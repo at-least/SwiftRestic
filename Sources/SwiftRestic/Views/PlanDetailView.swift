@@ -72,16 +72,18 @@ struct PlanDetailView: View {
     private func summaryTiles(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
         let lastRun = model.configuration.runs.first { $0.planID == plan.id }
-        return HStack(spacing: 10) {
+        return HStack(spacing: Theme.Space.tile) {
             StatTile(
                 title: "Last backup",
                 value: plan.lastSuccessAt.map { Format.relative($0) } ?? "Never",
-                systemImage: "clock"
+                systemImage: "clock.badge.checkmark",
+                hue: plan.lastSuccessAt == nil ? Theme.warning : Theme.success
             )
             StatTile(
                 title: "Next backup",
                 value: plan.nextRunDate.map { Format.timestamp($0) } ?? "Manual",
-                systemImage: "calendar"
+                systemImage: "calendar",
+                hue: plan.isEnabled ? Theme.tint : Theme.warning
             )
             StatTile(
                 title: "Snapshots",
@@ -97,14 +99,14 @@ struct PlanDetailView: View {
     }
 
     private func configurationCard(_ plan: BackupPlan) -> some View {
-        GroupBox {
+        Card("Configuration", systemImage: "slider.horizontal.3") {
             VStack(alignment: .leading, spacing: 10) {
                 DetailGrid {
                     DetailRow("Repository") {
                         if let repository = model.repository(id: plan.repositoryID) {
                             Text(repository.name)
                         } else {
-                            Text("Not set").foregroundStyle(.orange)
+                            Text("Not set").foregroundStyle(Theme.warning)
                         }
                     }
                     DetailRow("Schedule", plan.isEnabled ? plan.schedule.summary : "Paused")
@@ -125,7 +127,8 @@ struct PlanDetailView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     } icon: {
-                        Image(systemName: "folder")
+                        Image(systemName: "folder.fill")
+                            .foregroundStyle(Theme.tint)
                     }
                     .font(.callout)
                 }
@@ -135,15 +138,12 @@ struct PlanDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(6)
-        } label: {
-            Text("Configuration").font(.headline)
         }
     }
 
     private func snapshotsCard(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
-        return GroupBox {
+        return Card("Snapshots", systemImage: "camera.on.rectangle.fill") {
             SnapshotTable(
                 snapshots: snapshots,
                 isLoading: plan.repositoryID.map { model.loadingSnapshots.contains($0) } ?? false,
@@ -156,17 +156,12 @@ struct PlanDetailView: View {
                     comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
                 }
             )
-            .padding(6)
-        } label: {
-            HStack {
-                Text("Snapshots").font(.headline)
-                Spacer()
-                Button("Refresh") {
-                    guard let repositoryID = plan.repositoryID else { return }
-                    Task { await model.refreshSnapshots(repositoryID: repositoryID) }
-                }
-                .controlSize(.small)
+        } accessory: {
+            Button("Refresh") {
+                guard let repositoryID = plan.repositoryID else { return }
+                Task { await model.refreshSnapshots(repositoryID: repositoryID) }
             }
+            .controlSize(.small)
         }
     }
 }

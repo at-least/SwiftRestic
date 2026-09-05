@@ -15,14 +15,14 @@ struct OverviewView: View {
     private static let windowDays = 30
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: Theme.Space.section) {
             if let banner = model.banner {
                 BannerView(banner: banner)
             }
             statTiles
             volumeCard
             repositorySizeCard
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: Theme.Space.section) {
                 upcomingCard
                 recentFailuresCard
             }
@@ -55,7 +55,7 @@ struct OverviewView: View {
             runs: model.configuration.runs,
             since: .now.addingTimeInterval(-7 * 86_400)
         )
-        return HStack(spacing: 10) {
+        return HStack(spacing: Theme.Space.tile) {
             StatTile(
                 title: "Protected",
                 value: Format.bytes(protectedBytes),
@@ -74,7 +74,8 @@ struct OverviewView: View {
             StatTile(
                 title: "Failures (7 days)",
                 value: Format.count(failures),
-                systemImage: failures == 0 ? "checkmark.circle" : "xmark.octagon"
+                systemImage: failures == 0 ? "checkmark.circle" : "xmark.octagon.fill",
+                hue: failures == 0 ? Theme.success : Theme.danger
             )
         }
     }
@@ -82,7 +83,7 @@ struct OverviewView: View {
     // MARK: - Daily volume
 
     private var volumeCard: some View {
-        GroupBox {
+        Card("Data added per day", systemImage: "chart.bar.fill") {
             VStack(alignment: .leading, spacing: 8) {
                 if daily.isEmpty {
                     Text("No backups in the last \(Self.windowDays) days.")
@@ -95,22 +96,17 @@ struct OverviewView: View {
                     volumeChart
                 }
             }
-            .padding(6)
-        } label: {
-            HStack {
-                Text("Data added per day").font(.headline)
-                Spacer()
-                // Several of the light-mode series colours sit below 3:1 against
-                // the surface, so a non-colour reading of the same data is not
-                // optional.
-                Picker("", selection: $showsTable) {
-                    Image(systemName: "chart.bar").tag(false)
-                    Image(systemName: "tablecells").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 90)
+        } accessory: {
+            // Several of the light-mode series colours sit below 3:1 against
+            // the surface, so a non-colour reading of the same data is not
+            // optional.
+            Picker("", selection: $showsTable) {
+                Image(systemName: "chart.bar").tag(false)
+                Image(systemName: "tablecells").tag(true)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 90)
         }
     }
 
@@ -202,7 +198,7 @@ struct OverviewView: View {
             guard let stats = model.repositoryStats[repository.id] else { return nil }
             return RepositoryVolume(id: repository.id, name: repository.name, bytes: stats.totalSize)
         }
-        return GroupBox {
+        return Card("Repository size", systemImage: "internaldrive.fill") {
             if volumes.isEmpty {
                 Text("No repository statistics yet.")
                     .foregroundStyle(.secondary)
@@ -235,16 +231,14 @@ struct OverviewView: View {
                 .frame(height: CGFloat(volumes.count) * 34 + 40)
                 .padding(.trailing, 60)
             }
-        } label: {
-            Text("Repository size").font(.headline)
         }
     }
 
     // MARK: - Lists
 
     private var upcomingCard: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 6) {
+        Card("Next runs", systemImage: "clock.arrow.circlepath") {
+            VStack(alignment: .leading, spacing: 7) {
                 let upcoming = model.configuration.plans
                     .compactMap { plan -> (BackupPlan, Date)? in
                         guard let date = plan.nextRunDate else { return nil }
@@ -258,32 +252,46 @@ struct OverviewView: View {
                 } else {
                     ForEach(Array(upcoming), id: \.0.id) { plan, date in
                         HStack {
-                            Text(plan.name).lineLimit(1)
+                            Label {
+                                Text(plan.name).lineLimit(1)
+                            } icon: {
+                                Circle()
+                                    .fill(Theme.tint.opacity(0.7))
+                                    .frame(width: 6, height: 6)
+                            }
                             Spacer()
-                            Text(date <= .now ? "Due now" : Format.timestamp(date))
-                                .font(.callout.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                            if date <= .now {
+                                Text("Due now")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Theme.warning)
+                            } else {
+                                Text(Format.timestamp(date))
+                                    .font(.callout.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
-        } label: {
-            Text("Next runs").font(.headline)
         }
     }
 
     private var recentFailuresCard: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 6) {
+        Card("Recent problems", systemImage: "exclamationmark.bubble.fill") {
+            VStack(alignment: .leading, spacing: 7) {
                 let failures = model.configuration.runs
                     .filter { $0.outcome == .failed || $0.outcome == .completedWithErrors }
                     .prefix(5)
 
                 if failures.isEmpty {
-                    Label("Nothing has failed recently.", systemImage: "checkmark.circle")
-                        .foregroundStyle(.secondary)
+                    Label {
+                        Text("Nothing has failed recently.")
+                    } icon: {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundStyle(Theme.success)
+                    }
+                    .foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(failures)) { run in
                         HStack(spacing: 6) {
@@ -306,9 +314,6 @@ struct OverviewView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
-        } label: {
-            Text("Recent problems").font(.headline)
         }
     }
 }

@@ -41,7 +41,13 @@ struct FindFilesView: View {
     }
 
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            SheetHeader(
+                systemImage: "magnifyingglass",
+                title: "Find Files",
+                subtitle: "Search every snapshot for a file, then restore what you find"
+            )
+
             Picker("Repository", selection: $repositoryID) {
                 Text("Choose…").tag(UUID?.none)
                 ForEach(model.configuration.repositories) { repository in

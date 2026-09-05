@@ -75,11 +75,11 @@ struct RepositoryDetailView: View {
             let stats = model.repositoryStats[repositoryID]
             let snapshots = model.snapshots(for: repositoryID)
 
-            HStack(spacing: 10) {
+            HStack(spacing: Theme.Space.tile) {
                 StatTile(
                     title: "Repository size",
                     value: Format.bytes(stats?.totalSize),
-                    systemImage: "internaldrive"
+                    systemImage: "internaldrive.fill"
                 )
                 StatTile(
                     title: "Snapshots",
@@ -89,18 +89,19 @@ struct RepositoryDetailView: View {
                 StatTile(
                     title: "Blobs",
                     value: Format.count(stats?.totalBlobCount),
-                    systemImage: "square.stack.3d.up"
+                    systemImage: "square.stack.3d.up.fill"
                 )
                 StatTile(
                     title: "Compression saved",
                     value: stats?.compressionSpaceSaving.map {
                         ($0 / 100).formatted(.percent.precision(.fractionLength(1)))
                     } ?? "—",
-                    systemImage: "arrow.down.right.and.arrow.up.left"
+                    systemImage: "arrow.down.right.and.arrow.up.left",
+                    hue: Theme.success
                 )
             }
 
-            GroupBox {
+            Card("Details", systemImage: "info.circle.fill") {
                 DetailGrid {
                     DetailRow("Type", repository.kind.displayName)
                     DetailRow("Location") {
@@ -112,14 +113,11 @@ struct RepositoryDetailView: View {
                     DetailRow("Added", Format.timestamp(repository.createdAt))
                     DetailRow("Plans using it", Format.count(planCount))
                 }
-                .padding(6)
-            } label: {
-                Text("Details").font(.headline)
             }
 
             maintenanceCard(repository)
 
-            GroupBox {
+            Card("All Snapshots", systemImage: "camera.on.rectangle.fill") {
                 SnapshotTable(
                     snapshots: snapshots,
                     isLoading: model.loadingSnapshots.contains(repositoryID),
@@ -130,9 +128,6 @@ struct RepositoryDetailView: View {
                         comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
                     }
                 )
-                .padding(6)
-            } label: {
-                Text("All Snapshots").font(.headline)
             }
 
             HStack {
@@ -147,7 +142,7 @@ struct RepositoryDetailView: View {
 
     @ViewBuilder
     private func maintenanceCard(_ repository: Repository) -> some View {
-        GroupBox {
+        Card("Maintenance", systemImage: "wrench.and.screwdriver.fill") {
             VStack(alignment: .leading, spacing: 10) {
                 if let task = model.maintenance[repositoryID] {
                     HStack(spacing: 8) {
@@ -174,10 +169,10 @@ struct RepositoryDetailView: View {
                 if model.repositoriesMissingPassword.contains(repositoryID) {
                     Label(
                         "Waiting for a repository password — nothing is scheduled until one is saved.",
-                        systemImage: "key"
+                        systemImage: "key.fill"
                     )
                     .font(.callout)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -186,9 +181,6 @@ struct RepositoryDetailView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(6)
-        } label: {
-            Text("Maintenance").font(.headline)
         }
     }
 

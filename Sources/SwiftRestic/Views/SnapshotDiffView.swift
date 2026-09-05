@@ -137,11 +137,13 @@ struct SnapshotDiffView: View {
                 systemImage: "minus.circle"
             )
             // restic's `changed_files` counts content changes only; the Modified
-            // filter also includes type changes and bitrot, so name it precisely.
+            // filter also includes type changes and bitrot, so the tooltip names
+            // it precisely while the tile stays short enough not to truncate.
             StatTile(
-                title: "Content changed",
+                title: "Changed",
                 value: Format.count(stats?.changedFiles),
-                systemImage: "pencil.circle"
+                systemImage: "pencil.circle",
+                help: "Files whose content changed — metadata-only edits are listed under Show › Metadata"
             )
             StatTile(
                 title: "Data added",

@@ -277,6 +277,20 @@ final class AppModel {
 
     /// Builds everything a restic command needs, or explains what is missing.
     func context(for repository: Repository) async throws -> RepositoryContext {
+        #if DEBUG
+        // Capture and CI runs hand over the password through the environment so
+        // they never touch the login Keychain.
+        if let injected = ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_PASSWORD"],
+           !injected.isEmpty
+        {
+            return RepositoryContext(
+                repository: repository,
+                password: injected,
+                providerSecret: ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_SECRET"],
+                settings: configuration.settings
+            )
+        }
+        #endif
         let stored = await secrets.load(repository.id)
         guard let password = stored.password, !password.isEmpty else {
             throw ResticError.passwordMissing(repositoryName: repository.name)

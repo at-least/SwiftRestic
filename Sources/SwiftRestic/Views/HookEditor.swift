@@ -37,7 +37,7 @@ struct HookEditor: View {
                         Spacer()
                         if hook.abortsRunOnFailure {
                             Image(systemName: "exclamationmark.octagon")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(Theme.warning)
                                 .help(isForMaintenance ? "Cancels the check or prune if it fails" : "Cancels the backup if it fails")
                         }
                     }

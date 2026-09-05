@@ -49,7 +49,13 @@ struct ResticConsoleView: View {
     }
 
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            SheetHeader(
+                systemImage: "apple.terminal",
+                title: "restic Console",
+                subtitle: "Run restic commands directly, for the things the UI does not cover"
+            )
+
             Picker("Repository", selection: $repositoryID) {
                 Text("Choose…").tag(UUID?.none)
                 ForEach(model.configuration.repositories) { repository in

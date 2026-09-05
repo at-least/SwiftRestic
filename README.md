@@ -158,6 +158,14 @@ your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 process, so unlike `screencapture` it needs no Screen Recording permission — it
 works over SSH and in CI. All of it is `#if DEBUG`.
 
+Three more environment variables shape a capture run: `SWIFTRESTIC_APPEARANCE`
+(`light`/`dark`) pins the appearance instead of following the system,
+`SWIFTRESTIC_CAPTURE_SHEET=diff` opens the compare sheet on the repository pane,
+and `SWIFTRESTIC_REPO_PASSWORD` hands repositories a password directly, so
+capture runs never touch the login Keychain. Launches that are never activated
+also need the app to activate itself — the capture path does that, because
+SwiftUI defers creating the main window until activation.
+
 ## Security and privacy
 
 - **The app is deliberately not sandboxed.** restic has to read arbitrary user

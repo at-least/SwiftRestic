@@ -52,7 +52,7 @@ struct SettingsView: View {
                     ? LoginItem.statusDescription
                     : LoginItem.notInstalledMessage)
                     .font(.caption)
-                    .foregroundStyle(LoginItem.needsApproval ? .orange : .secondary)
+                    .foregroundStyle(LoginItem.needsApproval ? Theme.warning : .secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if LoginItem.needsApproval {
                     Button("Open Login Items") { LoginItem.openLoginItemsSettings() }
@@ -96,7 +96,7 @@ struct SettingsView: View {
                     LabeledContent("Version", value: model.resticVersion.isEmpty ? "—" : model.resticVersion)
                 } else if let problem = model.binaryProblem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.warning)
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -166,7 +166,7 @@ struct NotificationChannelsTab: View {
                             Spacer()
                             if !channel.isUsable, channel.isEnabled {
                                 Image(systemName: "exclamationmark.triangle")
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(Theme.warning)
                                     .help("The URL is missing or not http(s)")
                             }
                         }

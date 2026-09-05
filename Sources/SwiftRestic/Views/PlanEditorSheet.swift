@@ -164,7 +164,7 @@ struct PlanEditorSheet: View {
                         "With every rule at zero, restic would delete all snapshots. Retention is skipped until at least one rule is set.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Theme.warning)
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                 }

@@ -15,6 +15,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        // Capture runs can pin the appearance so the same pane is captured in
+        // light and dark without flipping the whole system.
+        if let name = ProcessInfo.processInfo.environment["SWIFTRESTIC_APPEARANCE"] {
+            NSApp.appearance = NSAppearance(named: name == "dark" ? .darkAqua : .aqua)
+        }
         scheduleDebugCapture()
         #endif
     }
@@ -69,6 +74,11 @@ extension AppDelegate {
         }
 
         Task { @MainActor in
+            // A launch that is never activated (SSH, `&` from a script) does not
+            // get its `Window` scene created at all — SwiftUI defers it until
+            // the app is activated. The capture needs that window to exist, so
+            // activate on purpose.
+            NSApp.activate(ignoringOtherApps: true)
             try? await Task.sleep(for: .seconds(delay))
             captureMainWindow(to: URL(fileURLWithPath: path))
             // `NSApp.terminate` never reaches `applicationShouldTerminate` from
@@ -135,6 +145,7 @@ struct SwiftResticApp: App {
         Window("SwiftRestic", id: Self.mainWindowID) {
             RootView()
                 .environment(model)
+                .tint(Theme.tint)
                 .frame(minWidth: 940, minHeight: 600)
                 .task {
                     appDelegate.model = model

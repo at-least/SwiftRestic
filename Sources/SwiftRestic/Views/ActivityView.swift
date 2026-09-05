@@ -49,7 +49,7 @@ struct ActivityView: View {
 
                     TableColumn("Detail") { run in
                         Text(detail(for: run))
-                            .foregroundStyle(run.outcome == .failed ? .red : .secondary)
+                            .foregroundStyle(run.outcome == .failed ? Theme.danger : .secondary)
                             .lineLimit(1)
                     }
                 }
@@ -76,7 +76,7 @@ struct ActivityView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let failure = run.failureMessage {
                     Text(failure)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Theme.danger)
                         .textSelection(.enabled)
                 }
                 if let detail = run.detailText {
@@ -117,11 +117,6 @@ struct ActivityView: View {
     }
 
     private func color(for outcome: RunRecord.Outcome) -> Color {
-        switch outcome {
-        case .succeeded: .green
-        case .completedWithErrors: .orange
-        case .failed: .red
-        case .cancelled: .secondary
-        }
+        ChartPalette.status(outcome)
     }
 }

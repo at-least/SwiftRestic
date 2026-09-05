@@ -96,6 +96,7 @@ struct RootView: View {
                         }
                     } icon: {
                         Image(systemName: repository.kind.symbolName)
+                            .foregroundStyle(Theme.tint)
                     }
                     .tag(SidebarItem.repository(repository.id))
                     .contextMenu { repositoryContextMenu(repository) }
@@ -133,7 +134,7 @@ struct RootView: View {
 
             if !model.isResticAvailable {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Theme.warning)
                     .help(model.binaryProblem ?? "restic not found")
             }
         }
@@ -239,8 +240,12 @@ private struct PlanSidebarRow: View {
         } icon: {
             if model.isRunning(planID: plan.id) {
                 ProgressView().controlSize(.small)
+            } else if !plan.isEnabled {
+                Image(systemName: "pause.circle")
+                    .foregroundStyle(.secondary)
             } else {
-                Image(systemName: plan.isEnabled ? "clock.badge.checkmark" : "pause.circle")
+                Image(systemName: "clock.badge.checkmark")
+                    .foregroundStyle(Theme.tint)
             }
         }
     }
@@ -262,39 +267,85 @@ struct WelcomeView: View {
     let onAddPlan: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 22) {
+            Spacer()
+
             Image(systemName: "externaldrive.badge.timemachine")
-                .font(.system(size: 56))
-                .foregroundStyle(.tint)
-            Text("SwiftRestic")
-                .font(.largeTitle.bold())
-            Text("Scheduled, encrypted, deduplicated backups powered by restic.")
-                .foregroundStyle(.secondary)
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 84, height: 84)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Theme.tint, Theme.tintDeep],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .shadow(color: Theme.tint.opacity(0.25), radius: 14, y: 6)
+
+            VStack(spacing: 6) {
+                Text("SwiftRestic")
+                    .font(.largeTitle.weight(.bold))
+                Text("Scheduled, encrypted, deduplicated backups powered by restic.")
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: Theme.Space.section) {
+                welcomeFeature("lock.shield", "Encrypted", "Client-side, before anything leaves the Mac")
+                welcomeFeature("clock.arrow.circlepath", "Scheduled", "Hourly to weekly, with catch-up after sleep")
+                welcomeFeature("magnifyingglass", "Searchable", "Browse and restore any snapshot, any file")
+            }
+            .padding(.vertical, 6)
 
             if let problem = model.binaryProblem {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("restic is not available", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Theme.warning)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("restic is not available")
                             .font(.headline)
                         Text(problem)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(6)
                 }
+                .padding(Theme.Space.cardPadding)
                 .frame(maxWidth: 460)
+                .cardSurface()
             }
 
-            HStack {
+            HStack(spacing: 10) {
                 Button("Add a Repository…", action: onAddRepository)
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 Button("New Backup Plan…", action: onAddPlan)
+                    .controlSize(.large)
                     .disabled(model.configuration.repositories.isEmpty)
             }
+
+            Spacer()
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func welcomeFeature(_ symbol: String, _ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.tint)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: 150)
     }
 }

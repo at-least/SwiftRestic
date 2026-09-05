@@ -147,7 +147,7 @@ struct RepositoryEditorSheet: View {
             if let status {
                 Section {
                     Label(status.text, systemImage: status.isError ? "xmark.octagon.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(status.isError ? .red : .green)
+                        .foregroundStyle(status.isError ? Theme.danger : Theme.success)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
