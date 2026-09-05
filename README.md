@@ -145,26 +145,29 @@ Debug builds can photograph themselves, which is how the screens here were
 checked:
 
 ```sh
-SWIFTRESTIC_CONFIG_DIR=/tmp/demo \
-SWIFTRESTIC_CAPTURE=/tmp/overview.png \
-SWIFTRESTIC_CAPTURE_PANE=overview \
-  SwiftRestic.app/Contents/MacOS/SwiftRestic
+open --env SWIFTRESTIC_CONFIG_DIR=/tmp/demo \
+  --env SWIFTRESTIC_CAPTURE=/tmp/overview.png \
+  --env SWIFTRESTIC_CAPTURE_PANE=overview \
+  SwiftRestic.app
 ```
 
 `SWIFTRESTIC_CONFIG_DIR` points the app at a throwaway configuration instead of
 your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 `SWIFTRESTIC_CAPTURE_PANE` picks which screen (`overview`, `plan`, `repository`,
 `activity`, `find`, `console`). The capture uses `cacheDisplay` from inside the
-process, so unlike `screencapture` it needs no Screen Recording permission — it
-works over SSH and in CI. All of it is `#if DEBUG`.
+process, so unlike `screencapture` it needs no Screen Recording permission. All
+of it is `#if DEBUG`. Launching through `open` matters: a plain child-process
+launch is never activated, and SwiftUI then defers creating the main window
+until activation, long after the capture:
 
 Three more environment variables shape a capture run: `SWIFTRESTIC_APPEARANCE`
 (`light`/`dark`) pins the appearance instead of following the system,
 `SWIFTRESTIC_CAPTURE_SHEET=diff` opens the compare sheet on the repository pane,
-and `SWIFTRESTIC_REPO_PASSWORD` hands repositories a password directly, so
-capture runs never touch the login Keychain. Launches that are never activated
-also need the app to activate itself — the capture path does that, because
-SwiftUI defers creating the main window until activation.
+and `SWIFTRESTIC_REPO_PASSWORD` hands repositories a password directly (only
+honoured together with `SWIFTRESTIC_CONFIG_DIR`), so capture runs never touch
+the login Keychain. Capture runs also do not arm the scheduler, so a due plan
+cannot fire mid-capture. This all needs a logged-in GUI session on the Mac —
+not a headless SSH box.
 
 ## Security and privacy
 

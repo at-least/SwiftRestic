@@ -125,7 +125,15 @@ final class AppModel {
         // starting the scheduler first makes the app race itself on launch: a due
         // plan's retention step fails against our own refresh.
         await refreshAllSnapshots()
+        #if DEBUG
+        // A capture run must photograph a deterministic state: a live scheduler
+        // can fire a due plan mid-capture and put a progress card on screen.
+        if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE"] == nil {
+            startScheduler()
+        }
+        #else
         startScheduler()
+        #endif
     }
 
     func shutdown() async {
@@ -279,9 +287,12 @@ final class AppModel {
     func context(for repository: Repository) async throws -> RepositoryContext {
         #if DEBUG
         // Capture and CI runs hand over the password through the environment so
-        // they never touch the login Keychain.
+        // they never touch the login Keychain. Gated on the throwaway-config
+        // override as well, so a stale variable in a developer's shell cannot
+        // silently feed the wrong password to a normal debug run.
         if let injected = ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_PASSWORD"],
-           !injected.isEmpty
+           !injected.isEmpty,
+           ProcessInfo.processInfo.environment["SWIFTRESTIC_CONFIG_DIR"] != nil
         {
             return RepositoryContext(
                 repository: repository,
