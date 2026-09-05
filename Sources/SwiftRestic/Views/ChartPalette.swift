@@ -5,34 +5,35 @@ import SwiftUI
 ///
 /// The categorical slots are used in this fixed order and never cycled, which is
 /// what keeps adjacent stacked segments distinguishable under colour-vision
-/// deficiency. Each mode's steps were selected for its own surface rather than
-/// derived by flipping the other. On the light surface three of the slots sit
-/// below 3:1 contrast, so every chart using them ships a legend and a table view.
+/// deficiency; hue order is preserved from the original palette for the same
+/// reason. Each mode's steps were selected for its own surface rather than
+/// derived by flipping the other. On the light surface some slots sit below
+/// 3:1 contrast, so every chart using them ships a legend and a table view.
 enum ChartPalette {
     static let categorical: [Color] = [
-        dynamic(light: 0x2A78D6, dark: 0x3987E5), // blue
-        dynamic(light: 0xEB6834, dark: 0xD95926), // orange
-        dynamic(light: 0x1BAF7A, dark: 0x199E70), // aqua
-        dynamic(light: 0xEDA100, dark: 0xC98500), // yellow
-        dynamic(light: 0xE87BA4, dark: 0xD55181), // magenta
-        dynamic(light: 0x008300, dark: 0x008300), // green
-        dynamic(light: 0x4A3AA7, dark: 0x9085E9), // violet
+        Theme.tint, // indigo (brand)
+        Theme.dynamic(light: 0xD9662E, dark: 0xE8813F), // orange
+        Theme.dynamic(light: 0x14A085, dark: 0x2FBF9C), // teal
+        Theme.dynamic(light: 0xC08309, dark: 0xE3A93C), // gold
+        Theme.dynamic(light: 0xC9508B, dark: 0xDE7BAD), // rose
+        Theme.dynamic(light: 0x2E8B3D, dark: 0x4CB85C), // green
+        Theme.dynamic(light: 0x6D4FC4, dark: 0x9F8BEA), // violet
     ]
 
     /// Anything folded past the categorical cap. Deliberately neutral so it never
     /// reads as one more entity.
-    static let other = dynamic(light: 0x898781, dark: 0x898781)
+    static let other = Theme.dynamic(light: 0x898781, dark: 0x898781)
 
     /// Single hue for one-series magnitude charts.
-    static let sequential = dynamic(light: 0x2A78D6, dark: 0x3987E5)
+    static let sequential = Theme.tint
 
     /// Reserved for run state, never for a series.
     static func status(_ outcome: RunRecord.Outcome) -> Color {
         switch outcome {
-        case .succeeded: dynamic(light: 0x0CA30C, dark: 0x0CA30C)
-        case .completedWithErrors: dynamic(light: 0xEC835A, dark: 0xEC835A)
-        case .failed: dynamic(light: 0xD03B3B, dark: 0xD03B3B)
-        case .cancelled: dynamic(light: 0x898781, dark: 0x898781)
+        case .succeeded: Theme.success
+        case .completedWithErrors: Theme.warning
+        case .failed: Theme.danger
+        case .cancelled: other
         }
     }
 
@@ -44,7 +45,7 @@ enum ChartPalette {
         }
     }
 
-    private static func dynamic(light: UInt32, dark: UInt32) -> Color {
+    static func dynamic(light: UInt32, dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return nsColor(isDark ? dark : light)

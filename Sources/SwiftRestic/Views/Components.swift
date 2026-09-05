@@ -1,15 +1,101 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Card
+
+/// Titled card container, the visual unit of the redesigned dashboard and
+/// detail panes: an opaque control-coloured plate with a hairline border and a
+/// headline row, optionally carrying a trailing accessory (segmented pickers,
+/// refresh buttons).
+struct Card<Accessory: View, Content: View>: View {
+    var title: LocalizedStringKey
+    var systemImage: String?
+    @ViewBuilder var accessory: () -> Accessory
+    @ViewBuilder var content: () -> Content
+
+    init(
+        _ title: LocalizedStringKey,
+        systemImage: String? = nil,
+        @ViewBuilder content: @escaping () -> Content,
+        @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.content = content
+        self.accessory = accessory
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.tint)
+                }
+                Text(title)
+                    .font(.headline)
+                Spacer()
+                accessory()
+            }
+            content()
+        }
+        .padding(Theme.Space.cardPadding)
+        .cardSurface()
+    }
+}
+
+// MARK: - Sheet header
+
+/// Title row for utility sheets, which live outside the navigation stack and
+/// would otherwise carry no identity of their own.
+struct SheetHeader: View {
+    let systemImage: String
+    let title: LocalizedStringKey
+    var subtitle: LocalizedStringKey?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.tint)
+                .frame(width: 30, height: 30)
+                .background(
+                    Theme.tint.opacity(0.13),
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.headline)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Banner
+
 /// Dismissible message strip shown above a detail pane.
 struct BannerView: View {
     @Environment(AppModel.self) private var model
     let banner: Banner
 
+    private var hue: Color { banner.isError ? Theme.danger : Theme.success }
+    private var symbol: String {
+        banner.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+    }
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: banner.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(banner.isError ? .orange : .green)
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(hue)
+                .frame(width: 30, height: 30)
+                .background(hue.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(banner.title).font(.headline)
                 if !banner.message.isEmpty {
@@ -27,17 +113,74 @@ struct BannerView: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.borderless)
+            .help("Dismiss")
         }
-        .padding(12)
-        .background(banner.isError ? Color.orange.opacity(0.12) : Color.green.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(Theme.Space.cardPadding)
+        .cardSurface()
     }
 }
+
+// MARK: - Stat tile
+
+/// One KPI: an icon chip beside a caption and a large rounded numeral, on its
+/// own card plate. Used in overview, detail headers and diff statistics.
+struct StatTile: View {
+    let title: String
+    let value: String
+    var systemImage: String?
+    var hue: Color = Theme.tint
+    var help: String?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(hue)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        hue.opacity(0.13),
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                    )
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(value)
+                    .font(Theme.statValue)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Space.cardPadding)
+        .cardSurface()
+        .modifier(TileHelp(help: help))
+    }
+}
+
+/// `.help` only when there is text to show; an empty tooltip would still hit.
+private struct TileHelp: ViewModifier {
+    let help: String?
+
+    func body(content: Content) -> some View {
+        if let help {
+            content.help(help)
+        } else {
+            content
+        }
+    }
+}
+
+// MARK: - Detail rows
 
 /// A label/value row inside an information card.
 ///
 /// `LabeledContent` only aligns its two columns inside a `Form`; dropped into a
-/// `GroupBox` it renders the value hard against the label, which reads as a
+/// plain card it renders the value hard against the label, which reads as a
 /// typo. These rows go in a `Grid` so the values line up in a column.
 struct DetailRow<Value: View>: View {
     let label: String
@@ -76,37 +219,10 @@ struct DetailGrid<Content: View>: View {
     }
 }
 
-/// One number with a caption, used in the header of a plan or repository.
-struct StatTile: View {
-    let title: String
-    let value: String
-    var systemImage: String?
+// MARK: - Operation progress
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                if let systemImage {
-                    Image(systemName: systemImage).imageScale(.small)
-                }
-                Text(title)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.title3.weight(.medium))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(.quaternary.opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-/// Live progress of a running backup or restore.
+/// Live progress of a running backup or restore, on its own card plate with a
+/// tinted bar.
 struct OperationProgressView: View {
     let title: String
     let progress: OperationProgress
@@ -115,7 +231,10 @@ struct OperationProgressView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.tint)
                 Text(title).font(.headline)
                 Spacer()
                 if let onCancel {
@@ -126,6 +245,7 @@ struct OperationProgressView: View {
 
             ProgressView(value: progress.fraction)
                 .progressViewStyle(.linear)
+                .tint(Theme.tint)
 
             HStack(spacing: 14) {
                 Text("\(Format.count(progress.filesDone)) / \(Format.count(progress.totalFiles)) files")
@@ -141,7 +261,9 @@ struct OperationProgressView: View {
                 }
                 Spacer()
                 Text(progress.fraction.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.callout.weight(.semibold))
                     .monospacedDigit()
+                    .foregroundStyle(Theme.tint)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -154,11 +276,12 @@ struct OperationProgressView: View {
                     .truncationMode(.middle)
             }
         }
-        .padding(12)
-        .background(.quaternary.opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(Theme.Space.cardPadding)
+        .cardSurface()
     }
 }
+
+// MARK: - Path list editor
 
 /// A list of paths with add/remove buttons, used for sources and excludes.
 struct PathListEditor: View {
@@ -172,7 +295,8 @@ struct PathListEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
+            Label(title, systemImage: "folder.badge.gearshape")
+                .font(.headline)
 
             List(selection: $selection) {
                 ForEach(paths, id: \.self) { path in
@@ -184,7 +308,11 @@ struct PathListEditor: View {
                 }
             }
             .frame(minHeight: 110, maxHeight: 160)
-            .border(.quaternary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+            )
 
             HStack(spacing: 6) {
                 if allowsBrowsing {
@@ -220,6 +348,8 @@ struct PathListEditor: View {
         }
     }
 }
+
+// MARK: - File picker
 
 /// Thin wrapper over `NSOpenPanel`, which SwiftUI's `fileImporter` cannot fully
 /// replace here (we need multi-select across both files and folders).
@@ -269,14 +399,16 @@ enum FilePicker {
     }
 }
 
+// MARK: - Pane container
+
 extension View {
     /// Standard padded detail-pane container.
     func detailPane() -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: Theme.Space.section) {
                 self
             }
-            .padding(20)
+            .padding(Theme.Space.pane)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
