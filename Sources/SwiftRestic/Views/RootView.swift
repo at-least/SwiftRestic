@@ -278,13 +278,13 @@ struct WelcomeView: View {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [Theme.tint, Theme.tintDeep],
+                                colors: [Color.accentColor, Color.accentColor.opacity(0.65)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                 )
-                .shadow(color: Theme.tint.opacity(0.25), radius: 14, y: 6)
+                .shadow(color: Color.accentColor.opacity(0.25), radius: 14, y: 6)
 
             VStack(spacing: 6) {
                 Text("SwiftRestic")

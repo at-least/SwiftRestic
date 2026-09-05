@@ -245,7 +245,6 @@ struct OperationProgressView: View {
 
             ProgressView(value: progress.fraction)
                 .progressViewStyle(.linear)
-                .tint(Theme.tint)
 
             HStack(spacing: 14) {
                 Text("\(Format.count(progress.filesDone)) / \(Format.count(progress.totalFiles)) files")

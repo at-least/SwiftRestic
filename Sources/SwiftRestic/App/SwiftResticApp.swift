@@ -145,7 +145,6 @@ struct SwiftResticApp: App {
         Window("SwiftRestic", id: Self.mainWindowID) {
             RootView()
                 .environment(model)
-                .tint(Theme.tint)
                 .frame(minWidth: 940, minHeight: 600)
                 .task {
                     appDelegate.model = model
