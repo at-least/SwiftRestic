@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>SwiftRestic</string>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>SwiftRestic needs access to back up files on your Desktop.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>SwiftRestic needs access to back up files in your Documents folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>SwiftRestic needs access to back up files in your Downloads folder.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>SwiftRestic needs access to back up to or from removable volumes.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>SwiftRestic needs access to network volumes used as backup repositories.</string>
+</dict>
+</plist>

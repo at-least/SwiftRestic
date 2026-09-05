@@ -1,0 +1,314 @@
+import Charts
+import SwiftUI
+
+/// Dashboard: what is protected, what has been written lately, and what is next.
+struct OverviewView: View {
+    @Environment(AppModel.self) private var model
+
+    /// Series are reduced once when the history changes, not on every redraw —
+    /// a few hundred runs reduced per frame is visible.
+    @State private var daily: [DailyBackupVolume] = []
+    @State private var domain: [String] = []
+    @State private var selectedDay: Date?
+    @State private var showsTable = false
+
+    private static let windowDays = 30
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if let banner = model.banner {
+                BannerView(banner: banner)
+            }
+            statTiles
+            volumeCard
+            repositorySizeCard
+            HStack(alignment: .top, spacing: 14) {
+                upcomingCard
+                recentFailuresCard
+            }
+        }
+        .detailPane()
+        .navigationTitle("Overview")
+        .task(id: model.configuration.runs.count) { rebuild() }
+        .onChange(of: model.configuration.plans.count) { rebuild() }
+    }
+
+    private func rebuild() {
+        let planOrder = model.configuration.plans.map(\.name)
+        daily = OverviewMetrics.dailyVolume(
+            runs: model.configuration.runs,
+            planOrder: planOrder,
+            days: Self.windowDays
+        )
+        domain = OverviewMetrics.domain(for: daily, planOrder: planOrder)
+    }
+
+    // MARK: - Tiles
+
+    private var statTiles: some View {
+        let protectedBytes = OverviewMetrics.protectedBytes(
+            latestSnapshotsByPlan: model.configuration.plans.map { plan in
+                model.snapshots(for: plan.repositoryID, planID: plan.id).first
+            }
+        )
+        let failures = OverviewMetrics.failureCount(
+            runs: model.configuration.runs,
+            since: .now.addingTimeInterval(-7 * 86_400)
+        )
+        return HStack(spacing: 10) {
+            StatTile(
+                title: "Protected",
+                value: Format.bytes(protectedBytes),
+                systemImage: "lock.shield"
+            )
+            StatTile(
+                title: "Repositories",
+                value: Format.count(model.configuration.repositories.count),
+                systemImage: "externaldrive"
+            )
+            StatTile(
+                title: "Plans",
+                value: Format.count(model.configuration.plans.count),
+                systemImage: "calendar"
+            )
+            StatTile(
+                title: "Failures (7 days)",
+                value: Format.count(failures),
+                systemImage: failures == 0 ? "checkmark.circle" : "xmark.octagon"
+            )
+        }
+    }
+
+    // MARK: - Daily volume
+
+    private var volumeCard: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                if daily.isEmpty {
+                    Text("No backups in the last \(Self.windowDays) days.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 20)
+                } else if showsTable {
+                    volumeTable
+                } else {
+                    volumeChart
+                }
+            }
+            .padding(6)
+        } label: {
+            HStack {
+                Text("Data added per day").font(.headline)
+                Spacer()
+                // Several of the light-mode series colours sit below 3:1 against
+                // the surface, so a non-colour reading of the same data is not
+                // optional.
+                Picker("", selection: $showsTable) {
+                    Image(systemName: "chart.bar").tag(false)
+                    Image(systemName: "tablecells").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 90)
+            }
+        }
+    }
+
+    private var volumeChart: some View {
+        Chart(daily) { point in
+            BarMark(
+                x: .value("Day", point.day, unit: .day),
+                y: .value("Added", point.dataAdded)
+            )
+            .foregroundStyle(by: .value("Plan", point.series))
+            // A 2px surface gap keeps adjacent stack segments legible.
+            .cornerRadius(3)
+        }
+        .chartForegroundStyleScale(
+            domain: domain,
+            range: ChartPalette.range(for: domain)
+        )
+        .chartLegend(position: .bottom, alignment: .leading, spacing: 10)
+        .chartXSelection(value: $selectedDay)
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let bytes = value.as(Int64.self) {
+                        Text(Format.bytes(bytes))
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: 5)) { _ in
+                AxisGridLine()
+                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+            }
+        }
+        .chartOverlay { proxy in
+            if let selectedDay, let anchor = proxy.position(forX: selectedDay) {
+                selectionCallout(day: selectedDay, x: anchor)
+            }
+        }
+        .frame(height: 220)
+    }
+
+    @ViewBuilder
+    private func selectionCallout(day: Date, x: CGFloat) -> some View {
+        let sameDay = daily.filter { Calendar.current.isDate($0.day, inSameDayAs: day) }
+        if !sameDay.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(day.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption.weight(.semibold))
+                ForEach(sameDay) { point in
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(colorFor(point.series))
+                            .frame(width: 7, height: 7)
+                        Text(point.series).font(.caption)
+                        Spacer(minLength: 8)
+                        Text(Format.bytes(point.dataAdded))
+                            .font(.caption.monospacedDigit())
+                    }
+                }
+            }
+            .padding(8)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+            .fixedSize()
+            .offset(x: max(0, x - 60), y: 4)
+        }
+    }
+
+    private func colorFor(_ series: String) -> Color {
+        guard let index = domain.firstIndex(of: series) else { return ChartPalette.other }
+        return ChartPalette.range(for: domain)[index]
+    }
+
+    private var volumeTable: some View {
+        let rows = daily.sorted { $0.day > $1.day }
+        return Table(rows) {
+            TableColumn("Day") { Text($0.day.formatted(date: .abbreviated, time: .omitted)) }
+            TableColumn("Plan") { Text($0.series) }
+            TableColumn("Added") { Text(Format.bytes($0.dataAdded)).monospacedDigit() }
+        }
+        .frame(height: 220)
+    }
+
+    // MARK: - Repository sizes
+
+    private var repositorySizeCard: some View {
+        let volumes = model.configuration.repositories.compactMap { repository -> RepositoryVolume? in
+            guard let stats = model.repositoryStats[repository.id] else { return nil }
+            return RepositoryVolume(id: repository.id, name: repository.name, bytes: stats.totalSize)
+        }
+        return GroupBox {
+            if volumes.isEmpty {
+                Text("No repository statistics yet.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 16)
+            } else {
+                // One series, so the title names it and no legend is needed; the
+                // value sits beside each bar as a direct label.
+                Chart(volumes) { volume in
+                    BarMark(
+                        x: .value("Size", volume.bytes),
+                        y: .value("Repository", volume.name)
+                    )
+                    .foregroundStyle(ChartPalette.sequential)
+                    .cornerRadius(3)
+                    .annotation(position: .trailing, alignment: .leading) {
+                        Text(Format.bytes(volume.bytes))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let bytes = value.as(Int64.self) { Text(Format.bytes(bytes)) }
+                        }
+                    }
+                }
+                .frame(height: CGFloat(volumes.count) * 34 + 40)
+                .padding(.trailing, 60)
+            }
+        } label: {
+            Text("Repository size").font(.headline)
+        }
+    }
+
+    // MARK: - Lists
+
+    private var upcomingCard: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 6) {
+                let upcoming = model.configuration.plans
+                    .compactMap { plan -> (BackupPlan, Date)? in
+                        guard let date = plan.nextRunDate else { return nil }
+                        return (plan, date)
+                    }
+                    .sorted { $0.1 < $1.1 }
+                    .prefix(5)
+
+                if upcoming.isEmpty {
+                    Text("Nothing scheduled.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(upcoming), id: \.0.id) { plan, date in
+                        HStack {
+                            Text(plan.name).lineLimit(1)
+                            Spacer()
+                            Text(date <= .now ? "Due now" : Format.timestamp(date))
+                                .font(.callout.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(6)
+        } label: {
+            Text("Next runs").font(.headline)
+        }
+    }
+
+    private var recentFailuresCard: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 6) {
+                let failures = model.configuration.runs
+                    .filter { $0.outcome == .failed || $0.outcome == .completedWithErrors }
+                    .prefix(5)
+
+                if failures.isEmpty {
+                    Label("Nothing has failed recently.", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(failures)) { run in
+                        HStack(spacing: 6) {
+                            // Status is never carried by colour alone.
+                            Image(systemName: run.outcome.symbolName)
+                                .foregroundStyle(ChartPalette.status(run.outcome))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(run.planName.isEmpty ? run.kind.rawValue : run.planName)
+                                    .lineLimit(1)
+                                Text(run.outcome.displayName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(Format.relative(run.startedAt))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(6)
+        } label: {
+            Text("Recent problems").font(.headline)
+        }
+    }
+}

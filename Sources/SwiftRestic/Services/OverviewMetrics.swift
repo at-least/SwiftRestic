@@ -1,0 +1,108 @@
+import Foundation
+
+/// One plan's contribution to one day's backup volume.
+struct DailyBackupVolume: Identifiable, Sendable, Equatable {
+    var day: Date
+    var series: String
+    var dataAdded: Int64
+
+    var id: String { "\(series)@\(day.timeIntervalSince1970)" }
+}
+
+/// How much of a repository's data one repository holds, for the size chart.
+struct RepositoryVolume: Identifiable, Sendable, Equatable {
+    var id: UUID
+    var name: String
+    var bytes: Int64
+}
+
+/// Derives the dashboard's series from the run history.
+///
+/// Pure and separate from the view so it can be tested, and so the reduction
+/// happens once when the history changes rather than on every redraw.
+enum OverviewMetrics {
+    /// Categorical colour slots available. A ninth series is never a generated
+    /// hue: everything past the cap folds into "Other".
+    static let seriesCap = 7
+    static let otherSeriesName = "Other"
+
+    /// Daily totals of data written to repositories, one entry per plan per day.
+    ///
+    /// - Parameter planOrder: plan names in configuration order. Series colours
+    ///   follow this, so a plan keeps its colour as the data changes.
+    static func dailyVolume(
+        runs: [RunRecord],
+        planOrder: [String],
+        days: Int = 30,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [DailyBackupVolume] {
+        let start = calendar.startOfDay(for: now.addingTimeInterval(-Double(days - 1) * 86_400))
+        var totals: [String: [Date: Int64]] = [:]
+
+        for run in runs where run.kind == .backup && run.outcome != .cancelled {
+            let day = calendar.startOfDay(for: run.startedAt)
+            guard day >= start else { continue }
+            guard run.dataAdded > 0 else { continue }
+            let name = run.planName.isEmpty ? otherSeriesName : run.planName
+            totals[name, default: [:]][day, default: 0] += run.dataAdded
+        }
+
+        let kept = Set(seriesNames(for: totals, planOrder: planOrder))
+        var folded: [String: [Date: Int64]] = [:]
+        for (name, byDay) in totals {
+            let target = kept.contains(name) ? name : otherSeriesName
+            for (day, bytes) in byDay { folded[target, default: [:]][day, default: 0] += bytes }
+        }
+
+        return folded
+            .flatMap { name, byDay in
+                byDay.map { DailyBackupVolume(day: $0.key, series: name, dataAdded: $0.value) }
+            }
+            .sorted { ($0.day, $0.series) < ($1.day, $1.series) }
+    }
+
+    /// The series to draw, in a stable order, with anything past the cap folded.
+    ///
+    /// Ordering follows the configuration rather than size, so a plan does not
+    /// change colour just because it happened to write more this week.
+    static func seriesNames(
+        for totals: [String: [Date: Int64]],
+        planOrder: [String]
+    ) -> [String] {
+        let present = Set(totals.keys)
+        let ordered = planOrder.filter(present.contains)
+            + present.subtracting(planOrder).sorted()
+
+        guard ordered.count > seriesCap else { return ordered }
+        // Over the cap the smallest contributors fold together, so the series
+        // that matter keep their own colour.
+        let byVolume = ordered.sorted { lhs, rhs in
+            (totals[lhs]?.values.reduce(0, +) ?? 0) > (totals[rhs]?.values.reduce(0, +) ?? 0)
+        }
+        let keep = Set(byVolume.prefix(seriesCap))
+        return ordered.filter(keep.contains)
+    }
+
+    /// The domain for the colour scale: the drawn series plus "Other" when used.
+    static func domain(for points: [DailyBackupVolume], planOrder: [String]) -> [String] {
+        let present = Set(points.map(\.series))
+        var domain = planOrder.filter { present.contains($0) && $0 != otherSeriesName }
+        domain += present.subtracting(domain).sorted().filter { $0 != otherSeriesName }
+        if present.contains(otherSeriesName) { domain.append(otherSeriesName) }
+        return domain
+    }
+
+    /// Total bytes the newest snapshot of each plan protects.
+    static func protectedBytes(latestSnapshotsByPlan: [Snapshot?]) -> Int64 {
+        latestSnapshotsByPlan.compactMap { $0?.totalBytesProcessed }.reduce(0, +)
+    }
+
+    static func failureCount(runs: [RunRecord], since: Date) -> Int {
+        runs.filter { $0.startedAt >= since && $0.outcome == .failed }.count
+    }
+}
+
+private func < (lhs: (Date, String), rhs: (Date, String)) -> Bool {
+    lhs.0 == rhs.0 ? lhs.1 < rhs.1 : lhs.0 < rhs.0
+}

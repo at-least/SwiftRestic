@@ -1,0 +1,5 @@
+.build/
+DerivedData/
+SwiftRestic.xcodeproj/
+*.xcuserstate
+.DS_Store
