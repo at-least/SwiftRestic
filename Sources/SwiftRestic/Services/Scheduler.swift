@@ -8,6 +8,10 @@ enum Scheduler {
     /// Plans that should start now, most overdue first.
     ///
     /// - Parameters:
+    ///   - existingRepositoryIDs: repositories currently in the configuration. A
+    ///     plan whose repository has vanished can never run — starting it would
+    ///     only raise "Plan is incomplete" once a minute, forever — so it is
+    ///     filtered here instead of being reported as overdue.
     ///   - busyPlanIDs: plans already running.
     ///   - busyRepositoryIDs: repositories with a backup or maintenance job in
     ///     flight. A plan targeting one is held back rather than dropped — it is
@@ -16,16 +20,18 @@ enum Scheduler {
     static func duePlans(
         in plans: [BackupPlan],
         now: Date = .now,
+        existingRepositoryIDs: Set<UUID>,
         busyPlanIDs: Set<UUID> = [],
         busyRepositoryIDs: Set<UUID> = []
     ) -> [BackupPlan] {
         plans
             .filter { plan in
                 guard plan.isEnabled, plan.isConfigurationComplete else { return false }
+                guard let repositoryID = plan.repositoryID,
+                      existingRepositoryIDs.contains(repositoryID)
+                else { return false }
                 guard !busyPlanIDs.contains(plan.id) else { return false }
-                if let repositoryID = plan.repositoryID, busyRepositoryIDs.contains(repositoryID) {
-                    return false
-                }
+                if busyRepositoryIDs.contains(repositoryID) { return false }
                 guard plan.schedule.frequency != .manual else { return false }
                 guard let due = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now) else { return false }
                 return due <= now
@@ -62,10 +68,19 @@ enum Scheduler {
     }
 
     /// The soonest upcoming run across all enabled plans, for the menu bar.
-    static func nextScheduledRun(in plans: [BackupPlan], now: Date = .now) -> (plan: BackupPlan, date: Date)? {
+    /// A plan whose repository no longer exists is never listed: counting down
+    /// to a run that can never start is a lie.
+    static func nextScheduledRun(
+        in plans: [BackupPlan],
+        now: Date = .now,
+        existingRepositoryIDs: Set<UUID>
+    ) -> (plan: BackupPlan, date: Date)? {
         plans
             .filter { $0.isEnabled && $0.isConfigurationComplete }
             .compactMap { plan -> (BackupPlan, Date)? in
+                guard let repositoryID = plan.repositoryID,
+                      existingRepositoryIDs.contains(repositoryID)
+                else { return nil }
                 guard let date = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now) else { return nil }
                 return (plan, max(date, now))
             }

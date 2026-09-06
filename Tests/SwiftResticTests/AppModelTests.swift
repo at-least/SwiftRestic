@@ -364,7 +364,10 @@ struct AppModelTests {
         #expect(record.outcome == .succeeded, "unexpected warnings: \(record.itemErrors)")
 
         // Having just run, the plan must not be due again immediately.
-        #expect(Scheduler.duePlans(in: model.configuration.plans).isEmpty)
+        #expect(Scheduler.duePlans(
+            in: model.configuration.plans,
+            existingRepositoryIDs: Set(model.configuration.repositories.map(\.id))
+        ).isEmpty)
 
         await model.flushSave()
         let reloaded = try await ConfigStore(

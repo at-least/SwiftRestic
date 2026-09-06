@@ -143,9 +143,41 @@ struct SchedulingTests {
         let due = Scheduler.duePlans(
             in: [ready, disabled, incomplete, busy],
             now: date("2026-09-05 12:00:00"),
+            existingRepositoryIDs: [repositoryID],
             busyPlanIDs: [busy.id]
         )
         #expect(due.map(\.name) == ["ready"])
+    }
+
+    @Test("a plan whose repository no longer exists is never due and never announced")
+    func danglingRepositoryIsExcluded() {
+        let missingRepositoryID = UUID()
+        var plan = BackupPlan()
+        plan.name = "orphaned"
+        plan.repositoryID = missingRepositoryID
+        plan.sources = ["/tmp"]
+        plan.schedule.frequency = .hourly
+        plan.schedule.intervalHours = 1
+
+        let now = date("2026-09-05 12:00:00")
+        // The repository set is empty, as if the repository was deleted out from
+        // under the plan (or a hand-edited config never had it).
+        let existing: Set<UUID> = []
+
+        #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).isEmpty)
+        #expect(Scheduler.nextScheduledRun(in: [plan], now: now, existingRepositoryIDs: existing) == nil)
+
+        // With the repository present the plan behaves normally again.
+        #expect(Scheduler.duePlans(
+            in: [plan],
+            now: now,
+            existingRepositoryIDs: [missingRepositoryID]
+        ).map(\.name) == ["orphaned"])
+        #expect(Scheduler.nextScheduledRun(
+            in: [plan],
+            now: now,
+            existingRepositoryIDs: [missingRepositoryID]
+        )?.plan.name == "orphaned")
     }
 
     @Test("a plan whose repository is busy is held back, not dropped")
@@ -159,13 +191,16 @@ struct SchedulingTests {
         plan.schedule.intervalHours = 1
 
         let now = date("2026-09-05 12:00:00")
-        #expect(Scheduler.duePlans(in: [plan], now: now).map(\.name) == ["waiting"])
+        let existing: Set<UUID> = [repositoryID]
+        #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map(\.name) == ["waiting"])
 
         // While a prune holds the repository, the plan must not start …
-        #expect(Scheduler.duePlans(in: [plan], now: now, busyRepositoryIDs: [repositoryID]).isEmpty)
+        #expect(Scheduler.duePlans(
+            in: [plan], now: now, existingRepositoryIDs: existing, busyRepositoryIDs: [repositoryID]
+        ).isEmpty)
 
         // … and because nothing was recorded as run, it is still due afterwards.
-        #expect(Scheduler.duePlans(in: [plan], now: now).map(\.name) == ["waiting"])
+        #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map(\.name) == ["waiting"])
     }
 }
 
@@ -208,7 +243,8 @@ struct UpcomingRunTests {
         let now = date("2026-09-05 12:00:00")
         let next = Scheduler.nextScheduledRun(
             in: [manual, later, disabled, incomplete, soon],
-            now: now
+            now: now,
+            existingRepositoryIDs: Set([manual, later, disabled, incomplete, soon].compactMap(\.repositoryID))
         )
         #expect(next?.plan.id == soon.id)
         // An hourly plan that ran ten minutes ago is due in fifty.
@@ -221,15 +257,15 @@ struct UpcomingRunTests {
         // and the menu bar must not show a negative countdown.
         let overdue = plan(name: "hourly", frequency: .hourly, lastRun: date("2026-09-05 07:00:00"))
         let now = date("2026-09-05 12:00:00")
-        let next = Scheduler.nextScheduledRun(in: [overdue], now: now)
+        let next = Scheduler.nextScheduledRun(in: [overdue], now: now, existingRepositoryIDs: Set([overdue.repositoryID!]))
         #expect(next?.date == now)
     }
 
     @Test("no runnable plan means no upcoming run")
     func noneScheduled() {
         let manual = plan(name: "manual", frequency: .manual, lastRun: nil)
-        #expect(Scheduler.nextScheduledRun(in: [manual], now: date("2026-09-05 12:00:00")) == nil)
-        #expect(Scheduler.nextScheduledRun(in: [], now: date("2026-09-05 12:00:00")) == nil)
+        #expect(Scheduler.nextScheduledRun(in: [manual], now: date("2026-09-05 12:00:00"), existingRepositoryIDs: []) == nil)
+        #expect(Scheduler.nextScheduledRun(in: [], now: date("2026-09-05 12:00:00"), existingRepositoryIDs: []) == nil)
     }
 }
 

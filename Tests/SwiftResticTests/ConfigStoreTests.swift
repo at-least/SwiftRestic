@@ -91,7 +91,10 @@ struct ConfigStoreTests {
 
         // A plan that has never run and is on an interval schedule must be due
         // straight away, which is what makes the app back up shortly after launch.
-        let due = Scheduler.duePlans(in: loaded.plans)
+        let due = Scheduler.duePlans(
+            in: loaded.plans,
+            existingRepositoryIDs: Set(loaded.repositories.map(\.id))
+        )
         #expect(due.count == 1)
     }
 

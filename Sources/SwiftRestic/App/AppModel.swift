@@ -1117,6 +1117,7 @@ final class AppModel {
 
         for plan in Scheduler.duePlans(
             in: configuration.plans,
+            existingRepositoryIDs: Set(configuration.repositories.map(\.id)),
             busyPlanIDs: runningPlanIDs,
             busyRepositoryIDs: busy
         ) {
@@ -1125,7 +1126,10 @@ final class AppModel {
     }
 
     var nextScheduledRun: (plan: BackupPlan, date: Date)? {
-        Scheduler.nextScheduledRun(in: configuration.plans)
+        Scheduler.nextScheduledRun(
+            in: configuration.plans,
+            existingRepositoryIDs: Set(configuration.repositories.map(\.id))
+        )
     }
 
     // MARK: - Notifications
