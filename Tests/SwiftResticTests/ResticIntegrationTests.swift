@@ -187,6 +187,55 @@ struct ResticIntegrationTests {
         #expect(try await fixture.service.snapshots(fixture.context).count == 2)
     }
 
+    @Test("keep-last 1 per plan keeps exactly each plan's newest snapshot ID")
+    func retentionKeepsExactIDs() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // restic stamps snapshots with second granularity, so backups taken in
+        // the same second can tie and keep-last's notion of "newest" becomes
+        // unstable. Spacing the runs out makes the expected survivor exact.
+        func runPlan(_ plan: BackupPlan) async throws -> String {
+            try "change \(UUID().uuidString)".write(
+                to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+            let outcome = try await fixture.service.backup(fixture.context, plan: plan)
+            try await Task.sleep(for: .milliseconds(1100))
+            return try #require(outcome.summary?.snapshotID)
+        }
+
+        var planB = fixture.plan
+        planB.id = UUID()
+        planB.name = "Other"
+        planB.tags = ["other"]
+
+        var newest: [BackupPlan: String] = [:]
+        for plan in [fixture.plan, planB] {
+            for _ in 0 ..< 3 {
+                newest[plan] = try await runPlan(plan)
+            }
+        }
+
+        // keep-last 1 applied to each plan in turn: the two survivors must be
+        // exactly the newest snapshot of each group, not just some two snapshots.
+        let keepOne = RetentionPolicy(
+            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
+            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
+        )
+        var trimming = fixture.plan
+        var trimmingB = planB
+        trimming.retention = keepOne
+        trimmingB.retention = keepOne
+        #expect(try await fixture.service.forget(fixture.context, plan: trimming) == 2)
+        #expect(try await fixture.service.forget(fixture.context, plan: trimmingB) == 2)
+
+        let survivors = try await fixture.service.snapshots(fixture.context).map(\.id).sorted()
+        #expect(survivors == [newest[fixture.plan], newest[planB]].compactMap { $0 }.sorted())
+    }
+
     @Test("an empty retention policy is refused before restic ever sees it")
     func emptyRetentionIsNotRun() async throws {
         let fixture = try makeFixture()
