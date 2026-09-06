@@ -23,14 +23,7 @@ struct ResticBinary: Sendable {
     static func locate(userOverride: String?) throws -> ResticBinary {
         if let userOverride, !userOverride.trimmingCharacters(in: .whitespaces).isEmpty {
             let url = URL(fileURLWithPath: userOverride)
-            // `isExecutableFile` alone accepts a directory: 0755 has the execute
-            // bit, and the failure would only surface later as an opaque
-            // process-launch error.
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-                  !isDirectory.boolValue,
-                  FileManager.default.isExecutableFile(atPath: url.path)
-            else {
+            guard Self.isExecutableFile(atPath: url.path) else {
                 throw ResticError.binaryNotExecutable(path: url.path)
             }
             return ResticBinary(url: url)
@@ -39,16 +32,27 @@ struct ResticBinary: Sendable {
         var searched: [String] = []
         for candidate in searchPaths {
             searched.append(candidate)
-            if FileManager.default.isExecutableFile(atPath: candidate) {
+            if Self.isExecutableFile(atPath: candidate) {
                 return ResticBinary(url: URL(fileURLWithPath: candidate))
             }
         }
 
         // Last resort: whatever PATH we did inherit.
-        if let fromPath = Self.lookupOnPath(), FileManager.default.isExecutableFile(atPath: fromPath) {
+        if let fromPath = Self.lookupOnPath() {
             return ResticBinary(url: URL(fileURLWithPath: fromPath))
         }
         throw ResticError.binaryNotFound(searched: searched)
+    }
+
+    /// An executable *file*. `FileManager.isExecutableFile` alone also accepts
+    /// directories — 0755 has the execute bit — and spawning one fails later
+    /// with an opaque launch error.
+    static func isExecutableFile(atPath path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              !isDirectory.boolValue
+        else { return false }
+        return FileManager.default.isExecutableFile(atPath: path)
     }
 
     /// Looks for a helper binary restic shells out to (currently only `rclone`).
@@ -59,14 +63,14 @@ struct ResticBinary: Sendable {
         let directories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
         for directory in directories {
             let candidate = "\(directory)/\(name)"
-            if FileManager.default.isExecutableFile(atPath: candidate) {
+            if Self.isExecutableFile(atPath: candidate) {
                 return URL(fileURLWithPath: candidate)
             }
         }
         guard let pathValue = ProcessInfo.processInfo.environment["PATH"] else { return nil }
         for directory in pathValue.split(separator: ":") {
             let candidate = URL(fileURLWithPath: String(directory)).appendingPathComponent(name)
-            if FileManager.default.isExecutableFile(atPath: candidate.path) { return candidate }
+            if Self.isExecutableFile(atPath: candidate.path) { return candidate }
         }
         return nil
     }
@@ -75,7 +79,7 @@ struct ResticBinary: Sendable {
         guard let pathValue = ProcessInfo.processInfo.environment["PATH"] else { return nil }
         for dir in pathValue.split(separator: ":") {
             let candidate = URL(fileURLWithPath: String(dir)).appendingPathComponent("restic").path
-            if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
+            if Self.isExecutableFile(atPath: candidate) { return candidate }
         }
         return nil
     }
