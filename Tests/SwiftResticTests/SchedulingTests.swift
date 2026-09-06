@@ -204,6 +204,94 @@ struct SchedulingTests {
     }
 }
 
+@Suite("Schedule across DST transitions")
+struct DSTScheduleTests {
+    /// Los Angeles observes DST, which the UTC-pinned suites never exercise.
+    private var losAngeles: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        return calendar
+    }
+
+    /// A wall-clock instant in Los Angeles. Unlike `DateFormatter`, which
+    /// returns nil for a time inside the spring-forward gap, `Calendar`
+    /// resolves a nonexistent time to the edge of the gap — which is exactly
+    /// the behaviour under test.
+    private func la(_ hour: Int, _ minute: Int = 0, _ day: Int, _ month: Int, year: Int = 2026) -> Date {
+        losAngeles.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
+    }
+
+    private func dailySchedule(hour: Int, minute: Int) -> Schedule {
+        var schedule = Schedule()
+        schedule.frequency = .daily
+        schedule.hour = hour
+        schedule.minute = minute
+        return schedule
+    }
+
+    @Test("a daily slot inside the spring-forward gap still fires once, close to its wall-clock time")
+    func springForward() throws {
+        // 2026-03-08 02:00 PST becomes 03:00 PDT: a 02:30 slot does not exist
+        // that day. Whatever instant Calendar resolves the missing time to, the
+        // run must be due that morning (not skipped, not pushed to the next
+        // day) and the following day must be back at the ordinary slot.
+        let schedule = dailySchedule(hour: 2, minute: 30)
+        let now = la(9, 0, 8, 3) // after the gap
+        let next = try #require(schedule.nextRunDate(
+            after: la(2, 30, 7, 3),
+            now: now,
+            calendar: losAngeles
+        ))
+
+        #expect(next > la(2, 30, 7, 3), "the last run must not cover the gap day")
+        #expect(next <= now, "the missed gap-slot must be due immediately when the app wakes up — the catch-up rule, not a skip to tomorrow")
+        // Calendar resolves the nonexistent 02:30 to 03:00, half an hour late.
+        #expect(
+            abs(next.timeIntervalSince(la(2, 30, 8, 3))) < 3600,
+            "the resolution must stay within an hour of the intended wall-clock slot"
+        )
+
+        let followingDay = try #require(schedule.nextRunDate(after: next, now: now, calendar: losAngeles))
+        #expect(followingDay == la(2, 30, 9, 3), "the next day is back at the ordinary slot")
+    }
+
+    @Test("a daily slot inside the fall-back repeat fires once, not twice")
+    func fallBack() throws {
+        // 2026-11-01 01:00 PDT becomes 01:00 PST: 01:30 happens twice. The
+        // schedule must treat the day as having exactly one 01:30 slot.
+        let schedule = dailySchedule(hour: 1, minute: 30)
+        let now = la(12, 0, 1, 11)
+
+        // Never ran: due at that morning's slot (either 01:30 occurrence —
+        // which instant Calendar picks is its policy — but the same day).
+        let first = try #require(schedule.nextRunDate(after: nil, now: now, calendar: losAngeles))
+        let day = losAngeles.dateComponents([.year, .month, .day], from: first)
+        #expect(day == DateComponents(year: 2026, month: 11, day: 1))
+        let secondOccurrence = la(1, 30, 1, 11).addingTimeInterval(3600)
+        #expect(first >= la(1, 30, 1, 11) && first <= secondOccurrence, "the resolved instant is one of the two 01:30s")
+
+        // Having run at that slot, the next firing is tomorrow's — the repeated
+        // hour must not trigger a second run.
+        let next = try #require(schedule.nextRunDate(after: first, now: now, calendar: losAngeles))
+        #expect(next == la(1, 30, 2, 11))
+    }
+
+    @Test("an ordinary afternoon slot is unaffected by either transition")
+    func ordinarySlotUnchanged() {
+        let schedule = dailySchedule(hour: 12, minute: 0)
+        #expect(schedule.nextRunDate(
+            after: la(12, 0, 7, 3),
+            now: la(13, 0, 8, 3),
+            calendar: losAngeles
+        ) == la(12, 0, 8, 3))
+        #expect(schedule.nextRunDate(
+            after: la(12, 0, 1, 11),
+            now: la(13, 0, 2, 11),
+            calendar: losAngeles
+        ) == la(12, 0, 2, 11))
+    }
+}
+
 @Suite("Upcoming run")
 struct UpcomingRunTests {
     private func date(_ string: String) -> Date {
