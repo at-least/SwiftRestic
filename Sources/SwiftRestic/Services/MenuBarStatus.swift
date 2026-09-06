@@ -18,11 +18,21 @@ enum MenuBarStatus {
     }
 
     /// One line per plan that is currently running, in configuration order.
+    /// Identified by plan ID: two plans can share a name, and a `ForEach` over
+    /// bare strings would collide.
+    struct RunningLine: Equatable, Identifiable {
+        var planID: UUID
+        var text: String
+        var id: UUID { planID }
+    }
+
     static func runningLines(
         plans: [BackupPlan],
         activity: [UUID: PlanActivity]
-    ) -> [String] {
-        plans.filter { activity[$0.id] != nil }.map { "\($0.name) — \(progressText(activity[$0.id]))" }
+    ) -> [RunningLine] {
+        plans.filter { activity[$0.id] != nil }.map {
+            RunningLine(planID: $0.id, text: "\($0.name) — \(progressText(activity[$0.id]))")
+        }
     }
 
     /// Progress as the menu bar shows it: a percentage once restic is streaming

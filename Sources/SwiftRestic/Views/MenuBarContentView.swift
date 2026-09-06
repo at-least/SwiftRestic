@@ -12,11 +12,8 @@ struct MenuBarContentView: View {
         if let headline = MenuBarStatus.headline(activity: model.activity, nextRun: model.nextScheduledRun) {
             Text(headline)
         } else {
-            ForEach(
-                MenuBarStatus.runningLines(plans: model.configuration.plans, activity: model.activity),
-                id: \.self
-            ) { line in
-                Text(line)
+            ForEach(MenuBarStatus.runningLines(plans: model.configuration.plans, activity: model.activity)) { line in
+                Text(line.text)
             }
         }
 

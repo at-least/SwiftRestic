@@ -172,6 +172,27 @@ struct PasswordPrecedenceTests {
         #expect(env["TAG"] == "innocent")
     }
 
+    @Test("an empty repository string leaves the extra environment's location standing")
+    func incompleteRepositoryKeepsExtraLocation() {
+        // The console can reach a repository the plan editor would call
+        // incomplete; clobbering RESTIC_REPOSITORY with "" would break that.
+        var repository = Repository()
+        repository.name = "Repo"
+        repository.kind = .local
+        repository.localPath = ""
+        repository.extraEnvironment = ["RESTIC_REPOSITORY": "sftp:nas.local:/volume1/restic"]
+        let context = RepositoryContext(repository: repository, password: "stored-password")
+
+        #expect(context.environment["RESTIC_REPOSITORY"] == "sftp:nas.local:/volume1/restic")
+
+        // A repository with a real location still wins over the extra entry.
+        repository.localPath = "/Volumes/Backup"
+        #expect(
+            RepositoryContext(repository: repository, password: "stored-password")
+                .environment["RESTIC_REPOSITORY"] == "/Volumes/Backup"
+        )
+    }
+
     @Test("conflicting extra entries are named so the editor can warn about them")
     func conflictsAreReported() {
         let overridden = context(extra: [

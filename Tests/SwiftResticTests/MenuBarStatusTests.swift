@@ -43,7 +43,7 @@ struct MenuBarStatusTests {
     func runningReplacesHeadline() {
         let nightly = plan(name: "Nightly")
         #expect(MenuBarStatus.headline(activity: [nightly.id: activity()], nextRun: nil) == nil)
-        #expect(MenuBarStatus.runningLines(plans: [nightly], activity: [nightly.id: activity()]) == ["Nightly — 0%"])
+        #expect(MenuBarStatus.runningLines(plans: [nightly], activity: [nightly.id: activity()]).map(\.text) == ["Nightly — 0%"])
     }
 
     @Test("phases tick over: phase names before restic streams, percentages after")
@@ -71,7 +71,8 @@ struct MenuBarStatusTests {
                 first.id: activity(phase: .applyingRetention),
             ]
         )
-        #expect(lines == ["First — Applying retention", "Second — 50%"])
+        #expect(lines.map(\.text) == ["First — Applying retention", "Second — 50%"])
+        #expect(lines.map(\.planID) == [first.id, second.id])
     }
 
     @Test("finishing returns to the idle headline")
