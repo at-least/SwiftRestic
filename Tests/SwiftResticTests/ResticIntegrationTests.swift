@@ -254,6 +254,32 @@ struct ResticIntegrationTests {
         #expect(snapshots.isEmpty, "the repository exists but is empty; a password failure would have thrown instead")
     }
 
+    @Test("an unreadable file yields exit 3 with the file named, and the snapshot still lands")
+    func partialBackup() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // A file restic cannot read. 0000 keeps the owner out too, which is the
+        // shape a corrupted download or a botched rsync actually leaves behind.
+        let unreadable = fixture.sourceDirectory.appendingPathComponent("locked.dat")
+        try "secret".write(to: unreadable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: unreadable.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: unreadable.path) }
+
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+
+        #expect(outcome.exitCode == ResticError.backupPartialSuccessCode)
+        #expect(outcome.completedWithErrors)
+        // restic skipped the file but still wrote everything else, so the run
+        // must be recorded as a snapshot-with-warnings, never as no snapshot.
+        let snapshotID = try #require(outcome.summary?.snapshotID, "a partial backup must still produce a snapshot")
+        #expect(outcome.itemErrors.contains { $0.contains("locked.dat") })
+
+        let snapshots = try await fixture.service.snapshots(fixture.context, planID: fixture.plan.id)
+        #expect(snapshots.map(\.id) == [snapshotID])
+    }
+
     @Test("check reports a healthy repository")
     func check() async throws {
         let fixture = try makeFixture()

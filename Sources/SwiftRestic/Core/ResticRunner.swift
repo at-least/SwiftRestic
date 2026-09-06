@@ -146,16 +146,25 @@ actor ResticRunner {
         let exitCode: Int32
         do {
             exitCode = try await withTaskCancellationHandler {
-                async let stderrOutcome = stderrReader.readAll(decodeMessages: false, onMessage: nil)
+                // restic writes its per-item error events to stderr, not stdout —
+                // a partial backup's `message_type: error` lines (and its exit_error)
+                // only reach the result if stderr is decoded too. The decoder drops
+                // every non-JSON line, so human-readable stderr noise is unaffected.
+                async let stderrOutcome = stderrReader.readAll(decodeMessages: true, onMessage: onMessage)
                 let stdoutOutcome = await stdoutReader.readAll(
                     decodeMessages: true,
                     onMessage: onMessage
                 )
-                let stderrText = await stderrOutcome.text
+                let stderr = await stderrOutcome
                 let code = await exit.value()
 
                 // Same-actor call: nothing here actually suspends.
-                self.store(handle: handle, stdout: stdoutOutcome, stderr: stderrText)
+                self.store(
+                    handle: handle,
+                    stdout: stdoutOutcome,
+                    stderr: stderr.text,
+                    stderrMessages: stderr.messages
+                )
                 try Task.checkCancellation()
                 return code
             } onCancel: {
@@ -207,8 +216,16 @@ actor ResticRunner {
 
     private var captured: [UUID: (messages: [ResticMessage], stdout: String, stderr: String)] = [:]
 
-    private func store(handle: UUID, stdout: StreamReader.Outcome, stderr: String) {
-        captured[handle] = (stdout.messages, stdout.text, stderr)
+    /// stderr's JSON events follow stdout's: restic reports a backup's summary on
+    /// stdout and its read errors on stderr, so per-item errors land after the
+    /// summary — fine for display, and every list keeps its own order.
+    private func store(
+        handle: UUID,
+        stdout: StreamReader.Outcome,
+        stderr: String,
+        stderrMessages: [ResticMessage]
+    ) {
+        captured[handle] = (stdout.messages + stderrMessages, stdout.text, stderr)
     }
 
     private func takeCaptured(handle: UUID) -> (messages: [ResticMessage], stdout: String, stderr: String) {
