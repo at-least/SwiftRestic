@@ -25,6 +25,31 @@ struct StubRestic: Sendable {
         return StubRestic(url: url, sleepMarker: "sleep \(marker)")
     }
 
+    /// `/usr/bin/pgrep -f`: exit 1 means no match, output is one pid per line.
+    static func findProcesses(matching pattern: String) -> [String] {
+        let pgrep = Process()
+        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        pgrep.arguments = ["-f", pattern]
+        let pipe = Pipe()
+        pgrep.standardOutput = pipe
+        pgrep.standardError = FileHandle.nullDevice
+        do { try pgrep.run() } catch { return ["pgrep-unavailable"] }
+        pgrep.waitUntilExit()
+        guard pgrep.terminationStatus == 0 else { return [] }
+        let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return text.split(separator: "\n").map(String.init)
+    }
+
+    /// Polls the process table until nothing matches `pattern`, or time runs out.
+    static func processVanishes(matching pattern: String, within seconds: TimeInterval) async -> Bool {
+        let deadline = Date.now.addingTimeInterval(seconds)
+        while Date.now < deadline {
+            if findProcesses(matching: pattern).isEmpty { return true }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return findProcesses(matching: pattern).isEmpty
+    }
+
     private static func script(sleepMarker: String) -> String {
         """
         #!/bin/sh
@@ -42,20 +67,28 @@ struct StubRestic: Sendable {
         esac
 
         case "$SWIFTRESTIC_STUB" in
-            hang | hang-backup)
+            hang | hang-backup | hang-restore)
                 trace "$SWIFTRESTIC_STUB-arm"
-                # hang-backup hangs only a backup: AppModel fires follow-up
-                # snapshot/stats refreshes once a run ends, and those must
-                # answer instead of burning their 300 s refresh timeout.
+                # The selective modes hang one subcommand only: AppModel fires
+                # follow-up snapshot/stats refreshes once a run ends, and those
+                # must answer instead of burning their 300 s refresh timeout.
+                hang_this=1
                 if [ "$SWIFTRESTIC_STUB" = "hang-backup" ]; then
                     case " $* " in
                         *" backup "*) ;;
-                        *)
-                            trace "answer-empty"
-                            echo "[]"
-                            exit 0
-                            ;;
+                        *) hang_this=0 ;;
                     esac
+                fi
+                if [ "$SWIFTRESTIC_STUB" = "hang-restore" ]; then
+                    case " $* " in
+                        *" restore "* | *" dump "*) ;;
+                        *) hang_this=0 ;;
+                    esac
+                fi
+                if [ "$hang_this" = "0" ]; then
+                    trace "answer-empty"
+                    echo "[]"
+                    exit 0
                 fi
                 # Forked form, deliberately not `exec`: under the xctest host
                 # exec'ing into sleep behaved unreliably — the trace reached
@@ -68,6 +101,21 @@ struct StubRestic: Sendable {
                 sleepChild=$!
                 wait "$sleepChild"
                 exit 0
+                ;;
+            warn)
+                # A backup that finished but could not read one item — restic's
+                # exit 3, the "partial success" the app must not call a failure.
+                trace "warn-arm"
+                echo '{"message_type":"error","error":{"message":"permission denied"},"during":"archival","item":"/etc/secret-target"}'
+                echo '{"message_type":"summary","files_new":0,"total_files_processed":1,"total_bytes_processed":10,"snapshot_id":"feedface00000000"}'
+                exit 3
+                ;;
+            missing)
+                # restic's exit 10: the repository is not there or not initialised.
+                trace "missing-arm"
+                echo "Fatal: repository does not exist" >&2
+                echo '{"message_type":"exit_error","code":10,"message":"Fatal: repository does not exist"}'
+                exit 10
                 ;;
             dribble)
                 # A status line first, the rest of the run over a second later:
@@ -151,31 +199,6 @@ struct StubResticTests {
         try? FileManager.default.removeItem(at: root)
     }
 
-    /// Polls the process table until nothing matches `pattern`, or time runs out.
-    private static func processVanishes(matching pattern: String, within seconds: TimeInterval) async -> Bool {
-        let deadline = Date.now.addingTimeInterval(seconds)
-        while Date.now < deadline {
-            if findProcesses(matching: pattern).isEmpty { return true }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        return findProcesses(matching: pattern).isEmpty
-    }
-
-    /// `/usr/bin/pgrep -f`: exit 1 means no match, output is one pid per line.
-    private static func findProcesses(matching pattern: String) -> [String] {
-        let pgrep = Process()
-        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        pgrep.arguments = ["-f", pattern]
-        let pipe = Pipe()
-        pgrep.standardOutput = pipe
-        pgrep.standardError = FileHandle.nullDevice
-        do { try pgrep.run() } catch { return ["pgrep-unavailable"] }
-        pgrep.waitUntilExit()
-        guard pgrep.terminationStatus == 0 else { return [] }
-        let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        return text.split(separator: "\n").map(String.init)
-    }
-
     /// Process-table snapshot for failure diagnostics, narrowed to stub-related lines.
     private static func processSnapshot() -> String {
         let ps = Process()
@@ -209,10 +232,10 @@ struct StubResticTests {
         // If the hang never establishes, this fails with the stub's own trace.
         let hangDeadline = Date.now.addingTimeInterval(10)
         while Date.now < hangDeadline,
-              Self.findProcesses(matching: fixture.stub.sleepMarker).isEmpty {
+              StubRestic.findProcesses(matching: fixture.stub.sleepMarker).isEmpty {
             try? await Task.sleep(for: .milliseconds(50))
         }
-        let hangEstablished = !Self.findProcesses(matching: fixture.stub.sleepMarker).isEmpty
+        let hangEstablished = !StubRestic.findProcesses(matching: fixture.stub.sleepMarker).isEmpty
         if !hangEstablished {
             let trace = (try? String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)) ?? "no trace"
             Issue.record("the stub never established its hang within 10 s; trace: [\(trace)]; ps saw: [\(Self.processSnapshot())]")
@@ -233,7 +256,7 @@ struct StubResticTests {
         // Throwing .cancelled is the Swift side; the child itself must not
         // outlive the cancellation as an orphan holding the repository.
         #expect(
-            await Self.processVanishes(matching: fixture.stub.sleepMarker, within: 10),
+            await StubRestic.processVanishes(matching: fixture.stub.sleepMarker, within: 10),
             "the stub restic process outlived the cancellation"
         )
 
@@ -282,7 +305,7 @@ struct StubResticTests {
             #expect(command.contains("snapshots"))
         }
         #expect(
-            await Self.processVanishes(matching: fixture.stub.sleepMarker, within: 10),
+            await StubRestic.processVanishes(matching: fixture.stub.sleepMarker, within: 10),
             "the watchdog left the stub process alive"
         )
     }

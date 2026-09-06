@@ -34,6 +34,38 @@ struct ResticMessageTests {
         #expect(status.fractionComplete == 1)
     }
 
+    @Test("backup --verbose reports each file as a verbose_status line")
+    func backupVerboseStatus() throws {
+        // Captured verbatim from restic 0.19.1 (`backup --verbose --json`).
+        // The struct keeps the fields the app shows; the extra `_in_repo` and
+        // `total_files` keys must simply be tolerated.
+        let line = #"{"message_type":"verbose_status","action":"new","item":"/restic-capture/src/a.txt","duration":0.004700167,"data_size":12,"data_size_in_repo":94,"metadata_size":0,"metadata_size_in_repo":0,"total_files":0}"#
+        guard case let .verboseStatus(verbose)? = ResticMessageDecoder.decode(line: line) else {
+            Issue.record("expected a verbose_status message")
+            return
+        }
+        #expect(verbose.action == "new")
+        #expect(verbose.item == "/restic-capture/src/a.txt")
+        #expect(verbose.dataSize == 12)
+        #expect(verbose.duration != nil)
+    }
+
+    @Test("restore --verbose=2 spells the size `size`, not `data_size`")
+    func restoreVerboseStatus() throws {
+        // Captured verbatim from restic 0.19.1 (`restore --json --verbose=2`).
+        // The two commands disagree on the field name; decoding only the backup
+        // spelling would leave every restore line without a size.
+        let line = #"{"message_type":"verbose_status","action":"restored","item":"/restic-capture/src/sub/b.txt","size":7}"#
+        guard case let .verboseStatus(verbose)? = ResticMessageDecoder.decode(line: line) else {
+            Issue.record("expected a verbose_status message")
+            return
+        }
+        #expect(verbose.action == "restored")
+        #expect(verbose.item == "/restic-capture/src/sub/b.txt")
+        #expect(verbose.size == 7)
+        #expect(verbose.dataSize == nil)
+    }
+
     @Test("backup summary")
     func backupSummary() throws {
         let line = #"{"message_type":"summary","files_new":3,"files_changed":0,"files_unmodified":0,"dirs_new":8,"dirs_changed":0,"dirs_unmodified":0,"data_blobs":3,"tree_blobs":9,"data_added":304224,"data_added_packed":303244,"total_files_processed":3,"total_bytes_processed":300019,"total_duration":0.714604875,"backup_start":"2026-09-05T00:53:25.22662+08:00","backup_end":"2026-09-05T00:53:25.941226+08:00","snapshot_id":"6ed59088467b1e0388a3bb3b63f3cee920b9de2b69e082544441e1e7d5c56443"}"#
@@ -47,6 +79,23 @@ struct ResticMessageTests {
         #expect(summary.snapshotID?.hasPrefix("6ed59088") == true)
         #expect(summary.backupStart != nil)
         #expect(summary.backupEnd != nil)
+    }
+
+    @Test("restore summary carries the restored counters, not backup's")
+    func restoreSummary() throws {
+        // Captured verbatim from restic 0.19.1 (`restore --json`).
+        let line = #"{"message_type":"summary","total_files":6,"files_restored":6,"total_bytes":307219,"bytes_restored":307219}"#
+        guard case let .summary(summary)? = ResticMessageDecoder.decode(line: line) else {
+            Issue.record("expected a summary message")
+            return
+        }
+        #expect(summary.filesRestored == 6)
+        #expect(summary.bytesRestored == 307_219)
+        #expect(summary.totalFiles == 6)
+        // A restore has no snapshot, so the backup-only fields stay empty
+        // rather than masquerading as zeros.
+        #expect(summary.snapshotID == nil)
+        #expect(summary.filesNew == nil)
     }
 
     @Test("check summary shares message_type with backup but has disjoint fields")

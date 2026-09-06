@@ -151,15 +151,12 @@ struct NotificationSafetyTests {
         #expect(request.url.absoluteString == "https://hc-ping.com/abc-123/fail")
     }
 
-    @Test("hook output never leaves the machine")
-    func hookOutputIsNotBroadcast() throws {
-        // A hook is an arbitrary user script; a verbose curl prints its own
-        // Authorization header. That must not reach a webhook.
-        //
-        // This locks the payload layer. The wiring guarantee lives in
-        // `AppModel.broadcast(record:plan:)`, which builds the event from
-        // `record.itemErrors` only — `hookMessages` never enter a
-        // NotificationEvent, so there is nothing here for a payload to leak.
+    @Test("the webhook payload carries only what the event holds")
+    func webhookCarriesOnlyTheEvent() throws {
+        // Payload-level half of the hook-privacy guarantee: whatever the event
+        // does not hold cannot reach the wire. The other half — that AppModel
+        // builds run events from `itemErrors` alone, never `hookMessages` — is
+        // pinned end to end by AppModelStubTests' broadcast test.
         var record = RunRecord(kind: .backup, planName: "Docs")
         record.itemErrors = ["/etc/secrets: permission denied"]
         record.hookMessages = ["Hook “upload” exited 1 — Authorization: Bearer sk-live-abcdef"]

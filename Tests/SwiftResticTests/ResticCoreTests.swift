@@ -114,6 +114,17 @@ struct ResticBinaryTests {
         let withBlankOverride = (try? ResticBinary.locate(userOverride: "   "))?.url
         #expect(withoutOverride == withBlankOverride)
     }
+
+    @Test("helper lookup falls back to the inherited PATH")
+    func helperLookup() {
+        // `sh` lives in /bin, which the hard-coded candidate list never covers:
+        // only the PATH fallback can find it. Without the fallback, an rclone
+        // repository would fail with an opaque "command not found" in restic's
+        // stderr instead of a named missing binary.
+        let sh = ResticBinary.locateHelper(named: "sh")
+        #expect(sh?.path.hasSuffix("/sh") == true)
+        #expect(ResticBinary.locateHelper(named: "definitely-not-a-real-helper") == nil)
+    }
 }
 
 @Suite("Output tailing")

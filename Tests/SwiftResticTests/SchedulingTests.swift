@@ -443,6 +443,33 @@ struct MaintenanceSchedulingTests {
         both.pruneEnabled = true
         #expect(both.summary == "Check every 7d, Prune every 30d")
     }
+
+    @Test("the schedule summarises itself for the plan list")
+    func scheduleSummary() {
+        var manual = Schedule()
+        manual.frequency = .manual
+        #expect(manual.summary == "Manually")
+
+        var hourly = Schedule()
+        hourly.frequency = .hourly
+        hourly.intervalHours = 4
+        #expect(hourly.summary == "Every 4 hours")
+        hourly.intervalHours = 1
+        #expect(hourly.summary == "Every hour")
+
+        var daily = Schedule()
+        daily.frequency = .daily
+        daily.hour = 2
+        daily.minute = 5
+        #expect(daily.summary == "Daily at 02:05")
+
+        // The weekday name comes from Calendar.current, so the words depend on
+        // the machine's locale — assert only the shape.
+        var weekly = Schedule()
+        weekly.frequency = .weekly
+        weekly.hour = 3
+        #expect(weekly.summary.hasSuffix(" at 03:00"))
+    }
 }
 
 @Suite("Retention policy")
