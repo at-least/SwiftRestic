@@ -261,6 +261,22 @@ final class AppModel {
         } else {
             configuration.repositories.append(repository)
         }
+
+        // The context always applies the stored location and password last, so
+        // these entries would silently do nothing. Say so rather than let the
+        // user believe a variable is doing work.
+        let overridden = RepositoryContext(
+            repository: repository,
+            password: password ?? "",
+            providerSecret: providerSecret
+        ).overriddenExtraEnvironmentKeys
+        if !overridden.isEmpty {
+            banner = Banner(
+                title: "Ignored environment variables",
+                message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; the value in Extra environment has no effect.",
+                isError: false
+            )
+        }
     }
 
     /// Removes a repository from the app. The data in the repository is untouched.

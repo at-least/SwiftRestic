@@ -8,12 +8,26 @@ struct RepositoryContext: Sendable {
     var providerSecret: String?
     var settings = AppSettings()
 
+    /// Keys the app itself owns: the repository location and the stored password.
+    /// Letting `extraEnvironment` override these would silently point restic at
+    /// another repository or break authentication — the class of bug behind
+    /// backrest's issue #1139 — so they are applied last, whatever the user added.
+    static let protectedEnvironmentKeys: Set<String> = ["RESTIC_REPOSITORY", "RESTIC_PASSWORD"]
+
     var environment: [String: String] {
         var env = repository.credentialEnvironment(secret: providerSecret)
+        env.merge(repository.extraEnvironment) { _, new in new }
         env["RESTIC_REPOSITORY"] = repository.resticRepositoryString
         env["RESTIC_PASSWORD"] = password
-        env.merge(repository.extraEnvironment) { _, new in new }
         return env
+    }
+
+    /// Entries in `extraEnvironment` that this context overwrites anyway, so an
+    /// editor screen can tell the user their setting has no effect.
+    var overriddenExtraEnvironmentKeys: [String] {
+        repository.extraEnvironment.keys
+            .filter { Self.protectedEnvironmentKeys.contains($0) }
+            .sorted()
     }
 
     /// Flags that apply to every command, not just one.

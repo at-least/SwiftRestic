@@ -236,6 +236,24 @@ struct ResticIntegrationTests {
         }
     }
 
+    @Test("a hostile RESTIC_PASSWORD in the environment cannot override the stored one")
+    func hostileEnvironmentPassword() async throws {
+        // backrest issue #1139: a RESTIC_PASSWORD inherited from the environment
+        // must never beat the password the app stores for the repository, or a
+        // stale shell variable quietly breaks every backup. The runner does
+        // inherit the parent environment, so the context's own value is the only
+        // thing standing between restic and whatever is in it.
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        setenv("RESTIC_PASSWORD", "hostile-from-environment", 1)
+        defer { unsetenv("RESTIC_PASSWORD") }
+
+        let snapshots = try await fixture.service.snapshots(fixture.context)
+        #expect(snapshots.isEmpty, "the repository exists but is empty; a password failure would have thrown instead")
+    }
+
     @Test("check reports a healthy repository")
     func check() async throws {
         let fixture = try makeFixture()

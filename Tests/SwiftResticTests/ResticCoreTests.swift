@@ -141,3 +141,39 @@ struct TailTests {
         #expect(ResticRunner.tail(of: text, limit: 10) == text)
     }
 }
+
+@Suite("Password precedence")
+struct PasswordPrecedenceTests {
+    private func context(extra: [String: String]) -> RepositoryContext {
+        var repository = Repository()
+        repository.name = "Repo"
+        repository.kind = .local
+        repository.localPath = "/Volumes/Backup"
+        repository.extraEnvironment = extra
+        return RepositoryContext(repository: repository, password: "stored-password")
+    }
+
+    @Test("the stored repository and password win over extra environment entries")
+    func storedValuesWin() {
+        let env = context(extra: [
+            "RESTIC_PASSWORD": "hostile-password",
+            "RESTIC_REPOSITORY": "/somewhere/else",
+            "TAG": "innocent",
+        ]).environment
+        #expect(env["RESTIC_PASSWORD"] == "stored-password")
+        #expect(env["RESTIC_REPOSITORY"] == "/Volumes/Backup")
+        // A non-reserved entry passes through untouched.
+        #expect(env["TAG"] == "innocent")
+    }
+
+    @Test("conflicting extra entries are named so the editor can warn about them")
+    func conflictsAreReported() {
+        let overridden = context(extra: [
+            "RESTIC_PASSWORD": "x",
+            "AWS_ACCESS_KEY_ID": "y",
+        ]).overriddenExtraEnvironmentKeys
+        #expect(overridden == ["RESTIC_PASSWORD"])
+
+        #expect(context(extra: ["AWS_ACCESS_KEY_ID": "y"]).overriddenExtraEnvironmentKeys.isEmpty)
+    }
+}
