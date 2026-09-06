@@ -23,7 +23,8 @@ struct AppModelTests {
     /// a backup happens.
     private func makeHarness(
         retention: RetentionPolicy = RetentionPolicy(),
-        frequency: Schedule.Frequency = .manual
+        frequency: Schedule.Frequency = .manual,
+        stubMode: String? = nil
     ) async throws -> Harness {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticApp-\(UUID().uuidString)")
@@ -39,6 +40,15 @@ struct AppModelTests {
         repository.name = "Test Repo"
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
+        // In stub mode the model runs a fake restic whose `backup` hangs until
+        // killed, reached through the same override the Settings screen uses —
+        // timing tests become deterministic instead of betting on restic's
+        // speed against a fixed sleep.
+        var stub: StubRestic?
+        if let stubMode {
+            stub = try StubRestic.install(in: root)
+            repository.extraEnvironment = ["SWIFTRESTIC_STUB": stubMode]
+        }
 
         var plan = BackupPlan()
         plan.name = "Test Plan"
@@ -52,14 +62,19 @@ struct AppModelTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [plan]
+        if let stub {
+            configuration.settings.resticPathOverride = stub.url.path
+        }
 
         let storeDirectory = root.appendingPathComponent("config")
         let store = ConfigStore(directory: storeDirectory)
         try await store.save(configuration)
 
-        let binary = try ResticBinary.locate(userOverride: nil)
-        _ = try await ResticService(runner: ResticRunner(), binary: binary.url)
-            .initializeRepository(RepositoryContext(repository: repository, password: "test-password"))
+        if stub == nil {
+            let binary = try ResticBinary.locate(userOverride: nil)
+            _ = try await ResticService(runner: ResticRunner(), binary: binary.url)
+                .initializeRepository(RepositoryContext(repository: repository, password: "test-password"))
+        }
 
         let model = AppModel(
             store: store,
@@ -314,18 +329,15 @@ struct AppModelTests {
 
     @Test("quitting during a backup still gets the run onto disk, and records why it stopped")
     func shutdownPersistsInFlightRun() async throws {
-        let harness = try await makeHarness()
+        // hang-backup, not hang: after the run ends the model refreshes
+        // snapshots and stats, and those must answer instead of burning their
+        // 300 s refresh timeout.
+        let harness = try await makeHarness(stubMode: "hang-backup")
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
 
-        // Enough data that the backup is still running when we quit.
-        let bulk = harness.sourceDirectory.appendingPathComponent("bulk")
-        try FileManager.default.createDirectory(at: bulk, withIntermediateDirectories: true)
-        for index in 0 ..< 50 {
-            try Data((0 ..< 2_000_000).map { UInt8(($0 &+ index) % 251) })
-                .write(to: bulk.appendingPathComponent("f\(index).bin"))
-        }
-
+        // The stub backup never finishes on its own, so the run is guaranteed
+        // still in flight when we quit.
         model.runBackup(planID: harness.plan.id)
         try await Task.sleep(for: .milliseconds(400))
 
@@ -346,20 +358,17 @@ struct AppModelTests {
 
     @Test("a run the user cancels is recorded as cancelled, not as an interruption")
     func userCancellationIsRecorded() async throws {
-        let harness = try await makeHarness()
+        // hang-backup, not hang: after the run ends the model refreshes
+        // snapshots and stats, and those must answer instead of burning their
+        // 300 s refresh timeout.
+        let harness = try await makeHarness(stubMode: "hang-backup")
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
 
-        // Enough data that the backup is still running when the cancel lands.
-        let bulk = harness.sourceDirectory.appendingPathComponent("bulk")
-        try FileManager.default.createDirectory(at: bulk, withIntermediateDirectories: true)
-        for index in 0 ..< 50 {
-            try Data((0 ..< 2_000_000).map { UInt8(($0 &+ index) % 251) })
-                .write(to: bulk.appendingPathComponent("f\(index).bin"))
-        }
-
+        // The stub backup never finishes on its own, so the cancel is
+        // guaranteed to land mid-run.
         model.runBackup(planID: harness.plan.id)
-        try await Task.sleep(for: .milliseconds(400))
+        try await Task.sleep(for: .milliseconds(300))
         model.cancelBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
 

@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (macOS)
+    runs-on: macos-15
+    env:
+      # A silent skip is a lie in CI: with this set, a missing restic fails the
+      # run instead of letting every integration suite skip. See SkipPolicyTests.
+      SWIFTRESTIC_TEST_DISALLOW_SKIP: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install restic and xcodegen
+        run: brew install restic xcodegen
+
+      # build.sh regenerates the project (xcodegen snapshots the file list),
+      # runs xcodebuild test, and fails both on a failed run and on a run that
+      # executed no tests at all.
+      - name: Run the suite
+        run: ./build.sh test
