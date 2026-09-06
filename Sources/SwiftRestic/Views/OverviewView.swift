@@ -239,8 +239,14 @@ struct OverviewView: View {
     private var upcomingCard: some View {
         Card("Next runs", systemImage: "clock.arrow.circlepath") {
             VStack(alignment: .leading, spacing: 7) {
+                // Same exclusion the scheduler applies: a plan whose repository
+                // has vanished must not be announced as due forever.
+                let existingRepositories = Set(model.configuration.repositories.map(\.id))
                 let upcoming = model.configuration.plans
                     .compactMap { plan -> (BackupPlan, Date)? in
+                        guard let repositoryID = plan.repositoryID,
+                              existingRepositories.contains(repositoryID)
+                        else { return nil }
                         guard let date = plan.nextRunDate else { return nil }
                         return (plan, date)
                     }

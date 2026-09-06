@@ -158,10 +158,16 @@ struct PasswordPrecedenceTests {
         let env = context(extra: [
             "RESTIC_PASSWORD": "hostile-password",
             "RESTIC_REPOSITORY": "/somewhere/else",
+            // restic ranks these above RESTIC_PASSWORD itself, so they must be
+            // kept away from it too.
+            "RESTIC_PASSWORD_COMMAND": "echo hostile",
+            "RESTIC_PASSWORD_FILE": "/hostile/file",
             "TAG": "innocent",
         ]).environment
         #expect(env["RESTIC_PASSWORD"] == "stored-password")
         #expect(env["RESTIC_REPOSITORY"] == "/Volumes/Backup")
+        #expect(env["RESTIC_PASSWORD_COMMAND"] == nil)
+        #expect(env["RESTIC_PASSWORD_FILE"] == nil)
         // A non-reserved entry passes through untouched.
         #expect(env["TAG"] == "innocent")
     }
@@ -170,9 +176,10 @@ struct PasswordPrecedenceTests {
     func conflictsAreReported() {
         let overridden = context(extra: [
             "RESTIC_PASSWORD": "x",
-            "AWS_ACCESS_KEY_ID": "y",
+            "RESTIC_PASSWORD_COMMAND": "y",
+            "AWS_ACCESS_KEY_ID": "z",
         ]).overriddenExtraEnvironmentKeys
-        #expect(overridden == ["RESTIC_PASSWORD"])
+        #expect(overridden == ["RESTIC_PASSWORD", "RESTIC_PASSWORD_COMMAND"])
 
         #expect(context(extra: ["AWS_ACCESS_KEY_ID": "y"]).overriddenExtraEnvironmentKeys.isEmpty)
     }

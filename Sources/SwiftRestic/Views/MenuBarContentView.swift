@@ -12,8 +12,11 @@ struct MenuBarContentView: View {
         if let headline = MenuBarStatus.headline(activity: model.activity, nextRun: model.nextScheduledRun) {
             Text(headline)
         } else {
-            ForEach(runningPlans, id: \.id) { plan in
-                Text("\(plan.name) — \(MenuBarStatus.progressText(model.activity[plan.id]))")
+            ForEach(
+                MenuBarStatus.runningLines(plans: model.configuration.plans, activity: model.activity),
+                id: \.self
+            ) { line in
+                Text(line)
             }
         }
 
@@ -36,10 +39,6 @@ struct MenuBarContentView: View {
         // and stops any running restic first.
         Button("Quit SwiftRestic") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
-    }
-
-    private var runningPlans: [BackupPlan] {
-        model.configuration.plans.filter { model.activity[$0.id] != nil }
     }
 
     private func planLabel(_ plan: BackupPlan) -> String {

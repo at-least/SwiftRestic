@@ -216,9 +216,10 @@ actor ResticRunner {
 
     private var captured: [UUID: (messages: [ResticMessage], stdout: String, stderr: String)] = [:]
 
-    /// stderr's JSON events follow stdout's: restic reports a backup's summary on
-    /// stdout and its read errors on stderr, so per-item errors land after the
-    /// summary — fine for display, and every list keeps its own order.
+    /// stderr's decoded events are appended after stdout's, so a backup's
+    /// per-item errors land after its summary. Order within each stream is
+    /// preserved, and every consumer reads one stream's events or does reversed
+    /// lookup, so the interleaving is never load-bearing.
     private func store(
         handle: UUID,
         stdout: StreamReader.Outcome,
@@ -237,8 +238,16 @@ actor ResticRunner {
 
     /// A predictable environment for the child. A GUI app's inherited environment
     /// is nearly empty, so we rebuild the parts restic actually reads.
+    ///
+    /// restic's own repository and password variables are stripped from whatever
+    /// we inherited: they would win over the per-repository values restic is
+    /// handed (restic ranks PASSWORD_COMMAND and PASSWORD_FILE above PASSWORD),
+    /// and the app always supplies them explicitly — backrest issue #1139.
     private static func baseEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
+        for key in ["RESTIC_REPOSITORY", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE", "RESTIC_PASSWORD_COMMAND"] {
+            env.removeValue(forKey: key)
+        }
         let extraPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
         let existing = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
         var merged = existing

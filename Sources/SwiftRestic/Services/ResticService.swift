@@ -8,16 +8,26 @@ struct RepositoryContext: Sendable {
     var providerSecret: String?
     var settings = AppSettings()
 
-    /// Keys the app itself owns: the repository location and the stored password.
-    /// Letting `extraEnvironment` override these would silently point restic at
-    /// another repository or break authentication — the class of bug behind
-    /// backrest's issue #1139 — so they are applied last, whatever the user added.
-    static let protectedEnvironmentKeys: Set<String> = ["RESTIC_REPOSITORY", "RESTIC_PASSWORD"]
+    /// Keys the app itself owns: the repository location and every form of the
+    /// password restic can read. Letting `extraEnvironment` override these would
+    /// silently point restic at another repository or break authentication — the
+    /// class of bug behind backrest's issue #1139 — so they are applied last,
+    /// whatever the user added.
+    static let protectedEnvironmentKeys: Set<String> = [
+        "RESTIC_REPOSITORY", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE", "RESTIC_PASSWORD_COMMAND",
+    ]
 
     var environment: [String: String] {
         var env = repository.credentialEnvironment(secret: providerSecret)
         env.merge(repository.extraEnvironment) { _, new in new }
-        env["RESTIC_REPOSITORY"] = repository.resticRepositoryString
+        // restic ranks PASSWORD_COMMAND and PASSWORD_FILE above PASSWORD, so
+        // overriding the password alone is not enough — they must not reach it.
+        env.removeValue(forKey: "RESTIC_PASSWORD_COMMAND")
+        env.removeValue(forKey: "RESTIC_PASSWORD_FILE")
+        // Only claimed when there is a value: the console can legitimately reach
+        // a repository the plan editor would call incomplete.
+        let repositoryString = repository.resticRepositoryString
+        if !repositoryString.isEmpty { env["RESTIC_REPOSITORY"] = repositoryString }
         env["RESTIC_PASSWORD"] = password
         return env
     }

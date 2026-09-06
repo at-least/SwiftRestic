@@ -297,7 +297,11 @@ struct ResticIntegrationTests {
         _ = try await fixture.service.initializeRepository(fixture.context)
 
         setenv("RESTIC_PASSWORD", "hostile-from-environment", 1)
-        defer { unsetenv("RESTIC_PASSWORD") }
+        setenv("RESTIC_PASSWORD_COMMAND", "echo hostile-from-command", 1)
+        defer {
+            unsetenv("RESTIC_PASSWORD")
+            unsetenv("RESTIC_PASSWORD_COMMAND")
+        }
 
         let snapshots = try await fixture.service.snapshots(fixture.context)
         #expect(snapshots.isEmpty, "the repository exists but is empty; a password failure would have thrown instead")
