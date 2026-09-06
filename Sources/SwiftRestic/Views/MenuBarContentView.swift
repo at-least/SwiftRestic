@@ -9,16 +9,11 @@ struct MenuBarContentView: View {
     let mainWindowID: String
 
     var body: some View {
-        if model.activity.isEmpty {
-            if let next = model.nextScheduledRun {
-                Text("Next: \(next.plan.name) \(Format.relative(next.date))")
-            } else {
-                Text("No backups scheduled")
-            }
+        if let headline = MenuBarStatus.headline(activity: model.activity, nextRun: model.nextScheduledRun) {
+            Text(headline)
         } else {
             ForEach(runningPlans, id: \.id) { plan in
-                let activity = model.activity[plan.id]
-                Text("\(plan.name) — \(percent(activity))")
+                Text("\(plan.name) — \(MenuBarStatus.progressText(model.activity[plan.id]))")
             }
         }
 
@@ -50,11 +45,5 @@ struct MenuBarContentView: View {
     private func planLabel(_ plan: BackupPlan) -> String {
         let name = plan.name.isEmpty ? "Untitled Plan" : plan.name
         return "Back Up “\(name)” Now"
-    }
-
-    private func percent(_ activity: PlanActivity?) -> String {
-        guard let activity else { return "…" }
-        guard activity.phase == .backingUp else { return activity.phase.displayName }
-        return activity.progress.fraction.formatted(.percent.precision(.fractionLength(0)))
     }
 }
