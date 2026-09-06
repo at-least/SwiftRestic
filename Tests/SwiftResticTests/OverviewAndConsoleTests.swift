@@ -135,6 +135,60 @@ struct OverviewMetricsTests {
             since: date("2026-09-01 00:00:00")
         ) == 1)
     }
+
+    @Test("a run with no plan name folds into Other rather than disappearing")
+    func unnamedRunsFoldIntoOther() {
+        // Console and restore runs record no plan; their bytes still count.
+        let runs = [
+            run(plan: "", at: "2026-09-05 01:00:00", added: 300),
+            run(plan: "Docs", at: "2026-09-05 02:00:00", added: 100),
+        ]
+        let points = OverviewMetrics.dailyVolume(
+            runs: runs,
+            planOrder: ["Docs"],
+            now: date("2026-09-05 23:00:00"),
+            calendar: calendar
+        )
+        let other = points.first { $0.series == OverviewMetrics.otherSeriesName }
+        #expect(other?.dataAdded == 300, "the unnamed run's 300 bytes must survive the fold")
+        #expect(OverviewMetrics.domain(for: points, planOrder: ["Docs"]).last == OverviewMetrics.otherSeriesName)
+    }
+
+    @Test("protected bytes sum the snapshots that have one, skipping the rest")
+    func protectedBytes() throws {
+        func snapshot(totalBytes: Int64?) throws -> Snapshot {
+            // Older restic versions write no summary block at all.
+            let summary = totalBytes.map { #""summary":{"total_bytes_processed":\#($0)},"# } ?? ""
+            let json = """
+            {"id":"s\(UUID())","time":"2026-09-05T02:00:00Z","paths":["/tmp"],"hostname":"mac","tags":[],\(summary)"tree":"t"}
+            """
+            return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        }
+
+        let snapshots: [Snapshot?] = [
+            try snapshot(totalBytes: 500),
+            try snapshot(totalBytes: nil),
+            try snapshot(totalBytes: 250),
+            nil,
+        ]
+        #expect(OverviewMetrics.protectedBytes(latestSnapshotsByPlan: snapshots) == 750)
+        #expect(OverviewMetrics.protectedBytes(latestSnapshotsByPlan: [nil, nil]) == 0)
+    }
+}
+
+@Suite("Run record")
+struct RunRecordTests {
+    @Test("duration never goes negative")
+    func durationClamp() {
+        var record = RunRecord(kind: .backup, planName: "Docs")
+        record.finishedAt = record.startedAt.addingTimeInterval(90)
+        #expect(record.duration == 90)
+
+        // A clock adjusted backwards mid-run must not produce a negative
+        // duration for the history list.
+        record.finishedAt = record.startedAt.addingTimeInterval(-10)
+        #expect(record.duration == 0)
+    }
 }
 
 @Suite("Console command parsing")

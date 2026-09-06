@@ -366,14 +366,30 @@ private struct StreamReader: Sendable {
     }
 }
 
-/// `FileHandle` reads are thread-confined here: exactly one background queue
-/// touches each handle for its whole lifetime.
+/// Reads are thread-confined here: exactly one background queue touches each
+/// descriptor for its whole lifetime.
 private final class FileHandleBox: @unchecked Sendable {
     private let handle: FileHandle
     init(_ handle: FileHandle) { self.handle = handle }
 
+    /// Raw `read(2)` on the descriptor, not `FileHandle.read(upToCount:)`.
+    /// Foundation's read buffers on pipes: measured against an identical
+    /// invocation, `FileHandle.read` delivered restic's status lines only at
+    /// process exit while `read(2)` returned each line as it was written — the
+    /// difference between a progress bar that moves and one stuck at 0%.
     func read(upToCount count: Int) -> Data {
-        (try? handle.read(upToCount: count)) .flatMap { $0 } ?? Data()
+        var storage = [UInt8](repeating: 0, count: count)
+        let bytesRead = storage.withUnsafeMutableBufferPointer { buffer -> Int in
+            while true {
+                let n = Darwin.read(handle.fileDescriptor, buffer.baseAddress, buffer.count)
+                // A signal interrupt must not read as EOF: retry it, or the
+                // stream would silently end early.
+                if n < 0, errno == EINTR { continue }
+                return n
+            }
+        }
+        guard bytesRead > 0 else { return Data() }
+        return Data(storage[0 ..< bytesRead])
     }
 
     func close() { try? handle.close() }

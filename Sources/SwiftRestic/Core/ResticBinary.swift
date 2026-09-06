@@ -23,7 +23,14 @@ struct ResticBinary: Sendable {
     static func locate(userOverride: String?) throws -> ResticBinary {
         if let userOverride, !userOverride.trimmingCharacters(in: .whitespaces).isEmpty {
             let url = URL(fileURLWithPath: userOverride)
-            guard FileManager.default.isExecutableFile(atPath: url.path) else {
+            // `isExecutableFile` alone accepts a directory: 0755 has the execute
+            // bit, and the failure would only surface later as an opaque
+            // process-launch error.
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  !isDirectory.boolValue,
+                  FileManager.default.isExecutableFile(atPath: url.path)
+            else {
                 throw ResticError.binaryNotExecutable(path: url.path)
             }
             return ResticBinary(url: url)

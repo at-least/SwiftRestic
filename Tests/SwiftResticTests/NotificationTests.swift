@@ -155,6 +155,11 @@ struct NotificationSafetyTests {
     func hookOutputIsNotBroadcast() throws {
         // A hook is an arbitrary user script; a verbose curl prints its own
         // Authorization header. That must not reach a webhook.
+        //
+        // This locks the payload layer. The wiring guarantee lives in
+        // `AppModel.broadcast(record:plan:)`, which builds the event from
+        // `record.itemErrors` only — `hookMessages` never enter a
+        // NotificationEvent, so there is nothing here for a payload to leak.
         var record = RunRecord(kind: .backup, planName: "Docs")
         record.itemErrors = ["/etc/secrets: permission denied"]
         record.hookMessages = ["Hook “upload” exited 1 — Authorization: Bearer sk-live-abcdef"]

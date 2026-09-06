@@ -125,3 +125,95 @@ struct ConfigStoreTests {
         #expect(try text(of: "config.json.2").contains("generation 0"))
     }
 }
+
+/// The hand-written config above covers *missing* keys. These cover *malformed*
+/// ones: a value of the wrong type, or an enum case a newer build invented, must
+/// fall back to the field's default instead of failing the whole document.
+@Suite("Tolerant decoding")
+struct TolerantDecodingTests {
+    private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(T.self, from: Data(json.utf8))
+    }
+
+    @Test("an unknown enum raw value falls back to the default case")
+    func unknownEnumCases() throws {
+        let repository = try decode(
+            Repository.self,
+            #"{"name":"NAS","kind":"invented-by-a-newer-build"}"#
+        )
+        #expect(repository.kind == .local)
+        #expect(repository.name == "NAS")
+
+        let plan = try decode(BackupPlan.self, #"{"schedule":{"frequency":"invented"}}"#)
+        #expect(plan.schedule.frequency == .daily)
+
+        let record = try decode(
+            RunRecord.self,
+            #"{"kind":"invented","outcome":"invented","planName":"Docs"}"#
+        )
+        #expect(record.kind == .backup)
+        #expect(record.outcome == .succeeded)
+        #expect(record.planName == "Docs")
+
+        let channel = try decode(
+            NotificationChannel.self,
+            #"{"kind":"invented","url":"https://example.com"}"#
+        )
+        #expect(channel.kind == .webhook)
+        #expect(channel.url == "https://example.com")
+
+        let hook = try decode(
+            BackupHook.self,
+            #"{"event":"invented","failureBehaviour":"invented","command":"true"}"#
+        )
+        #expect(hook.event == .afterSuccess)
+        #expect(hook.failureBehaviour == .ignore)
+        #expect(hook.command == "true")
+    }
+
+    @Test("a field of the wrong type falls back to that field's default, neighbours survive")
+    func wrongTypedValues() throws {
+        // keepLast is a string; keepDaily is untouched next to it.
+        let plan = try decode(
+            BackupPlan.self,
+            #"{"name":"Documents","retention":{"keepLast":"many"},"schedule":"not an object"}"#
+        )
+        #expect(plan.name == "Documents")
+        #expect(plan.retention.keepLast == 0)
+        #expect(plan.retention.keepDaily == 7)
+        #expect(plan.schedule == Schedule())
+
+        let repository = try decode(
+            Repository.self,
+            #"{"name":"NAS","maintenance":42,"localPath":"/tmp/repo"}"#
+        )
+        #expect(repository.maintenance == MaintenancePolicy())
+        #expect(repository.localPath == "/tmp/repo")
+    }
+
+    @Test("a config file with a malformed field still loads through the store")
+    func malformedConfigLoads() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticTolerant-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let json = """
+        {
+          "repositories": [{"name": "NAS", "kind": "local", "localPath": "/tmp/repo"}],
+          "plans": [{"name": "Documents", "schedule": "corrupted"}],
+          "runs": []
+        }
+        """
+        try Data(json.utf8).write(to: directory.appendingPathComponent("config.json"))
+
+        let loaded = try await ConfigStore(directory: directory).load()
+        #expect(loaded.repositories.first?.localPath == "/tmp/repo")
+        let plan = try #require(loaded.plans.first)
+        #expect(plan.name == "Documents")
+        #expect(plan.schedule == Schedule())
+        #expect(plan.retention == RetentionPolicy())
+    }
+}

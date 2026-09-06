@@ -43,7 +43,7 @@ struct SchedulingTests {
     }
 
     @Test("a daily plan that missed its window while asleep is due now")
-    func dailyCatchesUp() {
+    func dailyCatchesUp() throws {
         var schedule = Schedule()
         schedule.frequency = .daily
         schedule.hour = 2
@@ -51,13 +51,13 @@ struct SchedulingTests {
 
         // 02:00 has passed today and the last run was yesterday morning, so the
         // plan must fire rather than silently skipping to tomorrow.
-        let next = schedule.nextRunDate(
+        let next = try #require(schedule.nextRunDate(
             after: date("2026-09-04 02:00:00"),
             now: date("2026-09-05 09:30:00"),
             calendar: calendar
-        )
+        ))
         #expect(next == date("2026-09-05 02:00:00"))
-        #expect(next! <= date("2026-09-05 09:30:00"))
+        #expect(next <= date("2026-09-05 09:30:00"))
     }
 
     @Test("a daily plan that already ran today waits for tomorrow")
@@ -71,6 +71,53 @@ struct SchedulingTests {
             calendar: calendar
         )
         #expect(next == date("2026-09-06 02:00:00"))
+    }
+
+    // 2026-08-31 and 2026-09-07 are both Mondays (weekday 2); 2026-09-05 is a
+    // Saturday, so the most recent firing before "now" below is 08-31 02:00.
+    @Test("a weekly plan that missed its window is due at the missed slot")
+    func weeklyCatchesUp() {
+        var schedule = Schedule()
+        schedule.frequency = .weekly
+        schedule.weekday = 2
+        schedule.hour = 2
+        let next = schedule.nextRunDate(
+            after: date("2026-08-24 02:00:00"),
+            now: date("2026-09-05 12:00:00"),
+            calendar: calendar
+        )
+        #expect(next == date("2026-08-31 02:00:00"))
+    }
+
+    @Test("a weekly plan that never ran is due at the most recent slot, not the next one")
+    func weeklyNeverRan() {
+        var schedule = Schedule()
+        schedule.frequency = .weekly
+        schedule.weekday = 2
+        schedule.hour = 2
+        let next = schedule.nextRunDate(
+            after: nil,
+            now: date("2026-09-05 12:00:00"),
+            calendar: calendar
+        )
+        #expect(next == date("2026-08-31 02:00:00"))
+    }
+
+    @Test("a weekly plan that already ran at its slot waits for the next week")
+    func weeklyAlreadyRan() {
+        var schedule = Schedule()
+        schedule.frequency = .weekly
+        schedule.weekday = 2
+        schedule.hour = 2
+        // Exactly at the slot counts as having run it; a few seconds later too.
+        for lastRun in [date("2026-08-31 02:00:00"), date("2026-08-31 02:00:05")] {
+            let next = schedule.nextRunDate(
+                after: lastRun,
+                now: date("2026-09-05 12:00:00"),
+                calendar: calendar
+            )
+            #expect(next == date("2026-09-07 02:00:00"))
+        }
     }
 
     @Test("only enabled, complete, non-busy plans are returned as due")
@@ -119,6 +166,70 @@ struct SchedulingTests {
 
         // … and because nothing was recorded as run, it is still due afterwards.
         #expect(Scheduler.duePlans(in: [plan], now: now).map(\.name) == ["waiting"])
+    }
+}
+
+@Suite("Upcoming run")
+struct UpcomingRunTests {
+    private func date(_ string: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.date(from: string)!
+    }
+
+    private func plan(
+        name: String,
+        frequency: Schedule.Frequency,
+        lastRun: Date?,
+        enabled: Bool = true,
+        sources: [String] = ["/tmp"]
+    ) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.name = name
+        plan.repositoryID = UUID()
+        plan.sources = sources
+        plan.isEnabled = enabled
+        plan.schedule.frequency = frequency
+        plan.schedule.intervalHours = 1
+        plan.schedule.hour = 2
+        plan.lastRunAt = lastRun
+        return plan
+    }
+
+    @Test("the soonest upcoming run wins, manual and incomplete plans are never listed")
+    func soonestWins() {
+        let soon = plan(name: "hourly", frequency: .hourly, lastRun: date("2026-09-05 11:50:00"))
+        let later = plan(name: "daily", frequency: .daily, lastRun: date("2026-09-05 02:00:00"))
+        let manual = plan(name: "manual", frequency: .manual, lastRun: nil)
+        let disabled = plan(name: "disabled", frequency: .hourly, lastRun: nil, enabled: false)
+        let incomplete = plan(name: "incomplete", frequency: .hourly, lastRun: nil, sources: [])
+
+        let now = date("2026-09-05 12:00:00")
+        let next = Scheduler.nextScheduledRun(
+            in: [manual, later, disabled, incomplete, soon],
+            now: now
+        )
+        #expect(next?.plan.id == soon.id)
+        // An hourly plan that ran ten minutes ago is due in fifty.
+        #expect(next?.date == date("2026-09-05 12:50:00"))
+    }
+
+    @Test("an overdue plan is shown as due now, not in the past")
+    func overdueIsClampedToNow() {
+        // Last ran five hours ago on an hourly schedule: the date is in the past,
+        // and the menu bar must not show a negative countdown.
+        let overdue = plan(name: "hourly", frequency: .hourly, lastRun: date("2026-09-05 07:00:00"))
+        let now = date("2026-09-05 12:00:00")
+        let next = Scheduler.nextScheduledRun(in: [overdue], now: now)
+        #expect(next?.date == now)
+    }
+
+    @Test("no runnable plan means no upcoming run")
+    func noneScheduled() {
+        let manual = plan(name: "manual", frequency: .manual, lastRun: nil)
+        #expect(Scheduler.nextScheduledRun(in: [manual], now: date("2026-09-05 12:00:00")) == nil)
+        #expect(Scheduler.nextScheduledRun(in: [], now: date("2026-09-05 12:00:00")) == nil)
     }
 }
 
@@ -195,6 +306,19 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.dueMaintenance(in: [repository], now: date("2026-09-12 00:00:00")).isEmpty)
         #expect(Scheduler.dueMaintenance(in: [repository], now: date("2026-09-16 00:00:01")).count == 1)
     }
+
+    @Test("the policy summary names both tasks and a deep check's read percentage")
+    func policySummary() {
+        #expect(MaintenancePolicy().summary == "Check every 7d")
+
+        var deep = MaintenancePolicy()
+        deep.checkReadDataPercent = 25
+        #expect(deep.summary == "Check every 7d (reads 25% of data)")
+
+        var both = MaintenancePolicy()
+        both.pruneEnabled = true
+        #expect(both.summary == "Check every 7d, Prune every 30d")
+    }
 }
 
 @Suite("Retention policy")
@@ -236,6 +360,30 @@ struct RetentionPolicyTests {
             "--keep-monthly", "12",
         ])
         #expect(policy.isSafeToRun)
+    }
+
+    @Test("the summary spells out what is kept, or why nothing will be")
+    func summaries() {
+        var disabled = RetentionPolicy()
+        disabled.isEnabled = false
+        #expect(disabled.summary == "Keep everything")
+
+        var empty = RetentionPolicy()
+        empty.keepHourly = 0
+        empty.keepDaily = 0
+        empty.keepWeekly = 0
+        empty.keepMonthly = 0
+        empty.keepYearly = 0
+        #expect(empty.summary == "No rules set")
+
+        var mixed = RetentionPolicy()
+        mixed.keepLast = 3
+        mixed.keepHourly = 24
+        mixed.keepDaily = 0
+        mixed.keepWeekly = 0
+        mixed.keepMonthly = 12
+        mixed.keepYearly = 0
+        #expect(mixed.summary == "Keep 3 latest, 24h, 12m")
     }
 }
 
@@ -379,6 +527,58 @@ struct AdditionalBackendTests {
         #expect(repository.s3Endpoint == "s3.amazonaws.com")
         #expect(repository.azureContainer.isEmpty)
         #expect(repository.rcloneRemote.isEmpty)
+    }
+}
+
+@Suite("Repository completeness")
+struct RepositoryCompletenessTests {
+    /// The non-secret fields each backend needs before restic can be run at all.
+    /// Computed, not stored: closure tables are not `Sendable` and Swift 6
+    /// refuses a shared static one.
+    private static var requiredFields: [Repository.Kind: (inout Repository) -> Void] {
+        [
+            .local: { $0.localPath = "/Volumes/Backup" },
+            .sftp: { $0.sftpHost = "nas.local"; $0.sftpPath = "/volume1/restic" },
+            .s3: { $0.s3Bucket = "bucket"; $0.s3AccessKeyID = "AKIA" },
+            .b2: { $0.b2Bucket = "bucket"; $0.b2AccountID = "0011" },
+            .azure: { $0.azureContainer = "container"; $0.azureAccountName = "acct" },
+            .gcs: { $0.gcsBucket = "bucket"; $0.gcsCredentialsPath = "~/key.json" },
+            .rest: { $0.restURL = "https://host:8000" },
+            .rclone: { $0.rcloneRemote = "mydrive" },
+        ]
+    }
+
+    @Test("a repository is complete exactly when its backend's required fields are filled")
+    func completenessPerKind() {
+        for kind in Repository.Kind.allCases {
+            guard let fill = Self.requiredFields[kind] else {
+                Issue.record("no required-field spec for \(kind)")
+                continue
+            }
+
+            var complete = Repository()
+            complete.name = "Repo"
+            complete.kind = kind
+            fill(&complete)
+            #expect(complete.isConfigurationComplete, "\(kind) with every required field must be complete")
+
+            // A fresh repository of the same kind has none of them filled. The
+            // scheduler refuses to schedule incomplete repositories, so this
+            // must never read as runnable.
+            var bare = Repository()
+            bare.name = "Repo"
+            bare.kind = kind
+            #expect(!bare.isConfigurationComplete, "a fresh \(kind) repository must be incomplete")
+        }
+    }
+
+    @Test("a blank name makes even a fully configured repository incomplete")
+    func blankNameIsIncomplete() {
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/Volumes/Backup"
+        repository.name = "   "
+        #expect(!repository.isConfigurationComplete)
     }
 }
 

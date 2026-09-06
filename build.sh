@@ -17,4 +17,12 @@ xcodebuild -project SwiftRestic.xcodeproj -scheme SwiftRestic -configuration Deb
   | tee "$log" \
   | grep --line-buffered -E "error:|warning:|BUILD|TEST|Testing failed|failed|passed" \
   || status=${PIPESTATUS[0]}
+
+# xcodebuild reports success even when a filter or a stale project file selects
+# zero tests — the swift-testing summary line is then absent entirely, and the
+# exit status is still 0. A green test run must prove it executed something.
+if [ "$ACTION" = "test" ] && ! grep -qE "Test run with [1-9][0-9]* tests" "$log"; then
+    echo "error: test run reported success without executing any tests" >&2
+    status=1
+fi
 exit "$status"
