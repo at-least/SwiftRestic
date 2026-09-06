@@ -48,6 +48,13 @@ enum CommandLineTokenizer {
             current.append(character)
             hasCurrent = true
         }
+        // A trailing backslash has nothing to escape. Keeping it literal — as
+        // the character the user typed — beats emitting an empty argument no
+        // one asked for.
+        if escaped {
+            current.append("\\")
+            hasCurrent = true
+        }
         if hasCurrent { tokens.append(current) }
         return tokens
     }
