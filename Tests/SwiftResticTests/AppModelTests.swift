@@ -312,7 +312,7 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("quitting during a backup still gets the run onto disk")
+    @Test("quitting during a backup still gets the run onto disk, and records why it stopped")
     func shutdownPersistsInFlightRun() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -338,7 +338,36 @@ struct AppModelTests {
         ).load()
         #expect(reloaded.runs.count == 1, "the in-flight run never reached disk")
         #expect(reloaded.runs.first?.outcome != .failed)
+        // Nobody clicked cancel: the record must not send someone hunting for a
+        // cancel click that never happened.
+        #expect(reloaded.runs.first?.failureMessage == "Interrupted by quitting SwiftRestic")
         #expect(reloaded.plans.first?.lastRunAt != nil)
+    }
+
+    @Test("a run the user cancels is recorded as cancelled, not as an interruption")
+    func userCancellationIsRecorded() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+
+        // Enough data that the backup is still running when the cancel lands.
+        let bulk = harness.sourceDirectory.appendingPathComponent("bulk")
+        try FileManager.default.createDirectory(at: bulk, withIntermediateDirectories: true)
+        for index in 0 ..< 50 {
+            try Data((0 ..< 2_000_000).map { UInt8(($0 &+ index) % 251) })
+                .write(to: bulk.appendingPathComponent("f\(index).bin"))
+        }
+
+        model.runBackup(planID: harness.plan.id)
+        try await Task.sleep(for: .milliseconds(400))
+        model.cancelBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.outcome == .cancelled)
+        #expect(record.failureMessage == "Cancelled")
+
+        await model.shutdown()
     }
 
     @Test("the scheduler starts a due plan on its own, and the history is persisted")

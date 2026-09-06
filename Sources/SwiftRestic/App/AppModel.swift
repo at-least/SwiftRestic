@@ -89,6 +89,10 @@ final class AppModel {
     private var schedulerTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
     private var isSaving = false
+    /// Set while `shutdown` is unwinding. A run cancelled this way was not
+    /// stopped by the user, and the run record should say so: "Cancelled" sends
+    /// someone hunting for a cancel click that never happened.
+    private var isShuttingDown = false
 
     init(store: ConfigStore = ConfigStore(), secrets: SecretStore = .keychain) {
         self.store = store
@@ -137,6 +141,7 @@ final class AppModel {
     }
 
     func shutdown() async {
+        isShuttingDown = true
         schedulerTask?.cancel()
         let pending = Array(planTasks.values) + Array(maintenanceTasks.values)
         for task in pending { task.cancel() }
@@ -496,11 +501,11 @@ final class AppModel {
             await refreshSnapshots(repositoryID: repository.id)
         } catch ResticError.cancelled {
             record.outcome = .cancelled
-            record.failureMessage = "Cancelled"
+            record.failureMessage = cancellationMessage
             markPlanRun(plan.id, at: startedAt, succeeded: false)
         } catch is CancellationError {
             record.outcome = .cancelled
-            record.failureMessage = "Cancelled"
+            record.failureMessage = cancellationMessage
             markPlanRun(plan.id, at: startedAt, succeeded: false)
         } catch {
             record.outcome = .failed
@@ -602,6 +607,12 @@ final class AppModel {
                 isError: true
             )
         }
+    }
+
+    /// Why a run was cancelled, for the run record: the user's own stop and the
+    /// app quitting mid-run are different events worth telling apart.
+    private var cancellationMessage: String {
+        isShuttingDown ? "Interrupted by quitting SwiftRestic" : "Cancelled"
     }
 
     private func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool) {
@@ -796,8 +807,10 @@ final class AppModel {
                 onSuccess()
             } catch ResticError.cancelled {
                 record.outcome = .cancelled
+                record.failureMessage = self.cancellationMessage
             } catch is CancellationError {
                 record.outcome = .cancelled
+                record.failureMessage = self.cancellationMessage
             } catch {
                 record.outcome = .failed
                 record.failureMessage = error.localizedDescription
@@ -945,8 +958,10 @@ final class AppModel {
             }
         } catch ResticError.cancelled {
             record.outcome = .cancelled
+            record.failureMessage = cancellationMessage
         } catch is CancellationError {
             record.outcome = .cancelled
+            record.failureMessage = cancellationMessage
         } catch ResticError.passwordMissing {
             // Not finished being set up. Record nothing and stamp nothing: the
             // scheduler skips this repository until a password exists, and the
