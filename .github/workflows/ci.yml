@@ -15,7 +15,9 @@ jobs:
     runs-on: macos-15
     env:
       # A silent skip is a lie in CI: with this set, a missing restic fails the
-      # run instead of letting every integration suite skip. See SkipPolicyTests.
+      # run instead of letting every integration suite skip. The guard itself
+      # lives in build.sh, which greps the log for the integration suite's
+      # start line.
       SWIFTRESTIC_TEST_DISALLOW_SKIP: "1"
     steps:
       - uses: actions/checkout@v4

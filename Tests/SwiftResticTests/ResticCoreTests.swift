@@ -108,11 +108,25 @@ struct ResticBinaryTests {
 
     @Test("a blank override means 'no override', not a broken path")
     func blankOverrideIsIgnored() {
-        // Whatever the machine would find without an override, it must find with
-        // a whitespace-only one — including both failing together on a bare box.
-        let withoutOverride = (try? ResticBinary.locate(userOverride: nil))?.url
-        let withBlankOverride = (try? ResticBinary.locate(userOverride: "   "))?.url
-        #expect(withoutOverride == withBlankOverride)
+        // Blank must behave exactly like nil: the same binary where one exists,
+        // the same not-found error where none does. A blank override handled as
+        // a path would fail with binaryNotExecutable instead of ever reaching
+        // the search, so on a bare box both sides are concrete errors — this
+        // cannot pass vacuously the way comparing two `try?` results would.
+        let withoutOverride = Result { try ResticBinary.locate(userOverride: nil) }
+        let withBlankOverride = Result { try ResticBinary.locate(userOverride: "   ") }
+        switch (withoutOverride, withBlankOverride) {
+        case (.success(let found), .success(let blank)):
+            #expect(found.url == blank.url)
+        case (.failure(let bare as ResticError), .failure(let blank as ResticError)):
+            #expect(bare == blank, "blank override changed the failure: \(bare) vs \(blank)")
+            guard case .binaryNotFound = blank else {
+                Issue.record("blank override failed with \(blank), not binaryNotFound")
+                return
+            }
+        default:
+            Issue.record("a blank override changed the locate outcome: \(withoutOverride) vs \(withBlankOverride)")
+        }
     }
 
     @Test("helper lookup falls back to the inherited PATH")

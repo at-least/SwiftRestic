@@ -27,9 +27,11 @@ xcodebuild -project SwiftRestic.xcodeproj -scheme SwiftRestic -configuration Deb
 # skipped them would still be green, so their suite line must appear in the
 # log. (An environment variable cannot do this check inside the tests:
 # xcodebuild does not forward the shell environment to the test process.)
-# The grep string must stay in sync with the @Suite("restic integration")
-# name in Tests/SwiftResticTests/ResticIntegrationTests.swift and with
-# swift-testing's "Suite ... started" console line.
+# Locally, without that variable, a missing suite only draws a warning — the
+# skip still happens, but it is no longer silent. The grep string must stay
+# in sync with the @Suite("restic integration") name in
+# Tests/SwiftResticTests/ResticIntegrationTests.swift and with swift-testing's
+# "Suite ... started" console line.
 if [ "$status" -eq 0 ] && [ "$ACTION" = "test" ]; then
     if ! grep -qE "Test run with [1-9][0-9]* tests" "$log"; then
         echo "error: test run reported success without executing any tests" >&2
@@ -37,6 +39,8 @@ if [ "$status" -eq 0 ] && [ "$ACTION" = "test" ]; then
     elif [ "${SWIFTRESTIC_TEST_DISALLOW_SKIP:-0}" = "1" ] && ! grep -q 'Suite "restic integration" started' "$log"; then
         echo "error: SWIFTRESTIC_TEST_DISALLOW_SKIP is set but the restic integration suite did not run — is restic installed?" >&2
         status=1
+    elif [ "${CI:-false}" = "false" ] && ! grep -q 'Suite "restic integration" started' "$log"; then
+        echo "warning: the restic integration suite did not run, so this result is missing real-restic coverage — is restic installed? (brew install restic)" >&2
     fi
 fi
 exit "$status"

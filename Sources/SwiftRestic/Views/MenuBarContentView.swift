@@ -4,8 +4,9 @@ struct MenuBarContentView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
 
-    /// Identifier of the main `WindowGroup`, so the window can be brought back
-    /// after the user closed it — with a menu bar item the app is still running.
+    /// Identifier of the main `Window` scene, so the window can be brought back
+    /// after the user closed it — the app keeps running either way; this is the
+    /// way back into its UI.
     let mainWindowID: String
 
     var body: some View {

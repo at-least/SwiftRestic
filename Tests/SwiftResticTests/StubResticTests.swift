@@ -33,7 +33,13 @@ struct StubRestic: Sendable {
         let pipe = Pipe()
         pgrep.standardOutput = pipe
         pgrep.standardError = FileHandle.nullDevice
-        do { try pgrep.run() } catch { return ["pgrep-unavailable"] }
+        do { try pgrep.run() } catch {
+            // A broken pgrep must not read as "processes found": report the
+            // real cause against the running test and nothing, so hang checks
+            // fail loudly with evidence instead of passing on a phantom list.
+            Issue.record("pgrep could not run: \(error)")
+            return []
+        }
         pgrep.waitUntilExit()
         guard pgrep.terminationStatus == 0 else { return [] }
         let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
@@ -48,6 +54,20 @@ struct StubRestic: Sendable {
             try? await Task.sleep(for: .milliseconds(100))
         }
         return findProcesses(matching: pattern).isEmpty
+    }
+
+    /// Polls the process table until the stub's sleep child shows up in it.
+    ///
+    /// Tests that cancel or quit mid-run need the hang actually established:
+    /// a fixed delay bets on spawn speed, which is exactly what a cold runner
+    /// loses. The sleep marker is what the hung stub is sleeping on.
+    static func waitForHang(matching marker: String, within seconds: TimeInterval) async -> Bool {
+        let deadline = Date.now.addingTimeInterval(seconds)
+        while Date.now < deadline {
+            if !findProcesses(matching: marker).isEmpty { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return !findProcesses(matching: marker).isEmpty
     }
 
     private static func script(sleepMarker: String) -> String {
@@ -226,16 +246,10 @@ struct StubResticTests {
         let context = fixture.context
         let plan = fixture.plan
         let task = Task { try await service.backup(context, plan: plan) }
-        // Wait until the stub's sleep child is actually in the process table:
-        // that hang is what guarantees the cancel lands mid-run, so the test
+        // The hang is what guarantees the cancel lands mid-run, so the test
         // must not assume a fixed delay — a cold first spawn can take a moment.
         // If the hang never establishes, this fails with the stub's own trace.
-        let hangDeadline = Date.now.addingTimeInterval(10)
-        while Date.now < hangDeadline,
-              StubRestic.findProcesses(matching: fixture.stub.sleepMarker).isEmpty {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-        let hangEstablished = !StubRestic.findProcesses(matching: fixture.stub.sleepMarker).isEmpty
+        let hangEstablished = await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 10)
         if !hangEstablished {
             let trace = (try? String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)) ?? "no trace"
             Issue.record("the stub never established its hang within 10 s; trace: [\(trace)]; ps saw: [\(Self.processSnapshot())]")

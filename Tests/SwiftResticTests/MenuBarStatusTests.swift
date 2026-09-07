@@ -81,6 +81,10 @@ struct MenuBarStatusTests {
         let next = Date.now.addingTimeInterval(86_400)
         let whileRunning = MenuBarStatus.headline(activity: [nightly.id: activity()], nextRun: nil)
         #expect(whileRunning == nil)
-        #expect(MenuBarStatus.headline(activity: [:], nextRun: (plan: nightly, date: next)) != nil)
+        // Back to the next-run line — not the running line and not the
+        // empty-state text. (The relative-date suffix has its own pins; the
+        // prefix is what distinguishes this state from its neighbours.)
+        let restored = MenuBarStatus.headline(activity: [:], nextRun: (plan: nightly, date: next))
+        #expect(restored?.hasPrefix("Next: Nightly ") == true)
     }
 }

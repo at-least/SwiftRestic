@@ -93,9 +93,11 @@ Views/      NavigationSplitView UI, Swift Charts dashboard, restic console
 ```
 
 Everything runs under Swift 6 strict concurrency. restic executes on the
-`ResticRunner` actor and reports progress back by hopping to the main actor;
-there is exactly one `@unchecked Sendable` wrapper in the codebase, around
-`Process`, because Foundation does not annotate it.
+`ResticRunner` actor and reports progress back by hopping to the main actor.
+The few places Foundation forces the issue — `Process`, its exit handler and
+file handles — use small lock-guarded `@unchecked Sendable` wrappers
+(`ProcessBox`, `ExitWaiter` and `FileHandleBox` in `ResticRunner`,
+`DiffCollector` in `ResticService`).
 
 ### Notes on restic's JSON
 
@@ -121,7 +123,7 @@ backup; 10 is a missing repository, 11 a lock, 12 a wrong password.
 ./build.sh test
 ```
 
-Three layers, 97 tests:
+Three layers:
 
 - **Decoding** — restic's JSON pinned against output captured verbatim from
   restic 0.19.1, plus scheduling, retention and repository-string logic.
@@ -227,7 +229,8 @@ a failed run. Only a before hook can be set to cancel the run.
 
 Repositories have hooks of their own, in the repository editor, around `check`
 and `prune`: *before*, *after success*, *after failure* and *after every*.
-They get the same variables minus the plan and snapshot ones, plus
+They get the same variables — the plan ones are present but empty, since
+there is no plan — never the snapshot one, plus
 `SWIFTRESTIC_TASK` (`check` or `prune`). A check that finds errors counts as a
 failure for hook purposes — that is the outcome a repository hook exists to
 report — and a before hook set to cancel still stamps the schedule, so a hook
@@ -256,8 +259,8 @@ that cannot be delivered is shown to you but never written into the run history.
 
 ## Behaviour worth knowing
 
-- **A new plan backs up almost immediately.** A plan on an interval or daily
-  schedule that has never run counts as due, so creating one starts a backup
+- **A new plan backs up almost immediately.** A plan on an interval, daily or
+  weekly schedule that has never run counts as due, so creating one starts a backup
   within a minute. Pick "Manually" if that is not what you want.
 - **A repository with no saved password is skipped, not retried.** Maintenance
   is not scheduled for it and no failure is recorded — the repository screen says
@@ -280,7 +283,9 @@ that cannot be delivered is shown to you but never written into the run history.
 
 - Scheduled runs need the app to be running. There is no LaunchAgent or daemon,
   so backups do not fire when SwiftRestic is quit. Turn on *Start at login* in
-  Settings and leave the menu bar item on; that is what keeps it resident. The
+  Settings. Closing the window never quits the app — that is what keeps it
+  resident, not the menu bar item — but keep the item on: it is the only way
+  back into the UI. The
   toggle refuses to register while the app is running out of a build folder — a
   login item registered from DerivedData points at a bundle the next compile
   replaces, and that stale entry outlives the build. Move the app to
@@ -307,7 +312,7 @@ that cannot be delivered is shown to you but never written into the run history.
 - *Find files* with **Latest snapshot only** means the newest snapshot in the
   repository, not the newest per plan. If two Macs write to one repository the
   latest snapshot may belong to the other one — search all snapshots there.
-- The UI is English only. Two strings (the find-pattern placeholder and the hook
-  variable list) are `Text(verbatim:)` because SwiftUI parses literal titles as
-  Markdown and ate the `*` in the glob example; those would need rewording if the
-  app were ever localized.
+- The UI is English only. Two strings (the find-pattern placeholder and the
+  /bin/sh note that mentions `SWIFTRESTIC_*`) are `Text(verbatim:)` because
+  SwiftUI parses literal titles as Markdown and ate the `*` in the glob
+  example; those would need rewording if the app were ever localized.

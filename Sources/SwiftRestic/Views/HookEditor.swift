@@ -149,7 +149,7 @@ struct HookEditor: View {
     SWIFTRESTIC_PLAN_ID           plan UUID
     SWIFTRESTIC_REPO_NAME         repository name
     SWIFTRESTIC_REPO_ID           repository UUID
-    SWIFTRESTIC_OUTCOME           succeeded | completedWithErrors | failed
+    SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed
     SWIFTRESTIC_SNAPSHOT_ID       set once a snapshot exists
     SWIFTRESTIC_ERROR             set only when something failed
     SWIFTRESTIC_FILES_NEW         file count
@@ -162,9 +162,15 @@ struct HookEditor: View {
     private static let maintenanceVariableReference = """
     SWIFTRESTIC_EVENT             beforeMaintenance | afterMaintenanceSuccess | …
     SWIFTRESTIC_TASK              check | prune
+    SWIFTRESTIC_PLAN_NAME         empty — repository hooks have no plan
+    SWIFTRESTIC_PLAN_ID           empty — repository hooks have no plan
     SWIFTRESTIC_REPO_NAME         repository name
     SWIFTRESTIC_REPO_ID           repository UUID
     SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed
+    SWIFTRESTIC_FILES_NEW         0 — no backup ran
+    SWIFTRESTIC_FILES_CHANGED     0 — no backup ran
+    SWIFTRESTIC_BYTES_PROCESSED   0 — no backup ran
+    SWIFTRESTIC_DATA_ADDED        0 — no backup ran
     SWIFTRESTIC_ERROR             set only when something failed
     SWIFTRESTIC_DURATION_SECONDS  seconds
     """

@@ -31,8 +31,14 @@ struct FormattingTests {
     @Test("hour-plus runs drop the seconds unit, short ones keep it")
     func durationUnitSwitch() {
         // The allowed units flip at an hour, so a 90-minute run never reads as
-        // "1 hr 30 min 0 sec".
-        #expect(Format.duration(90 * 60) != Format.duration(90))
+        // "1 hr 30 min 0 sec". Pinned to exact literals — an inequality between
+        // two different inputs would also survive a broken formatter. (The
+        // suite's other pins assume the en locale; so does DateComponentsFormatter.)
+        #expect(Format.duration(90) == "1m 30s")
+        #expect(Format.duration(90 * 60) == "1h 30m")
+        // At the boundary the seconds round away into a whole hour, never a
+        // "1h 0m" leaking the dropped unit back in.
+        #expect(Format.duration(3600) == "1h")
     }
 
     @Test("zero bytes stays numeric")

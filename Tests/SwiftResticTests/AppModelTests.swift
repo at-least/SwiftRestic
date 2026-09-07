@@ -13,6 +13,9 @@ struct AppModelTests {
         var repository: Repository
         var plan: BackupPlan
         var sourceDirectory: URL
+        /// Set only in stub mode; its sleep marker is how a test waits for a
+        /// hang to actually establish instead of betting on a fixed delay.
+        var stub: StubRestic?
     }
 
     /// Builds a ready-to-use repository *before* the model exists.
@@ -87,7 +90,8 @@ struct AppModelTests {
             root: root,
             repository: repository,
             plan: plan,
-            sourceDirectory: sourceDirectory
+            sourceDirectory: sourceDirectory,
+            stub: stub
         )
     }
 
@@ -336,10 +340,15 @@ struct AppModelTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
 
-        // The stub backup never finishes on its own, so the run is guaranteed
-        // still in flight when we quit.
+        // The stub backup never finishes on its own, so once its hang shows up
+        // in the process table the run is guaranteed still in flight when we
+        // quit — no fixed delay to bet on.
         model.runBackup(planID: harness.plan.id)
-        try await Task.sleep(for: .milliseconds(400))
+        let stub = try #require(harness.stub)
+        #expect(
+            await StubRestic.waitForHang(matching: stub.sleepMarker, within: 10),
+            "the stub never established its hang within 10 s"
+        )
 
         // shutdown() cancels the run; the record is written while it unwinds, and
         // the debounced save would never fire if shutdown did not wait for it.
@@ -365,10 +374,15 @@ struct AppModelTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
 
-        // The stub backup never finishes on its own, so the cancel is
-        // guaranteed to land mid-run.
+        // The cancel must land mid-run, so wait for the stub's sleep child to
+        // show up in the process table instead of betting that 300 ms is long
+        // enough for a cold first spawn.
         model.runBackup(planID: harness.plan.id)
-        try await Task.sleep(for: .milliseconds(300))
+        let stub = try #require(harness.stub)
+        #expect(
+            await StubRestic.waitForHang(matching: stub.sleepMarker, within: 10),
+            "the stub never established its hang within 10 s"
+        )
         model.cancelBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
 

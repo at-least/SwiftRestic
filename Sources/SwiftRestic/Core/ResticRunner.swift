@@ -267,7 +267,9 @@ actor ResticRunner {
 // MARK: - Sendable shims
 
 /// `Process` is safe to `terminate()` from another thread but is not annotated
-/// `Sendable`. This is the one deliberate wrapper in the codebase; keep it small.
+/// `Sendable`. One of the few lock-guarded `@unchecked Sendable` shims in the
+/// codebase (with `ExitWaiter`, `FileHandleBox` and `ResticService`'s
+/// `DiffCollector`); keep each of them small.
 private final class ProcessBox: @unchecked Sendable {
     private let process: Process
     private let lock = NSLock()

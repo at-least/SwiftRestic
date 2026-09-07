@@ -191,15 +191,47 @@ struct ResticMessageTests {
     @Test("timestamps with a variable-length fractional part")
     func timestampParsing() throws {
         // restic prints however many digits Go's time package produced: 5 here,
-        // 6 and 9 elsewhere in the same stream.
-        let samples = [
-            "2026-09-05T00:53:25.22662+08:00",
-            "2026-09-05T00:53:25.941226+08:00",
-            "2026-08-31T17:21:46.156199647+08:00",
-            "2026-09-05T00:53:25Z",
+        // 6 and 9 elsewhere in the same stream. Parsing must land on the right
+        // instant — run records and chart bins derive from these — but
+        // ISO8601DateFormatter keeps only the first three fraction digits
+        // (verified: .22662 parses back out as .226), so the pin is to the
+        // millisecond the formatter actually preserves.
+        func instant(
+            _ year: Int, _ month: Int, _ day: Int,
+            _ hour: Int, _ minute: Int, _ second: Int,
+            nanosecond: Int = 0, utcOffsetHours: Int
+        ) throws -> Date {
+            var components = DateComponents()
+            components.year = year
+            components.month = month
+            components.day = day
+            components.hour = hour
+            components.minute = minute
+            components.second = second
+            components.nanosecond = nanosecond
+            components.timeZone = TimeZone(secondsFromGMT: utcOffsetHours * 3600)
+            return try #require(Calendar(identifier: .gregorian).date(from: components))
+        }
+        // Just over the formatter's 1 ms truncation; Double epoch rounding at
+        // 2026 is orders of magnitude below this, so anything past it is a
+        // real misread, not float noise.
+        let tolerance: TimeInterval = 0.002
+        let samples: [(String, Date)] = [
+            ("2026-09-05T00:53:25.22662+08:00",
+             try instant(2026, 9, 5, 0, 53, 25, nanosecond: 226_620_000, utcOffsetHours: 8)),
+            ("2026-09-05T00:53:25.941226+08:00",
+             try instant(2026, 9, 5, 0, 53, 25, nanosecond: 941_226_000, utcOffsetHours: 8)),
+            ("2026-08-31T17:21:46.156199647+08:00",
+             try instant(2026, 8, 31, 17, 21, 46, nanosecond: 156_199_647, utcOffsetHours: 8)),
+            ("2026-09-05T00:53:25Z",
+             try instant(2026, 9, 5, 0, 53, 25, utcOffsetHours: 0)),
         ]
-        for sample in samples {
-            #expect(ResticDateFormat.parse(sample) != nil, "failed to parse \(sample)")
+        for (sample, expected) in samples {
+            let parsed = try #require(ResticDateFormat.parse(sample), "failed to parse \(sample)")
+            #expect(
+                abs(parsed.timeIntervalSince(expected)) < tolerance,
+                "\(sample) parsed as \(parsed), expected \(expected)"
+            )
         }
     }
 
