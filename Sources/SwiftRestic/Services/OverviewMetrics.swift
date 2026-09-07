@@ -93,8 +93,14 @@ enum OverviewMetrics {
         return domain
     }
 
-    static func failureCount(runs: [RunRecord], since: Date) -> Int {
-        runs.filter { $0.startedAt >= since && $0.outcome == .failed }.count
+    /// Failures and completed-with-errors runs in the window — the same set
+    /// the Recent problems card lists, so the dashboard's tile and card can
+    /// never disagree.
+    static func problemCount(runs: [RunRecord], since: Date) -> Int {
+        runs.filter {
+            $0.startedAt >= since
+                && ($0.outcome == .failed || $0.outcome == .completedWithErrors)
+        }.count
     }
 }
 

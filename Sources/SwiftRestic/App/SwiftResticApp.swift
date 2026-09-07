@@ -44,6 +44,8 @@ extension Notification.Name {
     /// Posted by the Backup menu. The sheet's state lives in `RootView`, which a
     /// menu command has no direct way to reach.
     static let swiftResticShowFind = Notification.Name("SwiftRestic.showFind")
+    /// Posted by the Help menu; same arrangement as `swiftResticShowFind`.
+    static let swiftResticShowConcepts = Notification.Name("SwiftRestic.showConcepts")
 }
 
 #if DEBUG
@@ -154,6 +156,18 @@ struct SwiftResticApp: App {
         .defaultSize(width: 1100, height: 720)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .help) {
+                Button("SwiftRestic Concepts…") {
+                    NotificationCenter.default.post(name: .swiftResticShowConcepts, object: nil)
+                }
+                Divider()
+                Button("restic Documentation") {
+                    NSWorkspace.shared.open(URL(string: "https://restic.readthedocs.io")!)
+                }
+                Button("restic Change Log") {
+                    NSWorkspace.shared.open(URL(string: "https://restic.readthedocs.io/en/stable/changelog.html")!)
+                }
+            }
             CommandMenu("Backup") {
                 Button("Back Up All Plans Now") {
                     for plan in model.configuration.plans where plan.isConfigurationComplete {

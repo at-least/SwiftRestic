@@ -103,6 +103,7 @@ struct ActivityView: View {
                     isConfirmingClear = true
                 }
                 .disabled(model.configuration.runs.isEmpty)
+                .help("Permanently remove all run records")
             }
         }
         .confirmationDialog(

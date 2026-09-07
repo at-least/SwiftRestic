@@ -124,16 +124,18 @@ struct OverviewMetricsTests {
         #expect(other?.dataAdded == 6) // Plan7 (3) + Plan8 (2) + Plan9 (1)
     }
 
-    @Test("headline figures")
+    @Test("problem figures")
     func headlineFigures() {
         var failed = run(plan: "Docs", at: "2026-09-05 01:00:00", added: 0)
         failed.outcome = .failed
+        var warned = run(plan: "Docs", at: "2026-09-06 01:00:00", added: 0)
+        warned.outcome = .completedWithErrors
         var old = run(plan: "Docs", at: "2026-08-01 01:00:00", added: 0)
         old.outcome = .failed
-        #expect(OverviewMetrics.failureCount(
-            runs: [failed, old],
+        #expect(OverviewMetrics.problemCount(
+            runs: [failed, warned, old],
             since: date("2026-09-01 00:00:00")
-        ) == 1)
+        ) == 2)
     }
 
     @Test("a run with no plan name folds into Other rather than disappearing")

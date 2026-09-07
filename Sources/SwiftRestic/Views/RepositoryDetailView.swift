@@ -28,20 +28,24 @@ struct RepositoryDetailView: View {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
                 Menu("Maintenance", systemImage: "wrench.and.screwdriver") {
-                    Button("Check Structure") {
-                        model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 0)
+                    Section("Checks — safe, read-mostly") {
+                        Button("Check Structure") {
+                            model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 0)
+                        }
+                        Button("Check + Read 5% of Data") {
+                            model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 5)
+                        }
+                        Button("Check + Read All Data") {
+                            model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 100)
+                        }
                     }
-                    Button("Check + Read 5% of Data") {
-                        model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 5)
+                    Section("Destructive — confirmed before running") {
+                        Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
+                        Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
                     }
-                    Button("Check + Read All Data") {
-                        model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 100)
-                    }
-                    Divider()
-                    Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
-                    Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
                 }
                 .disabled(model.busyRepositoryIDs.contains(repositoryID))
+                .help("Verify the repository's integrity, or run destructive maintenance")
                 Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
             }
         }

@@ -247,7 +247,7 @@ struct FindFilesView: View {
     private func restoreSelection() {
         guard let row = selectedRow, let repositoryID else { return }
         guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore “\(row.match.name)”",
+            message: "Choose where to restore “\(row.match.name)”. Restoring overwrites existing files at the destination.",
             prompt: "Restore"
         ) else { return }
         model.restore(

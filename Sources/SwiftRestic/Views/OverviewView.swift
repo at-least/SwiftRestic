@@ -55,7 +55,7 @@ struct OverviewView: View {
         }
         let plansWithSnapshots = latestSnapshots.compactMap { $0 }.count
         let totalPlans = model.configuration.plans.count
-        let failures = OverviewMetrics.failureCount(
+        let problems = OverviewMetrics.problemCount(
             runs: model.configuration.runs,
             since: .now.addingTimeInterval(-7 * 86_400)
         )
@@ -83,20 +83,20 @@ struct OverviewView: View {
                 value: Format.count(model.configuration.plans.count),
                 systemImage: "calendar"
             )
-            if failures > 0 {
+            if problems > 0 {
                 Button(action: showProblems) {
                     StatTile(
-                        title: "Failures (7 days)",
-                        value: Format.count(failures),
-                        systemImage: "xmark.octagon.fill",
-                        hue: Theme.danger
+                        title: "Problems (7 days)",
+                        value: Format.count(problems),
+                        systemImage: "exclamationmark.triangle.fill",
+                        hue: Theme.warning
                     )
                 }
                 .buttonStyle(HoverableButtonStyle())
-                .accessibilityLabel("Failures in the last 7 days: \(failures). Show them in Activity")
+                .accessibilityLabel("Problems in the last 7 days: \(problems). Show them in Activity")
             } else {
                 StatTile(
-                    title: "Failures (7 days)",
+                    title: "Problems (7 days)",
                     value: "0",
                     systemImage: "checkmark.circle",
                     hue: Theme.success

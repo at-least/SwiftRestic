@@ -208,7 +208,7 @@ struct SnapshotBrowserView: View {
     private func restoreSelection() {
         guard let node = selectedNode else { return }
         guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore “\(node.name)”",
+            message: "Choose where to restore “\(node.name)”. Restoring overwrites existing files at the destination.",
             prompt: "Restore"
         ) else { return }
         model.restore(
@@ -221,7 +221,7 @@ struct SnapshotBrowserView: View {
 
     private func restoreWholeSnapshot() {
         guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore the whole snapshot",
+            message: "Choose where to restore the whole snapshot. Restoring overwrites existing files at the destination.",
             prompt: "Restore"
         ) else { return }
         // A whole-snapshot restore keeps the original absolute layout, so it goes

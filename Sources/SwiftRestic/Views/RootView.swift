@@ -14,6 +14,7 @@ struct RootView: View {
     @State private var editingRepository: Repository?
     @State private var isShowingConsole = false
     @State private var isShowingFind = false
+    @State private var isShowingConcepts = false
     // Destructive actions armed from the sidebar context menus. The detail
     // pages confirm their own; these menus must not be a faster way around.
     @State private var planPendingDeletion: BackupPlan?
@@ -78,8 +79,10 @@ struct RootView: View {
         .toolbar {
             Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
                 .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
+                .help("Search snapshots for files, across every snapshot (⇧⌘F)")
             Button("restic Console", systemImage: "apple.terminal") { isShowingConsole = true }
                 .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
+                .help("Run restic commands directly against a repository")
         }
         .onAppear {
             selectSomething()
@@ -88,10 +91,16 @@ struct RootView: View {
             #endif
         }
         .onChange(of: model.configuration.plans.count) {
-            selectSomething()
+            revalidateSelection()
             #if DEBUG
             applyCapturePaneOverride()
             #endif
+        }
+        .onChange(of: model.configuration.repositories.count) {
+            revalidateSelection()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowConcepts)) { _ in
+            isShowingConcepts = true
         }
     }
 
@@ -260,6 +269,19 @@ struct RootView: View {
         guard selection == nil else { return }
         // The dashboard is the useful landing place once anything is configured.
         selection = model.configuration.repositories.isEmpty ? nil : .overview
+    }
+
+    /// After a deletion the selected plan or repository may no longer exist;
+    /// landing on "Plan not found" is a dead end whose only exit is the
+    /// sidebar, so retarget to the dashboard instead.
+    private func revalidateSelection() {
+        switch selection {
+        case .plan(let id) where model.plan(id: id) == nil,
+             .repository(let id) where model.repository(id: id) == nil:
+            selection = model.configuration.repositories.isEmpty ? nil : .overview
+        default:
+            break
+        }
     }
 }
 

@@ -31,8 +31,12 @@ struct PlanDetailView: View {
                             model.runBackup(planID: plan.id)
                         }
                         .disabled(!plan.isConfigurationComplete || !model.isResticAvailable)
+                        .labelStyle(.titleAndIcon)
+                        .help("Run this plan's backup now")
                     }
                     Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
+                        .labelStyle(.titleAndIcon)
+                        .help("Change this plan's folders, schedule and retention")
                 }
             }
         }
