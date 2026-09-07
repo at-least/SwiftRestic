@@ -227,10 +227,13 @@ struct OverviewView: View {
     private func colorRange(for domain: [String]) -> [Color] {
         domain.map { name in
             if name == OverviewMetrics.otherSeriesName { return ChartPalette.other }
-            guard let plan = model.configuration.plans.first(where: { $0.name == name }) else {
-                return ChartPalette.other
+            if let plan = model.configuration.plans.first(where: { $0.name == name }) {
+                return ChartPalette.color(for: plan)
             }
-            return ChartPalette.color(for: plan)
+            // Historical series recorded under a name no current plan bears —
+            // a renamed plan's older runs, say. Keep a stable colour of their
+            // own instead of collapsing into "Other" grey.
+            return ChartPalette.color(forSeriesNamed: name)
         }
     }
 

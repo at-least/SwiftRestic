@@ -37,8 +37,11 @@ struct PlanEditorSheet: View {
                     // one place plans are created, so this is where the slot
                     // is minted — the model layer stays view-free.
                     if isNew, plan.chartIndex == nil {
+                        // Legacy plans count via their fallback slot: a new
+                        // plan must not take a colour an existing one already
+                        // renders with.
                         plan.chartIndex = ChartPalette.nextSlot(
-                            taken: Set(model.configuration.plans.compactMap(\.chartIndex))
+                            taken: Set(model.configuration.plans.map { ChartPalette.slot(for: $0) })
                         )
                     }
                     model.upsert(plan: plan)

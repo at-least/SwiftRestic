@@ -211,3 +211,44 @@ struct CommandLineTokenizerTests {
         #expect(!CommandLineTokenizer.isDestructive([]))
     }
 }
+
+@Suite("Plan colour slots")
+struct PlanColourSlotTests {
+    private func plan(id: UUID, chartIndex: Int? = nil) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.id = id
+        plan.chartIndex = chartIndex
+        return plan
+    }
+
+    @Test("the fallback slot is deterministic across processes")
+    func deterministicFallback() {
+        // Pinned to this literal on purpose: Swift's Hasher is seeded per
+        // process, so if this derivation ever regresses to Hasher-based
+        // hashing, legacy plans' colours would change on every launch — and
+        // only this assertion would notice.
+        let legacy = plan(id: UUID(uuidString: "340CA842-C653-4E2D-B61F-D7653D70A521")!)
+        #expect(ChartPalette.slot(for: legacy) == 6)
+    }
+
+    @Test("a negative stored slot cannot become a negative subscript")
+    func negativeIndexClamps() {
+        let hostile = plan(id: UUID(), chartIndex: -3)
+        #expect((0..<ChartPalette.categorical.count).contains(ChartPalette.slot(for: hostile)))
+    }
+
+    @Test("new plans avoid the slots legacy plans already render with")
+    func nextSlotAvoidsEffectiveSlots() {
+        // A legacy plan whose fallback slot is 0: a naive taken-set built
+        // from stored chartIndexes alone would hand slot 0 to the new plan.
+        let legacy = plan(id: UUID(uuidString: "340CA842-C653-4E2D-B61F-D7653D70A521")!)
+        let taken = Set([legacy].map { ChartPalette.slot(for: $0) })
+        #expect(ChartPalette.nextSlot(taken: taken) != ChartPalette.slot(for: legacy))
+    }
+
+    @Test("explicit slots survive the modulo only within range")
+    func explicitSlotStable() {
+        let assigned = plan(id: UUID(), chartIndex: 2)
+        #expect(ChartPalette.slot(for: assigned) == 2)
+    }
+}

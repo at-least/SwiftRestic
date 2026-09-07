@@ -228,31 +228,31 @@ struct RootView: View {
                 OverviewView(onShowProblems: {
                     selection = .activity
                 })
-        case let .plan(id):
-            if let plan = model.plan(id: id) {
-                PlanDetailView(planID: plan.id, onEdit: { editingPlan = plan })
-            } else {
-                ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
-            }
-        case let .repository(id):
-            if let repository = model.repository(id: id) {
-                RepositoryDetailView(
-                    repositoryID: repository.id,
-                    onEdit: { editingRepository = repository }
+            case let .plan(id):
+                if let plan = model.plan(id: id) {
+                    PlanDetailView(planID: plan.id, onEdit: { editingPlan = plan })
+                } else {
+                    ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
+                }
+            case let .repository(id):
+                if let repository = model.repository(id: id) {
+                    RepositoryDetailView(
+                        repositoryID: repository.id,
+                        onEdit: { editingRepository = repository }
+                    )
+                } else {
+                    ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
+                }
+            case .activity:
+                ActivityView(onOpenPlan: { planID in
+                    selection = .plan(planID)
+                })
+            case .none:
+                WelcomeView(
+                    onAddRepository: { editingRepository = Repository() },
+                    onAddPlan: { editingPlan = BackupPlan() }
                 )
-            } else {
-                ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
             }
-        case .activity:
-            ActivityView(onOpenPlan: { planID in
-                selection = .plan(planID)
-            })
-        case .none:
-            WelcomeView(
-                onAddRepository: { editingRepository = Repository() },
-                onAddPlan: { editingPlan = BackupPlan() }
-            )
-        }
         }
     }
 

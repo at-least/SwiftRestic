@@ -38,24 +38,45 @@ enum ChartPalette {
         }
     }
 
-    /// A plan's colour: the slot assigned at creation, or a stable fallback
-    /// derived from its ID for plans created before slots existed.
+    /// A plan's colour: the slot assigned at creation, or a deterministic
+    /// fallback derived from its ID for plans created before slots existed.
     static func color(for plan: BackupPlan) -> Color {
         categorical[slot(for: plan)]
     }
 
-    /// The first palette slot no existing plan occupies. Once the palette is
-    /// exhausted the chart folds series past the cap anyway, so wrapping by
-    /// position keeps every plan coloured.
+    /// A historical chart series' colour. Series are keyed by the plan name
+    /// recorded when the run happened, so a renamed plan's older runs keep a
+    /// stable colour of their own rather than collapsing into "Other" grey.
+    static func color(forSeriesNamed name: String) -> Color {
+        categorical[slot(forName: name)]
+    }
+
+    /// The first palette slot no existing plan effectively occupies — legacy
+    /// plans count via their fallback slot, or two series would render
+    /// identical colours. Once the palette is exhausted the chart folds
+    /// series past the cap anyway, so wrapping keeps every plan coloured.
     static func nextSlot(taken: Set<Int>) -> Int {
         (0..<categorical.count).first { !taken.contains($0) }
             ?? ((taken.max() ?? -1) + 1) % categorical.count
     }
 
-    private static func slot(for plan: BackupPlan) -> Int {
-        if let chartIndex = plan.chartIndex { return chartIndex % categorical.count }
-        var hasher = Hasher()
-        hasher.combine(plan.id)
-        return Int(UInt(bitPattern: hasher.finalize()) % UInt(categorical.count))
+    static func slot(for plan: BackupPlan) -> Int {
+        if let chartIndex = plan.chartIndex {
+            // Config files are hand-editable; a negative index must not
+            // become a negative array subscript.
+            return ((chartIndex % categorical.count) + categorical.count) % categorical.count
+        }
+        return slot(forName: plan.id.uuidString)
+    }
+
+    /// Swift's `Hasher` is seeded per process, so a "stable hash" built from
+    /// it changes on every launch — the one thing a colour identity must not
+    /// do. FNV-1a over the raw bytes is boring and deterministic.
+    private static func slot(forName name: String) -> Int {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in name.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01b3
+        }
+        return Int(hash % UInt64(categorical.count))
     }
 }
