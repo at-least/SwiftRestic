@@ -290,8 +290,8 @@ struct SnapshotDiffView: View {
     private func footerText(_ diff: SnapshotDiff) -> String {
         let shown = filteredChanges(diff).count
         var text = shown == diff.changes.count
-            ? "\(Format.count(diff.changes.count)) change(s)"
-            : "\(Format.count(shown)) of \(Format.count(diff.changes.count)) change(s)"
+            ? Format.plural(diff.changes.count, "change")
+            : "\(Format.count(shown)) of \(Format.plural(diff.changes.count, "change"))"
         if diff.isTruncated {
             text += " — list cut off at \(Format.count(SnapshotDiff.changeLimit)); the totals above are complete"
         }

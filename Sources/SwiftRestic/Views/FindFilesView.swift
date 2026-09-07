@@ -154,14 +154,19 @@ struct FindFilesView: View {
                     onCancel: { model.cancelRestore() }
                 )
             }
+            Text("Restoring overwrites existing files at the destination.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             HStack {
                 if !rows.isEmpty {
-                    Text("\(rows.count) match(es) across \(results.count) snapshot(s)")
+                    Text("\(Format.plural(rows.count, "match")) across \(Format.plural(results.count, "snapshot"))")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Close") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Button("Restore Selected…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
                     .disabled(selectedRow == nil || model.isRestoring)

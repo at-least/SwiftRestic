@@ -28,6 +28,7 @@ struct HookEditor: View {
                         Toggle("", isOn: $hook.isEnabled)
                             .labelsHidden()
                             .controlSize(.mini)
+                            .accessibilityLabel("Enable \(hook.displayName)")
                         VStack(alignment: .leading, spacing: 1) {
                             Text(hook.displayName)
                             Text(hook.event.displayName)

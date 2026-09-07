@@ -157,6 +157,7 @@ struct NotificationChannelsTab: View {
                             Toggle("", isOn: $channel.isEnabled)
                                 .labelsHidden()
                                 .controlSize(.mini)
+                                .accessibilityLabel("Enable \(channel.displayName)")
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(channel.displayName)
                                 Text(channel.kind.displayName)

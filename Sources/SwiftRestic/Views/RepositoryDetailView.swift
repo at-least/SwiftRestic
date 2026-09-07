@@ -8,6 +8,7 @@ struct RepositoryDetailView: View {
     @State private var browsing: SnapshotBrowserTarget?
     @State private var comparing: SnapshotDiffTarget?
     @State private var isConfirmingRemoval = false
+    @State private var isConfirmingPrune = false
 
     private var repository: Repository? { model.repository(id: repositoryID) }
 
@@ -36,7 +37,7 @@ struct RepositoryDetailView: View {
                         model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 100)
                     }
                     Divider()
-                    Button("Prune Now") { model.runMaintenance(id: repositoryID, task: .prune) }
+                    Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
                     Button("Remove Stale Locks") { model.unlockRepository(id: repositoryID) }
                 }
                 .disabled(model.busyRepositoryIDs.contains(repositoryID))
@@ -62,6 +63,17 @@ struct RepositoryDetailView: View {
             Button("Remove", role: .destructive) { model.deleteRepository(id: repositoryID) }
         } message: {
             Text("The backup data itself is not deleted. Plans pointing at it will be paused.")
+        }
+        .confirmationDialog(
+            "Prune this repository now?",
+            isPresented: $isConfirmingPrune,
+            titleVisibility: .visible
+        ) {
+            Button("Prune", role: .destructive) {
+                model.runMaintenance(id: repositoryID, task: .prune)
+            }
+        } message: {
+            Text("Pruning permanently removes the data of deleted snapshots and locks the repository exclusively — backups to it are held back until it finishes.")
         }
     }
 

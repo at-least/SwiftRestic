@@ -111,7 +111,7 @@ struct PlanDetailView: View {
                     }
                     DetailRow("Schedule", plan.isEnabled ? plan.schedule.summary : "Paused")
                     DetailRow("Retention", plan.retention.summary)
-                    DetailRow("Excludes", "\(plan.excludePatterns.count) pattern(s)")
+                    DetailRow("Excludes", Format.plural(plan.excludePatterns.count, "pattern"))
                     if !plan.hooks.isEmpty {
                         DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")
                     }
@@ -231,7 +231,11 @@ struct SnapshotTable: View {
                 }
                 .width(onCompare == nil ? 72 : 150)
             }
-            .frame(minHeight: 180, maxHeight: 320)
+            // Content-sized: a Table fills whatever height it is offered, so a
+            // fixed minimum renders phantom empty rows under a short list —
+            // which reads as a broken loading skeleton. Estimate the content
+            // height instead, capping where the table scrolls anyway.
+            .frame(height: min(320, 34 + CGFloat(snapshots.count) * 26))
         }
     }
 }

@@ -71,6 +71,10 @@ final class AppModel {
     /// Mirrors `LoginItem.status`, which is not observable on its own.
     private(set) var startsAtLogin = false
     var banner: Banner?
+    /// Transient, never persisted: whether Activity shows every run or only
+    /// problems. Overview's problem rows and failures tile turn it on when they
+    /// send the user over.
+    var activityShowsProblemsOnly = false
 
     /// Progress of a restore, which is always one at a time.
     private(set) var restoreActivity: OperationProgress?

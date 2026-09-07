@@ -117,11 +117,16 @@ struct SnapshotBrowserView: View {
                 )
             }
 
+            Text("Restoring overwrites existing files at the destination.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             HStack {
                 Button("Restore Entire Snapshot…") { restoreWholeSnapshot() }
                     .disabled(model.isRestoring)
                 Spacer()
                 Button("Close") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Button("Restore Selected…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
                     .disabled(selectedNode == nil || model.isRestoring)

@@ -4,6 +4,10 @@ import SwiftUI
 /// Dashboard: what is protected, what has been written lately, and what is next.
 struct OverviewView: View {
     @Environment(AppModel.self) private var model
+    /// Opens Activity, which reads `model.activityShowsProblemsOnly`. The
+    /// problems card must not be a dead end: a failure the user cannot reach
+    /// is a failure they cannot fix.
+    var onShowProblems: () -> Void = {}
 
     /// Series are reduced once when the history changes, not on every redraw —
     /// a few hundred runs reduced per frame is visible.
@@ -46,20 +50,27 @@ struct OverviewView: View {
     // MARK: - Tiles
 
     private var statTiles: some View {
-        let protectedBytes = OverviewMetrics.protectedBytes(
-            latestSnapshotsByPlan: model.configuration.plans.map { plan in
-                model.snapshots(for: plan.repositoryID, planID: plan.id).first
-            }
-        )
+        let latestSnapshots = model.configuration.plans.map { plan in
+            model.snapshots(for: plan.repositoryID, planID: plan.id).first
+        }
+        let protectedBytes = OverviewMetrics.protectedBytes(latestSnapshotsByPlan: latestSnapshots)
+        let hasAnySnapshot = latestSnapshots.contains { $0 != nil }
+        let plansWithSnapshots = latestSnapshots.compactMap { $0 }.count
         let failures = OverviewMetrics.failureCount(
             runs: model.configuration.runs,
             since: .now.addingTimeInterval(-7 * 86_400)
         )
         return HStack(spacing: Theme.Space.tile) {
+            // With no snapshots anywhere the honest value is "no data", not a
+            // confident zero: on a backup app "0 bytes protected" reads as
+            // data loss.
             StatTile(
                 title: "Protected",
-                value: Format.bytes(protectedBytes),
-                systemImage: "lock.shield"
+                value: hasAnySnapshot ? Format.bytes(protectedBytes) : "—",
+                systemImage: "lock.shield",
+                help: hasAnySnapshot
+                    ? "Sum of each plan's latest snapshot — \(Format.plural(plansWithSnapshots, "plan")) of \(model.configuration.plans.count) have one."
+                    : "No snapshots yet — the protected total appears after the first backup."
             )
             StatTile(
                 title: "Repositories",
@@ -71,13 +82,31 @@ struct OverviewView: View {
                 value: Format.count(model.configuration.plans.count),
                 systemImage: "calendar"
             )
-            StatTile(
-                title: "Failures (7 days)",
-                value: Format.count(failures),
-                systemImage: failures == 0 ? "checkmark.circle" : "xmark.octagon.fill",
-                hue: failures == 0 ? Theme.success : Theme.danger
-            )
+            if failures > 0 {
+                Button(action: showProblems) {
+                    StatTile(
+                        title: "Failures (7 days)",
+                        value: Format.count(failures),
+                        systemImage: "xmark.octagon.fill",
+                        hue: Theme.danger
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Failures in the last 7 days: \(failures). Show them in Activity")
+            } else {
+                StatTile(
+                    title: "Failures (7 days)",
+                    value: "0",
+                    systemImage: "checkmark.circle",
+                    hue: Theme.success
+                )
+            }
         }
+    }
+
+    private func showProblems() {
+        model.activityShowsProblemsOnly = true
+        onShowProblems()
     }
 
     // MARK: - Daily volume
@@ -100,9 +129,9 @@ struct OverviewView: View {
             // Several of the light-mode series colours sit below 3:1 against
             // the surface, so a non-colour reading of the same data is not
             // optional.
-            Picker("", selection: $showsTable) {
-                Image(systemName: "chart.bar").tag(false)
-                Image(systemName: "tablecells").tag(true)
+            Picker("Data view", selection: $showsTable) {
+                Image(systemName: "chart.bar").tag(false).accessibilityLabel("Chart")
+                Image(systemName: "tablecells").tag(true).accessibilityLabel("Table")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -199,8 +228,16 @@ struct OverviewView: View {
             return RepositoryVolume(id: repository.id, name: repository.name, bytes: stats.totalSize)
         }
         return Card("Repository size", systemImage: "internaldrive.fill") {
+            // Stats that exist but total zero mean the repositories are empty,
+            // not that measurement failed: drawing zero-width bars with
+            // floating "0 bytes" labels reads as breakage.
             if volumes.isEmpty {
                 Text("No repository statistics yet.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 16)
+            } else if volumes.allSatisfy({ $0.bytes == 0 }) {
+                Text("The repositories are empty — sizes appear once data is written to them.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 16)
@@ -300,22 +337,30 @@ struct OverviewView: View {
                     .foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(failures)) { run in
-                        HStack(spacing: 6) {
-                            // Status is never carried by colour alone.
-                            Image(systemName: run.outcome.symbolName)
-                                .foregroundStyle(ChartPalette.status(run.outcome))
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(run.planName.isEmpty ? run.kind.rawValue : run.planName)
-                                    .lineLimit(1)
-                                Text(run.outcome.displayName)
+                        Button(action: showProblems) {
+                            HStack(spacing: 6) {
+                                // Status is never carried by colour alone.
+                                Image(systemName: run.outcome.symbolName)
+                                    .foregroundStyle(ChartPalette.status(run.outcome))
+                                    .accessibilityLabel(run.outcome.displayName)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(run.planName.isEmpty ? run.kind.rawValue : run.planName)
+                                        .lineLimit(1)
+                                    Text(run.outcome.displayName)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text(Format.relative(run.startedAt))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.forward")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
                             }
-                            Spacer()
-                            Text(Format.relative(run.startedAt))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(run.planName.isEmpty ? run.kind.rawValue : run.planName): \(run.outcome.displayName). Show in Activity")
                     }
                 }
             }

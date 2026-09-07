@@ -14,6 +14,10 @@ struct RootView: View {
     @State private var editingRepository: Repository?
     @State private var isShowingConsole = false
     @State private var isShowingFind = false
+    // Destructive actions armed from the sidebar context menus. The detail
+    // pages confirm their own; these menus must not be a faster way around.
+    @State private var planPendingDeletion: BackupPlan?
+    @State private var repositoryPendingRemoval: Repository?
     #if DEBUG
     @State private var didApplyCaptureOverride = false
     #endif
@@ -37,6 +41,36 @@ struct RootView: View {
         }
         .sheet(isPresented: $isShowingFind) {
             FindFilesView().environment(model)
+        }
+        .confirmationDialog(
+            planPendingDeletion.map { "Delete “\($0.name)”?" } ?? "",
+            isPresented: Binding(
+                get: { planPendingDeletion != nil },
+                set: { if !$0 { planPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Plan", role: .destructive) {
+                if let plan = planPendingDeletion { model.deletePlan(id: plan.id) }
+                planPendingDeletion = nil
+            }
+        } message: {
+            Text("The plan and its schedule are removed. Snapshots already written to the repository are not deleted.")
+        }
+        .confirmationDialog(
+            "Remove this repository from SwiftRestic?",
+            isPresented: Binding(
+                get: { repositoryPendingRemoval != nil },
+                set: { if !$0 { repositoryPendingRemoval = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                if let repository = repositoryPendingRemoval { model.deleteRepository(id: repository.id) }
+                repositoryPendingRemoval = nil
+            }
+        } message: {
+            Text("The backup data itself is not deleted. Plans pointing at it will be paused.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowFind)) { _ in
             isShowingFind = true
@@ -136,6 +170,7 @@ struct RootView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(Theme.warning)
                     .help(model.binaryProblem ?? "restic not found")
+                    .accessibilityLabel(model.binaryProblem ?? "restic not found")
             }
         }
         .padding(.horizontal, 12)
@@ -149,7 +184,7 @@ struct RootView: View {
             .disabled(model.isRunning(planID: plan.id))
         Button("Edit…") { editingPlan = plan }
         Divider()
-        Button("Delete Plan", role: .destructive) { model.deletePlan(id: plan.id) }
+        Button("Delete Plan", role: .destructive) { planPendingDeletion = plan }
     }
 
     @ViewBuilder
@@ -158,7 +193,7 @@ struct RootView: View {
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
         Divider()
         Button("Remove from SwiftRestic", role: .destructive) {
-            model.deleteRepository(id: repository.id)
+            repositoryPendingRemoval = repository
         }
     }
 
@@ -168,7 +203,9 @@ struct RootView: View {
     private var detail: some View {
         switch selection {
         case .overview:
-            OverviewView()
+            OverviewView(onShowProblems: {
+                selection = .activity
+            })
         case let .plan(id):
             if let plan = model.plan(id: id) {
                 PlanDetailView(planID: plan.id, onEdit: { editingPlan = plan })
@@ -185,7 +222,9 @@ struct RootView: View {
                 ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
             }
         case .activity:
-            ActivityView()
+            ActivityView(onOpenPlan: { planID in
+                selection = .plan(planID)
+            })
         case .none:
             WelcomeView(
                 onAddRepository: { editingRepository = Repository() },

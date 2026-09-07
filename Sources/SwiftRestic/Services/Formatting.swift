@@ -17,6 +17,13 @@ enum Format {
         return value.formatted(.number)
     }
 
+    /// A count and its noun, spelled for the actual count — the "2 pattern(s)"
+    /// style leaks programmer syntax into the interface.
+    static func plural(_ count: Int, _ singular: String, _ plural: String? = nil) -> String {
+        let noun = count == 1 ? singular : plural ?? "\(singular)s"
+        return "\(count.formatted(.number)) \(noun)"
+    }
+
     static func duration(_ seconds: TimeInterval?) -> String {
         guard let seconds, seconds.isFinite, seconds >= 0 else { return "—" }
         if seconds < 1 { return "<1s" }

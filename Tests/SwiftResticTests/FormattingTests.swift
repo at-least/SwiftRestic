@@ -41,6 +41,16 @@ struct FormattingTests {
         #expect(Format.duration(3600) == "1h")
     }
 
+    @Test("a count and its noun agree in number")
+    func pluralCounts() {
+        #expect(Format.plural(0, "pattern") == "0 patterns")
+        #expect(Format.plural(1, "pattern") == "1 pattern")
+        #expect(Format.plural(2, "pattern") == "2 patterns")
+        // Irregular plurals are spelled out, never auto-s suffixed.
+        #expect(Format.plural(3, "entry", "entries") == "3 entries")
+        #expect(Format.plural(1, "entry", "entries") == "1 entry")
+    }
+
     @Test("zero bytes stays numeric")
     func zeroBytes() {
         // ByteCountFormatter spells zero as "Zero KB" unless told not to; on an
