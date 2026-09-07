@@ -31,7 +31,17 @@ struct PlanEditorSheet: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button(isNew ? "Create Plan" : "Save") {
-                    model.upsert(plan: draft)
+                    var plan = draft
+                    // New plans claim a palette slot so their colour is stable
+                    // across the sidebar, tiles and charts. The editor is the
+                    // one place plans are created, so this is where the slot
+                    // is minted — the model layer stays view-free.
+                    if isNew, plan.chartIndex == nil {
+                        plan.chartIndex = ChartPalette.nextSlot(
+                            taken: Set(model.configuration.plans.compactMap(\.chartIndex))
+                        )
+                    }
+                    model.upsert(plan: plan)
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)

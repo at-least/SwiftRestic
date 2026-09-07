@@ -210,11 +210,24 @@ struct RootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch selection {
-        case .overview:
-            OverviewView(onShowProblems: {
-                selection = .activity
-            })
+        VStack(spacing: 0) {
+            // The one disabled-state whose cause the user cannot see from the
+            // panes themselves: every restic-backed control is grey, and this
+            // is why.
+            if !model.isResticAvailable {
+                BannerView(banner: Banner(
+                    title: "restic is missing",
+                    message: model.binaryProblem ?? "restic could not be found. Install it with `brew install restic`, or set the path in Settings.",
+                    isError: true
+                ))
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+            }
+            switch selection {
+            case .overview:
+                OverviewView(onShowProblems: {
+                    selection = .activity
+                })
         case let .plan(id):
             if let plan = model.plan(id: id) {
                 PlanDetailView(planID: plan.id, onEdit: { editingPlan = plan })
@@ -239,6 +252,7 @@ struct RootView: View {
                 onAddRepository: { editingRepository = Repository() },
                 onAddPlan: { editingPlan = BackupPlan() }
             )
+        }
         }
     }
 
@@ -305,8 +319,11 @@ private struct PlanSidebarRow: View {
                 Image(systemName: "pause.circle")
                     .foregroundStyle(.secondary)
             } else {
-                Image(systemName: "clock.badge.checkmark")
-                    .foregroundStyle(Theme.tint)
+                // The plan's own colour, the same one its chart series and
+                // run rows use — identity carried across every surface.
+                Circle()
+                    .fill(ChartPalette.color(for: plan))
+                    .frame(width: 9, height: 9)
             }
         }
     }

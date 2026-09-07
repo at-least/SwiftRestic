@@ -37,4 +37,25 @@ enum ChartPalette {
             return categorical[index % categorical.count]
         }
     }
+
+    /// A plan's colour: the slot assigned at creation, or a stable fallback
+    /// derived from its ID for plans created before slots existed.
+    static func color(for plan: BackupPlan) -> Color {
+        categorical[slot(for: plan)]
+    }
+
+    /// The first palette slot no existing plan occupies. Once the palette is
+    /// exhausted the chart folds series past the cap anyway, so wrapping by
+    /// position keeps every plan coloured.
+    static func nextSlot(taken: Set<Int>) -> Int {
+        (0..<categorical.count).first { !taken.contains($0) }
+            ?? ((taken.max() ?? -1) + 1) % categorical.count
+    }
+
+    private static func slot(for plan: BackupPlan) -> Int {
+        if let chartIndex = plan.chartIndex { return chartIndex % categorical.count }
+        var hasher = Hasher()
+        hasher.combine(plan.id)
+        return Int(UInt(bitPattern: hasher.finalize()) % UInt(categorical.count))
+    }
 }

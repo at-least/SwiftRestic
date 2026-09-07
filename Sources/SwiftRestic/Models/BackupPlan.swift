@@ -190,6 +190,11 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var hooks: [BackupHook] = []
     var lastRunAt: Date?
     var lastSuccessAt: Date?
+    /// Stable slot in `ChartPalette`'s categorical order, assigned when the
+    /// plan is created so its colour survives reordering and shows up in the
+    /// sidebar, tiles and charts alike. `nil` on plans from older configs,
+    /// which fall back to a hash of their ID.
+    var chartIndex: Int?
 
     init() {}
 
@@ -209,6 +214,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         hooks = c.value(.hooks, default: [])
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
+        chartIndex = c.optional(.chartIndex)
     }
 
     /// Noise that is never worth storing, mirroring what Arq excludes by default.

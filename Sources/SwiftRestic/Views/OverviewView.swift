@@ -166,7 +166,7 @@ struct OverviewView: View {
         }
         .chartForegroundStyleScale(
             domain: domain,
-            range: ChartPalette.range(for: domain)
+            range: colorRange(for: domain)
         )
         .chartLegend(position: .bottom, alignment: .leading, spacing: 10)
         .chartXSelection(value: $selectedDay)
@@ -220,9 +220,23 @@ struct OverviewView: View {
         }
     }
 
+    /// Series colours follow each plan's assigned palette slot instead of
+    /// domain position, so a plan keeps its colour when plans are added,
+    /// removed or reordered — on the chart, the sidebar and the run lists
+    /// alike.
+    private func colorRange(for domain: [String]) -> [Color] {
+        domain.map { name in
+            if name == OverviewMetrics.otherSeriesName { return ChartPalette.other }
+            guard let plan = model.configuration.plans.first(where: { $0.name == name }) else {
+                return ChartPalette.other
+            }
+            return ChartPalette.color(for: plan)
+        }
+    }
+
     private func colorFor(_ series: String) -> Color {
         guard let index = domain.firstIndex(of: series) else { return ChartPalette.other }
-        return ChartPalette.range(for: domain)[index]
+        return colorRange(for: domain)[index]
     }
 
     private var volumeTable: some View {
@@ -314,7 +328,7 @@ struct OverviewView: View {
                                 Text(plan.name).lineLimit(1)
                             } icon: {
                                 Circle()
-                                    .fill(Theme.tint.opacity(0.7))
+                                    .fill(ChartPalette.color(for: plan))
                                     .frame(width: 6, height: 6)
                             }
                             Spacer()
@@ -340,6 +354,8 @@ struct OverviewView: View {
             VStack(alignment: .leading, spacing: 7) {
                 let failures = model.configuration.runs
                     .filter { $0.outcome == .failed || $0.outcome == .completedWithErrors }
+                    // The card promises "recent"; storage order is neither.
+                    .sorted { $0.startedAt > $1.startedAt }
                     .prefix(5)
 
                 if failures.isEmpty {

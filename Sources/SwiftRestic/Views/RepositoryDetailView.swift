@@ -10,6 +10,7 @@ struct RepositoryDetailView: View {
     @State private var isConfirmingRemoval = false
     @State private var isConfirmingPrune = false
     @State private var isConfirmingUnlock = false
+    @State private var isConfirmingCheck = false
 
     private var repository: Repository? { model.repository(id: repositoryID) }
 
@@ -28,21 +29,10 @@ struct RepositoryDetailView: View {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
                 Menu("Maintenance", systemImage: "wrench.and.screwdriver") {
-                    Section("Checks — safe, read-mostly") {
-                        Button("Check Structure") {
-                            model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 0)
-                        }
-                        Button("Check + Read 5% of Data") {
-                            model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 5)
-                        }
-                        Button("Check + Read All Data") {
-                            model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 100)
-                        }
-                    }
-                    Section("Destructive — confirmed before running") {
-                        Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
-                        Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
-                    }
+                    Button("Check…") { isConfirmingCheck = true }
+                    Divider()
+                    Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
+                    Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
                 }
                 .disabled(model.busyRepositoryIDs.contains(repositoryID))
                 .help("Verify the repository's integrity, or run destructive maintenance")
@@ -79,6 +69,23 @@ struct RepositoryDetailView: View {
             }
         } message: {
             Text("Pruning permanently removes the data of deleted snapshots and locks the repository exclusively — backups to it are held back until it finishes.")
+        }
+        .confirmationDialog(
+            "Check this repository's integrity?",
+            isPresented: $isConfirmingCheck,
+            titleVisibility: .visible
+        ) {
+            Button("Check Structure") {
+                model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 0)
+            }
+            Button("Check + Read 5% of Data") {
+                model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 5)
+            }
+            Button("Check + Read All Data") {
+                model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 100)
+            }
+        } message: {
+            Text("Structure checks are fast; reading data finds more problems at the cost of time. The repository is locked while the check runs, so backups to it are held back until it finishes.")
         }
         .confirmationDialog(
             "Remove stale locks on this repository?",

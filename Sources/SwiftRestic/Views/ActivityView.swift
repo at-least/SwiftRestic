@@ -50,7 +50,10 @@ struct ActivityView: View {
                     }
                     .width(min: 150, ideal: 170)
 
-                    TableColumn("Plan", value: \.planName) { run in
+                    // Check and prune runs belong to a repository, backups to
+                    // a plan — the column names the subject, the Kind column
+                    // names the operation.
+                    TableColumn("Subject", value: \.planName) { run in
                         Text(run.planName.isEmpty ? "—" : run.planName)
                     }
 

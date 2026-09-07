@@ -74,7 +74,7 @@ struct ConfigStoreTests {
             "schedule": {"frequency": "hourly", "intervalHours": 1, "hour": 2, "minute": 0, "weekday": 2},
             "retention": {"isEnabled": true, "keepLast": 3, "keepHourly": 0, "keepDaily": 0,
                           "keepWeekly": 0, "keepMonthly": 0, "keepYearly": 0, "runPrune": false},
-            "isEnabled": true
+            "isEnabled": true, "chartIndex": 2
           }],
           "runs": [],
           "settings": {"resticPathOverride": "", "showMenuBarExtra": true, "notifyOnSuccess": false,
@@ -88,6 +88,8 @@ struct ConfigStoreTests {
         #expect(loaded.repositories.count == 1)
         #expect(loaded.plans.count == 1)
         #expect(loaded.plans.first?.schedule.frequency == .hourly)
+        // A plan's palette slot is stored, so its colour survives relaunch.
+        #expect(loaded.plans.first?.chartIndex == 2)
 
         // A plan that has never run and is on an interval schedule must be due
         // straight away, which is what makes the app back up shortly after launch.
