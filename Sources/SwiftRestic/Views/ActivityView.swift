@@ -73,7 +73,9 @@ struct ActivityView: View {
                     TableColumn("Detail") { run in
                         Text(detail(for: run))
                             .foregroundStyle(run.outcome == .failed ? Theme.danger : .secondary)
-                            .lineLimit(1)
+                            // A failure's first sentence is the one thing the
+                            // user came for; never cut it at the scan surface.
+                            .lineLimit(run.failureMessage != nil ? 2 : 1)
                     }
                 }
 

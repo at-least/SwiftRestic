@@ -53,24 +53,25 @@ struct OverviewView: View {
         let latestSnapshots = model.configuration.plans.map { plan in
             model.snapshots(for: plan.repositoryID, planID: plan.id).first
         }
-        let protectedBytes = OverviewMetrics.protectedBytes(latestSnapshotsByPlan: latestSnapshots)
-        let hasAnySnapshot = latestSnapshots.contains { $0 != nil }
         let plansWithSnapshots = latestSnapshots.compactMap { $0 }.count
+        let totalPlans = model.configuration.plans.count
         let failures = OverviewMetrics.failureCount(
             runs: model.configuration.runs,
             since: .now.addingTimeInterval(-7 * 86_400)
         )
         return HStack(spacing: Theme.Space.tile) {
-            // With no snapshots anywhere the honest value is "no data", not a
-            // confident zero: on a backup app "0 bytes protected" reads as
-            // data loss.
+            // Protection is coverage, not bytes: a sum nobody can act on
+            // ("5 bytes protected") reads as nonsense on the dashboard's
+            // first tile. Per-plan detail lives in the tooltip.
             StatTile(
                 title: "Protected",
-                value: hasAnySnapshot ? Format.bytes(protectedBytes) : "—",
+                value: totalPlans == 0
+                    ? "—"
+                    : "\(plansWithSnapshots) of \(totalPlans)",
                 systemImage: "lock.shield",
-                help: hasAnySnapshot
-                    ? "Sum of each plan's latest snapshot — \(Format.plural(plansWithSnapshots, "plan")) of \(model.configuration.plans.count) have one."
-                    : "No snapshots yet — the protected total appears after the first backup."
+                help: totalPlans == 0
+                    ? "Add a backup plan to start protecting your data."
+                    : helpLines(latestSnapshots: latestSnapshots)
             )
             StatTile(
                 title: "Repositories",
@@ -91,7 +92,7 @@ struct OverviewView: View {
                         hue: Theme.danger
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HoverableButtonStyle())
                 .accessibilityLabel("Failures in the last 7 days: \(failures). Show them in Activity")
             } else {
                 StatTile(
@@ -102,6 +103,20 @@ struct OverviewView: View {
                 )
             }
         }
+    }
+
+    /// One line per plan for the Protected tile's tooltip: which plans have
+    /// snapshots and how fresh the latest one is.
+    private func helpLines(latestSnapshots: [Snapshot?]) -> String {
+        guard !model.configuration.plans.isEmpty else {
+            return "Add a backup plan to start protecting your data."
+        }
+        return zip(model.configuration.plans, latestSnapshots)
+            .map { plan, snapshot in
+                snapshot.map { "\(plan.name): latest \($0.time.formatted(.relative(presentation: .named)))" }
+                    ?? "\(plan.name): no snapshots yet"
+            }
+            .joined(separator: "\n")
     }
 
     private func showProblems() {
@@ -359,7 +374,7 @@ struct OverviewView: View {
                                     .foregroundStyle(.tertiary)
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(HoverableButtonStyle())
                         .accessibilityLabel("\(run.planName.isEmpty ? run.kind.rawValue : run.planName): \(run.outcome.displayName). Show in Activity")
                     }
                 }

@@ -159,6 +159,21 @@ struct PlanEditorSheet: View {
                 Toggle("Also prune (reclaims space, much slower)", isOn: $draft.retention.runPrune)
                     .disabled(!draft.retention.isEnabled)
                 LabeledContent("Summary", value: draft.retention.summary)
+                if draft.retention.isEnabled, let projection = RetentionProjection.project(
+                    policy: draft.retention,
+                    schedule: draft.schedule
+                ) {
+                    // Retention is where users decide what gets deleted; the
+                    // steppers' bucket arithmetic is impossible to eyeball,
+                    // so project the outcome instead of restating the rules.
+                    Label(
+                        "≈ \(projection.keptSnapshots) snapshots would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule.",
+                        systemImage: "chart.bar.doc.horizontal"
+                    )
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
                     Label(
                         "With every rule at zero, restic would delete all snapshots. Retention is skipped until at least one rule is set.",

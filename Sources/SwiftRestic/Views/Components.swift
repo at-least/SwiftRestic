@@ -175,6 +175,24 @@ private struct TileHelp: ViewModifier {
     }
 }
 
+/// For buttons that are tiles or rows and do not look pressable: a quiet
+/// hover tint so the pointer reveals the affordance before the click.
+struct HoverableButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                (isHovering || configuration.isPressed)
+                    ? Color.primary.opacity(0.045)
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+            )
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .onHover { isHovering = $0 }
+    }
+}
+
 // MARK: - Detail rows
 
 /// A label/value row inside an information card.

@@ -9,6 +9,7 @@ struct RepositoryDetailView: View {
     @State private var comparing: SnapshotDiffTarget?
     @State private var isConfirmingRemoval = false
     @State private var isConfirmingPrune = false
+    @State private var isConfirmingUnlock = false
 
     private var repository: Repository? { model.repository(id: repositoryID) }
 
@@ -38,7 +39,7 @@ struct RepositoryDetailView: View {
                     }
                     Divider()
                     Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
-                    Button("Remove Stale Locks") { model.unlockRepository(id: repositoryID) }
+                    Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
                 }
                 .disabled(model.busyRepositoryIDs.contains(repositoryID))
                 Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
@@ -74,6 +75,17 @@ struct RepositoryDetailView: View {
             }
         } message: {
             Text("Pruning permanently removes the data of deleted snapshots and locks the repository exclusively — backups to it are held back until it finishes.")
+        }
+        .confirmationDialog(
+            "Remove stale locks on this repository?",
+            isPresented: $isConfirmingUnlock,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Locks", role: .destructive) {
+                model.unlockRepository(id: repositoryID)
+            }
+        } message: {
+            Text("This removes locks left behind by interrupted restic processes. If restic is running somewhere else right now, removing its lock can corrupt the repository.")
         }
     }
 

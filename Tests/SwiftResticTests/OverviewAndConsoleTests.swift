@@ -153,27 +153,6 @@ struct OverviewMetricsTests {
         #expect(other?.dataAdded == 300, "the unnamed run's 300 bytes must survive the fold")
         #expect(OverviewMetrics.domain(for: points, planOrder: ["Docs"]).last == OverviewMetrics.otherSeriesName)
     }
-
-    @Test("protected bytes sum the snapshots that have one, skipping the rest")
-    func protectedBytes() throws {
-        func snapshot(totalBytes: Int64?) throws -> Snapshot {
-            // Older restic versions write no summary block at all.
-            let summary = totalBytes.map { #""summary":{"total_bytes_processed":\#($0)},"# } ?? ""
-            let json = """
-            {"id":"s\(UUID())","time":"2026-09-05T02:00:00Z","paths":["/tmp"],"hostname":"mac","tags":[],\(summary)"tree":"t"}
-            """
-            return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
-        }
-
-        let snapshots: [Snapshot?] = [
-            try snapshot(totalBytes: 500),
-            try snapshot(totalBytes: nil),
-            try snapshot(totalBytes: 250),
-            nil,
-        ]
-        #expect(OverviewMetrics.protectedBytes(latestSnapshotsByPlan: snapshots) == 750)
-        #expect(OverviewMetrics.protectedBytes(latestSnapshotsByPlan: [nil, nil]) == 0)
-    }
 }
 
 @Suite("Run record")

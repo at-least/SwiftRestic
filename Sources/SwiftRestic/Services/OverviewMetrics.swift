@@ -93,11 +93,6 @@ enum OverviewMetrics {
         return domain
     }
 
-    /// Total bytes the newest snapshot of each plan protects.
-    static func protectedBytes(latestSnapshotsByPlan: [Snapshot?]) -> Int64 {
-        latestSnapshotsByPlan.compactMap { $0?.totalBytesProcessed }.reduce(0, +)
-    }
-
     static func failureCount(runs: [RunRecord], since: Date) -> Int {
         runs.filter { $0.startedAt >= since && $0.outcome == .failed }.count
     }
