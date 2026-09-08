@@ -179,15 +179,37 @@ struct RepositoryDetailView: View {
     private func maintenanceCard(_ repository: Repository) -> some View {
         Card("Maintenance", systemImage: "wrench.and.screwdriver.fill") {
             VStack(alignment: .leading, spacing: 10) {
-                if let task = model.maintenance[repositoryID] {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("\(task.displayName) running…")
-                        Spacer()
-                        Button("Cancel", role: .destructive) {
-                            model.cancelMaintenance(repositoryID: repositoryID)
+                if let activity = model.maintenance[repositoryID] {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            // An indeterminate spinner plus a live elapsed
+                            // time: a check can legitimately run for hours,
+                            // and "14 min" is what separates working from hung.
+                            TimelineView(.periodic(from: .now, by: 1)) { context in
+                                Text(
+                                    "\(activity.task.displayName) running — \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
+                                )
+                                .monospacedDigit()
+                            }
+                            Spacer()
+                            Button("Cancel", role: .destructive) {
+                                model.cancelMaintenance(repositoryID: repositoryID)
+                            }
+                            .controlSize(.small)
                         }
-                        .controlSize(.small)
+                        if let last = activity.lastOutput {
+                            Text(last)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                                .help(last)
+                        }
+                        Text("You can keep working while it runs.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 

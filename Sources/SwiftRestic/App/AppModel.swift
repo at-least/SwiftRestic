@@ -31,6 +31,17 @@ struct PlanActivity: Sendable, Equatable {
     var startedAt: Date = .now
 }
 
+/// Live state of one repository's check or prune.
+struct MaintenanceActivity: Sendable, Equatable {
+    var task: MaintenanceTask
+    var startedAt: Date = .now
+    /// The last line the command printed. `prune` narrates in plain text, so
+    /// this distinguishes "working" from "hung"; `check --json` stays silent
+    /// until it finishes, so there this stays `nil` and elapsed time is the
+    /// only live signal.
+    var lastOutput: String?
+}
+
 /// A transient message shown at the top of the detail pane.
 struct Banner: Identifiable, Equatable {
     var id = UUID()
@@ -59,7 +70,7 @@ final class AppModel {
     private(set) var binaryProblem: String?
     private(set) var activity: [UUID: PlanActivity] = [:]
     /// Repository upkeep currently in flight, keyed by repository.
-    private(set) var maintenance: [UUID: MaintenanceTask] = [:]
+    private(set) var maintenance: [UUID: MaintenanceActivity] = [:]
     private(set) var snapshots: [UUID: [Snapshot]] = [:]
     private(set) var repositoryStats: [UUID: RepositoryStats] = [:]
     private(set) var loadingSnapshots: Set<UUID> = []
@@ -871,7 +882,7 @@ final class AppModel {
             return
         }
 
-        maintenance[repositoryID] = task
+        maintenance[repositoryID] = MaintenanceActivity(task: task)
         maintenanceTasks[repositoryID] = Task { [weak self] in
             await self?.performMaintenance(
                 repository: repository,
@@ -957,7 +968,19 @@ final class AppModel {
                     record.detailText? += " restic suggests running prune."
                 }
             case .prune:
-                record.detailText = try await service.prune(context)
+                // Prune narrates its progress line by line; surfacing the
+                // newest line is the difference between "working" and "hung"
+                // across a prune that can run for hours. (Restic's lines are
+                // \n-terminated when stdout is a pipe — progress lines like
+                // "[0:00] 100.00%  2 / 2 packs processed" arrive as they
+                // print, no \r in-place updates to split around.)
+                let repositoryID = repository.id
+                record.detailText = try await service.prune(context) { [weak self] line in
+                    Task { @MainActor in
+                        guard let self, self.maintenance[repositoryID] != nil else { return }
+                        self.maintenance[repositoryID]?.lastOutput = line
+                    }
+                }
                 record.outcome = .succeeded
             }
         } catch ResticError.cancelled {

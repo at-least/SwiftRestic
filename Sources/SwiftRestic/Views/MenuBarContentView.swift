@@ -10,6 +10,11 @@ struct MenuBarContentView: View {
     let mainWindowID: String
 
     var body: some View {
+        // The failure line leads: the menu's first job is answering "did the
+        // last run succeed?" before it answers "what happens next?".
+        if let problem = MenuBarStatus.problemLine(runs: model.configuration.runs) {
+            Text(problem)
+        }
         if let headline = MenuBarStatus.headline(activity: model.activity, nextRun: model.nextScheduledRun) {
             Text(headline)
         } else {

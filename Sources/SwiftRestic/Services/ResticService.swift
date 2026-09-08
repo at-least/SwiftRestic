@@ -187,8 +187,13 @@ struct ResticService: Sendable {
     ///
     /// `prune` is one of the commands `--json` does not cover in restic 0.19.1 —
     /// it prints human-readable progress — so its output is captured as text and
-    /// kept on the run record rather than parsed.
-    func prune(_ context: RepositoryContext, dryRun: Bool = false) async throws -> String {
+    /// kept on the run record rather than parsed. `onRawLine` receives each line
+    /// as it arrives so a UI can show that the prune is still moving.
+    func prune(
+        _ context: RepositoryContext,
+        dryRun: Bool = false,
+        onRawLine: (@Sendable (String) -> Void)? = nil
+    ) async throws -> String {
         var args = context.globalArguments + ["prune"]
         if dryRun { args.append("--dry-run") }
         let result = try await runner.run(
@@ -197,7 +202,8 @@ struct ResticService: Sendable {
                 arguments: args,
                 environment: context.environment,
                 retainFullOutput: true
-            )
+            ),
+            onRawLine: onRawLine
         )
         let combined = (result.stdout + result.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
         return ResticRunner.tail(of: combined, limit: 4000)

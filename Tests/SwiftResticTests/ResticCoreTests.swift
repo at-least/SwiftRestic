@@ -167,6 +167,62 @@ struct TailTests {
     }
 }
 
+@Suite("Raw line streaming")
+struct RawLineStreamingTests {
+    /// onRawLine fires from two stream-reading queues, so the test's collector
+    /// needs its own lock.
+    private final class LineCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [String] = []
+
+        func append(_ line: String) {
+            lock.lock()
+            storage.append(line)
+            lock.unlock()
+        }
+
+        var lines: [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage
+        }
+    }
+
+    @Test("every raw line of stdout and stderr arrives, including non-JSON ones")
+    func rawLinesArriveFromBothStreams() async throws {
+        // /bin/sh with builtins only: no restic needed to exercise the pipes.
+        // The JSON-looking line must pass through undecoded-decision intact —
+        // raw delivery is independent of whether the line decodes.
+        let runner = ResticRunner()
+        let collector = LineCollector()
+        let result = try await runner.run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(arguments: [
+                "-c", "printf 'packing 12 packs\\n'; printf 'not json either\\n' >&2; echo '{\"message_type\":\"summary\"}'; printf 'done\\n' >&2",
+            ]),
+            onRawLine: { collector.append($0) }
+        )
+
+        #expect(result.exitCode == 0)
+        // stdout and stderr interleave, so compare as a set.
+        #expect(Set(collector.lines) == ["packing 12 packs", "not json either", "{\"message_type\":\"summary\"}", "done"])
+        #expect(collector.lines.count == 4)
+        // The decoded path is unaffected: the summary line still arrives as a message.
+        #expect(result.summary != nil)
+    }
+
+    @Test("no onRawLine callback means the default streaming path is untouched")
+    func nilCallbackIsFine() async throws {
+        let runner = ResticRunner()
+        let result = try await runner.run(
+            binary: URL(fileURLWithPath: "/bin/echo"),
+            invocation: ResticInvocation(arguments: ["hello"])
+        )
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "hello")
+    }
+}
+
 @Suite("Password precedence")
 struct PasswordPrecedenceTests {
     private func context(extra: [String: String]) -> RepositoryContext {

@@ -76,12 +76,19 @@ actor ResticRunner {
     ///
     /// - Parameter onMessage: called for every decoded NDJSON line as it arrives,
     ///   off the main actor.
+    /// - Parameter onRawLine: called for every raw line of both streams before
+    ///   JSON decoding — the human-readable progress `prune` prints, which
+    ///   decodes to nothing. Fires off the main actor, possibly concurrently
+    ///   for the two streams, with no ordering guarantee between them; keep
+    ///   the callback cheap. Commands whose streams are unbounded (backup,
+    ///   diff) must not pass it: there is no back-pressure.
     /// - Throws: `ResticError.commandFailed` for a disallowed exit code, or
     ///   `ResticError.cancelled` if the surrounding task was cancelled.
     func run(
         binary: URL,
         invocation: ResticInvocation,
-        onMessage: (@Sendable (ResticMessage) -> Void)? = nil
+        onMessage: (@Sendable (ResticMessage) -> Void)? = nil,
+        onRawLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> ResticRunResult {
         let handle = UUID()
         let process = Process()
@@ -150,10 +157,15 @@ actor ResticRunner {
                 // a partial backup's `message_type: error` lines (and its exit_error)
                 // only reach the result if stderr is decoded too. The decoder drops
                 // every non-JSON line, so human-readable stderr noise is unaffected.
-                async let stderrOutcome = stderrReader.readAll(decodeMessages: true, onMessage: onMessage)
+                async let stderrOutcome = stderrReader.readAll(
+                    decodeMessages: true,
+                    onMessage: onMessage,
+                    onRawLine: onRawLine
+                )
                 let stdoutOutcome = await stdoutReader.readAll(
                     decodeMessages: true,
-                    onMessage: onMessage
+                    onMessage: onMessage,
+                    onRawLine: onRawLine
                 )
                 let stderr = await stderrOutcome
                 let code = await exit.value()
@@ -349,7 +361,8 @@ private struct StreamReader: Sendable {
 
     func readAll(
         decodeMessages: Bool,
-        onMessage: (@Sendable (ResticMessage) -> Void)?
+        onMessage: (@Sendable (ResticMessage) -> Void)?,
+        onRawLine: (@Sendable (String) -> Void)? = nil
     ) async -> Outcome {
         guard active else { return Outcome() }
         let box = handle
@@ -362,6 +375,7 @@ private struct StreamReader: Sendable {
                 let keepMessages = retainMessages
 
                 func consume(_ line: String) {
+                    onRawLine?(line)
                     // utf8.count, not count: grapheme counting is O(n) and this
                     // runs once per line for the whole stream.
                     if retained.utf8.count < limit { retained += line + "\n" }
