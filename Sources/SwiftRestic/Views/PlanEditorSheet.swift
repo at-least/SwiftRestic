@@ -159,6 +159,17 @@ struct PlanEditorSheet: View {
                 timeOfDayPickers
             }
 
+            if draft.schedule.frequency != .manual {
+                // Owning the moment instead of surprising with it: a new plan
+                // counts as due, so its first backup starts within a minute of
+                // being created — a first-timer's unprompted multi-gigabyte
+                // upload unless the caption says so.
+                Text("A new plan starts its first backup within a minute of being created; pick Manually if that is not what you want.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section {
                 LabeledContent("Summary", value: draft.schedule.summary)
                 Text(

@@ -139,9 +139,10 @@ struct SnapshotDiffView: View {
             // restic's `changed_files` counts content changes only; the Modified
             // filter also includes type changes and bitrot, so the tooltip names
             // it precisely while the tile stays short enough not to truncate.
+            // "N files" agrees with the Added/Removed tiles' unit spelling.
             StatTile(
                 title: "Changed",
-                value: Format.count(stats?.changedFiles),
+                value: stats.map { Format.plural($0.changedFiles, "file") } ?? "—",
                 systemImage: "pencil.circle",
                 help: "Files whose content changed — metadata-only edits are listed under Show › Metadata"
             )
@@ -265,7 +266,16 @@ struct SnapshotDiffView: View {
 
     private func comparisonLabel(_ snapshot: Snapshot) -> String {
         let when = snapshot.time.formatted(date: .abbreviated, time: .shortened)
-        return "\(when) · \(snapshot.shortID)"
+        // The abbreviated time cannot tell snapshots inside the same minute
+        // apart; when another candidate shares the displayed minute, a
+        // relative stamp says which one came first.
+        let sharesDisplayedMinute = candidates.contains { other in
+            other.id != snapshot.id
+                && other.time.formatted(date: .abbreviated, time: .shortened) == when
+        }
+        return sharesDisplayedMinute
+            ? "\(when) · \(Format.relative(snapshot.time)) · \(snapshot.shortID)"
+            : "\(when) · \(snapshot.shortID)"
     }
 
     private func glyph(for change: ResticDiffChange) -> String {

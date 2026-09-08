@@ -31,7 +31,7 @@ struct SettingsView: View {
         return Form {
             Section("Menu bar") {
                 Toggle("Show SwiftRestic in the menu bar", isOn: $model.configuration.settings.showMenuBarExtra)
-                Text("Closing the window never quits SwiftRestic — scheduled backups keep firing. The menu bar item is how you get back to it.")
+                Text("Closing the window never quits SwiftRestic — scheduled backups keep firing. The menu bar item is how you get back to it, and its icon animates while a backup or maintenance task is running.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
