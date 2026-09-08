@@ -115,6 +115,16 @@ struct RootView: View {
         .onChange(of: model.configuration.repositories.count) {
             revalidateSelection()
         }
+        // The load finishing is what selects the landing pane: onAppear runs
+        // before `bootstrap` has read anything, so without this a configured
+        // app sat on the Welcome screen until the user clicked somewhere.
+        .onChange(of: model.isBootstrapping) {
+            guard !model.isBootstrapping else { return }
+            selectSomething()
+            #if DEBUG
+            applyCapturePaneOverride()
+            #endif
+        }
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowConcepts)) { _ in
             isShowingConcepts = true
         }
@@ -138,7 +148,7 @@ struct RootView: View {
                         .tag(SidebarItem.plan(plan.id))
                         .contextMenu { planContextMenu(plan) }
                 }
-                if model.configuration.plans.isEmpty {
+                if model.configuration.plans.isEmpty, !model.isBootstrapping {
                     Text("No plans yet")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -163,7 +173,7 @@ struct RootView: View {
                     .tag(SidebarItem.repository(repository.id))
                     .contextMenu { repositoryContextMenu(repository) }
                 }
-                if model.configuration.repositories.isEmpty {
+                if model.configuration.repositories.isEmpty, !model.isBootstrapping {
                     Text("No repositories yet")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -255,35 +265,43 @@ struct RootView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
             }
-            switch model.sidebarSelection {
-            case .overview:
-                OverviewView(onShowProblems: {
-                    model.sidebarSelection = .activity
-                })
-            case let .plan(id):
-                if let plan = model.plan(id: id) {
-                    PlanDetailView(planID: plan.id, onEdit: { editingPlan = plan })
-                } else {
-                    ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
-                }
-            case let .repository(id):
-                if let repository = model.repository(id: id) {
-                    RepositoryDetailView(
-                        repositoryID: repository.id,
-                        onEdit: { editingRepository = repository }
+            if model.isBootstrapping {
+                // Configuration still being read: a loading state, not the
+                // empty states — an empty sidebar and Welcome here would read
+                // as a fresh install or as breakage.
+                ProgressView("Reading your configuration…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                switch model.sidebarSelection {
+                case .overview:
+                    OverviewView(onShowProblems: {
+                        model.sidebarSelection = .activity
+                    })
+                case let .plan(id):
+                    if let plan = model.plan(id: id) {
+                        PlanDetailView(planID: plan.id, onEdit: { editingPlan = plan })
+                    } else {
+                        ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
+                    }
+                case let .repository(id):
+                    if let repository = model.repository(id: id) {
+                        RepositoryDetailView(
+                            repositoryID: repository.id,
+                            onEdit: { editingRepository = repository }
+                        )
+                    } else {
+                        ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
+                    }
+                case .activity:
+                    ActivityView(onOpenPlan: { planID in
+                        model.sidebarSelection = .plan(planID)
+                    })
+                case .none:
+                    WelcomeView(
+                        onAddRepository: { editingRepository = Repository() },
+                        onAddPlan: { editingPlan = BackupPlan() }
                     )
-                } else {
-                    ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
                 }
-            case .activity:
-                ActivityView(onOpenPlan: { planID in
-                    model.sidebarSelection = .plan(planID)
-                })
-            case .none:
-                WelcomeView(
-                    onAddRepository: { editingRepository = Repository() },
-                    onAddPlan: { editingPlan = BackupPlan() }
-                )
             }
         }
     }
@@ -312,7 +330,9 @@ struct RootView: View {
     #endif
 
     private func selectSomething() {
-        guard model.sidebarSelection == nil else { return }
+        // Before the configuration is read there is nothing to decide from;
+        // the `isBootstrapping` change handler picks the landing pane.
+        guard model.sidebarSelection == nil, !model.isBootstrapping else { return }
         // The dashboard is the useful landing place once anything is configured.
         model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
     }

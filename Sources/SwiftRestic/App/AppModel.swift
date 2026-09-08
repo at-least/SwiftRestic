@@ -89,6 +89,11 @@ final class AppModel {
     /// a check that never happened would be a lie on the repository screen.
     private(set) var repositoriesMissingPassword: Set<UUID> = []
     private(set) var isLoaded = false
+    /// True while `bootstrap` is still reading the configuration and locating
+    /// restic. The views show a loading state instead of the empty states:
+    /// on a slow disk the default (empty) configuration otherwise reads as a
+    /// fresh install — or as breakage — for the first seconds.
+    private(set) var isBootstrapping = false
     /// Mirrors `LoginItem.status`, which is not observable on its own.
     private(set) var startsAtLogin = false
     /// Transient messages shown at the top of the detail panes, newest first.
@@ -174,6 +179,7 @@ final class AppModel {
     func bootstrap() async {
         guard !isLoaded else { return }
         isLoaded = true
+        isBootstrapping = true
 
         do {
             configuration = try await store.load()
@@ -189,6 +195,12 @@ final class AppModel {
         maintenance.removeAll()
         startsAtLogin = LoginItem.isEnabled
         await resolveBinary()
+        // The loading state covers configuration plus the binary probe: both
+        // decide what the first real screen looks like (panes, or the
+        // restic-is-missing banner). The snapshot refresh below can take
+        // minutes against a slow remote — that must never hold the UI
+        // hostage behind a spinner.
+        isBootstrapping = false
         // Not awaited: `requestAuthorization` suspends until the user answers the
         // system prompt, and nothing below may wait on that — the scheduler has to
         // start whether or not notifications are ever allowed.
