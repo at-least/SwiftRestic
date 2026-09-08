@@ -91,6 +91,13 @@ struct ActivityView: View {
                             .lineLimit(run.failureMessage != nil ? 2 : 1)
                     }
                 }
+                // A full-height table that outlives its records paints striped
+                // phantom rows under the last one — an uncanny loading
+                // skeleton that never resolves. The stripes are the table's
+                // alternating-row background, not its content background, so
+                // it is the alternating behavior that gets disabled; the
+                // outcome glyphs and the Detail column keep rows scannable.
+                .alternatingRowBackgrounds(.disabled)
 
                 if let selected = visibleRuns.first(where: { $0.id == selection }),
                    !selected.itemErrors.isEmpty || !selected.hookMessages.isEmpty

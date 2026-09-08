@@ -224,32 +224,32 @@ struct SnapshotTable: View {
                     Text(snapshot.time.formatted(date: .abbreviated, time: .shortened))
                         .monospacedDigit()
                 }
-                .width(min: 150, ideal: 170)
+                .width(min: 150, ideal: 164)
 
                 TableColumn("ID") { snapshot in
                     Text(snapshot.shortID)
                         .font(.system(.callout, design: .monospaced))
                         .textSelection(.enabled)
                 }
-                .width(min: 76, ideal: 84)
+                .width(min: 76, ideal: 82)
 
                 TableColumn("Files") { snapshot in
                     Text(Format.count(snapshot.totalFilesProcessed))
                         .monospacedDigit()
                 }
-                .width(min: 60, ideal: 70)
+                .width(min: 60, ideal: 66)
 
                 TableColumn("Size") { snapshot in
                     Text(Format.bytes(snapshot.totalBytesProcessed))
                         .monospacedDigit()
                 }
-                .width(min: 70, ideal: 84)
+                .width(min: 70, ideal: 78)
 
                 TableColumn("Added") { snapshot in
                     Text(Format.bytes(snapshot.dataAdded))
                         .monospacedDigit()
                 }
-                .width(min: 70, ideal: 84)
+                .width(min: 70, ideal: 78)
 
                 TableColumn("") { snapshot in
                     HStack(spacing: 6) {
@@ -261,13 +261,20 @@ struct SnapshotTable: View {
                     }
                     .controlSize(.small)
                 }
-                .width(onCompare == nil ? 72 : 150)
+                // 126pt fits the two small buttons without crowding them.
+                .width(min: 116, ideal: 126, max: 128)
             }
             // Content-sized: a Table fills whatever height it is offered, so a
             // fixed minimum renders phantom empty rows under a short list —
-            // which reads as a broken loading skeleton. Estimate the content
-            // height instead, capping where the table scrolls anyway.
-            .frame(height: min(320, 34 + CGFloat(snapshots.count) * 26))
+            // which reads as a broken loading skeleton — and fixedSize asks a
+            // scroll-backed Table for a degenerate zero height instead. The
+            // constants are measured from the rendered table (~38pt header,
+            // ~34pt inset-row pitch) and biased a point high on purpose: an
+            // overestimate fails as a hair of padding, an underestimate clips
+            // the last row's glyphs mid-line. The cap is where the table
+            // scrolls its own overflow anyway.
+            .frame(height: min(320, 38 + CGFloat(snapshots.count) * 34))
+            .alternatingRowBackgrounds(.disabled)
         }
     }
 }

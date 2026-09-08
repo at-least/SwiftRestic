@@ -161,8 +161,10 @@ struct OverviewView: View {
                 y: .value("Added", point.dataAdded)
             )
             .foregroundStyle(by: .value("Plan", point.series))
-            // A 2px surface gap keeps adjacent stack segments legible.
-            .cornerRadius(3)
+            // No corner radius here: it rounds every stack segment on all
+            // sides, so mid-stack pieces turn into lens shapes against their
+            // neighbours. The 2px surface gap keeps segments legible; the
+            // single-series repository chart below can afford rounding.
         }
         .chartForegroundStyleScale(
             domain: domain,
