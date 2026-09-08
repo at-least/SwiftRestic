@@ -46,6 +46,7 @@ targets:
       - path: Sources/SwiftRestic/Models
       - path: Sources/SwiftRestic/Services
       - path: Sources/SwiftRestic/App/AppModel.swift
+      - path: Sources/SwiftRestic/App/ConsoleModel.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.newlix.SwiftResticTests

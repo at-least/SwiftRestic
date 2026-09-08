@@ -57,6 +57,7 @@ enum SidebarItem: Hashable {
     case overview
     case plan(UUID)
     case repository(UUID)
+    case console
     case activity
 }
 
@@ -154,6 +155,8 @@ final class AppModel {
     private let store: ConfigStore
     private let secrets: SecretStore
     private let runner = ResticRunner()
+    /// State of the restic console pane (see `ConsoleModel`).
+    let console = ConsoleModel()
     private var binary: ResticBinary?
     private var planTasks: [UUID: Task<Void, Never>] = [:]
     private var maintenanceTasks: [UUID: Task<Void, Never>] = [:]
@@ -228,6 +231,9 @@ final class AppModel {
         let pending = Array(planTasks.values) + Array(maintenanceTasks.values)
         for task in pending { task.cancel() }
         restoreTask?.cancel()
+        // A confirmed-destructive console command must not outlive the app
+        // either — as a sheet it was cancelled on dismissal; quitting cancels.
+        console.cancelRunningCommand()
         await runner.terminateAll()
 
         // Wait for the cancelled runs to finish unwinding. Their `catch` blocks

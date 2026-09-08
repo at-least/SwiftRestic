@@ -4,7 +4,6 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
     @State private var editingPlan: BackupPlan?
     @State private var editingRepository: Repository?
-    @State private var isShowingConsole = false
     @State private var isShowingFind = false
     @State private var isShowingConcepts = false
     // Destructive actions armed from the sidebar context menus. The detail
@@ -29,9 +28,6 @@ struct RootView: View {
         .sheet(item: $editingRepository) { repository in
             RepositoryEditorSheet(repository: repository)
                 .environment(model)
-        }
-        .sheet(isPresented: $isShowingConsole) {
-            ResticConsoleView().environment(model)
         }
         .sheet(isPresented: $isShowingFind) {
             FindFilesView().environment(model)
@@ -73,8 +69,7 @@ struct RootView: View {
             // ⌘B: run whichever plan the sidebar is on. A no-op when the
             // selection is not a runnable plan — the menu item's name says as
             // much — and while a sheet is up, where a run would start unseen.
-            guard editingPlan == nil, editingRepository == nil,
-                  !isShowingConsole, !isShowingFind
+            guard editingPlan == nil, editingRepository == nil, !isShowingFind
             else { return }
             if case let .plan(id) = model.sidebarSelection,
                let plan = model.plan(id: id),
@@ -96,9 +91,11 @@ struct RootView: View {
             Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
                 .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
                 .help("Search snapshots for files, across every snapshot (⇧⌘F)")
-            Button("restic Console", systemImage: "apple.terminal") { isShowingConsole = true }
-                .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
-                .help("Run restic commands directly against a repository")
+            Button("restic Console", systemImage: "apple.terminal") {
+                model.sidebarSelection = .console
+            }
+            .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
+            .help("Run restic commands directly against a repository")
         }
         .onAppear {
             selectSomething()
@@ -178,6 +175,11 @@ struct RootView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section("Tools") {
+                Label("restic Console", systemImage: "apple.terminal")
+                    .tag(SidebarItem.console)
             }
 
             Section {
@@ -292,6 +294,8 @@ struct RootView: View {
                     } else {
                         ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
                     }
+                case .console:
+                    ResticConsoleView()
                 case .activity:
                     ActivityView(onOpenPlan: { planID in
                         model.sidebarSelection = .plan(planID)
@@ -321,7 +325,7 @@ struct RootView: View {
         case "repository": model.sidebarSelection = model.configuration.repositories.first.map { .repository($0.id) }
         case "activity": model.sidebarSelection = .activity
         case "find": isShowingFind = true
-        case "console": isShowingConsole = true
+        case "console": model.sidebarSelection = .console
         case "overview": model.sidebarSelection = .overview
         case "repositoryHooks": editingRepository = model.configuration.repositories.first
         default: break
