@@ -309,7 +309,13 @@ final class AppModel {
         if password?.isEmpty == false { repositoriesMissingPassword.remove(repository.id) }
 
         if let index = configuration.repositories.firstIndex(where: { $0.id == repository.id }) {
-            configuration.repositories[index] = repository
+            // As with plans: maintenance stamps are written by the model while
+            // the editor held its draft. A check that finished mid-edit must
+            // not look like it never happened, or the scheduler repeats it.
+            var updated = repository
+            updated.maintenance.lastCheckAt = configuration.repositories[index].maintenance.lastCheckAt
+            updated.maintenance.lastPruneAt = configuration.repositories[index].maintenance.lastPruneAt
+            configuration.repositories[index] = updated
         } else {
             configuration.repositories.append(repository)
         }
@@ -398,7 +404,14 @@ final class AppModel {
 
     func upsert(plan: BackupPlan) {
         if let index = configuration.plans.firstIndex(where: { $0.id == plan.id }) {
-            configuration.plans[index] = plan
+            // The editor's draft was taken before the sheet opened, and a run
+            // may have finished since. The stamps are written by the model,
+            // never by the editor, so the stored ones win — otherwise saving
+             // an edit would erase the plan's own last success.
+            var updated = plan
+            updated.lastRunAt = configuration.plans[index].lastRunAt
+            updated.lastSuccessAt = configuration.plans[index].lastSuccessAt
+            configuration.plans[index] = updated
         } else {
             configuration.plans.append(plan)
         }

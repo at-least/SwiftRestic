@@ -494,3 +494,69 @@ struct BannerQueueTests {
         #expect(errors.banners.map(\.title) == ["e4", "e3", "e2", "e1"])
     }
 }
+
+/// Saving an editor draft must never erase what the model wrote while the
+/// sheet was open: the run and maintenance stamps are the scheduler's and the
+/// dashboard's ground truth.
+@Suite("Editor upsert preserves model-written stamps")
+@MainActor
+struct UpsertStampTests {
+    private func makeModel() -> AppModel {
+        var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+        return AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticUpsert-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory(secrets)
+        )
+    }
+
+    @Test("a stale plan draft keeps the last-run and last-success stamps")
+    func planStampsSurviveStaleUpsert() {
+        let model = makeModel()
+        var plan = BackupPlan()
+        plan.name = "Nightly"
+        plan.repositoryID = UUID()
+        plan.sources = ["/tmp"]
+
+        model.upsert(plan: plan)
+
+        // The model stamps a finished run, the way markPlanRun does.
+        let ranAt = Date.now.addingTimeInterval(-600)
+        model.configuration.plans[0].lastRunAt = ranAt
+        model.configuration.plans[0].lastSuccessAt = ranAt
+
+        // A draft taken before that run is saved with an unrelated edit.
+        var staleDraft = plan
+        staleDraft.schedule.intervalHours = 7
+        model.upsert(plan: staleDraft)
+
+        #expect(model.configuration.plans[0].lastRunAt == ranAt)
+        #expect(model.configuration.plans[0].lastSuccessAt == ranAt)
+        #expect(model.configuration.plans[0].schedule.intervalHours == 7)
+    }
+
+    @Test("a stale repository draft keeps the check and prune stamps")
+    func repositoryStampsSurviveStaleUpsert() async {
+        let model = makeModel()
+        var repository = Repository()
+        repository.name = "NAS"
+        repository.kind = .local
+        repository.localPath = "/tmp/somewhere"
+
+        await model.upsert(repository: repository, password: nil, providerSecret: nil)
+
+        let checkedAt = Date.now.addingTimeInterval(-3_600)
+        model.configuration.repositories[0].maintenance.lastCheckAt = checkedAt
+        model.configuration.repositories[0].maintenance.lastPruneAt = checkedAt
+
+        var staleDraft = repository
+        staleDraft.name = "NAS (renamed)"
+        await model.upsert(repository: staleDraft, password: nil, providerSecret: nil)
+
+        #expect(model.configuration.repositories[0].maintenance.lastCheckAt == checkedAt)
+        #expect(model.configuration.repositories[0].maintenance.lastPruneAt == checkedAt)
+        #expect(model.configuration.repositories[0].name == "NAS (renamed)")
+    }
+}
