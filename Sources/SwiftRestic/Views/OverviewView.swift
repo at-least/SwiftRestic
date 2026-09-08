@@ -338,7 +338,10 @@ struct OverviewView: View {
                             }
                             Spacer()
                             if date <= .now {
-                                Text("Due now")
+                                // Icon + word, not colour alone: orange
+                                // caption text on light surfaces sat right
+                                // at the contrast floor.
+                                Label("Due now", systemImage: "clock.badge.exclamationmark")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(Theme.warning)
                             } else {

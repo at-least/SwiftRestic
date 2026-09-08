@@ -122,6 +122,7 @@ struct ActivityView: View {
                 Button("Clear History", systemImage: "trash") {
                     isConfirmingClear = true
                 }
+                .labelStyle(.titleAndIcon)
                 .disabled(model.configuration.runs.isEmpty)
                 .help("Permanently remove all run records")
             }

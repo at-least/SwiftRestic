@@ -76,7 +76,10 @@ struct RepositoryEditorSheet: View {
             }
             .padding(12)
         }
-        .frame(width: 600, height: 660)
+        // Resizable, not fixed: the SFTP notes pushed a fixed 600x660 sheet
+        // into scrolling at default font sizes and buried the maintenance
+        // section. A minimum keeps it usable; the user can grow it.
+        .frame(minWidth: 600, idealWidth: 660, minHeight: 560, idealHeight: 660)
         .task {
             // Snapshot before the keychain await: an edit typed during the
             // load must already register as a change.
@@ -118,9 +121,22 @@ struct RepositoryEditorSheet: View {
         Form {
             Section {
                 TextField("Name", text: $draft.name, prompt: Text("Home backups"))
+                // Grouped by how a restic backend is actually reached, so the
+                // eight kinds read as three decisions instead of one wall.
                 Picker("Type", selection: $draft.kind) {
-                    ForEach(Repository.Kind.allCases) { kind in
-                        Text(kind.displayName).tag(kind)
+                    Section("Local and direct") {
+                        Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
+                        Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
+                    }
+                    Section("Cloud storage") {
+                        Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
+                        Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
+                        Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
+                        Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
+                    }
+                    Section("Gateways") {
+                        Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
+                        Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
                     }
                 }
             }

@@ -202,6 +202,8 @@ struct SnapshotDiffView: View {
                         .foregroundStyle(color(for: change.category))
                         .frame(width: 22, alignment: .center)
                         .help(change.explanation)
+                        // VoiceOver reads "plus"; the explanation says "added".
+                        .accessibilityLabel(change.explanation)
                     Image(systemName: change.isDirectory ? "folder" : "doc")
                         .foregroundStyle(.secondary)
                         .frame(width: 16)
@@ -215,6 +217,7 @@ struct SnapshotDiffView: View {
                             .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.tertiary)
                             .help(change.explanation)
+                            .accessibilityLabel(change.explanation)
                     }
                 }
             }

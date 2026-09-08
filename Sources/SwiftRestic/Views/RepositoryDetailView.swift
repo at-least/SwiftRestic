@@ -28,15 +28,19 @@ struct RepositoryDetailView: View {
                 Button("Refresh", systemImage: "arrow.clockwise") {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
+                .help("Re-read snapshots and statistics")
                 Menu("Maintenance", systemImage: "wrench.and.screwdriver") {
                     Button("Check…") { isConfirmingCheck = true }
                     Divider()
                     Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
                     Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
                 }
+                .labelStyle(.titleAndIcon)
                 .disabled(model.busyRepositoryIDs.contains(repositoryID))
                 .help("Verify the repository's integrity, or run destructive maintenance")
                 Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
+                    .labelStyle(.titleAndIcon)
+                    .help("Change this repository's location, credentials and maintenance")
             }
         }
         .sheet(item: $browsing) { target in

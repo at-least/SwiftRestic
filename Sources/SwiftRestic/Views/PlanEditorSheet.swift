@@ -189,10 +189,18 @@ struct PlanEditorSheet: View {
                 ForEach(0 ... 23, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
             }
             .frame(width: 130)
-            Picker(":", selection: $draft.schedule.minute) {
-                ForEach([0, 15, 30, 45], id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
-            }
-            .frame(width: 90)
+            // Any minute, not a hidden 15-minute grid: a typed :05 or :20
+            // failed invisibly before, and "every 6 hours at :20" was
+            // inexpressible.
+            TextField(
+                "Minute",
+                value: Binding(
+                    get: { draft.schedule.minute },
+                    set: { draft.schedule.minute = min(59, max(0, $0)) }
+                ),
+                format: .number.grouping(.never)
+            )
+            .frame(width: 56)
         }
     }
 

@@ -38,11 +38,13 @@ struct PlanDetailView: View {
                         Button("Pause Schedule", systemImage: "pause.circle") {
                             model.setPlanEnabled(id: plan.id, isEnabled: false)
                         }
+                        .labelStyle(.titleAndIcon)
                         .help("Stop scheduled runs — Back Up Now still works")
                     } else {
                         Button("Resume Schedule", systemImage: "play.circle") {
                             model.setPlanEnabled(id: plan.id, isEnabled: true)
                         }
+                        .labelStyle(.titleAndIcon)
                         .help("Run this plan on its schedule again")
                     }
                     Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)

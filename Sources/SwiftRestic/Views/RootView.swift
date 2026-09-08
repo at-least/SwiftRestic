@@ -388,6 +388,11 @@ private struct PlanSidebarRow: View {
         if let activity = model.activity[plan.id] {
             return activity.phase.displayName
         }
+        // The icon alone carried the paused state; the subtitle says it so
+        // colour and symbol are never the only signals.
+        if !plan.isEnabled {
+            return "Paused — \(plan.schedule.summary)"
+        }
         if plan.lastSuccessAt != nil {
             return "Last backup \(Format.relative(plan.lastSuccessAt))"
         }
@@ -420,13 +425,17 @@ struct WelcomeView: View {
                 )
                 .shadow(color: Color.accentColor.opacity(0.25), radius: 14, y: 6)
 
-            HStack(spacing: 6) {
+            // Title above tagline, both centred: the title sitting beside a
+            // wrapping paragraph read as a layout accident on the app's very
+            // first screen.
+            VStack(spacing: 6) {
                 Text("SwiftRestic")
                     .font(.largeTitle.weight(.bold))
                 Text("Scheduled, encrypted, deduplicated backups powered by restic — and your repository stays an open one you can restore anywhere.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
             }
 
             HStack(spacing: Theme.Space.section) {
