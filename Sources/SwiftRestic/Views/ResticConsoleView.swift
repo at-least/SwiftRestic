@@ -9,9 +9,18 @@ struct ResticConsoleView: View {
     @State private var commandText = "snapshots --compact"
     @State private var output = ""
     @State private var isRunning = false
-    @State private var pendingDestructive: [String]?
+    /// The command waiting on its destructive-confirmation dialog, with the
+    /// text as it was when armed — the field stays editable while the dialog
+    /// is up, and the history must record what was confirmed, not what got
+    /// typed afterwards.
+    @State private var pendingDestructive: PendingCommand?
     @State private var history: [String] = []
     @State private var runTask: Task<Void, Never>?
+
+    private struct PendingCommand {
+        let arguments: [String]
+        let text: String
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,6 +33,9 @@ struct ResticConsoleView: View {
         .frame(minWidth: 720, minHeight: 460)
         .onAppear {
             if repositoryID == nil { repositoryID = model.configuration.repositories.first?.id }
+            // History outlives the sheet: it lives in the configuration, so a
+            // command that worked is still here next week.
+            history = model.configuration.settings.consoleHistory
         }
         // A command outliving its sheet would keep a restic process (possibly a
         // confirmed-destructive one) running with nowhere to show its output.
@@ -37,14 +49,14 @@ struct ResticConsoleView: View {
             titleVisibility: .visible
         ) {
             Button("Run", role: .destructive) {
-                if let arguments = pendingDestructive {
+                if let pending = pendingDestructive {
                     pendingDestructive = nil
-                    execute(arguments)
+                    execute(pending.arguments, record: pending.text)
                 }
             }
             Button("Cancel", role: .cancel) { pendingDestructive = nil }
         } message: {
-            Text("`restic \(pendingDestructive?.joined(separator: " ") ?? "")` can change or delete data in this repository. Add --dry-run first if you are unsure.")
+            Text("`restic \(pendingDestructive?.arguments.joined(separator: " ") ?? "")` can change or delete data in this repository. Add --dry-run first if you are unsure.")
         }
     }
 
@@ -132,17 +144,16 @@ struct ResticConsoleView: View {
         let arguments = CommandLineTokenizer.tokenize(commandText)
         guard !arguments.isEmpty, repositoryID != nil else { return }
         if CommandLineTokenizer.isDestructive(arguments) {
-            pendingDestructive = arguments
+            pendingDestructive = PendingCommand(arguments: arguments, text: commandText)
         } else {
-            execute(arguments)
+            execute(arguments, record: commandText)
         }
     }
 
-    private func execute(_ arguments: [String]) {
+    private func execute(_ arguments: [String], record entry: String) {
         guard let repositoryID else { return }
         isRunning = true
         output = "Running…"
-        let entry = commandText
         runTask = Task {
             let result = await model.runConsoleCommand(
                 repositoryID: repositoryID,
@@ -157,6 +168,22 @@ struct ResticConsoleView: View {
             history.removeAll { $0 == entry }
             history.insert(entry, at: 0)
             history = Array(history.prefix(20))
+            // Sensitive commands stay in this session's menu but never reach
+            // the configuration file: it gets rotated and is the first thing
+            // attached to a bug report, and a history miss is a small price
+            // next to a stored secret.
+            model.configuration.settings.consoleHistory = history.filter {
+                !Self.mayCarrySecret($0)
+            }
         }
+    }
+
+    private static func mayCarrySecret(_ command: String) -> Bool {
+        let lowered = command.lowercased()
+        return lowered.contains("password")
+            || lowered.contains("secret")
+            || lowered.contains("token")
+            || lowered.contains("key add")
+            || lowered.contains("key passwd")
     }
 }

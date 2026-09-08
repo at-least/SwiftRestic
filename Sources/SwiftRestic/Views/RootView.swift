@@ -76,6 +76,21 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowFind)) { _ in
             isShowingFind = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .swiftResticRunSelected)) { _ in
+            // ⌘B: run whichever plan the sidebar is on. A no-op when the
+            // selection is not a runnable plan — the menu item's name says as
+            // much — and while a sheet is up, where a run would start unseen.
+            guard editingPlan == nil, editingRepository == nil,
+                  !isShowingConsole, !isShowingFind
+            else { return }
+            if case let .plan(id) = selection,
+               let plan = model.plan(id: id),
+               plan.isConfigurationComplete,
+               !model.isRunning(planID: id)
+            {
+                model.runBackup(planID: id)
+            }
+        }
         .toolbar {
             Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
                 .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
@@ -192,6 +207,11 @@ struct RootView: View {
         Button("Back Up Now") { model.runBackup(planID: plan.id) }
             .disabled(model.isRunning(planID: plan.id))
         Button("Edit…") { editingPlan = plan }
+        // The sidebar row already wears a pause icon when disabled; the menu
+        // is where that state is changed. Manual runs stay possible either way.
+        Button(plan.isEnabled ? "Pause Scheduled Runs" : "Resume Scheduled Runs") {
+            model.setPlanEnabled(id: plan.id, isEnabled: !plan.isEnabled)
+        }
         Divider()
         Button("Delete Plan", role: .destructive) { planPendingDeletion = plan }
     }

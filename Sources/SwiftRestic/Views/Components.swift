@@ -306,14 +306,23 @@ struct OperationProgressView: View {
 // MARK: - Path list editor
 
 /// A list of paths with add/remove buttons, used for sources and excludes.
+///
+/// Typing, pasting and dropping are first-class: the audience keeps paths on
+/// the clipboard, and an NSOpenPanel per source is the app's biggest
+/// efficiency tax.
 struct PathListEditor: View {
     let title: String
     @Binding var paths: [String]
     var allowsBrowsing = true
     var placeholder = "Add a pattern"
+    /// Sources are real paths, so a leading `~` has to become the home
+    /// directory — restic never sees a shell. Excludes are match patterns
+    /// where `~` must stay literal.
+    var expandsTildeInPath = false
 
     @State private var selection: Set<String> = []
     @State private var draft = ""
+    @State private var isDropTargeted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -333,18 +342,28 @@ struct PathListEditor: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+                    .strokeBorder(
+                        isDropTargeted ? Theme.tint : Color.primary.opacity(0.09),
+                        lineWidth: isDropTargeted ? 2 : 1
+                    )
             )
+            .dropDestination(for: URL.self) { urls, _ in
+                // Only file URLs are sources: a dragged web link's `.path`
+                // would silently become a nonexistent backup source.
+                let filePaths = urls.filter(\.isFileURL).map(\.path)
+                guard !filePaths.isEmpty else { return false }
+                addPaths(filePaths)
+                return true
+            } isTargeted: { isDropTargeted = $0 }
 
             HStack(spacing: 6) {
+                TextField(placeholder, text: $draft)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addDraft)
+                Button("Add", action: addDraft)
+                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
                 if allowsBrowsing {
                     Button("Choose…") { browse() }
-                } else {
-                    TextField(placeholder, text: $draft)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit(addDraft)
-                    Button("Add", action: addDraft)
-                        .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 Spacer()
                 Button("Remove") {
@@ -357,17 +376,28 @@ struct PathListEditor: View {
     }
 
     private func addDraft() {
-        let value = draft.trimmingCharacters(in: .whitespaces)
-        guard !value.isEmpty, !paths.contains(value) else { return }
-        paths.append(value)
+        addPaths([draft])
+    }
+
+    private func addPaths(_ rawPaths: [String]) {
+        for raw in rawPaths {
+            // Trim first: a pasted " ~/Documents" does not start with `~`, so
+            // expanding before trimming would leave the tilde literal — and
+            // restic, seeing no shell, would stat a path that cannot exist.
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let value = expandsTildeInPath
+                ? (trimmed as NSString).expandingTildeInPath
+                : trimmed
+            guard !paths.contains(value) else { continue }
+            paths.append(value)
+        }
         draft = ""
     }
 
     private func browse() {
         guard let chosen = FilePicker.chooseFoldersAndFiles() else { return }
-        for url in chosen where !paths.contains(url.path) {
-            paths.append(url.path)
-        }
+        addPaths(chosen.map(\.path))
     }
 }
 

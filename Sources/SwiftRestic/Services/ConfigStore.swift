@@ -16,6 +16,10 @@ struct AppSettings: Codable, Sendable, Hashable {
     var pauseOnBattery: Bool = false
     /// Webhook, chat and dead-man's-switch destinations.
     var notificationChannels: [NotificationChannel] = []
+    /// The console's last commands, newest first. Persisted so a command that
+    /// worked survives closing the sheet — the console is a power user's home,
+    /// and retyping from memory is the tax it exists to remove.
+    var consoleHistory: [String] = []
 
     init() {}
 
@@ -30,6 +34,7 @@ struct AppSettings: Codable, Sendable, Hashable {
         downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)
         pauseOnBattery = c.value(.pauseOnBattery, default: false)
         notificationChannels = c.value(.notificationChannels, default: [])
+        consoleHistory = c.value(.consoleHistory, default: [])
     }
 }
 

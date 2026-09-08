@@ -34,6 +34,17 @@ struct PlanDetailView: View {
                         .labelStyle(.titleAndIcon)
                         .help("Run this plan's backup now")
                     }
+                    if plan.isEnabled {
+                        Button("Pause Schedule", systemImage: "pause.circle") {
+                            model.setPlanEnabled(id: plan.id, isEnabled: false)
+                        }
+                        .help("Stop scheduled runs — Back Up Now still works")
+                    } else {
+                        Button("Resume Schedule", systemImage: "play.circle") {
+                            model.setPlanEnabled(id: plan.id, isEnabled: true)
+                        }
+                        .help("Run this plan on its schedule again")
+                    }
                     Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                         .labelStyle(.titleAndIcon)
                         .help("Change this plan's folders, schedule and retention")

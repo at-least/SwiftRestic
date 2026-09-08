@@ -46,6 +46,8 @@ extension Notification.Name {
     static let swiftResticShowFind = Notification.Name("SwiftRestic.showFind")
     /// Posted by the Help menu; same arrangement as `swiftResticShowFind`.
     static let swiftResticShowConcepts = Notification.Name("SwiftRestic.showConcepts")
+    /// Posted by the Backup menu; RootView knows which plan is selected.
+    static let swiftResticRunSelected = Notification.Name("SwiftRestic.runSelected")
 }
 
 #if DEBUG
@@ -175,6 +177,11 @@ struct SwiftResticApp: App {
                     }
                 }
                 .keyboardShortcut("b", modifiers: [.command, .shift])
+
+                Button("Back Up Selected Plan") {
+                    NotificationCenter.default.post(name: .swiftResticRunSelected, object: nil)
+                }
+                .keyboardShortcut("b", modifiers: .command)
 
                 Button("Find Files in Snapshots…") {
                     NotificationCenter.default.post(name: .swiftResticShowFind, object: nil)

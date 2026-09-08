@@ -111,7 +111,12 @@ struct PlanEditorSheet: View {
 
     private var sourcesTab: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PathListEditor(title: "Back up these folders and files", paths: $draft.sources)
+            PathListEditor(
+                title: "Back up these folders and files",
+                paths: $draft.sources,
+                placeholder: "/Users/you/Documents",
+                expandsTildeInPath: true
+            )
             PathListEditor(
                 title: "Exclude patterns",
                 paths: $draft.excludePatterns,
