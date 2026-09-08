@@ -1,15 +1,7 @@
 import SwiftUI
 
-enum SidebarItem: Hashable {
-    case overview
-    case plan(UUID)
-    case repository(UUID)
-    case activity
-}
-
 struct RootView: View {
     @Environment(AppModel.self) private var model
-    @State private var selection: SidebarItem?
     @State private var editingPlan: BackupPlan?
     @State private var editingRepository: Repository?
     @State private var isShowingConsole = false
@@ -24,6 +16,7 @@ struct RootView: View {
     #endif
 
     var body: some View {
+        @Bindable var model = model
         NavigationSplitView {
             sidebar
         } detail: {
@@ -83,13 +76,21 @@ struct RootView: View {
             guard editingPlan == nil, editingRepository == nil,
                   !isShowingConsole, !isShowingFind
             else { return }
-            if case let .plan(id) = selection,
+            if case let .plan(id) = model.sidebarSelection,
                let plan = model.plan(id: id),
                plan.isConfigurationComplete,
                !model.isRunning(planID: id)
             {
                 model.runBackup(planID: id)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .swiftResticNewPlan)) { _ in
+            guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
+            editingPlan = BackupPlan()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .swiftResticNewRepository)) { _ in
+            guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
+            editingRepository = Repository()
         }
         .toolbar {
             Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
@@ -122,7 +123,10 @@ struct RootView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        List(selection: $selection) {
+        List(selection: Binding(
+            get: { model.sidebarSelection },
+            set: { model.sidebarSelection = $0 }
+        )) {
             Section {
                 Label("Overview", systemImage: "square.grid.2x2")
                     .tag(SidebarItem.overview)
@@ -251,10 +255,10 @@ struct RootView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
             }
-            switch selection {
+            switch model.sidebarSelection {
             case .overview:
                 OverviewView(onShowProblems: {
-                    selection = .activity
+                    model.sidebarSelection = .activity
                 })
             case let .plan(id):
                 if let plan = model.plan(id: id) {
@@ -273,7 +277,7 @@ struct RootView: View {
                 }
             case .activity:
                 ActivityView(onOpenPlan: { planID in
-                    selection = .plan(planID)
+                    model.sidebarSelection = .plan(planID)
                 })
             case .none:
                 WelcomeView(
@@ -295,12 +299,12 @@ struct RootView: View {
         else { return }
         didApplyCaptureOverride = true
         switch ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_PANE"] {
-        case "plan": selection = model.configuration.plans.first.map { .plan($0.id) }
-        case "repository": selection = model.configuration.repositories.first.map { .repository($0.id) }
-        case "activity": selection = .activity
+        case "plan": model.sidebarSelection = model.configuration.plans.first.map { .plan($0.id) }
+        case "repository": model.sidebarSelection = model.configuration.repositories.first.map { .repository($0.id) }
+        case "activity": model.sidebarSelection = .activity
         case "find": isShowingFind = true
         case "console": isShowingConsole = true
-        case "overview": selection = .overview
+        case "overview": model.sidebarSelection = .overview
         case "repositoryHooks": editingRepository = model.configuration.repositories.first
         default: break
         }
@@ -308,19 +312,19 @@ struct RootView: View {
     #endif
 
     private func selectSomething() {
-        guard selection == nil else { return }
+        guard model.sidebarSelection == nil else { return }
         // The dashboard is the useful landing place once anything is configured.
-        selection = model.configuration.repositories.isEmpty ? nil : .overview
+        model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
     }
 
     /// After a deletion the selected plan or repository may no longer exist;
     /// landing on "Plan not found" is a dead end whose only exit is the
     /// sidebar, so retarget to the dashboard instead.
     private func revalidateSelection() {
-        switch selection {
+        switch model.sidebarSelection {
         case .plan(let id) where model.plan(id: id) == nil,
              .repository(let id) where model.repository(id: id) == nil:
-            selection = model.configuration.repositories.isEmpty ? nil : .overview
+            model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
         default:
             break
         }

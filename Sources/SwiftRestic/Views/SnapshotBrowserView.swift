@@ -103,6 +103,13 @@ struct SnapshotBrowserView: View {
                 .tag(node.id)
             }
             .listStyle(.inset)
+            // A browser navigable only by double-click strands keyboard users
+            // one level deep: arrows move the selection and stop. Return opens
+            // the selected folder, ⌫ and ⌘↑ ascend — Finder's own grammar.
+            .onKeyPress(phases: .down) { press in
+                handleKeyPress(press)
+            }
+            .help("Return opens a folder; ⌘↑ or ⌫ goes up; double-click also opens")
         }
     }
 
@@ -129,13 +136,38 @@ struct SnapshotBrowserView: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Restore Selected…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("r", modifiers: .command)
                     .disabled(selectedNode == nil || model.isRestoring)
+                    .help("Restore the selected item (⌘R)")
             }
         }
         .padding(12)
     }
 
     // MARK: - Actions
+
+    /// Keyboard grammar for the list. Everything unrecognised returns
+    /// `.ignored` so the List keeps its own arrow-key selection movement.
+    private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
+        switch press.key {
+        case .return:
+            if let node = selectedNode, node.isDirectory {
+                open(node)
+                return .handled
+            }
+            return .ignored
+        case .delete:
+            guard currentPath != nil else { return .ignored }
+            goUp()
+            return .handled
+        case .upArrow where press.modifiers.contains(.command):
+            guard currentPath != nil else { return .ignored }
+            goUp()
+            return .handled
+        default:
+            return .ignored
+        }
+    }
 
     private var selectedNode: SnapshotNode? {
         guard let selection else { return nil }

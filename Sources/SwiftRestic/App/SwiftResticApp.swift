@@ -48,6 +48,9 @@ extension Notification.Name {
     static let swiftResticShowConcepts = Notification.Name("SwiftRestic.showConcepts")
     /// Posted by the Backup menu; RootView knows which plan is selected.
     static let swiftResticRunSelected = Notification.Name("SwiftRestic.runSelected")
+    /// Posted by the File menu; the new-item sheets are RootView's to present.
+    static let swiftResticNewPlan = Notification.Name("SwiftRestic.newPlan")
+    static let swiftResticNewRepository = Notification.Name("SwiftRestic.newRepository")
 }
 
 #if DEBUG
@@ -157,7 +160,22 @@ struct SwiftResticApp: App {
         }
         .defaultSize(width: 1100, height: 720)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            // ⌘N is macOS's reflex for "new thing" — an emptied group here
+            // meant adding a repository was always a mouse trip to the sidebar
+            // footer. RootView owns the sheets and ignores these while a sheet
+            // is already up.
+            CommandGroup(replacing: .newItem) {
+                Button("New Backup Plan…") {
+                    NotificationCenter.default.post(name: .swiftResticNewPlan, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(model.configuration.repositories.isEmpty)
+
+                Button("Add Repository…") {
+                    NotificationCenter.default.post(name: .swiftResticNewRepository, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+            }
             CommandGroup(after: .help) {
                 Button("SwiftRestic Concepts…") {
                     NotificationCenter.default.post(name: .swiftResticShowConcepts, object: nil)
@@ -182,6 +200,10 @@ struct SwiftResticApp: App {
                     NotificationCenter.default.post(name: .swiftResticRunSelected, object: nil)
                 }
                 .keyboardShortcut("b", modifiers: .command)
+                // The handler in RootView no-ops when the selection is not a
+                // runnable plan; an enabled menu item over a disabled action
+                // is a menu that lies.
+                .disabled(!model.canRunSelectedPlan)
 
                 Button("Find Files in Snapshots…") {
                     NotificationCenter.default.post(name: .swiftResticShowFind, object: nil)

@@ -50,6 +50,16 @@ struct Banner: Identifiable, Equatable {
     var isError: Bool
 }
 
+/// Which pane the sidebar is showing. Lives beside the model because menu-bar
+/// commands must read it: a "Back Up Selected Plan" item that stays enabled
+/// over a non-plan selection is a menu that lies.
+enum SidebarItem: Hashable {
+    case overview
+    case plan(UUID)
+    case repository(UUID)
+    case activity
+}
+
 /// The single source of truth the SwiftUI views observe.
 ///
 /// Everything that touches persisted state happens here on the main actor;
@@ -118,6 +128,19 @@ final class AppModel {
     /// problems. Overview's problem rows and failures tile turn it on when they
     /// send the user over.
     var activityShowsProblemsOnly = false
+
+    /// The pane the sidebar is showing, bound from RootView so the Backup
+    /// menu can disable against it.
+    var sidebarSelection: SidebarItem?
+
+    /// Whether ⌘B has something to do right now: the sidebar must be on a
+    /// complete, currently idle plan.
+    var canRunSelectedPlan: Bool {
+        guard case let .plan(id) = sidebarSelection,
+              let plan = plan(id: id)
+        else { return false }
+        return plan.isConfigurationComplete && !isRunning(planID: id)
+    }
 
     /// Progress of a restore, which is always one at a time.
     private(set) var restoreActivity: OperationProgress?
