@@ -96,7 +96,7 @@ struct PlanDetailView: View {
             )
             StatTile(
                 title: "Next backup",
-                value: plan.nextRunDate.map { Format.timestamp($0) } ?? "Manual",
+                value: plan.nextRunDate.map { Format.timestamp($0) } ?? "Manually",
                 systemImage: "calendar",
                 hue: plan.isEnabled ? Theme.tint : Theme.warning
             )
@@ -130,6 +130,19 @@ struct PlanDetailView: View {
                     if !plan.hooks.isEmpty {
                         DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")
                     }
+                }
+
+                // The same projection the editor shows: the shorthand above is
+                // buckets, this sentence is what the buckets mean.
+                if plan.retention.isEnabled,
+                   let projection = RetentionProjection.project(policy: plan.retention, schedule: plan.schedule)
+                {
+                    Text(
+                        "≈ \(projection.keptSnapshots) snapshots would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Divider()

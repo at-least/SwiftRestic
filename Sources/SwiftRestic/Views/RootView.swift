@@ -205,7 +205,10 @@ struct RootView: View {
     @ViewBuilder
     private func planContextMenu(_ plan: BackupPlan) -> some View {
         Button("Back Up Now") { model.runBackup(planID: plan.id) }
-            .disabled(model.isRunning(planID: plan.id))
+            // Same guard the menu bar applies: an incomplete plan has nothing
+            // to run, and an error banner is not a substitute for a disabled
+            // item.
+            .disabled(model.isRunning(planID: plan.id) || !plan.isConfigurationComplete)
         Button("Edit…") { editingPlan = plan }
         // The sidebar row already wears a pause icon when disabled; the menu
         // is where that state is changed. Manual runs stay possible either way.
@@ -221,7 +224,7 @@ struct RootView: View {
         Button("Edit…") { editingRepository = repository }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
         Divider()
-        Button("Remove from SwiftRestic", role: .destructive) {
+        Button("Remove from SwiftRestic…", role: .destructive) {
             repositoryPendingRemoval = repository
         }
     }
@@ -389,17 +392,19 @@ struct WelcomeView: View {
                 )
                 .shadow(color: Color.accentColor.opacity(0.25), radius: 14, y: 6)
 
-            VStack(spacing: 6) {
+            HStack(spacing: 6) {
                 Text("SwiftRestic")
                     .font(.largeTitle.weight(.bold))
-                Text("Scheduled, encrypted, deduplicated backups powered by restic.")
+                Text("Scheduled, encrypted, deduplicated backups powered by restic — and your repository stays an open one you can restore anywhere.")
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.center)
             }
 
             HStack(spacing: Theme.Space.section) {
                 welcomeFeature("lock.shield", "Encrypted", "Client-side, before anything leaves the Mac")
-                welcomeFeature("clock.arrow.circlepath", "Scheduled", "Hourly to weekly, with catch-up after sleep")
-                welcomeFeature("magnifyingglass", "Searchable", "Browse and restore any snapshot, any file")
+                welcomeFeature("arrow.left.arrow.right.square", "See what changed", "Compare any two snapshots file by file")
+                welcomeFeature("apple.terminal", "restic console", "Run any restic command, for what the UI does not cover")
             }
             .padding(.vertical, 6)
 

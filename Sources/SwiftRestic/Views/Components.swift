@@ -157,7 +157,10 @@ struct StatTile: View {
                     .font(Theme.statValue)
                     .monospacedDigit()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                    // 75%, not less: these are the app's most prominent
+                    // numerals, and shrinking further trades legibility for a
+                    // fit a truncation ellipsis would serve better.
+                    .minimumScaleFactor(0.75)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

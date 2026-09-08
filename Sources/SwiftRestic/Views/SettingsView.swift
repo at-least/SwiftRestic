@@ -237,6 +237,13 @@ struct NotificationChannelsTab: View {
                     text: $model.configuration.settings.notificationChannels[index].url,
                     prompt: Text(channel.kind.urlPrompt)
                 )
+                // The row's warning triangle has a reason; it is repeated here
+                // where the user edits, not only on hover.
+                if !channel.isUsable, channel.isEnabled {
+                    Label("This channel cannot fire: the URL is missing or not http(s).", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Theme.warning)
+                        .font(.callout)
+                }
 
                 Section("Send when a run") {
                     Toggle(

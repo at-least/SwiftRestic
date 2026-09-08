@@ -124,7 +124,8 @@ struct RepositoryDetailView: View {
                 StatTile(
                     title: "Blobs",
                     value: Format.count(stats?.totalBlobCount),
-                    systemImage: "square.stack.3d.up.fill"
+                    systemImage: "square.stack.3d.up.fill",
+                    help: "Chunks of encrypted data stored in the repository — the pieces snapshots are made of"
                 )
                 StatTile(
                     title: "Compression saved",
