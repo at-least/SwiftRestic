@@ -81,7 +81,39 @@ final class AppModel {
     private(set) var isLoaded = false
     /// Mirrors `LoginItem.status`, which is not observable on its own.
     private(set) var startsAtLogin = false
-    var banner: Banner?
+    /// Transient messages shown at the top of the detail panes, newest first.
+    /// A queue rather than a single slot: an unread error must not be erased
+    /// by the next message — a failing-repository refresh, a finished restore
+    /// and a notification failure can land minutes apart.
+    private(set) var banners: [Banner] = []
+
+    /// Shows a transient message. Non-errors dismiss themselves after a few
+    /// seconds — success that outlives its moment reads as stale — while
+    /// errors stay until the user dismisses them. The cap keeps a pathological
+    /// stream (a refresh loop over many unreachable repositories) from
+    /// stacking banners without end.
+    func post(_ banner: Banner) {
+        banners.insert(banner, at: 0)
+        if banners.count > Self.bannerLimit {
+            // Evict the oldest success first: an unread error is exactly what
+            // the queue exists to protect. The just-posted banner (index 0) is
+            // exempt; only an all-error queue gives up its oldest error.
+            let oldestSuccess = banners.lastIndex(where: { !$0.isError }).flatMap { $0 > 0 ? $0 : nil }
+            banners.remove(at: oldestSuccess ?? banners.count - 1)
+        }
+        guard !banner.isError else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard let self else { return }
+            self.banners.removeAll { $0.id == banner.id }
+        }
+    }
+
+    func dismiss(_ banner: Banner) {
+        banners.removeAll { $0.id == banner.id }
+    }
+
+    private static let bannerLimit = 4
     /// Transient, never persisted: whether Activity shows every run or only
     /// problems. Overview's problem rows and failures tile turn it on when they
     /// send the user over.
@@ -123,11 +155,11 @@ final class AppModel {
         do {
             configuration = try await store.load()
         } catch {
-            banner = Banner(
+            post(Banner(
                 title: "Could not read your configuration",
                 message: error.localizedDescription,
                 isError: true
-            )
+            ))
         }
         // Reset any activity left behind by a crash mid-backup.
         activity.removeAll()
@@ -200,11 +232,11 @@ final class AppModel {
     /// Registers or removes the login item, reporting whatever macOS says.
     func setStartsAtLogin(_ enabled: Bool) {
         if enabled, !LoginItem.isInInstallableLocation {
-            banner = Banner(
+            post(Banner(
                 title: "Cannot start at login from here",
                 message: LoginItem.notInstalledMessage,
                 isError: true
-            )
+            ))
             startsAtLogin = LoginItem.isEnabled
             return
         }
@@ -212,19 +244,19 @@ final class AppModel {
             try LoginItem.setEnabled(enabled)
             startsAtLogin = LoginItem.isEnabled
             if enabled, LoginItem.needsApproval {
-                banner = Banner(
+                post(Banner(
                     title: "Approval needed",
                     message: LoginItem.statusDescription,
                     isError: false
-                )
+                ))
             }
         } catch {
             startsAtLogin = LoginItem.isEnabled
-            banner = Banner(
+            post(Banner(
                 title: "Could not change the login item",
                 message: error.localizedDescription,
                 isError: true
-            )
+            ))
         }
     }
 
@@ -256,11 +288,11 @@ final class AppModel {
         do {
             try await store.save(snapshot)
         } catch {
-            banner = Banner(
+            post(Banner(
                 title: "Could not save your configuration",
                 message: error.localizedDescription,
                 isError: true
-            )
+            ))
         }
     }
 
@@ -272,7 +304,7 @@ final class AppModel {
         do {
             try await secrets.save(repository.id, password, providerSecret)
         } catch {
-            banner = Banner(title: "Keychain", message: error.localizedDescription, isError: true)
+            post(Banner(title: "Keychain", message: error.localizedDescription, isError: true))
         }
         if password?.isEmpty == false { repositoriesMissingPassword.remove(repository.id) }
 
@@ -291,11 +323,11 @@ final class AppModel {
             providerSecret: providerSecret
         ).overriddenExtraEnvironmentKeys
         if !overridden.isEmpty {
-            banner = Banner(
+            post(Banner(
                 title: "Ignored environment variables",
                 message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; the value in Extra environment has no effect.",
                 isError: false
-            )
+            ))
         }
     }
 
@@ -390,11 +422,11 @@ final class AppModel {
         guard plan.isConfigurationComplete, let repositoryID = plan.repositoryID,
               let repository = repository(id: repositoryID)
         else {
-            banner = Banner(
+            post(Banner(
                 title: "Plan is incomplete",
                 message: "Choose a repository and at least one folder to back up.",
                 isError: true
-            )
+            ))
             return
         }
 
@@ -616,11 +648,11 @@ final class AppModel {
 
         let failures = await NotificationPoster.broadcast(event, to: channels)
         if !failures.isEmpty {
-            banner = Banner(
+            post(Banner(
                 title: "Could not send \(failures.count) notification(s)",
                 message: failures.joined(separator: "\n"),
                 isError: true
-            )
+            ))
         }
     }
 
@@ -685,11 +717,11 @@ final class AppModel {
             snapshots[repositoryID] = []
         } catch {
             snapshots[repositoryID] = []
-            banner = Banner(
+            post(Banner(
                 title: "Could not read “\(repository.name)”",
                 message: error.localizedDescription,
                 isError: true
-            )
+            ))
         }
     }
 
@@ -765,11 +797,11 @@ final class AppModel {
                 Task { @MainActor in self?.restoreActivity = progress }
             }
         } onSuccess: { [weak self] in
-            self?.banner = Banner(
+            self?.post(Banner(
                 title: "Restored \(node.name)",
                 message: destination.path,
                 isError: false
-            )
+            ))
         }
     }
 
@@ -785,11 +817,11 @@ final class AppModel {
                 Task { @MainActor in self?.restoreActivity = progress }
             }
         } onSuccess: { [weak self] in
-            self?.banner = Banner(
+            self?.post(Banner(
                 title: "Restored snapshot",
                 message: destination.path,
                 isError: false
-            )
+            ))
         }
     }
 
@@ -829,11 +861,11 @@ final class AppModel {
             } catch {
                 record.outcome = .failed
                 record.failureMessage = error.localizedDescription
-                self.banner = Banner(
+                self.post(Banner(
                     title: "Restore failed",
                     message: error.localizedDescription,
                     isError: true
-                )
+                ))
             }
             record.finishedAt = .now
             self.append(record: record)
@@ -874,11 +906,11 @@ final class AppModel {
         guard maintenanceTasks[repositoryID] == nil else { return }
         guard let repository = repository(id: repositoryID) else { return }
         guard !busyRepositoryIDs.contains(repositoryID) else {
-            banner = Banner(
+            post(Banner(
                 title: "“\(repository.name)” is busy",
                 message: "A backup or another maintenance job is already using this repository.",
                 isError: false
-            )
+            ))
             return
         }
 
@@ -1041,11 +1073,11 @@ final class AppModel {
 
         append(record: record)
         if record.outcome == .failed {
-            banner = Banner(
+            post(Banner(
                 title: "\(record.kind.rawValue.capitalized) failed on “\(repository.name)”",
                 message: record.failureMessage ?? "",
                 isError: true
-            )
+            ))
         }
         await broadcast(record: record, plan: nil)
         await refreshSnapshots(repositoryID: repository.id)
@@ -1066,46 +1098,37 @@ final class AppModel {
             do {
                 let service = try self.service()
                 try await service.unlock(self.context(for: repository))
-                self.banner = Banner(title: "Removed stale locks", message: repository.name, isError: false)
+                self.post(Banner(title: "Removed stale locks", message: repository.name, isError: false))
             } catch {
-                self.banner = Banner(title: "Unlock failed", message: error.localizedDescription, isError: true)
+                self.post(Banner(title: "Unlock failed", message: error.localizedDescription, isError: true))
             }
         }
     }
 
+    /// The outcome of a Settings alert-channel test, reported inline where the
+    /// user clicked rather than as a global banner on another window.
+    enum TestNotificationOutcome: Equatable, Sendable {
+        case unusable
+        case delivered
+        case failed(String)
+    }
+
     /// Sends one channel a sample event so the user can confirm it is wired up.
-    func sendTestNotification(_ channel: NotificationChannel) {
-        Task { [weak self] in
-            guard let self else { return }
-            let event = NotificationEvent(
-                stage: .succeeded,
-                planName: "Test",
-                repositoryName: "SwiftRestic",
-                dataAdded: 1_234_567,
-                duration: 12
-            )
-            guard let payload = NotificationPayload.request(for: channel, event: event) else {
-                self.banner = Banner(
-                    title: "That URL does not look usable",
-                    message: channel.url,
-                    isError: true
-                )
-                return
-            }
-            if let failure = await NotificationPoster.send(payload) {
-                self.banner = Banner(
-                    title: "Test failed for “\(channel.displayName)”",
-                    message: failure,
-                    isError: true
-                )
-            } else {
-                self.banner = Banner(
-                    title: "Test sent to “\(channel.displayName)”",
-                    message: "",
-                    isError: false
-                )
-            }
+    func sendTestNotification(_ channel: NotificationChannel) async -> TestNotificationOutcome {
+        let event = NotificationEvent(
+            stage: .succeeded,
+            planName: "Test",
+            repositoryName: "SwiftRestic",
+            dataAdded: 1_234_567,
+            duration: 12
+        )
+        guard let payload = NotificationPayload.request(for: channel, event: event) else {
+            return .unusable
         }
+        if let failure = await NotificationPoster.send(payload) {
+            return .failed(failure)
+        }
+        return .delivered
     }
 
     // MARK: - Console

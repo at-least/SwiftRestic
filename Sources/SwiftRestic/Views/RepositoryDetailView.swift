@@ -103,7 +103,7 @@ struct RepositoryDetailView: View {
     @ViewBuilder
     private func content(_ repository: Repository) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            if let banner = model.banner {
+            ForEach(model.banners) { banner in
                 BannerView(banner: banner)
             }
 

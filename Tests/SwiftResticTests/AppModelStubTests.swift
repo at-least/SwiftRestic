@@ -81,10 +81,12 @@ struct AppModelStubTests {
     ) async -> Banner? {
         let deadline = Date.now.addingTimeInterval(seconds)
         while Date.now < deadline {
-            if let banner = model.banner, banner.title.contains(fragment) { return banner }
+            if let banner = model.banners.first(where: { $0.title.contains(fragment) }) {
+                return banner
+            }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        return model.banner
+        return model.banners.first(where: { $0.title.contains(fragment) })
     }
 
     /// Restores run as detached tasks with no `waitFor` API; watch the flag.
@@ -119,7 +121,7 @@ struct AppModelStubTests {
         #expect(record.kind == .restore)
         #expect(record.outcome == .succeeded)
         #expect(record.bytesProcessed == 12)
-        #expect(harness.model.banner?.title == "Restored a.txt")
+        #expect(harness.model.banners.first?.title == "Restored a.txt")
         #expect(
             try String(contentsOf: destination.appendingPathComponent("a.txt"), encoding: .utf8)
                 .contains("[]"),
@@ -147,7 +149,7 @@ struct AppModelStubTests {
         #expect(record.kind == .restore)
         #expect(record.outcome == .failed)
         #expect(record.failureMessage != nil)
-        #expect(harness.model.banner?.title == "Restore failed")
+        #expect(harness.model.banners.first?.title == "Restore failed")
 
         await harness.model.shutdown()
     }
@@ -206,7 +208,7 @@ struct AppModelStubTests {
         // sidebar must know the repository is not set up yet.
         #expect(harness.model.repositoriesMissingPassword == [harness.repository.id])
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
-        #expect(harness.model.banner == nil)
+        #expect(harness.model.banners.isEmpty)
 
         await harness.model.upsert(
             repository: harness.repository,
@@ -226,7 +228,7 @@ struct AppModelStubTests {
         // Exit code 10 is restic saying "nothing here yet" — a normal state
         // between adding a repository and its first init, not a failure.
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
-        #expect(harness.model.banner == nil)
+        #expect(harness.model.banners.isEmpty)
         #expect(harness.model.repositoriesMissingPassword.isEmpty)
 
         await harness.model.shutdown()
@@ -237,7 +239,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "plainfail")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        let banner = try #require(harness.model.banner, "a broken repository must surface a banner")
+        let banner = try #require(harness.model.banners.first, "a broken repository must surface a banner")
         #expect(banner.isError)
         #expect(banner.title.contains("Could not read"))
         #expect(banner.title.contains("Stub Repo"))
@@ -452,8 +454,8 @@ struct AppModelStubTests {
         // "Could not read" banner this stub mode also sets) and waitForRun
         // awaited all of it — reordering those steps changes what lands here.
         #expect(
-            harness.model.banner?.title.contains("Could not send") == true,
-            "banner was: \(harness.model.banner?.title ?? "none")"
+            harness.model.banners.contains { $0.title.contains("Could not send") } == true,
+            "banners were: \(harness.model.banners.map(\.title))"
         )
 
         await harness.model.shutdown()

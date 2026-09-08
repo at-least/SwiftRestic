@@ -215,11 +215,16 @@ struct RootView: View {
             // panes themselves: every restic-backed control is grey, and this
             // is why.
             if !model.isResticAvailable {
-                BannerView(banner: Banner(
-                    title: "restic is missing",
-                    message: model.binaryProblem ?? "restic could not be found. Install it with `brew install restic`, or set the path in Settings.",
-                    isError: true
-                ))
+                // Built in place, not posted: the condition is the model's
+                // binary state, so there is nothing to dismiss.
+                BannerView(
+                    banner: Banner(
+                        title: "restic is missing",
+                        message: model.binaryProblem ?? "restic could not be found. Install it with `brew install restic`, or set the path in Settings.",
+                        isError: true
+                    ),
+                    isDismissible: false
+                )
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
             }

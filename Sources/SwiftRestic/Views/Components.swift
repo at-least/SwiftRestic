@@ -79,10 +79,13 @@ struct SheetHeader: View {
 
 // MARK: - Banner
 
-/// Dismissible message strip shown above a detail pane.
+/// Dismissible message strip shown above a detail pane. Banners built in
+/// place (rather than posted to the queue) have nothing to dismiss, so they
+/// hide the close button.
 struct BannerView: View {
     @Environment(AppModel.self) private var model
     let banner: Banner
+    var isDismissible = true
 
     private var hue: Color { banner.isError ? Theme.danger : Theme.success }
     private var symbol: String {
@@ -107,13 +110,15 @@ struct BannerView: View {
                 }
             }
             Spacer()
-            Button {
-                model.banner = nil
-            } label: {
-                Image(systemName: "xmark")
+            if isDismissible {
+                Button {
+                    model.dismiss(banner)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("Dismiss")
             }
-            .buttonStyle(.borderless)
-            .help("Dismiss")
         }
         .padding(Theme.Space.cardPadding)
         .cardSurface()

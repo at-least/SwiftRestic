@@ -62,9 +62,13 @@ enum CommandLineTokenizer {
     /// restic subcommands that change or delete data, or take an exclusive lock.
     ///
     /// Typing one of these into the console gets a confirmation first; everything
-    /// else runs straight away.
+    /// else runs straight away. `restore` belongs here even though the repository
+    /// is untouched: it overwrites whatever sits at the destination. `tag` also
+    /// mutates, but only snapshot metadata, reversibly with another `tag` —
+    /// confirming it would be noise.
     static let destructiveSubcommands: Set<String> = [
         "forget", "prune", "rewrite", "repair", "unlock", "init", "migrate", "key",
+        "restore",
     ]
 
     static func isDestructive(_ arguments: [String]) -> Bool {

@@ -10,6 +10,7 @@ struct HookEditor: View {
     @Binding var hooks: [BackupHook]
     var events: [BackupHook.Event] = BackupHook.Event.backupEvents
     @State private var selection: BackupHook.ID?
+    @State private var isConfirmingRemove = false
 
     private var isForMaintenance: Bool { events.allSatisfy(\.isMaintenanceEvent) }
 
@@ -17,6 +18,18 @@ struct HookEditor: View {
         VSplitView {
             list
             detail
+        }
+        .confirmationDialog(
+            "Remove this hook?",
+            isPresented: $isConfirmingRemove,
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                hooks.removeAll { $0.id == selection }
+                selection = nil
+            }
+        } message: {
+            Text("The script and its settings are removed from this editor. Nothing is deleted on disk.")
         }
     }
 
@@ -60,11 +73,8 @@ struct HookEditor: View {
                     hooks.append(hook)
                     selection = hook.id
                 }
-                Button("Remove") {
-                    hooks.removeAll { $0.id == selection }
-                    selection = nil
-                }
-                .disabled(selection == nil)
+                Button("Remove") { isConfirmingRemove = true }
+                    .disabled(selection == nil)
                 Spacer()
                 Text("Hooks run in the order listed; drag to reorder.")
                     .font(.caption)

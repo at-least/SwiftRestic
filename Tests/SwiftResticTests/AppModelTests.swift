@@ -432,3 +432,65 @@ struct AppModelTests {
         await model.shutdown()
     }
 }
+
+/// The banner queue's contract: an unread error survives the next message,
+/// the queue is bounded, and dismissal removes exactly one message.
+@Suite("Banner queue")
+@MainActor
+struct BannerQueueTests {
+    private func makeModel() -> AppModel {
+        var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+        return AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticBanners-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory(secrets)
+        )
+    }
+
+    @Test("newest first, dismissal by identity")
+    func queueSemantics() {
+        let model = makeModel()
+        model.post(Banner(title: "first", message: "", isError: true))
+        model.post(Banner(title: "second", message: "", isError: true))
+        #expect(model.banners.map(\.title) == ["second", "first"])
+
+        model.dismiss(model.banners[0])
+        #expect(model.banners.map(\.title) == ["first"])
+    }
+
+    @Test("the queue is bounded so a failure loop cannot stack banners without end")
+    func bounded() {
+        let model = makeModel()
+        for index in 0 ..< 10 {
+            model.post(Banner(title: "banner \(index)", message: "", isError: true))
+        }
+        #expect(model.banners.count == 4)
+        // The newest survive: the oldest were dropped, not the ones the user
+        // is most likely to be reading.
+        #expect(model.banners.map(\.title) == ["banner 9", "banner 8", "banner 7", "banner 6"])
+    }
+
+    @Test("the cap evicts a success before it gives up an error")
+    func capPrefersErrors() {
+        let model = makeModel()
+        model.post(Banner(title: "error", message: "", isError: true))
+        for index in 0 ..< 4 {
+            model.post(Banner(title: "ok \(index)", message: "", isError: false))
+        }
+        // Queue is at the cap ("ok 3" … "ok 0", "error"). One more post has to
+        // evict the oldest success, never the unread error.
+        model.post(Banner(title: "ok 4", message: "", isError: false))
+        #expect(model.banners.count == 4)
+        #expect(model.banners.contains { $0.title == "error" })
+        #expect(model.banners.first?.title == "ok 4")
+
+        // An all-error queue falls back to dropping its oldest.
+        let errors = makeModel()
+        for index in 0 ..< 5 {
+            errors.post(Banner(title: "e\(index)", message: "", isError: true))
+        }
+        #expect(errors.banners.map(\.title) == ["e4", "e3", "e2", "e1"])
+    }
+}

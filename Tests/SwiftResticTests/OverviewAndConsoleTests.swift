@@ -203,6 +203,9 @@ struct CommandLineTokenizerTests {
         #expect(CommandLineTokenizer.isDestructive(["forget", "--keep-last", "1"]))
         #expect(CommandLineTokenizer.isDestructive(["prune"]))
         #expect(CommandLineTokenizer.isDestructive(["unlock"]))
+        // `restore` leaves the repository alone but overwrites whatever sits
+        // at the destination, so it confirms too.
+        #expect(CommandLineTokenizer.isDestructive(["restore", "latest", "--target", "/tmp/x"]))
         // Leading flags must not hide the subcommand.
         #expect(CommandLineTokenizer.isDestructive(["--verbose", "repair", "index"]))
 

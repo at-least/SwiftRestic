@@ -9,8 +9,15 @@ struct RepositoryEditorSheet: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var providerSecret = ""
+    /// The state the sheet settled into after loading, including the secrets
+    /// pulled from the Keychain. Cancel compares against it so Esc cannot
+    /// silently discard a half-filled SFTP form.
+    @State private var initial: Repository?
+    @State private var initialPassword = ""
+    @State private var initialProviderSecret = ""
     @State private var status: Status?
     @State private var isWorking = false
+    @State private var isConfirmingDiscard = false
     @State private var tab: Tab = .repository
 
     private let isNew: Bool
@@ -60,7 +67,7 @@ struct RepositoryEditorSheet: View {
                     .disabled(!canSubmit || isWorking)
                 if isWorking { ProgressView().controlSize(.small) }
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
                 Button(isNew ? "Add Repository" : "Save") { Task { await save() } }
                     .buttonStyle(.borderedProminent)
@@ -70,7 +77,41 @@ struct RepositoryEditorSheet: View {
             .padding(12)
         }
         .frame(width: 600, height: 660)
-        .task { await loadExistingSecrets() }
+        .task {
+            // Snapshot before the keychain await: an edit typed during the
+            // load must already register as a change.
+            initial = draft
+            await loadExistingSecrets()
+            // The stored secrets are the sheet's baseline, not edits to be
+            // warned about.
+            initialPassword = password
+            initialProviderSecret = providerSecret
+        }
+        .confirmationDialog(
+            "Discard changes?",
+            isPresented: $isConfirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("The repository has unsaved changes.")
+        }
+    }
+
+    private var isDirty: Bool {
+        if let initial, draft != initial { return true }
+        if password != initialPassword { return true }
+        if providerSecret != initialProviderSecret { return true }
+        return false
+    }
+
+    private func cancel() {
+        if isDirty {
+            isConfirmingDiscard = true
+        } else {
+            dismiss()
+        }
     }
 
     private var settingsForm: some View {

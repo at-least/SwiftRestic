@@ -53,7 +53,7 @@ struct PlanDetailView: View {
     @ViewBuilder
     private func content(_ plan: BackupPlan) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            if let banner = model.banner {
+            ForEach(model.banners) { banner in
                 BannerView(banner: banner)
             }
 

@@ -22,6 +22,16 @@ struct ActivityView: View {
     var body: some View {
         @Bindable var model = model
         VStack(alignment: .leading, spacing: 0) {
+            // Activity is where failures get read, so it carries the banner
+            // queue like the other panes — a refresh error must be visible
+            // here too, not only on the pane that happened to be open.
+            Group {
+                ForEach(model.banners) { banner in
+                    BannerView(banner: banner)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
             if model.configuration.runs.isEmpty {
                 ContentUnavailableView(
                     "No activity yet",

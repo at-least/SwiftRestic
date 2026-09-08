@@ -145,6 +145,9 @@ struct SettingsView: View {
 struct NotificationChannelsTab: View {
     @Environment(AppModel.self) private var model
     @State private var selection: NotificationChannel.ID?
+    @State private var testOutcome: AppModel.TestNotificationOutcome?
+    @State private var isTesting = false
+    @State private var isConfirmingRemove = false
 
     var body: some View {
         @Bindable var model = model
@@ -183,11 +186,8 @@ struct NotificationChannelsTab: View {
                         model.configuration.settings.notificationChannels.append(channel)
                         selection = channel.id
                     }
-                    Button("Remove") {
-                        model.configuration.settings.notificationChannels.removeAll { $0.id == selection }
-                        selection = nil
-                    }
-                    .disabled(selection == nil)
+                    Button("Remove") { isConfirmingRemove = true }
+                        .disabled(selection == nil)
                     Spacer()
                 }
                 .padding(.horizontal, 12)
@@ -195,6 +195,25 @@ struct NotificationChannelsTab: View {
             }
 
             detail(model: model)
+        }
+        .confirmationDialog(
+            "Remove this alert channel?",
+            isPresented: $isConfirmingRemove,
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                model.configuration.settings.notificationChannels.removeAll { $0.id == selection }
+                selection = nil
+                testOutcome = nil
+            }
+        } message: {
+            Text("The webhook URL is removed from SwiftRestic. The destination itself — the Slack channel, the Healthchecks check — is not touched.")
+        }
+        .onChange(of: selection) { _, _ in
+            // A test result belongs to the channel it was sent from; showing
+            // it under another selection would bless an untested webhook.
+            testOutcome = nil
+            isTesting = false
         }
     }
 
@@ -241,8 +260,51 @@ struct NotificationChannelsTab: View {
                 }
 
                 Section {
-                    Button("Send Test Notification") { model.sendTestNotification(channel) }
-                        .disabled(!channel.isUsable)
+                    HStack {
+                    Button("Send Test Notification") {
+                        guard let channelID = selection else { return }
+                        testOutcome = nil
+                        isTesting = true
+                        Task {
+                            let outcome = await model.sendTestNotification(channel)
+                            // A switch to another channel while in flight
+                            // must not land this result — or kill another
+                            // test's spinner — under the wrong channel.
+                            guard selection == channelID else { return }
+                            testOutcome = outcome
+                            isTesting = false
+                        }
+                    }
+                        .disabled(!channel.isUsable || isTesting)
+                        if isTesting {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                    // The outcome belongs here, next to the button that caused
+                    // it — a global banner would land on a different window
+                    // than the Settings one the user is looking at.
+                    switch testOutcome {
+                    case .unusable:
+                        Label("That URL does not look usable.", systemImage: "xmark.octagon.fill")
+                            .foregroundStyle(Theme.danger)
+                            .font(.callout)
+                    case .failed(let failure):
+                        Label {
+                            Text(failure)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "xmark.octagon.fill")
+                        }
+                        .foregroundStyle(Theme.danger)
+                        .font(.callout)
+                    case .delivered:
+                        Label("Test sent to “\(channel.displayName)”.", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Theme.success)
+                            .font(.callout)
+                    case nil:
+                        EmptyView()
+                    }
                     Text("A failed notification is reported here but never changes what the run history says happened — the backup either ran or it did not.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

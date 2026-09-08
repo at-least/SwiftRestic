@@ -20,7 +20,7 @@ struct OverviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.section) {
-            if let banner = model.banner {
+            ForEach(model.banners) { banner in
                 BannerView(banner: banner)
             }
             statTiles

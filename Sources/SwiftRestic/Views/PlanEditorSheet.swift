@@ -5,6 +5,11 @@ struct PlanEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: BackupPlan
+    /// The state the sheet opened with (after the repository defaulting in
+    /// `onAppear`). Cancel compares against it: Esc is a reflex on macOS, and
+    /// a reflex must not silently throw away ten pasted exclude patterns.
+    @State private var initial: BackupPlan?
+    @State private var isConfirmingDiscard = false
     private let isNew: Bool
 
     init(plan: BackupPlan) {
@@ -28,7 +33,7 @@ struct PlanEditorSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
                 Button(isNew ? "Create Plan" : "Save") {
                     var plan = draft
@@ -58,6 +63,27 @@ struct PlanEditorSheet: View {
             if draft.repositoryID == nil {
                 draft.repositoryID = model.configuration.repositories.first?.id
             }
+            // Snapshot after the defaulting above, so an untouched sheet is
+            // not born dirty.
+            if initial == nil { initial = draft }
+        }
+        .confirmationDialog(
+            "Discard changes?",
+            isPresented: $isConfirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("The plan has unsaved changes.")
+        }
+    }
+
+    private func cancel() {
+        if let initial, draft != initial {
+            isConfirmingDiscard = true
+        } else {
+            dismiss()
         }
     }
 
