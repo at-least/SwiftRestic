@@ -96,9 +96,13 @@ struct PlanDetailView: View {
             )
             StatTile(
                 title: "Next backup",
-                value: plan.nextRunDate.map { Format.timestamp($0) } ?? "Manually",
+                // Tile-sized on the face, full form in the tooltip: the plain
+                // timestamp truncated away its AM/PM exactly when that was
+                // the part that said morning or evening.
+                value: plan.nextRunDate.map { Format.tileTimestamp($0) } ?? "Manually",
                 systemImage: "calendar",
-                hue: plan.isEnabled ? Theme.tint : Theme.warning
+                hue: plan.isEnabled ? Theme.tint : Theme.warning,
+                help: plan.nextRunDate.map { Format.timestamp($0) }
             )
             StatTile(
                 title: "Snapshots",

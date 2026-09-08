@@ -59,6 +59,23 @@ enum CommandLineTokenizer {
         return tokens
     }
 
+    /// Renders arguments back to a shell-like command line — the display
+    /// inverse of `tokenize`. Joining with spaces alone loses quoting, so a
+    /// destructive confirmation would show a different command than the one
+    /// about to run: `--path ~/My Backups` displayed for two arguments.
+    static func render(_ arguments: [String]) -> String {
+        arguments.map { argument in
+            let needsQuoting = argument.isEmpty || argument.contains { character in
+                character.isWhitespace || character == "'" || character == "\"" || character == "\\"
+            }
+            guard needsQuoting else { return argument }
+            // Single quotes protect everything but themselves; the shell's
+            // `'\''` dance closes the quote, carries a literal quote, reopens.
+            return "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        }
+        .joined(separator: " ")
+    }
+
     /// restic subcommands that change or delete data, or take an exclusive lock.
     ///
     /// Typing one of these into the console gets a confirmation first; everything

@@ -70,6 +70,49 @@ struct FormattingTests {
         #expect(Format.relative(Date.now.addingTimeInterval(30)) == "Just now")
     }
 
+    @Test("relative time stays truthful for a future timestamp")
+    func relativeFuture() {
+        // The old `min(date, now)` clamp fed the formatter a zero delta, so a
+        // run an hour ahead rendered as "in 0 seconds". The exact unit is the
+        // formatter's business (3600 s rounds to 59 minutes); future tense is
+        // ours.
+        let value = Format.relative(Date.now.addingTimeInterval(3_600))
+        #expect(value.hasPrefix("in "))
+        #expect(!value.contains("0 seconds"))
+    }
+
+    @Test("tile timestamps keep the part a tile would truncate — morning or evening")
+    func tileTimestamps() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        // The formatter separates a time from its meridiem with a narrow
+        // no-break space, which is invisible in a test failure's printout —
+        // flatten it so a pin compares what it appears to compare.
+        func flat(_ value: String) -> String {
+            value.replacingOccurrences(of: "\u{202F}", with: " ")
+        }
+        func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+        }
+        let now = date(2026, 9, 9, 10) // a Wednesday, mid-morning
+
+        // A moment that has already passed is due, never a date in the past tense.
+        #expect(flat(Format.tileTimestamp(date(2026, 9, 9, 8), now: now, calendar: calendar)) == "Due now")
+        #expect(flat(Format.tileTimestamp(date(2026, 9, 9, 21), now: now, calendar: calendar)) == "Today 9:00 PM")
+        #expect(flat(Format.tileTimestamp(date(2026, 9, 10, 21), now: now, calendar: calendar)) == "Tomorrow 9:00 PM")
+        // Inside the week the day name leads; September 14, 2026 is a Monday.
+        #expect(flat(Format.tileTimestamp(date(2026, 9, 14, 21), now: now, calendar: calendar)) == "Mon 9:00 PM")
+        // Further out the month leads, and the time is still spelled in full.
+        let inDecember = flat(Format.tileTimestamp(date(2026, 12, 24, 21), now: now, calendar: calendar))
+        #expect(inDecember.hasSuffix("9:00 PM"))
+        #expect(inDecember.contains("Dec"))
+        #expect(!inDecember.contains("Today") && !inDecember.contains("Tomorrow"))
+        // A different year keeps the year, so the tile cannot imply this December.
+        let nextYear = flat(Format.tileTimestamp(date(2027, 12, 24, 21), now: now, calendar: calendar))
+        #expect(nextYear.contains("2027"))
+        #expect(nextYear.hasSuffix("9:00 PM"))
+    }
+
     @Test("rate refuses to divide by a meaningless duration")
     func rateGuards() {
         #expect(Format.rate(bytes: 1_000, over: 0) == "—")

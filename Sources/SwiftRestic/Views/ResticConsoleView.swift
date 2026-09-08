@@ -56,7 +56,7 @@ struct ResticConsoleView: View {
             }
             Button("Cancel", role: .cancel) { pendingDestructive = nil }
         } message: {
-            Text("`restic \(pendingDestructive?.arguments.joined(separator: " ") ?? "")` can change or delete data in this repository. Add --dry-run first if you are unsure.")
+            Text("`restic \(CommandLineTokenizer.render(pendingDestructive?.arguments ?? []))` can change or delete data in this repository. Add --dry-run first if you are unsure.")
         }
     }
 

@@ -100,4 +100,40 @@ struct TokenizerPropertyTests {
             )
         }
     }
+
+    @Test("render is the display inverse of tokenize")
+    func renderRoundTrip() {
+        // Quotes, escapes, every kind of whitespace: the same alphabet the
+        // tokenizer's own property tests use, since render exists to produce
+        // lines the tokenizer reads back as the same arguments.
+        let alphabet = Array("a b'c\"d\\ e\t\n")
+        func randomToken(_ generator: inout SeededGenerator) -> String {
+            let length = Int(generator.next() % 10)
+            var token = ""
+            for _ in 0 ..< length {
+                token.append(alphabet[Int(generator.next() % UInt64(alphabet.count))])
+            }
+            return token
+        }
+        var generator = SeededGenerator(seed: 4)
+        for _ in 0 ..< 500 {
+            let count = Int(generator.next() % 5)
+            var tokens: [String] = []
+            for _ in 0 ..< count { tokens.append(randomToken(&generator)) }
+            #expect(
+                CommandLineTokenizer.tokenize(CommandLineTokenizer.render(tokens)) == tokens,
+                "tokens \(tokens.map { $0.debugDescription }) did not survive render-and-retokenize"
+            )
+        }
+    }
+
+    @Test("the destructive confirmation shows what will really run")
+    func renderQuoting() {
+        #expect(CommandLineTokenizer.render([]) == "")
+        #expect(CommandLineTokenizer.render(["restore", "--path", "~/My Backups"]) == "restore --path '~/My Backups'")
+        // The shell's `'\''` dance for an embedded single quote.
+        #expect(CommandLineTokenizer.render(["tag", "it's"]) == "tag 'it'\\''s'")
+        // An empty argument is a real argument and must stay visible as one.
+        #expect(CommandLineTokenizer.render(["", "x"]) == "'' x")
+    }
 }
