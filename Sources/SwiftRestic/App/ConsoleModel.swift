@@ -82,6 +82,11 @@ final class ConsoleModel {
     /// The entry ↑ should show: the newest history entry first, then one
     /// older per press, clamped at the oldest. `current` is what the field
     /// holds right now — the draft remembered before the first recall.
+    ///
+    /// The draft is fixed when the walk starts: edits made to a recalled
+    /// entry mid-walk are discarded when ↓ returns to the draft, matching
+    /// shell behavior. Submitting, a history-sidebar click, the pane going
+    /// away, or the history changing ends the walk.
     func recallPrevious(current: String) -> String? {
         guard !history.isEmpty else { return nil }
         if let index = historyIndex {

@@ -35,7 +35,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
-        guard !isConfirmingQuit, !isTerminating else { return .terminateCancel }
+        if isConfirmingQuit { return .terminateCancel }
+        if isTerminating {
+            // Shutdown is already unwinding, and it awaits cancelled restic
+            // children. A second ⌘Q is the user's force-quit escape hatch —
+            // without it, a hung child would make the app unquittable.
+            return .terminateNow
+        }
 
         // A backup app that silently cancels its own work on quit is breaking
         // its promise, so restic work in flight gets one confirmation. The
