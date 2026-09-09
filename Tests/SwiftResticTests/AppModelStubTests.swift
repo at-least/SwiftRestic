@@ -191,8 +191,9 @@ struct AppModelStubTests {
         #expect(record.failureMessage == "Cancelled")
         // The strip vanishing is not the whole story: a settled, non-error
         // banner says the restore stopped and nothing is still running.
+        let cancelledBanner = await bannerTitled("Restore cancelled", in: harness.model)
         #expect(
-            harness.model.banners.contains { $0.title == "Restore cancelled" && !$0.isError },
+            cancelledBanner?.isError == false,
             "banners were: \(harness.model.banners.map(\.title))"
         )
         #expect(
@@ -685,8 +686,9 @@ struct AppModelStubTests {
         #expect(record.outcome == .cancelled)
         // The removal may not cancel silently: the user learns their restore
         // stopped from a banner, not from a progress strip that never returns.
+        let cancelledBanner = await bannerTitled("Restore cancelled", in: harness.model)
         #expect(
-            harness.model.banners.contains { $0.title == "Restore cancelled" && !$0.isError },
+            cancelledBanner?.isError == false,
             "banners were: \(harness.model.banners.map(\.title))"
         )
 

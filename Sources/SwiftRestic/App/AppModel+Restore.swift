@@ -94,7 +94,7 @@ extension AppModel {
                             isError: false
                         ))
                     }
-                } else if record.outcome == .failed {
+                } else {
                     self.post(Banner(
                         title: "Restore failed",
                         message: record.failureMessage ?? "",
