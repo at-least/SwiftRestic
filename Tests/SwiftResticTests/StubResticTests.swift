@@ -87,7 +87,7 @@ struct StubRestic: Sendable {
         esac
 
         case "$SWIFTRESTIC_STUB" in
-            hang | hang-backup | hang-restore)
+            hang | hang-backup | hang-restore | hang-check)
                 trace "$SWIFTRESTIC_STUB-arm"
                 # The selective modes hang one subcommand only: AppModel fires
                 # follow-up snapshot/stats refreshes once a run ends, and those
@@ -102,6 +102,12 @@ struct StubRestic: Sendable {
                 if [ "$SWIFTRESTIC_STUB" = "hang-restore" ]; then
                     case " $* " in
                         *" restore "* | *" dump "*) ;;
+                        *) hang_this=0 ;;
+                    esac
+                fi
+                if [ "$SWIFTRESTIC_STUB" = "hang-check" ]; then
+                    case " $* " in
+                        *" check "*) ;;
                         *) hang_this=0 ;;
                     esac
                 fi

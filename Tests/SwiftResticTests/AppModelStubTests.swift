@@ -557,6 +557,38 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("cancelling a check still stamps the schedule and records the cancellation")
+    func cancellingCheckStampsAndRecords() async throws {
+        // hang-check hangs only the check command, so launch-time snapshot
+        // refreshes still answer.
+        let harness = try await makeHarness(mode: "hang-check")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runMaintenance(id: harness.repository.id, task: .check, readDataPercent: 0)
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+
+        harness.model.cancelMaintenance(repositoryID: harness.repository.id)
+        await harness.model.waitForMaintenance(repositoryID: harness.repository.id)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(harness.model.configuration.runs.count == 1)
+        #expect(record.kind == .check)
+        #expect(record.outcome == .cancelled)
+        #expect(record.failureMessage == "Cancelled")
+        // A cancelled check still counts as "checked": without the stamp the
+        // scheduler would re-arm upkeep against this repository every minute.
+        #expect(harness.model.repository(id: harness.repository.id)?.maintenance.lastCheckAt != nil)
+        #expect(
+            await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 10),
+            "the stub process outlived the cancelled check"
+        )
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Deletion
 
     @Test("deleting a repository detaches and disables its plans")
