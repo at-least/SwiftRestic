@@ -352,6 +352,7 @@ struct RootView: View {
         // Lets a capture run photograph the *new*-repository sheet, whose
         // destination-before-kind picker only exists before a repository exists.
         case "newRepository": editingRepository = Repository()
+        case "planRetention": editingPlan = model.configuration.plans.first
         default: break
         }
     }

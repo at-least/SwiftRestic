@@ -10,22 +10,36 @@ struct PlanEditorSheet: View {
     /// a reflex must not silently throw away ten pasted exclude patterns.
     @State private var initial: BackupPlan?
     @State private var isConfirmingDiscard = false
+    @State private var tab: Tab = .general
     private let isNew: Bool
+
+    private enum Tab: Hashable { case general, files, schedule, retention, hooks }
 
     init(plan: BackupPlan) {
         _draft = State(initialValue: plan)
         isNew = plan.name.isEmpty && plan.sources.isEmpty
+        #if DEBUG
+        // Debug-only: lets a capture run land on the Retention tab.
+        if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "retention" {
+            _tab = State(initialValue: .retention)
+        }
+        #endif
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            TabView {
+            TabView(selection: $tab) {
                 generalTab.tabItem { Label("General", systemImage: "gearshape") }
+                    .tag(Tab.general)
                 sourcesTab.tabItem { Label("Files", systemImage: "folder") }
+                    .tag(Tab.files)
                 scheduleTab.tabItem { Label("Schedule", systemImage: "calendar") }
+                    .tag(Tab.schedule)
                 retentionTab.tabItem { Label("Retention", systemImage: "clock.arrow.circlepath") }
+                    .tag(Tab.retention)
                 HookEditor(hooks: $draft.hooks)
                     .tabItem { Label("Hooks", systemImage: "terminal") }
+                    .tag(Tab.hooks)
             }
             .padding(12)
 
@@ -226,29 +240,15 @@ struct PlanEditorSheet: View {
             Toggle("Apply retention after each backup", isOn: $draft.retention.isEnabled)
 
             if draft.retention.isEnabled {
-                // The buckets are the advanced truth; the presets are the
-                // answer most people actually have ("about a month", "about
-                // a year"). Applying one fills all six fields at once.
-                HStack(spacing: 8) {
-                    Text("Presets")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    ForEach(RetentionPreset.allCases) { preset in
-                        Button(preset.name) { preset.apply(to: &draft.retention) }
-                            .controlSize(.small)
+                // The question people actually have, in the words they'd
+                // answer it with. The six buckets are the machinery that
+                // delivers the answer, so they live in the disclosure below.
+                Picker("How far back do you want to reach?", selection: retentionChoice) {
+                    ForEach(RetentionPolicy.Reach.allCases) { choice in
+                        Text(choice.displayName).tag(choice)
                     }
                 }
             }
-
-            Group {
-                keepStepper("Keep latest", value: $draft.retention.keepLast, max: 100)
-                keepStepper("Keep hourly", value: $draft.retention.keepHourly, max: 168)
-                keepStepper("Keep daily", value: $draft.retention.keepDaily, max: 365)
-                keepStepper("Keep weekly", value: $draft.retention.keepWeekly, max: 260)
-                keepStepper("Keep monthly", value: $draft.retention.keepMonthly, max: 120)
-                keepStepper("Keep yearly", value: $draft.retention.keepYearly, max: 50)
-            }
-            .disabled(!draft.retention.isEnabled)
 
             Section {
                 Toggle("Also prune (reclaims space, much slower)", isOn: $draft.retention.runPrune)
@@ -259,8 +259,8 @@ struct PlanEditorSheet: View {
                     schedule: draft.schedule
                 ) {
                     // Retention is where users decide what gets deleted; the
-                    // steppers' bucket arithmetic is impossible to eyeball,
-                    // so project the outcome instead of restating the rules.
+                    // bucket arithmetic is impossible to eyeball, so project
+                    // the outcome instead of restating the rules.
                     Label(
                         "≈ \(projection.keptSnapshots) snapshots would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule.",
                         systemImage: "chart.bar.doc.horizontal"
@@ -288,51 +288,39 @@ struct PlanEditorSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
             }
+
+            if draft.retention.isEnabled {
+                DisclosureGroup("Advanced: keep rules by bucket") {
+                    keepStepper("Keep latest", value: $draft.retention.keepLast, max: 100)
+                    keepStepper("Keep hourly", value: $draft.retention.keepHourly, max: 168)
+                    keepStepper("Keep daily", value: $draft.retention.keepDaily, max: 365)
+                    keepStepper("Keep weekly", value: $draft.retention.keepWeekly, max: 260)
+                    keepStepper("Keep monthly", value: $draft.retention.keepMonthly, max: 120)
+                    keepStepper("Keep yearly", value: $draft.retention.keepYearly, max: 50)
+                    // Hand-edited rules are the Custom answer, said out loud so
+                    // the picker above never silently disagrees with the
+                    // buckets below.
+                    Text("Hand-editing the rules shows as Custom in the picker above.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
     }
 
-    /// Whole-bucket answers to "how much history do you want?", so the six
-    /// steppers never have to be operated one at a time to get a sane shape.
-    private enum RetentionPreset: CaseIterable, Identifiable {
-        case standard, month, year
-
-        var id: Self { self }
-
-        var name: String {
-            switch self {
-            case .standard: "Standard"
-            case .month: "30 days"
-            case .year: "A year of dailies"
+    /// The reach question and the bucket machinery, kept in sync on the model
+    /// (`RetentionPolicy.Reach`), where matching and writing are testable.
+    /// Custom only exists because a hand-edited policy needs a name; selecting
+    /// the Custom row itself changes nothing.
+    private var retentionChoice: Binding<RetentionPolicy.Reach> {
+        Binding(
+            get: { RetentionPolicy.Reach(policy: draft.retention) },
+            set: { choice in
+                guard choice != .custom else { return }
+                choice.apply(to: &draft.retention)
             }
-        }
-
-        func apply(to policy: inout RetentionPolicy) {
-            // The "also prune" choice is not part of what the preset names,
-            // so it survives the rewrite.
-            let runPrune = policy.runPrune
-            switch self {
-            case .standard:
-                policy = RetentionPolicy()
-            case .month:
-                // Zero the other buckets: the label promises a window, not a
-                // stack of extra rules that quietly keep more than it says.
-                policy = RetentionPolicy()
-                policy.keepHourly = 0
-                policy.keepDaily = 30
-                policy.keepWeekly = 0
-                policy.keepMonthly = 0
-                policy.keepYearly = 0
-            case .year:
-                policy = RetentionPolicy()
-                policy.keepHourly = 0
-                policy.keepDaily = 365
-                policy.keepWeekly = 0
-                policy.keepMonthly = 0
-                policy.keepYearly = 0
-            }
-            policy.runPrune = runPrune
-        }
+        )
     }
 
     private func keepStepper(_ title: String, value: Binding<Int>, max: Int) -> some View {

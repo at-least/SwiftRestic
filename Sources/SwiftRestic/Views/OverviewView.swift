@@ -23,8 +23,8 @@ struct OverviewView: View {
             ForEach(model.banners) { banner in
                 BannerView(banner: banner)
             }
+            protectionCard
             statTiles
-            protectionCaveats
             volumeCard
             repositorySizeCard
             HStack(alignment: .top, spacing: Theme.Space.section) {
@@ -50,82 +50,165 @@ struct OverviewView: View {
 
     // MARK: - Tiles
 
-    /// One plan's protection status as the tile can state it: whether the
-    /// listing is known at all, whether it protects, and the line the tooltip
-    /// owes the user when it is not.
+    /// One plan's protection state as the card states it: what is known,
+    /// whether it protects, and the line the user is owed when it does not.
     private struct ProtectionRow: Identifiable {
         let planID: UUID
-        var isKnown: Bool
-        var isProtected: Bool
-        var didFail: Bool
-        var tooltipLine: String
+        let planName: String
+        let repositoryID: UUID?
+        let stateText: String
+        let isKnown: Bool
+        let isProtected: Bool
+        let didFail: Bool
         var id: UUID { planID }
+
+        var symbolName: String {
+            if didFail { return "exclamationmark.triangle.fill" }
+            if !isKnown { return "clock.arrow.circlepath" }
+            return isProtected ? "checkmark.circle.fill" : "camera"
+        }
+
+        var hue: Color {
+            if didFail { return Theme.warning }
+            if !isKnown { return .secondary }
+            return isProtected ? Theme.success : .secondary
+        }
+
+        init(
+            planID: UUID,
+            planName: String,
+            repositoryID: UUID?,
+            stateText: String,
+            isKnown: Bool,
+            isProtected: Bool,
+            didFail: Bool
+        ) {
+            self.planID = planID
+            self.planName = planName
+            self.repositoryID = repositoryID
+            self.stateText = stateText
+            self.isKnown = isKnown
+            self.isProtected = isProtected
+            self.didFail = didFail
+        }
+
+        /// Derives straight from the plan, so each listing outcome states
+        /// only the part that differs.
+        init(
+            plan: BackupPlan,
+            stateText: String,
+            isKnown: Bool,
+            isProtected: Bool,
+            didFail: Bool
+        ) {
+            planID = plan.id
+            planName = plan.name.isEmpty ? "Untitled Plan" : plan.name
+            repositoryID = plan.repositoryID
+            self.stateText = stateText
+            self.isKnown = isKnown
+            self.isProtected = isProtected
+            self.didFail = didFail
+        }
     }
 
     private var protectionRows: [ProtectionRow] {
         model.configuration.plans.map { plan in
             guard let repositoryID = plan.repositoryID else {
                 return ProtectionRow(
-                    planID: plan.id,
-                    isKnown: true, isProtected: false, didFail: false,
-                    tooltipLine: "\(plan.name): no repository set"
+                    plan: plan,
+                    stateText: "No repository set",
+                    isKnown: true, isProtected: false, didFail: false
                 )
             }
             let latest = model.snapshots(for: repositoryID, planID: plan.id).first
             switch model.snapshotListingOutcome(for: repositoryID) {
             case .loaded:
                 let line = latest.map {
-                    "\(plan.name): latest \($0.time.formatted(.relative(presentation: .named)))"
-                } ?? "\(plan.name): no snapshots yet"
-                return ProtectionRow(planID: plan.id, isKnown: true, isProtected: latest != nil, didFail: false, tooltipLine: line)
+                    "Latest backup \($0.time.formatted(.relative(presentation: .named)))"
+                } ?? "No snapshots yet"
+                return ProtectionRow(plan: plan, stateText: line, isKnown: true, isProtected: latest != nil, didFail: false)
             case let .failed(message):
                 return ProtectionRow(
-                    planID: plan.id,
-                    isKnown: false, isProtected: false, didFail: true,
-                    tooltipLine: "\(plan.name): can't read snapshots — \(Format.firstSentence(message))"
+                    plan: plan,
+                    stateText: "Can't read snapshots — \(Format.firstSentence(message))",
+                    isKnown: false, isProtected: false, didFail: true
                 )
             case .idle:
                 let checking = model.loadingSnapshots.contains(repositoryID)
                 return ProtectionRow(
-                    planID: plan.id,
-                    isKnown: false, isProtected: false, didFail: false,
-                    tooltipLine: "\(plan.name): \(checking ? "checking…" : "snapshot list not loaded yet")"
+                    plan: plan,
+                    stateText: checking ? "Checking…" : "Snapshot list not loaded yet",
+                    isKnown: false, isProtected: false, didFail: false
                 )
             }
         }
     }
 
+    /// Protection, the dashboard's actual subject: one row per plan with its
+    /// own state texture — protected, empty, unreadable, unknown — instead of
+    /// one aggregate number that cannot say which plan it is worried about.
+    /// The count survives as a derived caption, never the headline.
+    private var protectionCard: some View {
+        Card("Protection", systemImage: "lock.shield") {
+            VStack(alignment: .leading, spacing: 7) {
+                let rows = protectionRows
+                if rows.isEmpty {
+                    Text("Add a backup plan to start protecting your data.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(rows) { row in
+                        protectionRow(row)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } accessory: {
+            let rows = protectionRows
+            let known = rows.filter(\.isKnown)
+            if !known.isEmpty {
+                Text("\(known.filter(\.isProtected).count) of \(known.count) protected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    private func protectionRow(_ row: ProtectionRow) -> some View {
+        HStack(spacing: 8) {
+            // Symbol + words carry the state; the symbol is hidden from
+            // VoiceOver because the words beside it say the same thing.
+            Image(systemName: row.symbolName)
+                .foregroundStyle(row.hue)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(row.planName)
+                    .lineLimit(1)
+                Text(row.stateText)
+                    .font(.caption)
+                    .foregroundStyle(row.didFail ? Theme.warning : .secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 12)
+            if row.didFail, let repositoryID = row.repositoryID {
+                Button("Retry") {
+                    Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                }
+                .controlSize(.small)
+                .accessibilityLabel("Retry reading snapshots for \(row.planName)")
+            }
+        }
+    }
+
     private var statTiles: some View {
-        // Protection is a claim about facts on disk, so only plans whose
-        // snapshot listing has actually succeeded take part in the count —
-        // on both sides of "of". A plan whose listing failed or has not run
-        // yet is neither protected nor unprotected: the tile tint warns, and
-        // the tooltip names exactly which plan could not be checked, instead
-        // of the number silently reading it as "unprotected".
-        let rows = protectionRows
-        let knownRows = rows.filter(\.isKnown)
-        let protectedCount = knownRows.filter(\.isProtected).count
-        let anyFailed = rows.contains(where: \.didFail)
+        // Coverage lives in the Protection card above; these are the app's
+        // inventory counts.
         let problems = OverviewMetrics.problemCount(
             runs: model.configuration.runs,
             since: .now.addingTimeInterval(-7 * 86_400)
         )
         return HStack(spacing: Theme.Space.tile) {
-            // Coverage, not bytes: a sum nobody can act on ("5 bytes
-            // protected") reads as nonsense on the dashboard's first tile.
-            // "—" is reserved for the moment nothing is known yet.
-            StatTile(
-                title: "Protected",
-                value: knownRows.isEmpty
-                    ? "—"
-                    : "\(protectedCount) of \(knownRows.count)",
-                systemImage: "lock.shield",
-                hue: anyFailed ? Theme.warning : Theme.tint,
-                help: rows.isEmpty
-                    ? "Add a backup plan to start protecting your data."
-                    : (rows.map(\.tooltipLine) + (anyFailed ? ["Retry the failed repository from its page."] : []))
-                        .joined(separator: "\n")
-            )
             StatTile(
                 title: "Repositories",
                 value: Format.count(model.configuration.repositories.count),
@@ -153,26 +236,6 @@ struct OverviewView: View {
                     ? "Problems in the last 7 days: \(problems). Show them in Activity"
                     : "No problems in the last 7 days. Show Activity"
             )
-        }
-    }
-
-    /// Why the Protected tile reads "2 of 3" or "—", in visible text. The
-    /// tooltip carries the same lines, but a reason a screen-reader or a
-    /// non-hovering user cannot reach is a reason hidden.
-    @ViewBuilder
-    private var protectionCaveats: some View {
-        let unknown = protectionRows.filter { !$0.isKnown }
-        if !unknown.isEmpty {
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(unknown) { row in
-                    Label(
-                        row.tooltipLine,
-                        systemImage: row.didFail ? "exclamationmark.triangle.fill" : "clock.arrow.circlepath"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(row.didFail ? Theme.warning : .secondary)
-                }
-            }
         }
     }
 

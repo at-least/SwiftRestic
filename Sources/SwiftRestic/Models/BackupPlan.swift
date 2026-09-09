@@ -106,7 +106,8 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     /// Run `--prune` as part of `forget`. Slow, so off by default.
     var runPrune: Bool = false
 
-    init() {}
+    /// The all-defaults memberwise initializer below also serves `init()`,
+    /// so no second default initializer is declared alongside it.
 
     init(
         isEnabled: Bool = true,
@@ -170,6 +171,75 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         if keepMonthly > 0 { parts.append("\(keepMonthly)m") }
         if keepYearly > 0 { parts.append("\(keepYearly)y") }
         return "Keep " + parts.joined(separator: ", ")
+    }
+
+    /// The plain-language answer to "how far back do you want to reach?" —
+    /// the editor's primary control — and the bucket set each answer writes.
+    /// Matching and writing live on the model so both stay testable and the
+    /// picker can never disagree with the policy it claims to describe.
+    /// Deliberately not Codable: it is a derived view of the buckets, never
+    /// a persisted fact.
+    enum Reach: String, Sendable, CaseIterable, Identifiable {
+        /// The default bucket set: 24h, 7d, 4w, 12m, 3y.
+        case standard
+        case month
+        case quarter
+        case year
+        /// A hand-edited policy no preset expresses.
+        case custom
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .standard: "The standard buckets"
+            case .month: "About a month"
+            case .quarter: "About 3 months"
+            case .year: "About a year"
+            case .custom: "Custom rules"
+            }
+        }
+
+        init(policy: RetentionPolicy) {
+            let buckets = (
+                policy.keepLast, policy.keepHourly, policy.keepDaily,
+                policy.keepWeekly, policy.keepMonthly, policy.keepYearly
+            )
+            switch buckets {
+            case (0, 24, 7, 4, 12, 3): self = .standard
+            case (0, 0, 30, 0, 0, 0): self = .month
+            case (0, 0, 90, 0, 0, 0): self = .quarter
+            case (0, 0, 365, 0, 0, 0): self = .year
+            default: self = .custom
+            }
+        }
+
+        /// Writes exactly the window the name promises: every other bucket is
+        /// zeroed, and the toggles the answer does not name — prune, enabled —
+        /// survive the rewrite untouched. Custom names a hand-edited policy;
+        /// it has nothing to write.
+        func apply(to policy: inout RetentionPolicy) {
+            guard self != .custom else { return }
+            let isEnabled = policy.isEnabled
+            let runPrune = policy.runPrune
+            let daily = switch self {
+            case .standard: 7
+            case .month: 30
+            case .quarter: 90
+            case .year: 365
+            case .custom: 0
+            }
+            policy = RetentionPolicy(
+                isEnabled: isEnabled,
+                keepLast: 0,
+                keepHourly: self == .standard ? 24 : 0,
+                keepDaily: daily,
+                keepWeekly: self == .standard ? 4 : 0,
+                keepMonthly: self == .standard ? 12 : 0,
+                keepYearly: self == .standard ? 3 : 0,
+                runPrune: runPrune
+            )
+        }
     }
 }
 
