@@ -45,8 +45,13 @@ targets:
       - path: Sources/SwiftRestic/Core
       - path: Sources/SwiftRestic/Models
       - path: Sources/SwiftRestic/Services
-      - path: Sources/SwiftRestic/App/AppModel.swift
-      - path: Sources/SwiftRestic/App/ConsoleModel.swift
+      # The model layer only — the app entry point (and any view) stays out,
+      # so the tests never pull in the UI. New AppModel domain files under
+      # App/ are picked up automatically; add deliberate exceptions to
+      # `excludes` below.
+      - path: Sources/SwiftRestic/App
+        excludes:
+          - SwiftResticApp.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.newlix.SwiftResticTests
