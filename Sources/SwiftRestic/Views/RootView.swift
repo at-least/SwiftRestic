@@ -471,13 +471,29 @@ struct WelcomeView: View {
                 .cardSurface()
             }
 
-            HStack(spacing: 10) {
-                Button("Add a Repository…", action: onAddRepository)
-                    .buttonStyle(.borderedProminent)
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Button("Add a Repository…", action: onAddRepository)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    Button("New Backup Plan…") {
+                        // The plan's first requirement is where backups go.
+                        // With no repository yet, this button starts there —
+                        // a disabled button with an invisible reason was a
+                        // dead end at the exact moment adoption is decided.
+                        if model.configuration.repositories.isEmpty {
+                            onAddRepository()
+                        } else {
+                            onAddPlan()
+                        }
+                    }
                     .controlSize(.large)
-                Button("New Backup Plan…", action: onAddPlan)
-                    .controlSize(.large)
-                    .disabled(model.configuration.repositories.isEmpty)
+                }
+                if model.configuration.repositories.isEmpty {
+                    Text("A backup plan backs up to a repository — add the repository first.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
