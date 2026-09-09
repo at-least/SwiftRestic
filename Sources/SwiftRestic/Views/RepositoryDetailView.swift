@@ -68,7 +68,9 @@ struct RepositoryDetailView: View {
         ) {
             Button("Remove", role: .destructive) { model.deleteRepository(id: repositoryID) }
         } message: {
-            Text("The backup data itself is not deleted. Plans pointing at it will be paused.")
+            // Same source as the sidebar's removal dialog: one wording, one
+            // place, testable at the model level.
+            Text(model.removalConsequences(for: repositoryID))
         }
         .confirmationDialog(
             "Prune this repository now?",

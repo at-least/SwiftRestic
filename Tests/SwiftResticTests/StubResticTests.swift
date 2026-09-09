@@ -137,6 +137,14 @@ struct StubRestic: Sendable {
                 echo '{"message_type":"exit_error","code":10,"message":"Fatal: repository does not exist"}'
                 exit 10
                 ;;
+            wrongpassword)
+                # restic's exit 12: the stored password doesn't open the
+                # repository — the trust-critical failure whose copy must name
+                # the fix instead of offering a Retry that cannot succeed.
+                trace "wrongpassword-arm"
+                echo "Fatal: wrong password or no matching key" >&2
+                exit 12
+                ;;
             dribble)
                 # A status line first, the rest of the run over a second later:
                 # progress callbacks must arrive in between, not at exit.

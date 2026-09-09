@@ -42,6 +42,17 @@ extension AppModel {
         }
     }
 
+    /// What removing this repository does to work in flight — the removal
+    /// dialogs word themselves from here so the rule and its phrasing stay
+    /// testable at the model level, the same pattern as `quitInterruptions`.
+    func removalConsequences(for repositoryID: UUID) -> String {
+        var consequences = "The backup data itself is not deleted. Plans pointing at it will be paused."
+        if restoreRepositoryID == repositoryID {
+            consequences += " A restore from this repository is running and will be cancelled."
+        }
+        return consequences
+    }
+
     /// Removes a repository from the app. The data in the repository is untouched.
     ///
     /// Work in flight against it is cancelled first, and the tasks' unwind

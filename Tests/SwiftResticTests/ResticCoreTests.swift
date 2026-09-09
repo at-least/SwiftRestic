@@ -17,14 +17,29 @@ struct ResticErrorTests {
 
     @Test("a known code prefixes restic's message; an unknown code gets the raw text")
     func commandFailedDescriptions() {
-        // Known code with restic's own words: explanation and words, both there.
-        let known = ResticError.commandFailed(
+        // The wrong-password failure carries its fix, plus restic's words for
+        // the discriminating detail — Retry can never succeed here.
+        let wrongPassword = ResticError.commandFailed(
             exitCode: 12,
             message: "Fatal: wrong password",
             command: "restic snapshots"
         ).errorDescription ?? ""
-        #expect(known.contains("password"))
-        #expect(known.contains("Fatal: wrong password"))
+        #expect(wrongPassword.contains("doesn't open this repository"))
+        #expect(wrongPassword.contains("check it in the repository settings"))
+        #expect(wrongPassword.contains("Fatal: wrong password"))
+        #expect(
+            ResticError.commandFailed(exitCode: 12, message: "", command: "x")
+                .errorDescription?.contains("check it in the repository settings") == true
+        )
+
+        // Other known codes: explanation and restic's words, both there.
+        let known = ResticError.commandFailed(
+            exitCode: 11,
+            message: "Fatal: repository is locked",
+            command: "restic prune"
+        ).errorDescription ?? ""
+        #expect(known.contains("already locked"))
+        #expect(known.contains("Fatal: repository is locked"))
 
         // Known code, no JSON message: the explanation is all there is.
         let bare = ResticError.commandFailed(

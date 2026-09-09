@@ -60,7 +60,11 @@ struct RootView: View {
                 repositoryPendingRemoval = nil
             }
         } message: {
-            Text("The backup data itself is not deleted. Plans pointing at it will be paused.")
+            // Wording comes from the model so the disclosed consequences can
+            // never drift from what removal actually does.
+            if let repository = repositoryPendingRemoval {
+                Text(model.removalConsequences(for: repository.id))
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowFind)) { _ in
             isShowingFind = true

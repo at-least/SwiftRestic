@@ -81,7 +81,20 @@ extension AppModel {
                 onSuccess()
             } catch {
                 record.record(error, cancellationMessage: self.cancellationMessage)
-                if record.outcome == .failed {
+                if record.outcome == .cancelled {
+                    // The strip vanishing is the only signal a cancelled
+                    // restore otherwise leaves — including when it is the
+                    // repository's removal that cancelled it. During shutdown
+                    // the banner would die with the process, and the quit
+                    // confirmation has already said it.
+                    if !self.isShuttingDown {
+                        self.post(Banner(
+                            title: "Restore cancelled",
+                            message: "The restore was cancelled before it finished.",
+                            isError: false
+                        ))
+                    }
+                } else if record.outcome == .failed {
                     self.post(Banner(
                         title: "Restore failed",
                         message: record.failureMessage ?? "",

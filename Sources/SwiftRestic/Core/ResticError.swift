@@ -26,6 +26,16 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .binaryNotExecutable(path):
             return "The file at \(path) is not executable."
         case let .commandFailed(code, message, _):
+            if code == 12 {
+                // The trust-critical failure carries its fix: restic's own
+                // diagnosis leaves Retry as the only next step, and Retry can
+                // never succeed here. restic's words stay for the discriminating
+                // detail (wrong password vs no matching key vs a damaged key
+                // file), first sentence only — stderr can run multi-line.
+                let base = "The password doesn't open this repository — check it in the repository settings."
+                let restic = Format.firstSentence(message)
+                return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
+            }
             let known = ResticError.knownExitCodeDescription(code)
             if message.isEmpty { return known ?? "restic exited with code \(code)." }
             return known.map { "\($0) — \(message)" } ?? message

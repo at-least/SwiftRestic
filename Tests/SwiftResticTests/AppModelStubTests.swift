@@ -189,6 +189,12 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
         #expect(record.failureMessage == "Cancelled")
+        // The strip vanishing is not the whole story: a settled, non-error
+        // banner says the restore stopped and nothing is still running.
+        #expect(
+            harness.model.banners.contains { $0.title == "Restore cancelled" && !$0.isError },
+            "banners were: \(harness.model.banners.map(\.title))"
+        )
         #expect(
             await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 10),
             "the stub process outlived the cancelled restore"
@@ -645,6 +651,71 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.kind == .restore)
         #expect(record.outcome == .cancelled)
+        // The removal may not cancel silently: the user learns their restore
+        // stopped from a banner, not from a progress strip that never returns.
+        #expect(
+            harness.model.banners.contains { $0.title == "Restore cancelled" && !$0.isError },
+            "banners were: \(harness.model.banners.map(\.title))"
+        )
+
+        await harness.model.shutdown()
+    }
+
+    // MARK: - Removal disclosure and wrong-password copy
+
+    @Test("removing a repository discloses the restore its removal will cancel")
+    func removalDisclosesRunningRestore() async throws {
+        let harness = try await makeHarness(mode: "hang-restore")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // Idle: the removal dialog's base sentence only, no restore clause.
+        let idle = harness.model.removalConsequences(for: harness.repository.id)
+        #expect(idle.contains("The backup data itself is not deleted."))
+        #expect(!idle.contains("restore"))
+
+        let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt")
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            node: node,
+            to: harness.root.appendingPathComponent("restored")
+        )
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+
+        let consequences = harness.model.removalConsequences(for: harness.repository.id)
+        #expect(consequences.contains("The backup data itself is not deleted."))
+        #expect(consequences.contains("A restore from this repository is running"))
+        #expect(consequences.contains("cancelled"))
+
+        // Settled again: the disclosure returns to the base sentence.
+        harness.model.cancelRestore()
+        await waitUntilRestoreFinishes(in: harness.model)
+        #expect(!harness.model.removalConsequences(for: harness.repository.id).contains("restore"))
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a wrong password names the fix instead of restic's raw diagnosis")
+    func wrongPasswordNamesTheFix() async throws {
+        let harness = try await makeHarness(mode: "wrongpassword")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+            Issue.record(
+                "expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))"
+            )
+            return
+        }
+        #expect(message.contains("doesn't open this repository"))
+        #expect(message.contains("check it in the repository settings"))
+        // The failure is not a quiet state like a missing password: the user
+        // saved credentials that do not work, so the banner says so.
+        let banner = try #require(harness.model.banners.first, "a wrong password must surface a banner")
+        #expect(banner.isError)
+        #expect(banner.message.contains("doesn't open this repository"))
 
         await harness.model.shutdown()
     }
