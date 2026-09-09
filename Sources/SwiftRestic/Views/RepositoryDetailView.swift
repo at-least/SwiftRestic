@@ -164,7 +164,8 @@ struct RepositoryDetailView: View {
                         title: "Blobs",
                         value: Format.count(stats?.totalBlobCount),
                         systemImage: "square.stack.3d.up.fill",
-                        help: "Chunks of encrypted data stored in the repository — the pieces snapshots are made of"
+                        help: "Chunks of encrypted data stored in the repository — the pieces snapshots are made of",
+                        trailingSymbol: "chevron.forward"
                     )
                 }
                 .buttonStyle(HoverableButtonStyle())

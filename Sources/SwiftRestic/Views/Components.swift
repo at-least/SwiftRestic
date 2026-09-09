@@ -147,6 +147,11 @@ struct StatTile: View {
     var systemImage: String?
     var hue: Color = Theme.tint
     var help: String?
+    /// Resting-state cue for tiles wrapped in a Button: the same trailing
+    /// chevron the overview problem rows wear, so clickability does not
+    /// exist only under the cursor. Decorative — the button's own
+    /// accessibility label says where it goes.
+    var trailingSymbol: String?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -173,6 +178,13 @@ struct StatTile: View {
                     // numerals, and shrinking further trades legibility for a
                     // fit a truncation ellipsis would serve better.
                     .minimumScaleFactor(0.75)
+            }
+            if let trailingSymbol {
+                Spacer(minLength: 8)
+                Image(systemName: trailingSymbol)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
         }
         // Caption and value read as one utterance — as separate stops every

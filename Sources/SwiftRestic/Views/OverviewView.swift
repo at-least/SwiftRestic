@@ -25,8 +25,15 @@ struct OverviewView: View {
             }
             protectionCard
             statTiles
-            volumeCard
-            repositorySizeCard
+            // Space and history read as one unit: what accumulates daily,
+            // where it lives. Pairing cards two-up (the grammar the
+            // upcoming/problems row already sets) is what keeps the common
+            // one-plan, one-repository overview inside the default window
+            // instead of a scroll; genuinely long content still grows down.
+            HStack(alignment: .top, spacing: Theme.Space.section) {
+                volumeCard
+                repositorySizeCard
+            }
             HStack(alignment: .top, spacing: Theme.Space.section) {
                 upcomingCard
                 recentFailuresCard
@@ -227,7 +234,8 @@ struct OverviewView: View {
                     title: "Problems (7 days)",
                     value: problems > 0 ? Format.count(problems) : "0",
                     systemImage: problems > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle",
-                    hue: problems > 0 ? Theme.warning : Theme.success
+                    hue: problems > 0 ? Theme.warning : Theme.success,
+                    trailingSymbol: "chevron.forward"
                 )
             }
             .buttonStyle(HoverableButtonStyle())
