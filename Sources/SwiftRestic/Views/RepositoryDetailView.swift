@@ -272,10 +272,13 @@ struct RepositoryDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Text("Both operations lock the repository — prune exclusively — so backups to it are held back until they finish rather than failing.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // The confirmations own the lock warning at the moment it
+                // decides anything; here it stays one line, with the full
+                // sentence on demand.
+                ExpandableCaption(
+                    summary: "Maintenance locks the repository — backups wait rather than fail.",
+                    detail: "Both operations lock the repository — prune exclusively — so backups to it are held back until they finish rather than failing."
+                )
             }
         }
     }

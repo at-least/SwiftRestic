@@ -249,6 +249,48 @@ struct DetailGrid<Content: View>: View {
     }
 }
 
+// MARK: - Expandable caption
+
+/// A form caption that keeps its teaching text but stops charging for it on
+/// every render: the summary line is always visible, and the rest sits
+/// behind the info button for whoever wants it — the same on-demand depth
+/// the app already gives hook variables and diff metadata.
+struct ExpandableCaption: View {
+    /// The always-visible line.
+    let summary: String
+    /// What reveals on demand; written to read continuously after the summary.
+    let detail: String
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Theme.tint)
+                .help("More about this")
+                .accessibilityLabel("More about this")
+            }
+            if isExpanded {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 // MARK: - Operation progress
 
 /// Live progress of a running backup or restore, on its own card plate with a

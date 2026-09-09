@@ -88,10 +88,10 @@ struct FindFilesView: View {
                 }
             }
 
-            Text("Matching is case-insensitive and supports shell globs. Searching every snapshot walks each one, so it takes longer the more history a repository holds.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            ExpandableCaption(
+                summary: "Matching is case-insensitive and supports shell globs.",
+                detail: "Searching every snapshot walks each one, so it takes longer the more history a repository holds."
+            )
         }
         .padding(12)
     }

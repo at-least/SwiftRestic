@@ -133,9 +133,10 @@ struct ResticConsoleView: View {
                 }
             }
 
-            Text("The repository and its credentials are supplied for you. Output is restic's own — nothing here is parsed by the app.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            ExpandableCaption(
+                summary: "The repository and its credentials are supplied for you.",
+                detail: "Output is restic's own — nothing here is parsed by the app."
+            )
         }
         .padding(12)
     }

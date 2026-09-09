@@ -31,10 +31,10 @@ struct SettingsView: View {
         return Form {
             Section("Menu bar") {
                 Toggle("Show SwiftRestic in the menu bar", isOn: $model.configuration.settings.showMenuBarExtra)
-                Text("Closing the window never quits SwiftRestic — scheduled backups keep firing. The menu bar item is how you get back to it, and its icon animates while a backup or maintenance task is running.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                ExpandableCaption(
+                    summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing.",
+                    detail: "The menu bar item is how you get back to it, and its icon animates while a backup or maintenance task is running."
+                )
             }
 
             Section("Notifications") {
@@ -259,10 +259,10 @@ struct NotificationChannelsTab: View {
                         isOn: $model.configuration.settings.notificationChannels[index].notifyOnFailure
                     )
                     if channel.kind.usesStartPing {
-                        Text("Healthchecks is also pinged when a backup starts — that is what arms the timer it measures against, so a Mac that never wakes up still raises the alarm.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        ExpandableCaption(
+                            summary: "Healthchecks is also pinged when a backup starts.",
+                            detail: "That ping is what arms the timer it measures against, so a Mac that never wakes up still raises the alarm."
+                        )
                     }
                 }
 
@@ -312,10 +312,10 @@ struct NotificationChannelsTab: View {
                     case nil:
                         EmptyView()
                     }
-                    Text("A failed notification is reported here but never changes what the run history says happened — the backup either ran or it did not.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    ExpandableCaption(
+                        summary: "A failed notification is reported here but never changes what the run history says happened.",
+                        detail: "The backup either ran or it did not."
+                    )
                 }
             }
             .formStyle(.grouped)

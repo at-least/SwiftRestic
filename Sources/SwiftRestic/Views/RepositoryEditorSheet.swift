@@ -203,10 +203,10 @@ struct RepositoryEditorSheet: View {
                     LabeledContent("Every", value: "\(draft.maintenance.pruneIntervalDays) day(s)")
                 }
                 .disabled(!draft.maintenance.pruneEnabled)
-                Text("Pruning reclaims the space that retention freed. It rewrites pack files, takes an exclusive lock and can run for a long time, so backups to this repository wait for it.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                ExpandableCaption(
+                    summary: "Pruning reclaims the space that retention freed.",
+                    detail: "It rewrites pack files, takes an exclusive lock and can run for a long time, so backups to this repository wait for it."
+                )
             }
 
             if let status {
@@ -268,19 +268,19 @@ struct RepositoryEditorSheet: View {
                     }
                 }
             }
-            Text("restic reads the key file from disk itself, so the path is stored in your configuration rather than the Keychain. Keep the file readable only by you.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            ExpandableCaption(
+                summary: "The key file's path is stored in your configuration, not the Keychain.",
+                detail: "restic reads the key file from disk itself. Keep the file readable only by you."
+            )
         case .rest:
             TextField("URL", text: $draft.restURL, prompt: Text("https://user:pass@host:8000/"))
         case .rclone:
             TextField("Remote", text: $draft.rcloneRemote, prompt: Text("mydrive"))
             TextField("Path", text: $draft.rclonePath, prompt: Text("backups/mac"))
-            Text("restic launches the rclone binary itself, so rclone has to be installed (`brew install rclone`) and its remote already configured with `rclone config`.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            ExpandableCaption(
+                summary: "rclone has to be installed and its remote already configured.",
+                detail: "restic launches the rclone binary itself: install it (`brew install rclone`) and set the remote up with `rclone config`."
+            )
         }
 
         LabeledContent("restic will use") {
