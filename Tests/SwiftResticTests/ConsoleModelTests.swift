@@ -188,3 +188,29 @@ struct ConsoleModelTests {
         #expect(console.recallNext() == nil)
     }
 }
+
+extension ConsoleModelTests {
+    @Test("re-seeding history from disk ends the walk instead of indexing past it")
+    func appearResetsRecallWalk() async throws {
+        let (app, console, _) = try makeHarness()
+        console.appear(with: app)
+        // Two of the three commands carry secrets, so the persisted list the
+        // pane re-reads on return is shorter than the session's history.
+        await seedHistory(["aaa", "password one", "password two"], app: app, console: console)
+        #expect(console.history.count == 3)
+
+        // Walk to the oldest entry, index 2.
+        #expect(console.recallPrevious(current: "draft") != nil)
+        #expect(console.recallPrevious(current: "") != nil)
+        #expect(console.recallPrevious(current: "") != nil)
+
+        // The pane is left and revisited: history re-reads from disk, now
+        // without the secret-bearing commands.
+        console.appear(with: app)
+        #expect(console.history == ["aaa"])
+
+        // The walk is over — ↓ must not index past the shrunken list.
+        #expect(console.recallNext() == nil)
+        #expect(console.commandText != "")
+    }
+}

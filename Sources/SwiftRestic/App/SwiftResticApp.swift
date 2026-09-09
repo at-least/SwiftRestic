@@ -11,6 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// keeps the app alive, so a second ⌘Q re-enters `applicationShouldTerminate`
     /// mid-dialog; answering it again would stack a second alert on the first.
     private var isConfirmingQuit = false
+    /// Set once quit is accepted and `shutdown` is unwinding — that takes
+    /// seconds (cancelled restic children are awaited), and during it a second
+    /// ⌘Q must not raise a second alert whose Cancel would be a lie, nor run
+    /// a second shutdown against tasks already being awaited.
+    private var isTerminating = false
 
     /// Closing the window must not quit: scheduled backups need the app alive.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -30,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
-        guard !isConfirmingQuit else { return .terminateCancel }
+        guard !isConfirmingQuit, !isTerminating else { return .terminateCancel }
 
         // A backup app that silently cancels its own work on quit is breaking
         // its promise, so restic work in flight gets one confirmation. The
@@ -54,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isConfirmingQuit = false
             guard confirmed else { return .terminateCancel }
         }
+        isTerminating = true
 
         Task { @MainActor in
             #if DEBUG

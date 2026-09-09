@@ -266,6 +266,10 @@ final class AppModel {
     }
 
     func shutdown() async {
+        // Quitting and the debug-capture path can both drive shutdown; a
+        // second concurrent pass would cancel and re-await tasks that are
+        // already unwinding.
+        guard !isShuttingDown else { return }
         isShuttingDown = true
         schedulerTask?.cancel()
         let pending = Array(planTasks.values) + Array(maintenanceTasks.values)

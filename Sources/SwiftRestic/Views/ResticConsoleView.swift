@@ -66,7 +66,7 @@ struct ResticConsoleView: View {
                     Section("History") {
                         ForEach(model.console.history, id: \.self) { entry in
                             Button {
-                                model.console.commandText = entry
+                                model.console.pickFromHistory(entry)
                             } label: {
                                 Text(entry)
                                     .font(.system(.callout, design: .monospaced))

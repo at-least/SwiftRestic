@@ -39,8 +39,11 @@ final class ConsoleModel {
     func appear(with app: AppModel) {
         if repositoryID == nil { repositoryID = app.configuration.repositories.first?.id }
         // History outlives the pane: it lives in the configuration, so a
-        // command that worked is still here next week.
+        // command that worked is still here next week. It is also the
+        // secret-filtered list, which can be shorter than the session's —
+        // an in-progress walk's index would point past it, so the walk ends.
         history = app.configuration.settings.consoleHistory
+        endRecall()
     }
 
     var canRun: Bool {
@@ -93,7 +96,12 @@ final class ConsoleModel {
     /// The entry ↓ should show: one step newer per press, and past the newest
     /// back to the draft the field held when the walk started.
     func recallNext() -> String? {
-        guard let index = historyIndex else { return nil }
+        // A history shorter than the index it was walked with (the persisted
+        // list drops secrets) ends the walk rather than indexing past it.
+        guard let index = historyIndex, index < history.count else {
+            endRecall()
+            return nil
+        }
         if index == 0 {
             let draft = recalledDraft
             endRecall()
@@ -101,6 +109,13 @@ final class ConsoleModel {
         }
         historyIndex = index - 1
         return history[historyIndex!]
+    }
+
+    /// History-sidebar click: the user chose a command, so any walk ends and
+    /// the field shows the entry.
+    func pickFromHistory(_ entry: String) {
+        endRecall()
+        commandText = entry
     }
 
     private func endRecall() {
