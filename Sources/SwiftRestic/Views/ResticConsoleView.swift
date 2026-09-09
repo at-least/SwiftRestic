@@ -167,6 +167,8 @@ struct ResticConsoleView: View {
                 NSPasteboard.general.setString(model.console.output, forType: .string)
             }
             .disabled(model.console.output.isEmpty)
+            Button("Clear") { model.console.clearOutput() }
+                .disabled(model.console.output.isEmpty || model.console.isRunning)
             Spacer()
         }
         .padding(12)

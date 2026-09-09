@@ -225,6 +225,21 @@ struct PlanEditorSheet: View {
         Form {
             Toggle("Apply retention after each backup", isOn: $draft.retention.isEnabled)
 
+            if draft.retention.isEnabled {
+                // The buckets are the advanced truth; the presets are the
+                // answer most people actually have ("about a month", "about
+                // a year"). Applying one fills all six fields at once.
+                HStack(spacing: 8) {
+                    Text("Presets")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(RetentionPreset.allCases) { preset in
+                        Button(preset.name) { preset.apply(to: &draft.retention) }
+                            .controlSize(.small)
+                    }
+                }
+            }
+
             Group {
                 keepStepper("Keep latest", value: $draft.retention.keepLast, max: 100)
                 keepStepper("Keep hourly", value: $draft.retention.keepHourly, max: 168)
@@ -254,6 +269,15 @@ struct PlanEditorSheet: View {
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                 }
+                // Anchor the projection to the snapshot count that exists
+                // today, so "≈ 41 would survive" can be read against a real
+                // number rather than floating free.
+                if !isNew, let repositoryID = draft.repositoryID,
+                   case .loaded = model.snapshotListingOutcome(for: repositoryID)
+                {
+                    let count = model.snapshots(for: repositoryID, planID: draft.id).count
+                    LabeledContent("Snapshots now", value: Format.count(count))
+                }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
                     Label(
                         "With every rule at zero, restic would delete all snapshots. Retention is skipped until at least one rule is set.",
@@ -266,6 +290,35 @@ struct PlanEditorSheet: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Whole-bucket answers to "how much history do you want?", so the six
+    /// steppers never have to be operated one at a time to get a sane shape.
+    private enum RetentionPreset: CaseIterable, Identifiable {
+        case standard, month, year
+
+        var id: Self { self }
+
+        var name: String {
+            switch self {
+            case .standard: "Standard"
+            case .month: "30 days"
+            case .year: "A year of dailies"
+            }
+        }
+
+        func apply(to policy: inout RetentionPolicy) {
+            switch self {
+            case .standard:
+                policy = RetentionPolicy()
+            case .month:
+                policy = RetentionPolicy()
+                policy.keepDaily = 30
+            case .year:
+                policy = RetentionPolicy()
+                policy.keepDaily = 365
+            }
+        }
     }
 
     private func keepStepper(_ title: String, value: Binding<Int>, max: Int) -> some View {

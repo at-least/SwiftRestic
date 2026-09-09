@@ -165,6 +165,7 @@ struct RootView: View {
                     Label {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(repository.name)
+                                .lineLimit(1)
                             Text(repository.displayLocation)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -185,12 +186,10 @@ struct RootView: View {
                 }
             }
 
+            // Console and Activity are peers, not a lone tool plus a footnote.
             Section("Tools") {
                 Label("restic Console", systemImage: "apple.terminal")
                     .tag(SidebarItem.console)
-            }
-
-            Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
                     .tag(SidebarItem.activity)
             }
@@ -388,6 +387,7 @@ private struct PlanSidebarRow: View {
         Label {
             VStack(alignment: .leading, spacing: 1) {
                 Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
+                    .lineLimit(1)
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)

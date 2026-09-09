@@ -2,6 +2,10 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    /// Arming the "you can strand the app" confirmation: turning the menu bar
+    /// item off and closing the window leaves the scheduler running with no
+    /// visible way back, so that exact toggle gets named before it lands.
+    @State private var isConfirmingMenuBarOff = false
 
     var body: some View {
         @Bindable var model = model
@@ -16,6 +20,17 @@ struct SettingsView: View {
                 .tabItem { Label("restic", systemImage: "terminal") }
         }
         .frame(minWidth: 560, idealWidth: 560, minHeight: 460, idealHeight: 500)
+        .confirmationDialog(
+            "Turn off the menu bar item?",
+            isPresented: $isConfirmingMenuBarOff,
+            titleVisibility: .visible
+        ) {
+            Button("Turn Off", role: .destructive) {
+                model.configuration.settings.showMenuBarExtra = false
+            }
+        } message: {
+            Text("Closing the main window afterwards leaves scheduled backups running with no visible way back into SwiftRestic — reopening means launching the app again. Keep the item on to always have a way in.")
+        }
         .task { model.refreshLoginItemStatus() }
         // Approving a login item happens in System Settings, so the only signal
         // that it went through is the user coming back to this app.
@@ -30,7 +45,19 @@ struct SettingsView: View {
         @Bindable var model = model
         return Form {
             Section("Menu bar") {
-                Toggle("Show SwiftRestic in the menu bar", isOn: $model.configuration.settings.showMenuBarExtra)
+                Toggle(
+                    "Show SwiftRestic in the menu bar",
+                    isOn: Binding(
+                        get: { model.configuration.settings.showMenuBarExtra },
+                        set: { newValue in
+                            if newValue {
+                                model.configuration.settings.showMenuBarExtra = true
+                            } else {
+                                isConfirmingMenuBarOff = true
+                            }
+                        }
+                    )
+                )
                 ExpandableCaption(
                     summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing.",
                     detail: "The menu bar item is how you get back to it. Its icon shows work in progress, and wears a warning mark while a run from the last seven days failed or finished with errors."
@@ -104,18 +131,18 @@ struct SettingsView: View {
             }
 
             Section("Bandwidth") {
-                Stepper(value: $model.configuration.settings.uploadLimitKiBps, in: 0 ... 1_000_000, step: 256) {
-                    LabeledContent(
-                        "Upload limit",
-                        value: limitText(model.configuration.settings.uploadLimitKiBps)
-                    )
-                }
-                Stepper(value: $model.configuration.settings.downloadLimitKiBps, in: 0 ... 1_000_000, step: 256) {
-                    LabeledContent(
-                        "Download limit",
-                        value: limitText(model.configuration.settings.downloadLimitKiBps)
-                    )
-                }
+                // Typeable, not steppers: a step-256 stepper made "50000"
+                // a roughly two-hundred-click affair.
+                TextField(
+                    "Upload limit (KiB/s, 0 for unlimited)",
+                    value: clampedLimit($model.configuration.settings.uploadLimitKiBps),
+                    format: .number.grouping(.never)
+                )
+                TextField(
+                    "Download limit (KiB/s, 0 for unlimited)",
+                    value: clampedLimit($model.configuration.settings.downloadLimitKiBps),
+                    format: .number.grouping(.never)
+                )
             }
 
             Section("Full Disk Access") {
@@ -133,6 +160,15 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Keeps the typed value inside restic's accepted range without fighting
+    /// the keystroke: out-of-range text is corrected on commit, not per key.
+    private func clampedLimit(_ binding: Binding<Int>) -> Binding<Int> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: { binding.wrappedValue = min(1_000_000, max(0, $0)) }
+        )
     }
 
     private func limitText(_ value: Int) -> String {

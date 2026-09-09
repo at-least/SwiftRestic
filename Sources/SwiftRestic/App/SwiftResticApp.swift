@@ -256,7 +256,7 @@ struct SwiftResticApp: App {
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
 
-                Button("Refresh Snapshots") {
+                Button("Refresh All Snapshots") {
                     Task { await model.refreshAllSnapshots() }
                 }
                 .keyboardShortcut("r", modifiers: .command)

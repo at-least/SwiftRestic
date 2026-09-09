@@ -136,25 +136,23 @@ struct OverviewView: View {
                 value: Format.count(model.configuration.plans.count),
                 systemImage: "calendar"
             )
-            if problems > 0 {
-                Button(action: showProblems) {
-                    StatTile(
-                        title: "Problems (7 days)",
-                        value: Format.count(problems),
-                        systemImage: "exclamationmark.triangle.fill",
-                        hue: Theme.warning
-                    )
-                }
-                .buttonStyle(HoverableButtonStyle())
-                .accessibilityLabel("Problems in the last 7 days: \(problems). Show them in Activity")
-            } else {
+            // A button in both states: a tile that only became clickable when
+            // problems existed was a disappearing affordance, and arriving in
+            // Activity pre-filtered is a fine answer to "zero problems" too.
+            Button(action: showProblems) {
                 StatTile(
                     title: "Problems (7 days)",
-                    value: "0",
-                    systemImage: "checkmark.circle",
-                    hue: Theme.success
+                    value: problems > 0 ? Format.count(problems) : "0",
+                    systemImage: problems > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle",
+                    hue: problems > 0 ? Theme.warning : Theme.success
                 )
             }
+            .buttonStyle(HoverableButtonStyle())
+            .accessibilityLabel(
+                problems > 0
+                    ? "Problems in the last 7 days: \(problems). Show them in Activity"
+                    : "No problems in the last 7 days. Show Activity"
+            )
         }
     }
 

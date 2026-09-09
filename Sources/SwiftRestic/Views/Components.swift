@@ -108,6 +108,12 @@ struct BannerView: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if let revealPath = banner.revealPath {
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: revealPath)])
+                    }
+                    .controlSize(.small)
+                }
             }
             // Title and message read as one utterance; the dismiss button
             // stays its own element beside them.
@@ -167,6 +173,9 @@ struct StatTile: View {
                     .minimumScaleFactor(0.75)
             }
         }
+        // Caption and value read as one utterance — as separate stops every
+        // pane's tile row would cost VoiceOver twice the trips.
+        .accessibilityElement(children: .combine)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Space.cardPadding)
         .cardSurface()

@@ -152,6 +152,18 @@ struct FindFilesView: View {
                 }
                 .width(min: 70, ideal: 84)
             }
+            // An explicit right-click route to the restore the footer button
+            // offers. Double-click deliberately does nothing: an accidental
+            // double-tap must not start moving bytes.
+            .contextMenu(forSelectionType: Row.ID.self) { ids in
+                if let id = ids.first, ids.count == 1,
+                   let row = rows.first(where: { $0.id == id }) {
+                    Button("Restore “\(row.match.name)”…") {
+                        selection = id
+                        restoreSelection()
+                    }
+                }
+            }
         }
     }
 

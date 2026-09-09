@@ -139,6 +139,13 @@ final class ConsoleModel {
         runTask?.cancel()
     }
 
+    /// Empties the output pane. A running command's stream owns the pane, so
+    /// this waits for stillness rather than fighting it.
+    func clearOutput() {
+        guard !isRunning else { return }
+        output = ""
+    }
+
     /// Waits for an in-flight command, so tests can observe settled state.
     func waitForCommand() async {
         await runTask?.value

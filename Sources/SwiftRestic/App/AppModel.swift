@@ -48,6 +48,9 @@ struct Banner: Identifiable, Equatable {
     var title: String
     var message: String
     var isError: Bool
+    /// When set, the banner offers a Reveal-in-Finder button — a restore that
+    /// ends with "here is the path" reads finished only half-way.
+    var revealPath: String?
 }
 
 /// Which pane the sidebar is showing. Lives beside the model because menu-bar
@@ -420,7 +423,7 @@ final class AppModel {
         if !overridden.isEmpty {
             post(Banner(
                 title: "Ignored environment variables",
-                message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; the value in Extra environment has no effect.",
+                message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; an entry for it in this repository's extra environment (configuration file) has no effect.",
                 isError: false
             ))
         }
@@ -1018,7 +1021,8 @@ final class AppModel {
             self?.post(Banner(
                 title: "Restored \(node.name)",
                 message: destination.path,
-                isError: false
+                isError: false,
+                revealPath: destination.path
             ))
         }
     }
@@ -1038,7 +1042,8 @@ final class AppModel {
             self?.post(Banner(
                 title: "Restored snapshot",
                 message: destination.path,
-                isError: false
+                isError: false,
+                revealPath: destination.path
             ))
         }
     }

@@ -34,6 +34,13 @@ struct RepositoryDetailView: View {
                     Divider()
                     Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
                     Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
+                    Divider()
+                    // The most destructive act on this pane — it pauses every
+                    // plan pointing here — sits with the pane's other
+                    // consequential actions, not at the bottom of a scroll.
+                    Button("Remove from SwiftRestic…", role: .destructive) {
+                        isConfirmingRemoval = true
+                    }
                 }
                 .labelStyle(.titleAndIcon)
                 .disabled(model.busyRepositoryIDs.contains(repositoryID))
@@ -89,7 +96,7 @@ struct RepositoryDetailView: View {
                 model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 100)
             }
         } message: {
-            Text("Structure checks are fast; reading data finds more problems at the cost of time. The repository is locked while the check runs, so backups to it are held back until it finishes.")
+            Text(checkMessage)
         }
         .confirmationDialog(
             "Remove stale locks on this repository?",
@@ -172,6 +179,8 @@ struct RepositoryDetailView: View {
                 )
             }
 
+            listingCaveat(outcome: listingOutcome)
+
             Card("Details", systemImage: "info.circle.fill") {
                 DetailGrid {
                     DetailRow("Type", repository.kind.displayName)
@@ -212,15 +221,37 @@ struct RepositoryDetailView: View {
                         .monospacedDigit()
                 }
             }
-
-            HStack {
-                Spacer()
-                Button("Remove from SwiftRestic…", role: .destructive) {
-                    isConfirmingRemoval = true
-                }
-            }
         }
         .detailPane()
+    }
+
+    /// "Slow" is a different unit of slow on a 4 TB repository than on a
+    /// memory stick, so the check dialog says which one the user is holding.
+    private var checkMessage: String {
+        var message = "Structure checks are fast; reading data finds more problems at the cost of time. The repository is locked while the check runs, so backups to it are held back until it finishes."
+        if let size = model.repositoryStats[repositoryID]?.totalSize {
+            message += " This repository currently holds \(Format.bytes(size))."
+        }
+        return message
+    }
+
+    @ViewBuilder
+    private func listingCaveat(outcome: SnapshotListingOutcome) -> some View {
+        switch outcome {
+        case let .failed(message):
+            Label(
+                "Snapshots could not be read — \(Format.firstSentence(message))",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(Theme.warning)
+        case .idle:
+            Label("The snapshot list has not finished loading.", systemImage: "clock.arrow.circlepath")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .loaded:
+            EmptyView()
+        }
     }
 
     @ViewBuilder

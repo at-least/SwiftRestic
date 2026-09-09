@@ -107,10 +107,34 @@ struct PlanDetailView: View {
             }
 
             summaryTiles(plan)
+            listingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             configurationCard(plan)
             snapshotsCard(plan)
         }
         .detailPane()
+    }
+
+    /// Why a Snapshots tile may read "—", in visible text. The tooltips carry
+    /// the same lines, but a reason only a hovering mouse user can reach is no
+    /// reason at all for a keyboard or VoiceOver user — the same lesson the
+    /// Overview tile row learned.
+    @ViewBuilder
+    private func listingCaveat(outcome: SnapshotListingOutcome) -> some View {
+        switch outcome {
+        case let .failed(message):
+            Label(
+                "Snapshots could not be read — \(Format.firstSentence(message))",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(Theme.warning)
+        case .idle:
+            Label("The snapshot list has not finished loading.", systemImage: "clock.arrow.circlepath")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .loaded:
+            EmptyView()
+        }
     }
 
     private func summaryTiles(_ plan: BackupPlan) -> some View {
@@ -458,6 +482,16 @@ struct SnapshotTable: View {
             // The row context menu and double-click mirror the two buttons,
             // so the table's most-repeated actions have a keyboard-and-menu
             // path and not only a mouse-only pair of small buttons.
+            // Return on a selected row opens it, the same grammar the
+            // browser sheet speaks — the context menu alone is not a
+            // keyboard path.
+            .onKeyPress(.return) {
+                guard let selection,
+                      let snapshot = visibleSnapshots.first(where: { $0.id == selection })
+                else { return .ignored }
+                onBrowse(snapshot)
+                return .handled
+            }
             .contextMenu(forSelectionType: Snapshot.ID.self) { ids in
                 if let id = ids.first, ids.count == 1,
                    let snapshot = visibleSnapshots.first(where: { $0.id == id }) {
