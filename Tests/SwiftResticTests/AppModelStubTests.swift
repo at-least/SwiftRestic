@@ -393,6 +393,79 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    // MARK: - Quit confirmation and run banners
+
+    @Test("a backup in flight is a reason to confirm quitting; an idle model has none")
+    func runningBackupAsksForQuitConfirmation() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        #expect(harness.model.quitInterruptions.isEmpty)
+        harness.model.runBackup(planID: harness.plan.id)
+        #expect(harness.model.isRunning(planID: harness.plan.id))
+        #expect(harness.model.quitInterruptions == ["A backup is running"])
+
+        harness.model.cancelBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+        #expect(harness.model.quitInterruptions.isEmpty)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a finished backup announces its outcome in the banner queue")
+    func finishedBackupAnnouncesItself() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        let banner = try #require(harness.model.banners.first)
+        #expect(!banner.isError)
+        #expect(banner.title.contains("Stub Plan"))
+        #expect(banner.message.contains("Backed up"))
+        // A settled run is not a reason to interject on quit.
+        #expect(harness.model.quitInterruptions.isEmpty)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a backup with unreadable items surfaces them without calling the run a failure")
+    func backupWithWarningsSurfacesThem() async throws {
+        let harness = try await makeHarness(mode: "warn")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.outcome == .completedWithErrors)
+        let banner = try #require(harness.model.banners.first)
+        #expect(banner.isError)
+        #expect(banner.title.contains("finished with warnings"))
+        #expect(banner.message.contains("unreadable item"))
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a failed backup names the failure in a banner")
+    func failedBackupNamesTheFailure() async throws {
+        let harness = try await makeHarness(mode: "plainfail")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.outcome == .failed)
+        let banner = try #require(harness.model.banners.first)
+        #expect(banner.isError)
+        #expect(banner.title.contains("failed"))
+        #expect(banner.message.contains(record.failureMessage ?? ""))
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Console
 
     @Test("the console returns restic's own output, or explains there is nothing")

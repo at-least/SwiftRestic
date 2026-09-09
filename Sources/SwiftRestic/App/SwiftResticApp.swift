@@ -7,6 +7,10 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var model: AppModel?
+    /// Set while the quit confirmation's modal loop is up. The modal run loop
+    /// keeps the app alive, so a second ⌘Q re-enters `applicationShouldTerminate`
+    /// mid-dialog; answering it again would stack a second alert on the first.
+    private var isConfirmingQuit = false
 
     /// Closing the window must not quit: scheduled backups need the app alive.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -26,6 +30,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
+        guard !isConfirmingQuit else { return .terminateCancel }
+
+        // A backup app that silently cancels its own work on quit is breaking
+        // its promise, so restic work in flight gets one confirmation. The
+        // clauses come from the model, where they are testable.
+        let interruptions = model.quitInterruptions
+        if !interruptions.isEmpty {
+            isConfirmingQuit = true
+            let alert = NSAlert()
+            alert.messageText = "Quit SwiftRestic?"
+            alert.informativeText = interruptions.joined(separator: "\n")
+                + "\nQuitting stops the work in progress; the run history records the interruption."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Quit Anyway")
+            alert.addButton(withTitle: "Cancel")
+            alert.buttons[0].hasDestructiveAction = true
+            // The safe answer owns Return: quitting must be a deliberate
+            // click, never the key a reflex hits while typing elsewhere.
+            // Escape keeps its built-in route to the "Cancel" button.
+            alert.buttons[1].keyEquivalent = "\r"
+            let confirmed = alert.runModal() == .alertFirstButtonReturn
+            isConfirmingQuit = false
+            guard confirmed else { return .terminateCancel }
+        }
+
         Task { @MainActor in
             #if DEBUG
             debugLog("terminate: shutting down")

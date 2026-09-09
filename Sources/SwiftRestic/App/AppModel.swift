@@ -203,6 +203,22 @@ final class AppModel {
 
     // MARK: - Lifecycle
 
+    /// Why quitting right now would interrupt restic work in flight — one
+    /// full clause per kind of work, empty when the process is idle. The quit
+    /// confirmation is worded from here so the rule and its phrasing stay
+    /// testable at the model level instead of living inside the alert.
+    var quitInterruptions: [String] {
+        var reasons: [String] = []
+        let backups = activity.count
+        if backups > 0 {
+            reasons.append(backups == 1 ? "A backup is running" : "\(backups) backups are running")
+        }
+        if !maintenance.isEmpty { reasons.append("Repository maintenance is running") }
+        if isRestoring { reasons.append("A restore is running") }
+        if console.isRunning { reasons.append("A restic console command is running") }
+        return reasons
+    }
+
     func bootstrap() async {
         guard !isLoaded else { return }
         isLoaded = true
@@ -698,8 +714,45 @@ final class AppModel {
         }
 
         append(record: record)
+        announceInApp(record: record)
         notify(about: record)
         await broadcast(record: record, plan: plan)
+    }
+
+    /// The in-app counterpart to `notify`: a finished backup lands in the
+    /// banner queue so "did it work?" is answered in the pane the user is
+    /// looking at, without a trip to Activity. Successes ride the queue's own
+    /// auto-dismiss — success that outlives its moment reads as stale — while
+    /// warnings and failures stay until dismissed, like every other problem
+    /// the queue holds.
+    private func announceInApp(record: RunRecord) {
+        switch record.outcome {
+        case .cancelled:
+            // The user asked for this stop — or confirmed the quit that caused
+            // it — and a banner nagging about it adds nothing.
+            return
+        case .succeeded:
+            post(Banner(
+                title: "“\(record.planName)” backed up",
+                message: "Backed up \(Format.bytes(record.dataAdded)) of new data in \(Format.duration(record.duration)).",
+                isError: false
+            ))
+        case .completedWithErrors:
+            // restic's partial success: a snapshot exists, so this is not a
+            // failure — but the unreadable items are exactly what the banner
+            // queue exists to keep visible.
+            let count = max(record.itemErrorCount, record.itemErrors.count)
+            let message = record.itemErrors.first.map {
+                "\($0) — \(Format.plural(count, "unreadable item")) in total."
+            } ?? record.failureMessage ?? "Finished, but restic reported problems."
+            post(Banner(title: "“\(record.planName)” finished with warnings", message: message, isError: true))
+        case .failed:
+            post(Banner(
+                title: "Backup of “\(record.planName)” failed",
+                message: record.failureMessage ?? "",
+                isError: true
+            ))
+        }
     }
 
     /// Tells the configured webhooks and chat channels how the run went.
