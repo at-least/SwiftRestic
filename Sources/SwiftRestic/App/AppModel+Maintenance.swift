@@ -146,7 +146,7 @@ extension AppModel {
             repositoriesMissingPassword.insert(repository.id)
             return
         } catch {
-            record.record(error, cancellationMessage: cancellationMessage)
+            record.setOutcome(from: error, cancellationMessage: cancellationMessage)
         }
 
         // Stamp the timestamp whatever happened. Leaving it unset on failure would

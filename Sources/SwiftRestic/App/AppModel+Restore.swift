@@ -80,7 +80,7 @@ extension AppModel {
                 record.bytesProcessed = summary?.bytesRestored ?? 0
                 onSuccess()
             } catch {
-                record.record(error, cancellationMessage: self.cancellationMessage)
+                record.setOutcome(from: error, cancellationMessage: self.cancellationMessage)
                 if record.outcome == .cancelled {
                     // The strip vanishing is the only signal a cancelled
                     // restore otherwise leaves — including when it is the

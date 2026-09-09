@@ -112,7 +112,7 @@ extension RunRecord {
     /// it was the user's stop or the app quitting, and anything else as
     /// `.failed` with the error's message. Callers keep their own side effects:
     /// stamps, banners, bookkeeping.
-    mutating func record(_ error: Error, cancellationMessage: String) {
+    mutating func setOutcome(from error: Error, cancellationMessage: String) {
         let cancelled = error is CancellationError || (error as? ResticError) == .cancelled
         outcome = cancelled ? .cancelled : .failed
         failureMessage = cancelled ? cancellationMessage : error.localizedDescription
