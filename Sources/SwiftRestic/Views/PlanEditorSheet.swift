@@ -308,16 +308,30 @@ struct PlanEditorSheet: View {
         }
 
         func apply(to policy: inout RetentionPolicy) {
+            // The "also prune" choice is not part of what the preset names,
+            // so it survives the rewrite.
+            let runPrune = policy.runPrune
             switch self {
             case .standard:
                 policy = RetentionPolicy()
             case .month:
+                // Zero the other buckets: the label promises a window, not a
+                // stack of extra rules that quietly keep more than it says.
                 policy = RetentionPolicy()
+                policy.keepHourly = 0
                 policy.keepDaily = 30
+                policy.keepWeekly = 0
+                policy.keepMonthly = 0
+                policy.keepYearly = 0
             case .year:
                 policy = RetentionPolicy()
+                policy.keepHourly = 0
                 policy.keepDaily = 365
+                policy.keepWeekly = 0
+                policy.keepMonthly = 0
+                policy.keepYearly = 0
             }
+            policy.runPrune = runPrune
         }
     }
 

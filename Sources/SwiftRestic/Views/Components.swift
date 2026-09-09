@@ -99,15 +99,20 @@ struct BannerView: View {
                 .foregroundStyle(hue)
                 .frame(width: 30, height: 30)
                 .background(hue.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(banner.title).font(.headline)
-                if !banner.message.isEmpty {
-                    Text(banner.message)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+            // Title and message read as one utterance; the Reveal action and
+            // the dismiss button stay their own elements beside them.
+            VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(banner.title).font(.headline)
+                    if !banner.message.isEmpty {
+                        Text(banner.message)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .accessibilityElement(children: .combine)
                 if let revealPath = banner.revealPath {
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: revealPath)])
@@ -115,9 +120,6 @@ struct BannerView: View {
                     .controlSize(.small)
                 }
             }
-            // Title and message read as one utterance; the dismiss button
-            // stays its own element beside them.
-            .accessibilityElement(children: .combine)
             Spacer()
             if isDismissible {
                 Button {

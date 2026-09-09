@@ -132,9 +132,11 @@ final class AppModel {
 
     /// Shows a transient message. Non-errors dismiss themselves after a few
     /// seconds — success that outlives its moment reads as stale — while
-    /// errors stay until the user dismisses them. The cap keeps a pathological
-    /// stream (a refresh loop over many unreachable repositories) from
-    /// stacking banners without end.
+    /// errors stay until the user dismisses them. Banners carrying a Reveal
+    /// action stay too: a restore finishing behind an open sheet would
+    /// otherwise expire its button before anyone could click it. The cap
+    /// keeps a pathological stream (a refresh loop over many unreachable
+    /// repositories) from stacking banners without end.
     func post(_ banner: Banner) {
         banners.insert(banner, at: 0)
         if banners.count > Self.bannerLimit {
@@ -144,7 +146,7 @@ final class AppModel {
             let oldestSuccess = banners.lastIndex(where: { !$0.isError }).flatMap { $0 > 0 ? $0 : nil }
             banners.remove(at: oldestSuccess ?? banners.count - 1)
         }
-        guard !banner.isError else { return }
+        guard !banner.isError, banner.revealPath == nil else { return }
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(8))
             guard let self else { return }

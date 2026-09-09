@@ -132,7 +132,9 @@ struct SettingsView: View {
 
             Section("Bandwidth") {
                 // Typeable, not steppers: a step-256 stepper made "50000"
-                // a roughly two-hundred-click affair.
+                // a roughly two-hundred-click affair. Values are clamped on
+                // commit; the assignment itself refreshes the field even when
+                // the clamp lands on the value it already held.
                 TextField(
                     "Upload limit (KiB/s, 0 for unlimited)",
                     value: clampedLimit($model.configuration.settings.uploadLimitKiBps),
@@ -162,17 +164,13 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    /// Keeps the typed value inside restic's accepted range without fighting
-    /// the keystroke: out-of-range text is corrected on commit, not per key.
+    /// Keeps the typed value inside restic's accepted range: out-of-range
+    /// input is corrected on commit, never mid-keystroke.
     private func clampedLimit(_ binding: Binding<Int>) -> Binding<Int> {
         Binding(
             get: { binding.wrappedValue },
             set: { binding.wrappedValue = min(1_000_000, max(0, $0)) }
         )
-    }
-
-    private func limitText(_ value: Int) -> String {
-        value == 0 ? "Unlimited" : "\(value) KiB/s"
     }
 }
 

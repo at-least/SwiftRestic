@@ -158,9 +158,10 @@ struct FindFilesView: View {
             .contextMenu(forSelectionType: Row.ID.self) { ids in
                 if let id = ids.first, ids.count == 1,
                    let row = rows.first(where: { $0.id == id }) {
+                    // The row is passed directly: a right-click on an
+                    // unselected row must not depend on selection state.
                     Button("Restore “\(row.match.name)”…") {
-                        selection = id
-                        restoreSelection()
+                        restoreSelection(row)
                     }
                 }
             }
@@ -203,7 +204,7 @@ struct FindFilesView: View {
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .help(model.isRestoring ? "The restore keeps running" : "Close")
-                Button("Restore Selected…") { restoreSelection() }
+                Button("Restore Selected…") { restoreSelection(selectedRow) }
                     .buttonStyle(.borderedProminent)
                     // Same grammar as the snapshot browser: Return offers the
                     // restore, always through the destination picker where
@@ -284,8 +285,10 @@ struct FindFilesView: View {
         selection = nil
     }
 
-    private func restoreSelection() {
-        guard let row = selectedRow, let repositoryID else { return }
+    /// Restores the given row through the destination picker, where the
+    /// overwrite warning lives.
+    private func restoreSelection(_ row: Row?) {
+        guard let row, let repositoryID else { return }
         guard let destination = FilePicker.chooseDirectory(
             message: "Choose where to restore “\(row.match.name)”. Restoring overwrites existing files at the destination.",
             prompt: "Restore"
