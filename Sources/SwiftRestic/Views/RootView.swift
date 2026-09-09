@@ -350,6 +350,9 @@ struct RootView: View {
         case "console": model.sidebarSelection = .console
         case "overview": model.sidebarSelection = .overview
         case "repositoryHooks": editingRepository = model.configuration.repositories.first
+        // Lets a capture run photograph the *new*-repository sheet, whose
+        // destination-before-kind picker only exists before a repository exists.
+        case "newRepository": editingRepository = Repository()
         default: break
         }
     }
