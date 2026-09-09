@@ -82,15 +82,21 @@ struct FindFilesView: View {
                 Button("Search", action: search)
                     .buttonStyle(.borderedProminent)
                     .disabled(!canSearch)
-                if isSearching {
-                    Button("Stop") { cancelSearch() }
-                    ProgressView().controlSize(.small)
-                }
+                // Occupying their space whether or not a search runs: appearing
+                // here would shift the row at the exact moment of a click.
+                Button("Stop") { cancelSearch() }
+                    .disabled(!isSearching)
+                    .opacity(isSearching ? 1 : 0)
+                    .accessibilityHidden(!isSearching)
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(isSearching ? 1 : 0)
+                    .accessibilityHidden(!isSearching)
             }
 
             ExpandableCaption(
                 summary: "Matching is case-insensitive and supports shell globs.",
-                detail: "Searching every snapshot walks each one, so it takes longer the more history a repository holds."
+                detail: "Searching every snapshot walks each one, so it takes longer the more history a repository holds. “Latest snapshot only” searches the repository's single newest snapshot — that snapshot may span other plans' folders, so it is not the newest per plan."
             )
         }
         .padding(12)
@@ -165,9 +171,21 @@ struct FindFilesView: View {
 
             HStack {
                 if !rows.isEmpty {
-                    Text("\(Format.plural(rows.count, "match")) across \(Format.plural(results.count, "snapshot"))")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(Format.plural(rows.count, "match")) across \(Format.plural(results.count, "snapshot"))")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        // When the listing was read: results carry snapshot
+                        // stamps from that moment, so a list that predates a
+                        // refresh in flight says so instead of passing as
+                        // current.
+                        if let loadedAt = repositoryID.flatMap({ model.snapshotsLoadedAt(for: $0) }) {
+                            Text("Snapshot list read \(Format.relative(loadedAt))")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .monospacedDigit()
+                        }
+                    }
                 }
                 Spacer()
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }

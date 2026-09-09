@@ -65,7 +65,11 @@ struct PlanEditorSheet: View {
             }
             .padding(12)
         }
-        .frame(width: 640, height: 580)
+        // Resizable, not fixed: forty pasted exclude patterns do not fit the
+        // default frame, and a fixed sheet turns its list into a mailbox slot
+        // at exactly the moment the user has the most to paste. The repository
+        // editor already works this way.
+        .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 580)
         .onAppear {
             if draft.repositoryID == nil {
                 draft.repositoryID = model.configuration.repositories.first?.id
@@ -124,12 +128,14 @@ struct PlanEditorSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             PathListEditor(
                 title: "Back up these folders and files",
+                systemImage: "folder.fill",
                 paths: $draft.sources,
                 placeholder: "/Users/you/Documents",
                 expandsTildeInPath: true
             )
             PathListEditor(
                 title: "Exclude patterns",
+                systemImage: "eye.slash",
                 paths: $draft.excludePatterns,
                 allowsBrowsing: false,
                 placeholder: "e.g. **/node_modules"  // a String variable, so not parsed as Markdown

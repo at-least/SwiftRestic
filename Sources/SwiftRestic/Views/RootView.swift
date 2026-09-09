@@ -431,21 +431,21 @@ struct WelcomeView: View {
         VStack(spacing: 22) {
             Spacer()
 
+            // The tinted chip the rest of the app uses (sheet headers, tiles,
+            // banners) at hero scale — the old gradient-and-shadow plate was
+            // the one ornamental surface in an otherwise flat, hairline world.
             Image(systemName: "externaldrive.badge.timemachine")
                 .font(.system(size: 34, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.tint)
                 .frame(width: 84, height: 84)
                 .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.accentColor, Color.accentColor.opacity(0.65)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                    Theme.tint.opacity(0.13),
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
                 )
-                .shadow(color: Color.accentColor.opacity(0.25), radius: 14, y: 6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Theme.tint.opacity(0.22), lineWidth: 1)
+                )
 
             // Title above tagline, both centred: the title sitting beside a
             // wrapping paragraph read as a layout accident on the app's very

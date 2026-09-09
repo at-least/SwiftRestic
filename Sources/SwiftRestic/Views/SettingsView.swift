@@ -15,7 +15,7 @@ struct SettingsView: View {
             resticTab(model: model)
                 .tabItem { Label("restic", systemImage: "terminal") }
         }
-        .frame(width: 560, height: 500)
+        .frame(minWidth: 560, idealWidth: 560, minHeight: 460, idealHeight: 500)
         .task { model.refreshLoginItemStatus() }
         // Approving a login item happens in System Settings, so the only signal
         // that it went through is the user coming back to this app.

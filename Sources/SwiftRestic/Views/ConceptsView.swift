@@ -89,6 +89,6 @@ struct ConceptsView: View {
             }
             .padding(12)
         }
-        .frame(width: 460, height: 520)
+        .frame(minWidth: 440, idealWidth: 460, minHeight: 480, idealHeight: 520)
     }
 }

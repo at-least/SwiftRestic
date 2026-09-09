@@ -361,6 +361,9 @@ struct OperationProgressView: View {
 /// efficiency tax.
 struct PathListEditor: View {
     let title: String
+    /// Names the list's meaning in the row: sources and excludes are not the
+    /// same thing, so they no longer wear the same icon.
+    var systemImage = "folder.badge.gearshape"
     @Binding var paths: [String]
     var allowsBrowsing = true
     var placeholder = "Add a pattern"
@@ -375,7 +378,7 @@ struct PathListEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: "folder.badge.gearshape")
+            Label(title, systemImage: systemImage)
                 .font(.headline)
 
             List(selection: $selection) {
@@ -387,7 +390,7 @@ struct PathListEditor: View {
                         .tag(path)
                 }
             }
-            .frame(minHeight: 110, maxHeight: 160)
+            .frame(minHeight: 110, maxHeight: 220)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)

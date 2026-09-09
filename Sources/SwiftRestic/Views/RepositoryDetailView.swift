@@ -147,12 +147,21 @@ struct RepositoryDetailView: View {
                         help: "The snapshot list has not finished loading."
                     )
                 }
-                StatTile(
-                    title: "Blobs",
-                    value: Format.count(stats?.totalBlobCount),
-                    systemImage: "square.stack.3d.up.fill",
-                    help: "Chunks of encrypted data stored in the repository — the pieces snapshots are made of"
-                )
+                // A word restic owns, defined in the Concepts sheet: the tile
+                // is a button so the definition is one click from the word,
+                // not a Help-menu hunt.
+                Button {
+                    NotificationCenter.default.post(name: .swiftResticShowConcepts, object: nil)
+                } label: {
+                    StatTile(
+                        title: "Blobs",
+                        value: Format.count(stats?.totalBlobCount),
+                        systemImage: "square.stack.3d.up.fill",
+                        help: "Chunks of encrypted data stored in the repository — the pieces snapshots are made of"
+                    )
+                }
+                .buttonStyle(HoverableButtonStyle())
+                .help("What “blobs” means — opens the concepts guide")
                 StatTile(
                     title: "Compression saved",
                     value: stats?.compressionSpaceSaving.map {

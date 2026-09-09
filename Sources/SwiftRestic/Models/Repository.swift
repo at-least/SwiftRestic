@@ -30,7 +30,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             case .s3: "cloud"
             case .b2: "flame"
             case .azure: "cube"
-            case .gcs: "cloud.fill"
+            // A distinct glyph, not `cloud.fill`: two clouds one weight apart
+            // collided in the sidebar at caption size.
+            case .gcs: "hexagon"
             case .rest: "network"
             case .rclone: "shippingbox"
             }

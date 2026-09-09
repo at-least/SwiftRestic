@@ -127,10 +127,17 @@ struct ResticConsoleView: View {
                 Button("Run") { console.run(with: model) }
                     .buttonStyle(.borderedProminent)
                     .disabled(!console.canRun)
-                if console.isRunning {
-                    Button("Stop") { console.cancelRunningCommand() }
-                    ProgressView().controlSize(.small)
-                }
+                // Always occupying their space, only visible while running:
+                // appearing here would shift the row at the exact moment of
+                // a click.
+                Button("Stop") { console.cancelRunningCommand() }
+                    .disabled(!console.isRunning)
+                    .opacity(console.isRunning ? 1 : 0)
+                    .accessibilityHidden(!console.isRunning)
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(console.isRunning ? 1 : 0)
+                    .accessibilityHidden(!console.isRunning)
             }
 
             ExpandableCaption(

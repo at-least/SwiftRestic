@@ -7,6 +7,7 @@ struct PlanDetailView: View {
 
     @State private var browsing: SnapshotBrowserTarget?
     @State private var comparing: SnapshotDiffTarget?
+    @State private var isConfirmingDeletion = false
 
     private var plan: BackupPlan? { model.plan(id: planID) }
 
@@ -50,6 +51,15 @@ struct PlanDetailView: View {
                     Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                         .labelStyle(.titleAndIcon)
                         .help("Change this plan's folders, schedule and retention")
+                    // Deletion was sidebar-context-menu-only, while the less
+                    // destructive repository removal sat in its pane's own
+                    // toolbar — the more destructive act had the worse
+                    // affordance.
+                    Button("Delete Plan", systemImage: "trash", role: .destructive) {
+                        isConfirmingDeletion = true
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .help("Remove this plan and its schedule; snapshots are not deleted")
                 }
             }
         }
@@ -60,6 +70,23 @@ struct PlanDetailView: View {
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target)
                 .environment(model)
+        }
+        .confirmationDialog(
+            "Delete “\(plan?.name ?? "")”?",
+            isPresented: $isConfirmingDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Plan", role: .destructive) {
+                if let plan { model.deletePlan(id: plan.id) }
+            }
+        } message: {
+            // Same promise the sidebar's dialog makes, plus the one thing this
+            // pane can see that the sidebar cannot: a run in flight.
+            Text(
+                model.isRunning(planID: planID)
+                    ? "The running backup will be stopped and recorded as cancelled. Snapshots already written to the repository are not deleted."
+                    : "The plan and its schedule are removed. Snapshots already written to the repository are not deleted."
+            )
         }
     }
 

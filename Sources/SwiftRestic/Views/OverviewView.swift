@@ -24,6 +24,7 @@ struct OverviewView: View {
                 BannerView(banner: banner)
             }
             statTiles
+            protectionCaveats
             volumeCard
             repositorySizeCard
             HStack(alignment: .top, spacing: Theme.Space.section) {
@@ -52,17 +53,20 @@ struct OverviewView: View {
     /// One plan's protection status as the tile can state it: whether the
     /// listing is known at all, whether it protects, and the line the tooltip
     /// owes the user when it is not.
-    private struct ProtectionRow {
+    private struct ProtectionRow: Identifiable {
+        let planID: UUID
         var isKnown: Bool
         var isProtected: Bool
         var didFail: Bool
         var tooltipLine: String
+        var id: UUID { planID }
     }
 
     private var protectionRows: [ProtectionRow] {
         model.configuration.plans.map { plan in
             guard let repositoryID = plan.repositoryID else {
                 return ProtectionRow(
+                    planID: plan.id,
                     isKnown: true, isProtected: false, didFail: false,
                     tooltipLine: "\(plan.name): no repository set"
                 )
@@ -73,15 +77,17 @@ struct OverviewView: View {
                 let line = latest.map {
                     "\(plan.name): latest \($0.time.formatted(.relative(presentation: .named)))"
                 } ?? "\(plan.name): no snapshots yet"
-                return ProtectionRow(isKnown: true, isProtected: latest != nil, didFail: false, tooltipLine: line)
+                return ProtectionRow(planID: plan.id, isKnown: true, isProtected: latest != nil, didFail: false, tooltipLine: line)
             case let .failed(message):
                 return ProtectionRow(
+                    planID: plan.id,
                     isKnown: false, isProtected: false, didFail: true,
                     tooltipLine: "\(plan.name): can't read snapshots — \(Format.firstSentence(message))"
                 )
             case .idle:
                 let checking = model.loadingSnapshots.contains(repositoryID)
                 return ProtectionRow(
+                    planID: plan.id,
                     isKnown: false, isProtected: false, didFail: false,
                     tooltipLine: "\(plan.name): \(checking ? "checking…" : "snapshot list not loaded yet")"
                 )
@@ -152,6 +158,26 @@ struct OverviewView: View {
         }
     }
 
+    /// Why the Protected tile reads "2 of 3" or "—", in visible text. The
+    /// tooltip carries the same lines, but a reason a screen-reader or a
+    /// non-hovering user cannot reach is a reason hidden.
+    @ViewBuilder
+    private var protectionCaveats: some View {
+        let unknown = protectionRows.filter { !$0.isKnown }
+        if !unknown.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(unknown) { row in
+                    Label(
+                        row.tooltipLine,
+                        systemImage: row.didFail ? "exclamationmark.triangle.fill" : "clock.arrow.circlepath"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(row.didFail ? Theme.warning : .secondary)
+                }
+            }
+        }
+    }
+
     private func showProblems() {
         model.activityShowsProblemsOnly = true
         onShowProblems()
@@ -176,14 +202,15 @@ struct OverviewView: View {
         } accessory: {
             // Several of the light-mode series colours sit below 3:1 against
             // the surface, so a non-colour reading of the same data is not
-            // optional.
+            // optional. Words, not icons: an icon-pair segment was findable
+            // by mouse and invisible to everyone else.
             Picker("Data view", selection: $showsTable) {
-                Image(systemName: "chart.bar").tag(false).accessibilityLabel("Chart")
-                Image(systemName: "tablecells").tag(true).accessibilityLabel("Table")
+                Text("Chart").tag(false)
+                Text("Table").tag(true)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 90)
+            .frame(width: 140)
         }
     }
 

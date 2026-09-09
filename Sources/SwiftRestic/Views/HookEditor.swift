@@ -105,7 +105,14 @@ struct HookEditor: View {
                     TextEditor(text: $hooks[index].command)
                         .font(.system(.callout, design: .monospaced))
                         .frame(minHeight: 70)
-                        .border(.quaternary)
+                        // The same hairline chip the path lists wear — the
+                        // dated `.border` read against the card language
+                        // everywhere else.
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+                        )
                     Text(verbatim: "Runs through /bin/sh with the app's own privileges, which are not sandboxed. Details of the run arrive as SWIFTRESTIC_* environment variables.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
