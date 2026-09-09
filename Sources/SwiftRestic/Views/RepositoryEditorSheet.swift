@@ -129,22 +129,44 @@ struct RepositoryEditorSheet: View {
         Form {
             Section {
                 TextField("Name", text: $draft.name, prompt: Text("Home backups"))
-                // Grouped by how a restic backend is actually reached, so the
-                // eight kinds read as three decisions instead of one wall.
-                Picker("Type", selection: $draft.kind) {
-                    Section("Local and direct") {
-                        Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
-                        Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
+                // A new repository asks where the backup will live before it
+                // asks which of the eight kinds — the highest-uncertainty
+                // decision of the form, made before the form has shown it
+                // will adapt. An existing repository keeps the direct picker:
+                // its owner already knows where it is.
+                if isNew {
+                    Picker("Where is it?", selection: destinationBinding) {
+                        ForEach(Destination.allCases) { destination in
+                            Text(destination.displayName).tag(destination)
+                        }
                     }
-                    Section("Cloud storage") {
-                        Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
-                        Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
-                        Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
-                        Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
+                    Picker("Kind", selection: $draft.kind) {
+                        ForEach(destinationBinding.wrappedValue.kinds) { kind in
+                            Text(kind.displayName).tag(kind)
+                        }
                     }
-                    Section("Gateways") {
-                        Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
-                        Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
+                    Text(draft.kind.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    // Grouped by how a restic backend is actually reached, so
+                    // the eight kinds read as three decisions instead of one wall.
+                    Picker("Type", selection: $draft.kind) {
+                        Section("Local and direct") {
+                            Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
+                            Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
+                        }
+                        Section("Cloud storage") {
+                            Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
+                            Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
+                            Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
+                            Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
+                        }
+                        Section("Gateways") {
+                            Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
+                            Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
+                        }
                     }
                 }
             }
@@ -293,6 +315,61 @@ struct RepositoryEditorSheet: View {
         }
     }
 
+    // MARK: - Backend choice
+
+    /// Where a repository lives — the first question a new one should answer.
+    /// The eight restic kinds are overwhelming as a first field; grouped by
+    /// destination they are one obvious choice followed by two or three.
+    private enum Destination: CaseIterable, Identifiable {
+        case thisMac
+        case anotherMachine
+        case cloud
+        case gateway
+
+        var id: Self { self }
+
+        var displayName: String {
+            switch self {
+            case .thisMac: "On this Mac"
+            case .anotherMachine: "On another machine"
+            case .cloud: "In the cloud"
+            case .gateway: "Through a gateway"
+            }
+        }
+
+        var kinds: [Repository.Kind] {
+            switch self {
+            case .thisMac: [.local]
+            case .anotherMachine: [.sftp, .rest]
+            case .cloud: [.s3, .b2, .azure, .gcs]
+            case .gateway: [.rclone]
+            }
+        }
+
+        static func destination(for kind: Repository.Kind) -> Destination {
+            switch kind {
+            case .local: .thisMac
+            case .sftp, .rest: .anotherMachine
+            case .s3, .b2, .azure, .gcs: .cloud
+            case .rclone: .gateway
+            }
+        }
+    }
+
+    /// Derived, never stored: a `@State` mirror of `draft.kind` would go stale
+    /// the moment a kind lands in a different destination. Setting the
+    /// destination only moves the kind when it truly changes address space —
+    /// a Form re-setting the same destination must not clobber a chosen kind.
+    private var destinationBinding: Binding<Destination> {
+        Binding(
+            get: { Destination.destination(for: draft.kind) },
+            set: { newValue in
+                guard !newValue.kinds.contains(draft.kind) else { return }
+                draft.kind = newValue.kinds[0]
+            }
+        )
+    }
+
     // MARK: - Logic
 
     private var canSubmit: Bool {
@@ -389,5 +466,23 @@ struct RepositoryEditorSheet: View {
         await model.flushSave()
         await model.refreshSnapshots(repositoryID: draft.id)
         dismiss()
+    }
+}
+
+/// The one-line orientation the new-repository picker owes each kind: the
+/// picker names the backend, this names what it is for. Editor-local teaching
+/// copy, so `Repository.Kind` stays a plain configuration model.
+extension Repository.Kind {
+    var summary: String {
+        switch self {
+        case .local: "A folder or an external drive attached to this Mac."
+        case .sftp: "A NAS or server you reach over SSH."
+        case .rest: "A machine running the restic REST server."
+        case .s3: "Amazon S3, Wasabi, MinIO, Cloudflare R2 and other S3-compatible services."
+        case .b2: "Backblaze B2 cloud storage."
+        case .azure: "Microsoft Azure Blob Storage."
+        case .gcs: "Google Cloud Storage."
+        case .rclone: "Any of rclone's many backends, through a remote you configure once."
+        }
     }
 }
