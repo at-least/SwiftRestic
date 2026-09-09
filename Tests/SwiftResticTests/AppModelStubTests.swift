@@ -531,6 +531,26 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    // MARK: - Maintenance
+
+    @Test("a check against a repository with no password records nothing at all")
+    func missingPasswordMaintenanceRecordsNothing() async throws {
+        let harness = try await makeHarness(mode: "default", password: nil)
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runMaintenance(id: harness.repository.id, task: .check, readDataPercent: 0)
+        await harness.model.waitForMaintenance(repositoryID: harness.repository.id)
+
+        // Not finished being set up: no run record and no "last checked" stamp.
+        // Either would claim a check happened — and a stamped failure would
+        // hide the repository from the scheduler for a full interval.
+        #expect(harness.model.configuration.runs.isEmpty)
+        #expect(harness.model.repository(id: harness.repository.id)?.maintenance.lastCheckAt == nil)
+        #expect(harness.model.banners.isEmpty)
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Deletion
 
     @Test("deleting a repository detaches and disables its plans")

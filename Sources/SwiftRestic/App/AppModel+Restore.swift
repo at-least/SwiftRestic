@@ -79,20 +79,15 @@ extension AppModel {
                 record.outcome = .succeeded
                 record.bytesProcessed = summary?.bytesRestored ?? 0
                 onSuccess()
-            } catch ResticError.cancelled {
-                record.outcome = .cancelled
-                record.failureMessage = self.cancellationMessage
-            } catch is CancellationError {
-                record.outcome = .cancelled
-                record.failureMessage = self.cancellationMessage
             } catch {
-                record.outcome = .failed
-                record.failureMessage = error.localizedDescription
-                self.post(Banner(
-                    title: "Restore failed",
-                    message: error.localizedDescription,
-                    isError: true
-                ))
+                record.record(error, cancellationMessage: self.cancellationMessage)
+                if record.outcome == .failed {
+                    self.post(Banner(
+                        title: "Restore failed",
+                        message: record.failureMessage ?? "",
+                        isError: true
+                    ))
+                }
             }
             record.finishedAt = .now
             self.append(record: record)

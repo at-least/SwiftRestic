@@ -139,12 +139,6 @@ extension AppModel {
                 }
                 record.outcome = .succeeded
             }
-        } catch ResticError.cancelled {
-            record.outcome = .cancelled
-            record.failureMessage = cancellationMessage
-        } catch is CancellationError {
-            record.outcome = .cancelled
-            record.failureMessage = cancellationMessage
         } catch ResticError.passwordMissing {
             // Not finished being set up. Record nothing and stamp nothing: the
             // scheduler skips this repository until a password exists, and the
@@ -152,8 +146,7 @@ extension AppModel {
             repositoriesMissingPassword.insert(repository.id)
             return
         } catch {
-            record.outcome = .failed
-            record.failureMessage = error.localizedDescription
+            record.record(error, cancellationMessage: cancellationMessage)
         }
 
         // Stamp the timestamp whatever happened. Leaving it unset on failure would

@@ -133,17 +133,8 @@ extension AppModel {
             }
 
             await refreshSnapshots(repositoryID: repository.id)
-        } catch ResticError.cancelled {
-            record.outcome = .cancelled
-            record.failureMessage = cancellationMessage
-            markPlanRun(plan.id, at: startedAt, succeeded: false)
-        } catch is CancellationError {
-            record.outcome = .cancelled
-            record.failureMessage = cancellationMessage
-            markPlanRun(plan.id, at: startedAt, succeeded: false)
         } catch {
-            record.outcome = .failed
-            record.failureMessage = error.localizedDescription
+            record.record(error, cancellationMessage: cancellationMessage)
             markPlanRun(plan.id, at: startedAt, succeeded: false)
         }
 

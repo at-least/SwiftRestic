@@ -105,3 +105,16 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 
     var duration: TimeInterval { max(0, finishedAt.timeIntervalSince(startedAt)) }
 }
+
+extension RunRecord {
+    /// Maps a thrown error onto the outcome fields: task cancellation — Swift's
+    /// or restic's own — reads as `.cancelled`, with the caller saying whether
+    /// it was the user's stop or the app quitting, and anything else as
+    /// `.failed` with the error's message. Callers keep their own side effects:
+    /// stamps, banners, bookkeeping.
+    mutating func record(_ error: Error, cancellationMessage: String) {
+        let cancelled = error is CancellationError || (error as? ResticError) == .cancelled
+        outcome = cancelled ? .cancelled : .failed
+        failureMessage = cancelled ? cancellationMessage : error.localizedDescription
+    }
+}
