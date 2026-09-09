@@ -113,6 +113,7 @@ struct RepositoryDetailView: View {
 
             let stats = model.repositoryStats[repositoryID]
             let snapshots = model.snapshots(for: repositoryID)
+            let listingOutcome = model.snapshotListingOutcome(for: repositoryID)
 
             HStack(spacing: Theme.Space.tile) {
                 StatTile(
@@ -120,11 +121,32 @@ struct RepositoryDetailView: View {
                     value: Format.bytes(stats?.totalSize),
                     systemImage: "internaldrive.fill"
                 )
-                StatTile(
-                    title: "Snapshots",
-                    value: Format.count(stats?.snapshotsCount ?? snapshots.count),
-                    systemImage: "camera.aperture"
-                )
+                // The count is a fact only once the listing has succeeded; a
+                // failed read wears "—" and says so in the tooltip instead of
+                // passing an empty repository off as the truth.
+                switch listingOutcome {
+                case .loaded:
+                    StatTile(
+                        title: "Snapshots",
+                        value: Format.count(stats?.snapshotsCount ?? snapshots.count),
+                        systemImage: "camera.aperture"
+                    )
+                case let .failed(message):
+                    StatTile(
+                        title: "Snapshots",
+                        value: "—",
+                        systemImage: "camera.aperture",
+                        hue: Theme.warning,
+                        help: message
+                    )
+                case .idle:
+                    StatTile(
+                        title: "Snapshots",
+                        value: "—",
+                        systemImage: "camera.aperture",
+                        help: "The snapshot list has not finished loading."
+                    )
+                }
                 StatTile(
                     title: "Blobs",
                     value: Format.count(stats?.totalBlobCount),
@@ -161,13 +183,25 @@ struct RepositoryDetailView: View {
                 SnapshotTable(
                     snapshots: snapshots,
                     isLoading: model.loadingSnapshots.contains(repositoryID),
+                    loadOutcome: listingOutcome,
                     onBrowse: { snapshot in
                         browsing = SnapshotBrowserTarget(repositoryID: repositoryID, snapshot: snapshot)
                     },
                     onCompare: { snapshot in
                         comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
+                    },
+                    onRetry: {
+                        Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                     }
                 )
+            } accessory: {
+                if let loadedAt = model.snapshotsLoadedAt(for: repositoryID),
+                   !model.loadingSnapshots.contains(repositoryID) {
+                    Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
 
             HStack {

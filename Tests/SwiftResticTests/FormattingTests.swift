@@ -122,4 +122,26 @@ struct FormattingTests {
         // The per-second suffix is our own literal, not the formatter's.
         #expect(Format.rate(bytes: 1_000, over: 2).hasSuffix("/s"))
     }
+
+    @Test("firstSentence cuts at the first real sentence boundary")
+    func firstSentenceCuts() {
+        #expect(
+            Format.firstSentence("Repository /Volumes/Photos is not writable: read-only file system")
+                == "Repository /Volumes/Photos is not writable: read-only file system",
+            "no boundary means the whole message"
+        )
+        #expect(
+            Format.firstSentence("Cannot reach nas.local: connection refused. Check the host and try again.")
+                == "Cannot reach nas.local: connection refused",
+            "a period followed by a space is a boundary"
+        )
+        #expect(
+            Format.firstSentence("0.5 GB were written. Done.")
+                == "0.5 GB were written",
+            "a decimal point is not a boundary, but the real sentence end still cuts"
+        )
+        #expect(Format.firstSentence("first\nsecond") == "first", "a newline is a boundary")
+        #expect(Format.firstSentence("  padded  ") == "padded", "whitespace is trimmed")
+        #expect(Format.firstSentence("") == "", "empty in, empty out")
+    }
 }

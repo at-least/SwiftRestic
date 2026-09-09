@@ -24,6 +24,17 @@ enum Format {
         return "\(count.formatted(.number)) \(noun)"
     }
 
+    /// The first sentence of a longer message — the part a scan surface can
+    /// afford to show, with the rest one selection or tooltip away. Splits on
+    /// a period followed by whitespace (so "0.5 GB" survives), a newline, or
+    /// a CJK full stop.
+    static func firstSentence(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cuts = [". ", "\n", "。"].compactMap { trimmed.range(of: $0)?.lowerBound }
+        guard let cut = cuts.min() else { return trimmed }
+        return String(trimmed[..<cut])
+    }
+
     static func duration(_ seconds: TimeInterval?) -> String {
         guard let seconds, seconds.isFinite, seconds >= 0 else { return "—" }
         if seconds < 1 { return "<1s" }

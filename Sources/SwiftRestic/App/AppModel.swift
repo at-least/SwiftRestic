@@ -61,6 +61,23 @@ enum SidebarItem: Hashable {
     case activity
 }
 
+/// The last settled outcome of a repository's snapshot listing.
+///
+/// Deliberately not the in-flight state — `loadingSnapshots` owns that. A
+/// refresh that starts while a repository is in `failed` keeps the failure
+/// visible until it settles, so a background refresh cycle cannot make the
+/// error row flicker to a spinner and back every five minutes.
+enum SnapshotListingOutcome: Equatable {
+    /// Never loaded: the app is still bootstrapping, or the refresh has not
+    /// been attempted for this repository.
+    case idle
+    case loaded
+    /// The last refresh could not read the repository. The message is what
+    /// the surfaces show instead of a snapshot count, and stale rows (when a
+    /// previous listing succeeded) stay visible next to it.
+    case failed(String)
+}
+
 /// The single source of truth the SwiftUI views observe.
 ///
 /// Everything that touches persisted state happens here on the main actor;
@@ -85,6 +102,13 @@ final class AppModel {
     private(set) var snapshots: [UUID: [Snapshot]] = [:]
     private(set) var repositoryStats: [UUID: RepositoryStats] = [:]
     private(set) var loadingSnapshots: Set<UUID> = []
+    /// The last settled listing outcome per repository. Kept apart from the
+    /// rows themselves: a failed refresh must read as "unknown", never as the
+    /// empty list it used to be folded into.
+    private(set) var snapshotListingOutcomes: [UUID: SnapshotListingOutcome] = [:]
+    /// When the listing last succeeded. A freshness stamp the surfaces show
+    /// so a number can always be traced to the moment it was read.
+    private(set) var snapshotsLoadedAt: [UUID: Date] = [:]
     /// Repositories with no password in the Keychain yet. Upkeep is not scheduled
     /// for these: there is nothing to run, and stamping a "last checked" time for
     /// a check that never happened would be a lie on the repository screen.
@@ -387,6 +411,9 @@ final class AppModel {
         }
         snapshots[id] = nil
         repositoryStats[id] = nil
+        snapshotListingOutcomes[id] = nil
+        snapshotsLoadedAt[id] = nil
+        repositoriesMissingPassword.remove(id)
         Task { [secrets] in await secrets.remove(id) }
     }
 
@@ -769,24 +796,71 @@ final class AppModel {
         do {
             let service = try service()
             let context = try await context(for: repository)
-            snapshots[repositoryID] = try await service.snapshots(context, timeout: Self.refreshTimeout)
-            repositoryStats[repositoryID] = try? await service.stats(context, timeout: Self.refreshTimeout)
+            let listing = try await service.snapshots(context, timeout: Self.refreshTimeout)
+            let stats = try? await service.stats(context, timeout: Self.refreshTimeout)
+            // The repository can be deleted while its refresh is in flight; a
+            // removed entry gets no state, no rows and no banner.
+            guard configuration.repository(id: repositoryID) != nil else { return }
+            snapshots[repositoryID] = listing
+            repositoryStats[repositoryID] = stats
+            snapshotListingOutcomes[repositoryID] = .loaded
+            snapshotsLoadedAt[repositoryID] = .now
             repositoriesMissingPassword.remove(repositoryID)
         } catch ResticError.passwordMissing {
             // Expected before the user has entered a password; not worth a banner.
+            // The listing surfaces stay honest through the outcome: "waiting for
+            // a password" is a state a user can fix, "no snapshots" is not.
+            guard configuration.repository(id: repositoryID) != nil else { return }
             repositoriesMissingPassword.insert(repositoryID)
-            snapshots[repositoryID] = []
+            snapshotListingOutcomes[repositoryID] = .failed(
+                "Waiting for a repository password — add it in the repository settings to read this repository."
+            )
         } catch let ResticError.commandFailed(code, _, _) where code == 10 {
-            // Repository not initialised yet.
-            snapshots[repositoryID] = []
+            // restic's "nothing here yet" — the expected state between adding a
+            // repository and its first init, so it reads as loaded-and-empty.
+            // But when an earlier listing had rows, "does not exist" means the
+            // repository vanished (an unmounted volume, a moved folder), and
+            // emptying the list would trade the user's history for a lie.
+            guard configuration.repository(id: repositoryID) != nil else { return }
+            if (snapshots[repositoryID] ?? []).isEmpty {
+                snapshots[repositoryID] = []
+                snapshotListingOutcomes[repositoryID] = .loaded
+                snapshotsLoadedAt[repositoryID] = .now
+            } else {
+                snapshotListingOutcomes[repositoryID] = .failed(
+                    "The repository is missing at its saved location — reconnect the volume or update its path in the repository settings."
+                )
+                post(Banner(
+                    title: "Could not read “\(repository.name)”",
+                    message: "The repository is missing at \(repository.resticRepositoryString).",
+                    isError: true
+                ))
+            }
         } catch {
-            snapshots[repositoryID] = []
+            // Keep whatever an earlier successful listing produced — stale rows
+            // beside an error are worth more to a backup user than a blank card
+            // that reads as "nothing backed up".
+            guard configuration.repository(id: repositoryID) != nil else { return }
+            snapshotListingOutcomes[repositoryID] = .failed(error.localizedDescription)
             post(Banner(
                 title: "Could not read “\(repository.name)”",
                 message: error.localizedDescription,
                 isError: true
             ))
         }
+    }
+
+    /// The listing outcome a surface should render for a repository, `.idle`
+    /// when there is none (including the "no repository" case).
+    func snapshotListingOutcome(for repositoryID: UUID?) -> SnapshotListingOutcome {
+        guard let repositoryID else { return .idle }
+        return snapshotListingOutcomes[repositoryID] ?? .idle
+    }
+
+    /// When the repository's listing last succeeded, for freshness stamps.
+    func snapshotsLoadedAt(for repositoryID: UUID?) -> Date? {
+        guard let repositoryID else { return nil }
+        return snapshotsLoadedAt[repositoryID]
     }
 
     func snapshots(for repositoryID: UUID?, planID: UUID? = nil) -> [Snapshot] {

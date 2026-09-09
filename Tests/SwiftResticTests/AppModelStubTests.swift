@@ -248,6 +248,132 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    // MARK: - Snapshot listing states
+
+    @Test("a successful refresh settles the listing as loaded and stamps freshness")
+    func successfulRefreshSettlesLoaded() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .loaded)
+        #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) != nil)
+        #expect(harness.model.snapshots(for: harness.repository.id).count == 1)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a missing password settles the listing as failed, without a banner")
+    func missingPasswordSettlesFailed() async throws {
+        let harness = try await makeHarness(mode: "snaprows", password: nil)
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+            Issue.record("expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
+            return
+        }
+        #expect(message.contains("password"))
+        #expect(harness.model.banners.isEmpty, "a missing password is a normal state, not an error banner")
+        #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) == nil)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("an uninitialised repository settles as loaded and empty")
+    func uninitialisedSettlesLoadedEmpty() async throws {
+        let harness = try await makeHarness(mode: "missing")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .loaded)
+        #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
+        #expect(harness.model.banners.isEmpty)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a failed refresh keeps the last successful listing and its freshness stamp")
+    func failedRefreshKeepsStaleListing() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let loadedAt = try #require(harness.model.snapshotsLoadedAt(for: harness.repository.id))
+        #expect(harness.model.snapshots(for: harness.repository.id).count == 1)
+
+        // Flip the stub to failing and refresh again through the same path a
+        // Retry button takes.
+        var broken = harness.repository
+        broken.extraEnvironment["SWIFTRESTIC_STUB"] = "plainfail"
+        await harness.model.upsert(repository: broken, password: nil, providerSecret: nil)
+        await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+
+        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+            Issue.record("expected a failed outcome after the broken refresh")
+            return
+        }
+        #expect(message.contains("config file"))
+        #expect(harness.model.snapshots(for: harness.repository.id).count == 1, "stale rows must survive a failed refresh")
+        #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) == loadedAt, "freshness is the last success, not the last attempt")
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a repository that vanishes after listing fails instead of reading as empty")
+    func vanishedRepositoryKeepsStaleListing() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        #expect(harness.model.snapshots(for: harness.repository.id).count == 1)
+        let loadedAt = try #require(harness.model.snapshotsLoadedAt(for: harness.repository.id))
+
+        // restic's exit 10 ("does not exist") against a repository that has
+        // listed before: an unmounted volume or moved folder, not an empty
+        // repository.
+        var vanished = harness.repository
+        vanished.extraEnvironment["SWIFTRESTIC_STUB"] = "missing"
+        await harness.model.upsert(repository: vanished, password: nil, providerSecret: nil)
+        await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+
+        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+            Issue.record("expected a failed outcome for a vanished repository, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
+            return
+        }
+        #expect(message.contains("missing"))
+        #expect(harness.model.snapshots(for: harness.repository.id).count == 1, "stale rows must survive")
+        #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) == loadedAt)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a refresh that outlives its repository settles nothing")
+    func refreshAfterDeletionSettlesNothing() async throws {
+        // "missing" answers exit 10 quickly, but the refresh can still race a
+        // deletion: whichever way the command lands, the removed repository
+        // must come back with no rows, no outcome and no banner.
+        let harness = try await makeHarness(mode: "missing")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.deleteRepository(id: harness.repository.id)
+        await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+
+        #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
+        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .idle)
+        #expect(harness.model.banners.isEmpty)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("deleting a repository clears its listing state")
+    func deletingRepositoryClearsListingState() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.deleteRepository(id: harness.repository.id)
+
+        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .idle)
+        #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) == nil)
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Run history
 
     @Test("the run history is capped at twenty even when every run succeeds")

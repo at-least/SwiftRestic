@@ -49,29 +49,76 @@ struct OverviewView: View {
 
     // MARK: - Tiles
 
-    private var statTiles: some View {
-        let latestSnapshots = model.configuration.plans.map { plan in
-            model.snapshots(for: plan.repositoryID, planID: plan.id).first
+    /// One plan's protection status as the tile can state it: whether the
+    /// listing is known at all, whether it protects, and the line the tooltip
+    /// owes the user when it is not.
+    private struct ProtectionRow {
+        var isKnown: Bool
+        var isProtected: Bool
+        var didFail: Bool
+        var tooltipLine: String
+    }
+
+    private var protectionRows: [ProtectionRow] {
+        model.configuration.plans.map { plan in
+            guard let repositoryID = plan.repositoryID else {
+                return ProtectionRow(
+                    isKnown: true, isProtected: false, didFail: false,
+                    tooltipLine: "\(plan.name): no repository set"
+                )
+            }
+            let latest = model.snapshots(for: repositoryID, planID: plan.id).first
+            switch model.snapshotListingOutcome(for: repositoryID) {
+            case .loaded:
+                let line = latest.map {
+                    "\(plan.name): latest \($0.time.formatted(.relative(presentation: .named)))"
+                } ?? "\(plan.name): no snapshots yet"
+                return ProtectionRow(isKnown: true, isProtected: latest != nil, didFail: false, tooltipLine: line)
+            case let .failed(message):
+                return ProtectionRow(
+                    isKnown: false, isProtected: false, didFail: true,
+                    tooltipLine: "\(plan.name): can't read snapshots — \(Format.firstSentence(message))"
+                )
+            case .idle:
+                let checking = model.loadingSnapshots.contains(repositoryID)
+                return ProtectionRow(
+                    isKnown: false, isProtected: false, didFail: false,
+                    tooltipLine: "\(plan.name): \(checking ? "checking…" : "snapshot list not loaded yet")"
+                )
+            }
         }
-        let plansWithSnapshots = latestSnapshots.compactMap { $0 }.count
-        let totalPlans = model.configuration.plans.count
+    }
+
+    private var statTiles: some View {
+        // Protection is a claim about facts on disk, so only plans whose
+        // snapshot listing has actually succeeded take part in the count —
+        // on both sides of "of". A plan whose listing failed or has not run
+        // yet is neither protected nor unprotected: the tile tint warns, and
+        // the tooltip names exactly which plan could not be checked, instead
+        // of the number silently reading it as "unprotected".
+        let rows = protectionRows
+        let knownRows = rows.filter(\.isKnown)
+        let protectedCount = knownRows.filter(\.isProtected).count
+        let anyFailed = rows.contains(where: \.didFail)
         let problems = OverviewMetrics.problemCount(
             runs: model.configuration.runs,
             since: .now.addingTimeInterval(-7 * 86_400)
         )
         return HStack(spacing: Theme.Space.tile) {
-            // Protection is coverage, not bytes: a sum nobody can act on
-            // ("5 bytes protected") reads as nonsense on the dashboard's
-            // first tile. Per-plan detail lives in the tooltip.
+            // Coverage, not bytes: a sum nobody can act on ("5 bytes
+            // protected") reads as nonsense on the dashboard's first tile.
+            // "—" is reserved for the moment nothing is known yet.
             StatTile(
                 title: "Protected",
-                value: totalPlans == 0
+                value: knownRows.isEmpty
                     ? "—"
-                    : "\(plansWithSnapshots) of \(totalPlans)",
+                    : "\(protectedCount) of \(knownRows.count)",
                 systemImage: "lock.shield",
-                help: totalPlans == 0
+                hue: anyFailed ? Theme.warning : Theme.tint,
+                help: rows.isEmpty
                     ? "Add a backup plan to start protecting your data."
-                    : helpLines(latestSnapshots: latestSnapshots)
+                    : (rows.map(\.tooltipLine) + (anyFailed ? ["Retry the failed repository from its page."] : []))
+                        .joined(separator: "\n")
             )
             StatTile(
                 title: "Repositories",
@@ -103,20 +150,6 @@ struct OverviewView: View {
                 )
             }
         }
-    }
-
-    /// One line per plan for the Protected tile's tooltip: which plans have
-    /// snapshots and how fresh the latest one is.
-    private func helpLines(latestSnapshots: [Snapshot?]) -> String {
-        guard !model.configuration.plans.isEmpty else {
-            return "Add a backup plan to start protecting your data."
-        }
-        return zip(model.configuration.plans, latestSnapshots)
-            .map { plan, snapshot in
-                snapshot.map { "\(plan.name): latest \($0.time.formatted(.relative(presentation: .named)))" }
-                    ?? "\(plan.name): no snapshots yet"
-            }
-            .joined(separator: "\n")
     }
 
     private func showProblems() {

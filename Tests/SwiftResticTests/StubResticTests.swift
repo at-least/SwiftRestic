@@ -162,6 +162,21 @@ struct StubRestic: Sendable {
                 echo "Fatal: unable to open config file" >&2
                 exit 17
                 ;;
+            snaprows)
+                # One well-formed snapshot for `snapshots`, empty answers for
+                # everything else: drives the "a listing that succeeded once,
+                # then a refresh failed" scenarios at the model level.
+                trace "snaprows-arm"
+                case " $* " in
+                    *" snapshots "*)
+                        echo '[{"id":"feedface00000000","short_id":"feedface","time":"2026-01-02T03:04:05Z","hostname":"stub","paths":["/src"],"tags":["stub"]}]'
+                        ;;
+                    *)
+                        echo "{}"
+                        ;;
+                esac
+                exit 0
+                ;;
             *)
                 # Everything the fault tests do not care about gets an empty answer.
                 trace "default-arm"
