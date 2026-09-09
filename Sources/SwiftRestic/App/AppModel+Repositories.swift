@@ -62,6 +62,12 @@ extension AppModel {
     /// and double bookkeeping would double the records. Cancellation is
     /// cooperative, so a backup already past restic (in retention or the
     /// closing refresh) still settles as a success — its snapshot is real.
+    ///
+    /// Known disclosure gap: only a cancelled *restore* is announced (banner
+    /// plus the removal-dialog clause in `removalConsequences`). Cancelled
+    /// backups, maintenance and console commands land in the run history and
+    /// menu lines but are not disclosed by the dialogs — same defect class,
+    /// still open.
     func deleteRepository(id: UUID) {
         for plan in configuration.plans where plan.repositoryID == id {
             planTasks[plan.id]?.cancel()
