@@ -125,6 +125,14 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowConcepts)) { _ in
             isShowingConcepts = true
         }
+        .onChange(of: model.banners) { old, new in
+            // The VoiceOver channel for transient messages: announced once,
+            // here at the root, when the message lands — never per rendering
+            // pane, so switching panes cannot re-speak a banner still on
+            // screen, and the queue's dismissals say nothing.
+            guard new.count > old.count, let banner = new.first else { return }
+            AccessibilityNotification.Announcement("\(banner.title). \(banner.message)").post()
+        }
     }
 
     // MARK: - Sidebar

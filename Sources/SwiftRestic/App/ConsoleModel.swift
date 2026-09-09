@@ -28,6 +28,12 @@ final class ConsoleModel {
     /// is up, and the history must record what was confirmed, not what got
     /// typed afterwards.
     var pendingDestructive: PendingCommand?
+    /// Where ↑/↓ are walking in `history`. `nil` means the field shows the
+    /// user's own words, not a recalled entry.
+    private var historyIndex: Int?
+    /// What the field held when the recall walk started, so ↓ past the newest
+    /// entry returns to the user's draft instead of an empty field.
+    private var recalledDraft: String?
     private var runTask: Task<Void, Never>?
 
     func appear(with app: AppModel) {
@@ -45,6 +51,8 @@ final class ConsoleModel {
     func run(with app: AppModel) {
         let arguments = CommandLineTokenizer.tokenize(commandText)
         guard !arguments.isEmpty, repositoryID != nil else { return }
+        // Submitting ends any recall walk: the field belongs to the user again.
+        endRecall()
         if CommandLineTokenizer.isDestructive(arguments) {
             pendingDestructive = PendingCommand(arguments: arguments, text: commandText)
         } else {
@@ -64,7 +72,40 @@ final class ConsoleModel {
 
     func removeFromHistory(_ entry: String, app: AppModel) {
         history.removeAll { $0 == entry }
+        endRecall()
         persistHistory(in: app)
+    }
+
+    /// The entry ↑ should show: the newest history entry first, then one
+    /// older per press, clamped at the oldest. `current` is what the field
+    /// holds right now — the draft remembered before the first recall.
+    func recallPrevious(current: String) -> String? {
+        guard !history.isEmpty else { return nil }
+        if let index = historyIndex {
+            historyIndex = min(index + 1, history.count - 1)
+        } else {
+            recalledDraft = current
+            historyIndex = 0
+        }
+        return history[historyIndex!]
+    }
+
+    /// The entry ↓ should show: one step newer per press, and past the newest
+    /// back to the draft the field held when the walk started.
+    func recallNext() -> String? {
+        guard let index = historyIndex else { return nil }
+        if index == 0 {
+            let draft = recalledDraft
+            endRecall()
+            return draft
+        }
+        historyIndex = index - 1
+        return history[historyIndex!]
+    }
+
+    private func endRecall() {
+        historyIndex = nil
+        recalledDraft = nil
     }
 
     /// Stops a running command. The in-flight task still unwinds naturally —
@@ -103,6 +144,9 @@ final class ConsoleModel {
         history.removeAll { $0 == entry }
         history.insert(entry, at: 0)
         history = Array(history.prefix(20))
+        // An append shifts every index a walk in progress points at; end the
+        // walk rather than let ↑ land on a different command than it showed.
+        endRecall()
         persistHistory(in: app)
     }
 

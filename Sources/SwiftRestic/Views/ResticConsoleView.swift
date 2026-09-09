@@ -14,6 +14,17 @@ struct ResticConsoleView: View {
             historySidebar
             Divider()
             VStack(spacing: 0) {
+                // The shared banner queue, like every other pane: the console
+                // is a first-class pane, so a repository failure while it is
+                // open must not be the one message with nowhere to land.
+                if !model.banners.isEmpty {
+                    VStack(spacing: 8) {
+                        ForEach(model.banners) { banner in
+                            BannerView(banner: banner)
+                        }
+                    }
+                    .padding([.horizontal, .top], 12)
+                }
                 controls
                 Divider()
                 outputPane
@@ -96,6 +107,23 @@ struct ResticConsoleView: View {
                     .font(.system(.body, design: .monospaced))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { console.run(with: model) }
+                    // Terminal reflexes: ↑ walks into the history, ↓ walks
+                    // back out to what was being typed. The model owns the
+                    // walk; an .ignored lets the field keep its own handling.
+                    .onKeyPress(.upArrow) {
+                        if let entry = console.recallPrevious(current: console.commandText) {
+                            console.commandText = entry
+                            return .handled
+                        }
+                        return .ignored
+                    }
+                    .onKeyPress(.downArrow) {
+                        if let entry = console.recallNext() {
+                            console.commandText = entry
+                            return .handled
+                        }
+                        return .ignored
+                    }
                 Button("Run") { console.run(with: model) }
                     .buttonStyle(.borderedProminent)
                     .disabled(!console.canRun)

@@ -128,4 +128,63 @@ struct ConsoleModelTests {
         #expect(console.history.isEmpty)
         #expect(app.configuration.settings.consoleHistory.isEmpty)
     }
+
+    // MARK: - Arrow recall
+
+    /// Seeds history through real runs, the only writer the model allows.
+    private func seedHistory(
+        _ commands: [String],
+        app: AppModel,
+        console: ConsoleModel
+    ) async {
+        for command in commands {
+            console.commandText = command
+            console.run(with: app)
+            await console.waitForCommand()
+        }
+    }
+
+    @Test("↑ walks the history newest first and clamps at the oldest; ↓ returns to the draft")
+    func arrowRecallWalksHistoryAndReturnsToDraft() async throws {
+        let (app, console, _) = try makeHarness()
+        console.appear(with: app)
+        await seedHistory(["snapshots --compact", "version"], app: app, console: console)
+        #expect(console.history.first == "version")
+
+        // ↑ from a typed draft takes the newest entry, then walks older…
+        #expect(console.recallPrevious(current: "ls") == "version")
+        #expect(console.recallPrevious(current: "version") == "snapshots --compact")
+        // …and clamps at the oldest instead of wrapping.
+        #expect(console.recallPrevious(current: "snapshots --compact") == "snapshots --compact")
+
+        // ↓ walks back toward the field's own words.
+        #expect(console.recallNext() == "version")
+        #expect(console.recallNext() == "ls")
+        // With nothing recalled, ↓ has nothing to offer.
+        #expect(console.recallNext() == nil)
+    }
+
+    @Test("submitting a command ends the recall walk")
+    func submittingEndsRecall() async throws {
+        let (app, console, _) = try makeHarness()
+        console.appear(with: app)
+        await seedHistory(["version"], app: app, console: console)
+
+        #expect(console.recallPrevious(current: "ls") == "version")
+        console.commandText = "version"
+        console.run(with: app)
+        await console.waitForCommand()
+
+        // The walk is over: ↓ must not conjure a recalled entry.
+        #expect(console.recallNext() == nil)
+        // And ↑ starts fresh from the newest entry again.
+        #expect(console.recallPrevious(current: console.commandText) == "version")
+    }
+
+    @Test("an empty history has nothing to recall")
+    func emptyHistoryRecallsNothing() throws {
+        let (_, console, _) = try makeHarness()
+        #expect(console.recallPrevious(current: "ls") == nil)
+        #expect(console.recallNext() == nil)
+    }
 }

@@ -109,6 +109,9 @@ struct BannerView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            // Title and message read as one utterance; the dismiss button
+            // stays its own element beside them.
+            .accessibilityElement(children: .combine)
             Spacer()
             if isDismissible {
                 Button {
@@ -118,6 +121,7 @@ struct BannerView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Dismiss")
+                .accessibilityLabel("Dismiss")
             }
         }
         .padding(Theme.Space.cardPadding)

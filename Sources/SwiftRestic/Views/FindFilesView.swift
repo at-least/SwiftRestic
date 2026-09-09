@@ -17,6 +17,9 @@ struct FindFilesView: View {
     @State private var errorMessage: String?
     @State private var hasSearched = false
     @State private var searchTask: Task<Void, Never>?
+    /// The sheet exists to answer one question, so the field that receives it
+    /// takes focus on arrival — typing starts immediately.
+    @FocusState private var patternFieldIsFocused: Bool
 
     private struct Row: Identifiable {
         var id: String { "\(snapshotID)/\(match.path)" }
@@ -36,6 +39,7 @@ struct FindFilesView: View {
         .frame(minWidth: 760, minHeight: 480)
         .onAppear {
             if repositoryID == nil { repositoryID = model.configuration.repositories.first?.id }
+            patternFieldIsFocused = true
         }
         .onDisappear { searchTask?.cancel() }
     }
@@ -71,6 +75,7 @@ struct FindFilesView: View {
                     prompt: Text(verbatim: "File name or pattern, e.g. *.key or invoice*")
                 )
                 .textFieldStyle(.roundedBorder)
+                .focused($patternFieldIsFocused)
                 .onSubmit(search)
                 Toggle("Latest snapshot only", isOn: $latestOnly)
                     .toggleStyle(.checkbox)
@@ -169,6 +174,10 @@ struct FindFilesView: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Restore Selected…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
+                    // Same grammar as the snapshot browser: Return offers the
+                    // restore, always through the destination picker where
+                    // the overwrite warning lives.
+                    .keyboardShortcut(.defaultAction)
                     .disabled(selectedRow == nil || model.isRestoring)
             }
         }
