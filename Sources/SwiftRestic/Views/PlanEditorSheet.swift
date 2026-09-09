@@ -32,6 +32,13 @@ struct PlanEditorSheet: View {
             Divider()
 
             HStack {
+                // A greyed Save that spans five tabs of validation owes the
+                // user the reason at the button, not a hunt across tabs.
+                if let reason = missingRequirement {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
@@ -85,6 +92,21 @@ struct PlanEditorSheet: View {
         } else {
             dismiss()
         }
+    }
+
+    /// The first requirement the plan does not meet yet, in the order the
+    /// tabs present them — the same one `isConfigurationComplete` checks.
+    private var missingRequirement: String? {
+        if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Name the plan to save it."
+        }
+        if draft.repositoryID == nil {
+            return "Choose a repository to save it."
+        }
+        if draft.sources.isEmpty {
+            return "Add at least one folder to back up."
+        }
+        return nil
     }
 
     private var generalTab: some View {

@@ -63,6 +63,14 @@ struct RepositoryEditorSheet: View {
             Divider()
 
             HStack {
+                // A greyed Save or Test Connection owes the user the reason
+                // at the button — a mismatched confirm password must not be
+                // a hunt across fields.
+                if let reason = missingRequirement {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Button("Test Connection") { Task { await test(initializeIfMissing: false) } }
                     .disabled(!canSubmit || isWorking)
                 if isWorking { ProgressView().controlSize(.small) }
@@ -293,6 +301,41 @@ struct RepositoryEditorSheet: View {
             return !password.isEmpty && password == confirmPassword
         }
         return true
+    }
+
+    /// The first requirement the sheet does not meet yet — the same chain
+    /// `canSubmit` checks, spelled out where the buttons are.
+    private var missingRequirement: String? {
+        if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Name the repository to save it."
+        }
+        switch draft.kind {
+        case .local:
+            if draft.localPath.isEmpty { return "Choose a folder to save it." }
+        case .sftp:
+            if draft.sftpHost.isEmpty || draft.sftpPath.isEmpty { return "Enter the host and path to save it." }
+        case .s3:
+            if draft.s3Bucket.isEmpty || draft.s3AccessKeyID.isEmpty { return "Enter the bucket and access key ID to save it." }
+        case .b2:
+            if draft.b2Bucket.isEmpty || draft.b2AccountID.isEmpty { return "Enter the bucket and account ID to save it." }
+        case .azure:
+            if draft.azureContainer.isEmpty || draft.azureAccountName.isEmpty { return "Enter the container and account name to save it." }
+        case .gcs:
+            if draft.gcsBucket.isEmpty || draft.gcsCredentialsPath.isEmpty { return "Enter the bucket and service account file to save it." }
+        case .rest:
+            if draft.restURL.isEmpty { return "Enter the server URL to save it." }
+        case .rclone:
+            if draft.rcloneRemote.isEmpty { return "Enter the rclone remote to save it." }
+        }
+        if isNew {
+            if password.isEmpty {
+                return "Set a repository password to save it."
+            }
+            if password != confirmPassword {
+                return "The passwords do not match yet."
+            }
+        }
+        return nil
     }
 
     private func loadExistingSecrets() async {

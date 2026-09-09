@@ -89,6 +89,11 @@ struct ActivityView: View {
                             // A failure's first sentence is the one thing the
                             // user came for; never cut it at the scan surface.
                             .lineLimit(run.failureMessage != nil ? 2 : 1)
+                            // Failure messages lead with the subject ("which
+                            // repository") and end with the verdict ("why").
+                            // Tail truncation removed exactly the verdict, so
+                            // a long path now sacrifices its middle instead.
+                            .truncationMode(run.failureMessage != nil ? .middle : .tail)
                     }
                 }
                 // A full-height table that outlives its records paints striped
