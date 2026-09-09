@@ -73,8 +73,15 @@ struct SnapshotDiffView: View {
 
             HStack(spacing: 8) {
                 Picker("Compared with", selection: $olderID) {
-                    ForEach(candidates) { snapshot in
-                        Text(comparisonLabel(snapshot)).tag(String?.some(snapshot.id))
+                    // Grouped by month: with a year of hourly snapshots the
+                    // flat list was a thousand-row scroll, and a header to
+                    // park the eye on is the cheapest jump a menu can offer.
+                    ForEach(groupedCandidates, id: \.month) { group in
+                        Section(group.month) {
+                            ForEach(group.snapshots) { snapshot in
+                                Text(comparisonLabel(snapshot)).tag(String?.some(snapshot.id))
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: 420)
@@ -125,7 +132,7 @@ struct SnapshotDiffView: View {
 
     private func statistics(_ diff: SnapshotDiff) -> some View {
         let stats = diff.statistics
-        return HStack(spacing: 10) {
+        return HStack(alignment: .center, spacing: 10) {
             StatTile(
                 title: "Added",
                 value: countText(stats?.added),
@@ -146,16 +153,36 @@ struct SnapshotDiffView: View {
                 systemImage: "pencil.circle",
                 help: "Files whose content changed — metadata-only edits are listed under Show › Metadata"
             )
-            StatTile(
-                title: "Data added",
-                value: Format.bytes(stats?.added.bytes),
-                systemImage: "arrow.down.to.line"
-            )
-            StatTile(
-                title: "Data removed",
-                value: Format.bytes(stats?.removed.bytes),
-                systemImage: "arrow.up.to.line"
-            )
+            // The byte pair is this sheet's headline answer — "what did the
+            // backup actually pick up?" — so it leaves the count tiles' row
+            // and reads as one unit: what went in, what came out.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Data changed")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label {
+                    Text(Format.bytes(stats?.added.bytes))
+                        .monospacedDigit()
+                } icon: {
+                    Text("+")
+                        .font(.system(.callout, design: .monospaced).weight(.semibold))
+                }
+                .foregroundStyle(ChartPalette.status(.succeeded))
+                .accessibilityLabel("\(Format.bytes(stats?.added.bytes)) added")
+                Label {
+                    Text(Format.bytes(stats?.removed.bytes))
+                        .monospacedDigit()
+                } icon: {
+                    Text("−")
+                        .font(.system(.callout, design: .monospaced).weight(.semibold))
+                }
+                .foregroundStyle(ChartPalette.status(.failed))
+                .accessibilityLabel("\(Format.bytes(stats?.removed.bytes)) removed")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Theme.Space.cardPadding)
+            .cardSurface()
+            .help("Bytes written to the repository by this snapshot, and bytes the repository no longer holds because of it")
         }
         .padding(12)
     }
@@ -245,6 +272,19 @@ struct SnapshotDiffView: View {
         includeMetadata
             ? ResticDiffChange.Category.allCases
             : ResticDiffChange.Category.allCases.filter { $0 != .metadataOnly }
+    }
+
+    /// Candidates bucketed by month, newest bucket first — `candidates` is
+    /// already sorted newest first, so first-sight of a month names the group.
+    private var groupedCandidates: [(month: String, snapshots: [Snapshot])] {
+        var order: [String] = []
+        var buckets: [String: [Snapshot]] = [:]
+        for snapshot in candidates {
+            let month = snapshot.time.formatted(.dateTime.month(.wide).year())
+            if buckets[month] == nil { order.append(month) }
+            buckets[month, default: []].append(snapshot)
+        }
+        return order.map { (month: $0, snapshots: buckets[$0] ?? []) }
     }
 
     private func filteredChanges(_ diff: SnapshotDiff) -> [ResticDiffChange] {

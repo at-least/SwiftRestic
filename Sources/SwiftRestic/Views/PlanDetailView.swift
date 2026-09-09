@@ -268,7 +268,8 @@ struct PlanDetailView: View {
     }
 }
 
-/// Sortable list of snapshots with "Browse" and "Compare" affordances per row.
+/// Sortable, filterable list of snapshots with "Browse" and "Compare"
+/// affordances per row — as buttons, in a context menu, and on double-click.
 struct SnapshotTable: View {
     let snapshots: [Snapshot]
     var isLoading = false
@@ -282,6 +283,26 @@ struct SnapshotTable: View {
     let onBrowse: (Snapshot) -> Void
     var onCompare: ((Snapshot) -> Void)?
     var onRetry: (() -> Void)?
+
+    /// Newest first by default: the table is scanned by recency, and a year
+    /// of hourly snapshots is otherwise a scroll hunt for last Tuesday.
+    @State private var sortOrder: [KeyPathComparator<Snapshot>] = [
+        KeyPathComparator(\Snapshot.time, order: .reverse)
+    ]
+    @State private var filterText = ""
+    @State private var selection: Snapshot.ID?
+
+    /// The sort does not apply itself: `Table(sortOrder:)` only reports the
+    /// user's chosen order, so the rows are filtered and sorted here.
+    private var visibleSnapshots: [Snapshot] {
+        let needle = filterText.trimmingCharacters(in: .whitespaces)
+        let base = needle.isEmpty ? snapshots : snapshots.filter { snapshot in
+            snapshot.id.localizedCaseInsensitiveContains(needle)
+                || snapshot.time.formatted(date: .abbreviated, time: .shortened)
+                    .localizedCaseInsensitiveContains(needle)
+        }
+        return base.sorted(using: sortOrder)
+    }
 
     var body: some View {
         if case let .failed(message) = loadOutcome, snapshots.isEmpty {
@@ -308,25 +329,68 @@ struct SnapshotTable: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 8)
             }
+        } else if visibleSnapshots.isEmpty {
+            // The listing succeeded but the filter matches nothing: say so
+            // with the way back, rather than a content-less table frame that
+            // reads as a broken load.
+            VStack(alignment: .leading, spacing: 6) {
+                Text("No snapshots match the filter.")
+                    .foregroundStyle(.secondary)
+                Button("Clear Filter") { filterText = "" }
+                    .controlSize(.small)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
         } else {
             VStack(spacing: 0) {
                 if case let .failed(message) = loadOutcome {
                     staleListingStrip(message)
                 }
+                filterBar
                 table
             }
         }
     }
 
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            TextField(
+                "Filter by ID or date",
+                text: $filterText,
+                prompt: Text(verbatim: "Filter by ID or date")
+            )
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            .frame(maxWidth: 220)
+            // A selection that survives its own row leaving the filter would
+            // strand the context menu and double-click on an id the table
+            // no longer shows.
+            .onChange(of: filterText) { selection = nil }
+
+            if visibleSnapshots.count != snapshots.count {
+                Text("\(Format.count(visibleSnapshots.count)) of \(Format.plural(snapshots.count, "snapshot"))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Spacer()
+        }
+        .padding(.bottom, 6)
+    }
+
     private var table: some View {
-        Table(snapshots) {
-                TableColumn("When") { snapshot in
+        Table(visibleSnapshots, selection: $selection, sortOrder: $sortOrder) {
+                // Sortable where a person scans: when it ran, and which
+                // snapshot it is. The numeric columns stay fixed because the
+                // model's values are optional (a snapshot can lack a summary)
+                // and a table sorter cannot sort "—".
+                TableColumn("When", value: \.time) { snapshot in
                     Text(snapshot.time.formatted(date: .abbreviated, time: .shortened))
                         .monospacedDigit()
                 }
                 .width(min: 150, ideal: 164)
 
-                TableColumn("ID") { snapshot in
+                TableColumn("ID", value: \.id) { snapshot in
                     Text(snapshot.shortID)
                         .font(.system(.callout, design: .monospaced))
                         .textSelection(.enabled)
@@ -364,6 +428,28 @@ struct SnapshotTable: View {
                 // 126pt fits the two small buttons without crowding them.
                 .width(min: 116, ideal: 126, max: 128)
             }
+            // The row context menu and double-click mirror the two buttons,
+            // so the table's most-repeated actions have a keyboard-and-menu
+            // path and not only a mouse-only pair of small buttons.
+            .contextMenu(forSelectionType: Snapshot.ID.self) { ids in
+                if let id = ids.first, ids.count == 1,
+                   let snapshot = visibleSnapshots.first(where: { $0.id == id }) {
+                    Button("Browse Contents…") { onBrowse(snapshot) }
+                    if let onCompare {
+                        Button("Compare with Previous…") { onCompare(snapshot) }
+                    }
+                    Divider()
+                    Button("Copy Snapshot ID") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(id, forType: .string)
+                    }
+                }
+            } primaryAction: { ids in
+                guard let id = ids.first, ids.count == 1,
+                      let snapshot = visibleSnapshots.first(where: { $0.id == id })
+                else { return }
+                onBrowse(snapshot)
+            }
             // Content-sized: a Table fills whatever height it is offered, so a
             // fixed minimum renders phantom empty rows under a short list —
             // which reads as a broken loading skeleton — and fixedSize asks a
@@ -371,9 +457,10 @@ struct SnapshotTable: View {
             // constants are measured from the rendered table (~38pt header,
             // ~34pt inset-row pitch) and biased a point high on purpose: an
             // overestimate fails as a hair of padding, an underestimate clips
-            // the last row's glyphs mid-line. The cap is where the table
-            // scrolls its own overflow anyway.
-            .frame(height: min(320, 38 + CGFloat(snapshots.count) * 34))
+            // the last row's glyphs mid-line. Sized from the *visible* rows so
+            // a filter that narrows 300 rows to 2 shrinks the frame with it,
+            // and the cap is where the table scrolls its own overflow anyway.
+            .frame(height: min(320, 38 + CGFloat(visibleSnapshots.count) * 34))
             .alternatingRowBackgrounds(.disabled)
     }
 
