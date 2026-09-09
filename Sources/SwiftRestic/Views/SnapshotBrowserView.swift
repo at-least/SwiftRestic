@@ -132,8 +132,12 @@ struct SnapshotBrowserView: View {
                 Button("Restore Entire Snapshot…") { restoreWholeSnapshot() }
                     .disabled(model.isRestoring)
                 Spacer()
-                Button("Close") { dismiss() }
+                Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    // The restore belongs to the model, not the sheet: hiding
+                    // hands its progress to the app-level strip (and the menu
+                    // bar) rather than implying it was cancelled.
+                    .help(model.isRestoring ? "The restore keeps running" : "Close")
                 Button("Restore Selected…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
                     // Return as the default action keeps a keyboard path to

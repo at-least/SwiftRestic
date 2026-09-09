@@ -72,7 +72,114 @@ struct MenuBarStatusTests {
             ]
         )
         #expect(lines.map(\.text) == ["First — Applying retention", "Second — 50%"])
-        #expect(lines.map(\.planID) == [first.id, second.id])
+        #expect(lines.map(\.id) == [first.id.uuidString, second.id.uuidString])
+    }
+
+    @Test("restores, upkeep and console work read as running and get their own lines")
+    func nonPlanWorkIsVisible() {
+        var progress = OperationProgress()
+        progress.fraction = 0.25
+
+        // The restore is one line with its own stable identity.
+        let restore = MenuBarStatus.restoreLine(progress: progress)
+        #expect(restore?.text == "Restoring — 25%")
+        #expect(restore?.id == "restore")
+        #expect(MenuBarStatus.restoreLine(progress: nil) == nil)
+
+        // Upkeep names the repository and the task, never "NAS failed"-style
+        // ambiguity — a check on the NAS is not the NAS failing.
+        let idle = Repository()
+        let upkeep = MenuBarStatus.maintenanceLines(
+            repositories: [idle],
+            maintenance: [UUID(): MaintenanceActivity(task: .prune)]
+        )
+        #expect(upkeep.isEmpty, "a repository with no maintenance in flight gets no line")
+
+        let repository = Repository()
+        let busy = MenuBarStatus.maintenanceLines(
+            repositories: [repository],
+            maintenance: [repository.id: MaintenanceActivity(task: .check)]
+        )
+        #expect(busy.map(\.text) == ["\(repository.name) — check running"])
+
+        let console = MenuBarStatus.consoleLine(isRunning: true)
+        #expect(console?.id == "console")
+        #expect(MenuBarStatus.consoleLine(isRunning: false) == nil)
+    }
+
+    @Test("upkeep, restores and console work hold the idle headline back, like a backup does")
+    func nonPlanWorkHoldsTheHeadline() {
+        let next = Date.now.addingTimeInterval(3600)
+        #expect(MenuBarStatus.headline(activity: [:], nextRun: (plan(name: "Nightly"), next)) != nil)
+        #expect(MenuBarStatus.headline(activity: [:], isRestoring: true, nextRun: (plan(name: "Nightly"), next)) == nil)
+        #expect(MenuBarStatus.headline(activity: [:], isConsoleRunning: true, nextRun: (plan(name: "Nightly"), next)) == nil)
+        #expect(
+            MenuBarStatus.headline(
+                activity: [:],
+                maintenance: [UUID(): MaintenanceActivity(task: .prune)],
+                nextRun: (plan(name: "Nightly"), next)
+            ) == nil
+        )
+    }
+
+    @Test("the icon runs while anything runs, warns on a recent problem, idles otherwise")
+    func iconStates() {
+        let repository = Repository()
+        let busyActivity = [UUID(): activity()]
+
+        func state(
+            activity: [UUID: PlanActivity] = [:],
+            maintenance: [UUID: MaintenanceActivity] = [:],
+            isRestoring: Bool = false,
+            isConsoleRunning: Bool = false,
+            runs: [RunRecord] = []
+        ) -> MenuBarStatus.IconState {
+            MenuBarStatus.iconState(
+                activity: activity,
+                maintenance: maintenance,
+                isRestoring: isRestoring,
+                isConsoleRunning: isConsoleRunning,
+                runs: runs
+            )
+        }
+
+        #expect(state() == .idle)
+        #expect(state(activity: busyActivity) == .running)
+        #expect(state(maintenance: [repository.id: MaintenanceActivity(task: .check)]) == .running)
+        #expect(state(isRestoring: true) == .running)
+        #expect(state(isConsoleRunning: true) == .running)
+
+        // A recent failure is the warning face — but only when nothing runs;
+        // the menu's problem line carries the news meanwhile.
+        var failed = RunRecord(planName: "Nightly")
+        failed.outcome = .failed
+        failed.startedAt = .now.addingTimeInterval(-60)
+        failed.finishedAt = failed.startedAt
+        #expect(state(runs: [failed]) == .problem)
+        #expect(state(activity: busyActivity, runs: [failed]) == .running)
+
+        // A seven-day-stale failure is old news, same window as problemLine.
+        var stale = RunRecord(planName: "Old")
+        stale.outcome = .failed
+        stale.startedAt = .now.addingTimeInterval(-9 * 86_400)
+        stale.finishedAt = stale.startedAt
+        #expect(state(runs: [stale]) == .idle)
+    }
+
+    @Test("each icon state wears a distinct glyph and a spoken description")
+    func iconSymbolsAndVoice() {
+        let glyphs = [
+            MenuBarStatus.symbolName(for: .idle),
+            MenuBarStatus.symbolName(for: .running),
+            MenuBarStatus.symbolName(for: .problem),
+        ]
+        #expect(Set(glyphs).count == 3, "the three states must be tellable apart at a glance")
+        #expect(glyphs[0] == "clock.arrow.circlepath")
+        #expect(glyphs[1] == "arrow.triangle.2.circlepath")
+        #expect(glyphs[2] == "exclamationmark.triangle")
+
+        #expect(MenuBarStatus.accessibilityDescription(for: .running).contains("work in progress"))
+        #expect(MenuBarStatus.accessibilityDescription(for: .problem).contains("problem"))
     }
 
     @Test("finishing returns to the idle headline")

@@ -15,10 +15,27 @@ struct MenuBarContentView: View {
         if let problem = MenuBarStatus.problemLine(runs: model.configuration.runs) {
             Text(problem)
         }
-        if let headline = MenuBarStatus.headline(activity: model.activity, nextRun: model.nextScheduledRun) {
+        // Every kind of restic work in flight gets a line — plans, repository
+        // upkeep, restores, console commands — because the closed window makes
+        // this menu the only place any of it is visible.
+        let runningLines = MenuBarStatus.runningLines(plans: model.configuration.plans, activity: model.activity)
+            + MenuBarStatus.maintenanceLines(
+                repositories: model.configuration.repositories,
+                maintenance: model.maintenance
+            )
+            + [MenuBarStatus.restoreLine(progress: model.restoreActivity),
+               MenuBarStatus.consoleLine(isRunning: model.console.isRunning)].compactMap(\.self)
+
+        if let headline = MenuBarStatus.headline(
+            activity: model.activity,
+            maintenance: model.maintenance,
+            isRestoring: model.isRestoring,
+            isConsoleRunning: model.console.isRunning,
+            nextRun: model.nextScheduledRun
+        ) {
             Text(headline)
         } else {
-            ForEach(MenuBarStatus.runningLines(plans: model.configuration.plans, activity: model.activity)) { line in
+            ForEach(runningLines) { line in
                 Text(line.text)
             }
         }

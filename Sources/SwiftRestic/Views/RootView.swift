@@ -258,6 +258,20 @@ struct RootView: View {
     @ViewBuilder
     private var detail: some View {
         VStack(spacing: 0) {
+            // A restore outlives the sheet that started it, so its progress is
+            // an app-level fact: this strip sits above every pane, and the
+            // menu bar line covers the window-closed case. Dismissing the
+            // browser or Find sheet hands the progress over to this strip.
+            if let progress = model.restoreActivity {
+                OperationProgressView(
+                    title: model.restoreDescription.isEmpty ? "Restoring" : model.restoreDescription,
+                    progress: progress,
+                    startedAt: nil,
+                    onCancel: { model.cancelRestore() }
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+            }
             // The one disabled-state whose cause the user cannot see from the
             // panes themselves: every restic-backed control is grey, and this
             // is why.

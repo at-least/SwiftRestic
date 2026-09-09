@@ -33,7 +33,7 @@ struct SettingsView: View {
                 Toggle("Show SwiftRestic in the menu bar", isOn: $model.configuration.settings.showMenuBarExtra)
                 ExpandableCaption(
                     summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing.",
-                    detail: "The menu bar item is how you get back to it, and its icon animates while a backup or maintenance task is running."
+                    detail: "The menu bar item is how you get back to it. Its icon shows work in progress, and wears a warning mark while a run from the last seven days failed or finished with errors."
                 )
             }
 

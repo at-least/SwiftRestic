@@ -175,6 +175,10 @@ final class AppModel {
     /// Progress of a restore, which is always one at a time.
     private(set) var restoreActivity: OperationProgress?
     private(set) var restoreDescription: String = ""
+    /// The repository the running restore reads from. Deleting it cancels the
+    /// restore; kept beside the task because the task alone cannot be asked
+    /// what it is working on.
+    private(set) var restoreRepositoryID: UUID?
 
     private let store: ConfigStore
     private let secrets: SecretStore
@@ -423,7 +427,26 @@ final class AppModel {
     }
 
     /// Removes a repository from the app. The data in the repository is untouched.
+    ///
+    /// Work in flight against it is cancelled first, and the tasks' unwind
+    /// writes the run records itself — a cancelled run beats one that finishes
+    /// silently against a repository the app no longer lists. Nothing else is
+    /// cleaned up here: the completion blocks nil their own dictionary entries,
+    /// and double bookkeeping would double the records. Cancellation is
+    /// cooperative, so a backup already past restic (in retention or the
+    /// closing refresh) still settles as a success — its snapshot is real.
     func deleteRepository(id: UUID) {
+        for plan in configuration.plans where plan.repositoryID == id {
+            planTasks[plan.id]?.cancel()
+        }
+        maintenanceTasks[id]?.cancel()
+        if restoreRepositoryID == id { restoreTask?.cancel() }
+        if console.runningRepositoryID == id { console.cancelRunningCommand() }
+        // Cancel-then-forget the menu line: the cancelled child can take
+        // seconds to unwind, and `maintenanceLines` derives its rows from the
+        // repository list this removal just shrank — without this the menu
+        // would show neither a headline nor a line until the unwind lands.
+        maintenance[id] = nil
         configuration.repositories.removeAll { $0.id == id }
         for index in configuration.plans.indices where configuration.plans[index].repositoryID == id {
             configuration.plans[index].repositoryID = nil
@@ -1031,6 +1054,7 @@ final class AppModel {
         guard restoreTask == nil else { return }
         restoreActivity = OperationProgress()
         restoreDescription = "Restoring \(label)"
+        restoreRepositoryID = repositoryID
 
         restoreTask = Task { [weak self] in
             guard let self else { return }
@@ -1066,6 +1090,7 @@ final class AppModel {
             self.append(record: record)
             self.restoreActivity = nil
             self.restoreDescription = ""
+            self.restoreRepositoryID = nil
             self.restoreTask = nil
         }
     }

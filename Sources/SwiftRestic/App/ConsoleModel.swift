@@ -21,6 +21,10 @@ final class ConsoleModel {
     var commandText = "snapshots --compact"
     private(set) var output = ""
     private(set) var isRunning = false
+    /// The repository the in-flight command runs against, captured at submit:
+    /// the picker may move on while it runs, and deletion needs the run's own
+    /// answer to "would cancelling this still the removed repository's work?".
+    private(set) var runningRepositoryID: UUID?
     /// Newest first, as typed — what the history sidebar offers back.
     private(set) var history: [String] = []
     /// The command waiting on its destructive-confirmation dialog, with the
@@ -143,6 +147,7 @@ final class ConsoleModel {
     private func execute(_ arguments: [String], record entry: String, app: AppModel) {
         guard let repositoryID, !isRunning else { return }
         isRunning = true
+        runningRepositoryID = repositoryID
         output = "Running…"
         runTask = Task { [weak self] in
             let result = await app.runConsoleCommand(
@@ -151,10 +156,11 @@ final class ConsoleModel {
             )
             // No cancellation guard here: `runConsoleCommand` answers a stop
             // with "The operation was cancelled.", and nothing else writes
-            // this state while the command runs — the message must reach the
-            // pane.
+            // this state while the command runs — the message must reach
+            // the pane.
             self?.output = result
             self?.isRunning = false
+            self?.runningRepositoryID = nil
             self?.runTask = nil
             self?.record(entry, in: app)
         }

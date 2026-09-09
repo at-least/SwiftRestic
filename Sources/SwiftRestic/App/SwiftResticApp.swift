@@ -282,8 +282,32 @@ struct SwiftResticApp: App {
             MenuBarContentView(mainWindowID: Self.mainWindowID)
                 .environment(model)
         } label: {
-            Image(systemName: model.activity.isEmpty ? "clock.arrow.circlepath" : "arrow.triangle.2.circlepath")
+            MenuBarStatusLabel(model: model)
         }
         .menuBarExtraStyle(.menu)
+    }
+}
+
+/// The menu bar icon's face, a `View` of its own so the `@Observable` reads
+/// that pick the glyph are tracked from a view body — the one place SwiftUI
+/// guarantees re-evaluation when the model changes.
+private struct MenuBarStatusLabel: View {
+    let model: AppModel
+
+    var body: some View {
+        // Three faces, not two: the icon is the app's only always-visible
+        // surface, so it must say "something is wrong" without a click and
+        // show restores, upkeep and console work as running, not just plan
+        // backups. Template rendering is the menu bar's law, so the state
+        // wears a distinct glyph rather than a tint.
+        let state = MenuBarStatus.iconState(
+            activity: model.activity,
+            maintenance: model.maintenance,
+            isRestoring: model.isRestoring,
+            isConsoleRunning: model.console.isRunning,
+            runs: model.configuration.runs
+        )
+        Image(systemName: MenuBarStatus.symbolName(for: state))
+            .accessibilityLabel(MenuBarStatus.accessibilityDescription(for: state))
     }
 }

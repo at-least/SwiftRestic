@@ -573,6 +573,62 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("deleting a repository cancels the backup running against it")
+    func deletingRepositoryCancelsRunningBackup() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        #expect(harness.model.isRunning(planID: harness.plan.id))
+
+        harness.model.deleteRepository(id: harness.repository.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        // The repository is gone…
+        #expect(harness.model.configuration.repositories.isEmpty)
+        #expect(harness.model.isRunning(planID: harness.plan.id) == false)
+        // …and the interrupted run is recorded as what it was — a cancelled
+        // run — rather than completing silently against a repository the app
+        // no longer lists.
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.outcome == .cancelled)
+        #expect(record.failureMessage == "Cancelled")
+
+        await harness.model.shutdown()
+    }
+
+    @Test("deleting a repository cancels the restore reading from it")
+    func deletingRepositoryCancelsRunningRestore() async throws {
+        let harness = try await makeHarness(mode: "hang-restore")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt")
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            node: node,
+            to: harness.root.appendingPathComponent("restored")
+        )
+        // Same guarantee as the backup case: the hang proves the restore is
+        // genuinely in flight before the deletion lands.
+        let hangDeadline = Date.now.addingTimeInterval(10)
+        while Date.now < hangDeadline,
+              StubRestic.findProcesses(matching: harness.stub.sleepMarker).isEmpty {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(StubRestic.findProcesses(matching: harness.stub.sleepMarker).isEmpty == false)
+
+        harness.model.deleteRepository(id: harness.repository.id)
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        #expect(harness.model.isRestoring == false)
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .restore)
+        #expect(record.outcome == .cancelled)
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Notification wiring
 
     @Test("the webhook gets restic's warnings and never a hook's output")

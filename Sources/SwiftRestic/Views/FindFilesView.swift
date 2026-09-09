@@ -170,8 +170,9 @@ struct FindFilesView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Close") { dismiss() }
+                Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .help(model.isRestoring ? "The restore keeps running" : "Close")
                 Button("Restore Selected…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
                     // Same grammar as the snapshot browser: Return offers the
