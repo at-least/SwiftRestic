@@ -47,11 +47,21 @@ struct PlanEditorSheet: View {
 
             HStack {
                 // A greyed Save that spans five tabs of validation owes the
-                // user the reason at the button, not a hunt across tabs.
-                if let reason = missingRequirement {
-                    Text(reason)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                // user the reason at the button, not a hunt across tabs. The
+                // first-run consequence rides in the same slot: it changes
+                // what Create does, and the Schedule tab that explains the
+                // escape hatch may never be opened.
+                VStack(alignment: .leading, spacing: 4) {
+                    if let reason = missingRequirement {
+                        Text(reason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if startsFirstBackupOnCreate {
+                        Text("Creating this plan starts its first backup within a minute.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Button("Cancel") { cancel() }
@@ -114,6 +124,15 @@ struct PlanEditorSheet: View {
 
     private var missingRequirement: String? {
         EditorRequirements.plan(draft)
+    }
+
+    /// The first backup of a new scheduled plan starts within a minute of
+    /// Create — the scheduler ticks once a minute and a never-run plan counts
+    /// as immediately due. Stated at the button, on every tab, because the
+    /// schedule picker that could avoid it sits behind a tab the user may
+    /// never open.
+    private var startsFirstBackupOnCreate: Bool {
+        isNew && draft.isEnabled && draft.schedule.frequency != .manual
     }
 
     private var generalTab: some View {
@@ -191,11 +210,10 @@ struct PlanEditorSheet: View {
             }
 
             if draft.schedule.frequency != .manual {
-                // Owning the moment instead of surprising with it: a new plan
-                // counts as due, so its first backup starts within a minute of
-                // being created — a first-timer's unprompted multi-gigabyte
-                // upload unless the caption says so.
-                Text("A new plan starts its first backup within a minute of being created; pick Manually if that is not what you want.")
+                // The footer states the consequence on every tab; this line
+                // only carries the escape hatch, so the two never repeat
+                // each other on the tab where both are visible.
+                Text("Pick Manually if the plan should only run when you press Back Up Now.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
