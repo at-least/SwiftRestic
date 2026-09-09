@@ -136,9 +136,12 @@ struct SnapshotBrowserView: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Restore Selected…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut("r", modifiers: .command)
+                    // Deliberately no ⌘R: the Backup menu owns it for Refresh
+                    // Snapshots, and the same key meaning "restore" one sheet
+                    // away could fire the wrong verb. Restore asks for
+                    // confirmation anyway; the button is right here.
                     .disabled(selectedNode == nil || model.isRestoring)
-                    .help("Restore the selected item (⌘R)")
+                    .help("Restore the selected item")
             }
         }
         .padding(12)
