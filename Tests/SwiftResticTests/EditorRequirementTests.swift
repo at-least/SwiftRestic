@@ -5,6 +5,7 @@ import Testing
 /// state checks, in the order the sheets present their fields. The wording
 /// and the ordering are pinned here — a reordering that makes the footer
 /// name a later gap while an earlier one exists is a regression.
+@Suite("Editor requirement chains")
 struct EditorRequirementTests {
     @Test("the plan editor names the first unmet requirement in tab order")
     func planRequirementOrdering() {
@@ -38,10 +39,26 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
             == "Set a repository password to save it.")
 
-        // Each backend names its own required pair rather than the local one.
+        // Each backend names its own required pair rather than the local one,
+        // and every one is pinned so a field rename cannot desync its copy.
+        draft.kind = .sftp
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+            == "Enter the host and path to save it.")
         draft.kind = .s3
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
             == "Enter the bucket and access key ID to save it.")
+        draft.kind = .b2
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+            == "Enter the bucket and account ID to save it.")
+        draft.kind = .azure
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+            == "Enter the container and account name to save it.")
+        draft.kind = .gcs
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+            == "Enter the bucket and service account file to save it.")
+        draft.kind = .rest
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+            == "Enter the server URL to save it.")
         draft.kind = .rclone
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
             == "Enter the rclone remote to save it.")

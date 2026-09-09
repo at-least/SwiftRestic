@@ -136,12 +136,17 @@ struct SnapshotBrowserView: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Restore Selected…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
-                    // Deliberately no ⌘R: the Backup menu owns it for Refresh
-                    // Snapshots, and the same key meaning "restore" one sheet
-                    // away could fire the wrong verb. Restore asks for
-                    // confirmation anyway; the button is right here.
+                    // Return as the default action keeps a keyboard path to
+                    // restore now that ⌘R is gone (it meant Refresh in the
+                    // menu — one key could not fire opposite verbs a sheet
+                    // apart). The grammar stays coherent: Return on a
+                    // directory enters it via the list's own key handling,
+                    // Return on a file offers to restore it — always through
+                    // the destination picker, where the overwrite warning
+                    // lives.
+                    .keyboardShortcut(.defaultAction)
                     .disabled(selectedNode == nil || model.isRestoring)
-                    .help("Restore the selected item")
+                    .help("Restore the selected item (Return)")
             }
         }
         .padding(12)
