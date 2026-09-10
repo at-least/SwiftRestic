@@ -33,12 +33,20 @@ enum MenuBarStatus {
         return problemLine(runs: runs, now: now) == nil ? .idle : .problem
     }
 
-    /// The icon glyph for a state, and what VoiceOver calls it.
-    static func symbolName(for state: IconState) -> String {
+    /// What the icon draws for a state. Idle wears the app's own mark — the
+    /// logo's small-size construction as a template line drawing, see
+    /// `MenuBarLogo` — because idle is the brand's face, not news. Running
+    /// and problem wear SF Symbols whose shapes shout their news.
+    enum Glyph: Equatable {
+        case logo
+        case symbol(String)
+    }
+
+    static func glyph(for state: IconState) -> Glyph {
         switch state {
-        case .idle: "clock.arrow.circlepath"
-        case .running: "arrow.triangle.2.circlepath"
-        case .problem: "exclamationmark.triangle"
+        case .idle: .logo
+        case .running: .symbol("arrow.triangle.2.circlepath")
+        case .problem: .symbol("exclamationmark.triangle")
         }
     }
 

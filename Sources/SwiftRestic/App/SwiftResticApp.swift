@@ -307,7 +307,15 @@ private struct MenuBarStatusLabel: View {
             isConsoleRunning: model.console.isRunning,
             runs: model.configuration.runs
         )
-        Image(systemName: MenuBarStatus.symbolName(for: state))
-            .accessibilityLabel(MenuBarStatus.accessibilityDescription(for: state))
+        Group {
+            switch MenuBarStatus.glyph(for: state) {
+            case .logo: Image(nsImage: MenuBarLogo.image)
+            case .symbol(let name): Image(systemName: name)
+            }
+        }
+        // Swapping a drawn image for a symbol is not a transition SwiftUI
+        // always re-renders; keying the view on the state forbids a stale face.
+        .id(state)
+        .accessibilityLabel(MenuBarStatus.accessibilityDescription(for: state))
     }
 }

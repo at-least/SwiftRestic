@@ -166,17 +166,11 @@ struct MenuBarStatusTests {
         #expect(state(runs: [stale]) == .idle)
     }
 
-    @Test("each icon state wears a distinct glyph and a spoken description")
+    @Test("idle wears the brand mark; the news faces wear distinct symbols")
     func iconSymbolsAndVoice() {
-        let glyphs = [
-            MenuBarStatus.symbolName(for: .idle),
-            MenuBarStatus.symbolName(for: .running),
-            MenuBarStatus.symbolName(for: .problem),
-        ]
-        #expect(Set(glyphs).count == 3, "the three states must be tellable apart at a glance")
-        #expect(glyphs[0] == "clock.arrow.circlepath")
-        #expect(glyphs[1] == "arrow.triangle.2.circlepath")
-        #expect(glyphs[2] == "exclamationmark.triangle")
+        #expect(MenuBarStatus.glyph(for: .idle) == .logo)
+        #expect(MenuBarStatus.glyph(for: .running) == .symbol("arrow.triangle.2.circlepath"))
+        #expect(MenuBarStatus.glyph(for: .problem) == .symbol("exclamationmark.triangle"))
 
         #expect(MenuBarStatus.accessibilityDescription(for: .running).contains("work in progress"))
         #expect(MenuBarStatus.accessibilityDescription(for: .problem).contains("problem"))
