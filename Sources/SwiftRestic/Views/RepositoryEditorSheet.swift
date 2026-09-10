@@ -144,20 +144,26 @@ struct RepositoryEditorSheet: View {
         Form {
             Section {
                 TextField("Name", text: $draft.name, prompt: Text("Home backups"))
-                // A new repository asks where the backup will live before it
-                // asks which of the eight kinds — the highest-uncertainty
-                // decision of the form, made before the form has shown it
-                // will adapt. An existing repository keeps the direct picker:
-                // its owner already knows where it is.
+                // The eight kinds grouped by where the backup lives: the
+                // destination answers "where is it" as the section header
+                // above each kind, so one control carries both questions.
                 if isNew {
-                    Picker("Where is it?", selection: destinationBinding) {
-                        ForEach(Destination.allCases) { destination in
-                            Text(destination.displayName).tag(destination)
+                    Picker("Where is it?", selection: $draft.kind) {
+                        Section("On this Mac") {
+                            Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
                         }
-                    }
-                    Picker("Kind", selection: $draft.kind) {
-                        ForEach(destinationBinding.wrappedValue.kinds) { kind in
-                            Text(kind.displayName).tag(kind)
+                        Section("On another machine") {
+                            Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
+                            Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
+                        }
+                        Section("In the cloud") {
+                            Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
+                            Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
+                            Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
+                            Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
+                        }
+                        Section("Through a gateway") {
+                            Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
                         }
                     }
                     Text(draft.kind.summary)
@@ -347,61 +353,6 @@ struct RepositoryEditorSheet: View {
                 .lineLimit(2)
                 .truncationMode(.middle)
         }
-    }
-
-    // MARK: - Backend choice
-
-    /// Where a repository lives — the first question a new one should answer.
-    /// The eight restic kinds are overwhelming as a first field; grouped by
-    /// destination they are one obvious choice followed by two or three.
-    private enum Destination: CaseIterable, Identifiable {
-        case thisMac
-        case anotherMachine
-        case cloud
-        case gateway
-
-        var id: Self { self }
-
-        var displayName: String {
-            switch self {
-            case .thisMac: "On this Mac"
-            case .anotherMachine: "On another machine"
-            case .cloud: "In the cloud"
-            case .gateway: "Through a gateway"
-            }
-        }
-
-        var kinds: [Repository.Kind] {
-            switch self {
-            case .thisMac: [.local]
-            case .anotherMachine: [.sftp, .rest]
-            case .cloud: [.s3, .b2, .azure, .gcs]
-            case .gateway: [.rclone]
-            }
-        }
-
-        static func destination(for kind: Repository.Kind) -> Destination {
-            switch kind {
-            case .local: .thisMac
-            case .sftp, .rest: .anotherMachine
-            case .s3, .b2, .azure, .gcs: .cloud
-            case .rclone: .gateway
-            }
-        }
-    }
-
-    /// Derived, never stored: a `@State` mirror of `draft.kind` would go stale
-    /// the moment a kind lands in a different destination. Setting the
-    /// destination only moves the kind when it truly changes address space —
-    /// a Form re-setting the same destination must not clobber a chosen kind.
-    private var destinationBinding: Binding<Destination> {
-        Binding(
-            get: { Destination.destination(for: draft.kind) },
-            set: { newValue in
-                guard !newValue.kinds.contains(draft.kind) else { return }
-                draft.kind = newValue.kinds[0]
-            }
-        )
     }
 
     // MARK: - Logic
