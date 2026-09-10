@@ -60,7 +60,7 @@ struct SettingsView: View {
                 )
                 ExpandableCaption(
                     summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing.",
-                    detail: "The menu bar item is how you get back to it. Its icon shows work in progress, and wears a warning mark while a run from the last seven days failed or finished with errors."
+                    detail: "The menu bar item is how you get back to it. Its icon shows work in progress, wears a warning mark while a run from the last seven days failed or finished with errors, and asks with a question mark until a repository is set up."
                 )
             }
 

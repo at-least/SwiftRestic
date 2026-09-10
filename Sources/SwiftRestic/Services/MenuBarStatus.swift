@@ -6,11 +6,14 @@ import Foundation
 /// tested by handing it snapshots of the model's state, the way backrest tests
 /// its tray icon by appending operations one at a time.
 enum MenuBarStatus {
-    /// The three faces the menu bar icon can wear. Running beats problem: while
-    /// work is in flight the icon says so, and the menu's problem line carries
-    /// the news — an animated-then-failing glyph would flicker between the two
-    /// on every run that follows a failure.
+    /// The four faces the menu bar icon can wear. Running beats everything
+    /// else: while work is in flight the icon says so, and the menu's running
+    /// lines carry the news — an animated-then-badged glyph would flicker
+    /// between faces on every run. Unconfigured beats problem: with no
+    /// repository there is nothing that could have produced a run to warn
+    /// about.
     enum IconState: Equatable {
+        case unconfigured
         case idle
         case running
         case problem
@@ -25,33 +28,42 @@ enum MenuBarStatus {
         maintenance: [UUID: MaintenanceActivity],
         isRestoring: Bool,
         isConsoleRunning: Bool,
+        hasNoRepositories: Bool,
         runs: [RunRecord],
         now: Date = .now
     ) -> IconState {
         let isRunning = !activity.isEmpty || !maintenance.isEmpty || isRestoring || isConsoleRunning
         if isRunning { return .running }
+        if hasNoRepositories { return .unconfigured }
         return problemLine(runs: runs, now: now) == nil ? .idle : .problem
     }
 
     /// What the icon draws for a state. Idle wears the app's own mark — the
     /// logo's small-size construction as a template line drawing, see
-    /// `MenuBarLogo` — because idle is the brand's face, not news. Running
-    /// and problem wear SF Symbols whose shapes shout their news.
+    /// `MenuBarLogo` — the same convention every backup menu extra uses for
+    /// its quiet, nothing-to-see face. Running wears that mark with the
+    /// snapshot stack pulsing, to read as data climbing it. Unconfigured and
+    /// problem are silhouettes, not the logo with a mark stuffed inside it —
+    /// a state that needs noticing changes shape, not just decoration, and a
+    /// bare SF Symbol gets sized like every other menu bar icon for free.
     enum Glyph: Equatable {
-        case logo
         case symbol(String)
+        case logo
+        case animatedLogo
     }
 
     static func glyph(for state: IconState) -> Glyph {
         switch state {
+        case .unconfigured: .symbol("questionmark")
         case .idle: .logo
-        case .running: .symbol("arrow.triangle.2.circlepath")
-        case .problem: .symbol("exclamationmark.triangle")
+        case .running: .animatedLogo
+        case .problem: .symbol("exclamationmark")
         }
     }
 
     static func accessibilityDescription(for state: IconState) -> String {
         switch state {
+        case .unconfigured: "SwiftRestic, no repository configured yet"
         case .idle: "SwiftRestic"
         case .running: "SwiftRestic, work in progress"
         case .problem: "SwiftRestic, a recent run had a problem"
@@ -100,14 +112,20 @@ enum MenuBarStatus {
     /// the running lines replace it rather than sitting underneath. Restores
     /// and repository upkeep count as running — a "Next: Nightly" headline
     /// over a running restore reads as if the restore is not happening.
+    /// `hasNoRepositories` answers the question the `unconfigured` icon face
+    /// asks: the plan list below this line is empty either way, but "no
+    /// repository set up yet" tells a first-time user what to do next, where
+    /// the plain empty-schedule copy would not.
     static func headline(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity] = [:],
         isRestoring: Bool = false,
         isConsoleRunning: Bool = false,
+        hasNoRepositories: Bool = false,
         nextRun: (plan: BackupPlan, date: Date)?
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring, !isConsoleRunning else { return nil }
+        if hasNoRepositories { return "No repository set up yet" }
         guard let nextRun else { return "No backups scheduled" }
         return "Next: \(nextRun.plan.name) \(Format.relative(nextRun.date))"
     }

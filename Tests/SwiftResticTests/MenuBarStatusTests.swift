@@ -39,6 +39,21 @@ struct MenuBarStatusTests {
         #expect(headline == "Next: Nightly \(Format.relative(next))")
     }
 
+    @Test("with no repository configured, the headline sends the user to add one")
+    func noRepositoriesHeadline() {
+        #expect(MenuBarStatus.headline(activity: [:], hasNoRepositories: true, nextRun: nil) == "No repository set up yet")
+        // Running work still holds the headline back even with no repository —
+        // the same rule as every other running state.
+        let nightly = plan(name: "Nightly")
+        #expect(
+            MenuBarStatus.headline(
+                activity: [nightly.id: activity()],
+                hasNoRepositories: true,
+                nextRun: nil
+            ) == nil
+        )
+    }
+
     @Test("a running plan replaces the headline with a progress line")
     func runningReplacesHeadline() {
         let nightly = plan(name: "Nightly")
@@ -122,7 +137,7 @@ struct MenuBarStatusTests {
         )
     }
 
-    @Test("the icon runs while anything runs, warns on a recent problem, idles otherwise")
+    @Test("the icon runs while anything runs, warns on a recent problem, otherwise idles or asks for setup")
     func iconStates() {
         let repository = Repository()
         let busyActivity = [UUID(): activity()]
@@ -132,6 +147,7 @@ struct MenuBarStatusTests {
             maintenance: [UUID: MaintenanceActivity] = [:],
             isRestoring: Bool = false,
             isConsoleRunning: Bool = false,
+            hasNoRepositories: Bool = false,
             runs: [RunRecord] = []
         ) -> MenuBarStatus.IconState {
             MenuBarStatus.iconState(
@@ -139,15 +155,20 @@ struct MenuBarStatusTests {
                 maintenance: maintenance,
                 isRestoring: isRestoring,
                 isConsoleRunning: isConsoleRunning,
+                hasNoRepositories: hasNoRepositories,
                 runs: runs
             )
         }
 
         #expect(state() == .idle)
+        #expect(state(hasNoRepositories: true) == .unconfigured)
         #expect(state(activity: busyActivity) == .running)
         #expect(state(maintenance: [repository.id: MaintenanceActivity(task: .check)]) == .running)
         #expect(state(isRestoring: true) == .running)
         #expect(state(isConsoleRunning: true) == .running)
+        // Running beats even having no repository — the icon should never
+        // claim setup is needed while work it can't explain is in flight.
+        #expect(state(activity: busyActivity, hasNoRepositories: true) == .running)
 
         // A recent failure is the warning face — but only when nothing runs;
         // the menu's problem line carries the news meanwhile.
@@ -166,12 +187,14 @@ struct MenuBarStatusTests {
         #expect(state(runs: [stale]) == .idle)
     }
 
-    @Test("idle wears the brand mark; the news faces wear distinct symbols")
+    @Test("idle and running wear the brand mark; unconfigured and problem wear a bare symbol")
     func iconSymbolsAndVoice() {
+        #expect(MenuBarStatus.glyph(for: .unconfigured) == .symbol("questionmark"))
         #expect(MenuBarStatus.glyph(for: .idle) == .logo)
-        #expect(MenuBarStatus.glyph(for: .running) == .symbol("arrow.triangle.2.circlepath"))
-        #expect(MenuBarStatus.glyph(for: .problem) == .symbol("exclamationmark.triangle"))
+        #expect(MenuBarStatus.glyph(for: .running) == .animatedLogo)
+        #expect(MenuBarStatus.glyph(for: .problem) == .symbol("exclamationmark"))
 
+        #expect(MenuBarStatus.accessibilityDescription(for: .unconfigured).contains("no repository"))
         #expect(MenuBarStatus.accessibilityDescription(for: .running).contains("work in progress"))
         #expect(MenuBarStatus.accessibilityDescription(for: .problem).contains("problem"))
     }

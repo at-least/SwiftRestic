@@ -31,6 +31,7 @@ struct MenuBarContentView: View {
             maintenance: model.maintenance,
             isRestoring: model.isRestoring,
             isConsoleRunning: model.console.isRunning,
+            hasNoRepositories: model.configuration.repositories.isEmpty,
             nextRun: model.nextScheduledRun
         ) {
             Text(headline)
@@ -42,9 +43,16 @@ struct MenuBarContentView: View {
 
         Divider()
 
-        ForEach(model.configuration.plans) { plan in
-            Button(planLabel(plan)) { model.runBackup(planID: plan.id) }
-                .disabled(model.isRunning(planID: plan.id) || !plan.isConfigurationComplete)
+        // The icon's `unconfigured` face sent the user here; the menu it
+        // opens must answer, not just repeat "nothing scheduled" and leave
+        // them to find the sidebar's "Add Repository" on their own.
+        if model.configuration.repositories.isEmpty {
+            Button("Add a Repository…") { addRepository() }
+        } else {
+            ForEach(model.configuration.plans) { plan in
+                Button(planLabel(plan)) { model.runBackup(planID: plan.id) }
+                    .disabled(model.isRunning(planID: plan.id) || !plan.isConfigurationComplete)
+            }
         }
 
         Divider()
@@ -64,5 +72,19 @@ struct MenuBarContentView: View {
     private func planLabel(_ plan: BackupPlan) -> String {
         let name = plan.name.isEmpty ? "Untitled Plan" : plan.name
         return "Back Up “\(name)” Now"
+    }
+
+    /// Unlike the File menu's identically-named command, this one can fire
+    /// with the main window closed — the whole reason the icon has an
+    /// `unconfigured` face. The window has to exist before `RootView`'s
+    /// `.onReceive` is there to catch the notification, so open it first and
+    /// post on the next run-loop turn rather than in the same synchronous
+    /// action.
+    private func addRepository() {
+        openWindow(id: mainWindowID)
+        NSApp.activate(ignoringOtherApps: true)
+        Task { @MainActor in
+            NotificationCenter.default.post(name: .swiftResticNewRepository, object: nil)
+        }
     }
 }

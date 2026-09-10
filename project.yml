@@ -52,6 +52,11 @@ targets:
       - path: Sources/SwiftRestic/App
         excludes:
           - SwiftResticApp.swift
+      # MenuBarLogo lives under Views/ by neighborhood, not by nature: it's a
+      # plain enum drawing into an NSImage (AppKit/CoreGraphics/Foundation
+      # only, no SwiftUI), the same shape as MenuBarStatus above. Named
+      # explicitly rather than pulling in all of Views/, which stays UI-only.
+      - path: Sources/SwiftRestic/Views/MenuBarLogo.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.newlix.SwiftResticTests

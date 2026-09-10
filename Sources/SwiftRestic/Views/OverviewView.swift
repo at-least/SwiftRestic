@@ -211,10 +211,12 @@ struct OverviewView: View {
     private var statTiles: some View {
         // Coverage lives in the Protection card above; these are the app's
         // inventory counts.
-        let problems = OverviewMetrics.problemCount(
-            runs: model.configuration.runs,
-            since: .now.addingTimeInterval(-7 * 86_400)
-        )
+        let since = Date.now.addingTimeInterval(-7 * 86_400)
+        let problems = OverviewMetrics.problemCount(runs: model.configuration.runs, since: since)
+        // Worst-of-window, not a flat "problems exist" orange: a failed run
+        // reads red here exactly like it does in Recent problems and
+        // Activity below, instead of disagreeing with them on the same page.
+        let worstProblem = OverviewMetrics.worstProblemOutcome(runs: model.configuration.runs, since: since)
         return HStack(spacing: Theme.Space.tile) {
             StatTile(
                 title: "Repositories",
@@ -231,8 +233,8 @@ struct OverviewView: View {
                 StatTile(
                     title: "Problems (7 days)",
                     value: problems > 0 ? Format.count(problems) : "0",
-                    systemImage: problems > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle",
-                    hue: problems > 0 ? Theme.warning : Theme.success,
+                    systemImage: worstProblem?.symbolName ?? "checkmark.circle",
+                    hue: worstProblem.map(ChartPalette.status) ?? Theme.success,
                     trailingSymbol: "chevron.forward"
                 )
             }

@@ -97,10 +97,26 @@ enum OverviewMetrics {
     /// the Recent problems card lists, so the dashboard's tile and card can
     /// never disagree.
     static func problemCount(runs: [RunRecord], since: Date) -> Int {
+        problems(in: runs, since: since).count
+    }
+
+    /// The most severe outcome among the window's problems, `.failed` beating
+    /// `.completedWithErrors` — so the Problems tile's colour and icon track
+    /// the same worst-case severity the Recent problems card and Activity
+    /// already show per-run, instead of a flat "something's wrong" orange
+    /// regardless of which kind of problem it actually is.
+    static func worstProblemOutcome(runs: [RunRecord], since: Date) -> RunRecord.Outcome? {
+        let outcomes = Set(problems(in: runs, since: since).map(\.outcome))
+        if outcomes.contains(.failed) { return .failed }
+        if outcomes.contains(.completedWithErrors) { return .completedWithErrors }
+        return nil
+    }
+
+    private static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {
         runs.filter {
             $0.startedAt >= since
                 && ($0.outcome == .failed || $0.outcome == .completedWithErrors)
-        }.count
+        }
     }
 }
 

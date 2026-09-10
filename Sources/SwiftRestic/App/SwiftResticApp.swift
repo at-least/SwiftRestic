@@ -295,7 +295,7 @@ private struct MenuBarStatusLabel: View {
     let model: AppModel
 
     var body: some View {
-        // Three faces, not two: the icon is the app's only always-visible
+        // Four faces, not two: the icon is the app's only always-visible
         // surface, so it must say "something is wrong" without a click and
         // show restores, upkeep and console work as running, not just plan
         // backups. Template rendering is the menu bar's law, so the state
@@ -305,12 +305,26 @@ private struct MenuBarStatusLabel: View {
             maintenance: model.maintenance,
             isRestoring: model.isRestoring,
             isConsoleRunning: model.console.isRunning,
+            hasNoRepositories: model.configuration.repositories.isEmpty,
             runs: model.configuration.runs
         )
         Group {
             switch MenuBarStatus.glyph(for: state) {
-            case .logo: Image(nsImage: MenuBarLogo.image)
-            case .symbol(let name): Image(systemName: name)
+            case .symbol(let name):
+                Image(systemName: name)
+            case .logo:
+                Image(nsImage: MenuBarLogo.image())
+            case .animatedLogo:
+                // Reduce Motion gets the resting mark rather than a stepped
+                // pulse — the running state is still legible from the menu's
+                // running lines, which don't depend on the icon animating.
+                if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    Image(nsImage: MenuBarLogo.image())
+                } else {
+                    TimelineView(.periodic(from: .now, by: MenuBarLogo.frameInterval)) { context in
+                        Image(nsImage: MenuBarLogo.image(phase: MenuBarLogo.phase(at: context.date)))
+                    }
+                }
             }
         }
         // Swapping a drawn image for a symbol is not a transition SwiftUI
