@@ -66,16 +66,30 @@ func color(_ hex: UInt32) -> CGColor {
 
 /// Glyph proportions, as fractions of the canvas.
 ///
+/// The whole glyph is drawn with one stroke weight: the ring and the height of
+/// each plate are both `stroke`, with round caps everywhere, which is what makes
+/// the glyph read like an SF Symbol rather than an illustration. The ring is
+/// built the way Apple builds `arrow.circlepath` (the Time Machine glyph): the
+/// opening sits on the left, the arc sweeps counterclockwise from the tail at
+/// the lower end of the opening, and a filled, rounded triangular head at the
+/// upper end points straight down into the opening, back toward the tail. The
+/// head is axis-aligned rather than tangent to the arc; that is what keeps it
+/// reading as an arrow instead of a hook flying off the ring.
+///
 /// Small sizes get a deliberately coarser glyph. At 16pt the three-plate stack
 /// leaves gaps under half a pixel wide and collapses into a smudge, so those
-/// sizes drop to two thicker plates and a heavier ring. The choice is keyed on
-/// pixel count rather than point size, so 16pt@2x and 32pt@1x — both 32 pixels —
+/// sizes drop to two plates and a heavier stroke. The choice is keyed on pixel
+/// count rather than point size, so 16pt@2x and 32pt@1x — both 32 pixels —
 /// always render identically.
 struct Proportions {
     var ringRadius: CGFloat
-    var ringWidth: CGFloat
+    var stroke: CGFloat
+    /// Where the stroke ends and the head sits, in degrees above the left
+    /// horizontal, and where the stroke starts, in degrees below it. The opening
+    /// is deliberately asymmetric: the head hangs a little higher than the tail.
+    var headAngle: CGFloat
+    var tailAngle: CGFloat
     var plateWidth: CGFloat
-    var plateHeight: CGFloat
     var plateSpacing: CGFloat
     /// Bottom plate first; the last one is the newest snapshot and fully opaque.
     var plateAlphas: [CGFloat]
@@ -84,17 +98,19 @@ struct Proportions {
     static func forPixelSize(_ pixels: Int) -> Proportions {
         if pixels <= 32 {
             Proportions(
-                ringRadius: 0.292, ringWidth: 0.092,
-                plateWidth: 0.286, plateHeight: 0.092, plateSpacing: 0.156,
-                plateAlphas: [0.62, 1.0],
+                // The head hangs higher here so its inner corner clears the top
+                // plate; at this size the two would otherwise fuse into a blob.
+                ringRadius: 0.260, stroke: 0.082, headAngle: 36, tailAngle: 40,
+                plateWidth: 0.190, plateSpacing: 0.160,
+                plateAlphas: [0.60, 1.0],
                 // A blurred shadow only muddies the edge at this size.
                 drawsShadow: false
             )
         } else {
             Proportions(
-                ringRadius: 0.278, ringWidth: 0.070,
-                plateWidth: 0.300, plateHeight: 0.062, plateSpacing: 0.112,
-                plateAlphas: [0.50, 0.74, 1.0],
+                ringRadius: 0.252, stroke: 0.051, headAngle: 30, tailAngle: 36,
+                plateWidth: 0.191, plateSpacing: 0.098,
+                plateAlphas: [0.40, 0.66, 1.0],
                 drawsShadow: true
             )
         }
@@ -117,100 +133,87 @@ func drawIcon(size: CGFloat, into context: CGContext) {
     context.saveGState()
     if proportions.drawsShadow {
         context.setShadow(
-            offset: CGSize(width: 0, height: -s * 0.012),
-            blur: s * 0.03,
-            color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.28)
+            offset: CGSize(width: 0, height: -s * 0.010),
+            blur: s * 0.028,
+            color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.26)
         )
     }
     context.addPath(path)
-    context.setFillColor(color(0x2B3AA0))
+    context.setFillColor(color(0x0F7488))
     context.fillPath()
     context.restoreGState()
 
-    // Background gradient: light blue at the top-left, deep navy at the bottom.
+    // Background: one restrained two-stop teal gradient, lighter at the top. No
+    // gloss band and no diagonal — the depth comes from the gradient alone.
     context.saveGState()
     context.addPath(path)
     context.clip()
     let gradient = CGGradient(
         colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [color(0x5C8BFF), color(0x3B4FD8), color(0x1E2160)] as CFArray,
-        locations: [0, 0.55, 1]
-    )!
-    context.drawLinearGradient(
-        gradient,
-        start: CGPoint(x: shape.minX, y: shape.maxY),
-        end: CGPoint(x: shape.maxX, y: shape.minY),
-        options: []
-    )
-
-    // Soft highlight along the top edge, which is what stops a flat gradient from
-    // looking like a sticker at large sizes.
-    let highlight = CGGradient(
-        colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [
-            CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.30),
-            CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0),
-        ] as CFArray,
+        colors: [color(0x48C9BD), color(0x0F7488)] as CFArray,
         locations: [0, 1]
     )!
     context.drawLinearGradient(
-        highlight,
+        gradient,
         start: CGPoint(x: shape.midX, y: shape.maxY),
-        end: CGPoint(x: shape.midX, y: shape.midY),
+        end: CGPoint(x: shape.midX, y: shape.minY),
         options: []
     )
     context.restoreGState()
 
     let center = CGPoint(x: shape.midX, y: shape.midY)
     let white = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+    let stroke = s * proportions.stroke
 
-    // Circular restore arrow sweeping around the stack.
+    // Circular restore arrow sweeping counterclockwise around the stack — the
+    // same direction Time Machine's arrow turns, back through time.
     let ringRadius = s * proportions.ringRadius
-    let ringWidth = s * proportions.ringWidth
     context.saveGState()
     context.setStrokeColor(white)
-    context.setLineWidth(ringWidth)
-    context.setLineCap(.butt)
-    // The arc runs counterclockwise from `gapEnd` round to `gapStart`, so the
-    // arrowhead belongs at `gapStart` — the end of the stroke, not its tail.
-    let gapStart: CGFloat = 74 * .pi / 180
-    let gapEnd: CGFloat = 116 * .pi / 180
+    context.setLineWidth(stroke)
+    context.setLineCap(.round)
+    context.setLineJoin(.round)
+    // The opening is on the left. Going counterclockwise the stroke starts at
+    // the lower edge of the opening and ends at its upper edge, so the arrowhead
+    // belongs at `headAngle` — the end of the stroke, not its tail.
+    let tailAngle = .pi + proportions.tailAngle * .pi / 180
+    let headAngle = .pi - proportions.headAngle * .pi / 180
     context.addArc(
         center: center,
         radius: ringRadius,
-        startAngle: gapEnd,
-        endAngle: gapStart + 2 * .pi,
+        startAngle: tailAngle,
+        endAngle: headAngle + 2 * .pi,
         clockwise: false
     )
     context.strokePath()
 
-    // The head's base sits well behind the arc's end, so the stroke needs no
-    // overshoot — any would show as a step along the arrowhead's outer edge.
-    let headAngle = gapStart
-    let headCenter = CGPoint(
+    // Filled arrowhead pointing straight down: 2.3 strokes long and 2.9 across
+    // the base, with the base's midpoint on the end of the arc so it covers the
+    // arc's round cap. The outline is stroked with round joins to round the
+    // corners the same way the rest of the glyph is rounded; the path is inset
+    // by half that outline so the finished shape lands on those measurements.
+    let arcEnd = CGPoint(
         x: center.x + cos(headAngle) * ringRadius,
         y: center.y + sin(headAngle) * ringRadius
     )
-    let headLength = ringWidth * 1.16
-    let headHalfWidth = ringWidth * 0.94
     context.saveGState()
-    context.translateBy(x: headCenter.x, y: headCenter.y)
-    // Local +x points along the direction of travel: the tangent at `headAngle`
-    // for a counterclockwise sweep is that angle plus a quarter turn.
-    context.rotate(by: headAngle + .pi / 2)
-    context.move(to: CGPoint(x: headLength, y: 0))
-    context.addLine(to: CGPoint(x: -headLength * 0.78, y: headHalfWidth))
-    context.addLine(to: CGPoint(x: -headLength * 0.78, y: -headHalfWidth))
+    context.translateBy(x: arcEnd.x, y: arcEnd.y)
+    let edge = stroke * 0.5
+    let headLength = stroke * 2.3 - edge / 2
+    let headHalfBase = stroke * 1.45 - edge / 2
+    context.setLineWidth(edge)
+    context.move(to: CGPoint(x: -headHalfBase, y: -edge / 2))
+    context.addLine(to: CGPoint(x: headHalfBase, y: -edge / 2))
+    context.addLine(to: CGPoint(x: 0, y: -headLength))
     context.closePath()
     context.setFillColor(white)
-    context.fillPath()
+    context.drawPath(using: .fillStroke)
     context.restoreGState()
     context.restoreGState()
 
     // Snapshot stack. Index 0 is drawn lowest (Core Graphics is y-up), so the
     // ascending alphas put the newest, brightest plate on top.
     let plateWidth = s * proportions.plateWidth
-    let plateHeight = s * proportions.plateHeight
     let spacing = s * proportions.plateSpacing
     let alphas = proportions.plateAlphas
     let stackOffset = CGFloat(alphas.count - 1) * spacing / 2
@@ -220,7 +223,7 @@ func drawIcon(size: CGFloat, into context: CGContext) {
         context.addPath(platePath(
             center: CGPoint(x: center.x, y: y),
             width: plateWidth,
-            height: plateHeight
+            height: stroke
         ))
         context.fillPath()
     }
