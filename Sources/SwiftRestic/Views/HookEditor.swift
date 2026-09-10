@@ -15,8 +15,15 @@ struct HookEditor: View {
     private var isForMaintenance: Bool { events.allSatisfy(\.isMaintenanceEvent) }
 
     var body: some View {
-        VSplitView {
+        // A fixed-height band for the list, the form for the rest. This was a
+        // VSplitView, but its divider has no visible affordance in a sheet and
+        // its initial split gave the list — usually one or two rows — most of
+        // the height, pushing the Command field the user has to fill out of
+        // view.
+        VStack(spacing: 0) {
             list
+                .frame(height: 180)
+            Divider()
             detail
         }
         .confirmationDialog(
@@ -61,7 +68,11 @@ struct HookEditor: View {
                     hooks.move(fromOffsets: indices, toOffset: destination)
                 }
             }
-            .frame(minHeight: 120)
+            .listStyle(.inset)
+            // The stock white list background read as a broken empty pane in
+            // the sheet; rows straight on the sheet background match the
+            // grouped forms everywhere else in these editors.
+            .scrollContentBackground(.hidden)
 
             HStack {
                 Button("Add Hook") {

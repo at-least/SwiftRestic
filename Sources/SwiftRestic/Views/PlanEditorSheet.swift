@@ -92,8 +92,9 @@ struct PlanEditorSheet: View {
         // Resizable, not fixed: forty pasted exclude patterns do not fit the
         // default frame, and a fixed sheet turns its list into a mailbox slot
         // at exactly the moment the user has the most to paste. The repository
-        // editor already works this way.
-        .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 580)
+        // editor already works this way. Tall enough that the Hooks tab's
+        // Command field clears the fixed hook list band without scrolling.
+        .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 620)
         .onAppear {
             if draft.repositoryID == nil {
                 draft.repositoryID = model.configuration.repositories.first?.id
