@@ -19,6 +19,9 @@ struct RepositoryEditorSheet: View {
     @State private var isWorking = false
     @State private var isConfirmingDiscard = false
     @State private var tab: Tab = .repository
+    /// Remotes reported by the user's own rclone, or `nil` when unknown or
+    /// unavailable — the Remote field then stays a plain text field.
+    @State private var rcloneRemotes: [RcloneRemote]?
 
     private let isNew: Bool
 
@@ -97,6 +100,18 @@ struct RepositoryEditorSheet: View {
             // warned about.
             initialPassword = password
             initialProviderSecret = providerSecret
+        }
+        .task(id: draft.kind) {
+            // Requeried on every return to the rclone kind: remotes are edited
+            // outside the app, so a list from a previous visit may be stale.
+            guard draft.kind == .rclone else {
+                rcloneRemotes = nil
+                return
+            }
+            let remotes = await loadRcloneRemotes()
+            // A cancelled query must not write over its successor's fresher list.
+            guard !Task.isCancelled else { return }
+            rcloneRemotes = remotes
         }
         .confirmationDialog(
             "Discard changes?",
@@ -297,7 +312,26 @@ struct RepositoryEditorSheet: View {
         case .rest:
             TextField("URL", text: $draft.restURL, prompt: Text("https://user:pass@host:8000/"))
         case .rclone:
-            TextField("Remote", text: $draft.rcloneRemote, prompt: Text("mydrive"))
+            HStack {
+                TextField("Remote", text: $draft.rcloneRemote, prompt: Text("mydrive"))
+                // Recognition over recall: the names rclone already knows, as
+                // suggestions — never a replacement for the field, since
+                // `:backend:` connection strings and env-defined remotes are
+                // typed, not picked.
+                if let rcloneRemotes, !rcloneRemotes.isEmpty {
+                    Menu {
+                        ForEach(rcloneRemotes, id: \.name) { remote in
+                            Button(remote.menuTitle) { draft.rcloneRemote = remote.name }
+                        }
+                    } label: {
+                        Label("Remotes", systemImage: "chevron.up.chevron.down")
+                    }
+                    .menuStyle(.borderedButton)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help("Remotes configured with `rclone config` on this Mac")
+                }
+            }
             TextField("Path", text: $draft.rclonePath, prompt: Text("backups/mac"))
             ExpandableCaption(
                 summary: "rclone has to be installed and its remote already configured.",
@@ -395,6 +429,14 @@ struct RepositoryEditorSheet: View {
         password = secrets.password ?? ""
         confirmPassword = password
         providerSecret = secrets.providerSecret ?? ""
+    }
+
+    /// Asks the user's rclone what it has configured. Empty on any failure —
+    /// without rclone the field is simply free text, and the save-time probe
+    /// already explains a missing binary.
+    private func loadRcloneRemotes() async -> [RcloneRemote] {
+        guard let rclone = ResticBinary.locateHelper(named: "rclone") else { return [] }
+        return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
     }
 
     private func effectivePassword() async -> String {
