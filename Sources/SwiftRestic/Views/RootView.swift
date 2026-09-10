@@ -458,25 +458,8 @@ struct WelcomeView: View {
                         .strokeBorder(Theme.tint.opacity(0.22), lineWidth: 1)
                 )
 
-            // Title above tagline, both centred: the title sitting beside a
-            // wrapping paragraph read as a layout accident on the app's very
-            // first screen.
-            VStack(spacing: 6) {
-                Text("SwiftRestic")
-                    .font(.largeTitle.weight(.bold))
-                Text("Scheduled, encrypted, deduplicated backups powered by restic — and your repository stays an open one you can restore anywhere.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 460)
-            }
-
-            HStack(spacing: Theme.Space.section) {
-                welcomeFeature("lock.shield", "Encrypted", "Client-side, before anything leaves the Mac")
-                welcomeFeature("arrow.left.arrow.right.square", "See what changed", "Compare any two snapshots file by file")
-                welcomeFeature("apple.terminal", "restic console", "Run any restic command, for what the UI does not cover")
-            }
-            .padding(.vertical, 6)
+            Text("SwiftRestic")
+                .font(.largeTitle.weight(.bold))
 
             if let problem = model.binaryProblem {
                 HStack(alignment: .top, spacing: 10) {
@@ -525,21 +508,5 @@ struct WelcomeView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func welcomeFeature(_ symbol: String, _ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
-        VStack(spacing: 5) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.tint)
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: 150)
     }
 }
