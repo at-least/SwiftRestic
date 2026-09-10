@@ -53,6 +53,10 @@ func platePath(center: CGPoint, width: CGFloat, height: CGFloat) -> CGPath {
     return CGPath(roundedRect: rect, cornerWidth: height / 2, cornerHeight: height / 2, transform: nil)
 }
 
+func radians(_ degrees: CGFloat) -> CGFloat {
+    degrees * .pi / 180
+}
+
 func color(_ hex: UInt32) -> CGColor {
     CGColor(
         srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
@@ -85,9 +89,10 @@ struct Proportions {
     var ringRadius: CGFloat
     var stroke: CGFloat
     /// Where the stroke ends and the head sits, in degrees above the left
-    /// horizontal, and where the stroke starts, in degrees below it. The opening
-    /// is deliberately asymmetric: the head hangs a little higher than the tail.
+    /// horizontal. The opening is deliberately asymmetric: the head hangs a
+    /// little higher than the tail.
     var headAngle: CGFloat
+    /// Where the stroke starts, in degrees below the left horizontal.
     var tailAngle: CGFloat
     var plateWidth: CGFloat
     var plateSpacing: CGFloat
@@ -172,17 +177,16 @@ func drawIcon(size: CGFloat, into context: CGContext) {
     context.setStrokeColor(white)
     context.setLineWidth(stroke)
     context.setLineCap(.round)
-    context.setLineJoin(.round)
     // The opening is on the left. Going counterclockwise the stroke starts at
     // the lower edge of the opening and ends at its upper edge, so the arrowhead
-    // belongs at `headAngle` — the end of the stroke, not its tail.
-    let tailAngle = .pi + proportions.tailAngle * .pi / 180
-    let headAngle = .pi - proportions.headAngle * .pi / 180
+    // belongs at `endAngle` — the end of the stroke, not its tail.
+    let startAngle = .pi + radians(proportions.tailAngle)
+    let endAngle = .pi - radians(proportions.headAngle)
     context.addArc(
         center: center,
         radius: ringRadius,
-        startAngle: tailAngle,
-        endAngle: headAngle + 2 * .pi,
+        startAngle: startAngle,
+        endAngle: endAngle + 2 * .pi,
         clockwise: false
     )
     context.strokePath()
@@ -193,17 +197,19 @@ func drawIcon(size: CGFloat, into context: CGContext) {
     // corners the same way the rest of the glyph is rounded; the path is inset
     // by half that outline so the finished shape lands on those measurements.
     let arcEnd = CGPoint(
-        x: center.x + cos(headAngle) * ringRadius,
-        y: center.y + sin(headAngle) * ringRadius
+        x: center.x + cos(endAngle) * ringRadius,
+        y: center.y + sin(endAngle) * ringRadius
     )
     context.saveGState()
     context.translateBy(x: arcEnd.x, y: arcEnd.y)
-    let edge = stroke * 0.5
-    let headLength = stroke * 2.3 - edge / 2
-    let headHalfBase = stroke * 1.45 - edge / 2
-    context.setLineWidth(edge)
-    context.move(to: CGPoint(x: -headHalfBase, y: -edge / 2))
-    context.addLine(to: CGPoint(x: headHalfBase, y: -edge / 2))
+    let outline = stroke * 0.5
+    let joinInset = outline / 2
+    let headLength = stroke * 2.3 - joinInset
+    let headHalfBase = stroke * 1.45 - joinInset
+    context.setLineWidth(outline)
+    context.setLineJoin(.round)
+    context.move(to: CGPoint(x: -headHalfBase, y: -joinInset))
+    context.addLine(to: CGPoint(x: headHalfBase, y: -joinInset))
     context.addLine(to: CGPoint(x: 0, y: -headLength))
     context.closePath()
     context.setFillColor(white)
