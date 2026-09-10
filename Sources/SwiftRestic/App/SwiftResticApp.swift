@@ -91,7 +91,6 @@ extension Notification.Name {
     static let swiftResticRunSelected = Notification.Name("SwiftRestic.runSelected")
     /// Posted by the File menu; the new-item sheets are RootView's to present.
     static let swiftResticNewPlan = Notification.Name("SwiftRestic.newPlan")
-    static let swiftResticNewRepository = Notification.Name("SwiftRestic.newRepository")
 }
 
 #if DEBUG
@@ -218,7 +217,11 @@ struct SwiftResticApp: App {
                 .disabled(model.configuration.repositories.isEmpty)
 
                 Button("Add Repository…") {
-                    NotificationCenter.default.post(name: .swiftResticNewRepository, object: nil)
+                    // Through the model, not a notification: with the window
+                    // closed there is no RootView to receive a post, and the
+                    // command would silently do nothing. The intent waits for
+                    // the next time the window opens.
+                    model.pendingNewRepository = true
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }

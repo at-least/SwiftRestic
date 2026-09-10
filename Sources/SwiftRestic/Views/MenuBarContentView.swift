@@ -76,15 +76,13 @@ struct MenuBarContentView: View {
 
     /// Unlike the File menu's identically-named command, this one can fire
     /// with the main window closed — the whole reason the icon has an
-    /// `unconfigured` face. The window has to exist before `RootView`'s
-    /// `.onReceive` is there to catch the notification, so open it first and
-    /// post on the next run-loop turn rather than in the same synchronous
-    /// action.
+    /// `unconfigured` face. The intent travels through the model, set *before*
+    /// the window opens: a fresh window consumes it in `onAppear`, an already
+    /// open one in `onChange`, so nothing depends on how many run-loop turns
+    /// scene installation takes.
     private func addRepository() {
+        model.pendingNewRepository = true
         openWindow(id: mainWindowID)
         NSApp.activate(ignoringOtherApps: true)
-        Task { @MainActor in
-            NotificationCenter.default.post(name: .swiftResticNewRepository, object: nil)
-        }
     }
 }

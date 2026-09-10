@@ -59,6 +59,14 @@ final class AppModel {
     /// send the user over.
     var activityShowsProblemsOnly = false
 
+    /// Set when something asks for the new-repository sheet before the window
+    /// that presents it exists — the tray's `unconfigured` face, or the File
+    /// command with the window closed. RootView consumes and clears it on
+    /// `onAppear` (window opening fresh) or `onChange` (window already on
+    /// screen), so the intent survives no matter which order window creation
+    /// and the request land in. Transient, never persisted.
+    var pendingNewRepository = false
+
     /// The pane the sidebar is showing, bound from RootView so the Backup
     /// menu can disable against it.
     var sidebarSelection: SidebarItem?

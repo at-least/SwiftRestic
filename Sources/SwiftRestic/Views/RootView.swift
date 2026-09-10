@@ -87,10 +87,6 @@ struct RootView: View {
             guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
             editingPlan = BackupPlan()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .swiftResticNewRepository)) { _ in
-            guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
-            editingRepository = Repository()
-        }
         .toolbar {
             Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
                 .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
@@ -102,6 +98,7 @@ struct RootView: View {
             .help("Run restic commands directly against a repository")
         }
         .onAppear {
+            consumePendingNewRepository()
             selectSomething()
             #if DEBUG
             applyCapturePaneOverride()
@@ -260,8 +257,7 @@ struct RootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        VStack(spacing: 0) {
-            // A restore outlives the sheet that started it, so its progress is
+        VStack(spacing: 0) {            // A restore outlives the sheet that started it, so its progress is
             // an app-level fact: this strip sits above every pane, and the
             // menu bar line covers the window-closed case. Dismissing the
             // browser or Find sheet hands the progress over to this strip.
@@ -333,6 +329,14 @@ struct RootView: View {
                 }
             }
         }
+        // The new-repository intent lands on this unconditional stack rather
+        // than the body's modifier chain — the chain is long enough that one
+        // more modifier pushed it past the type-checker's budget, and this
+        // stack exists in every state, so the consumption fires wherever the
+        // window is already open.
+        .onChange(of: model.pendingNewRepository) {
+            consumePendingNewRepository()
+        }
     }
 
     #if DEBUG
@@ -374,6 +378,18 @@ struct RootView: View {
         guard model.sidebarSelection == nil, !model.isBootstrapping else { return }
         // The dashboard is the useful landing place once anything is configured.
         model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
+    }
+
+    /// The model-carried "add a repository" intent: a fresh window consumes it
+    /// here on appear, an already open one through `onChange`. The flag clears
+    /// before the guards, so a request arriving while a sheet is up is dropped
+    /// — the same no-op the old notification's guard produced, now without the
+    /// race on whether the window existed to receive it at all.
+    private func consumePendingNewRepository() {
+        guard model.pendingNewRepository else { return }
+        model.pendingNewRepository = false
+        guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
+        editingRepository = Repository()
     }
 
     /// After a deletion the selected plan or repository may no longer exist;
