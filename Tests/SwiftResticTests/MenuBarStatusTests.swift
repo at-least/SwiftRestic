@@ -218,16 +218,16 @@ struct MenuBarStatusTests {
 
     @Test("a clean or empty history has no problem line")
     func noProblemWhenClean() {
-        #expect(MenuBarStatus.problemLine(runs: []) == nil)
+        #expect(MenuBarStatus.problemLine(runs: [], hasNoRepositories: false) == nil)
 
         var succeeded = RunRecord(planName: "Nightly")
         succeeded.outcome = .succeeded
-        #expect(MenuBarStatus.problemLine(runs: [succeeded]) == nil)
+        #expect(MenuBarStatus.problemLine(runs: [succeeded], hasNoRepositories: false) == nil)
 
         // Cancelled is not a problem: the user asked for it.
         var cancelled = RunRecord(planName: "Nightly")
         cancelled.outcome = .cancelled
-        #expect(MenuBarStatus.problemLine(runs: [cancelled]) == nil)
+        #expect(MenuBarStatus.problemLine(runs: [cancelled], hasNoRepositories: false) == nil)
     }
 
     @Test("a recent failure and a recent warning both lead, newest first")
@@ -243,17 +243,17 @@ struct MenuBarStatusTests {
         warned.finishedAt = warned.startedAt
 
         #expect(
-            MenuBarStatus.problemLine(runs: [failed], relative: Self.ago)
+            MenuBarStatus.problemLine(runs: [failed], hasNoRepositories: false, relative: Self.ago)
                 == "Documents to NAS failed 2 hours ago"
         )
         #expect(
-            MenuBarStatus.problemLine(runs: [warned], relative: Self.ago)
+            MenuBarStatus.problemLine(runs: [warned], hasNoRepositories: false, relative: Self.ago)
                 == "Photos finished with errors 2 hours ago"
         )
         // Two problems: the one that finished later leads, whatever the
         // storage order.
-        #expect(MenuBarStatus.problemLine(runs: [failed, warned])?.hasPrefix("Photos ") == true)
-        #expect(MenuBarStatus.problemLine(runs: [warned, failed])?.hasPrefix("Photos ") == true)
+        #expect(MenuBarStatus.problemLine(runs: [failed, warned], hasNoRepositories: false)?.hasPrefix("Photos ") == true)
+        #expect(MenuBarStatus.problemLine(runs: [warned, failed], hasNoRepositories: false)?.hasPrefix("Photos ") == true)
     }
 
     @Test("recency counts from when the run finished, not when it started")
@@ -271,12 +271,12 @@ struct MenuBarStatusTests {
         afternoon.finishedAt = .now.addingTimeInterval(-4.5 * 3_600)
 
         #expect(
-            MenuBarStatus.problemLine(runs: [overnight, afternoon])?.hasPrefix("Nightly ") == true
+            MenuBarStatus.problemLine(runs: [overnight, afternoon], hasNoRepositories: false)?.hasPrefix("Nightly ") == true
         )
 
         // A run that started outside the window but finished inside it is
         // still news.
-        #expect(MenuBarStatus.problemLine(runs: [overnight]) != nil)
+        #expect(MenuBarStatus.problemLine(runs: [overnight], hasNoRepositories: false) != nil)
     }
 
     @Test("a failure older than the dashboard's seven-day window is old news")
@@ -285,14 +285,41 @@ struct MenuBarStatusTests {
         stale.outcome = .failed
         stale.startedAt = .now.addingTimeInterval(-9 * 86_400)
         stale.finishedAt = .now.addingTimeInterval(-8 * 86_400)
-        #expect(MenuBarStatus.problemLine(runs: [stale]) == nil)
+        #expect(MenuBarStatus.problemLine(runs: [stale], hasNoRepositories: false) == nil)
 
         // Just inside the window still counts.
         var fresh = RunRecord(planName: "New Plan")
         fresh.outcome = .failed
         fresh.startedAt = .now.addingTimeInterval(-7 * 86_400)
         fresh.finishedAt = .now.addingTimeInterval(-6 * 86_400)
-        #expect(MenuBarStatus.problemLine(runs: [fresh]) != nil)
+        #expect(MenuBarStatus.problemLine(runs: [fresh], hasNoRepositories: false) != nil)
+    }
+
+    @Test("the problem line yields when no repository is configured")
+    func problemLineYieldsToUnconfigured() {
+        var failed = RunRecord(planName: "Nightly")
+        failed.outcome = .failed
+        failed.startedAt = .now.addingTimeInterval(-60)
+        failed.finishedAt = failed.startedAt
+
+        // Runs outlive the repository that produced them — removing it keeps
+        // the history — so the line must yield explicitly, or a `?` icon's
+        // menu would open leading with "Nightly failed 2 hours ago".
+        #expect(MenuBarStatus.problemLine(runs: [failed], hasNoRepositories: true) == nil)
+        #expect(MenuBarStatus.problemLine(runs: [failed], hasNoRepositories: false) != nil)
+
+        // The icon's own ordering is unchanged: unconfigured still beats
+        // problem, so both channels now answer setup the same way.
+        #expect(
+            MenuBarStatus.iconState(
+                activity: [:],
+                maintenance: [:],
+                isRestoring: false,
+                isConsoleRunning: false,
+                hasNoRepositories: true,
+                runs: [failed]
+            ) == .unconfigured
+        )
     }
 
     @Test("the subject names what ran: a plan, a restore's target, or a repository")
@@ -306,19 +333,19 @@ struct MenuBarStatusTests {
         }
 
         #expect(
-            MenuBarStatus.problemLine(runs: [failedRun(kind: .check, name: "NAS")], relative: Self.ago)
+            MenuBarStatus.problemLine(runs: [failedRun(kind: .check, name: "NAS")], hasNoRepositories: false, relative: Self.ago)
                 == "Check on NAS failed 2 hours ago"
         )
         #expect(
-            MenuBarStatus.problemLine(runs: [failedRun(kind: .prune, name: "NAS")], relative: Self.ago)
+            MenuBarStatus.problemLine(runs: [failedRun(kind: .prune, name: "NAS")], hasNoRepositories: false, relative: Self.ago)
                 == "Prune on NAS failed 2 hours ago"
         )
         #expect(
-            MenuBarStatus.problemLine(runs: [failedRun(kind: .restore, name: "Report.pdf")], relative: Self.ago)
+            MenuBarStatus.problemLine(runs: [failedRun(kind: .restore, name: "Report.pdf")], hasNoRepositories: false, relative: Self.ago)
                 == "Restore of Report.pdf failed 2 hours ago"
         )
         #expect(
-            MenuBarStatus.problemLine(runs: [failedRun(kind: .backup, name: "Nightly")], relative: Self.ago)
+            MenuBarStatus.problemLine(runs: [failedRun(kind: .backup, name: "Nightly")], hasNoRepositories: false, relative: Self.ago)
                 == "Nightly failed 2 hours ago"
         )
     }

@@ -11,8 +11,13 @@ struct MenuBarContentView: View {
 
     var body: some View {
         // The failure line leads: the menu's first job is answering "did the
-        // last run succeed?" before it answers "what happens next?".
-        if let problem = MenuBarStatus.problemLine(runs: model.configuration.runs) {
+        // last run succeed?" before it answers "what happens next?" — unless
+        // the `?` face summoned the menu to ask for setup, which an old
+        // failure from a since-removed repository's runs must not talk over.
+        if let problem = MenuBarStatus.problemLine(
+            runs: model.configuration.runs,
+            hasNoRepositories: model.configuration.repositories.isEmpty
+        ) {
             Text(problem)
         }
         // Every kind of restic work in flight gets a line — plans, repository

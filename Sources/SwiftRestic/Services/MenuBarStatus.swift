@@ -9,9 +9,11 @@ enum MenuBarStatus {
     /// The four faces the menu bar icon can wear. Running beats everything
     /// else: while work is in flight the icon says so, and the menu's running
     /// lines carry the news — an animated-then-badged glyph would flicker
-    /// between faces on every run. Unconfigured beats problem: with no
-    /// repository there is nothing that could have produced a run to warn
-    /// about.
+    /// between faces on every run. Unconfigured beats problem: the run
+    /// history outlives the repositories that produced it — removing a
+    /// repository keeps its runs — so both channels yield to the setup
+    /// question explicitly, or the icon could ask for setup over a menu line
+    /// announcing an old failure.
     enum IconState: Equatable {
         case unconfigured
         case idle
@@ -35,7 +37,9 @@ enum MenuBarStatus {
         let isRunning = !activity.isEmpty || !maintenance.isEmpty || isRestoring || isConsoleRunning
         if isRunning { return .running }
         if hasNoRepositories { return .unconfigured }
-        return problemLine(runs: runs, now: now) == nil ? .idle : .problem
+        // `hasNoRepositories` already returned above; the problem line's own
+        // yield to it is the menu channel's rule, not this one's.
+        return problemLine(runs: runs, hasNoRepositories: false, now: now) == nil ? .idle : .problem
     }
 
     /// What the icon draws for a state. Idle wears the app's own mark — the
@@ -76,11 +80,17 @@ enum MenuBarStatus {
     /// it forever would read as permanent breakage. Runs count from when they
     /// finished — a backup that ran all night and failed at dawn is the
     /// newest news, not the stalest.
+    ///
+    /// Yields to `hasNoRepositories`: the `unconfigured` icon face is what
+    /// summoned the menu, and the line under it must not answer with a
+    /// failure belonging to a since-removed repository's runs.
     static func problemLine(
         runs: [RunRecord],
+        hasNoRepositories: Bool,
         now: Date = .now,
         relative: (Date) -> String = { Format.relative($0) }
     ) -> String? {
+        guard !hasNoRepositories else { return nil }
         let windowStart = now.addingTimeInterval(-7 * 86_400)
         let problems = runs.filter {
             $0.finishedAt >= windowStart
