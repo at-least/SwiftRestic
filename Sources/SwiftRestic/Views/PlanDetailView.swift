@@ -186,14 +186,13 @@ struct PlanDetailView: View {
             }
             StatTile(
                 title: "Last run added",
-                value: Format.bytes(lastRun?.dataAdded),
-                systemImage: "arrow.up.doc"
+                value: Format.bytes(lastRun?.dataAdded)
             )
         }
     }
 
     private func configurationCard(_ plan: BackupPlan) -> some View {
-        Card("Configuration", systemImage: "slider.horizontal.3") {
+        Card("Configuration") {
             VStack(alignment: .leading, spacing: 10) {
                 DetailGrid {
                     DetailRow("Repository") {
@@ -255,7 +254,7 @@ struct PlanDetailView: View {
         } else {
             // A retry could never succeed, so the card says what is actually
             // missing instead of offering buttons that lie.
-            Card("Snapshots", systemImage: "camera.on.rectangle.fill") {
+            Card("Snapshots") {
                 Text("No repository set — snapshots appear once the plan points at one.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -269,7 +268,7 @@ struct PlanDetailView: View {
         let repositoryTotal = model.snapshots(for: repositoryID).count
         let outcome = model.snapshotListingOutcome(for: repositoryID)
         let loadedAt = model.snapshotsLoadedAt(for: repositoryID)
-        return Card("Snapshots", systemImage: "camera.on.rectangle.fill") {
+        return Card("Snapshots") {
             SnapshotTable(
                 snapshots: snapshots,
                 isLoading: model.loadingSnapshots.contains(repositoryID),

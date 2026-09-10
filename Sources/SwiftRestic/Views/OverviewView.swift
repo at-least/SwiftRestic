@@ -156,7 +156,7 @@ struct OverviewView: View {
     /// one aggregate number that cannot say which plan it is worried about.
     /// The count survives as a derived caption, never the headline.
     private var protectionCard: some View {
-        Card("Protection", systemImage: "lock.shield") {
+        Card("Protection") {
             VStack(alignment: .leading, spacing: 7) {
                 let rows = protectionRows
                 if rows.isEmpty {
@@ -218,13 +218,11 @@ struct OverviewView: View {
         return HStack(spacing: Theme.Space.tile) {
             StatTile(
                 title: "Repositories",
-                value: Format.count(model.configuration.repositories.count),
-                systemImage: "externaldrive"
+                value: Format.count(model.configuration.repositories.count)
             )
             StatTile(
                 title: "Plans",
-                value: Format.count(model.configuration.plans.count),
-                systemImage: "calendar"
+                value: Format.count(model.configuration.plans.count)
             )
             // A button in both states: a tile that only became clickable when
             // problems existed was a disappearing affordance, and arriving in
@@ -255,7 +253,7 @@ struct OverviewView: View {
     // MARK: - Daily volume
 
     private var volumeCard: some View {
-        Card("Data added per day", systemImage: "chart.bar.fill") {
+        Card("Data added per day") {
             VStack(alignment: .leading, spacing: 8) {
                 if daily.isEmpty {
                     Text("No backups in the last \(Self.windowDays) days.")
@@ -390,7 +388,7 @@ struct OverviewView: View {
             guard let stats = model.repositoryStats[repository.id] else { return nil }
             return RepositoryVolume(id: repository.id, name: repository.name, bytes: stats.totalSize)
         }
-        return Card("Repository size", systemImage: "internaldrive.fill") {
+        return Card("Repository size") {
             // Stats that exist but total zero mean the repositories are empty,
             // not that measurement failed: drawing zero-width bars with
             // floating "0 bytes" labels reads as breakage.
@@ -437,7 +435,7 @@ struct OverviewView: View {
     // MARK: - Lists
 
     private var upcomingCard: some View {
-        Card("Next runs", systemImage: "clock.arrow.circlepath") {
+        Card("Next runs") {
             VStack(alignment: .leading, spacing: 7) {
                 // Same exclusion the scheduler applies: a plan whose repository
                 // has vanished must not be announced as due forever.
@@ -487,7 +485,7 @@ struct OverviewView: View {
     }
 
     private var recentFailuresCard: some View {
-        Card("Recent problems", systemImage: "exclamationmark.bubble.fill") {
+        Card("Recent problems") {
             VStack(alignment: .leading, spacing: 7) {
                 let failures = model.configuration.runs
                     .filter { $0.outcome == .failed || $0.outcome == .completedWithErrors }

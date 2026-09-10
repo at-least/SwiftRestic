@@ -135,13 +135,11 @@ struct SnapshotDiffView: View {
         return HStack(alignment: .center, spacing: 10) {
             StatTile(
                 title: "Added",
-                value: countText(stats?.added),
-                systemImage: "plus.circle"
+                value: countText(stats?.added)
             )
             StatTile(
                 title: "Removed",
-                value: countText(stats?.removed),
-                systemImage: "minus.circle"
+                value: countText(stats?.removed)
             )
             // restic's `changed_files` counts content changes only; the Modified
             // filter also includes type changes and bitrot, so the tooltip names
@@ -150,7 +148,6 @@ struct SnapshotDiffView: View {
             StatTile(
                 title: "Changed",
                 value: stats.map { Format.plural($0.changedFiles, "file") } ?? "—",
-                systemImage: "pencil.circle",
                 help: "Files whose content changed — metadata-only edits are listed under Show › Metadata"
             )
             // The byte pair is this sheet's headline answer — "what did the

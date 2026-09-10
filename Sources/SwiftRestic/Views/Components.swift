@@ -9,18 +9,15 @@ import SwiftUI
 /// refresh buttons).
 struct Card<Accessory: View, Content: View>: View {
     var title: LocalizedStringKey
-    var systemImage: String?
     @ViewBuilder var accessory: () -> Accessory
     @ViewBuilder var content: () -> Content
 
     init(
         _ title: LocalizedStringKey,
-        systemImage: String? = nil,
         @ViewBuilder content: @escaping () -> Content,
         @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
     ) {
         self.title = title
-        self.systemImage = systemImage
         self.content = content
         self.accessory = accessory
     }
@@ -28,11 +25,6 @@ struct Card<Accessory: View, Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.tint)
-                }
                 Text(title)
                     .font(.headline)
                 Spacer()
@@ -50,20 +42,11 @@ struct Card<Accessory: View, Content: View>: View {
 /// Title row for utility sheets, which live outside the navigation stack and
 /// would otherwise carry no identity of their own.
 struct SheetHeader: View {
-    let systemImage: String
     let title: LocalizedStringKey
     var subtitle: LocalizedStringKey?
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Theme.tint)
-                .frame(width: 30, height: 30)
-                .background(
-                    Theme.tint.opacity(0.13),
-                    in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                )
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.headline)
                 if let subtitle {

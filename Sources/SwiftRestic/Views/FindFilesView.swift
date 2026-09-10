@@ -47,7 +47,6 @@ struct FindFilesView: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 10) {
             SheetHeader(
-                systemImage: "magnifyingglass",
                 title: "Find Files",
                 subtitle: "Search every snapshot for a file, then restore what you find"
             )

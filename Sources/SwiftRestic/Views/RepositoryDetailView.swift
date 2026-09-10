@@ -127,8 +127,7 @@ struct RepositoryDetailView: View {
             HStack(spacing: Theme.Space.tile) {
                 StatTile(
                     title: "Repository size",
-                    value: Format.bytes(stats?.totalSize),
-                    systemImage: "internaldrive.fill"
+                    value: Format.bytes(stats?.totalSize)
                 )
                 // The count is a fact only once the listing has succeeded; a
                 // failed read wears "—" and says so in the tooltip instead of
@@ -165,7 +164,6 @@ struct RepositoryDetailView: View {
                     StatTile(
                         title: "Blobs",
                         value: Format.count(stats?.totalBlobCount),
-                        systemImage: "square.stack.3d.up.fill",
                         help: "Chunks of encrypted data stored in the repository — the pieces snapshots are made of",
                         trailingSymbol: "chevron.forward"
                     )
@@ -176,15 +174,13 @@ struct RepositoryDetailView: View {
                     title: "Compression saved",
                     value: stats?.compressionSpaceSaving.map {
                         ($0 / 100).formatted(.percent.precision(.fractionLength(1)))
-                    } ?? "—",
-                    systemImage: "arrow.down.right.and.arrow.up.left",
-                    hue: Theme.success
+                    } ?? "—"
                 )
             }
 
             listingCaveat(outcome: listingOutcome)
 
-            Card("Details", systemImage: "info.circle.fill") {
+            Card("Details") {
                 DetailGrid {
                     DetailRow("Type", repository.kind.displayName)
                     DetailRow("Location") {
@@ -200,7 +196,7 @@ struct RepositoryDetailView: View {
 
             maintenanceCard(repository)
 
-            Card("All Snapshots", systemImage: "camera.on.rectangle.fill") {
+            Card("All Snapshots") {
                 SnapshotTable(
                     snapshots: snapshots,
                     isLoading: model.loadingSnapshots.contains(repositoryID),
@@ -259,7 +255,7 @@ struct RepositoryDetailView: View {
 
     @ViewBuilder
     private func maintenanceCard(_ repository: Repository) -> some View {
-        Card("Maintenance", systemImage: "wrench.and.screwdriver.fill") {
+        Card("Maintenance") {
             VStack(alignment: .leading, spacing: 10) {
                 if let activity = model.maintenance[repositoryID] {
                     VStack(alignment: .leading, spacing: 6) {
