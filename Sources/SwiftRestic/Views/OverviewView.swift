@@ -18,6 +18,14 @@ struct OverviewView: View {
 
     private static let windowDays = 30
 
+    /// The problems window, shared by the Problems tile and the failures card
+    /// so the two can never disagree on what "recent" covers. The predicate
+    /// itself is `OverviewMetrics.problems`, which the menu bar's problem
+    /// line also draws from.
+    private var problemWindowStart: Date {
+        Date.now.addingTimeInterval(-7 * 86_400)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.section) {
             ForEach(model.banners) { banner in
@@ -211,12 +219,17 @@ struct OverviewView: View {
     private var statTiles: some View {
         // Coverage lives in the Protection card above; these are the app's
         // inventory counts.
-        let since = Date.now.addingTimeInterval(-7 * 86_400)
-        let problems = OverviewMetrics.problemCount(runs: model.configuration.runs, since: since)
+        let problems = OverviewMetrics.problemCount(
+            runs: model.configuration.runs,
+            since: problemWindowStart
+        )
         // Worst-of-window, not a flat "problems exist" orange: a failed run
         // reads red here exactly like it does in Recent problems and
         // Activity below, instead of disagreeing with them on the same page.
-        let worstProblem = OverviewMetrics.worstProblemOutcome(runs: model.configuration.runs, since: since)
+        let worstProblem = OverviewMetrics.worstProblemOutcome(
+            runs: model.configuration.runs,
+            since: problemWindowStart
+        )
         return HStack(spacing: Theme.Space.tile) {
             StatTile(
                 title: "Repositories",
@@ -489,15 +502,19 @@ struct OverviewView: View {
     private var recentFailuresCard: some View {
         Card("Recent problems") {
             VStack(alignment: .leading, spacing: 7) {
-                let failures = model.configuration.runs
-                    .filter { $0.outcome == .failed || $0.outcome == .completedWithErrors }
-                    // The card promises "recent"; storage order is neither.
-                    .sorted { $0.startedAt > $1.startedAt }
-                    .prefix(5)
+                // The same window the Problems tile counts. The card's
+                // "recent" used to mean "all of history, latest five", which
+                // let the tile read a green zero above a nine-day-old failure.
+                let failures = OverviewMetrics.problems(
+                    in: model.configuration.runs,
+                    since: problemWindowStart
+                )
+                .sorted { $0.finishedAt > $1.finishedAt }
+                .prefix(5)
 
                 if failures.isEmpty {
                     Label {
-                        Text("Nothing has failed recently.")
+                        Text("Nothing has failed in the last seven days.")
                     } icon: {
                         Image(systemName: "checkmark.circle")
                             .foregroundStyle(Theme.success)
@@ -519,7 +536,7 @@ struct OverviewView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text(Format.relative(run.startedAt))
+                                Text(Format.relative(run.finishedAt))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 Image(systemName: "chevron.forward")

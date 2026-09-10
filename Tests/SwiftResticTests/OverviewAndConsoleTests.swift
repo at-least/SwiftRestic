@@ -158,6 +158,21 @@ struct OverviewMetricsTests {
         #expect(OverviewMetrics.worstProblemOutcome(runs: [old], since: since) == nil)
     }
 
+    @Test("recency counts from when the run finished, matching the tray's line")
+    func problemsCountFromFinishedAt() {
+        var overnight = run(plan: "Docs", at: "2026-09-04 23:00:00", added: 0)
+        overnight.outcome = .failed
+        overnight.finishedAt = date("2026-09-05 06:00:00")
+
+        let since = date("2026-09-05 00:00:00")
+        // Started before the window, failed inside it: this morning's news,
+        // not eight days old. A start-time basis would have dropped it — the
+        // old tile disagreed with the tray's line exactly here, on an
+        // overnight run that failed at dawn.
+        #expect(OverviewMetrics.problemCount(runs: [overnight], since: since) == 1)
+        #expect(OverviewMetrics.worstProblemOutcome(runs: [overnight], since: since) == .failed)
+    }
+
     @Test("a run with no plan name folds into Other rather than disappearing")
     func unnamedRunsFoldIntoOther() {
         // Console and restore runs record no plan; their bytes still count.

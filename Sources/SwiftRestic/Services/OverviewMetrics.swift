@@ -112,9 +112,15 @@ enum OverviewMetrics {
         return nil
     }
 
-    private static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {
+    /// Failures and completed-with-errors runs that finished inside the
+    /// window — the one definition of "recent problem". The dashboard's tile
+    /// counts this set, the Recent problems card lists it, and the menu bar's
+    /// problem line leads with its newest entry. Recency counts from when a
+    /// run finished: a backup that ran all night and failed at dawn is this
+    /// morning's news, not eight days old.
+    static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {
         runs.filter {
-            $0.startedAt >= since
+            $0.finishedAt >= since
                 && ($0.outcome == .failed || $0.outcome == .completedWithErrors)
         }
     }

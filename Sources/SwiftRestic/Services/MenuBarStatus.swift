@@ -75,11 +75,11 @@ enum MenuBarStatus {
     }
 
     /// The newest problem in the run history as one sentence, or `nil` while
-    /// the window is clean. Same seven-day window the dashboard's Problems
-    /// tile counts: a failure older than that is old news, and leading with
-    /// it forever would read as permanent breakage. Runs count from when they
-    /// finished — a backup that ran all night and failed at dawn is the
-    /// newest news, not the stalest.
+    /// the window is clean. One definition of recent trouble, shared with the
+    /// dashboard: `OverviewMetrics.problems` supplies the set, so the
+    /// Problems tile, the Recent problems card and this line can never
+    /// disagree on what counts. Leading with a failure forever would read as
+    /// permanent breakage, hence the window.
     ///
     /// Yields to `hasNoRepositories`: the `unconfigured` icon face is what
     /// summoned the menu, and the line under it must not answer with a
@@ -91,11 +91,7 @@ enum MenuBarStatus {
         relative: (Date) -> String = { Format.relative($0) }
     ) -> String? {
         guard !hasNoRepositories else { return nil }
-        let windowStart = now.addingTimeInterval(-7 * 86_400)
-        let problems = runs.filter {
-            $0.finishedAt >= windowStart
-                && ($0.outcome == .failed || $0.outcome == .completedWithErrors)
-        }
+        let problems = OverviewMetrics.problems(in: runs, since: now.addingTimeInterval(-7 * 86_400))
         guard let newest = problems.max(by: { $0.finishedAt < $1.finishedAt }) else { return nil }
 
         // A backup names its plan the way Activity does; a restore names what
