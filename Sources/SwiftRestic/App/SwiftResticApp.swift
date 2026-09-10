@@ -187,6 +187,7 @@ extension AppDelegate {
 struct SwiftResticApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
+    @Environment(\.openWindow) private var openWindow
 
     private static let mainWindowID = "main"
 
@@ -217,11 +218,14 @@ struct SwiftResticApp: App {
                 .disabled(model.configuration.repositories.isEmpty)
 
                 Button("Add Repository…") {
-                    // Through the model, not a notification: with the window
-                    // closed there is no RootView to receive a post, and the
-                    // command would silently do nothing. The intent waits for
-                    // the next time the window opens.
+                    // Through the model, not a notification: the intent has to
+                    // survive the window being closed. The command also opens
+                    // the window, like the tray's identical button — a menu
+                    // command that visibly does nothing is a dead key, and an
+                    // unexpired intent would ambush whatever opens the window
+                    // later for other reasons.
                     model.pendingNewRepository = true
+                    openWindow(id: Self.mainWindowID)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }

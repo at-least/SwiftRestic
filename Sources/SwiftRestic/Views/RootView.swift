@@ -261,7 +261,8 @@ struct RootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        VStack(spacing: 0) {            // A restore outlives the sheet that started it, so its progress is
+        VStack(spacing: 0) {
+            // A restore outlives the sheet that started it, so its progress is
             // an app-level fact: this strip sits above every pane, and the
             // menu bar line covers the window-closed case. Dismissing the
             // browser or Find sheet hands the progress over to this strip.
@@ -341,6 +342,13 @@ struct RootView: View {
         .onChange(of: model.pendingNewRepository) {
             consumePendingNewRepository()
         }
+        // The console row disables on restic availability as well as on an
+        // empty repository list, and only count changes revalidate the
+        // selection — a binary lost while the console pane is open would
+        // otherwise park the selection on a row the sidebar now refuses.
+        .onChange(of: model.isResticAvailable) {
+            revalidateSelection()
+        }
     }
 
     #if DEBUG
@@ -404,7 +412,7 @@ struct RootView: View {
         case .plan(let id) where model.plan(id: id) == nil,
              .repository(let id) where model.repository(id: id) == nil:
             model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
-        case .console where model.configuration.repositories.isEmpty:
+        case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable:
             // The row is now disabled; a selection parked on it would be a
             // pane the sidebar no longer offers.
             model.sidebarSelection = nil
