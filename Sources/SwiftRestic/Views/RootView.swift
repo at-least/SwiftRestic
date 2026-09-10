@@ -188,9 +188,13 @@ struct RootView: View {
             }
 
             // Console and Activity are peers, not a lone tool plus a footnote.
+            // Console carries the toolbar's guards: with no repository it
+            // opened a pane whose only content was "Choose…", and a tool that
+            // can never work reads as breakage, not emptiness.
             Section("Tools") {
                 Label("restic Console", systemImage: "apple.terminal")
                     .tag(SidebarItem.console)
+                    .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
                 Label("Activity", systemImage: "list.bullet.rectangle")
                     .tag(SidebarItem.activity)
             }
@@ -400,6 +404,10 @@ struct RootView: View {
         case .plan(let id) where model.plan(id: id) == nil,
              .repository(let id) where model.repository(id: id) == nil:
             model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
+        case .console where model.configuration.repositories.isEmpty:
+            // The row is now disabled; a selection parked on it would be a
+            // pane the sidebar no longer offers.
+            model.sidebarSelection = nil
         default:
             break
         }

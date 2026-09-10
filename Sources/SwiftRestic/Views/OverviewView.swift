@@ -138,9 +138,18 @@ struct OverviewView: View {
             let latest = model.snapshots(for: repositoryID, planID: plan.id).first
             switch model.snapshotListingOutcome(for: repositoryID) {
             case .loaded:
-                let line = latest.map {
-                    "Latest backup \($0.time.formatted(.relative(presentation: .named)))"
-                } ?? "No snapshots yet"
+                let line: String
+                if let latest {
+                    line = "Latest backup \(latest.time.formatted(.relative(presentation: .named)))"
+                } else if model.snapshots(for: repositoryID).isEmpty {
+                    line = "No snapshots yet"
+                } else {
+                    // The repository has snapshots, but none tagged from this
+                    // plan — the same distinction Plan Detail draws. A bare
+                    // "No snapshots yet" reads as a false statement about a
+                    // repository the user adopted with snapshots already in it.
+                    line = "The repository has snapshots, but none from this plan yet."
+                }
                 return ProtectionRow(plan: plan, stateText: line, isKnown: true, isProtected: latest != nil, didFail: false)
             case let .failed(message):
                 return ProtectionRow(

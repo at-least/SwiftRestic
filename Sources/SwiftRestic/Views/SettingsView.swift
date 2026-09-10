@@ -60,13 +60,21 @@ struct SettingsView: View {
                 )
                 ExpandableCaption(
                     summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing.",
-                    detail: "The menu bar item is how you get back to it. Its icon shows work in progress, wears a warning mark while a run from the last seven days failed or finished with errors, and asks with a question mark until a repository is set up."
+                    detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), wears a warning mark while a run from the last seven days failed or finished with errors, and asks with a question mark until a repository is set up."
                 )
             }
 
             Section("Notifications") {
                 Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
                 Toggle("Notify when a backup fails", isOn: $model.configuration.settings.notifyOnFailure)
+                // The relationship between the two toggle layers, stated where
+                // both are visible: these gate this Mac's notification centre,
+                // the Alerts tab's channels carry their own per-event switches
+                // — and neither gates the other.
+                Text("These switches control this Mac's notifications. Webhook and chat channels on the Alerts tab have their own per-event switches and don't follow them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Scheduling") {

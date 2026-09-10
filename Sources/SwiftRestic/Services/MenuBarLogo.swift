@@ -23,11 +23,11 @@ enum MenuBarLogo {
     private static let canvasSize: CGFloat = 18
     /// The generator's proportions are fractions of the full icon tile, where
     /// the glyph fills about sixty percent. The menu bar has no tile, so the
-    /// glyph is drawn against a larger implied size, overflowing the canvas
-    /// on purpose — measured next to a neighboring status item's icon, the
-    /// mark read noticeably smaller until pushed this far. The ring's
-    /// outer edge (`radius + stroke / 2`, `0.294 * s`) still lands inside
-    /// the canvas half-width of 9 at this size.
+    /// glyph is drawn against a larger implied size — measured next to a
+    /// neighboring status item's icon, the mark read noticeably smaller until
+    /// pushed this far. The tightest fit is not the ring (`radius + stroke /
+    /// 2`, `0.294 * s`) but the arrowhead's base corner: the ink stays inside
+    /// the 18pt canvas with roughly 0.7–0.9pt of margin on every side.
     private static let impliedSize: CGFloat = 28
 
     /// At rest, both plates sit at their own settled alpha — no motion, just

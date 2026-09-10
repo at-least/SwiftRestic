@@ -45,10 +45,41 @@ extension AppModel {
     /// What removing this repository does to work in flight — the removal
     /// dialogs word themselves from here so the rule and its phrasing stay
     /// testable at the model level, the same pattern as `quitInterruptions`.
+    /// Every kind of cancellation `deleteRepository` will perform gets its own
+    /// clause, so the dialog's word of what will be interrupted can never
+    /// trail what removal actually does.
     func removalConsequences(for repositoryID: UUID) -> String {
+        Self.removalConsequences(
+            isRestoring: restoreRepositoryID == repositoryID,
+            runningBackupNames: configuration.plans
+                .filter { $0.repositoryID == repositoryID && activity[$0.id] != nil }
+                .map { $0.name.isEmpty ? "Untitled Plan" : $0.name },
+            isMaintaining: maintenance[repositoryID] != nil,
+            isConsoleRunning: console.runningRepositoryID == repositoryID
+        )
+    }
+
+    /// Pure so the dialog's wording can be tested without a live model — the
+    /// console's running state is `private(set)`, and the sentence, not the
+    /// bookkeeping, is what needs testing.
+    nonisolated static func removalConsequences(
+        isRestoring: Bool,
+        runningBackupNames: [String],
+        isMaintaining: Bool,
+        isConsoleRunning: Bool
+    ) -> String {
         var consequences = "The backup data itself is not deleted. Plans pointing at it will be paused."
-        if restoreRepositoryID == repositoryID {
+        if isRestoring {
             consequences += " A restore from this repository is running and will be cancelled."
+        }
+        if !runningBackupNames.isEmpty {
+            consequences += " A backup (\(runningBackupNames.joined(separator: ", "))) is running and will be cancelled."
+        }
+        if isMaintaining {
+            consequences += " Repository maintenance is running and will be cancelled."
+        }
+        if isConsoleRunning {
+            consequences += " A console command is running and will be cancelled."
         }
         return consequences
     }
@@ -63,11 +94,10 @@ extension AppModel {
     /// cooperative, so a backup already past restic (in retention or the
     /// closing refresh) still settles as a success — its snapshot is real.
     ///
-    /// Known disclosure gap: only a cancelled *restore* is announced (banner
-    /// plus the removal-dialog clause in `removalConsequences`). Cancelled
-    /// backups, maintenance and console commands land in the run history and
-    /// menu lines but are not disclosed by the dialogs — same defect class,
-    /// still open.
+    /// The removal dialog discloses all of it through `removalConsequences`,
+    /// which enumerates every kind of work in flight; cancelled runs land in
+    /// the run history either way, so the record of what stopped survives the
+    /// dialog.
     func deleteRepository(id: UUID) {
         for plan in configuration.plans where plan.repositoryID == id {
             planTasks[plan.id]?.cancel()
