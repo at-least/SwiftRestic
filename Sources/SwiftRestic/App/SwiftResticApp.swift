@@ -293,6 +293,11 @@ struct SwiftResticApp: App {
 /// guarantees re-evaluation when the model changes.
 private struct MenuBarStatusLabel: View {
     let model: AppModel
+    /// SwiftUI keeps this current across changes to the setting. The tray
+    /// label is exactly where a stale read would hide: while a long run holds
+    /// every observed model property still, nothing else re-evaluates this
+    /// view, so a body-level read once froze for the run's whole duration.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         // Four faces, not two: the icon is the app's only always-visible
@@ -315,11 +320,12 @@ private struct MenuBarStatusLabel: View {
             case .logo:
                 Image(nsImage: MenuBarLogo.image())
             case .animatedLogo:
-                // Reduce Motion gets the resting mark rather than a stepped
-                // pulse — the running state is still legible from the menu's
-                // running lines, which don't depend on the icon animating.
-                if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                    Image(nsImage: MenuBarLogo.image())
+                // Reduce Motion holds the first running frame still instead of
+                // stepping the pulse — no motion, but unlike the resting mark
+                // it differs from idle in both plates, so the always-visible
+                // surface keeps saying "running" without animating.
+                if reduceMotion {
+                    Image(nsImage: MenuBarLogo.stillRunningImage)
                 } else {
                     TimelineView(.periodic(from: .now, by: MenuBarLogo.frameInterval)) { context in
                         Image(nsImage: MenuBarLogo.image(phase: MenuBarLogo.phase(at: context.date)))

@@ -77,6 +77,12 @@ enum MenuBarLogo {
         runningImages[((phase % runningImages.count) + runningImages.count) % runningImages.count]
     }
 
+    /// The Reduce Motion face: the first running frame, held still. Nothing
+    /// animates, but unlike the resting mark it differs from idle in both
+    /// plates — a fallback that erased the running cue would leave these users
+    /// no way to tell "backing up" from "idle" without clicking.
+    static var stillRunningImage: NSImage { runningImages[0] }
+
     private static func makeImage(_ draw: @escaping (CGRect, CGContext) -> Void) -> NSImage {
         let image = NSImage(size: NSSize(width: canvasSize, height: canvasSize), flipped: false) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }

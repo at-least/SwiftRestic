@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -25,5 +26,16 @@ struct MenuBarLogoTests {
         #expect(MenuBarLogo.image().size.width > 0)
         #expect(MenuBarLogo.image(phase: 0).size.width > 0)
         #expect(MenuBarLogo.image(phase: 1).size.width > 0)
+    }
+
+    @Test("the Reduce Motion face is the held first frame, distinct from rest")
+    func reducedMotionFace() {
+        // Held: it is literally frame 0 of the pulse, not a new construction.
+        #expect(MenuBarLogo.stillRunningImage === MenuBarLogo.image(phase: 0))
+        // Distinct: the old fallback handed Reduce Motion users the resting
+        // mark, indistinguishable from idle on the only always-visible surface.
+        // TIFF bytes are the cheapest honest comparison of two template
+        // bitmaps — the alphas differ in both plates.
+        #expect(MenuBarLogo.stillRunningImage.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
     }
 }
