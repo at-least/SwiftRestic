@@ -143,6 +143,12 @@ struct RootView: View {
             get: { model.sidebarSelection },
             set: { model.sidebarSelection = $0 }
         )) {
+            // The same recent-problem count every surface uses; computed once
+            // per body so the badge and the surfaces it points at agree.
+            let problemCount = OverviewMetrics.problemCount(
+                runs: model.configuration.runs,
+                since: Date.now.addingTimeInterval(-7 * 86_400)
+            )
             Section {
                 Label("Overview", systemImage: "square.grid.2x2")
                     .tag(SidebarItem.overview)
@@ -197,6 +203,18 @@ struct RootView: View {
                     .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
                 Label("Activity", systemImage: "list.bullet.rectangle")
                     .tag(SidebarItem.activity)
+                    // The window's unread badge, wired to the same 7-day
+                    // window the tray dot, the Problems tile and the menu's
+                    // problem line share: one count, so no surface can claim
+                    // trouble another denies. It also yields to the
+                    // unconfigured state like the tray's problem face does —
+                    // a removed repository's old failures must not summon
+                    // setup-bound attention — and stays silent when clean.
+                    .badge(
+                        problemCount > 0 && !model.configuration.repositories.isEmpty
+                            ? Text(verbatim: "\(problemCount)")
+                            : nil
+                    )
             }
         }
         .listStyle(.sidebar)
@@ -477,12 +495,14 @@ struct WelcomeView: View {
         VStack(spacing: 22) {
             Spacer()
 
-            // The tinted chip the rest of the app uses (sheet headers, tiles,
-            // banners) at hero scale — the old gradient-and-shadow plate was
-            // the one ornamental surface in an otherwise flat, hairline world.
-            Image(systemName: "externaldrive.badge.timemachine")
-                .font(.system(size: 34, weight: .medium))
+            // The app's own mark — the same construction the tray wears — at
+            // hero scale on the tinted chip the rest of the app uses (sheet
+            // headers, tiles, banners). The borrowed stock symbol this chip
+            // once held was the one ornament the app had no right to.
+            Image(nsImage: MenuBarLogo.heroImage)
+                .resizable()
                 .foregroundStyle(Theme.tint)
+                .aspectRatio(contentMode: .fit)
                 .frame(width: 84, height: 84)
                 .background(
                     Theme.tint.opacity(0.13),
@@ -492,6 +512,7 @@ struct WelcomeView: View {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .strokeBorder(Theme.tint.opacity(0.22), lineWidth: 1)
                 )
+                .accessibilityHidden(true)
 
             Text("SwiftRestic")
                 .font(.largeTitle.weight(.bold))

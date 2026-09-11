@@ -67,6 +67,12 @@ struct OverviewView: View {
 
     /// One plan's protection state as the card states it: what is known,
     /// whether it protects, and the line the user is owed when it does not.
+    ///
+    /// Markers follow the quiet rule: only trouble wears a glyph. A protected
+    /// plan and a not-yet-protected one are both ordinary states — their line
+    /// of text carries the truth — so neither gets a celebratory or
+    /// metaphorical icon competing for the eye; scannability comes from
+    /// severity ordering instead.
     private struct ProtectionRow: Identifiable {
         let planID: UUID
         let planName: String
@@ -77,16 +83,33 @@ struct OverviewView: View {
         let didFail: Bool
         var id: UUID { planID }
 
-        var symbolName: String {
+        var symbolName: String? {
             if didFail { return "exclamationmark.triangle.fill" }
             if !isKnown { return "clock.arrow.circlepath" }
-            return isProtected ? "checkmark.circle.fill" : "camera"
+            return nil
         }
 
         var hue: Color {
             if didFail { return Theme.warning }
-            if !isKnown { return .secondary }
-            return isProtected ? Theme.success : .secondary
+            return .secondary
+        }
+
+        /// The state line's weight: "not protected" is the row's real news
+        /// and reads at full weight; a pending or protected line stays quiet,
+        /// and a failure keeps its warning hue.
+        var stateHue: Color {
+            if didFail { return Theme.warning }
+            if isKnown, !isProtected { return .primary }
+            return .secondary
+        }
+
+        /// Scanning order is severity, not sidebar order: unreadable first,
+        /// then exposed, then pending, protected last.
+        var severityRank: Int {
+            if didFail { return 0 }
+            if isKnown, !isProtected { return 1 }
+            if !isKnown { return 2 }
+            return 3
         }
 
         init(
@@ -127,45 +150,51 @@ struct OverviewView: View {
     }
 
     private var protectionRows: [ProtectionRow] {
-        model.configuration.plans.map { plan in
-            guard let repositoryID = plan.repositoryID else {
-                return ProtectionRow(
-                    plan: plan,
-                    stateText: "No repository set",
-                    isKnown: true, isProtected: false, didFail: false
-                )
-            }
-            let latest = model.snapshots(for: repositoryID, planID: plan.id).first
-            switch model.snapshotListingOutcome(for: repositoryID) {
-            case .loaded:
-                let line: String
-                if let latest {
-                    line = "Latest backup \(latest.time.formatted(.relative(presentation: .named)))"
-                } else if model.snapshots(for: repositoryID).isEmpty {
-                    line = "No snapshots yet"
-                } else {
-                    // The repository has snapshots, but none tagged from this
-                    // plan — the same distinction Plan Detail draws. A bare
-                    // "No snapshots yet" reads as a false statement about a
-                    // repository the user adopted with snapshots already in it.
-                    line = "The repository has snapshots, but none from this plan yet."
+        // Stable severity sort: Swift's sort is not documented stable, so the
+        // plan order breaks ties inside each rank.
+        model.configuration.plans
+            .map { plan -> ProtectionRow in
+                guard let repositoryID = plan.repositoryID else {
+                    return ProtectionRow(
+                        plan: plan,
+                        stateText: "No repository set",
+                        isKnown: true, isProtected: false, didFail: false
+                    )
                 }
-                return ProtectionRow(plan: plan, stateText: line, isKnown: true, isProtected: latest != nil, didFail: false)
-            case let .failed(message):
-                return ProtectionRow(
-                    plan: plan,
-                    stateText: "Can't read snapshots — \(Format.firstSentence(message))",
-                    isKnown: false, isProtected: false, didFail: true
-                )
-            case .idle:
-                let checking = model.loadingSnapshots.contains(repositoryID)
-                return ProtectionRow(
-                    plan: plan,
-                    stateText: checking ? "Checking…" : "Snapshot list not loaded yet",
-                    isKnown: false, isProtected: false, didFail: false
-                )
+                let latest = model.snapshots(for: repositoryID, planID: plan.id).first
+                switch model.snapshotListingOutcome(for: repositoryID) {
+                case .loaded:
+                    let line: String
+                    if let latest {
+                        line = "Latest backup \(latest.time.formatted(.relative(presentation: .named)))"
+                    } else if model.snapshots(for: repositoryID).isEmpty {
+                        line = "No snapshots yet"
+                    } else {
+                        // The repository has snapshots, but none tagged from this
+                        // plan — the same distinction Plan Detail draws. A bare
+                        // "No snapshots yet" reads as a false statement about a
+                        // repository the user adopted with snapshots already in it.
+                        line = "The repository has snapshots, but none from this plan yet."
+                    }
+                    return ProtectionRow(plan: plan, stateText: line, isKnown: true, isProtected: latest != nil, didFail: false)
+                case let .failed(message):
+                    return ProtectionRow(
+                        plan: plan,
+                        stateText: "Can't read snapshots — \(Format.firstSentence(message))",
+                        isKnown: false, isProtected: false, didFail: true
+                    )
+                case .idle:
+                    let checking = model.loadingSnapshots.contains(repositoryID)
+                    return ProtectionRow(
+                        plan: plan,
+                        stateText: checking ? "Checking…" : "Snapshot list not loaded yet",
+                        isKnown: false, isProtected: false, didFail: false
+                    )
+                }
             }
-        }
+            .enumerated()
+            .sorted { ($0.element.severityRank, $0.offset) < ($1.element.severityRank, $1.offset) }
+            .map(\.element)
     }
 
     /// Protection, the dashboard's actual subject: one row per plan with its
@@ -200,17 +229,19 @@ struct OverviewView: View {
 
     private func protectionRow(_ row: ProtectionRow) -> some View {
         HStack(spacing: 8) {
-            // Symbol + words carry the state; the symbol is hidden from
-            // VoiceOver because the words beside it say the same thing.
-            Image(systemName: row.symbolName)
-                .foregroundStyle(row.hue)
-                .accessibilityHidden(true)
+            // Only trouble wears a glyph; the words carry every state, so the
+            // symbol stays hidden from VoiceOver when there is one at all.
+            if let symbolName = row.symbolName {
+                Image(systemName: symbolName)
+                    .foregroundStyle(row.hue)
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.planName)
                     .lineLimit(1)
                 Text(row.stateText)
                     .font(.caption)
-                    .foregroundStyle(row.didFail ? Theme.warning : .secondary)
+                    .foregroundStyle(row.stateHue)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -251,13 +282,16 @@ struct OverviewView: View {
             // A button in both states: a tile that only became clickable when
             // problems existed was a disappearing affordance, and arriving in
             // Activity pre-filtered is a fine answer to "zero problems" too.
+            // The marker follows the quiet rule: zero problems wears no glyph
+            // at all — the tile sits silently until trouble gives it one.
             Button(action: showProblems) {
                 StatTile(
                     title: "Problems (7 days)",
                     value: problems > 0 ? Format.count(problems) : "0",
-                    systemImage: worstProblem?.symbolName ?? "checkmark.circle",
-                    hue: worstProblem.map(ChartPalette.status) ?? Theme.success,
-                    trailingSymbol: "chevron.forward"
+                    systemImage: worstProblem.flatMap(\.symbolName),
+                    hue: worstProblem.map(ChartPalette.status) ?? Theme.tint,
+                    trailingSymbol: "chevron.forward",
+                    reservesIconSpace: true
                 )
             }
             .buttonStyle(HoverableButtonStyle())
@@ -522,21 +556,22 @@ struct OverviewView: View {
                 .prefix(5)
 
                 if failures.isEmpty {
-                    Label {
-                        Text("Nothing has failed in the last seven days.")
-                    } icon: {
-                        Image(systemName: "checkmark.circle")
-                            .foregroundStyle(Theme.success)
-                    }
-                    .foregroundStyle(.secondary)
+                    // Quiet by rule: a clean week is the absence of trouble,
+                    // not an achievement — words, no celebratory checkmark.
+                    Text("Nothing has failed in the last seven days.")
+                        .foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(failures)) { run in
                         Button(action: showProblems) {
                             HStack(spacing: 6) {
                                 // Status is never carried by colour alone.
-                                Image(systemName: run.outcome.symbolName)
-                                    .foregroundStyle(ChartPalette.status(run.outcome))
-                                    .accessibilityLabel(run.outcome.displayName)
+                                // This card lists only problems, so the
+                                // marker is always present.
+                                if let symbolName = run.outcome.symbolName {
+                                    Image(systemName: symbolName)
+                                        .foregroundStyle(ChartPalette.status(run.outcome))
+                                        .accessibilityLabel(run.outcome.displayName)
+                                }
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(run.planName.isEmpty ? run.kind.rawValue : run.planName)
                                         .lineLimit(1)

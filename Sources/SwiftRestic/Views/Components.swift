@@ -65,6 +65,11 @@ struct SheetHeader: View {
 /// Dismissible message strip shown above a detail pane. Banners built in
 /// place (rather than posted to the queue) have nothing to dismiss, so they
 /// hide the close button.
+///
+/// Banners keep their icons by rule, where run lists and tiles drop theirs:
+/// a banner is action feedback — success ones dismiss themselves within
+/// seconds, and a persistent error banner *is* the intervention marker —
+/// so neither is ambient decoration competing for attention.
 struct BannerView: View {
     @Environment(AppModel.self) private var model
     let banner: Banner
@@ -124,6 +129,8 @@ struct BannerView: View {
 
 /// One KPI: an icon chip beside a caption and a large rounded numeral, on its
 /// own card plate. Used in overview, detail headers and diff statistics.
+/// Icons are opt-in per tile and reserved for trouble — a healthy number
+/// needs no glyph (the quiet rule the overview's tiles follow).
 struct StatTile: View {
     let title: String
     let value: String
@@ -135,18 +142,15 @@ struct StatTile: View {
     /// exist only under the cursor. Decorative — the button's own
     /// accessibility label says where it goes.
     var trailingSymbol: String?
+    /// Keeps the icon chip's slot when `systemImage` is nil, so a tile whose
+    /// glyph appears only with trouble (the Problems tile) does not shift
+    /// its text when the state flips.
+    var reservesIconSpace = false
 
     var body: some View {
         HStack(spacing: 10) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(hue)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        hue.opacity(0.13),
-                        in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                    )
+            if systemImage != nil || reservesIconSpace {
+                iconChip
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -177,6 +181,25 @@ struct StatTile: View {
         .padding(Theme.Space.cardPadding)
         .cardSurface()
         .modifier(TileHelp(help: help))
+    }
+
+    /// The tinted chip, or an invisible spacer of the same footprint when a
+    /// tile reserves the slot for a glyph it does not yet wear.
+    @ViewBuilder
+    private var iconChip: some View {
+        if let systemImage {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(hue)
+                .frame(width: 30, height: 30)
+                .background(
+                    hue.opacity(0.13),
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                )
+        } else {
+            Color.clear
+                .frame(width: 30, height: 30)
+        }
     }
 }
 
@@ -310,9 +333,9 @@ struct OperationProgressView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.tint)
+                // No leading glyph: the bar below is the live status, and the
+                // card's title names the work — a decorative symbol would
+                // only re-draw the eye to a card that is already the answer.
                 Text(title).font(.headline)
                 Spacer()
                 if let onCancel {

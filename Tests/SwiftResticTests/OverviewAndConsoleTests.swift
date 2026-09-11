@@ -290,3 +290,18 @@ struct PlanColourSlotTests {
         #expect(ChartPalette.slot(for: assigned) == 2)
     }
 }
+
+@Suite("Run outcome markers")
+struct RunOutcomeMarkerTests {
+    @Test("success wears nothing, cancelled stays quiet, trouble keeps its alarms")
+    func markerPerOutcome() {
+        // The unread-dot rule: a clean run is the quiet default, and only
+        // trouble asks to be seen.
+        #expect(RunRecord.Outcome.succeeded.symbolName == nil)
+        // Cancelled must never scan as success, but it is not an alarm either:
+        // a quiet monochrome outline, not a filled glyph.
+        #expect(RunRecord.Outcome.cancelled.symbolName == "slash.circle")
+        #expect(RunRecord.Outcome.completedWithErrors.symbolName?.contains("exclamationmark") == true)
+        #expect(RunRecord.Outcome.failed.symbolName?.contains("xmark") == true)
+    }
+}

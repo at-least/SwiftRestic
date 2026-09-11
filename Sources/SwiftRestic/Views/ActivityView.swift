@@ -47,10 +47,21 @@ struct ActivityView: View {
             } else {
                 Table(visibleRuns, selection: $selection, sortOrder: $sortOrder) {
                     TableColumn("") { run in
-                        Image(systemName: run.outcome.symbolName)
-                            .foregroundStyle(color(for: run.outcome))
-                            .help(run.outcome.displayName)
-                            .accessibilityLabel(run.outcome.displayName)
+                        // Only trouble wears a glyph; a clean run leaves the
+                        // cell empty, the way Mail's unread column does. The
+                        // invisible text keeps the verdict in VoiceOver —
+                        // `hidden()` would silence it, opacity does not.
+                        if let symbolName = run.outcome.symbolName {
+                            Image(systemName: symbolName)
+                                .foregroundStyle(color(for: run.outcome))
+                                .help(run.outcome.displayName)
+                                .accessibilityLabel(run.outcome.displayName)
+                        } else {
+                            Text(run.outcome.displayName)
+                                .opacity(0)
+                                .lineLimit(1)
+                                .accessibilityLabel(run.outcome.displayName)
+                        }
                     }
                     .width(24)
 

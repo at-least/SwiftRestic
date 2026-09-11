@@ -307,11 +307,11 @@ private struct MenuBarStatusLabel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        // Four faces, not two: the icon is the app's only always-visible
-        // surface, so it must say "something is wrong" without a click and
-        // show restores, upkeep and console work as running, not just plan
-        // backups. Template rendering is the menu bar's law, so the state
-        // wears a distinct glyph rather than a tint.
+        // Four faces, three glyphs: the mark never leaves the tray — idle
+        // wears it at rest, both intervention states add one companion dot
+        // (the unread-badge grammar), and running pulses the stack. Template
+        // rendering is the menu bar's law, so state lives in the drawing,
+        // never in a tint.
         let state = MenuBarStatus.iconState(
             activity: model.activity,
             maintenance: model.maintenance,
@@ -322,10 +322,10 @@ private struct MenuBarStatusLabel: View {
         )
         Group {
             switch MenuBarStatus.glyph(for: state) {
-            case .symbol(let name):
-                Image(systemName: name)
             case .logo:
                 Image(nsImage: MenuBarLogo.image())
+            case .badgedLogo:
+                Image(nsImage: MenuBarLogo.badgedImage)
             case .animatedLogo:
                 // Reduce Motion holds the first running frame still instead of
                 // stepping the pulse — no motion, but unlike the resting mark

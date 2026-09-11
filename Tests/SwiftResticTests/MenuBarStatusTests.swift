@@ -187,16 +187,23 @@ struct MenuBarStatusTests {
         #expect(state(runs: [stale]) == .idle)
     }
 
-    @Test("idle and running wear the brand mark; unconfigured and problem wear a bare symbol")
+    @Test("idle and running wear the brand mark; both intervention states add the dot")
     func iconSymbolsAndVoice() {
-        #expect(MenuBarStatus.glyph(for: .unconfigured) == .symbol("questionmark"))
+        // The dot's job is only "open me" — the menu's first line names the
+        // reason — so unconfigured and problem share one badged face instead
+        // of wearing two different bare symbols.
+        #expect(MenuBarStatus.glyph(for: .unconfigured) == .badgedLogo)
         #expect(MenuBarStatus.glyph(for: .idle) == .logo)
         #expect(MenuBarStatus.glyph(for: .running) == .animatedLogo)
-        #expect(MenuBarStatus.glyph(for: .problem) == .symbol("exclamationmark"))
+        #expect(MenuBarStatus.glyph(for: .problem) == .badgedLogo)
 
+        // Shared face means VoiceOver carries the distinction between the
+        // two intervention states.
         #expect(MenuBarStatus.accessibilityDescription(for: .unconfigured).contains("no repository"))
         #expect(MenuBarStatus.accessibilityDescription(for: .running).contains("work in progress"))
         #expect(MenuBarStatus.accessibilityDescription(for: .problem).contains("problem"))
+        #expect(MenuBarStatus.accessibilityDescription(for: .unconfigured)
+            != MenuBarStatus.accessibilityDescription(for: .problem))
     }
 
     @Test("finishing returns to the idle headline")

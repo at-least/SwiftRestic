@@ -42,26 +42,29 @@ enum MenuBarStatus {
         return problemLine(runs: runs, hasNoRepositories: false, now: now) == nil ? .idle : .problem
     }
 
-    /// What the icon draws for a state. Idle wears the app's own mark — the
-    /// logo's small-size construction as a template line drawing, see
-    /// `MenuBarLogo` — the same convention every backup menu extra uses for
-    /// its quiet, nothing-to-see face. Running wears that mark with the
-    /// snapshot stack pulsing, to read as data climbing it. Unconfigured and
-    /// problem are silhouettes, not the logo with a mark stuffed inside it —
-    /// a state that needs noticing changes shape, not just decoration, and a
-    /// bare SF Symbol gets sized like every other menu bar icon for free.
+    /// What the icon draws for a state. The mark is the app's own line
+    /// drawing (see `MenuBarLogo`) and never changes silhouette: idle wears
+    /// it at rest — the quiet, nothing-to-see face every backup menu extra
+    /// shares — running wears it with the snapshot stack pulsing, and both
+    /// intervention states wear it with one small companion dot. That follows
+    /// the unread-badge grammar Mail's own Dock icon uses: the dot's whole
+    /// job is "open me", and it says so without shouting — the menu's first
+    /// line is what names the reason, so unconfigured and problem can share
+    /// one face. (They replaced an earlier full-swap design — a bare `!` or
+    /// `?` symbol — which made the tray wear a stranger's glyph precisely
+    /// when the app needed to be recognizable.)
     enum Glyph: Equatable {
-        case symbol(String)
         case logo
+        case badgedLogo
         case animatedLogo
     }
 
     static func glyph(for state: IconState) -> Glyph {
         switch state {
-        case .unconfigured: .symbol("questionmark")
+        case .unconfigured: .badgedLogo
         case .idle: .logo
         case .running: .animatedLogo
-        case .problem: .symbol("exclamationmark")
+        case .problem: .badgedLogo
         }
     }
 

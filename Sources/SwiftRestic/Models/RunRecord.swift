@@ -18,12 +18,17 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             }
         }
 
-        var symbolName: String {
+        /// The marker a run row wears in lists. Success wears nothing — a
+        /// clean run is the quiet default, and only trouble asks to be seen
+        /// (the unread-dot rule Mail's message list follows). Cancelled keeps
+        /// a quiet monochrome outline so it can never be misread as success;
+        /// the two problem outcomes keep their alarm glyphs.
+        var symbolName: String? {
             switch self {
-            case .succeeded: "checkmark.circle.fill"
+            case .succeeded: nil
+            case .cancelled: "slash.circle"
             case .completedWithErrors: "exclamationmark.triangle.fill"
             case .failed: "xmark.octagon.fill"
-            case .cancelled: "slash.circle.fill"
             }
         }
     }
