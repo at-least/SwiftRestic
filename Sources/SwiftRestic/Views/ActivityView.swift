@@ -163,6 +163,15 @@ struct ActivityView: View {
             else { return }
             selection = visibleRuns.first?.id
         }
+        // The "Last backup" tile's landing: the plan page hands over a run to
+        // land selected, the way the problems filter hands over a filter.
+        .task(id: model.activityFocusRunID) {
+            guard let id = model.activityFocusRunID else { return }
+            model.activityFocusRunID = nil
+            if visibleRuns.contains(where: { $0.id == id }) {
+                selection = id
+            }
+        }
     }
 
     private func detailPanel(_ run: RunRecord) -> some View {

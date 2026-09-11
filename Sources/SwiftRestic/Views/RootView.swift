@@ -325,7 +325,11 @@ struct RootView: View {
                     })
                 case let .plan(id):
                     if let plan = model.plan(id: id) {
-                        PlanDetailView(planID: plan.id, onEdit: { editingPlan = plan })
+                        PlanDetailView(
+                            planID: plan.id,
+                            onEdit: { editingPlan = plan },
+                            onShowRun: { model.sidebarSelection = .activity }
+                        )
                     } else {
                         ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
                     }

@@ -4,6 +4,9 @@ struct PlanDetailView: View {
     @Environment(AppModel.self) private var model
     let planID: UUID
     let onEdit: () -> Void
+    /// Sends the pane to Activity — the "Last backup" tile's destination,
+    /// wired by RootView so this view owns no navigation of its own.
+    var onShowRun: (() -> Void)? = nil
 
     @State private var browsing: SnapshotBrowserTarget?
     @State private var comparing: SnapshotDiffTarget?
@@ -147,10 +150,7 @@ struct PlanDetailView: View {
         let lastRun = model.configuration.runs.first { $0.planID == plan.id }
         let outcome = model.snapshotListingOutcome(for: plan.repositoryID)
         return HStack(spacing: Theme.Space.tile) {
-            StatTile(
-                title: "Last backup",
-                value: plan.lastSuccessAt.map { Format.relative($0) } ?? "Never"
-            )
+            lastBackupTile(plan)
             StatTile(
                 title: "Next backup",
                 // Tile-sized on the face, full form in the tooltip: the plain
@@ -185,6 +185,37 @@ struct PlanDetailView: View {
                 title: "Last run added",
                 value: Format.bytes(lastRun?.dataAdded)
             )
+        }
+    }
+
+    /// Arq's "View Latest Backup Record…" as a tile: the timestamp is a
+    /// handle to its run's record. Only when a record exists to land on —
+    /// "Never" has nowhere to go and stays a plain tile.
+    @ViewBuilder
+    private func lastBackupTile(_ plan: BackupPlan) -> some View {
+        let value = plan.lastSuccessAt.map { Format.relative($0) } ?? "Never"
+        // The stored history's order is arbitrary, so "the plan's run" is the
+        // newest by start time, not `first(where:)` — that one is merely *a*
+        // run and can be weeks old.
+        let newestRun = model.configuration.runs
+            .filter { $0.planID == plan.id }
+            .max { $0.startedAt < $1.startedAt }
+        if let newestRun, let onShowRun {
+            Button {
+                model.activityShowsProblemsOnly = false
+                model.activityFocusRunID = newestRun.id
+                onShowRun()
+            } label: {
+                StatTile(
+                    title: "Last backup",
+                    value: value,
+                    trailingSymbol: "chevron.forward"
+                )
+            }
+            .buttonStyle(HoverableButtonStyle())
+            .accessibilityLabel("Last backup \(value). Show its run in Activity")
+        } else {
+            StatTile(title: "Last backup", value: value)
         }
     }
 

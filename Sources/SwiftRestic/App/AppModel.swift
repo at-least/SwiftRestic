@@ -59,6 +59,12 @@ final class AppModel {
     /// send the user over.
     var activityShowsProblemsOnly = false
 
+    /// The run a detail surface asked Activity to land selected — the plan
+    /// page's "Last backup" tile, Arq's "View Latest Backup Record…" pattern:
+    /// the timestamp is the handle to its own record. Transient, never
+    /// persisted; Activity consumes and clears it.
+    var activityFocusRunID: RunRecord.ID?
+
     /// Set when something asks for the new-repository sheet before the window
     /// that presents it exists — the tray's `unconfigured` face, or the File
     /// command with the window closed. RootView consumes and clears it on
