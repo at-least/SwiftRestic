@@ -68,11 +68,10 @@ struct OverviewView: View {
     /// One plan's protection state as the card states it: what is known,
     /// whether it protects, and the line the user is owed when it does not.
     ///
-    /// Markers follow the quiet rule: only trouble wears a glyph. A protected
-    /// plan and a not-yet-protected one are both ordinary states — their line
-    /// of text carries the truth — so neither gets a celebratory or
-    /// metaphorical icon competing for the eye; scannability comes from
-    /// severity ordering instead.
+    /// No row wears a glyph, trouble included: the state line's words carry
+    /// every state and its hue carries the alarm, so scannability comes from
+    /// severity ordering and the tinted line instead of a symbol competing
+    /// for the eye.
     private struct ProtectionRow: Identifiable {
         let planID: UUID
         let planName: String
@@ -82,17 +81,6 @@ struct OverviewView: View {
         let isProtected: Bool
         let didFail: Bool
         var id: UUID { planID }
-
-        var symbolName: String? {
-            if didFail { return "exclamationmark.triangle.fill" }
-            if !isKnown { return "clock.arrow.circlepath" }
-            return nil
-        }
-
-        var hue: Color {
-            if didFail { return Theme.warning }
-            return .secondary
-        }
 
         /// The state line's weight: "not protected" is the row's real news
         /// and reads at full weight; a pending or protected line stays quiet,
@@ -229,13 +217,6 @@ struct OverviewView: View {
 
     private func protectionRow(_ row: ProtectionRow) -> some View {
         HStack(spacing: 8) {
-            // Only trouble wears a glyph; the words carry every state, so the
-            // symbol stays hidden from VoiceOver when there is one at all.
-            if let symbolName = row.symbolName {
-                Image(systemName: symbolName)
-                    .foregroundStyle(row.hue)
-                    .accessibilityHidden(true)
-            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.planName)
                     .lineLimit(1)
@@ -263,13 +244,6 @@ struct OverviewView: View {
             runs: model.configuration.runs,
             since: problemWindowStart
         )
-        // Worst-of-window, not a flat "problems exist" orange: a failed run
-        // reads red here exactly like it does in Recent problems and
-        // Activity below, instead of disagreeing with them on the same page.
-        let worstProblem = OverviewMetrics.worstProblemOutcome(
-            runs: model.configuration.runs,
-            since: problemWindowStart
-        )
         return HStack(spacing: Theme.Space.tile) {
             StatTile(
                 title: "Repositories",
@@ -282,16 +256,14 @@ struct OverviewView: View {
             // A button in both states: a tile that only became clickable when
             // problems existed was a disappearing affordance, and arriving in
             // Activity pre-filtered is a fine answer to "zero problems" too.
-            // The marker follows the quiet rule: zero problems wears no glyph
-            // at all — the tile sits silently until trouble gives it one.
+            // The tile wears no glyph in any state — the count is the whole
+            // message, and the failure itself is named in words in Recent
+            // problems below.
             Button(action: showProblems) {
                 StatTile(
                     title: "Problems (7 days)",
                     value: problems > 0 ? Format.count(problems) : "0",
-                    systemImage: worstProblem.flatMap(\.symbolName),
-                    hue: worstProblem.map(ChartPalette.status) ?? Theme.tint,
-                    trailingSymbol: "chevron.forward",
-                    reservesIconSpace: true
+                    trailingSymbol: "chevron.forward"
                 )
             }
             .buttonStyle(HoverableButtonStyle())
@@ -564,14 +536,9 @@ struct OverviewView: View {
                     ForEach(Array(failures)) { run in
                         Button(action: showProblems) {
                             HStack(spacing: 6) {
-                                // Status is never carried by colour alone.
                                 // This card lists only problems, so the
-                                // marker is always present.
-                                if let symbolName = run.outcome.symbolName {
-                                    Image(systemName: symbolName)
-                                        .foregroundStyle(ChartPalette.status(run.outcome))
-                                        .accessibilityLabel(run.outcome.displayName)
-                                }
+                                // outcome is said in words right under the
+                                // name — a glyph would only repeat it.
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(run.planName.isEmpty ? run.kind.rawValue : run.planName)
                                         .lineLimit(1)

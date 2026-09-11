@@ -138,26 +138,6 @@ struct OverviewMetricsTests {
         ) == 2)
     }
 
-    @Test("the worst problem in the window is failed over completed-with-errors")
-    func worstProblemSeverity() {
-        var warned = run(plan: "Docs", at: "2026-09-05 01:00:00", added: 0)
-        warned.outcome = .completedWithErrors
-        var failed = run(plan: "Docs", at: "2026-09-06 01:00:00", added: 0)
-        failed.outcome = .failed
-        var old = run(plan: "Docs", at: "2026-08-01 01:00:00", added: 0)
-        old.outcome = .failed
-
-        let since = date("2026-09-01 00:00:00")
-        // A failure anywhere in the window outranks a warning, regardless of
-        // which one is newer — the tile's colour must not soften just
-        // because the warning happened to record last.
-        #expect(OverviewMetrics.worstProblemOutcome(runs: [warned, failed], since: since) == .failed)
-        #expect(OverviewMetrics.worstProblemOutcome(runs: [warned], since: since) == .completedWithErrors)
-        #expect(OverviewMetrics.worstProblemOutcome(runs: [], since: since) == nil)
-        // A failure outside the window does not color a clean window's tile.
-        #expect(OverviewMetrics.worstProblemOutcome(runs: [old], since: since) == nil)
-    }
-
     @Test("recency counts from when the run finished, matching the tray's line")
     func problemsCountFromFinishedAt() {
         var overnight = run(plan: "Docs", at: "2026-09-04 23:00:00", added: 0)
@@ -170,7 +150,6 @@ struct OverviewMetricsTests {
         // old tile disagreed with the tray's line exactly here, on an
         // overnight run that failed at dawn.
         #expect(OverviewMetrics.problemCount(runs: [overnight], since: since) == 1)
-        #expect(OverviewMetrics.worstProblemOutcome(runs: [overnight], since: since) == .failed)
     }
 
     @Test("a run with no plan name folds into Other rather than disappearing")

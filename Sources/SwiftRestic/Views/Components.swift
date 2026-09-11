@@ -142,15 +142,18 @@ struct StatTile: View {
     /// exist only under the cursor. Decorative — the button's own
     /// accessibility label says where it goes.
     var trailingSymbol: String?
-    /// Keeps the icon chip's slot when `systemImage` is nil, so a tile whose
-    /// glyph appears only with trouble (the Problems tile) does not shift
-    /// its text when the state flips.
-    var reservesIconSpace = false
 
     var body: some View {
         HStack(spacing: 10) {
-            if systemImage != nil || reservesIconSpace {
-                iconChip
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(hue)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        hue.opacity(0.13),
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                    )
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -181,25 +184,6 @@ struct StatTile: View {
         .padding(Theme.Space.cardPadding)
         .cardSurface()
         .modifier(TileHelp(help: help))
-    }
-
-    /// The tinted chip, or an invisible spacer of the same footprint when a
-    /// tile reserves the slot for a glyph it does not yet wear.
-    @ViewBuilder
-    private var iconChip: some View {
-        if let systemImage {
-            Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(hue)
-                .frame(width: 30, height: 30)
-                .background(
-                    hue.opacity(0.13),
-                    in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                )
-        } else {
-            Color.clear
-                .frame(width: 30, height: 30)
-        }
     }
 }
 

@@ -100,18 +100,6 @@ enum OverviewMetrics {
         problems(in: runs, since: since).count
     }
 
-    /// The most severe outcome among the window's problems, `.failed` beating
-    /// `.completedWithErrors` — so the Problems tile's colour and icon track
-    /// the same worst-case severity the Recent problems card and Activity
-    /// already show per-run, instead of a flat "something's wrong" orange
-    /// regardless of which kind of problem it actually is.
-    static func worstProblemOutcome(runs: [RunRecord], since: Date) -> RunRecord.Outcome? {
-        let outcomes = Set(problems(in: runs, since: since).map(\.outcome))
-        if outcomes.contains(.failed) { return .failed }
-        if outcomes.contains(.completedWithErrors) { return .completedWithErrors }
-        return nil
-    }
-
     /// Failures and completed-with-errors runs that finished inside the
     /// window — the one definition of "recent problem". The dashboard's tile
     /// counts this set, the Recent problems card lists it, and the menu bar's
