@@ -4,6 +4,32 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 xcodegen generate --quiet
+
+# The portability seam: Core, Models and the restic engine must stay usable
+# off macOS (Foundation only). An AppKit/SwiftUI import there would weld the
+# engine to this platform silently, so it fails here instead of waiting for
+# a port to discover it. NSString (expandTilde) is Foundation's own and
+# allowed; this guards the framework imports only.
+portable=(
+    Sources/SwiftRestic/Core
+    Sources/SwiftRestic/Models
+    Sources/SwiftRestic/Services/ResticService.swift
+    Sources/SwiftRestic/Services/ResticClient.swift
+)
+# Fail closed: a renamed or moved path makes grep exit 2, which an `if grep`
+# alone would read as "clean" — the guard must not die with the paths it
+# names, so missing paths fail the build too.
+for linted in "${portable[@]}"; do
+    if [ ! -e "$linted" ]; then
+        echo "error: portability lint path is missing: $linted (update the list in build.sh)" >&2
+        exit 1
+    fi
+done
+if grep -rnE "import (AppKit|SwiftUI|Cocoa)" "${portable[@]}"; then
+    echo "error: AppKit/SwiftUI imported in the portable layer (see lines above)" >&2
+    exit 1
+fi
+
 ACTION="${1:-build}"
 
 # The full log goes to a temporary file, the interesting lines stream to the
