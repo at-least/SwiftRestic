@@ -91,7 +91,7 @@ struct BackupOutcome: Sendable {
 }
 
 /// The typed restic commands the app uses, layered over `ResticRunner`.
-struct ResticService: Sendable {
+struct ResticService: ResticClient {
     let runner: ResticRunner
     let binary: URL
 
@@ -282,7 +282,7 @@ struct ResticService: Sendable {
             guard case let .node(node) = message else { continue }
             let nodePath = Self.normalize(node.path)
             guard nodePath != normalized else { continue }
-            guard Self.normalize((nodePath as NSString).deletingLastPathComponent) == normalized else { continue }
+            guard Self.parent(of: nodePath) == normalized else { continue }
             nodes.append(node)
         }
         return nodes.sorted { lhs, rhs in
@@ -296,6 +296,21 @@ struct ResticService: Sendable {
         var value = path
         while value.count > 1, value.hasSuffix("/") { value.removeLast() }
         return value
+    }
+
+    /// The directory containing `path`, in pure String arithmetic rather
+    /// than NSString's `deletingLastPathComponent`, so the tree-filtering
+    /// here spells the same on any Foundation. The scan is over unicode
+    /// scalars, not Characters: a name beginning with a combining mark
+    /// merges the separator into one grapheme ("/a/´x"), and a Character
+    /// scan would miss it and drop the node from the listing. Paths are
+    /// absolute and already trailing-slash-stripped by `normalize`, so
+    /// slicing at the last separator is the whole rule. (`expandTilde`
+    /// below remains the one NSString use: `~user` semantics have no
+    /// pure-Swift spelling.)
+    private static func parent(of path: String) -> String {
+        guard let separator = path.unicodeScalars.lastIndex(of: "/") else { return path }
+        return separator == path.startIndex ? "/" : String(path[..<separator])
     }
 
     /// Searches every snapshot for paths matching a glob.

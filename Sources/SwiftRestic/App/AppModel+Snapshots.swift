@@ -30,7 +30,7 @@ extension AppModel {
         do {
             let service = try service()
             let context = try await context(for: repository)
-            let listing = try await service.snapshots(context, timeout: Self.refreshTimeout)
+            let listing = try await service.snapshots(context, planID: nil, timeout: Self.refreshTimeout)
             let stats = try? await service.stats(context, timeout: Self.refreshTimeout)
             // The repository can be deleted while its refresh is in flight; a
             // removed entry gets no state, no rows and no banner.
@@ -127,6 +127,7 @@ extension AppModel {
         return try await service.find(
             context,
             pattern: pattern,
+            ignoreCase: true,
             snapshotID: latestOnly ? "latest" : nil
         )
     }

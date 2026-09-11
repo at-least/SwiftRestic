@@ -56,7 +56,7 @@ extension AppModel {
     private func beginRestore(
         repositoryID: UUID,
         label: String,
-        operation: @escaping @Sendable (ResticService, RepositoryContext) async throws -> ResticSummary?,
+        operation: @escaping @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?,
         onSuccess: @escaping @MainActor () -> Void
     ) {
         guard restoreTask == nil else { return }
@@ -130,7 +130,7 @@ extension AppModel {
     /// main only after the promise resolves — by then the drag has ended
     /// and the main actor drains again.
     nonisolated static func restoredFileForDrag(
-        service: ResticService,
+        service: any ResticClient,
         secrets: SecretStore,
         repository: Repository,
         settings: AppSettings,
@@ -143,7 +143,9 @@ extension AppModel {
             await Self.dragContext(repository: repository, settings: settings, secrets: secrets),
             snapshotID: snapshotID,
             node: node,
-            destinationDirectory: destination
+            destinationDirectory: destination,
+            // No progress through the drag path: the drop is the feedback.
+            onProgress: nil
         )
         // The name rule of the service's directory branch: an empty name
         // only happens for a path-less root, which cannot be dragged.

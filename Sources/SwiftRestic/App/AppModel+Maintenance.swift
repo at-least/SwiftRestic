@@ -131,7 +131,7 @@ extension AppModel {
                 // "[0:00] 100.00%  2 / 2 packs processed" arrive as they
                 // print, no \r in-place updates to split around.)
                 let repositoryID = repository.id
-                record.detailText = try await service.prune(context) { [weak self] line in
+                record.detailText = try await service.prune(context, dryRun: false) { [weak self] line in
                     Task { @MainActor in
                         guard let self, self.maintenance[repositoryID] != nil else { return }
                         self.maintenance[repositoryID]?.lastOutput = line

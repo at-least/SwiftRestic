@@ -107,8 +107,7 @@ extension AppModel {
             )
             binary = located
             binaryProblem = nil
-            let service = ResticService(runner: runner, binary: located.url)
-            resticVersion = (try? await service.version()) ?? ""
+            resticVersion = (try? await service().version()) ?? ""
         } catch {
             binary = nil
             resticVersion = ""

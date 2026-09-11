@@ -142,7 +142,10 @@ extension AppModel {
         )
     }
 
-    func service() throws -> ResticService {
+    /// The engine seam: everything above `ResticClient` is written against
+    /// the protocol, and this is the one place the concrete binary-backed
+    /// implementation is chosen.
+    func service() throws -> any ResticClient {
         guard let binary else {
             throw ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
         }

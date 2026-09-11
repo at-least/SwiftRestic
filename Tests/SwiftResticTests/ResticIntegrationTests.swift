@@ -49,6 +49,15 @@ struct ResticIntegrationTests {
             atomically: true,
             encoding: .utf8
         )
+        // A name whose first character is a combining mark: the separator
+        // before it merges into one grapheme, so any Character-level path
+        // arithmetic silently drops the file from a directory listing. A
+        // regression here would lose exactly this file at browse time.
+        try "combining".write(
+            to: sourceDirectory.appendingPathComponent("\u{0301}leading.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
 
         var repository = Repository()
         repository.name = "Integration"
@@ -86,8 +95,8 @@ struct ResticIntegrationTests {
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
         #expect(outcome.exitCode == 0)
         #expect(outcome.summary?.snapshotID != nil)
-        #expect(outcome.summary?.filesNew == 3)
-        #expect(outcome.summary?.totalBytesProcessed == 200_017)
+        #expect(outcome.summary?.filesNew == 4)
+        #expect(outcome.summary?.totalBytesProcessed == 200_026)
 
         // The plan tag has to survive the round trip, or per-plan retention would
         // operate on the wrong snapshots.
@@ -103,7 +112,11 @@ struct ResticIntegrationTests {
             snapshotID: snapshot.id,
             path: fixture.sourceDirectory.path
         )
-        #expect(children.map(\.name) == ["sub", "a.txt", "big.bin"])
+        // The combining-mark name sorts after the plain letters — the order
+        // localizedStandardCompare actually produces, captured here so a
+        // collation change is seen, not silently absorbed.
+        #expect(children.map(\.name) == ["sub", "a.txt", "big.bin", "\u{0301}leading.txt"])
+        #expect(children.first { $0.name == "\u{0301}leading.txt" } != nil)
         #expect(children.first { $0.name == "a.txt" }?.size == 11)
         #expect(children.first { $0.name == "sub" }?.isDirectory == true)
 
