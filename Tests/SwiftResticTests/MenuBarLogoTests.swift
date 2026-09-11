@@ -41,16 +41,19 @@ struct MenuBarLogoTests {
 
     @Test("the attention face keeps the mark and adds a haloed dot on the ring")
     func badgedFace() throws {
+        let light = try #require(NSAppearance(named: .aqua))
+        let badged = MenuBarLogo.badgedImage(for: light)
         // Same identity, one companion mark: the TIFF differs from rest, and
         // the badged canvas is one point wider on every side for the halo.
-        #expect(MenuBarLogo.badgedImage.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
-        #expect(MenuBarLogo.badgedImage.size.width == 20)
+        #expect(badged.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
+        #expect(badged.size.width == 20)
+        #expect(!badged.isTemplate, "the blue dot must be baked in, so this face cannot be template")
 
         // Pixel facts at 4x, coordinates in the 20pt canvas (y-up). The dot
         // sits on the ring at its lower-right; the halo between dot and ring
         // must be truly transparent, and the ring must survive right next
         // door — a halo that tinted as ink would read as a second stroke.
-        let rep = try render(MenuBarLogo.badgedImage, canvas: 20, scale: 4)
+        let rep = try render(badged, canvas: 20, scale: 4)
         func alpha(x: CGFloat, y: CGFloat) throws -> CGFloat {
             let pixel = NSPoint(
                 x: (x * 4).rounded(),
@@ -67,12 +70,25 @@ struct MenuBarLogoTests {
         let ringRadius: CGFloat = 0.260 * 28
         let dotCenter = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4), dy: 10 + ringRadius * sin(.pi * 7 / 4))
         try #expect(alpha(x: dotCenter.dx, y: dotCenter.dy) > 0.85, "the dot itself is solid ink")
+        // The dot is baked in systemBlue, not the mark's ink: blue dominates.
+        let dotColor = try #require(rep.colorAt(
+            x: Int((dotCenter.dx * 4).rounded()),
+            y: Int(((20 - dotCenter.dy) * 4).rounded())
+        )?.usingColorSpace(.deviceRGB))
+        #expect(dotColor.blueComponent > dotColor.redComponent + 0.2, "the light face's dot is blue")
         // On the ring's centerline 17° away: inside the halo, outside the dot.
         let gap = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4 + 0.30), dy: 10 + ringRadius * sin(.pi * 7 / 4 + 0.30))
         try #expect(alpha(x: gap.dx, y: gap.dy) < 0.2, "the halo separates dot from ring with real transparency")
         // On the ring's centerline 33° away: past the halo, ink must survive.
         let survivor = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4 + 0.58), dy: 10 + ringRadius * sin(.pi * 7 / 4 + 0.58))
         try #expect(alpha(x: survivor.dx, y: survivor.dy) > 0.85, "the ring survives beside the dot")
+        // The light face's ink is black — routing the dark ink here would
+        // still pass the alpha check above, so pin the colour itself.
+        let inkColor = try #require(rep.colorAt(
+            x: Int((survivor.dx * 4).rounded()),
+            y: Int(((20 - survivor.dy) * 4).rounded())
+        )?.usingColorSpace(.deviceRGB))
+        #expect(inkColor.redComponent < 0.15, "the light face's mark draws in black ink")
 
         // The mark itself must not change size with its state: the badged
         // construction is drawn one-to-one with the idle construction, so
@@ -83,6 +99,38 @@ struct MenuBarLogoTests {
         let badgedExtent = try inkExtent(rep, canvas: 20)
         #expect(abs(badgedExtent.width - restingExtent.width) < 0.5)
         #expect(abs(badgedExtent.height - restingExtent.height) < 0.5)
+    }
+
+    @Test("the dark-appearance attention face wears white ink and the blue dot")
+    func badgedDarkFace() throws {
+        let dark = try #require(NSAppearance(named: .darkAqua))
+        let badged = MenuBarLogo.badgedImage(for: dark)
+        #expect(!badged.isTemplate)
+
+        let rep = try render(badged, canvas: 20, scale: 4)
+        let ringRadius: CGFloat = 0.260 * 28
+        func rgb(x: CGFloat, y: CGFloat) throws -> (r: CGFloat, g: CGFloat, b: CGFloat) {
+            let pixel = NSPoint(
+                x: (x * 4).rounded(),
+                y: ((20 - y) * 4).rounded()
+            )
+            let color = try #require(rep.colorAt(x: Int(pixel.x), y: Int(pixel.y)))
+                .usingColorSpace(.deviceRGB)
+            let resolved = try #require(color)
+            return (resolved.redComponent, resolved.greenComponent, resolved.blueComponent)
+        }
+
+        // The mark's ink must be white on the dark menu bar, not the template
+        // construction's black — a black mark would vanish there.
+        let survivor = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4 + 0.58), dy: 10 + ringRadius * sin(.pi * 7 / 4 + 0.58))
+        let ink = try rgb(x: survivor.dx, y: survivor.dy)
+        #expect(ink.r > 0.85, "the mark draws in white ink on the dark face")
+
+        // The dot is blue on the dark face — b dominates r and g — while the
+        // mark's ink is white; on the light face both flip per badgedFace.
+        let dotCenter = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4), dy: 10 + ringRadius * sin(.pi * 7 / 4))
+        let darkDot = try rgb(x: dotCenter.dx, y: dotCenter.dy)
+        #expect(darkDot.b > darkDot.r + 0.2 && darkDot.b > darkDot.g + 0.2, "the dark face's dot is blue")
     }
 
     /// The drawing's bounding box in points, from opaque pixels.
@@ -106,7 +154,7 @@ struct MenuBarLogoTests {
 
     @Test("every face renders, including the hero scale")
     func allFacesRender() {
-        #expect(MenuBarLogo.badgedImage.size.width > 0)
+        #expect(MenuBarLogo.badgedImage(for: .currentDrawing()).size.width > 0)
         #expect(MenuBarLogo.heroImage.size.width == 96)
     }
 
@@ -159,7 +207,7 @@ struct MenuBarLogoTests {
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         let faces: [(String, NSImage, CGFloat)] = [
             ("idle", MenuBarLogo.image(), 18),
-            ("attention", MenuBarLogo.badgedImage, 20),
+            ("attention", MenuBarLogo.badgedImage(for: .currentDrawing()), 20),
             ("running-0", MenuBarLogo.image(phase: 0), 18),
             ("running-1", MenuBarLogo.image(phase: 1), 18),
             ("hero", MenuBarLogo.heroImage, 96),

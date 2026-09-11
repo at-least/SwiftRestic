@@ -58,9 +58,6 @@ enum MenuBarLogo {
     /// peripheral vision, not a flicker.
     static let frameInterval: TimeInterval = 0.6
 
-    /// Template ink: alpha alone carries the drawing.
-    private static let ink = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
-
     /// Which running frame is showing at a given moment. Pure so the cadence
     /// can be tested without a live timer or view.
     static func phase(at date: Date) -> Int {
@@ -80,9 +77,8 @@ enum MenuBarLogo {
             draw(in: rect, into: context, content: .running(phase))
         }
     }
-    private static let badgedImageCache: NSImage = makeImage(size: badgedCanvasSize) { rect, context in
-        draw(in: rect, into: context, content: .badged, scaleBasis: badgedCanvasSize)
-    }
+    private static let badgedLightImageCache: NSImage = makeBadgedImage(isDark: false)
+    private static let badgedDarkImageCache: NSImage = makeBadgedImage(isDark: true)
     private static let heroImageCache: NSImage = makeImage(size: heroCanvasSize) { rect, context in
         draw(in: rect, into: context, content: .resting)
     }
@@ -90,12 +86,53 @@ enum MenuBarLogo {
     /// The ring at rest, the plate stack settled rather than pulsing.
     static func image() -> NSImage { restingImage }
 
-    /// The attention face: the resting mark plus the companion dot.
-    static var badgedImage: NSImage { badgedImageCache }
+    /// The two cached variants, for callers that already know which
+    /// appearance they are drawing — the tray label reads its colorScheme.
+    static var badgedLightImage: NSImage { badgedLightImageCache }
+    static var badgedDarkImage: NSImage { badgedDarkImageCache }
+
+    /// The attention face: the resting mark plus the companion dot, drawn in
+    /// fixed colour — the mark in the menu bar's label ink for `appearance`,
+    /// the dot in systemBlue, Mail's unread-dot colour.
+    ///
+    /// This face leaves the template law on purpose. Verified live against a
+    /// real status item: the menu bar flattens its whole label and tints it,
+    /// so blue painted anywhere in SwiftUI view layer dies — the colour has
+    /// to be baked into the bitmap, and a baked bitmap cannot also be a
+    /// template image. The cost is contained: idle and running keep their
+    /// template faces and adapt for free; only this face swaps images on
+    /// appearance change (both variants cached; the label re-evaluates on
+    /// every model tick while a run is in flight, so both accessors must
+    /// stay allocation-free).
+    static func badgedImage(for appearance: NSAppearance) -> NSImage {
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? badgedDarkImage : badgedLightImage
+    }
 
     /// The welcome screen's brand mark — the app's own construction at hero
     /// scale, not a borrowed SF Symbol.
     static var heroImage: NSImage { heroImageCache }
+
+    private static func makeBadgedImage(isDark: Bool) -> NSImage {
+        let components: (red: CGFloat, green: CGFloat, blue: CGFloat) = isDark ? (1, 1, 1) : (0, 0, 0)
+        // Resolve systemBlue under this appearance so the dark menu bar gets
+        // the brighter variant, the way a template image would adapt.
+        var dot = CGColor(srgbRed: 0, green: 0.478, blue: 1, alpha: 1)
+        if let named = NSAppearance(named: isDark ? .darkAqua : .aqua) {
+            named.performAsCurrentDrawingAppearance {
+                if let resolved = NSColor.systemBlue.usingColorSpace(.sRGB)?.cgColor {
+                    dot = resolved
+                }
+            }
+        }
+        let image = makeImage(size: badgedCanvasSize) { rect, context in
+            draw(
+                in: rect, into: context, content: .badged, scaleBasis: badgedCanvasSize,
+                inkComponents: components, dotColor: dot
+            )
+        }
+        image.isTemplate = false
+        return image
+    }
 
     /// A running frame: the ring with the snapshot stack pulsing.
     static func image(phase: Int) -> NSImage {
@@ -138,15 +175,25 @@ enum MenuBarLogo {
     /// its own canvas instead: one-to-one with `impliedSize`, the mark keeps
     /// the idle construction's absolute size and the wider canvas buys real
     /// halo margin — the tray glyph must never change size with its state.
+    /// `inkComponents` recolours the construction for the non-template faces
+    /// (white on the dark menu bar); `dotColor` recolours the attention dot.
     private static func draw(
         in rect: CGRect,
         into context: CGContext,
         content: Content,
-        scaleBasis: CGFloat = canvasSize
+        scaleBasis: CGFloat = canvasSize,
+        inkComponents: (red: CGFloat, green: CGFloat, blue: CGFloat) = (0, 0, 0),
+        dotColor: CGColor? = nil
     ) {
         let s = impliedSize * rect.width / scaleBasis
         let stroke = s * 0.068
         let center = CGPoint(x: rect.midX, y: rect.midY)
+        let ink = CGColor(
+            srgbRed: inkComponents.red,
+            green: inkComponents.green,
+            blue: inkComponents.blue,
+            alpha: 1
+        )
 
         // Circular restore arrow: opening on the left, sweeping
         // counterclockwise from the tail below it to the head above.
@@ -189,14 +236,21 @@ enum MenuBarLogo {
 
         switch content {
         case .resting:
-            drawStack(alphas: restingAlphas, into: context, center: center, s: s, stroke: stroke)
+            drawStack(
+                alphas: restingAlphas, into: context, center: center, s: s, stroke: stroke,
+                components: inkComponents
+            )
         case .badged:
-            drawStack(alphas: restingAlphas, into: context, center: center, s: s, stroke: stroke)
-            drawAttentionDot(into: context, center: center, s: s)
+            drawStack(
+                alphas: restingAlphas, into: context, center: center, s: s, stroke: stroke,
+                components: inkComponents
+            )
+            drawAttentionDot(into: context, center: center, s: s, dotColor: dotColor ?? ink)
         case .running(let phase):
             drawStack(
                 alphas: runningAlphaFrames[phase % runningAlphaFrames.count],
-                into: context, center: center, s: s, stroke: stroke
+                into: context, center: center, s: s, stroke: stroke,
+                components: inkComponents
             )
         }
     }
@@ -206,8 +260,11 @@ enum MenuBarLogo {
     /// from the arrowhead's upper-left. Template rendering tints from alpha
     /// alone, so the halo around the dot is knocked out to *transparent* —
     /// a drawn light-coloured ring would tint as ink and read as a second
-    /// stroke — which leaves a real gap between dot and ring on any menu bar.
-    private static func drawAttentionDot(into context: CGContext, center: CGPoint, s: CGFloat) {
+    /// stroke — which leaves a real gap between dot and ring on any menu bar,
+    /// and lets the non-template faces paint the dot in colour over the gap.
+    private static func drawAttentionDot(
+        into context: CGContext, center: CGPoint, s: CGFloat, dotColor: CGColor
+    ) {
         let ringRadius = s * 0.260
         let dotRadius = s * 0.064
         let haloRadius = s * 0.093
@@ -220,7 +277,7 @@ enum MenuBarLogo {
         context.setBlendMode(.clear)
         context.fillEllipse(in: ellipse(at: dotCenter, radius: haloRadius))
         context.setBlendMode(.normal)
-        context.setFillColor(ink)
+        context.setFillColor(dotColor)
         context.fillEllipse(in: ellipse(at: dotCenter, radius: dotRadius))
         context.restoreGState()
     }
@@ -235,14 +292,20 @@ enum MenuBarLogo {
     }
 
     private static func drawStack(
-        alphas: [CGFloat], into context: CGContext, center: CGPoint, s: CGFloat, stroke: CGFloat
+        alphas: [CGFloat], into context: CGContext, center: CGPoint, s: CGFloat, stroke: CGFloat,
+        components: (red: CGFloat, green: CGFloat, blue: CGFloat)
     ) {
         let plateWidth = s * 0.190
         let spacing = s * 0.160
         let stackOffset = CGFloat(alphas.count - 1) * spacing / 2
         for (index, alpha) in alphas.enumerated() {
             let y = center.y - stackOffset + CGFloat(index) * spacing
-            context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: alpha))
+            context.setFillColor(CGColor(
+                srgbRed: components.red,
+                green: components.green,
+                blue: components.blue,
+                alpha: alpha
+            ))
             let plateRect = CGRect(
                 x: center.x - plateWidth / 2,
                 y: y - stroke / 2,

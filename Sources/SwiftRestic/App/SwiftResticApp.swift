@@ -305,6 +305,14 @@ private struct MenuBarStatusLabel: View {
     /// every observed model property still, nothing else re-evaluates this
     /// view, so a body-level read once froze for the run's whole duration.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The status item's own appearance — the label's hosting view inherits
+    /// it from the button, whose material follows the menu bar (which can
+    /// differ from the app's appearance when the bar adapts to the
+    /// wallpaper). This, not the app appearance, is what a template image
+    /// gets tinted with, so the baked mark must key on it to sit level with
+    /// the idle face. Verified live: this label reads dark on a dark-styled
+    /// bar while the app's windows stay light.
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         // Four faces, three glyphs: the mark never leaves the tray — idle
@@ -325,7 +333,14 @@ private struct MenuBarStatusLabel: View {
             case .logo:
                 Image(nsImage: MenuBarLogo.image())
             case .badgedLogo:
-                Image(nsImage: MenuBarLogo.badgedImage)
+                // Non-template by necessity: the menu bar flattens its whole
+                // label and tints it, so blue painted in the view layer dies
+                // (verified live — the overlay came out white on a dark bar).
+                // The mark's ink and the blue dot are baked per the status
+                // item's own appearance, keyed on this label's colorScheme.
+                Image(nsImage: colorScheme == .dark
+                    ? MenuBarLogo.badgedDarkImage
+                    : MenuBarLogo.badgedLightImage)
             case .animatedLogo:
                 // Reduce Motion holds the first running frame still instead of
                 // stepping the pulse — no motion, but unlike the resting mark
