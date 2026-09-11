@@ -132,33 +132,13 @@ extension AppModel {
     }
 
     /// Builds everything a restic command needs, or explains what is missing.
+    /// The password rules live once, in the drag path's main-actor-free
+    /// variant (`AppModel.dragContext`) — this delegates to it.
     func context(for repository: Repository) async throws -> RepositoryContext {
-        #if DEBUG
-        // Capture and CI runs hand over the password through the environment so
-        // they never touch the login Keychain. Gated on the throwaway-config
-        // override as well, so a stale variable in a developer's shell cannot
-        // silently feed the wrong password to a normal debug run.
-        if let injected = ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_PASSWORD"],
-           !injected.isEmpty,
-           ProcessInfo.processInfo.environment["SWIFTRESTIC_CONFIG_DIR"] != nil
-        {
-            return RepositoryContext(
-                repository: repository,
-                password: injected,
-                providerSecret: ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_SECRET"],
-                settings: configuration.settings
-            )
-        }
-        #endif
-        let stored = await secrets.load(repository.id)
-        guard let password = stored.password, !password.isEmpty else {
-            throw ResticError.passwordMissing(repositoryName: repository.name)
-        }
-        return RepositoryContext(
+        try await Self.dragContext(
             repository: repository,
-            password: password,
-            providerSecret: stored.providerSecret,
-            settings: configuration.settings
+            settings: configuration.settings,
+            secrets: secrets
         )
     }
 

@@ -117,41 +117,74 @@ extension AppModel {
     /// directory and returns the restored item's URL, which the drag's
     /// promised-file provider hands to Finder.
     ///
-    /// Deliberately outside `beginRestore`: that path owns the app-level
-    /// progress strip, the run history and the "Restored…" banner, none of
-    /// which describe a drop whose destination the user chose with the drag
-    /// itself. A failed drag still posts a banner, because Finder's own
-    /// "couldn't complete the operation" says nothing about restic.
-    func restoredFileForDrag(
-        repositoryID: UUID,
+    /// `nonisolated`, and handed everything it needs as values, because the
+    /// promise's load handler runs *during* the drag session — while the
+    /// main thread is synchronously waiting on it (measured:
+    /// `NSItemProvider.loadURLSynchronously` → semaphore, under
+    /// `_dragUntilMouseUp`). Any hop to the main actor from there is a
+    /// self-deadlock; the caller captures the model-derived inputs before
+    /// the session starts. Deliberately outside `beginRestore`: that path
+    /// owns the progress strip, the run history and the "Restored…" banner,
+    /// none of which describe a drop whose destination the drag itself
+    /// chose. A failed drag posts its banner from the caller, which hops to
+    /// main only after the promise resolves — by then the drag has ended
+    /// and the main actor drains again.
+    nonisolated static func restoredFileForDrag(
+        service: ResticService,
+        secrets: SecretStore,
+        repository: Repository,
+        settings: AppSettings,
         snapshotID: String,
         node: SnapshotNode
     ) async throws -> URL {
-        guard let repository = repository(id: repositoryID) else {
-            throw ResticError.repositoryMissing
-        }
         let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(Self.dragRestorePrefix)\(UUID().uuidString)")
-        do {
-            _ = try await service().restore(
-                try await context(for: repository),
-                snapshotID: snapshotID,
-                node: node,
-                destinationDirectory: destination
-            )
-        } catch {
-            // The UI restore's quiet rules, so a drag failing during quit
-            // (or one the drop itself cancelled) cannot announce itself
-            // into a process that is going away.
-            if !isShuttingDown {
-                let message = (error as? ResticError)?.errorDescription ?? error.localizedDescription
-                post(Banner(title: "Drag restore failed", message: message, isError: true))
-            }
-            throw error
-        }
+            .appendingPathComponent("\(dragRestorePrefix)\(UUID().uuidString)")
+        _ = try await service.restore(
+            await Self.dragContext(repository: repository, settings: settings, secrets: secrets),
+            snapshotID: snapshotID,
+            node: node,
+            destinationDirectory: destination
+        )
         // The name rule of the service's directory branch: an empty name
         // only happens for a path-less root, which cannot be dragged.
         return destination.appendingPathComponent(node.name.isEmpty ? "restored" : node.name)
+    }
+
+    /// Everything a restic command needs, from pre-captured values, with no
+    /// main-actor dependency. One definition of the rules, shared by the
+    /// drag path above and the instance `context(for:)`.
+    nonisolated static func dragContext(
+        repository: Repository,
+        settings: AppSettings,
+        secrets: SecretStore
+    ) async throws -> RepositoryContext {
+        #if DEBUG
+        // Capture and CI runs hand over the password through the environment
+        // so they never touch the login Keychain. Gated on the throwaway-config
+        // override as well, so a stale variable in a developer's shell cannot
+        // silently feed the wrong password to a normal debug run.
+        if let injected = ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_PASSWORD"],
+           !injected.isEmpty,
+           ProcessInfo.processInfo.environment["SWIFTRESTIC_CONFIG_DIR"] != nil
+        {
+            return RepositoryContext(
+                repository: repository,
+                password: injected,
+                providerSecret: ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_SECRET"],
+                settings: settings
+            )
+        }
+        #endif
+        let stored = await secrets.load(repository.id)
+        guard let password = stored.password, !password.isEmpty else {
+            throw ResticError.passwordMissing(repositoryName: repository.name)
+        }
+        return RepositoryContext(
+            repository: repository,
+            password: password,
+            providerSecret: stored.providerSecret,
+            settings: settings
+        )
     }
 
     /// Prefix shared by every drag-restore staging directory, so the launch

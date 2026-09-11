@@ -140,8 +140,14 @@ struct AppModelTests {
             type: .file,
             path: harness.sourceDirectory.appendingPathComponent("a.txt").path
         )
-        let url = try await model.restoredFileForDrag(
-            repositoryID: harness.repository.id,
+        // The drag path's contract: everything it needs arrives as captured
+        // values, because the real caller cannot touch the model once the
+        // drag session holds the main thread.
+        let url = try await AppModel.restoredFileForDrag(
+            service: try model.service(),
+            secrets: model.secrets,
+            repository: harness.repository,
+            settings: model.configuration.settings,
             snapshotID: snapshot.id,
             node: node
         )

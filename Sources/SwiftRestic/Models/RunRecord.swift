@@ -117,8 +117,14 @@ extension RunRecord {
     /// it was the user's stop or the app quitting, and anything else as
     /// `.failed` with the error's message. Callers keep their own side effects:
     /// stamps, banners, bookkeeping.
+    ///
+    /// A task that is already cancelled counts as cancelled whatever the
+    /// error says: deleting a repository removes its secret before cancelling
+    /// the run, and a run suspended at exactly that moment surfaces the
+    /// missing password as its error — a race, not the cause. The
+    /// cancellation is the outcome that actually happened.
     mutating func setOutcome(from error: Error, cancellationMessage: String) {
-        let cancelled = error is CancellationError || (error as? ResticError) == .cancelled
+        let cancelled = Task.isCancelled || error is CancellationError || (error as? ResticError) == .cancelled
         outcome = cancelled ? .cancelled : .failed
         failureMessage = cancelled ? cancellationMessage : error.localizedDescription
     }
