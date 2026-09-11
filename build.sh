@@ -15,6 +15,7 @@ portable=(
     Sources/SwiftRestic/Models
     Sources/SwiftRestic/Services/ResticService.swift
     Sources/SwiftRestic/Services/ResticClient.swift
+    Sources/SwiftRestic/Services/Index
 )
 # Fail closed: a renamed or moved path makes grep exit 2, which an `if grep`
 # alone would read as "clean" — the guard must not die with the paths it

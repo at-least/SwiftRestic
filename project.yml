@@ -6,6 +6,11 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
 
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "7.11.1"
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -36,6 +41,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Support/SwiftRestic.entitlements
         COMBINE_HIDPI_IMAGES: YES
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/../Frameworks"]
+    dependencies:
+      - package: GRDB
 
   SwiftResticTests:
     type: bundle.unit-test
@@ -52,6 +59,8 @@ targets:
       - path: Sources/SwiftRestic/App
         excludes:
           - SwiftResticApp.swift
+    dependencies:
+      - package: GRDB
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.newlix.SwiftResticTests

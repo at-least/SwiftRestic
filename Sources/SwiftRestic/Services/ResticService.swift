@@ -98,8 +98,13 @@ struct ResticService: ResticClient {
     /// Tag stamped on every snapshot a plan creates, so retention and snapshot
     /// listings can be scoped to that plan without touching anyone else's data.
     static func planTag(_ planID: UUID) -> String {
-        "swiftrestic-plan-\(planID.uuidString.lowercased())"
+        Self.planTagPrefix + planID.uuidString.lowercased()
     }
+
+    /// The prefix that identifies a tag as ours. The snapshot index uses it to
+    /// decide which chain a snapshot belongs to; keep the two in sync through
+    /// this one constant.
+    static let planTagPrefix = "swiftrestic-plan-"
 
     // MARK: - Repository lifecycle
 
