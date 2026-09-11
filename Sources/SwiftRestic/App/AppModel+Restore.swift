@@ -131,7 +131,7 @@ extension AppModel {
             throw ResticError.repositoryMissing
         }
         let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftRestic-Drag-\(UUID().uuidString)")
+            .appendingPathComponent("\(Self.dragRestorePrefix)\(UUID().uuidString)")
         do {
             _ = try await service().restore(
                 try await context(for: repository),
@@ -140,11 +140,36 @@ extension AppModel {
                 destinationDirectory: destination
             )
         } catch {
-            let message = (error as? ResticError)?.errorDescription ?? error.localizedDescription
-            post(Banner(title: "Drag restore failed", message: message, isError: true))
+            // The UI restore's quiet rules, so a drag failing during quit
+            // (or one the drop itself cancelled) cannot announce itself
+            // into a process that is going away.
+            if !isShuttingDown {
+                let message = (error as? ResticError)?.errorDescription ?? error.localizedDescription
+                post(Banner(title: "Drag restore failed", message: message, isError: true))
+            }
             throw error
         }
-        // Same name rule the service applies for both restore shapes.
+        // The name rule of the service's directory branch: an empty name
+        // only happens for a path-less root, which cannot be dragged.
         return destination.appendingPathComponent(node.name.isEmpty ? "restored" : node.name)
+    }
+
+    /// Prefix shared by every drag-restore staging directory, so the launch
+    /// sweep in `bootstrap` and the creator above can never drift apart.
+    nonisolated static let dragRestorePrefix = "SwiftRestic-Drag-"
+
+    /// Removes drag-restore staging directories left behind by earlier
+    /// sessions. Run at launch only, never at shutdown: Finder may still be
+    /// copying from a directory a just-finished drop handed over, and no
+    /// callback says when that ends — deleting on our side of the handoff
+    /// is a race. A launch sweep has no such window: nothing from a previous
+    /// session can still be mid-copy.
+    nonisolated static func sweepDragRestoreStaging(fileManager: FileManager = .default) {
+        let temp = fileManager.temporaryDirectory
+        guard let contents = try? fileManager.contentsOfDirectory(at: temp, includingPropertiesForKeys: nil)
+        else { return }
+        for url in contents where url.lastPathComponent.hasPrefix(dragRestorePrefix) {
+            try? fileManager.removeItem(at: url)
+        }
     }
 }

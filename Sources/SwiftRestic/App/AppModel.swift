@@ -84,7 +84,8 @@ final class AppModel {
     /// not a setting. See `AppModel+ProblemDots.swift`.
     var problemsSeenAt: [UUID: Date]
 
-    /// Progress of a restore, which is always one at a time.
+    /// Progress of a picker-started restore, of which there is at most one
+    /// (drag restores track no progress — their feedback is the drop itself).
     var restoreActivity: OperationProgress?
     var restoreDescription: String = ""
     /// The repository the running restore reads from. Deleting it cancels the

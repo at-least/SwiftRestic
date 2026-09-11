@@ -185,7 +185,7 @@ struct SnapshotBrowserView: View {
                         snapshotID: snapshotID,
                         node: node
                     )
-                    completion(url, true, nil)
+                    completion(url, false, nil)
                 } catch {
                     completion(nil, false, error)
                 }

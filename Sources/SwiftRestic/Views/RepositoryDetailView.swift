@@ -11,6 +11,11 @@ struct RepositoryDetailView: View {
     @State private var isConfirmingPrune = false
     @State private var isConfirmingUnlock = false
     @State private var isConfirmingCheck = false
+    /// Read off the body: `resourceValues` is synchronous filesystem IO, and
+    /// a spun-down external disk can take seconds to answer — re-run on every
+    /// re-eval (progress ticks, banners) that would also stall the main
+    /// thread each time.
+    @State private var volumeCapacity: VolumeCapacity?
 
     private var repository: Repository? { model.repository(id: repositoryID) }
 
@@ -220,6 +225,20 @@ struct RepositoryDetailView: View {
             }
         }
         .detailPane()
+        // On the pane itself, not the strip: the strip renders nothing until
+        // a capacity exists, and a lifecycle modifier on a view that renders
+        // nothing never fires — the load would never start. Also off-main on
+        // purpose (see `volumeCapacity`): nil first, then a cancelled-check
+        // after the await, so a slow answer from the old disk can neither
+        // render under the new one's caption nor overwrite its numbers.
+        .task(id: repository.id) {
+            volumeCapacity = nil
+            let path = repository.localPath
+            let read = await Task.detached { VolumeCapacity.of(path: path) }.value
+            if !Task.isCancelled {
+                volumeCapacity = read
+            }
+        }
     }
 
     /// Arq's "Used Space / Free Space" bar, for the one kind of repository
@@ -230,7 +249,7 @@ struct RepositoryDetailView: View {
     @ViewBuilder
     private func volumeStrip(_ repository: Repository) -> some View {
         if repository.kind == .local,
-           let capacity = VolumeCapacity.of(path: repository.localPath) {
+           let capacity = volumeCapacity {
             Card("Volume") {
                 VStack(alignment: .leading, spacing: 8) {
                     ProgressView(value: capacity.usedFraction)

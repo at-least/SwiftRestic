@@ -194,16 +194,23 @@ struct PlanDetailView: View {
     @ViewBuilder
     private func lastBackupTile(_ plan: BackupPlan) -> some View {
         let value = plan.lastSuccessAt.map { Format.relative($0) } ?? "Never"
-        // The stored history's order is arbitrary, so "the plan's run" is the
-        // newest by start time, not `first(where:)` — that one is merely *a*
-        // run and can be weeks old.
-        let newestRun = model.configuration.runs
-            .filter { $0.planID == plan.id }
+        // The destination must be the run the tile's value claims — the
+        // newest backup that stamped `lastSuccessAt`. That is the same
+        // predicate `markPlanRun` uses: a snapshot-writing run whose
+        // after-hooks then failed still counts (`.completedWithErrors`),
+        // because the stamp happens before the downgrade. A `.failed` run
+        // never stamped, so landing on it would break the promise the
+        // tile's value makes.
+        let lastSuccessfulRun = model.configuration.runs
+            .filter {
+                $0.planID == plan.id && $0.kind == .backup
+                    && ($0.outcome == .succeeded || $0.outcome == .completedWithErrors)
+            }
             .max { $0.startedAt < $1.startedAt }
-        if let newestRun, let onShowRun {
+        if let lastSuccessfulRun, let onShowRun {
             Button {
                 model.activityShowsProblemsOnly = false
-                model.activityFocusRunID = newestRun.id
+                model.activityFocusRunID = lastSuccessfulRun.id
                 onShowRun()
             } label: {
                 StatTile(
@@ -213,6 +220,7 @@ struct PlanDetailView: View {
                 )
             }
             .buttonStyle(HoverableButtonStyle())
+            .help("Show this backup's run in Activity")
             .accessibilityLabel("Last backup \(value). Show its run in Activity")
         } else {
             StatTile(title: "Last backup", value: value)

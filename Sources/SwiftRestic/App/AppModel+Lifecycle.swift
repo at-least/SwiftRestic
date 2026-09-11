@@ -36,6 +36,10 @@ extension AppModel {
         // Reset any activity left behind by a crash mid-backup.
         activity.removeAll()
         maintenance.removeAll()
+        // Drag-restore staging from previous sessions is pure leftovers —
+        // Finder finished with those drops long ago. Not awaited: a slow
+        // temp directory must not hold the first screen behind the spinner.
+        Task.detached { Self.sweepDragRestoreStaging() }
         startsAtLogin = LoginItem.isEnabled
         await resolveBinary()
         // The loading state covers configuration plus the binary probe: both
