@@ -177,6 +177,13 @@ extension AppModel {
         #endif
         let stored = await secrets.load(repository.id)
         guard let password = stored.password, !password.isEmpty else {
+            // Deleting a repository cancels its running plans first and
+            // removes the secret last, in a detached task — a run suspended
+            // at this actor hop can resume after that removal, and the
+            // missing password is the race's echo, not the cause. Honouring
+            // the cancellation here keeps the run's record `.cancelled`
+            // instead of a failure nobody can act on.
+            try Task.checkCancellation()
             throw ResticError.passwordMissing(repositoryName: repository.name)
         }
         return RepositoryContext(

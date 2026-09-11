@@ -195,8 +195,15 @@ struct SnapshotBrowserView: View {
         let settings = model.configuration.settings
         let snapshotID = target.snapshot.id
 
+        // The promise is typed by *content*, not as a file URL: `public.file-url`
+        // declares the file's contents are a URL bookmark (what a .webloc is),
+        // and Finder answers that with the prohibited cursor (measured live —
+        // the drag offered, the drop refused). A content-typed promise is the
+        // shape Finder's drop sites accept. `public.data` is the root physical
+        // type every file conforms to; a directory's content type is `folder`.
+        let contentType: UTType = node.isDirectory ? .folder : .data
         provider.registerFileRepresentation(
-            forTypeIdentifier: UTType.fileURL.identifier,
+            forTypeIdentifier: contentType.identifier,
             fileOptions: [],
             visibility: .all
         ) { [weak model] completion in
