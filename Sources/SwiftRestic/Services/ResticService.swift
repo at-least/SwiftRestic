@@ -303,14 +303,18 @@ struct ResticService: ResticClient {
     /// here spells the same on any Foundation. The scan is over unicode
     /// scalars, not Characters: a name beginning with a combining mark
     /// merges the separator into one grapheme ("/a/´x"), and a Character
-    /// scan would miss it and drop the node from the listing. Paths are
+    /// scan would miss it and drop the node from the listing. The cut
+    /// stays inside the scalars view too — a String subscript re-aligns
+    /// to grapheme boundaries, and a Prepend character (U+0600 and
+    /// friends) puts the slash mid-cluster, so slicing through the
+    /// Character view would round down and shed the character. Paths are
     /// absolute and already trailing-slash-stripped by `normalize`, so
     /// slicing at the last separator is the whole rule. (`expandTilde`
     /// below remains the one NSString use: `~user` semantics have no
     /// pure-Swift spelling.)
     private static func parent(of path: String) -> String {
         guard let separator = path.unicodeScalars.lastIndex(of: "/") else { return path }
-        return separator == path.startIndex ? "/" : String(path[..<separator])
+        return separator == path.unicodeScalars.startIndex ? "/" : String(path.unicodeScalars[..<separator])
     }
 
     /// Searches every snapshot for paths matching a glob.

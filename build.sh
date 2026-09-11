@@ -5,11 +5,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 xcodegen generate --quiet
 
-# The portability seam: Core, Models and the restic engine must stay usable
-# off macOS (Foundation only). An AppKit/SwiftUI import there would weld the
-# engine to this platform silently, so it fails here instead of waiting for
-# a port to discover it. NSString (expandTilde) is Foundation's own and
-# allowed; this guards the framework imports only.
+# The portability seam: Core, Models and the restic engine stay free of UI
+# frameworks, so a future port does not inherit AppKit by accident. This is
+# the import guard only — it does not claim the layer compiles off macOS
+# today (the runner still calls Darwin.read). NSString (expandTilde) is
+# Foundation's own and allowed.
 portable=(
     Sources/SwiftRestic/Core
     Sources/SwiftRestic/Models
