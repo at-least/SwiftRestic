@@ -6,7 +6,15 @@ import SwiftUI
 /// running restic terminated before the process goes away.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    var model: AppModel?
+    var model: AppModel? {
+        didSet {
+            // The tray is AppKit-owned (see TrayStatusItem for why); it is
+            // created once, when the model first reaches the delegate.
+            guard oldValue == nil, let model else { return }
+            tray = TrayStatusItem(model: model)
+        }
+    }
+    private var tray: TrayStatusItem?
     /// Set while the quit confirmation's modal loop is up. The modal run loop
     /// keeps the app alive, so a second ⌘Q re-enters `applicationShouldTerminate`
     /// mid-dialog; answering it again would stack a second alert on the first.
@@ -275,89 +283,5 @@ struct SwiftResticApp: App {
                 .environment(model)
         }
 
-        MenuBarExtra(isInserted: Binding(
-            get: { model.configuration.settings.showMenuBarExtra },
-            set: { newValue in
-                // Must not write unconditionally. `configuration` publishes on
-                // every assignment, SwiftUI re-evaluates the scene, writes the
-                // same value back, and the main thread spins forever — which
-                // also starves every continuation hopping to the main actor.
-                guard model.configuration.settings.showMenuBarExtra != newValue else { return }
-                model.configuration.settings.showMenuBarExtra = newValue
-            }
-        )) {
-            MenuBarContentView(mainWindowID: Self.mainWindowID)
-                .environment(model)
-        } label: {
-            MenuBarStatusLabel(model: model)
-        }
-        .menuBarExtraStyle(.menu)
-    }
-}
-
-/// The menu bar icon's face, a `View` of its own so the `@Observable` reads
-/// that pick the glyph are tracked from a view body — the one place SwiftUI
-/// guarantees re-evaluation when the model changes.
-private struct MenuBarStatusLabel: View {
-    let model: AppModel
-    /// SwiftUI keeps this current across changes to the setting. The tray
-    /// label is exactly where a stale read would hide: while a long run holds
-    /// every observed model property still, nothing else re-evaluates this
-    /// view, so a body-level read once froze for the run's whole duration.
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The status item's own appearance — the label's hosting view inherits
-    /// it from the button, whose material follows the menu bar (which can
-    /// differ from the app's appearance when the bar adapts to the
-    /// wallpaper). This, not the app appearance, is what a template image
-    /// gets tinted with, so the baked mark must key on it to sit level with
-    /// the idle face. Verified live: this label reads dark on a dark-styled
-    /// bar while the app's windows stay light.
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        // Four faces, three glyphs: the mark never leaves the tray — idle
-        // wears it at rest, both intervention states add one companion dot
-        // (the unread-badge grammar), and running pulses the stack. Template
-        // rendering is the menu bar's law, so state lives in the drawing,
-        // never in a tint.
-        let state = MenuBarStatus.iconState(
-            activity: model.activity,
-            maintenance: model.maintenance,
-            isRestoring: model.isRestoring,
-            isConsoleRunning: model.console.isRunning,
-            hasNoRepositories: model.configuration.repositories.isEmpty,
-            runs: model.configuration.runs
-        )
-        Group {
-            switch MenuBarStatus.glyph(for: state) {
-            case .logo:
-                Image(nsImage: MenuBarLogo.image())
-            case .badgedLogo:
-                // Non-template by necessity: the menu bar flattens its whole
-                // label and tints it, so blue painted in the view layer dies
-                // (verified live — the overlay came out white on a dark bar).
-                // The mark's ink and the blue dot are baked per the status
-                // item's own appearance, keyed on this label's colorScheme.
-                Image(nsImage: colorScheme == .dark
-                    ? MenuBarLogo.badgedDarkImage
-                    : MenuBarLogo.badgedLightImage)
-            case .animatedLogo:
-                // Reduce Motion holds the first running frame still instead of
-                // stepping the pulse — no motion, but unlike the resting mark
-                // it differs from idle in both plates, so the always-visible
-                // surface keeps saying "running" without animating.
-                if reduceMotion {
-                    Image(nsImage: MenuBarLogo.stillRunningImage)
-                } else {
-                    TimelineView(.periodic(from: .now, by: MenuBarLogo.frameInterval)) { context in
-                        Image(nsImage: MenuBarLogo.image(phase: MenuBarLogo.phase(at: context.date)))
-                    }
-                }
-            }
-        }
-        // Swapping a drawn image for a symbol is not a transition SwiftUI
-        // always re-renders; keying the view on the state forbids a stale face.
-        .id(state)
-        .accessibilityLabel(MenuBarStatus.accessibilityDescription(for: state))
     }
 }

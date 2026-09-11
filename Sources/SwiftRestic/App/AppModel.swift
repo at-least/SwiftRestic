@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 /// The single source of truth the SwiftUI views observe.
 ///
@@ -72,6 +73,12 @@ final class AppModel {
     /// screen), so the intent survives no matter which order window creation
     /// and the request land in. Transient, never persisted.
     var pendingNewRepository = false
+
+    /// The main window's `openWindow` action, parked here by RootView the
+    /// first time the window appears — the AppKit tray has no view
+    /// environment to call it from, and it outlives the window it was
+    /// captured in (verified live). See TrayStatusItem.openMainWindow.
+    @ObservationIgnored var openMainWindowAction: OpenWindowAction?
 
     /// The pane the sidebar is showing, bound from RootView so the Backup
     /// menu can disable against it.

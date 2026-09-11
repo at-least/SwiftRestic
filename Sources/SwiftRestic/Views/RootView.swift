@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     @State private var editingPlan: BackupPlan?
     @State private var editingRepository: Repository?
     @State private var isShowingFind = false
@@ -98,6 +99,11 @@ struct RootView: View {
             .help("Run restic commands directly against a repository")
         }
         .onAppear {
+            // Parked for the AppKit tray, which cannot reach a view
+            // environment — see AppModel.openMainWindowAction.
+            if model.openMainWindowAction == nil {
+                model.openMainWindowAction = openWindow
+            }
             consumePendingNewRepository()
             selectSomething()
             #if DEBUG
