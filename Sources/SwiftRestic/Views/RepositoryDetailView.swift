@@ -176,6 +176,8 @@ struct RepositoryDetailView: View {
 
             listingCaveat(outcome: listingOutcome)
 
+            volumeStrip(repository)
+
             Card("Details") {
                 DetailGrid {
                     DetailRow("Type", repository.kind.displayName)
@@ -218,6 +220,31 @@ struct RepositoryDetailView: View {
             }
         }
         .detailPane()
+    }
+
+    /// Arq's "Used Space / Free Space" bar, for the one kind of repository
+    /// whose backing disk the app can actually see. The bar is the *volume's*
+    /// usage, not the repository's — the caption says so, because a small
+    /// repository on a full disk and a large one on an empty one must not
+    /// render as the same picture.
+    @ViewBuilder
+    private func volumeStrip(_ repository: Repository) -> some View {
+        if repository.kind == .local,
+           let capacity = VolumeCapacity.of(path: repository.localPath) {
+            Card("Volume") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView(value: capacity.usedFraction)
+                        .tint(Theme.tint)
+                    Text(
+                        "The disk holding this repository: \(Format.bytes(capacity.usedBytes)) used of \(Format.bytes(capacity.totalBytes)), \(Format.bytes(capacity.freeBytes)) free."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 
     /// "Slow" is a different unit of slow on a 4 TB repository than on a
