@@ -37,6 +37,7 @@ extension AppModel {
         planTasks[id]?.cancel()
         configuration.plans.removeAll { $0.id == id }
         activity[id] = nil
+        forgetProblemSeen(planID: id)
     }
 
     func isRunning(planID: UUID) -> Bool { activity[planID] != nil }

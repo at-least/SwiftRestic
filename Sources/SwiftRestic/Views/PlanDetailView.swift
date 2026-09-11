@@ -20,6 +20,11 @@ struct PlanDetailView: View {
             }
         }
         .navigationTitle(plan?.name ?? "Plan")
+        // Opening the page is the Mail "read": whatever failure the sidebar's
+        // dot was announcing is seen now. The dot for a run that fails while
+        // the page is already open stays, like a message arriving into the
+        // mailbox you are reading — leaving and returning clears it.
+        .onAppear { model.markProblemSeen(planID: planID) }
         .toolbar {
             ToolbarItemGroup {
                 if let plan {

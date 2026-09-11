@@ -71,6 +71,13 @@ final class AppModel {
     /// menu can disable against it.
     var sidebarSelection: SidebarItem?
 
+    /// Per plan, when its newest problem was last marked seen — the stamp
+    /// behind the sidebar's Mail dot. View state, not configuration: it lives
+    /// in UserDefaults (see `ProblemDotsStore`), never in config.json, because
+    /// whether a failure has been looked at is this device's reading progress,
+    /// not a setting. See `AppModel+ProblemDots.swift`.
+    var problemsSeenAt: [UUID: Date]
+
     /// Progress of a restore, which is always one at a time.
     var restoreActivity: OperationProgress?
     var restoreDescription: String = ""
@@ -81,6 +88,10 @@ final class AppModel {
 
     let store: ConfigStore
     let secrets: SecretStore
+    /// Where view-state stamps (the seen-problem marks) persist. Injectable
+    /// so tests never touch the real defaults, the same way secrets never
+    /// touch the login Keychain.
+    let viewDefaults: UserDefaults
     let runner = ResticRunner()
     /// State of the restic console pane (see `ConsoleModel`).
     let console = ConsoleModel()
@@ -99,9 +110,15 @@ final class AppModel {
     /// someone hunting for a cancel click that never happened.
     var isShuttingDown = false
 
-    init(store: ConfigStore = ConfigStore(), secrets: SecretStore = .keychain) {
+    init(
+        store: ConfigStore = ConfigStore(),
+        secrets: SecretStore = .keychain,
+        defaults: UserDefaults = .standard
+    ) {
         self.store = store
         self.secrets = secrets
+        self.viewDefaults = defaults
+        self.problemsSeenAt = ProblemDotsStore.load(from: defaults)
     }
 
     // MARK: - Persistence

@@ -446,12 +446,20 @@ private struct PlanSidebarRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // A row wears state, never identity: the in-flight spinner while
-            // its backup runs, the pause mark while scheduled runs are paused
-            // (named again by the subtitle). An idle plan wears nothing — its
-            // colour belongs to the chart series, not to this chrome.
+            // A row wears state, never identity. In rank: the in-flight
+            // spinner, the Mail dot for a failure the user has not seen, the
+            // pause mark. An otherwise idle plan wears nothing.
             if model.isRunning(planID: plan.id) {
                 ProgressView().controlSize(.small)
+            } else if model.showsProblemDot(for: plan.id) {
+                // Accent blue like Mail's unread dot, never red: the dot is
+                // an invitation ("a failure you haven't seen"), and the alarm
+                // lives in the subtitle's words and hue. It clears when the
+                // plan's page is opened or the next run succeeds.
+                Circle()
+                    .fill(Theme.tint)
+                    .frame(width: 9, height: 9)
+                    .accessibilityLabel("A failed run you haven't seen")
             } else if !plan.isEnabled {
                 Image(systemName: "pause.circle")
                     .foregroundStyle(.secondary)
@@ -459,27 +467,34 @@ private struct PlanSidebarRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
                     .lineLimit(1)
-                Text(subtitle)
+                Text(subtitle.text)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(subtitle.hue)
                     .lineLimit(1)
             }
         }
     }
 
-    private var subtitle: String {
+    // Words and hue move together, so the dot is never a state's only
+    // non-text signal.
+    private var subtitle: (text: String, hue: Color) {
         if let activity = model.activity[plan.id] {
-            return activity.phase.displayName
+            return (activity.phase.displayName, .secondary)
         }
-        // The icon alone carried the paused state; the subtitle says it so
-        // colour and symbol are never the only signals.
+        // Paused wears no icon any more; the subtitle is where the state
+        // is named.
         if !plan.isEnabled {
-            return "Paused — \(plan.schedule.summary)"
+            return ("Paused — \(plan.schedule.summary)", .secondary)
+        }
+        // A standing failure is the row's real news, named for as long as it
+        // stands — seen or not — in the warning hue.
+        if let problem = model.currentProblem(for: plan.id) {
+            return ("\(problem.outcome.displayName) — \(Format.relative(problem.finishedAt))", Theme.warning)
         }
         if plan.lastSuccessAt != nil {
-            return "Last backup \(Format.relative(plan.lastSuccessAt))"
+            return ("Last backup \(Format.relative(plan.lastSuccessAt))", .secondary)
         }
-        return plan.schedule.summary
+        return (plan.schedule.summary, .secondary)
     }
 }
 
