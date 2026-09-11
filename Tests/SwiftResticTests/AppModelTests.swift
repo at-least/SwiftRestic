@@ -123,6 +123,41 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a drag restore lands the node in a throwaway directory the drop can read")
+    func dragRestoreRestoresNode() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let snapshot = try #require(
+            model.snapshots(for: harness.repository.id, planID: harness.plan.id).first
+        )
+
+        let node = SnapshotNode(
+            name: "a.txt",
+            type: .file,
+            path: harness.sourceDirectory.appendingPathComponent("a.txt").path
+        )
+        let url = try await model.restoredFileForDrag(
+            repositoryID: harness.repository.id,
+            snapshotID: snapshot.id,
+            node: node
+        )
+
+        #expect(url.lastPathComponent == "a.txt")
+        #expect(url.deletingLastPathComponent().path.contains("SwiftRestic-Drag-"))
+        #expect(try String(contentsOf: url, encoding: .utf8) == "one")
+
+        // A drag restore is not a UI restore: it borrows neither the progress
+        // strip nor the run history.
+        #expect(model.restoreActivity == nil)
+        #expect(model.configuration.runs.allSatisfy { $0.kind == .backup })
+
+        await model.shutdown()
+    }
+
     @Test("retention runs after the backup and trims the plan's own snapshots")
     func retentionAfterBackup() async throws {
         var retention = RetentionPolicy()

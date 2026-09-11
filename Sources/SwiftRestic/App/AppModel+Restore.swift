@@ -112,4 +112,39 @@ extension AppModel {
     }
 
     func cancelRestore() { restoreTask?.cancel() }
+
+    /// The Arq-style drag restore: restores one node into a fresh throwaway
+    /// directory and returns the restored item's URL, which the drag's
+    /// promised-file provider hands to Finder.
+    ///
+    /// Deliberately outside `beginRestore`: that path owns the app-level
+    /// progress strip, the run history and the "Restored…" banner, none of
+    /// which describe a drop whose destination the user chose with the drag
+    /// itself. A failed drag still posts a banner, because Finder's own
+    /// "couldn't complete the operation" says nothing about restic.
+    func restoredFileForDrag(
+        repositoryID: UUID,
+        snapshotID: String,
+        node: SnapshotNode
+    ) async throws -> URL {
+        guard let repository = repository(id: repositoryID) else {
+            throw ResticError.repositoryMissing
+        }
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftRestic-Drag-\(UUID().uuidString)")
+        do {
+            _ = try await service().restore(
+                try await context(for: repository),
+                snapshotID: snapshotID,
+                node: node,
+                destinationDirectory: destination
+            )
+        } catch {
+            let message = (error as? ResticError)?.errorDescription ?? error.localizedDescription
+            post(Banner(title: "Drag restore failed", message: message, isError: true))
+            throw error
+        }
+        // Same name rule the service applies for both restore shapes.
+        return destination.appendingPathComponent(node.name.isEmpty ? "restored" : node.name)
+    }
 }

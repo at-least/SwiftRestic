@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SnapshotBrowserTarget: Identifiable {
     var repositoryID: UUID
@@ -100,6 +101,11 @@ struct SnapshotBrowserView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { open(node) }
+                // Arq's signature restore gesture: drag straight out of the
+                // browser into Finder. The provider promises the file, the
+                // restore runs when Finder asks for it, and the drop location
+                // is the destination.
+                .onDrag { dragProvider(for: node) }
                 .tag(node.id)
             }
             .listStyle(.inset)
@@ -109,7 +115,7 @@ struct SnapshotBrowserView: View {
             .onKeyPress(phases: .down) { press in
                 handleKeyPress(press)
             }
-            .help("Return opens a folder; ⌘↑ or ⌫ goes up; double-click also opens")
+            .help("Return opens a folder; ⌘↑ or ⌫ goes up; double-click also opens; drag out to restore into Finder")
         }
     }
 
@@ -124,7 +130,7 @@ struct SnapshotBrowserView: View {
                 )
             }
 
-            Text("Restoring overwrites existing files at the destination.")
+            Text("Drag a file or folder to Finder to restore it there. Restoring overwrites existing files at the destination.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -157,6 +163,37 @@ struct SnapshotBrowserView: View {
     }
 
     // MARK: - Actions
+
+    /// A promised-file provider: the file does not exist yet, so the drag
+    /// hands Finder a promise and the restore runs when the drop asks for the
+    /// contents. The coordinator returns immediately; the completion fires
+    /// when the restore lands (or fails).
+    private func dragProvider(for node: SnapshotNode) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.suggestedName = node.name
+        let repositoryID = target.repositoryID
+        let snapshotID = target.snapshot.id
+        provider.registerFileRepresentation(
+            forTypeIdentifier: UTType.fileURL.identifier,
+            fileOptions: [],
+            visibility: .all
+        ) { completion in
+            Task { @MainActor in
+                do {
+                    let url = try await model.restoredFileForDrag(
+                        repositoryID: repositoryID,
+                        snapshotID: snapshotID,
+                        node: node
+                    )
+                    completion(url, true, nil)
+                } catch {
+                    completion(nil, false, error)
+                }
+            }
+            return nil
+        }
+        return provider
+    }
 
     /// Keyboard grammar for the list. Everything unrecognised returns
     /// `.ignored` so the List keeps its own arrow-key selection movement.
