@@ -69,7 +69,9 @@ struct SheetHeader: View {
 /// Banners keep their icons by rule, where run lists and tiles drop theirs:
 /// a banner is action feedback — success ones dismiss themselves within
 /// seconds, and a persistent error banner *is* the intervention marker —
-/// so neither is ambient decoration competing for attention.
+/// so neither is ambient decoration competing for attention. The glyph is
+/// bare: colouring a plate behind it is the one ornament the interface
+/// grammar elsewhere refuses.
 struct BannerView: View {
     @Environment(AppModel.self) private var model
     let banner: Banner
@@ -85,8 +87,6 @@ struct BannerView: View {
             Image(systemName: symbol)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(hue)
-                .frame(width: 30, height: 30)
-                .background(hue.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
             // Title and message read as one utterance; the Reveal action and
             // the dismiss button stay their own elements beside them.
             VStack(alignment: .leading, spacing: 4) {
@@ -134,8 +134,6 @@ struct BannerView: View {
 struct StatTile: View {
     let title: String
     let value: String
-    var systemImage: String?
-    var hue: Color = Theme.tint
     var help: String?
     /// Resting-state cue for tiles wrapped in a Button: the same trailing
     /// chevron the overview problem rows wear, so clickability does not
@@ -145,16 +143,6 @@ struct StatTile: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(hue)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        hue.opacity(0.13),
-                        in: RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                    )
-            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.caption)

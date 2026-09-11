@@ -486,13 +486,7 @@ struct OverviewView: View {
                 } else {
                     ForEach(Array(upcoming), id: \.0.id) { plan, date in
                         HStack {
-                            Label {
-                                Text(plan.name).lineLimit(1)
-                            } icon: {
-                                Circle()
-                                    .fill(ChartPalette.color(for: plan))
-                                    .frame(width: 6, height: 6)
-                            }
+                            Text(plan.name).lineLimit(1)
                             Spacer()
                             if date <= .now {
                                 // Icon + word, not colour alone: orange

@@ -144,9 +144,7 @@ struct PlanDetailView: View {
         return HStack(spacing: Theme.Space.tile) {
             StatTile(
                 title: "Last backup",
-                value: plan.lastSuccessAt.map { Format.relative($0) } ?? "Never",
-                systemImage: "clock.badge.checkmark",
-                hue: plan.lastSuccessAt == nil ? Theme.warning : Theme.success
+                value: plan.lastSuccessAt.map { Format.relative($0) } ?? "Never"
             )
             StatTile(
                 title: "Next backup",
@@ -154,8 +152,6 @@ struct PlanDetailView: View {
                 // timestamp truncated away its AM/PM exactly when that was
                 // the part that said morning or evening.
                 value: plan.nextRunDate.map { Format.tileTimestamp($0) } ?? "Manually",
-                systemImage: "calendar",
-                hue: plan.isEnabled ? Theme.tint : Theme.warning,
                 help: plan.nextRunDate.map { Format.timestamp($0) }
             )
             // A count is only a fact once the listing it derives from has
@@ -165,22 +161,18 @@ struct PlanDetailView: View {
             case .loaded:
                 StatTile(
                     title: "Snapshots",
-                    value: Format.count(snapshots.count),
-                    systemImage: "camera.aperture"
+                    value: Format.count(snapshots.count)
                 )
             case let .failed(message):
                 StatTile(
                     title: "Snapshots",
                     value: "—",
-                    systemImage: "camera.aperture",
-                    hue: Theme.warning,
                     help: message
                 )
             case .idle:
                 StatTile(
                     title: "Snapshots",
                     value: "—",
-                    systemImage: "camera.aperture",
                     help: "The snapshot list has not finished loading."
                 )
             }

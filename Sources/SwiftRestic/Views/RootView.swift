@@ -445,7 +445,17 @@ private struct PlanSidebarRow: View {
     let plan: BackupPlan
 
     var body: some View {
-        Label {
+        HStack(spacing: 8) {
+            // A row wears state, never identity: the in-flight spinner while
+            // its backup runs, the pause mark while scheduled runs are paused
+            // (named again by the subtitle). An idle plan wears nothing — its
+            // colour belongs to the chart series, not to this chrome.
+            if model.isRunning(planID: plan.id) {
+                ProgressView().controlSize(.small)
+            } else if !plan.isEnabled {
+                Image(systemName: "pause.circle")
+                    .foregroundStyle(.secondary)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
                     .lineLimit(1)
@@ -453,19 +463,6 @@ private struct PlanSidebarRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-            }
-        } icon: {
-            if model.isRunning(planID: plan.id) {
-                ProgressView().controlSize(.small)
-            } else if !plan.isEnabled {
-                Image(systemName: "pause.circle")
-                    .foregroundStyle(.secondary)
-            } else {
-                // The plan's own colour, the same one its chart series and
-                // run rows use — identity carried across every surface.
-                Circle()
-                    .fill(ChartPalette.color(for: plan))
-                    .frame(width: 9, height: 9)
             }
         }
     }
@@ -496,22 +493,13 @@ struct WelcomeView: View {
             Spacer()
 
             // The app's own mark — the same construction the tray wears — at
-            // hero scale on the tinted chip the rest of the app uses (sheet
-            // headers, tiles, banners). The borrowed stock symbol this chip
-            // once held was the one ornament the app had no right to.
+            // hero scale, bare: a welcome screen's job is the mark and the
+            // two buttons, and a macOS welcome wears no plate behind its mark.
             Image(nsImage: MenuBarLogo.heroImage)
                 .resizable()
                 .foregroundStyle(Theme.tint)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 84, height: 84)
-                .background(
-                    Theme.tint.opacity(0.13),
-                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Theme.tint.opacity(0.22), lineWidth: 1)
-                )
                 .accessibilityHidden(true)
 
             Text("SwiftRestic")

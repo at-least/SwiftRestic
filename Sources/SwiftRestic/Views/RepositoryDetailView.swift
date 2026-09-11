@@ -136,22 +136,18 @@ struct RepositoryDetailView: View {
                 case .loaded:
                     StatTile(
                         title: "Snapshots",
-                        value: Format.count(stats?.snapshotsCount ?? snapshots.count),
-                        systemImage: "camera.aperture"
+                        value: Format.count(stats?.snapshotsCount ?? snapshots.count)
                     )
                 case let .failed(message):
                     StatTile(
                         title: "Snapshots",
                         value: "—",
-                        systemImage: "camera.aperture",
-                        hue: Theme.warning,
                         help: message
                     )
                 case .idle:
                     StatTile(
                         title: "Snapshots",
                         value: "—",
-                        systemImage: "camera.aperture",
                         help: "The snapshot list has not finished loading."
                     )
                 }
