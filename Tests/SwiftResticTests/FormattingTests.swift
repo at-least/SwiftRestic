@@ -145,4 +145,24 @@ struct FormattingTests {
         #expect(Format.firstSentence("  padded  ") == "padded", "whitespace is trimmed")
         #expect(Format.firstSentence("") == "", "empty in, empty out")
     }
+
+    @Test("breadcrumb crumbs walk down from the deepest containing root")
+    func breadcrumbCrumbs() {
+        let roots = ["/tmp/src", "/other"]
+
+        // A deep path: root crumb plus one per level below it.
+        let crumbs = Format.crumbs(of: "/tmp/src/Documents/Reports", roots: roots)
+        #expect(crumbs.map(\.label) == ["src", "Documents", "Reports"])
+        #expect(crumbs.map(\.target) == ["/tmp/src", "/tmp/src/Documents", "/tmp/src/Documents/Reports"])
+
+        // The root itself is a single crumb.
+        #expect(Format.crumbs(of: "/tmp/src", roots: roots).map(\.target) == ["/tmp/src"])
+
+        // A path outside every root yields nothing to click.
+        #expect(Format.crumbs(of: "/elsewhere/thing", roots: roots).isEmpty)
+
+        // A root that is a prefix of another root's name must not match it.
+        #expect(Format.crumbs(of: "/other/file", roots: ["/other Extended", "/other"]).map(\.target) == ["/other", "/other/file"])
+    }
+
 }

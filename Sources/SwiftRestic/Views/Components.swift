@@ -518,3 +518,41 @@ extension View {
         }
     }
 }
+
+// MARK: - Path breadcrumb
+
+/// A path rendered as clickable crumbs, walking down from the deepest root
+/// that contains it. The crumb for the current path renders as plain text —
+/// it is where you are, not where you can go. An empty path renders nothing:
+/// callers show their own pseudo-root face instead.
+struct PathBreadcrumb: View {
+    let path: String
+    let roots: [String]
+    let onJump: (String) -> Void
+
+    var body: some View {
+        let crumbs = Format.crumbs(of: path, roots: roots)
+        if !crumbs.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(Array(crumbs.enumerated()), id: \.offset) { index, crumb in
+                    if index > 0 {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    if crumb.target == path {
+                        Text(crumb.label)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
+                    } else {
+                        Button(crumb.label) { onJump(crumb.target) }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}

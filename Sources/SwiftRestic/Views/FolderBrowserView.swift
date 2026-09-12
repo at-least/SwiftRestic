@@ -89,12 +89,20 @@ struct FolderBrowserView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Folders over time")
                     .font(.headline)
-                Text(currentPath ?? "Backed-up folders")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .textSelection(.enabled)
+                if let currentPath {
+                    // Jump between levels without walking Back through each.
+                    PathBreadcrumb(path: currentPath, roots: planSnapshots.first?.paths ?? []) { target in
+                        self.currentPath = target
+                        selection = nil
+                    }
+                } else {
+                    Text("Backed-up folders")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .textSelection(.enabled)
+                }
             }
             Spacer()
             versionPicker

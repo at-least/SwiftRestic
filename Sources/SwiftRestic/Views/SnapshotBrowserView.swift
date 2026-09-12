@@ -51,12 +51,20 @@ struct SnapshotBrowserView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(target.snapshot.time.formatted(date: .abbreviated, time: .shortened))
                     .font(.headline)
-                Text(currentPath ?? "Backed-up folders")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .textSelection(.enabled)
+                if let currentPath {
+                    // Jump between levels without walking Back through each.
+                    PathBreadcrumb(path: currentPath, roots: target.snapshot.paths) { target in
+                        self.currentPath = target
+                        selection = nil
+                    }
+                } else {
+                    Text("Backed-up folders")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .textSelection(.enabled)
+                }
             }
             Spacer()
             Text(target.snapshot.shortID)

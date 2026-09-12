@@ -103,4 +103,26 @@ enum Format {
         let perSecond = Int64(Double(bytes) / seconds)
         return "\(ByteCountFormatter.string(fromByteCount: perSecond, countStyle: .file))/s"
     }
+
+    /// Splits an absolute path into clickable crumbs, walking down from the
+    /// deepest root that contains it — `/tmp/src/Documents` under root
+    /// `/tmp/src` becomes [(src, /tmp/src), (Documents, /tmp/src/Documents)].
+    /// Paths outside every root yield no crumbs: navigation never reaches
+    /// above the backed-up scope. Root labels are the root's own basename.
+    static func crumbs(of path: String, roots: [String]) -> [(label: String, target: String)] {
+        guard let root = roots.first(where: { path == $0 || path.hasPrefix($0 + "/") }) else {
+            return []
+        }
+        var crumbs: [(label: String, target: String)] = []
+        let rootLabel = root.split(separator: "/").last.map(String.init) ?? root
+        crumbs.append((rootLabel, root))
+        let remainder = root == "/" ? path.dropFirst() : path.dropFirst(root.count + 1)
+        var walked = root
+        for segment in remainder.split(separator: "/") {
+            walked = walked == "/" ? "/\(segment)" : walked + "/\(segment)"
+            crumbs.append((String(segment), walked))
+        }
+        return crumbs
+    }
+
 }
