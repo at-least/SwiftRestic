@@ -278,8 +278,13 @@ final class SQLiteIndexStore: IndexStore {
                 .filter { !removedSet.contains($0.path) }
             let addedSet = Set(addedEntries.map(\.path))
 
-            // Extend every run that ended at previousSeq except the changed
-            // paths. The exclusion set lives in a temp table so the check is
+            // Extend every run that existed at previousSeq and was unchanged
+            // through seq. Silence in the diff means "existed at both ends",
+            // so a run covering previousSeq — whether it ends exactly there
+            // or on a dead snapshot inside the span — reaches seq. Runs that
+            // started inside the span stay: diff silence about them means
+            // "absent at previousSeq", and extending would claim the gap.
+            // The exclusion set lives in a temp table so the check is
             // SQLite-side set logic — no candidate path list crosses into
             // memory, whatever the snapshot size. Same-connection guarantee:
             // temp tables live per connection, and one db.write block is one
@@ -292,10 +297,10 @@ final class SQLiteIndexStore: IndexStore {
             try db.execute(
                 sql: """
                 UPDATE entry SET last_seq = ?
-                WHERE chain = ? AND last_seq = ?
+                WHERE chain = ? AND first_seq <= ? AND last_seq >= ? AND last_seq < ?
                     AND path NOT IN (SELECT path FROM delta_changed)
                 """,
-                arguments: [seq, chain, previousSeq]
+                arguments: [seq, chain, previousSeq, previousSeq, seq]
             )
 
             // Added paths open fresh runs, guarded against claiming a gap:

@@ -415,6 +415,34 @@ struct IndexStoreTests {
         #expect(try store.predecessorForDelta(of: "ghost") == nil)
     }
 
+    @Test("a gap-spanning delta still extends runs that end on the dead middle")
+    func deltaExtendsRunsEndingMidSpan() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s2", time: t1, tags: [planTag]),
+            snapshot("s3", time: t2, tags: [planTag]),
+        ])
+        // /a exists in all three; /b only in s2.
+        try store.recordContent(snapshotID: "s1", entries: [entry("/a")], final: true)
+        try store.recordContent(snapshotID: "s2", entries: [entry("/a"), entry("/b")], final: true)
+
+        // s2 dies (prune), then s3 is built from the diff s1 -> s3, whose
+        // only answer about /a is silence: unchanged. The run [1,2] ends on
+        // the dead middle, and must still reach s3 — a diff across dead
+        // snapshots proves the whole span.
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s3", time: t2, tags: [planTag]),
+        ])
+        try store.applyDelta(snapshotID: "s3", previousSeq: 1, added: [], removed: [])
+
+        #expect(try store.versions(ofPath: "/a").map(\.id) == ["s3", "s1"])
+        #expect(try store.readEntryCount(ofPath: "/a", chain: planTag) == 1)
+        // /b was only ever in s2: nothing changed for it, nothing claimed.
+        #expect(try store.versions(ofPath: "/b").isEmpty)
+    }
+
     @Test("a diff is refused when an unread alive snapshot sits in the span")
     func deltaRefusedAcrossGap() throws {
         let store = try makeStore()
