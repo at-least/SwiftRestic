@@ -52,6 +52,15 @@ protocol ResticClient: Sendable {
         path: String
     ) async throws -> [SnapshotNode]
 
+    /// Streams every node of one snapshot — the unbounded full-tree
+    /// `restic ls <id>`. One callback per node as it arrives, off the main
+    /// actor; callers must consume incrementally, never retain wholesale.
+    func walkSnapshot(
+        _ context: RepositoryContext,
+        snapshotID: String,
+        onNode: @Sendable @escaping (SnapshotNode) -> Void
+    ) async throws
+
     func find(
         _ context: RepositoryContext,
         pattern: String,

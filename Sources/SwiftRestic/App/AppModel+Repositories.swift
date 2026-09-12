@@ -120,6 +120,7 @@ extension AppModel {
         snapshotListingOutcomes[id] = nil
         snapshotsLoadedAt[id] = nil
         repositoriesMissingPassword.remove(id)
+        Task { [indexCoordinator] in await indexCoordinator.dropRepository(repositoryID: id) }
         Task { [secrets] in await secrets.remove(id) }
     }
 

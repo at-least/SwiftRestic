@@ -303,6 +303,27 @@ struct ResticService: ResticClient {
         return value
     }
 
+    /// The full-tree `ls` behind the index backfill. `retainMessages: false`
+    /// keeps the runner from accumulating a snapshot's worth of nodes in
+    /// memory — the callback is the only delivery.
+    func walkSnapshot(
+        _ context: RepositoryContext,
+        snapshotID: String,
+        onNode: @Sendable @escaping (SnapshotNode) -> Void
+    ) async throws {
+        _ = try await runner.run(
+            binary: binary,
+            invocation: ResticInvocation(
+                arguments: context.globalArguments + ["ls", "--json", snapshotID],
+                environment: context.environment,
+                retainMessages: false
+            ),
+            onMessage: { message in
+                if case let .node(node) = message { onNode(node) }
+            }
+        )
+    }
+
     /// The directory containing `path`, in pure String arithmetic rather
     /// than NSString's `deletingLastPathComponent`, so the tree-filtering
     /// here spells the same on any Foundation. The scan is over unicode

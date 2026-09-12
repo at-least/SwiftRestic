@@ -107,6 +107,10 @@ final class AppModel {
     /// touch the login Keychain.
     let viewDefaults: UserDefaults
     let runner = ResticRunner()
+    /// The per-repository snapshot indexes and their upkeep. A cache with a
+    /// rebuild path: its failures are its own, never the refresh's or the
+    /// backup's. See `IndexCoordinator`.
+    let indexCoordinator = IndexCoordinator()
     /// State of the restic console pane (see `ConsoleModel`).
     let console = ConsoleModel()
     var binary: ResticBinary?

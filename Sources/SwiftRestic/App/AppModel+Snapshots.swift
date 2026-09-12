@@ -40,6 +40,7 @@ extension AppModel {
             snapshotListingOutcomes[repositoryID] = .loaded
             snapshotsLoadedAt[repositoryID] = .now
             repositoriesMissingPassword.remove(repositoryID)
+            indexReconcile(repositoryID: repositoryID, listing: listing)
         } catch ResticError.passwordMissing {
             // Expected before the user has entered a password; not worth a banner.
             // The listing surfaces stay honest through the outcome: "waiting for
