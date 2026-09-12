@@ -104,20 +104,22 @@ struct FolderBrowserView: View {
 
     @ViewBuilder
     private var versionPicker: some View {
-        if versions.isEmpty {
-            Text("versions still being read")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Picker("Version", selection: $chosen) {
-                ForEach(versions, id: \.id) { version in
-                    Text(verbatim: "\(Format.timestamp(version.time))  ·  \(version.id.prefix(8))")
-                        .tag(Optional(version))
+        if currentPath != nil {
+            if versions.isEmpty {
+                Text("versions still being read")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker("Version", selection: $chosen) {
+                    ForEach(versions, id: \.id) { version in
+                        Text(verbatim: "\(Format.timestamp(version.time))  ·  \(version.id.prefix(8))")
+                            .tag(Optional(version))
+                    }
                 }
+                .labelsHidden()
+                .frame(maxWidth: 340)
+                .help("Which snapshot this folder is listed from")
             }
-            .labelsHidden()
-            .frame(maxWidth: 340)
-            .help("Which snapshot this folder is listed from")
         }
     }
 
@@ -181,14 +183,9 @@ struct FolderBrowserView: View {
 
             HStack {
                 Button("Browse One Snapshot…") {
-                    if let snapshot = planSnapshots.first {
-                        showingSnapshotBrowser = SnapshotBrowserTarget(
-                            repositoryID: target.repositoryID,
-                            snapshot: snapshot
-                        )
-                    }
+                    showingSnapshotBrowser = snapshotBrowserTarget
                 }
-                .disabled(planSnapshots.isEmpty)
+                .disabled(snapshotBrowserTarget == nil)
                 .help("The snapshot-first browser: drag out to Finder, restore the whole snapshot")
                 Spacer()
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
@@ -209,7 +206,7 @@ struct FolderBrowserView: View {
     @ViewBuilder
     private var statusLine: some View {
         if indexComplete {
-            Text("Every snapshot of this plan is indexed — the version lists above are complete.")
+            Text("Every snapshot in this repository is indexed — the version lists above are complete.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
@@ -219,6 +216,15 @@ struct FolderBrowserView: View {
             )
             .font(.caption)
             .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The snapshot-first escape hatch, opened at the version the user is
+    /// reading — not discarded to the newest.
+    private var snapshotBrowserTarget: SnapshotBrowserTarget? {
+        let snapshot = planSnapshots.first { $0.id == chosen?.id } ?? planSnapshots.first
+        return snapshot.map {
+            SnapshotBrowserTarget(repositoryID: target.repositoryID, snapshot: $0)
         }
     }
 
@@ -280,48 +286,48 @@ struct FolderBrowserView: View {
 
     private func load() async {
         loadError = nil
-        indexComplete = await model.indexIsComplete(repositoryID: target.repositoryID)
+
+        // Every await is followed by a cancellation guard before any state
+        // write. A newer level owns the view the moment it is opened; a stale
+        // load that wrote `versions` or `chosen` after losing would clobber
+        // the newer folder's list and re-fire this task through `level`.
+        let complete = await model.indexIsComplete(repositoryID: target.repositoryID)
+        guard !Task.isCancelled else { return }
+        indexComplete = complete
 
         guard let currentPath else {
             // Pseudo-root: the plan's backed-up folder roots, presented as
             // directory entries. No single path, so no version list applies.
             nodes = planSnapshots.first?.paths.map(SnapshotNode.directory) ?? []
             versions = []
-            chosen = planSnapshots.first.map(self.snapshotVersion)
+            chosen = planSnapshots.first.map(snapshotVersion(from:))
             isLoading = false
             return
         }
 
         isLoading = true
         do {
-            versions = await model.indexedVersions(ofPath: currentPath, repositoryID: target.repositoryID)
+            let loadedVersions = await model.indexedVersions(ofPath: currentPath, repositoryID: target.repositoryID)
                 .filter { $0.chain == chain }
             // Keeping the user's version across a walk down matters — flip
             // through time, then step inside, and you are still in the same
             // era. When it does not cover the deeper path, the newest wins.
-            chosen = versions.preferredVersion(previousID: chosen?.id) ?? fallbackVersion
+            let nextChosen = loadedVersions.preferredVersion(previousID: chosen?.id) ?? fallbackVersion
+            guard !Task.isCancelled else { return }
+            versions = loadedVersions
+            chosen = nextChosen
 
-            guard let chosen else {
-                // Nothing covers this path — either the index has not reached
-                // it or the folder predates every indexed snapshot. The plan's
-                // newest snapshot can still list it.
-                if let fallback = fallbackVersion {
-                    nodes = try await model.children(
-                        repositoryID: target.repositoryID,
-                        snapshotID: fallback.id,
-                        path: currentPath
-                    )
-                } else {
-                    nodes = []
-                }
-                guard !Task.isCancelled else { return }
+            // Both routes to a version come up empty only when the plan has
+            // no snapshots at all — then there is nothing to list from.
+            guard let nextChosen else {
+                nodes = []
                 isLoading = false
                 return
             }
 
             let loaded = try await model.children(
                 repositoryID: target.repositoryID,
-                snapshotID: chosen.id,
+                snapshotID: nextChosen.id,
                 path: currentPath
             )
             guard !Task.isCancelled else { return }
