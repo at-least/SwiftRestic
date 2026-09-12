@@ -132,6 +132,10 @@ extension AppModel {
                 }
             }
 
+            // The closing refresh also feeds the snapshot index — which is
+            // why it must stay after retention: the index's restic calls
+            // hold shared locks, and a forget needs the exclusive one. A
+            // cache must never delay, and never fail, the run that feeds it.
             await refreshSnapshots(repositoryID: repository.id)
         } catch {
             record.setOutcome(from: error, cancellationMessage: cancellationMessage)

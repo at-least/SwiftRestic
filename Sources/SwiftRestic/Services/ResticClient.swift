@@ -75,6 +75,16 @@ protocol ResticClient: Sendable {
         includeMetadata: Bool
     ) async throws -> SnapshotDiff
 
+    /// Streams every `message_type: change` line of a `restic diff` — the
+    /// uncapped variant of `diff`: the index needs all changed paths, so
+    /// there is no change limit and nothing is retained.
+    func walkDiff(
+        _ context: RepositoryContext,
+        olderID: String,
+        newerID: String,
+        onChange: @Sendable @escaping (ResticDiffChange) -> Void
+    ) async throws
+
     // MARK: - Backup
 
     func backup(

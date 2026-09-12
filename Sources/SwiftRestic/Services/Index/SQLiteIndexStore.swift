@@ -189,6 +189,94 @@ final class SQLiteIndexStore: IndexStore {
         }
     }
 
+    func applyDelta(snapshotID: String, previousSeq: Int, added: [String], removed: [String]) throws {
+        try db.write { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT chain, seq FROM snapshot WHERE id = ?",
+                arguments: [snapshotID]
+            ) else {
+                throw IndexError.unknownSnapshot(snapshotID)
+            }
+            let chain: String = row["chain"]
+            let seq: Int = row["seq"]
+
+            // restic marks directories in diffs with a trailing slash; the
+            // paths this store holds — from `ls` nodes — never carry one.
+            // Normalize before matching or a directory's runs never meet.
+            func normalized(_ path: String) -> String {
+                path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+            }
+            let removedSet = Set(removed.map(normalized))
+            let addedSet = Set(added.map(normalized)).subtracting(removedSet)
+
+            // Extend every run that ended at previousSeq except the changed
+            // paths. The exclusion set lives in a temp table so the check is
+            // SQLite-side set logic — no candidate path list crosses into
+            // memory, whatever the snapshot size. Same-connection guarantee:
+            // temp tables live per connection, and one db.write block is one
+            // connection.
+            try db.execute(sql: "CREATE TEMP TABLE IF NOT EXISTS delta_changed (path TEXT PRIMARY KEY)")
+            try db.execute(sql: "DELETE FROM delta_changed")
+            for path in addedSet.union(removedSet) {
+                try db.execute(sql: "INSERT INTO delta_changed (path) VALUES (?)", arguments: [path])
+            }
+            try db.execute(
+                sql: """
+                UPDATE entry SET last_seq = ?
+                WHERE chain = ? AND last_seq = ?
+                    AND path NOT IN (SELECT path FROM delta_changed)
+                """,
+                arguments: [seq, chain, previousSeq]
+            )
+
+            // Added paths open fresh runs, guarded against claiming a gap:
+            // a path whose run ended before previousSeq reappearing now has
+            // two episodes, not one long life.
+            for path in addedSet {
+                try db.execute(
+                    sql: """
+                    INSERT INTO entry (path, chain, first_seq, last_seq)
+                    SELECT ?, ?, ?, ? WHERE NOT EXISTS (
+                        SELECT 1 FROM entry
+                        WHERE path = ? AND chain = ?
+                            AND first_seq <= ? AND last_seq >= ?
+                    )
+                    """,
+                    arguments: [path, chain, seq, seq, path, chain, seq, seq]
+                )
+            }
+
+            try db.execute(
+                sql: "UPDATE snapshot SET indexed = MAX(indexed, ?) WHERE id = ?",
+                arguments: [IndexCoverage.delta.rawValue, snapshotID]
+            )
+        }
+    }
+
+    func predecessorForDelta(of snapshotID: String) throws -> IndexedSnapshot? {
+        try db.read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT chain, seq FROM snapshot WHERE id = ? AND alive = 1 AND indexed = 0",
+                arguments: [snapshotID]
+            ) else { return nil }
+            let chain: String = row["chain"]
+            let seq: Int = row["seq"]
+            return try Self.snapshots(
+                from: Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT id, chain, seq, time, alive, indexed FROM snapshot
+                    WHERE chain = ? AND alive = 1 AND indexed > 0 AND seq < ?
+                    ORDER BY seq DESC LIMIT 1
+                    """,
+                    arguments: [chain, seq]
+                )
+            ).first
+        }
+    }
+
     func pendingBackfill(limit: Int) throws -> [IndexedSnapshot] {
         try db.read { db in
             try Self.snapshots(
@@ -230,6 +318,22 @@ final class SQLiteIndexStore: IndexStore {
                 sql: "SELECT COUNT(*) FROM entry WHERE path = ? AND chain = ?",
                 arguments: [path, chain]
             ) ?? 0
+        }
+    }
+
+    /// Every entry row, ordered — the whole-run-set view the equality test
+    /// compares a diff-built index against a from-scratch ls load with.
+    func readAllEntries() throws -> [IndexEntryRow] {
+        try db.read { db in
+            try Row.fetchAll(db, sql: "SELECT path, chain, first_seq, last_seq FROM entry ORDER BY path, chain, first_seq")
+                .map { row in
+                    IndexEntryRow(
+                        path: row["path"],
+                        chain: row["chain"],
+                        firstSeq: row["first_seq"],
+                        lastSeq: row["last_seq"]
+                    )
+                }
         }
     }
 

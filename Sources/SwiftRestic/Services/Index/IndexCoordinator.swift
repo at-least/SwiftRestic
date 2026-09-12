@@ -57,15 +57,18 @@ actor IndexCoordinator {
         backfillTasks[repositoryID]?.cancel()
     }
 
-    /// The awaitable backfill loop — one `ls` per pending snapshot until the
-    /// queue is empty or cancelled. Tests await this directly; production
-    /// goes through `startBackfill`.
+    /// The awaitable backfill loop — one snapshot at a time, newest first,
+    /// until the queue is empty or cancelled. Each snapshot is built from a
+    /// diff against its indexed predecessor when one exists (change-sized,
+    /// whatever the snapshot weighs) and from a full `ls` otherwise — the
+    /// first snapshot of a chain, and the fallback whenever the diff fails.
+    /// Tests await this directly; production goes through `startBackfill`.
     func runBackfill(repositoryID: UUID, service: any ResticClient, context: RepositoryContext) async {
         do {
             let store = try self.store(for: repositoryID)
             while !Task.isCancelled {
                 guard let next = try await store.pendingBackfill(limit: 1).first else { break }
-                try await backfillOne(next, into: store, service: service, context: context)
+                try await backfillOne(next, repositoryID: repositoryID, into: store, service: service, context: context)
             }
             outcomes[repositoryID] = nil
         } catch {
@@ -75,10 +78,41 @@ actor IndexCoordinator {
 
     private func backfillOne(
         _ snapshot: IndexedSnapshot,
+        repositoryID: UUID,
         into store: SQLiteIndexStore,
         service: any ResticClient,
         context: RepositoryContext
     ) async throws {
+        // The cheap route first: a diff against an already-indexed
+        // predecessor. Everything that can go wrong there — no indexed
+        // neighbor, a failed or cancelled walk — falls back to the full read,
+        // which is always correct and idempotent after whatever landed.
+        if let predecessor = try store.predecessorForDelta(of: snapshot.id) {
+            do {
+                let changes = ChangeCollector()
+                try await service.walkDiff(
+                    context,
+                    olderID: predecessor.id,
+                    newerID: snapshot.id
+                ) { change in
+                    changes.consume(change)
+                }
+                try store.applyDelta(
+                    snapshotID: snapshot.id,
+                    previousSeq: predecessor.seq,
+                    added: changes.addedPaths,
+                    removed: changes.removedPaths
+                )
+                return
+            } catch {
+                // The delta attempt is transactional: a failure leaves the
+                // snapshot pending and untouched, so the full read below
+                // starts clean. Recorded, not fatal — the full read is the
+                // safety net this whole design leans on.
+                outcomes[repositoryID] = error.localizedDescription
+            }
+        }
+
         // The restic stream arrives on a background queue; the buffer flushes
         // chunks into the store synchronously on that same thread, capturing
         // anything thrown so the non-throwing callback can surface it here.
@@ -128,6 +162,40 @@ actor IndexCoordinator {
             stores[repositoryID] = store
             return store
         }
+    }
+}
+
+/// Lock-guarded accumulation of one diff's existence changes — the stream's
+/// callbacks run off the main actor, and actor-local variables cannot be
+/// mutated from a `@Sendable` closure.
+private final class ChangeCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var added: [String] = []
+    private var removed: [String] = []
+
+    func consume(_ change: ResticDiffChange) {
+        lock.lock()
+        defer { lock.unlock() }
+        // The category split the index cares about is existence: content,
+        // type and metadata changes all leave the path in place, so they
+        // ride the "extend" default in the store.
+        switch change.category {
+        case .added: added.append(change.path)
+        case .removed: removed.append(change.path)
+        case .modified, .metadataOnly: break
+        }
+    }
+
+    var addedPaths: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return added
+    }
+
+    var removedPaths: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return removed
     }
 }
 

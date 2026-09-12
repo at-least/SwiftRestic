@@ -190,4 +190,71 @@ struct IndexStoreTests {
         ])
         #expect(try store.versions(ofPath: "/data/shared.bin").map(\.id) == ["plan-new", "plan-old"])
     }
+
+    // MARK: - Diff apply
+
+    @Test("applyDelta extends the unchanged, opens the added, leaves the removed closed")
+    func applyDeltaSemantics() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s2", time: t1, tags: [planTag]),
+        ])
+        try store.recordContent(
+            snapshotID: "s1",
+            paths: ["/data/kept.txt", "/data/modified.txt", "/data/gone.txt", "/data"],
+            final: true
+        )
+
+        // diff s1 -> s2: modified.txt's content changed (existence unchanged),
+        // gone.txt disappeared, new.txt appeared, a directory arrived —
+        // spelled the way restic spells directories in diffs, trailing slash.
+        try store.applyDelta(
+            snapshotID: "s2",
+            previousSeq: 1,
+            added: ["/data/new.txt", "/data/newdir/"],
+            removed: ["/data/gone.txt"]
+        )
+
+        #expect(try store.versions(ofPath: "/data/kept.txt").map(\.id) == ["s2", "s1"])
+        #expect(try store.versions(ofPath: "/data/modified.txt").map(\.id) == ["s2", "s1"])
+        #expect(try store.versions(ofPath: "/data/gone.txt").map(\.id) == ["s1"])
+        #expect(try store.versions(ofPath: "/data/new.txt").map(\.id) == ["s2"])
+        #expect(try store.versions(ofPath: "/data/newdir").map(\.id) == ["s2"])
+
+        // The extended ones merged; only the added pair and the dead run remain.
+        let planChain = planTag
+        #expect(try store.readEntryCount(ofPath: "/data/kept.txt", chain: planChain) == 1)
+        #expect(try store.readEntryCount(ofPath: "/data/gone.txt", chain: planChain) == 1)
+        #expect(try store.readEntryCount(ofPath: "/data/newdir", chain: planChain) == 1)
+
+        // A delta-applied snapshot reads as delta coverage, not pending.
+        #expect(try store.pendingBackfill(limit: 100).isEmpty)
+    }
+
+    @Test("predecessor lookup answers only pending, alive snapshots with an indexed neighbor")
+    func predecessorForDelta() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s2", time: t1, tags: [planTag]),
+            snapshot("s3", time: t2, tags: [planTag]),
+            snapshot("lone", time: t2, tags: [otherPlanTag]),
+        ])
+        try store.recordContent(snapshotID: "s1", paths: ["/data"], final: true)
+
+        // s2: pending, and s1 is indexed — the diff can build it.
+        let predecessor = try store.predecessorForDelta(of: "s2")
+        #expect(predecessor?.id == "s1")
+
+        // Once s2 is read, it is no longer a candidate itself.
+        try store.recordContent(snapshotID: "s2", paths: ["/data"], final: true)
+        // s3's best predecessor is now s2 (highest indexed seq below).
+        #expect(try store.predecessorForDelta(of: "s3")?.id == "s2")
+
+        // First of its chain, never indexed: no diff route exists.
+        #expect(try store.predecessorForDelta(of: "lone") == nil)
+        // Unknown snapshot: nil, not a throw.
+        #expect(try store.predecessorForDelta(of: "ghost") == nil)
+    }
 }

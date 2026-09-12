@@ -405,6 +405,29 @@ struct ResticService: ResticClient {
         return result
     }
 
+    /// The uncapped, retention-free diff the index applies after each backup.
+    /// Everything the capped `diff` says about its change limit applies
+    /// doubly here: the stream is unbounded, so the callback must consume
+    /// incrementally.
+    func walkDiff(
+        _ context: RepositoryContext,
+        olderID: String,
+        newerID: String,
+        onChange: @Sendable @escaping (ResticDiffChange) -> Void
+    ) async throws {
+        _ = try await runner.run(
+            binary: binary,
+            invocation: ResticInvocation(
+                arguments: context.globalArguments + ["diff", "--json", olderID, newerID],
+                environment: context.environment,
+                retainMessages: false
+            ),
+            onMessage: { message in
+                if case let .change(change) = message { onChange(change) }
+            }
+        )
+    }
+
     // MARK: - Backup
 
     func backup(

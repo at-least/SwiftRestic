@@ -44,6 +44,14 @@ struct ReconcileOutcome: Sendable, Equatable {
     var revived: [String] = []
 }
 
+/// One run, raw — the row the equality test compares index-build paths with.
+struct IndexEntryRow: Sendable, Equatable {
+    var path: String
+    var chain: String
+    var firstSeq: Int
+    var lastSeq: Int
+}
+
 /// Errors the index layer raises on its own behalf.
 enum IndexError: Error, Equatable {
     /// `recordContent` named a snapshot the index has never reconciled.
@@ -73,6 +81,20 @@ protocol IndexStore: Sendable {
     /// distinct file versions, not files × snapshots. Call with `final: true`
     /// once the last chunk has been delivered. Idempotent per call.
     func recordContent(snapshotID: String, paths: [String], final: Bool) throws
+
+    /// Applies a `restic diff` between an indexed snapshot at `previousSeq`
+    /// and the snapshot `snapshotID`: added paths open runs, removed paths
+    /// end theirs, and everything else — content, type, metadata changes —
+    /// extends, because the path's existence is unchanged. Idempotent; on a
+    /// thrown error nothing is recorded and the snapshot stays pending for
+    /// the backfill's full read.
+    func applyDelta(snapshotID: String, previousSeq: Int, added: [String], removed: [String]) throws
+
+    /// The newest alive, already-indexed snapshot of `snapshotID`'s chain
+    /// that a diff could build it from — nil when the snapshot is unknown,
+    /// no longer pending, or first in its chain (then the backfill's full
+    /// read is the only correct route).
+    func predecessorForDelta(of snapshotID: String) throws -> IndexedSnapshot?
 
     /// Alive snapshots with no content indexed yet, newest first — the
     /// backfill queue.
