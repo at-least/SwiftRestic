@@ -52,14 +52,20 @@ struct FileTree: Equatable {
         return path
     }
 
-    /// Installs a directory's children directly under it, at one level deeper.
+    /// Installs a directory's children directly under it, at one level
+    /// deeper. Replacing is idempotent: any stale descendant rows (a fetch
+    /// landing twice after a double-click race, or an earlier deeper walk)
+    /// go away with the level they belong to.
     mutating func replaceChildren(of path: String, nodes: [SnapshotNode]) {
         guard let index = rows.firstIndex(where: { $0.node.path == path }) else { return }
         rows[index].childrenLoaded = true
+        let depth = rows[index].depth
+        var staleEnd = index + 1
+        while staleEnd < rows.count, rows[staleEnd].depth > depth { staleEnd += 1 }
         let children = nodes.map {
-            FileTreeRow(node: $0, depth: rows[index].depth + 1, expanded: false, childrenLoaded: !$0.isDirectory)
+            FileTreeRow(node: $0, depth: depth + 1, expanded: false, childrenLoaded: !$0.isDirectory)
         }
-        rows.replaceSubrange(index + 1 ..< index + 1, with: children)
+        rows.replaceSubrange(index + 1 ..< staleEnd, with: children)
     }
 
     /// Marks every row unloaded and collapsed, keeping only the root level —

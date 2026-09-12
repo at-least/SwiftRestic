@@ -89,4 +89,22 @@ struct FileTreeTests {
         #expect(tree.node(at: "/src/a.txt") != nil)
         #expect(tree.node(at: "/src/never-loaded.txt") == nil)
     }
+
+    @Test("the same listing landing twice never duplicates rows")
+    func duplicateFetchIsIdempotent() throws {
+        var tree = FileTree(roots: [dir("/src")])
+        _ = tree.toggleExpanded(path: "/src")
+        tree.replaceChildren(of: "/src", nodes: [file("/src/a.txt"), dir("/src/sub")])
+        // The same listing arrives again — a double-click racing two fetches.
+        tree.replaceChildren(of: "/src", nodes: [file("/src/a.txt"), dir("/src/sub")])
+
+        #expect(tree.rows.map(\.node.path) == ["/src", "/src/a.txt", "/src/sub"])
+
+        // Stale deeper rows go with the level they were loaded under.
+        _ = tree.toggleExpanded(path: "/src/sub")
+        tree.replaceChildren(of: "/src/sub", nodes: [file("/src/sub/deep.txt")])
+        #expect(tree.rows.map(\.node.path) == ["/src", "/src/a.txt", "/src/sub", "/src/sub/deep.txt"])
+        tree.replaceChildren(of: "/src", nodes: [file("/src/a.txt"), dir("/src/sub")])
+        #expect(tree.rows.map(\.node.path) == ["/src", "/src/a.txt", "/src/sub"])
+    }
 }

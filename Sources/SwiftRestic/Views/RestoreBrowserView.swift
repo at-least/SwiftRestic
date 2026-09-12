@@ -28,6 +28,9 @@ struct RestoreBrowserView: View {
     @State private var loadError: String?
     /// Set when the focused folder does not exist in the selected snapshot.
     @State private var folderMissing = false
+    /// Directories with a fetch already running — a double-click racing
+    /// itself must not spawn duplicate listings.
+    @State private var inFlightFetches: Set<String> = []
 
     private struct Level: Equatable {
         var snapshotID: String?
@@ -430,8 +433,14 @@ struct RestoreBrowserView: View {
     private func expand(path: String) {
         guard let needed = tree.toggleExpanded(path: path) else { return }
         guard let selected else { return }
+        // One fetch per directory at a time: a double-click racing itself
+        // must not land two listings (the tree is replace-idempotent, but
+        // skipping the duplicate spares a restic round trip).
+        guard !inFlightFetches.contains(needed) else { return }
+        inFlightFetches.insert(needed)
         currentPath = path
         Task {
+            defer { inFlightFetches.remove(needed) }
             let nodes = try? await model.children(
                 repositoryID: target.repositoryID,
                 snapshotID: selected.id,
