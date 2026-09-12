@@ -225,7 +225,7 @@ struct FindFilesView: View {
                 if !rows.isEmpty {
                     VStack(alignment: .leading, spacing: 1) {
                         let snapshotCount = Set(rows.map(\.snapshotID)).count
-                        Text("\(Format.plural(rows.count, "match")) across \(Format.plural(snapshotCount, "snapshot"))")
+                        Text("\(Format.plural(rows.count, "match", "matches")) across \(Format.plural(snapshotCount, "snapshot"))")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         // When the listing was read: results carry snapshot

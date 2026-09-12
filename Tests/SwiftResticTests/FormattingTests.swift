@@ -49,6 +49,7 @@ struct FormattingTests {
         // Irregular plurals are spelled out, never auto-s suffixed.
         #expect(Format.plural(3, "entry", "entries") == "3 entries")
         #expect(Format.plural(1, "entry", "entries") == "1 entry")
+        #expect(Format.plural(2, "match", "matches") == "2 matches")
     }
 
     @Test("zero bytes stays numeric")
