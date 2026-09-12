@@ -7,6 +7,7 @@ struct RepositoryDetailView: View {
 
     @State private var browsing: SnapshotBrowserTarget?
     @State private var comparing: SnapshotDiffTarget?
+    @State private var restoring: RestoreBrowserTarget?
     @State private var isConfirmingRemoval = false
     @State private var isConfirmingPrune = false
     @State private var isConfirmingUnlock = false
@@ -59,6 +60,10 @@ struct RepositoryDetailView: View {
         }
         .sheet(item: $browsing) { target in
             SnapshotBrowserView(target: target).environment(model)
+        }
+        .sheet(item: $restoring) { target in
+            RestoreBrowserView(target: target).environment(model)
+                .frame(minWidth: 960, minHeight: 580)
         }
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target).environment(model)
@@ -228,12 +233,22 @@ struct RepositoryDetailView: View {
                     }
                 )
             } accessory: {
-                if let loadedAt = model.snapshotsLoadedAt(for: repositoryID),
-                   !model.loadingSnapshots.contains(repositoryID) {
-                    Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                HStack(spacing: 8) {
+                    // The restore-centric surface: backup timeline on the
+                    // left, the selected backup's files on the right.
+                    Button("Restore Files…") {
+                        restoring = RestoreBrowserTarget(repositoryID: repositoryID)
+                    }
+                    .controlSize(.small)
+                    .disabled(snapshots.isEmpty)
+                    .help("Browse backups and restore files — pick a backup on the left, flip through them without losing your place")
+                    if let loadedAt = model.snapshotsLoadedAt(for: repositoryID),
+                       !model.loadingSnapshots.contains(repositoryID) {
+                        Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                 }
             }
         }

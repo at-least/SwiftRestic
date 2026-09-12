@@ -62,9 +62,11 @@ struct IndexedEntry: Sendable, Equatable {
 /// One search result: a distinct path the index has seen, and whether it is a
 /// directory. `nil` means unknown — rows rebuilt from pre-`search`-table
 /// indexes carry no kind; the caller resolves those on demand.
-struct SearchHit: Sendable, Equatable {
+struct SearchHit: Sendable, Equatable, Identifiable {
     var path: String
     var isDirectory: Bool?
+
+    var id: String { path }
 }
 
 extension Array where Element == IndexedSnapshot {

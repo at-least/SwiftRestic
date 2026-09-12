@@ -62,4 +62,48 @@ extension AppModel {
             limit: limit
         )
     }
+
+    /// What changed between two snapshots, keyed by normalized path — the
+    /// restore browser's Change column. Empty on failure; the column then
+    /// reads as "no change information" rather than "unchanged".
+    func snapshotChanges(
+        repositoryID: UUID,
+        olderID: String,
+        newerID: String
+    ) async -> [String: ResticDiffChange] {
+        guard let repository = repository(id: repositoryID),
+              let service = try? service(),
+              let context = try? await context(for: repository)
+        else { return [:] }
+        let collector = ChangeMap()
+        _ = try? await service.walkDiff(context, olderID: olderID, newerID: newerID) { change in
+            collector.insert(change)
+        }
+        return collector.map
+    }
+}
+
+/// Lock-guarded accumulation of one diff's changes — the stream's callbacks
+/// run off the main actor, and a main-actor dictionary cannot be mutated
+/// from a `@Sendable` closure.
+private final class ChangeMap: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String: ResticDiffChange] = [:]
+
+    func insert(_ change: ResticDiffChange) {
+        // Directories arrive with a trailing slash; the tree keys paths
+        // without one.
+        let key = change.path.count > 1 && change.path.hasSuffix("/")
+            ? String(change.path.dropLast())
+            : change.path
+        lock.lock()
+        storage[key] = change
+        lock.unlock()
+    }
+
+    var map: [String: ResticDiffChange] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
 }
