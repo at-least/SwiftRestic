@@ -28,6 +28,10 @@ struct FindFilesView: View {
     @State private var errorMessage: String?
     @State private var hasSearched = false
     @State private var searchTask: Task<Void, Never>?
+    /// True when the index search stopped early — the hit cap, or paths
+    /// whose every version has since been pruned. The footer says so; a
+    /// truncated list must not pass for the whole answer.
+    @State private var resultsTruncated = false
     /// The sheet exists to answer one question, so the field that receives it
     /// takes focus on arrival — typing starts immediately.
     @FocusState private var patternFieldIsFocused: Bool
@@ -234,6 +238,11 @@ struct FindFilesView: View {
                                 .foregroundStyle(.tertiary)
                                 .monospacedDigit()
                         }
+                        if resultsTruncated {
+                            Text("Showing the first matches — narrow the search to see more.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
                 Spacer()
@@ -329,11 +338,18 @@ struct FindFilesView: View {
     /// so every row names a restorable snapshot. Sorted newest-first by that
     /// snapshot, matching the restic engine's row order.
     private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> [Row] {
-        let hits = await model.searchIndex(pattern: pattern, repositoryID: repositoryID)
+        let hits = try await model.searchIndex(pattern: pattern, repositoryID: repositoryID)
         var rows: [Row] = []
+        var dropped = 0
         for hit in hits {
             let versions = await model.indexedVersions(ofPath: hit.path, repositoryID: repositoryID)
-            guard let newest = versions.first else { continue }
+            guard let newest = versions.first else {
+                // Every version of this path has since been pruned; there is
+                // nothing restorable to list. Counted, so the footer can own
+                // the gap instead of letting the row vanish silently.
+                dropped += 1
+                continue
+            }
             let name = (hit.path as NSString).lastPathComponent
             let match = FindMatch(
                 path: hit.path,
@@ -350,6 +366,7 @@ struct FindFilesView: View {
                 hit: hit
             ))
         }
+        resultsTruncated = dropped > 0 || hits.count >= 200
         return rows
     }
 
@@ -362,54 +379,73 @@ struct FindFilesView: View {
         isSearching = false
         results = []
         indexRows = nil
+        resultsTruncated = false
         hasSearched = false
         errorMessage = nil
         selection = nil
     }
 
     /// Re-reads whether the selected repository's index is ready — the switch
-    /// behind the engine choice and the toggle's visibility.
+    /// behind the engine choice and the toggle's visibility. The answer is
+    /// discarded if the user has switched repository meanwhile.
     private func refreshIndexState() {
         guard let repositoryID else { indexComplete = nil; return }
         Task {
             let ready = await model.indexIsComplete(repositoryID: repositoryID)
+            guard self.repositoryID == repositoryID else { return }
             indexComplete = ready
         }
     }
 
     /// Restores the given row through the destination picker, where the
-    /// overwrite warning lives. Index rows rebuilt from a pre-kind index may
-    /// not know file from directory — resolved from the snapshot itself
-    /// before restoring, because guessing wrong picks the wrong restic verb.
+    /// overwrite warning lives.
+    ///
+    /// Index rows resolve their node from the snapshot itself, no matter what
+    /// kind the index recorded: the search table's kind is first-writer-wins,
+    /// and a path that changed from file to directory would otherwise take
+    /// `dump` — which happily writes a folder's tar into one file, no error.
+    /// A listing that cannot answer fails the restore loudly instead.
     private func restoreSelection(_ row: Row?) {
         guard let row, let repositoryID else { return }
         guard let destination = FilePicker.chooseDirectory(
             message: "Choose where to restore “\(row.match.name)”. Restoring overwrites existing files at the destination.",
             prompt: "Restore"
         ) else { return }
-        if let hit = row.hit, hit.isDirectory == nil {
-            Task {
-                let parent = (row.match.path as NSString).deletingLastPathComponent
-                let children = try? await model.children(
-                    repositoryID: repositoryID,
-                    snapshotID: row.snapshotID,
-                    path: parent
-                )
-                let node = children?.first { $0.path == row.match.path } ?? row.match.node
-                model.restore(
-                    repositoryID: repositoryID,
-                    snapshotID: row.snapshotID,
-                    node: node,
-                    to: destination
-                )
-            }
-        } else {
+
+        if row.hit == nil {
+            // A restic-engine row: the node came from restic itself.
             model.restore(
                 repositoryID: repositoryID,
                 snapshotID: row.snapshotID,
                 node: row.match.node,
                 to: destination
             )
+            return
+        }
+        Task {
+            do {
+                let parent = (row.match.path as NSString).deletingLastPathComponent
+                let children = try await model.children(
+                    repositoryID: repositoryID,
+                    snapshotID: row.snapshotID,
+                    path: parent
+                )
+                guard let node = children.first(where: { $0.path == row.match.path }) else {
+                    throw ResticError.commandFailed(
+                        exitCode: 0,
+                        message: "“\(row.match.name)” is no longer listed in the chosen snapshot — refresh and try again.",
+                        command: "ls"
+                    )
+                }
+                model.restore(
+                    repositoryID: repositoryID,
+                    snapshotID: row.snapshotID,
+                    node: node,
+                    to: destination
+                )
+            } catch {
+                errorMessage = (error as? ResticError)?.errorDescription ?? error.localizedDescription
+            }
         }
     }
 }

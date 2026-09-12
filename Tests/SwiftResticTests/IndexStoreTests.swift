@@ -245,6 +245,8 @@ struct IndexStoreTests {
         #expect(try store.searchPaths(matching: "   ", limit: 10).isEmpty)
         // metacharacters travel inside quotes, never as syntax
         #expect(try store.searchPaths(matching: "invoice*\" OR", limit: 10).isEmpty)
+        // input that tokenizes to nothing matches nothing
+        #expect(try store.searchPaths(matching: "\"", limit: 10).isEmpty)
     }
 
     @Test("diff-added paths become searchable, directories keep their kind")

@@ -418,11 +418,14 @@ final class SQLiteIndexStore: IndexStore {
         let tokens = input.split(whereSeparator: \.isWhitespace)
         return tokens
             .map { token in
-                let escaped = token
+                token
                     .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
                     .replacingOccurrences(of: "\"", with: "\"\"")
-                return "\"\(escaped)\"*"
             }
+            // A token that was nothing but quotes carries no term; emitting
+            // it would make the whole query a zero-token phrase.
+            .filter { !$0.isEmpty }
+            .map { "\"\($0)\"*" }
             .joined(separator: " ")
     }
 
