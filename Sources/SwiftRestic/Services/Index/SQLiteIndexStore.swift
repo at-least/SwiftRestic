@@ -263,7 +263,7 @@ final class SQLiteIndexStore: IndexStore {
             ) else { return nil }
             let chain: String = row["chain"]
             let seq: Int = row["seq"]
-            return try Self.snapshots(
+            guard let predecessor = try Self.snapshots(
                 from: Row.fetchAll(
                     db,
                     sql: """
@@ -273,7 +273,20 @@ final class SQLiteIndexStore: IndexStore {
                     """,
                     arguments: [chain, seq]
                 )
-            ).first
+            ).first else { return nil }
+            // The diff asserts existence across every snapshot it spans, so
+            // none of the alive ones in between may go unread: a path deleted
+            // in an unread gap snapshot would be claimed present there. A
+            // dead snapshot in the gap is fine — nothing queries the dead.
+            let unread = try Int.fetchOne(
+                db,
+                sql: """
+                SELECT COUNT(*) FROM snapshot
+                WHERE chain = ? AND alive = 1 AND indexed = 0 AND seq > ? AND seq < ?
+                """,
+                arguments: [chain, predecessor.seq, seq]
+            )
+            return unread == 0 ? predecessor : nil
         }
     }
 

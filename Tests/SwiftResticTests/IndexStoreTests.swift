@@ -257,4 +257,28 @@ struct IndexStoreTests {
         // Unknown snapshot: nil, not a throw.
         #expect(try store.predecessorForDelta(of: "ghost") == nil)
     }
+
+    @Test("a diff is refused when an unread alive snapshot sits in the span")
+    func deltaRefusedAcrossGap() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s2", time: t1, tags: [planTag]),
+            snapshot("s3", time: t2, tags: [planTag]),
+        ])
+        try store.recordContent(snapshotID: "s1", paths: ["/data/a.txt"], final: true)
+
+        // s2's read failed (a network blip, say). A diff s1 -> s3 would span
+        // the unread s2 and assert existence there for every unchanged path —
+        // exactly what a deletion in s2 would contradict.
+        #expect(try store.predecessorForDelta(of: "s3") == nil)
+
+        // A dead snapshot in the span is different: nothing queries the dead,
+        // so the diff route stays open. s2 dies (pruned), s3 may now diff.
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s3", time: t2, tags: [planTag]),
+        ])
+        #expect(try store.predecessorForDelta(of: "s3")?.id == "s1")
+    }
 }

@@ -57,20 +57,47 @@ actor IndexCoordinator {
         backfillTasks[repositoryID]?.cancel()
     }
 
-    /// The awaitable backfill loop — one snapshot at a time, newest first,
-    /// until the queue is empty or cancelled. Each snapshot is built from a
-    /// diff against its indexed predecessor when one exists (change-sized,
-    /// whatever the snapshot weighs) and from a full `ls` otherwise — the
-    /// first snapshot of a chain, and the fallback whenever the diff fails.
-    /// Tests await this directly; production goes through `startBackfill`.
+    /// The awaitable backfill loop — newest first, in batches, until the
+    /// queue is empty or cancelled. Each snapshot is built from a diff
+    /// against its indexed predecessor when one exists (change-sized, whatever
+    /// the snapshot weighs) and from a full `ls` otherwise. A snapshot that
+    /// cannot be read — network gone, repository vanished — stays pending and
+    /// the batch moves on: stranding the whole queue behind one failure is
+    /// what made gaps possible in the first place. Tests await this directly;
+    /// production goes through `startBackfill`.
     func runBackfill(repositoryID: UUID, service: any ResticClient, context: RepositoryContext) async {
+        var recordedFailure = false
         do {
             let store = try self.store(for: repositoryID)
             while !Task.isCancelled {
-                guard let next = try await store.pendingBackfill(limit: 1).first else { break }
-                try await backfillOne(next, repositoryID: repositoryID, into: store, service: service, context: context)
+                let batch = try await store.pendingBackfill(limit: 16)
+                guard !batch.isEmpty else { break }
+                var progressed = false
+                for next in batch {
+                    if Task.isCancelled { break }
+                    do {
+                        try await backfillOne(
+                            next,
+                            repositoryID: repositoryID,
+                            into: store,
+                            service: service,
+                            context: context
+                        )
+                        progressed = true
+                    } catch {
+                        recordedFailure = true
+                        outcomes[repositoryID] = error.localizedDescription
+                    }
+                }
+                // Every snapshot in the batch failed: refetching would serve
+                // the same batch again. Leave them pending for a later pass.
+                if !progressed { break }
             }
-            outcomes[repositoryID] = nil
+            // A clean sweep clears the last error; a bumpy one keeps it —
+            // the next reconcile decides what the current truth is.
+            if !recordedFailure {
+                outcomes[repositoryID] = nil
+            }
         } catch {
             outcomes[repositoryID] = error.localizedDescription
         }
@@ -108,7 +135,8 @@ actor IndexCoordinator {
                 // The delta attempt is transactional: a failure leaves the
                 // snapshot pending and untouched, so the full read below
                 // starts clean. Recorded, not fatal — the full read is the
-                // safety net this whole design leans on.
+                // safety net this whole design leans on, and if it lands, the
+                // loop's end-of-run sweep clears this stale error.
                 outcomes[repositoryID] = error.localizedDescription
             }
         }
@@ -116,7 +144,9 @@ actor IndexCoordinator {
         // The restic stream arrives on a background queue; the buffer flushes
         // chunks into the store synchronously on that same thread, capturing
         // anything thrown so the non-throwing callback can surface it here.
-        let buffer = BackfillBuffer(snapshotID: snapshot.id, store: store)
+        let buffer = BackfillBuffer { paths, final in
+            try store.recordContent(snapshotID: snapshot.id, paths: paths, final: final)
+        }
         do {
             try await service.walkSnapshot(context, snapshotID: snapshot.id) { node in
                 buffer.append(node.path)
@@ -132,14 +162,14 @@ actor IndexCoordinator {
 
     /// Closes and deletes a repository's index — the index exists only to
     /// serve its repository, so removal takes it along. Any running backfill
-    /// is cancelled first.
+    /// is cancelled first. The WAL and shm sidecars go too: recreating a
+    /// database at a path whose stale `-wal` survives is one of SQLite's
+    /// documented corruption routes.
     func dropRepository(repositoryID: UUID) {
         cancelBackfill(repositoryID: repositoryID)
         stores[repositoryID] = nil
         outcomes[repositoryID] = nil
-        try? FileManager.default.removeItem(
-            at: directory.appendingPathComponent(repositoryID.uuidString + ".sqlite")
-        )
+        removeIndexFiles(at: directory.appendingPathComponent(repositoryID.uuidString + ".sqlite"))
     }
 
     // MARK: - Store access
@@ -157,10 +187,16 @@ actor IndexCoordinator {
             stores[repositoryID] = store
             return store
         } catch {
-            try? FileManager.default.removeItem(at: path)
+            removeIndexFiles(at: path)
             let store = try SQLiteIndexStore(path: path.path)
             stores[repositoryID] = store
             return store
+        }
+    }
+
+    private func removeIndexFiles(at path: URL) {
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(atPath: path.path + suffix)
         }
     }
 }
@@ -203,21 +239,22 @@ private final class ChangeCollector: @unchecked Sendable {
 ///
 /// Thread confinement by lock: the restic stream's callbacks arrive on one
 /// background queue, while `finish` runs after the await on the actor. The
-/// store call is synchronous and transaction-per-chunk, so chunks recorded
+/// flush call is synchronous and transaction-per-chunk, so chunks recorded
 /// before a failure or cancellation stay — the snapshot remains pending and
-/// the next pass resumes from the top, idempotently.
-private final class BackfillBuffer: @unchecked Sendable {
-    private let snapshotID: String
-    private let store: SQLiteIndexStore
+/// the next pass resumes from the top, idempotently. Internal, not private:
+/// the tests drive the failure paths through an injected flush.
+final class BackfillBuffer: @unchecked Sendable {
+    private let flush: @Sendable ([String], Bool) throws -> Void
     private let chunkSize = 4_000
     private let lock = NSLock()
     private var pending: [String] = []
     private var captured: Error?
     private var isCancelled = false
 
-    init(snapshotID: String, store: SQLiteIndexStore) {
-        self.snapshotID = snapshotID
-        self.store = store
+    /// - Parameter flush: records one chunk; `final: true` flips the
+    ///   snapshot's coverage and must only ever run after every chunk landed.
+    init(flush: @escaping @Sendable ([String], Bool) throws -> Void) {
+        self.flush = flush
     }
 
     func append(_ path: String) {
@@ -232,27 +269,38 @@ private final class BackfillBuffer: @unchecked Sendable {
             }
         }
         lock.unlock()
-        if let chunk { flush(chunk) }
+        if let chunk { flushChunk(chunk, false) }
     }
 
     /// Marks the snapshot fully read — `final: true` is what flips coverage,
-    /// and without it the snapshot would sit pending forever. An error
-    /// captured mid-stream throws instead, leaving the snapshot pending so
-    /// the next pass resumes it.
+    /// and without it the snapshot would sit pending forever. Any error
+    /// captured mid-stream — and any error from the final marker itself —
+    /// throws, leaving the snapshot pending for the next pass.
     func finish() throws {
         lock.lock()
         let remainder = pending
         pending = []
+        lock.unlock()
+        flushChunk(remainder, false)
+        lock.lock()
         let failed = captured
         lock.unlock()
-        guard failed == nil else { throw failed! }
-        flush(remainder)
-        try store.recordContent(snapshotID: snapshotID, paths: [], final: true)
+        if let failed { throw failed }
+        lock.lock()
+        let cancelled = isCancelled
+        lock.unlock()
+        // A buffer told to stop never declares coverage — the snapshot stays
+        // pending and the unwinding walk above handles its own error.
+        guard !cancelled else { return }
+        // The decisive call propagates directly rather than being captured:
+        // a failure here is exactly what must surface.
+        try flush([], true)
     }
 
     /// Stops accepting paths — the walk above us is unwinding with an error
     /// or cancellation, and half-flushed state is exactly as far as the
-    /// resumable design wants to go.
+    /// resumable design wants to go. The coverage marker is not exempt: a
+    /// cancelled buffer never declares a snapshot fully read.
     func cancel() {
         lock.lock()
         isCancelled = true
@@ -260,10 +308,13 @@ private final class BackfillBuffer: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func flush(_ chunk: [String]) {
-        guard !chunk.isEmpty else { return }
+    private func flushChunk(_ chunk: [String], _ final: Bool) {
+        lock.lock()
+        let cancelled = isCancelled
+        lock.unlock()
+        guard !cancelled, final || !chunk.isEmpty else { return }
         do {
-            try store.recordContent(snapshotID: snapshotID, paths: chunk, final: false)
+            try flush(chunk, final)
         } catch {
             lock.lock()
             if captured == nil { captured = error }

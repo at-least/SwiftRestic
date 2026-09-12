@@ -85,9 +85,12 @@ protocol IndexStore: Sendable {
     /// Applies a `restic diff` between an indexed snapshot at `previousSeq`
     /// and the snapshot `snapshotID`: added paths open runs, removed paths
     /// end theirs, and everything else — content, type, metadata changes —
-    /// extends, because the path's existence is unchanged. Idempotent; on a
-    /// thrown error nothing is recorded and the snapshot stays pending for
-    /// the backfill's full read.
+    /// extends, because the path's existence is unchanged. The interval
+    /// spans every alive snapshot between the two seqs, so the caller must
+    /// guarantee there are none unindexed in between (`predecessorForDelta`
+    /// enforces it); a dead snapshot in the span is fine, since nothing
+    /// queries the dead. Idempotent; on a thrown error nothing is recorded
+    /// and the snapshot stays pending for the backfill's full read.
     func applyDelta(snapshotID: String, previousSeq: Int, added: [String], removed: [String]) throws
 
     /// The newest alive, already-indexed snapshot of `snapshotID`'s chain

@@ -305,7 +305,11 @@ struct ResticService: ResticClient {
 
     /// The full-tree `ls` behind the index backfill. `retainMessages: false`
     /// keeps the runner from accumulating a snapshot's worth of nodes in
-    /// memory — the callback is the only delivery.
+    /// memory — the callback is the only delivery. `--no-lock` because a
+    /// history walk is long and read-only: holding even a shared lock
+    /// throughout would collide with retention's exclusive `forget`, and a
+    /// read that trips over a concurrently pruned pack fails and stays
+    /// pending for a later pass instead.
     func walkSnapshot(
         _ context: RepositoryContext,
         snapshotID: String,
@@ -314,7 +318,7 @@ struct ResticService: ResticClient {
         _ = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
-                arguments: context.globalArguments + ["ls", "--json", snapshotID],
+                arguments: context.globalArguments + ["ls", "--json", "--no-lock", snapshotID],
                 environment: context.environment,
                 retainMessages: false
             ),
@@ -408,7 +412,7 @@ struct ResticService: ResticClient {
     /// The uncapped, retention-free diff the index applies after each backup.
     /// Everything the capped `diff` says about its change limit applies
     /// doubly here: the stream is unbounded, so the callback must consume
-    /// incrementally.
+    /// incrementally. `--no-lock` for the same reason `walkSnapshot` wears it.
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,
@@ -418,7 +422,7 @@ struct ResticService: ResticClient {
         _ = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
-                arguments: context.globalArguments + ["diff", "--json", olderID, newerID],
+                arguments: context.globalArguments + ["diff", "--json", "--no-lock", olderID, newerID],
                 environment: context.environment,
                 retainMessages: false
             ),
