@@ -144,12 +144,12 @@ actor IndexCoordinator {
         // The restic stream arrives on a background queue; the buffer flushes
         // chunks into the store synchronously on that same thread, capturing
         // anything thrown so the non-throwing callback can surface it here.
-        let buffer = BackfillBuffer { paths, final in
-            try store.recordContent(snapshotID: snapshot.id, paths: paths, final: final)
+        let buffer = BackfillBuffer { entries, final in
+            try store.recordContent(snapshotID: snapshot.id, entries: entries, final: final)
         }
         do {
             try await service.walkSnapshot(context, snapshotID: snapshot.id) { node in
-                buffer.append(node.path)
+                buffer.append(IndexedEntry(path: node.path, isDirectory: node.isDirectory))
             }
             try buffer.finish()
         } catch {
@@ -164,6 +164,11 @@ actor IndexCoordinator {
     /// browser's core question.
     func versions(ofPath path: String, repositoryID: UUID) throws -> [IndexedSnapshot] {
         try store(for: repositoryID).versions(ofPath: path)
+    }
+
+    /// Basename search across every indexed path — instant, no restic walk.
+    func searchPaths(matching query: String, repositoryID: UUID, limit: Int) throws -> [SearchHit] {
+        try store(for: repositoryID).searchPaths(matching: query, limit: limit)
     }
 
     /// Whether every alive snapshot's content has been read — the folder
@@ -258,25 +263,25 @@ private final class ChangeCollector: @unchecked Sendable {
 /// the next pass resumes from the top, idempotently. Internal, not private:
 /// the tests drive the failure paths through an injected flush.
 final class BackfillBuffer: @unchecked Sendable {
-    private let flush: @Sendable ([String], Bool) throws -> Void
+    private let flush: @Sendable ([IndexedEntry], Bool) throws -> Void
     private let chunkSize = 4_000
     private let lock = NSLock()
-    private var pending: [String] = []
+    private var pending: [IndexedEntry] = []
     private var captured: Error?
     private var isCancelled = false
 
     /// - Parameter flush: records one chunk; `final: true` flips the
     ///   snapshot's coverage and must only ever run after every chunk landed.
-    init(flush: @escaping @Sendable ([String], Bool) throws -> Void) {
+    init(flush: @escaping @Sendable ([IndexedEntry], Bool) throws -> Void) {
         self.flush = flush
     }
 
-    func append(_ path: String) {
+    func append(_ entry: IndexedEntry) {
         guard !Task.isCancelled else { return }
-        var chunk: [String]?
+        var chunk: [IndexedEntry]?
         lock.lock()
         if !isCancelled {
-            pending.append(path)
+            pending.append(entry)
             if pending.count >= chunkSize {
                 chunk = pending
                 pending = []
@@ -322,7 +327,7 @@ final class BackfillBuffer: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func flushChunk(_ chunk: [String], _ final: Bool) {
+    private func flushChunk(_ chunk: [IndexedEntry], _ final: Bool) {
         lock.lock()
         let cancelled = isCancelled
         lock.unlock()

@@ -26,6 +26,7 @@ final class SQLiteIndexStore: IndexStore {
             db = try DatabaseQueue(configuration: Self.configuration())
         }
         try Self.migrator().migrate(db)
+        try rebuildSearchIfNeeded()
     }
 
     private static func configuration() -> Configuration {
@@ -41,7 +42,41 @@ final class SQLiteIndexStore: IndexStore {
         migrator.registerMigration("index-v1") { db in
             try db.execute(sql: IndexSchema.v1)
         }
+        migrator.registerMigration("index-v2") { db in
+            try db.execute(sql: IndexSchema.v2)
+        }
         return migrator
+    }
+
+    /// A database that reached v2 with entries but an empty search table is a
+    /// pre-search index upgraded in place — its paths are rebuilt into the
+    /// search table from the entry runs. One transaction, one pass over the
+    /// entry index; kind is unknown for these rows (the entry table stores no
+    /// kind), so they read as such and resolve on restore.
+    private func rebuildSearchIfNeeded() throws {
+        try db.write { db in
+            let searchCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM search") ?? 0
+            guard searchCount == 0 else { return }
+            let entryCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM entry") ?? 0
+            guard entryCount > 0 else { return }
+
+            let cursor = try Row.fetchCursor(db, sql: "SELECT DISTINCT path FROM entry")
+            while let row = try cursor.next() {
+                let path: String = row["path"]
+                let name = Self.basename(of: path)
+                let rowid = try Int.fetchOne(
+                    db,
+                    sql: "INSERT INTO search (path, name, is_dir) VALUES (?, ?, NULL) RETURNING rowid",
+                    arguments: [path, name]
+                )
+                if let rowid {
+                    try db.execute(
+                        sql: "INSERT INTO search_fts (rowid, name) VALUES (?, ?)",
+                        arguments: [rowid, name]
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - IndexStore
@@ -94,7 +129,7 @@ final class SQLiteIndexStore: IndexStore {
         }
     }
 
-    func recordContent(snapshotID: String, paths: [String], final: Bool) throws {
+    func recordContent(snapshotID: String, entries: [IndexedEntry], final: Bool) throws {
         try db.write { db in
             guard let row = try Row.fetchOne(
                 db,
@@ -106,12 +141,13 @@ final class SQLiteIndexStore: IndexStore {
             let chain: String = row["chain"]
             let seq: Int = row["seq"]
 
-            for chunk in paths.chunked(into: Self.chunkSize) {
-                let placeholders = chunk.map { _ in "?" }.joined(separator: ", ")
+            for chunk in entries.chunked(into: Self.chunkSize) {
+                let paths = chunk.map(\.path)
+                let placeholders = paths.map { _ in "?" }.joined(separator: ", ")
                 // The element-wise map matters: a bare `[int, string] + chunk`
                 // concatenation degrades to [Any], which none of
                 // StatementArguments' sequence initializers accept.
-                let chunkArguments = chunk.map { $0 as (any DatabaseValueConvertible)? }
+                let pathArguments = paths.map { $0 as (any DatabaseValueConvertible)? }
                 // A run that ended at seq-1 resumes: the file was there before,
                 // and this snapshot proves it is here now.
                 try db.execute(
@@ -119,7 +155,7 @@ final class SQLiteIndexStore: IndexStore {
                     UPDATE entry SET last_seq = ?
                     WHERE chain = ? AND last_seq = ? AND path IN (\(placeholders))
                     """,
-                    arguments: StatementArguments([seq, chain, seq - 1] + chunkArguments)
+                    arguments: StatementArguments([seq, chain, seq - 1] + pathArguments)
                 )
                 // A run that starts at seq+1 reaches back: same proof, other
                 // side, the case backfill walking newest-first lives in.
@@ -128,7 +164,7 @@ final class SQLiteIndexStore: IndexStore {
                     UPDATE entry SET first_seq = ?
                     WHERE chain = ? AND first_seq = ? AND path IN (\(placeholders))
                     """,
-                    arguments: StatementArguments([seq, chain, seq + 1] + chunkArguments)
+                    arguments: StatementArguments([seq, chain, seq + 1] + pathArguments)
                 )
 
                 // Both extensions fired: two runs now touch seq and must
@@ -143,7 +179,7 @@ final class SQLiteIndexStore: IndexStore {
                     WHERE e1.chain = ? AND e1.last_seq = ? AND e2.first_seq = ?
                         AND e1.path IN (\(placeholders))
                     """,
-                    arguments: StatementArguments([chain, seq, seq] + chunkArguments)
+                    arguments: StatementArguments([chain, seq, seq] + pathArguments)
                 )
                 for seam in seams {
                     let path: String = seam["path"]
@@ -165,7 +201,7 @@ final class SQLiteIndexStore: IndexStore {
                 // than one bulk VALUES statement: the mixed String/Int
                 // argument lists made the one-statement form unreadable, and
                 // GRDB's statement cache keeps the loop cheap.
-                for path in chunk {
+                for entry in chunk {
                     try db.execute(
                         sql: """
                         INSERT INTO entry (path, chain, first_seq, last_seq)
@@ -175,8 +211,9 @@ final class SQLiteIndexStore: IndexStore {
                                 AND first_seq <= ? AND last_seq >= ?
                         )
                         """,
-                        arguments: [path, chain, seq, seq, path, chain, seq, seq]
+                        arguments: [entry.path, chain, seq, seq, entry.path, chain, seq, seq]
                     )
+                    try indexSearchEntry(db, path: entry.path, isDirectory: entry.isDirectory)
                 }
             }
 
@@ -186,6 +223,29 @@ final class SQLiteIndexStore: IndexStore {
                     arguments: [IndexCoverage.full.rawValue, snapshotID]
                 )
             }
+        }
+    }
+
+    /// Lands one path in the search index: the content row (INSERT OR
+    /// IGNORE — the table only grows) and, for genuinely new rows, the FTS
+    /// twin. First writer wins on `is_dir`; the upsert conflicts silently on
+    /// known paths so their FTS rows are never duplicated.
+    private func indexSearchEntry(_ db: Database, path: String, isDirectory: Bool) throws {
+        let name = Self.basename(of: path)
+        let rowid = try Int.fetchOne(
+            db,
+            sql: """
+            INSERT INTO search (path, name, is_dir) VALUES (?, ?, ?)
+                ON CONFLICT(path) DO NOTHING
+                RETURNING rowid
+            """,
+            arguments: [path, name, isDirectory]
+        )
+        if let rowid {
+            try db.execute(
+                sql: "INSERT INTO search_fts (rowid, name) VALUES (?, ?)",
+                arguments: [rowid, name]
+            )
         }
     }
 
@@ -204,11 +264,15 @@ final class SQLiteIndexStore: IndexStore {
             // restic marks directories in diffs with a trailing slash; the
             // paths this store holds — from `ls` nodes — never carry one.
             // Normalize before matching or a directory's runs never meet.
+            // The slash is kept long enough to read the kind off it first.
             func normalized(_ path: String) -> String {
                 path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
             }
             let removedSet = Set(removed.map(normalized))
-            let addedSet = Set(added.map(normalized)).subtracting(removedSet)
+            let addedEntries = added
+                .map { path in IndexedEntry(path: normalized(path), isDirectory: path.hasSuffix("/")) }
+                .filter { !removedSet.contains($0.path) }
+            let addedSet = Set(addedEntries.map(\.path))
 
             // Extend every run that ended at previousSeq except the changed
             // paths. The exclusion set lives in a temp table so the check is
@@ -232,8 +296,9 @@ final class SQLiteIndexStore: IndexStore {
 
             // Added paths open fresh runs, guarded against claiming a gap:
             // a path whose run ended before previousSeq reappearing now has
-            // two episodes, not one long life.
-            for path in addedSet {
+            // two episodes, not one long life. They also land in the search
+            // index — a diff is how a brand-new file first becomes findable.
+            for entry in addedEntries {
                 try db.execute(
                     sql: """
                     INSERT INTO entry (path, chain, first_seq, last_seq)
@@ -243,8 +308,9 @@ final class SQLiteIndexStore: IndexStore {
                             AND first_seq <= ? AND last_seq >= ?
                     )
                     """,
-                    arguments: [path, chain, seq, seq, path, chain, seq, seq]
+                    arguments: [entry.path, chain, seq, seq, entry.path, chain, seq, seq]
                 )
+                try indexSearchEntry(db, path: entry.path, isDirectory: entry.isDirectory)
             }
 
             try db.execute(
@@ -319,6 +385,52 @@ final class SQLiteIndexStore: IndexStore {
                 )
             )
         }
+    }
+
+    func searchPaths(matching query: String, limit: Int) throws -> [SearchHit] {
+        let match = Self.ftsQuery(from: query)
+        guard !match.isEmpty else { return [] }
+        return try db.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT s.path AS path, s.is_dir AS is_dir
+                FROM search s
+                JOIN search_fts ON search_fts.rowid = s.rowid
+                WHERE search_fts MATCH ?
+                ORDER BY s.name, s.path
+                LIMIT ?
+                """,
+                arguments: [match, limit]
+            ).map { row in
+                SearchHit(path: row["path"], isDirectory: row["is_dir"])
+            }
+        }
+    }
+
+    /// User text to an FTS5 MATCH expression: every whitespace-separated
+    /// token becomes a quoted prefix term, so "inv 2026" finds basenames
+    /// containing tokens starting with either word, and metacharacters the
+    /// user typed (`*`, `"`, `-`) travel inside the quotes instead of being
+    /// parsed as syntax. An input with no tokens yields an empty query, which
+    /// the caller reads as "match nothing".
+    static func ftsQuery(from input: String) -> String {
+        let tokens = input.split(whereSeparator: \.isWhitespace)
+        return tokens
+            .map { token in
+                let escaped = token
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                    .replacingOccurrences(of: "\"", with: "\"\"")
+                return "\"\(escaped)\"*"
+            }
+            .joined(separator: " ")
+    }
+
+    /// The path's last component, scalar-wise for the same combining-mark
+    /// reason `parent(of:)` in the engine is.
+    static func basename(of path: String) -> String {
+        guard let last = path.unicodeScalars.lastIndex(of: "/") else { return path }
+        return String(path.unicodeScalars[last...].dropFirst())
     }
 
     /// Raw visibility into run storage: how many entry rows a path has in a

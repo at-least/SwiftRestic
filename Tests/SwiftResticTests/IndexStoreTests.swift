@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 
 /// The run semantics of the snapshot index, against an in-memory store.
@@ -25,6 +26,10 @@ struct IndexStoreTests {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
         return try! decoder.decode(Snapshot.self, from: data)
+    }
+
+    private func entry(_ path: String, dir: Bool = false) -> IndexedEntry {
+        IndexedEntry(path: path, isDirectory: dir)
     }
 
     private let t0 = Date(timeIntervalSince1970: 1_000)
@@ -121,11 +126,11 @@ struct IndexStoreTests {
             snapshot("s2", time: t1, tags: [planTag]),
             snapshot("s3", time: t2, tags: [planTag]),
         ])
-        try store.recordContent(snapshotID: "s1", paths: ["/data/a.txt"], final: true)
-        try store.recordContent(snapshotID: "s3", paths: ["/data/a.txt"], final: true)
+        try store.recordContent(snapshotID: "s1", entries: [entry("/data/a.txt")], final: true)
+        try store.recordContent(snapshotID: "s3", entries: [entry("/data/a.txt")], final: true)
 
         // s2 filled in late: both neighbors merge into one run [1, 3]
-        try store.recordContent(snapshotID: "s2", paths: ["/data/a.txt"], final: true)
+        try store.recordContent(snapshotID: "s2", entries: [entry("/data/a.txt")], final: true)
         #expect(try store.versions(ofPath: "/data/a.txt").map(\.id) == ["s3", "s2", "s1"])
 
         // and the runs really merged: exactly one entry row covers the path
@@ -141,8 +146,8 @@ struct IndexStoreTests {
             snapshot("s2", time: t1, tags: [planTag]),
             snapshot("s3", time: t2, tags: [planTag]),
         ])
-        try store.recordContent(snapshotID: "s1", paths: ["/data/a.txt"], final: true)
-        try store.recordContent(snapshotID: "s3", paths: ["/data/a.txt"], final: true)
+        try store.recordContent(snapshotID: "s1", entries: [entry("/data/a.txt")], final: true)
+        try store.recordContent(snapshotID: "s3", entries: [entry("/data/a.txt")], final: true)
 
         // s2 deleted the file: no run may cover seq 2
         #expect(try store.versions(ofPath: "/data/a.txt").map(\.id) == ["s3", "s1"])
@@ -154,12 +159,12 @@ struct IndexStoreTests {
     func chunkedIdempotent() throws {
         let store = try makeStore()
         _ = try store.reconcile(aliveSnapshots: [snapshot("s1", time: t0, tags: [planTag])])
-        try store.recordContent(snapshotID: "s1", paths: ["/data/a"], final: false)
-        try store.recordContent(snapshotID: "s1", paths: ["/data/b"], final: true)
+        try store.recordContent(snapshotID: "s1", entries: [entry("/data/a")], final: false)
+        try store.recordContent(snapshotID: "s1", entries: [entry("/data/b")], final: true)
         #expect(try store.pendingBackfill(limit: 100).isEmpty)
 
         // re-recording the same snapshot is a no-op
-        try store.recordContent(snapshotID: "s1", paths: ["/data/a", "/data/b"], final: true)
+        try store.recordContent(snapshotID: "s1", entries: [entry("/data/a"), entry("/data/b")], final: true)
         #expect(try store.versions(ofPath: "/data/a").count == 1)
         #expect(try store.versions(ofPath: "/data/b").count == 1)
     }
@@ -168,7 +173,7 @@ struct IndexStoreTests {
     func unknownSnapshotThrows() throws {
         let store = try makeStore()
         #expect(throws: IndexError.unknownSnapshot("ghost")) {
-            try store.recordContent(snapshotID: "ghost", paths: ["/data/a"], final: true)
+            try store.recordContent(snapshotID: "ghost", entries: [entry("/data/a")], final: true)
         }
     }
 
@@ -181,7 +186,7 @@ struct IndexStoreTests {
             snapshot("ext", time: t1, tags: []),
         ])
         for id in ["plan-new", "plan-old", "ext"] {
-            try store.recordContent(snapshotID: id, paths: ["/data/shared.bin"], final: true)
+            try store.recordContent(snapshotID: id, entries: [entry("/data/shared.bin")], final: true)
         }
         // prune took the external snapshot away
         _ = try store.reconcile(aliveSnapshots: [
@@ -214,6 +219,99 @@ struct IndexStoreTests {
         #expect(versions.preferredVersion(previousID: "ghost")?.id == "new")
     }
 
+
+    // MARK: - Search (FTS)
+
+    @Test("search finds paths by basename, case-insensitively, prefix-wise")
+    func searchFindsByBasename() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [snapshot("s1", time: t0, tags: [planTag])])
+        try store.recordContent(snapshotID: "s1", entries: [
+            entry("/Users/x/Documents/Invoice-2026.pdf"),
+            entry("/Users/x/Music/track 01.flac"),
+            entry("/Users/x/Documents", dir: true),
+        ], final: true)
+
+        #expect(try store.searchPaths(matching: "invoice", limit: 10).map(\.path) == ["/Users/x/Documents/Invoice-2026.pdf"])
+        // prefix on a partial token
+        #expect(try store.searchPaths(matching: "inv", limit: 10).count == 1)
+        // case-insensitive
+        #expect(try store.searchPaths(matching: "INVOICE", limit: 10).count == 1)
+        // directory basenames are searchable too
+        #expect(try store.searchPaths(matching: "documents", limit: 10).map(\.path) == ["/Users/x/Documents"])
+        // multiple tokens: both must match
+        #expect(try store.searchPaths(matching: "invoice 2026", limit: 10).count == 1)
+        // empty input matches nothing, not everything
+        #expect(try store.searchPaths(matching: "   ", limit: 10).isEmpty)
+        // metacharacters travel inside quotes, never as syntax
+        #expect(try store.searchPaths(matching: "invoice*\" OR", limit: 10).isEmpty)
+    }
+
+    @Test("diff-added paths become searchable, directories keep their kind")
+    func deltaPopulatesSearch() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s2", time: t1, tags: [planTag]),
+        ])
+        try store.recordContent(snapshotID: "s1", entries: [entry("/data/old.txt")], final: true)
+        try store.applyDelta(
+            snapshotID: "s2",
+            previousSeq: 1,
+            added: ["/data/report.pdf", "/data/reports/"],
+            removed: []
+        )
+
+        let hits = try store.searchPaths(matching: "report", limit: 10)
+        #expect(Set(hits.map(\.path)) == ["/data/report.pdf", "/data/reports"])
+        #expect(hits.first { $0.path == "/data/reports" }?.isDirectory == true)
+        #expect(hits.first { $0.path == "/data/report.pdf" }?.isDirectory == false)
+    }
+
+    @Test("a v1 database upgraded in place rebuilds its search table from entries")
+    func migrationRebuildsSearch() throws {
+        // Build a v1-era database by hand: schema v1 only, entries but no
+        // search table — what an index from before this feature looks like.
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticMigration-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let dbPath = base.appendingPathComponent("repo.sqlite").path
+
+        let legacy = try DatabaseQueue(path: dbPath)
+        // The shipped v1 code created its tables through the migrator, which
+        // records the migration in grdb_migrations — the upgrade path below
+        // depends on that row existing.
+        var legacyMigrator = DatabaseMigrator()
+        legacyMigrator.registerMigration("index-v1") { db in
+            try db.execute(sql: IndexSchema.v1)
+        }
+        try legacyMigrator.migrate(legacy)
+        try legacy.write { db in
+            try db.execute(
+                sql: "INSERT INTO snapshot (id, chain, seq, time, alive, indexed) VALUES (?, ?, 1, ?, 1, 1)",
+                arguments: ["aaa", "swiftrestic-plan-x", "2026-01-01T00:00:00.000"]
+            )
+            try db.execute(
+                sql: "INSERT INTO entry (path, chain, first_seq, last_seq) VALUES (?, ?, 1, 1)",
+                arguments: ["/old/path/report.docx", "swiftrestic-plan-x"]
+            )
+        }
+
+        // Opening it migrates to v2 and backfills the search table.
+        let store = try SQLiteIndexStore(path: dbPath)
+        let hits = try store.searchPaths(matching: "report", limit: 10)
+        #expect(hits.map(\.path) == ["/old/path/report.docx"])
+        // Kind is unknown for rebuilt rows — the restore path resolves it.
+        #expect(hits.first?.isDirectory == nil)
+    }
+
+    @Test("search over an empty index answers nothing")
+    func searchEmptyIndex() throws {
+        let store = try makeStore()
+        #expect(try store.searchPaths(matching: "anything", limit: 10).isEmpty)
+    }
+
     // MARK: - Diff apply
 
     @Test("applyDelta extends the unchanged, opens the added, leaves the removed closed")
@@ -225,7 +323,7 @@ struct IndexStoreTests {
         ])
         try store.recordContent(
             snapshotID: "s1",
-            paths: ["/data/kept.txt", "/data/modified.txt", "/data/gone.txt", "/data"],
+            entries: [entry("/data/kept.txt"), entry("/data/modified.txt"), entry("/data/gone.txt"), entry("/data", dir: true)],
             final: true
         )
 
@@ -264,14 +362,14 @@ struct IndexStoreTests {
             snapshot("s3", time: t2, tags: [planTag]),
             snapshot("lone", time: t2, tags: [otherPlanTag]),
         ])
-        try store.recordContent(snapshotID: "s1", paths: ["/data"], final: true)
+        try store.recordContent(snapshotID: "s1", entries: [entry("/data")], final: true)
 
         // s2: pending, and s1 is indexed — the diff can build it.
         let predecessor = try store.predecessorForDelta(of: "s2")
         #expect(predecessor?.id == "s1")
 
         // Once s2 is read, it is no longer a candidate itself.
-        try store.recordContent(snapshotID: "s2", paths: ["/data"], final: true)
+        try store.recordContent(snapshotID: "s2", entries: [entry("/data")], final: true)
         // s3's best predecessor is now s2 (highest indexed seq below).
         #expect(try store.predecessorForDelta(of: "s3")?.id == "s2")
 
@@ -289,7 +387,7 @@ struct IndexStoreTests {
             snapshot("s2", time: t1, tags: [planTag]),
             snapshot("s3", time: t2, tags: [planTag]),
         ])
-        try store.recordContent(snapshotID: "s1", paths: ["/data/a.txt"], final: true)
+        try store.recordContent(snapshotID: "s1", entries: [entry("/data/a.txt")], final: true)
 
         // s2's read failed (a network blip, say). A diff s1 -> s3 would span
         // the unread s2 and assert existence there for every unchanged path —

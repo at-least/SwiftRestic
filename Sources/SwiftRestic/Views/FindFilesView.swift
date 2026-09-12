@@ -4,6 +4,11 @@ import SwiftUI
 ///
 /// This is the "I deleted something months ago and don't know which backup has
 /// it" case, which browsing snapshot by snapshot does not solve.
+///
+/// Two engines sit behind one table. When the repository's index has finished
+/// its backfill, the search runs against the local FTS index — instant, every
+/// snapshot, no network. Otherwise the search falls back to `restic find`,
+/// which walks the trees and takes as long as the history is deep.
 struct FindFilesView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -12,6 +17,12 @@ struct FindFilesView: View {
     @State private var pattern = ""
     @State private var latestOnly = false
     @State private var results: [FindResult] = []
+    /// Rows straight from the index engine; nil means the restic engine owns
+    /// the table and `results` is the source.
+    @State private var indexRows: [Row]?
+    /// Whether the repository's index has finished its backfill. nil = not
+    /// known yet for the selected repository.
+    @State private var indexComplete: Bool?
     @State private var selection: String?
     @State private var isSearching = false
     @State private var errorMessage: String?
@@ -26,6 +37,11 @@ struct FindFilesView: View {
         var match: FindMatch
         var snapshotID: String
         var snapshotTime: Date?
+        /// Index rows know how many versions the path has; restic rows do not.
+        var versionsCount: Int?
+        /// Index rows carry the search hit, whose kind may be unknown and in
+        /// need of resolution before a restore.
+        var hit: SearchHit?
     }
 
     var body: some View {
@@ -39,8 +55,10 @@ struct FindFilesView: View {
         .frame(minWidth: 760, minHeight: 480)
         .onAppear {
             if repositoryID == nil { repositoryID = model.configuration.repositories.first?.id }
+            refreshIndexState()
             patternFieldIsFocused = true
         }
+        .onChange(of: repositoryID) { _, _ in refreshIndexState() }
         .onDisappear { searchTask?.cancel() }
     }
 
@@ -71,13 +89,17 @@ struct FindFilesView: View {
                 TextField(
                     "Pattern",
                     text: $pattern,
-                    prompt: Text(verbatim: "File name or pattern, e.g. *.key or invoice*")
+                    prompt: Text(verbatim: indexComplete == true ? "File name, e.g. invoice or keynote" : "File name or pattern, e.g. *.key or invoice*")
                 )
                 .textFieldStyle(.roundedBorder)
                 .focused($patternFieldIsFocused)
                 .onSubmit(search)
-                Toggle("Latest snapshot only", isOn: $latestOnly)
-                    .toggleStyle(.checkbox)
+                // Meaningless against the index engine, which always searches
+                // every version.
+                if indexComplete != true {
+                    Toggle("Latest snapshot only", isOn: $latestOnly)
+                        .toggleStyle(.checkbox)
+                }
                 Button("Search", action: search)
                     .buttonStyle(.borderedProminent)
                     .disabled(!canSearch)
@@ -94,8 +116,12 @@ struct FindFilesView: View {
             }
 
             ExpandableCaption(
-                summary: "Matching is case-insensitive and supports shell globs.",
-                detail: "Searching every snapshot walks each one, so it takes longer the more history a repository holds. “Latest snapshot only” searches the repository's single newest snapshot — that snapshot may span other plans' folders, so it is not the newest per plan."
+                summary: indexComplete == true
+                    ? "Matching is case-insensitive; whole words match from anywhere in the name."
+                    : "Matching is case-insensitive and supports shell globs.",
+                detail: indexComplete == true
+                    ? "This repository's index has finished reading, so the search runs locally against every snapshot at once — instant, however deep the history."
+                    : "Searching every snapshot walks each one, so it takes longer the more history a repository holds. “Latest snapshot only” searches the repository's single newest snapshot — that snapshot may span other plans' folders, so it is not the newest per plan."
             )
         }
         .padding(12)
@@ -145,6 +171,16 @@ struct FindFilesView: View {
                 }
                 .width(min: 130, ideal: 160)
 
+                TableColumn("Versions") { row in
+                    // The index engine knows how many snapshots hold the path
+                    // (older ones reachable through Browse Folders); the restic
+                    // engine walked exactly what it lists.
+                    Text(row.versionsCount.map { "of \($0)" } ?? "this one")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .width(min: 60, ideal: 70)
+
                 TableColumn("Size") { row in
                     Text(row.match.isDirectory ? "—" : Format.bytes(row.match.size))
                         .monospacedDigit()
@@ -184,7 +220,8 @@ struct FindFilesView: View {
             HStack {
                 if !rows.isEmpty {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("\(Format.plural(rows.count, "match")) across \(Format.plural(results.count, "snapshot"))")
+                        let snapshotCount = Set(rows.map(\.snapshotID)).count
+                        Text("\(Format.plural(rows.count, "match")) across \(Format.plural(snapshotCount, "snapshot"))")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         // When the listing was read: results carry snapshot
@@ -218,6 +255,7 @@ struct FindFilesView: View {
     // MARK: - Data
 
     private var rows: [Row] {
+        if let indexRows { return indexRows }
         let snapshots = repositoryID.map { model.snapshots(for: $0) } ?? []
         let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
         return results
@@ -252,23 +290,67 @@ struct FindFilesView: View {
         errorMessage = nil
         selection = nil
         searchTask = Task {
+            // The engine is chosen per search, not per sheet: a backfill that
+            // finished while the sheet sat open upgrades the next search.
+            let ready = await model.indexIsComplete(repositoryID: searchedRepository)
+            guard !Task.isCancelled else { return }
+            indexComplete = ready
             do {
-                let found = try await model.findFiles(
-                    repositoryID: searchedRepository,
-                    pattern: searchedPattern,
-                    latestOnly: searchedLatestOnly
-                )
-                guard !Task.isCancelled else { return }
-                results = found
+                if ready {
+                    let rows = try await searchViaIndex(
+                        pattern: searchedPattern, repositoryID: searchedRepository
+                    )
+                    guard !Task.isCancelled else { return }
+                    indexRows = rows
+                    results = []
+                } else {
+                    let found = try await model.findFiles(
+                        repositoryID: searchedRepository,
+                        pattern: searchedPattern,
+                        latestOnly: searchedLatestOnly
+                    )
+                    guard !Task.isCancelled else { return }
+                    results = found
+                    indexRows = nil
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 results = []
+                indexRows = nil
                 errorMessage = error.localizedDescription
             }
             hasSearched = true
             isSearching = false
             searchTask = nil
         }
+    }
+
+    /// The index engine: FTS over basenames, then a versions lookup per hit
+    /// so every row names a restorable snapshot. Sorted newest-first by that
+    /// snapshot, matching the restic engine's row order.
+    private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> [Row] {
+        let hits = await model.searchIndex(pattern: pattern, repositoryID: repositoryID)
+        var rows: [Row] = []
+        for hit in hits {
+            let versions = await model.indexedVersions(ofPath: hit.path, repositoryID: repositoryID)
+            guard let newest = versions.first else { continue }
+            let name = (hit.path as NSString).lastPathComponent
+            let match = FindMatch(
+                path: hit.path,
+                type: hit.isDirectory == true ? "dir" : "file",
+                size: nil,
+                permissions: nil,
+                mtime: nil
+            )
+            rows.append(Row(
+                match: match,
+                snapshotID: newest.id,
+                snapshotTime: newest.time,
+                versionsCount: versions.count,
+                hit: hit
+            ))
+        }
+        return rows
     }
 
     /// Abandons the running search, if any. The view state is reset here rather
@@ -279,24 +361,55 @@ struct FindFilesView: View {
         searchTask = nil
         isSearching = false
         results = []
+        indexRows = nil
         hasSearched = false
         errorMessage = nil
         selection = nil
     }
 
+    /// Re-reads whether the selected repository's index is ready — the switch
+    /// behind the engine choice and the toggle's visibility.
+    private func refreshIndexState() {
+        guard let repositoryID else { indexComplete = nil; return }
+        Task {
+            let ready = await model.indexIsComplete(repositoryID: repositoryID)
+            indexComplete = ready
+        }
+    }
+
     /// Restores the given row through the destination picker, where the
-    /// overwrite warning lives.
+    /// overwrite warning lives. Index rows rebuilt from a pre-kind index may
+    /// not know file from directory — resolved from the snapshot itself
+    /// before restoring, because guessing wrong picks the wrong restic verb.
     private func restoreSelection(_ row: Row?) {
         guard let row, let repositoryID else { return }
         guard let destination = FilePicker.chooseDirectory(
             message: "Choose where to restore “\(row.match.name)”. Restoring overwrites existing files at the destination.",
             prompt: "Restore"
         ) else { return }
-        model.restore(
-            repositoryID: repositoryID,
-            snapshotID: row.snapshotID,
-            node: row.match.node,
-            to: destination
-        )
+        if let hit = row.hit, hit.isDirectory == nil {
+            Task {
+                let parent = (row.match.path as NSString).deletingLastPathComponent
+                let children = try? await model.children(
+                    repositoryID: repositoryID,
+                    snapshotID: row.snapshotID,
+                    path: parent
+                )
+                let node = children?.first { $0.path == row.match.path } ?? row.match.node
+                model.restore(
+                    repositoryID: repositoryID,
+                    snapshotID: row.snapshotID,
+                    node: node,
+                    to: destination
+                )
+            }
+        } else {
+            model.restore(
+                repositoryID: repositoryID,
+                snapshotID: row.snapshotID,
+                node: row.match.node,
+                to: destination
+            )
+        }
     }
 }

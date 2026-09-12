@@ -17,11 +17,11 @@ struct IndexBackfillBufferTests {
             lock.unlock()
         }
 
-        func record(_ paths: [String], _ final: Bool) throws {
+        func record(_ entries: [IndexedEntry], _ final: Bool) throws {
             lock.lock()
             defer { lock.unlock() }
             if failing { throw IndexError.unknownSnapshot("injected") }
-            calls.append((paths.count, final))
+            calls.append((entries.count, final))
         }
 
         var recorded: [(count: Int, final: Bool)] {
@@ -40,7 +40,7 @@ struct IndexBackfillBufferTests {
 
         // Fill one chunk (the buffer's chunk size is 4000), then let the
         // writes start failing BEFORE the remainder is flushed at finish.
-        for index in 0..<4000 { buffer.append("/data/f\(index)") }
+        for index in 0..<4000 { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
         recorder.failFromNowOn()
 
         #expect(throws: (any Error).self) { try buffer.finish() }
@@ -54,7 +54,7 @@ struct IndexBackfillBufferTests {
         let buffer = BackfillBuffer { paths, final in
             try recorder.record(paths, final)
         }
-        for index in 0..<10 { buffer.append("/data/f\(index)") }
+        for index in 0..<10 { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
         try? buffer.finish()
         #expect(recorder.recorded.count == 2)
         #expect(recorder.recorded.first?.final == false)
@@ -67,9 +67,9 @@ struct IndexBackfillBufferTests {
         let buffer = BackfillBuffer { paths, final in
             try recorder.record(paths, final)
         }
-        buffer.append("/data/a")
+        buffer.append(IndexedEntry(path: "/data/a", isDirectory: false))
         buffer.cancel()
-        buffer.append("/data/b")
+        buffer.append(IndexedEntry(path: "/data/b", isDirectory: false))
         try? buffer.finish()
         #expect(recorder.recorded.isEmpty)
     }

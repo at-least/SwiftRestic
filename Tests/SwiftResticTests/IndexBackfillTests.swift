@@ -135,7 +135,11 @@ struct IndexBackfillTests {
         let diffStore = try SQLiteIndexStore(path: diffDirectory.appendingPathComponent(repository.id.uuidString + ".sqlite").path)
         let oldestID = try diffStore.pendingBackfill(limit: 2).last!.id
         let fullLoadPaths = try await fullLoad(service, context, snapshotID: oldestID)
-        try diffStore.recordContent(snapshotID: oldestID, paths: fullLoadPaths, final: true)
+        try diffStore.recordContent(
+            snapshotID: oldestID,
+            entries: fullLoadPaths.map { IndexedEntry(path: $0, isDirectory: false) },
+            final: true
+        )
         await diffCoordinator.runBackfill(repositoryID: repository.id, service: service, context: context)
 
         // Path two: from-scratch — every snapshot loaded from its full ls.

@@ -43,4 +43,21 @@ enum IndexSchema {
     CREATE INDEX entry_chain_last ON entry(chain, last_seq);
     CREATE INDEX snapshot_pending ON snapshot(alive, indexed, time);
     """
+
+    /// The cross-snapshot search index: one row per distinct path ever seen,
+    /// FTS5-indexed by basename. Deliberately a separate table from `entry` —
+    /// runs are UPDATED on every backup, and an external-content FTS table
+    /// fed by update triggers is the classic silent-drift trap. The search
+    /// table only ever grows (INSERT OR IGNORE), so its FTS twin never needs
+    /// a delete command and cannot drift. `is_dir` is nullable: rows rebuilt
+    /// from a pre-v2 index have no kind on record.
+    static let v2 = """
+    CREATE TABLE search (
+        path TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        is_dir INTEGER
+    );
+
+    CREATE VIRTUAL TABLE search_fts USING fts5(name, content='search', content_rowid='rowid');
+    """
 }

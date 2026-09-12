@@ -52,6 +52,21 @@ struct IndexEntryRow: Sendable, Equatable {
     var lastSeq: Int
 }
 
+/// One path handed to the index with its kind known — `ls` nodes carry it in
+/// `type`, diffs in the trailing slash of directory paths.
+struct IndexedEntry: Sendable, Equatable {
+    var path: String
+    var isDirectory: Bool
+}
+
+/// One search result: a distinct path the index has seen, and whether it is a
+/// directory. `nil` means unknown — rows rebuilt from pre-`search`-table
+/// indexes carry no kind; the caller resolves those on demand.
+struct SearchHit: Sendable, Equatable {
+    var path: String
+    var isDirectory: Bool?
+}
+
 extension Array where Element == IndexedSnapshot {
     /// The version a folder browser opens a path at: the newest covering
     /// version — unless the version the user was reading one level up still
@@ -92,9 +107,10 @@ protocol IndexStore: Sendable {
     /// streamed in chunks. Runs merge with an indexed neighbor on either side
     /// (a file unchanged between seq 4 and 6 becomes one run [4, 6] once both
     /// neighbors are known), so the steady-state row count is the number of
-    /// distinct file versions, not files × snapshots. Call with `final: true`
-    /// once the last chunk has been delivered. Idempotent per call.
-    func recordContent(snapshotID: String, paths: [String], final: Bool) throws
+    /// distinct file versions, not files × snapshots. Each entry also lands in
+    /// the search index by basename. Call with `final: true` once the last
+    /// chunk has been delivered. Idempotent per call.
+    func recordContent(snapshotID: String, entries: [IndexedEntry], final: Bool) throws
 
     /// Applies a `restic diff` between an indexed snapshot at `previousSeq`
     /// and the snapshot `snapshotID`: added paths open runs, removed paths
@@ -120,4 +136,10 @@ protocol IndexStore: Sendable {
     /// Alive snapshots whose runs cover `path`, newest first. This is the
     /// query restic cannot answer and the whole point of the index.
     func versions(ofPath: String) throws -> [IndexedSnapshot]
+
+    /// Distinct paths whose basename matches the query, via the FTS index —
+    /// instant, no restic walk. Tokens are matched as prefixes, so "inv"
+    /// finds "invoice-2026.pdf". An empty query matches nothing rather than
+    /// everything.
+    func searchPaths(matching query: String, limit: Int) throws -> [SearchHit]
 }

@@ -36,4 +36,19 @@ extension AppModel {
     func indexIsComplete(repositoryID: UUID) async -> Bool {
         (try? await indexCoordinator.isFullyIndexed(repositoryID: repositoryID)) ?? false
     }
+
+    /// Instant basename search over the indexed paths. Empty — never an
+    /// error — when the index cannot answer; the caller falls back to the
+    /// restic walk.
+    func searchIndex(
+        pattern: String,
+        repositoryID: UUID,
+        limit: Int = 200
+    ) async -> [SearchHit] {
+        (try? await indexCoordinator.searchPaths(
+            matching: pattern,
+            repositoryID: repositoryID,
+            limit: limit
+        )) ?? []
+    }
 }
