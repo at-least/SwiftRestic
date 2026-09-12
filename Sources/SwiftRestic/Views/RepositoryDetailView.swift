@@ -11,6 +11,7 @@ struct RepositoryDetailView: View {
     @State private var isConfirmingPrune = false
     @State private var isConfirmingUnlock = false
     @State private var isConfirmingCheck = false
+    @State private var isConfirmingIndexRebuild = false
     /// Read off the body: `resourceValues` is synchronous filesystem IO, and
     /// a spun-down external disk can take seconds to answer — re-run on every
     /// re-eval (progress ticks, banners) that would also stall the main
@@ -39,6 +40,7 @@ struct RepositoryDetailView: View {
                     Divider()
                     Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
                     Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
+                    Button("Rebuild Search Index…", role: .destructive) { isConfirmingIndexRebuild = true }
                     Divider()
                     // The most destructive act on this pane — it pauses every
                     // plan pointing here — sits with the pane's other
@@ -87,6 +89,17 @@ struct RepositoryDetailView: View {
             }
         } message: {
             Text("Pruning permanently removes the data of deleted snapshots and locks the repository exclusively — backups to it are held back until it finishes.")
+        }
+        .confirmationDialog(
+            "Rebuild this repository's search index?",
+            isPresented: $isConfirmingIndexRebuild,
+            titleVisibility: .visible
+        ) {
+            Button("Rebuild Index", role: .destructive) {
+                model.rebuildIndex(repositoryID: repositoryID)
+            }
+        } message: {
+            Text("The local search index is deleted and read back from the repository, snapshot by snapshot. The repository itself is not touched, but folder version lists and Find stay incomplete until the rebuild finishes.")
         }
         .confirmationDialog(
             "Check this repository's integrity?",

@@ -187,6 +187,69 @@ struct IndexBackfillTests {
         }
     }
 
+    @Test("backfill throughput: ten thousand files walk and store in bounded time")
+    func backfillThroughput() async throws {
+        let binary = try ResticBinary.locate(userOverride: nil)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticThroughput-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let root = base.resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repositoryDirectory = root.appendingPathComponent("repo")
+        let sourceDirectory = root.appendingPathComponent("source")
+        // Fifty folders of two hundred small files each — enough rows for the
+        // store side to dominate the decode side, small enough that CI stays
+        // quick. The assertion is the generous bound; the printed rate is the
+        // evidence the million-file projection rests on.
+        for folder in 0..<50 {
+            let directory = sourceDirectory.appendingPathComponent("folder\(folder)")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            for file in 0..<200 {
+                try "payload \(folder)-\(file)".write(
+                    to: directory.appendingPathComponent("file-\(folder)-\(file).txt"),
+                    atomically: true,
+                    encoding: .utf8
+                )
+            }
+        }
+
+        var repository = Repository()
+        repository.name = "Throughput"
+        repository.kind = .local
+        repository.localPath = repositoryDirectory.path
+        var plan = BackupPlan()
+        plan.name = "Throughput plan"
+        plan.repositoryID = repository.id
+        plan.sources = [sourceDirectory.path]
+
+        let context = RepositoryContext(repository: repository, password: Self.password)
+        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        _ = try await service.initializeRepository(context)
+        let outcome = try await service.backup(context, plan: plan)
+        #expect(outcome.exitCode == 0)
+
+        let listing = try await service.snapshots(context)
+        #expect(listing.count == 1)
+
+        let indexDirectory = root.appendingPathComponent("indexes")
+        let coordinator = IndexCoordinator(directory: indexDirectory)
+        await coordinator.reconcile(repositoryID: repository.id, snapshots: listing)
+        let start = Date()
+        await coordinator.runBackfill(repositoryID: repository.id, service: service, context: context)
+        let elapsed = Date().timeIntervalSince(start)
+
+        let store = try SQLiteIndexStore(
+            path: indexDirectory.appendingPathComponent(repository.id.uuidString + ".sqlite").path
+        )
+        #expect(try store.pendingBackfill(limit: 100).isEmpty)
+        let probedPath = sourceDirectory.appendingPathComponent("folder3/file-3-77.txt").path
+        #expect(try store.versions(ofPath: probedPath).count == 1)
+
+        print("backfill throughput: 10_001 paths in \(String(format: "%.2f", elapsed))s (\(String(format: "%.0f", Double(10_001) / max(elapsed, 0.001))) paths/s)")
+        #expect(elapsed < 120, "backfill of 10k paths took \(elapsed)s — the seconds-scale claim is broken")
+    }
+
     @Test("a deleted repository's index file goes with it")
     func dropRemovesTheFile() async throws {
         let indexDirectory = FileManager.default.temporaryDirectory

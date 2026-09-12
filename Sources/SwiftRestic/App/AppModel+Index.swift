@@ -37,6 +37,17 @@ extension AppModel {
         (try? await indexCoordinator.isFullyIndexed(repositoryID: repositoryID)) ?? false
     }
 
+    /// Throws the index away and rebuilds it from the listing the model
+    /// already holds. The recovery hatch for an index the user no longer
+    /// trusts — same path a corrupt file takes, just user-invoked.
+    func rebuildIndex(repositoryID: UUID) {
+        let listing = snapshots[repositoryID] ?? []
+        Task {
+            await indexCoordinator.dropRepository(repositoryID: repositoryID)
+            indexReconcile(repositoryID: repositoryID, listing: listing)
+        }
+    }
+
     /// Instant basename search over the indexed paths. Throws when the index
     /// itself fails: for a search tool, "the index is broken" must never
     /// read as "nothing matches".

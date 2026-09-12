@@ -308,6 +308,40 @@ struct IndexStoreTests {
         #expect(hits.first?.isDirectory == nil)
     }
 
+    // MARK: - Dead-run cleanup
+
+    @Test("pruning removes only the runs no alive snapshot covers")
+    func pruneDeadRunsSemantics() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s2", time: t1, tags: [planTag]),
+            snapshot("s3", time: t2, tags: [planTag]),
+        ])
+        // /a lives in s1 and s2; /b only in s1.
+        try store.recordContent(snapshotID: "s1", entries: [entry("/a"), entry("/b")], final: true)
+        try store.recordContent(snapshotID: "s2", entries: [entry("/a")], final: true)
+
+        // s2 dies: both runs still span alive s1 — nothing to remove.
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s3", time: t2, tags: [planTag]),
+        ])
+        #expect(try store.pruneDeadRuns() == 0)
+        #expect(try store.versions(ofPath: "/a").count == 1)
+        #expect(try store.versions(ofPath: "/b").count == 1)
+
+        // s1 dies too: now both runs span only the dead.
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s3", time: t2, tags: [planTag]),
+        ])
+        #expect(try store.pruneDeadRuns() == 2)
+        #expect(try store.versions(ofPath: "/a").isEmpty)
+        #expect(try store.versions(ofPath: "/b").isEmpty)
+        // A second pass finds nothing left to remove.
+        #expect(try store.pruneDeadRuns() == 0)
+    }
+
     @Test("search over an empty index answers nothing")
     func searchEmptyIndex() throws {
         let store = try makeStore()

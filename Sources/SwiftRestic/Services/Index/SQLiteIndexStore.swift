@@ -33,6 +33,10 @@ final class SQLiteIndexStore: IndexStore {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
             try db.execute(sql: "PRAGMA synchronous = NORMAL")
+            // A big backfill can leave a fat -wal sidecar behind even after
+            // checkpoints; this caps how far past the checkpoint point it
+            // may stay.
+            try db.execute(sql: "PRAGMA journal_size_limit = 33554432")
         }
         return configuration
     }
@@ -365,6 +369,33 @@ final class SQLiteIndexStore: IndexStore {
                     arguments: [limit]
                 )
             )
+        }
+    }
+
+    /// Deletes runs that no alive snapshot covers anymore — the residue a
+    /// forget/prune leaves. Runs still spanning one alive snapshot stay:
+    /// they are true statements about it. Returns how many rows went away,
+    /// so the caller can decide whether a vacuum is worth its rewrite.
+    func pruneDeadRuns() throws -> Int {
+        try db.write { db in
+            try db.execute(sql: """
+                DELETE FROM entry
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM snapshot s
+                    WHERE s.chain = entry.chain AND s.alive = 1
+                        AND s.seq BETWEEN entry.first_seq AND entry.last_seq
+                )
+                """)
+            return db.changesCount
+        }
+    }
+
+    /// Hands deleted pages back to the filesystem. Only meaningful after a
+    /// mass deletion; SQLite otherwise keeps freed pages on its freelist for
+    /// reuse. Must run outside a transaction — hence this dedicated method.
+    func vacuum() throws {
+        try db.writeWithoutTransaction { db in
+            try db.execute(sql: "VACUUM")
         }
     }
 

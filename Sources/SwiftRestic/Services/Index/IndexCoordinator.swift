@@ -28,12 +28,20 @@ actor IndexCoordinator {
 
     /// Feeds a fresh `restic snapshots` listing into the repository's index.
     /// Failure is recorded, never thrown: the caller's refresh already
-    /// succeeded and does not care.
+    /// succeeded and does not care. A listing that reports deaths (a forget
+    /// or prune happened) also sweeps the runs those deaths stranded, and
+    /// vacuums only when that sweep actually deleted something.
     func reconcile(repositoryID: UUID, snapshots: [Snapshot]) {
         do {
             let store = try self.store(for: repositoryID)
-            _ = try store.reconcile(aliveSnapshots: snapshots)
+            let outcome = try store.reconcile(aliveSnapshots: snapshots)
             outcomes[repositoryID] = nil
+            if !outcome.died.isEmpty {
+                let removed = try store.pruneDeadRuns()
+                if removed > 0 {
+                    try store.vacuum()
+                }
+            }
         } catch {
             outcomes[repositoryID] = error.localizedDescription
         }
