@@ -22,4 +22,18 @@ extension AppModel {
             await indexCoordinator.startBackfill(repositoryID: repositoryID, service: service, context: context)
         }
     }
+
+    /// The versions the index knows for one path, newest first. Empty — not
+    /// an error — when the index has not read that path yet; the folder
+    /// browser degrades to the newest snapshot and says so.
+    func indexedVersions(ofPath path: String, repositoryID: UUID) async -> [IndexedSnapshot] {
+        (try? await indexCoordinator.versions(ofPath: path, repositoryID: repositoryID)) ?? []
+    }
+
+    /// Whether the index has read every alive snapshot of the repository —
+    /// the folder browser's completeness signal. An index that cannot answer
+    /// reads as "not complete", never as a failure.
+    func indexIsComplete(repositoryID: UUID) async -> Bool {
+        (try? await indexCoordinator.isFullyIndexed(repositoryID: repositoryID)) ?? false
+    }
 }

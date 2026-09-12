@@ -191,6 +191,29 @@ struct IndexStoreTests {
         #expect(try store.versions(ofPath: "/data/shared.bin").map(\.id) == ["plan-new", "plan-old"])
     }
 
+    // MARK: - Version picking (the folder browser's selection rule)
+
+    private func version(_ id: String) -> IndexedSnapshot {
+        IndexedSnapshot(
+            id: id, chain: planTag, seq: 0,
+            time: Date(timeIntervalSince1970: 0), alive: true, coverage: .full
+        )
+    }
+
+    @Test("preferredVersion lands on the newest and keeps the user's era when it still covers")
+    func preferredVersionPicks() {
+        let versions = [version("new"), version("mid"), version("old")]
+
+        // Nothing chosen yet: the newest.
+        #expect(versions.preferredVersion(previousID: nil)?.id == "new")
+        #expect([IndexedSnapshot]().preferredVersion(previousID: nil) == nil)
+
+        // Walking down into a folder keeps the era the user is reading…
+        #expect(versions.preferredVersion(previousID: "mid")?.id == "mid")
+        // …unless that snapshot does not cover the deeper path at all.
+        #expect(versions.preferredVersion(previousID: "ghost")?.id == "new")
+    }
+
     // MARK: - Diff apply
 
     @Test("applyDelta extends the unchanged, opens the added, leaves the removed closed")

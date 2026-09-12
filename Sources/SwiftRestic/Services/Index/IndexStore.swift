@@ -3,7 +3,7 @@ import Foundation
 /// One restic snapshot as the index sees it: identity, its position in a
 /// chain, whether the repository still lists it, and how much of its content
 /// has been read into the entry runs.
-struct IndexedSnapshot: Sendable, Equatable {
+struct IndexedSnapshot: Sendable, Equatable, Hashable {
     var id: String
     var chain: String
     var seq: Int
@@ -50,6 +50,20 @@ struct IndexEntryRow: Sendable, Equatable {
     var chain: String
     var firstSeq: Int
     var lastSeq: Int
+}
+
+extension Array where Element == IndexedSnapshot {
+    /// The version a folder browser opens a path at: the newest covering
+    /// version — unless the version the user was reading one level up still
+    /// covers this path too, because flipping through time should survive
+    /// walking down into a folder. The list arrives newest first from the
+    /// store; this only picks among its head entries.
+    func preferredVersion(previousID: String?) -> IndexedSnapshot? {
+        if let previousID, let kept = first(where: { $0.id == previousID }) {
+            return kept
+        }
+        return first
+    }
 }
 
 /// Errors the index layer raises on its own behalf.

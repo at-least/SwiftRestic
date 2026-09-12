@@ -158,6 +158,20 @@ actor IndexCoordinator {
         }
     }
 
+    // MARK: - Queries
+
+    /// The versions the index holds for one path, newest first. The folder
+    /// browser's core question.
+    func versions(ofPath path: String, repositoryID: UUID) throws -> [IndexedSnapshot] {
+        try store(for: repositoryID).versions(ofPath: path)
+    }
+
+    /// Whether every alive snapshot's content has been read — the folder
+    /// browser's "this version list is complete" signal.
+    func isFullyIndexed(repositoryID: UUID) throws -> Bool {
+        try store(for: repositoryID).pendingBackfill(limit: 1).isEmpty
+    }
+
     // MARK: - Lifecycle
 
     /// Closes and deletes a repository's index — the index exists only to

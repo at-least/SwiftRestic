@@ -10,6 +10,7 @@ struct PlanDetailView: View {
 
     @State private var browsing: SnapshotBrowserTarget?
     @State private var comparing: SnapshotDiffTarget?
+    @State private var browsingFolders: FolderBrowserTarget?
     @State private var isConfirmingDeletion = false
 
     private var plan: BackupPlan? { model.plan(id: planID) }
@@ -73,6 +74,10 @@ struct PlanDetailView: View {
         }
         .sheet(item: $browsing) { target in
             SnapshotBrowserView(target: target)
+                .environment(model)
+        }
+        .sheet(item: $browsingFolders) { target in
+            FolderBrowserView(target: target)
                 .environment(model)
         }
         .sheet(item: $comparing) { target in
@@ -331,6 +336,15 @@ struct PlanDetailView: View {
                     loadedAt: loadedAt,
                     isLoading: model.loadingSnapshots.contains(repositoryID)
                 )
+                // The folder-first entry: pick a folder, then flip through the
+                // snapshots that contain it. Needs at least one snapshot to
+                // stand in as the newest version.
+                Button("Browse Folders…") {
+                    browsingFolders = FolderBrowserTarget(repositoryID: repositoryID, planID: plan.id)
+                }
+                .controlSize(.small)
+                .disabled(snapshots.isEmpty)
+                .help("Walk this plan's folders and flip through the snapshots that contain them")
                 Button("Refresh") {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
