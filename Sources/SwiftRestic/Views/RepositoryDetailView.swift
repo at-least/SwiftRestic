@@ -7,7 +7,6 @@ struct RepositoryDetailView: View {
 
     @State private var browsing: SnapshotBrowserTarget?
     @State private var comparing: SnapshotDiffTarget?
-    @State private var restoring: RestoreBrowserTarget?
     @State private var isConfirmingRemoval = false
     @State private var isConfirmingPrune = false
     @State private var isConfirmingUnlock = false
@@ -60,10 +59,6 @@ struct RepositoryDetailView: View {
         }
         .sheet(item: $browsing) { target in
             SnapshotBrowserView(target: target).environment(model)
-        }
-        .sheet(item: $restoring) { target in
-            RestoreBrowserView(target: target).environment(model)
-                .frame(minWidth: 960, minHeight: 580)
         }
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target).environment(model)
@@ -234,14 +229,22 @@ struct RepositoryDetailView: View {
                 )
             } accessory: {
                 HStack(spacing: 8) {
-                    // The restore-centric surface: backup timeline on the
-                    // left, the selected backup's files on the right.
+                    // Arq's restore entry: expand the sidebar's Restore
+                    // section on this repository and select its newest
+                    // backup record — the pane does the rest.
                     Button("Restore Files…") {
-                        restoring = RestoreBrowserTarget(repositoryID: repositoryID)
+                        Task {
+                            if model.snapshots(for: repositoryID).isEmpty {
+                                await model.refreshSnapshots(repositoryID: repositoryID)
+                            }
+                            if let latest = model.snapshots(for: repositoryID).first {
+                                model.sidebarSelection = .restoreSnapshot(repositoryID, latest.id)
+                            }
+                        }
                     }
                     .controlSize(.small)
                     .disabled(snapshots.isEmpty)
-                    .help("Browse backups and restore files — pick a backup on the left, flip through them without losing your place")
+                    .help("Browse backups and restore files — expands Restore on the left and selects the newest backup")
                     if let loadedAt = model.snapshotsLoadedAt(for: repositoryID),
                        !model.loadingSnapshots.contains(repositoryID) {
                         Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")

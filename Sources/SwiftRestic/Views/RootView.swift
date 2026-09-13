@@ -11,6 +11,9 @@ struct RootView: View {
     // pages confirm their own; these menus must not be a faster way around.
     @State private var planPendingDeletion: BackupPlan?
     @State private var repositoryPendingRemoval: Repository?
+    /// Which Restore-section repositories are expanded in the sidebar — the
+    /// backup records underneath are the restore pane's entry points.
+    @State private var expandedRestoreRepos: Set<UUID> = []
     #if DEBUG
     @State private var didApplyCaptureOverride = false
     #endif
@@ -173,6 +176,17 @@ struct RootView: View {
                 }
             }
 
+            Section("Restore") {
+                ForEach(model.configuration.repositories) { repository in
+                    restoreGroup(repository)
+                }
+                if model.configuration.repositories.isEmpty, !model.isBootstrapping {
+                    Text("No repositories to restore from")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Repositories") {
                 ForEach(model.configuration.repositories) { repository in
                     Label {
@@ -281,6 +295,73 @@ struct RootView: View {
         }
     }
 
+    // MARK: - Sidebar: Restore
+
+    /// Arq's RESTORE section: each repository expands to its backup
+    /// records, and picking a record shows its files in the detail pane.
+    @ViewBuilder
+    private func restoreGroup(_ repository: Repository) -> some View {
+        let listing = model.snapshots(for: repository.id)
+        DisclosureGroup(isExpanded: Binding(
+            get: { expandedRestoreRepos.contains(repository.id) },
+            set: { opened in
+                if opened {
+                    expandedRestoreRepos.insert(repository.id)
+                    // First expand loads the record list; later refreshes
+                    // come from the launch sweep and the repository's own
+                    // Refresh.
+                    if model.snapshotListingOutcome(for: repository.id) == .idle {
+                        Task { await model.refreshSnapshots(repositoryID: repository.id) }
+                    }
+                } else {
+                    expandedRestoreRepos.remove(repository.id)
+                }
+            }
+        )) {
+            if model.loadingSnapshots.contains(repository.id), listing.isEmpty {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading backups…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if case let .failed(message) = model.snapshotListingOutcome(for: repository.id), listing.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Format.firstSentence(message))
+                        .font(.caption)
+                        .foregroundStyle(Theme.warning)
+                        .lineLimit(2)
+                    Button("Try Again") {
+                        Task { await model.refreshSnapshots(repositoryID: repository.id) }
+                    }
+                    .controlSize(.small)
+                }
+            } else if listing.isEmpty {
+                Text("No backups yet")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(listing) { snapshot in
+                    RestoreRecordRow(snapshot: snapshot)
+                        .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+                }
+            }
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(repository.name)
+                        .lineLimit(1)
+                    Text("\(Format.plural(listing.count, "backup"))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: repository.kind.symbolName)
+                    .foregroundStyle(Theme.tint)
+            }
+        }
+    }
+
     // MARK: - Detail
 
     @ViewBuilder
@@ -348,6 +429,8 @@ struct RootView: View {
                     } else {
                         ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
                     }
+                case let .restoreSnapshot(repositoryID, snapshotID):
+                    RestorePaneView(repositoryID: repositoryID, snapshotID: snapshotID)
                 case .console:
                     ResticConsoleView()
                 case .activity:
@@ -377,6 +460,31 @@ struct RootView: View {
         .onChange(of: model.isResticAvailable) {
             revalidateSelection()
         }
+        // A restore record picked from anywhere (the repository page's
+        // Restore Files button included) must find its group open.
+        .onChange(of: model.sidebarSelection) {
+            if case let .restoreSnapshot(repositoryID, _) = model.sidebarSelection {
+                expandedRestoreRepos.insert(repositoryID)
+            }
+        }
+        // A refresh can drop the selected record (retention ran, the
+        // repository was re-initialised); the pane must not dead-end.
+        .onChange(of: model.snapshots) {
+            revalidateSelection()
+        }
+        #if DEBUG
+        .onChange(of: model.snapshots) {
+            // SWIFTRESTIC_CAPTURE_PANE=restore: the rows the pane needs land
+            // with the first listing, so the selection happens here.
+            guard pendingCaptureRestore,
+                  let repository = model.configuration.repositories.first,
+                  let latest = model.snapshots(for: repository.id).first
+            else { return }
+            pendingCaptureRestore = false
+            expandedRestoreRepos.insert(repository.id)
+            model.sidebarSelection = .restoreSnapshot(repository.id, latest.id)
+        }
+        #endif
     }
 
     #if DEBUG
@@ -384,6 +492,8 @@ struct RootView: View {
     ///
     /// Applied once the configuration has actually loaded — `onAppear` fires
     /// before `bootstrap()` finishes, when there is nothing to select yet.
+    @State private var pendingCaptureRestore = false
+
     private func applyCapturePaneOverride() {
         guard !didApplyCaptureOverride else { return }
         guard !model.configuration.plans.isEmpty || !model.configuration.repositories.isEmpty
@@ -396,6 +506,11 @@ struct RootView: View {
         case "find": isShowingFind = true
         case "console": model.sidebarSelection = .console
         case "overview": model.sidebarSelection = .overview
+        // The restore pane needs a snapshot row to select, and those arrive
+        // only after the launch refresh — see the snapshots onChange below.
+        case "restore":
+            didApplyCaptureOverride = true
+            pendingCaptureRestore = true
         case "repositoryHooks": editingRepository = model.configuration.repositories.first
         // Same sheet on its first tab: captures a specific kind's fields, e.g.
         // the rclone Remote row and its suggestion menu.
@@ -440,6 +555,16 @@ struct RootView: View {
         case .plan(let id) where model.plan(id: id) == nil,
              .repository(let id) where model.repository(id: id) == nil:
             model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
+        case let .restoreSnapshot(repositoryID, snapshotID)
+            where model.repository(id: repositoryID) == nil:
+            model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
+        case let .restoreSnapshot(repositoryID, snapshotID)
+            where model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }) == nil:
+            // The record itself is gone; the repository's newest record (or
+            // its page, when none are left) is the nearest honest landing.
+            model.sidebarSelection = model.snapshots(for: repositoryID).first
+                .map { .restoreSnapshot(repositoryID, $0.id) }
+                ?? .repository(repositoryID)
         case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable:
             // The row is now disabled; a selection parked on it would be a
             // pane the sidebar no longer offers.
@@ -447,6 +572,30 @@ struct RootView: View {
         default:
             break
         }
+    }
+}
+
+/// One dated backup record in the Restore section — the row whose selection
+/// fills the detail pane with that record's files.
+private struct RestoreRecordRow: View {
+    let snapshot: Snapshot
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Theme.success)
+                .font(.caption)
+                .help("This backup is complete and restorable")
+            VStack(alignment: .leading, spacing: 1) {
+                Text(Format.timestamp(snapshot.time))
+                    .lineLimit(1)
+                Text(snapshot.shortID)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .help("Browse this backup's files and restore from it")
     }
 }
 

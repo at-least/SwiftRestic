@@ -1,28 +1,23 @@
 import SwiftUI
 
-/// One repository's restore surface, laid out like Arq's: the backup
-/// records in a source list on the left, the selected backup's file tree
-/// on the right under a "Backup: …" title with back/forward arrows, a
-/// columned file table, search on top, Restore at the bottom right.
-/// Switching backups keeps the folder you are in.
-struct RestoreBrowserTarget: Identifiable {
-    var repositoryID: UUID
-    var id: String { repositoryID.uuidString }
-}
-
-struct RestoreBrowserView: View {
+/// The restore pane: one backup record's file tree, browsed straight from
+/// the sidebar's Restore section — Arq's arrangement, where picking a
+/// dated record in the source list shows its files in the main pane.
+///
+/// The record is identified, not chosen here: the sidebar owns the timeline.
+/// Switching records keeps the folder you are in; the restore progress strip
+/// lives on the window above every pane, so it outlives a pane switch too.
+struct RestorePaneView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
 
-    let target: RestoreBrowserTarget
+    let repositoryID: UUID
+    let snapshotID: String
 
-    @State private var snapshots: [Snapshot] = []
-    @State private var selectedID: Snapshot.ID?
     @State private var tree = FileTree(roots: [])
-    /// The folder the tree is focused on — kept across snapshot switches.
+    /// The folder the tree is focused on — kept across record switches.
     @State private var currentPath: String?
     /// The folder trail behind the back/forward arrows. Entries are the
-    /// `currentPath` at each step; nil is the records' root level.
+    /// `currentPath` at each step; nil is the record's root level.
     @State private var navHistory: [String?] = [nil]
     @State private var navIndex = 0
     @State private var changes: [String: ResticDiffChange] = [:]
@@ -31,113 +26,70 @@ struct RestoreBrowserView: View {
     @State private var selection: String?
     @State private var isLoadingTree = false
     @State private var loadError: String?
-    /// Set when the focused folder does not exist in the selected snapshot.
+    /// Set when the focused folder does not exist in the selected record.
     @State private var folderMissing = false
     /// Directories with a fetch already running — a double-click racing
     /// itself must not spawn duplicate listings.
     @State private var inFlightFetches: Set<String> = []
 
     private struct Level: Equatable {
-        var snapshotID: String?
+        var snapshotID: String
         var path: String?
     }
 
     private var level: Level {
-        Level(snapshotID: selectedID, path: currentPath)
+        Level(snapshotID: snapshotID, path: currentPath)
     }
 
-    private var selected: Snapshot? {
-        snapshots.first { $0.id == selectedID }
+    private var record: Snapshot? {
+        model.snapshots(for: repositoryID).first { $0.id == snapshotID }
     }
 
     /// The backup immediately before the selected one — what the Change
     /// column compares against.
     private var predecessor: Snapshot? {
-        guard let index = snapshots.firstIndex(where: { $0.id == selectedID }) else { return nil }
+        let listing = model.snapshots(for: repositoryID)
+        guard let index = listing.firstIndex(where: { $0.id == snapshotID }) else { return nil }
         let older = index + 1
-        return older < snapshots.count ? snapshots[older] : nil
-    }
-
-    private var repositoryName: String {
-        model.configuration.repositories.first { $0.id == target.repositoryID }?.name ?? "Repository"
+        return older < listing.count ? listing[older] : nil
     }
 
     private var canGoBack: Bool { navIndex > 0 }
     private var canGoForward: Bool { navIndex + 1 < navHistory.count }
 
     var body: some View {
-        HSplitView {
-            timeline
-                .frame(minWidth: 200, maxWidth: 300)
-            VStack(spacing: 0) {
-                toolbar
-                Divider()
-                if searchHits != nil || currentPath != nil {
-                    breadcrumbBar
-                    Divider()
+        Group {
+            if let record {
+                browserPane(record)
+            } else {
+                ContentUnavailableView {
+                    Label("Backup not found", systemImage: "questionmark.folder")
+                } description: {
+                    Text("This backup is no longer in the repository. Pick another one under Restore on the left.")
                 }
-                browser
-                Divider()
-                footer
             }
-            .frame(minWidth: 640)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 940, minHeight: 560)
-        .task { await loadSnapshots() }
+        .navigationTitle("Restore")
         .task(id: level) { await loadLevel() }
     }
 
-    // MARK: - Timeline (left)
-
-    private var timeline: some View {
+    private func browserPane(_ record: Snapshot) -> some View {
         VStack(spacing: 0) {
-            // Arq's source-list header: the caps section label with the
-            // backup set's name under it — here the repository being
-            // restored from.
-            VStack(alignment: .leading, spacing: 2) {
-                Text("RESTORE")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(repositoryName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            toolbar
             Divider()
-            List(snapshots, selection: $selectedID) { snapshot in
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Theme.success)
-                        .font(.caption)
-                        .help("This backup is complete and restorable")
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(Format.timestamp(snapshot.time))
-                            .lineLimit(1)
-                        Text(snapshot.shortID)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-                .tag(snapshot.id)
+            if searchHits != nil || currentPath != nil {
+                breadcrumbBar
+                Divider()
             }
-            .listStyle(.sidebar)
+            browser
+            Divider()
+            footer
         }
-        .safeAreaInset(edge: .bottom) {
-            Text("\(Format.plural(snapshots.count, "backup"))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-        }
-        .help("Pick a backup; the file tree on the right shows it")
+        .frame(minWidth: 640)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Toolbar (right, top)
+    // MARK: - Toolbar (top)
 
     /// Arq's header band: back/forward arrows, the bold "Backup: …" title,
     /// and the search field on the right.
@@ -145,14 +97,11 @@ struct RestoreBrowserView: View {
         HStack(spacing: 10) {
             navButtons
             VStack(alignment: .leading, spacing: 1) {
-                Text(
-                    selected.map { "Backup: \(Format.timestamp($0.time))" }
-                        ?? "No backup selected"
-                )
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                if let selected {
-                    Text(selected.shortID)
+                Text("Backup: \(Format.timestamp(record?.time))")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if let record {
+                    Text(record.shortID)
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -247,7 +196,7 @@ struct RestoreBrowserView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if let currentPath {
-                PathBreadcrumb(path: currentPath, roots: selected?.paths ?? []) { target in
+                PathBreadcrumb(path: currentPath, roots: record?.paths ?? []) { target in
                     navigate(to: target)
                 }
             }
@@ -257,7 +206,7 @@ struct RestoreBrowserView: View {
         .padding(.vertical, 5)
     }
 
-    // MARK: - Browser (right)
+    // MARK: - Browser
 
     @ViewBuilder
     private var browser: some View {
@@ -275,7 +224,7 @@ struct RestoreBrowserView: View {
                 ContentUnavailableView(
                     "No matches in this backup",
                     systemImage: "magnifyingglass",
-                    description: Text("Other backups may hold it — clear the search and pick another backup on the left.")
+                    description: Text("Other backups may hold it — clear the search and pick another backup under Restore on the left.")
                 )
             } else {
                 searchResults(hits)
@@ -284,7 +233,7 @@ struct RestoreBrowserView: View {
             ContentUnavailableView {
                 Label("Not in this backup", systemImage: "folder.badge.questionmark")
             } description: {
-                Text("This folder does not exist in the selected backup. Pick another backup on the left, or go up a level.")
+                Text("This folder does not exist in the selected backup. Pick another backup under Restore on the left, or go up a level.")
             }
         } else if tree.rows.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
@@ -398,29 +347,16 @@ struct RestoreBrowserView: View {
     }
 
     private var footer: some View {
-        VStack(spacing: 10) {
-            if let progress = model.restoreActivity {
-                OperationProgressView(
-                    title: model.restoreDescription,
-                    progress: progress,
-                    startedAt: nil,
-                    onCancel: { model.cancelRestore() }
-                )
-            }
-            HStack {
-                Text("Restoring overwrites existing files at the destination.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                    .help(model.isRestoring ? "The restore keeps running" : "Close")
-                Button("Restore…") { restoreSelection() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(selectedRow == nil || model.isRestoring || selected == nil)
-                    .help("Restore the selected item from the selected backup (Return)")
-            }
+        HStack {
+            Text("Restoring overwrites existing files at the destination.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Restore…") { restoreSelection() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(selectedRow == nil || model.isRestoring || record == nil)
+                .help("Restore the selected item from this backup (Return)")
         }
         .padding(12)
     }
@@ -524,22 +460,17 @@ struct RestoreBrowserView: View {
 
     // MARK: - Loading
 
-    private func loadSnapshots() async {
-        snapshots = model.snapshots(for: target.repositoryID)
-        selectedID = snapshots.first?.id
-    }
-
-    /// The selected snapshot changed: rebuild the tree, walk the preserved
+    /// The selected record changed: rebuild the tree, walk the preserved
     /// folder's spine back open, and load the change annotations. Search
-    /// results belong to the backup they were searched in.
+    /// results belong to the record they were searched in.
     private func loadLevel() async {
         searchHits = nil
-        guard let selected else {
+        guard let record else {
             tree = FileTree(roots: [])
             return
         }
-        let spine = Self.spine(of: currentPath, under: selected.paths)
-        tree.reset(to: selected.paths.map(SnapshotNode.directory))
+        let spine = Self.spine(of: currentPath, under: record.paths)
+        tree.reset(to: record.paths.map(SnapshotNode.directory))
 
         isLoadingTree = true
         loadError = nil
@@ -548,9 +479,9 @@ struct RestoreBrowserView: View {
         // Changes against the previous backup — one restic diff, streamed.
         if let predecessor {
             changes = await model.snapshotChanges(
-                repositoryID: target.repositoryID,
+                repositoryID: repositoryID,
                 olderID: predecessor.id,
-                newerID: selected.id
+                newerID: record.id
             )
         } else {
             changes = [:]
@@ -563,8 +494,8 @@ struct RestoreBrowserView: View {
             if let needed = tree.toggleExpanded(path: step) {
                 do {
                     let nodes = try await model.children(
-                        repositoryID: target.repositoryID,
-                        snapshotID: selected.id,
+                        repositoryID: repositoryID,
+                        snapshotID: record.id,
                         path: needed
                     )
                     guard !Task.isCancelled else { return }
@@ -601,7 +532,7 @@ struct RestoreBrowserView: View {
 
     private func expand(path: String) {
         guard let needed = tree.toggleExpanded(path: path) else { return }
-        guard let selected else { return }
+        guard let record else { return }
         // One fetch per directory at a time: a double-click racing itself
         // must not land two listings (the tree is replace-idempotent, but
         // skipping the duplicate spares a restic round trip).
@@ -611,8 +542,8 @@ struct RestoreBrowserView: View {
         Task {
             defer { inFlightFetches.remove(needed) }
             let nodes = try? await model.children(
-                repositoryID: target.repositoryID,
-                snapshotID: selected.id,
+                repositoryID: repositoryID,
+                snapshotID: record.id,
                 path: needed
             )
             guard let nodes else { return }
@@ -622,7 +553,7 @@ struct RestoreBrowserView: View {
 
     private func goUp() {
         guard let currentPath else { return }
-        let roots = selected?.paths ?? []
+        let roots = record?.paths ?? []
         if roots.contains(currentPath) {
             navigate(to: nil)
         } else {
@@ -632,20 +563,20 @@ struct RestoreBrowserView: View {
     }
 
     /// Search runs against the index (instant) and is filtered to paths the
-    /// selected backup contains — the tree on the right must stay honest
-    /// about which backup it is showing.
+    /// selected record contains — the tree must stay honest about which
+    /// backup it is showing.
     private func searchChanged(_ newValue: String) {
         let query = newValue.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty, let selected else {
+        guard !query.isEmpty, let record else {
             searchHits = nil
             return
         }
         Task {
-            let hits = (try? await model.searchIndex(pattern: query, repositoryID: target.repositoryID)) ?? []
+            let hits = (try? await model.searchIndex(pattern: query, repositoryID: repositoryID)) ?? []
             var covered: [SearchHit] = []
             for hit in hits {
-                let versions = await model.indexedVersions(ofPath: hit.path, repositoryID: target.repositoryID)
-                if versions.contains(where: { $0.id == selected.id }) {
+                let versions = await model.indexedVersions(ofPath: hit.path, repositoryID: repositoryID)
+                if versions.contains(where: { $0.id == record.id }) {
                     covered.append(hit)
                 }
             }
@@ -656,14 +587,14 @@ struct RestoreBrowserView: View {
     }
 
     private func restoreSelection() {
-        guard let selected, let node = selectedRow else { return }
+        guard let record, let node = selectedRow else { return }
         guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore “\(node.name)” from \(selected.time.formatted(date: .abbreviated, time: .shortened)). Restoring overwrites existing files at the destination.",
+            message: "Choose where to restore “\(node.name)” from \(record.time.formatted(date: .abbreviated, time: .shortened)). Restoring overwrites existing files at the destination.",
             prompt: "Restore"
         ) else { return }
         model.restore(
-            repositoryID: target.repositoryID,
-            snapshotID: selected.id,
+            repositoryID: repositoryID,
+            snapshotID: record.id,
             node: node,
             to: destination
         )
