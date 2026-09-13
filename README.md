@@ -156,8 +156,15 @@ open --env SWIFTRESTIC_CONFIG_DIR=/tmp/demo \
 `SWIFTRESTIC_CONFIG_DIR` points the app at a throwaway configuration instead of
 your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 `SWIFTRESTIC_CAPTURE_PANE` picks which screen (`overview`, `plan`, `repository`,
-`activity`, `find`, `console`). The capture uses `cacheDisplay` from inside the
-process, so unlike `screencapture` it needs no Screen Recording permission. All
+`activity`, `find`, `console`). `all` instead photographs every sidebar pane in
+one run — `SWIFTRESTIC_CAPTURE` names a directory, each pane lands as
+`pane-<name>.png`, and `SWIFTRESTIC_CAPTURE_DELAY` becomes the settle time per
+pane. The sweep is the whole-window regression check: a defect like macOS 26's
+floating title-bar material shows up on every pane, including the ones nobody
+was just then looking at. The capture uses `cacheDisplay` from inside the
+process, so unlike `screencapture` it needs no Screen Recording permission —
+but the session must be unlocked: Tahoe's material views photograph as black
+when the screen is locked, wake-up notwithstanding. All
 of it is `#if DEBUG`. Launching through `open` matters: a plain child-process
 launch is never activated, and SwiftUI then defers creating the main window
 until activation, long after the capture:

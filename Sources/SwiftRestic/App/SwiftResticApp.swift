@@ -112,6 +112,7 @@ extension AppDelegate {
         let environment = ProcessInfo.processInfo.environment
         guard let path = environment["SWIFTRESTIC_CAPTURE"], !path.isEmpty else { return }
         let delay = Double(environment["SWIFTRESTIC_CAPTURE_DELAY"] ?? "") ?? 6
+        let capturesAllPanes = environment["SWIFTRESTIC_CAPTURE_PANE"] == "all"
 
         if environmentFlag("SWIFTRESTIC_CAPTURE_VERBOSE") {
             Task { @MainActor in
@@ -135,7 +136,11 @@ extension AppDelegate {
             // activate on purpose.
             NSApp.activate(ignoringOtherApps: true)
             try? await Task.sleep(for: .seconds(delay))
-            captureMainWindow(to: URL(fileURLWithPath: path))
+            if capturesAllPanes {
+                await captureAllPanes(into: URL(fileURLWithPath: path), settlingFor: .seconds(delay))
+            } else {
+                captureMainWindow(to: URL(fileURLWithPath: path))
+            }
             // `NSApp.terminate` never reaches `applicationShouldTerminate` from
             // this unactivated, sheet-bearing debug launch, so shut the model
             // down directly and exit: this path exists only for captures.
@@ -144,6 +149,61 @@ extension AppDelegate {
             debugLog("shutdown finished; exiting")
             exit(0)
         }
+    }
+
+    /// `SWIFTRESTIC_CAPTURE_PANE=all`: photographs every sidebar pane into the
+    /// `SWIFTRESTIC_CAPTURE` directory as `pane-<name>.png`, quitting when the
+    /// sweep is done. `SWIFTRESTIC_CAPTURE_DELAY` is the settle time per pane
+    /// (and the initial wait for launch/bootstrap).
+    ///
+    /// The per-pane sweep exists because whole-window regressions show up on
+    /// panes nobody was just then looking at — the macOS 26 displaced
+    /// title-bar material floated over every pane but was only ever checked
+    /// where a change had been made.
+    private func captureAllPanes(into directory: URL, settlingFor settle: Duration) async {
+        guard let model else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        var stops: [(name: String, select: () async -> Void)] = [
+            ("overview", { model.sidebarSelection = .overview }),
+        ]
+        if let plan = model.configuration.plans.first {
+            stops.append(("plan", { model.sidebarSelection = .plan(plan.id) }))
+        }
+        if let repository = model.configuration.repositories.first {
+            stops.append(("repository", { model.sidebarSelection = .repository(repository.id) }))
+            // The restore pane needs record rows, which only exist after a
+            // listing; the same first-expand rule the sidebar uses.
+            if model.snapshots(for: repository.id).isEmpty {
+                await model.refreshSnapshots(repositoryID: repository.id)
+            }
+            if let latest = model.snapshots(for: repository.id).first {
+                stops.append(("restore", { model.sidebarSelection = .restoreSnapshot(repository.id, latest.id) }))
+            }
+        }
+        stops.append(("console", { model.sidebarSelection = .console }))
+        stops.append(("activity", { model.sidebarSelection = .activity }))
+
+        for stop in stops {
+            await stop.select()
+            try? await Task.sleep(for: settle)
+            wakeDisplayForCapture()
+            captureMainWindow(to: directory.appendingPathComponent("pane-\(stop.name).png"))
+            debugLog("captured pane-\(stop.name).png")
+        }
+    }
+
+    /// `cacheDisplay` resolves Tahoe's glass materials through the window
+    /// server: with the display asleep or the session locked, the panes
+    /// photograph as black. `caffeinate -u` asserts user activity, which
+    /// wakes the display, before each shot. Debug-only and best-effort — a
+    /// failed wake still produces a capture, just possibly a black one.
+    private func wakeDisplayForCapture() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
+        task.arguments = ["-u", "-t", "2"]
+        try? task.run()
+        task.waitUntilExit()
     }
 
     func debugLog(_ message: String) {
