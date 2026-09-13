@@ -16,10 +16,6 @@ struct RestorePaneView: View {
     @State private var tree = FileTree(roots: [])
     /// The folder the tree is focused on — kept across record switches.
     @State private var currentPath: String?
-    /// The folder trail behind the back/forward arrows. Entries are the
-    /// `currentPath` at each step; nil is the record's root level.
-    @State private var navHistory: [String?] = [nil]
-    @State private var navIndex = 0
     @State private var changes: [String: ResticDiffChange] = [:]
     @State private var searchText = ""
     @State private var searchHits: [SearchHit]?
@@ -49,13 +45,10 @@ struct RestorePaneView: View {
         return older < listing.count ? listing[older] : nil
     }
 
-    private var canGoBack: Bool { navIndex > 0 }
-    private var canGoForward: Bool { navIndex + 1 < navHistory.count }
-
     var body: some View {
         Group {
             if let record {
-                browserPane(record)
+                browserPane()
             } else {
                 ContentUnavailableView {
                     Label("Backup not found", systemImage: "questionmark.folder")
@@ -73,7 +66,7 @@ struct RestorePaneView: View {
         .task(id: snapshotID) { await loadLevel() }
     }
 
-    private func browserPane(_ record: Snapshot) -> some View {
+    private func browserPane() -> some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
@@ -91,69 +84,17 @@ struct RestorePaneView: View {
 
     // MARK: - Toolbar (top)
 
-    /// Arq's header band: back/forward arrows, the bold "Backup: …" title,
-    /// and the search field on the right.
+    /// The header row is the search field and nothing else: which record is
+    /// open is visible in the sidebar's selection, and the Change column
+    /// speaks for itself — the pane repeats neither.
     private var toolbar: some View {
-        HStack(spacing: 10) {
-            navButtons
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Backup: \(Format.timestamp(record?.time))")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                if let record {
-                    Text(record.shortID)
-                        .font(.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 12)
-            if !changes.isEmpty {
-                Text("changes are against \(predecessor.map { Format.timestamp($0.time) } ?? "—")")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
+        HStack {
+            Spacer()
             searchField
                 .frame(width: 230)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-    }
-
-    /// The back/forward pair as one bordered capsule, Arq-style.
-    private var navButtons: some View {
-        HStack(spacing: 0) {
-            Button {
-                goBack()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.caption.weight(.semibold))
-                    .frame(width: 24, height: 20)
-                    .foregroundStyle(canGoBack ? Color.primary : Color.secondary.opacity(0.4))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canGoBack)
-            .help("Go back (⌘←)")
-            Divider().frame(height: 12)
-            Button {
-                goForward()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .frame(width: 24, height: 20)
-                    .foregroundStyle(canGoForward ? Color.primary : Color.secondary.opacity(0.4))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canGoForward)
-            .help("Go forward (⌘→)")
-        }
-        .padding(.horizontal, 2)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(Color.primary.opacity(0.15))
-        )
     }
 
     private var searchField: some View {
@@ -418,12 +359,6 @@ struct RestorePaneView: View {
         case .upArrow where press.modifiers.contains(.command):
             goUp()
             return .handled
-        case .leftArrow where press.modifiers.contains(.command):
-            goBack()
-            return .handled
-        case .rightArrow where press.modifiers.contains(.command):
-            goForward()
-            return .handled
         default:
             return .ignored
         }
@@ -431,30 +366,12 @@ struct RestorePaneView: View {
 
     // MARK: - Navigation
 
-    /// Pushes a folder onto the navigation trail, dropping any forward
-    /// branch — the standard back/forward stack behaviour.
+    /// Moves to a folder, or back to the root level with nil: the tree on
+    /// screen already holds every loaded row, so this is only a focus change.
+    /// Re-focusing the current folder is a no-op that keeps the selection.
     private func navigate(to path: String?) {
-        guard path != navHistory[navIndex] else { return }
-        if navIndex + 1 < navHistory.count {
-            navHistory.removeSubrange((navIndex + 1)...)
-        }
-        navHistory.append(path)
-        navIndex += 1
+        guard path != currentPath else { return }
         currentPath = path
-        selection = nil
-    }
-
-    private func goBack() {
-        guard canGoBack else { return }
-        navIndex -= 1
-        currentPath = navHistory[navIndex]
-        selection = nil
-    }
-
-    private func goForward() {
-        guard canGoForward else { return }
-        navIndex += 1
-        currentPath = navHistory[navIndex]
         selection = nil
     }
 
