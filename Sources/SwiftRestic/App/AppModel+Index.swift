@@ -66,18 +66,46 @@ extension AppModel {
     /// What changed between two snapshots, keyed by normalized path — the
     /// restore browser's Change column. Empty on failure; the column then
     /// reads as "no change information" rather than "unchanged".
+    ///
+    /// A diff between two content-addressed snapshots is an immutable fact,
+    /// so completed walks are cached and a repeat record switch skips the
+    /// walk entirely. Only a completed walk is cached: a stream that died
+    /// partway keeps today's behavior — a partial map on screen — but never
+    /// presents itself as the whole answer on the next switch.
     func snapshotChanges(
         repositoryID: UUID,
         olderID: String,
         newerID: String
     ) async -> [String: ResticDiffChange] {
+        if let cached = await indexCoordinator.cachedDiff(
+            olderID: olderID,
+            newerID: newerID,
+            repositoryID: repositoryID
+        ) {
+            var map: [String: ResticDiffChange] = [:]
+            for change in cached {
+                map[ChangeMap.key(change.path)] = change.resticDiffChange
+            }
+            return map
+        }
         guard let repository = repository(id: repositoryID),
               let service = try? service(),
               let context = try? await context(for: repository)
         else { return [:] }
         let collector = ChangeMap()
-        _ = try? await service.walkDiff(context, olderID: olderID, newerID: newerID) { change in
-            collector.insert(change)
+        do {
+            try await service.walkDiff(context, olderID: olderID, newerID: newerID) { change in
+                collector.insert(change)
+            }
+            await indexCoordinator.cacheDiff(
+                olderID: olderID,
+                newerID: newerID,
+                changes: collector.changes,
+                repositoryID: repositoryID
+            )
+        } catch {
+            // The map keeps whatever streamed before the failure; nothing
+            // lands in the cache.
         }
         return collector.map
     }
@@ -89,21 +117,32 @@ extension AppModel {
 private final class ChangeMap: @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [String: ResticDiffChange] = [:]
+    private var raw: [ResticDiffChange] = []
+
+    /// Directories arrive with a trailing slash; the tree keys paths
+    /// without one.
+    static func key(_ path: String) -> String {
+        path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+    }
 
     func insert(_ change: ResticDiffChange) {
-        // Directories arrive with a trailing slash; the tree keys paths
-        // without one.
-        let key = change.path.count > 1 && change.path.hasSuffix("/")
-            ? String(change.path.dropLast())
-            : change.path
         lock.lock()
-        storage[key] = change
-        lock.unlock()
+        defer { lock.unlock() }
+        raw.append(change)
+        storage[Self.key(change.path)] = change
     }
 
     var map: [String: ResticDiffChange] {
         lock.lock()
         defer { lock.unlock() }
         return storage
+    }
+
+    /// The change rows as they streamed, undeduplicated — the cache's
+    /// record of the walk.
+    var changes: [ResticDiffChange] {
+        lock.lock()
+        defer { lock.unlock() }
+        return raw
     }
 }

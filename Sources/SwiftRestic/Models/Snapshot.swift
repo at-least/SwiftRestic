@@ -46,7 +46,7 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
 
 /// One `message_type: node` line from `restic ls --json`.
 struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
-    enum Kind: String, Sendable, Decodable {
+    enum Kind: String, Sendable, Codable {
         case file, dir, symlink, irregular
         case dev, chardev, fifo, socket
     }
@@ -73,11 +73,15 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
     }
 
     /// The optional members all default to `nil`, so a node can be built from
-    /// just the three fields the browser and the search results need.
-    init(name: String, type: Kind, path: String) {
+    /// just the three fields the browser and the search results need — or
+    /// carry size and mtime when they arrived decoded or from the browse
+    /// cache with the node.
+    init(name: String, type: Kind, path: String, size: Int64? = nil, mtime: Date? = nil) {
         self.name = name
         self.type = type
         self.path = path
+        self.size = size
+        self.mtime = mtime
     }
 
     init(from decoder: any Decoder) throws {

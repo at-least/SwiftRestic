@@ -69,6 +69,51 @@ struct SearchHit: Sendable, Equatable, Identifiable {
     var id: String { path }
 }
 
+/// One node of a cached directory listing — the fields a browser row shows,
+/// as `restic ls` reported them. The cache stores these rather than whole
+/// `SnapshotNode`s so the JSON carries nothing the UI never reads.
+struct CachedListingNode: Sendable, Equatable, Codable {
+    var path: String
+    var kind: SnapshotNode.Kind
+    var size: Int64?
+    var mtime: Date?
+
+    init(_ node: SnapshotNode) {
+        path = node.path
+        kind = node.type
+        size = node.size
+        mtime = node.mtime
+    }
+
+    /// The node form the browser's rows render; the name is re-derived from
+    /// the path, which for restic nodes is what it originally decoded from.
+    var snapshotNode: SnapshotNode {
+        SnapshotNode(
+            name: IndexPathText.basename(of: path),
+            type: kind,
+            path: path,
+            size: size,
+            mtime: mtime
+        )
+    }
+}
+
+/// One cached `restic diff` change row, kept raw — the modifier string is the
+/// fact, and the categories derive from it exactly as `ResticDiffChange` does.
+struct CachedDiffChange: Sendable, Equatable, Codable {
+    var path: String
+    var modifier: String
+
+    init(_ change: ResticDiffChange) {
+        path = change.path
+        modifier = change.modifier
+    }
+
+    var resticDiffChange: ResticDiffChange {
+        ResticDiffChange(path: path, modifier: modifier)
+    }
+}
+
 extension Array where Element == IndexedSnapshot {
     /// The version a folder browser opens a path at: the newest covering
     /// version — unless the version the user was reading one level up still
@@ -89,6 +134,18 @@ enum IndexError: Error, Equatable {
     case unknownSnapshot(String)
 }
 
+/// Path text helpers shared by the store and the cache row types — neutral
+/// ground, so protocol-level types need not reach into the SQLite
+/// implementation.
+enum IndexPathText {
+    /// The path's last component, scalar-wise for the same combining-mark
+    /// reason `parent(of:)` in the engine is.
+    static func basename(of path: String) -> String {
+        guard let last = path.unicodeScalars.lastIndex(of: "/") else { return path }
+        return String(path.unicodeScalars[last...].dropFirst())
+    }
+}
+
 /// The reverse lookup restic cannot answer: which snapshots contain a path.
 ///
 /// The store holds runs — `(path, chain, first_seq, last_seq)` — where a run
@@ -102,7 +159,10 @@ protocol IndexStore: Sendable {
     /// inserts unknown snapshots into their chains, marks listings that have
     /// vanished (forget/prune, an unmounted volume) dead, and revives ones
     /// that came back — a snapshot ID is content-addressed, so a returned
-    /// snapshot's runs are still true. Idempotent.
+    /// snapshot's runs are still true. Browse-cache rows naming an ID that is
+    /// not alive afterwards — forgotten, or never reconciled (a browse that
+    /// raced a forget) — are swept in the same transaction; a revived
+    /// snapshot simply re-browses live. Idempotent.
     func reconcile(aliveSnapshots: [Snapshot]) throws -> ReconcileOutcome
 
     /// Records paths verified to exist in one snapshot — a full `restic ls`
@@ -144,4 +204,26 @@ protocol IndexStore: Sendable {
     /// finds "invoice-2026.pdf". An empty query matches nothing rather than
     /// everything.
     func searchPaths(matching query: String, limit: Int) throws -> [SearchHit]
+
+    /// Caches one directory's `restic ls` answer — the fields the browser
+    /// renders. A snapshot is content-addressed and immutable, so the pair
+    /// (snapshot, directory) has one true answer forever: a repeated capture
+    /// is the same content, and the write may keep the first. Directories
+    /// with no children are cached too — an explicit empty row is what makes
+    /// their re-expansion free.
+    func recordListing(snapshotID: String, directory: String, nodes: [CachedListingNode]) throws
+
+    /// The cached listing for one directory of one snapshot, or nil when
+    /// nothing has been captured. The directory key is canonicalized at this
+    /// boundary — trailing slashes stripped, "/" preserved — so a lookup
+    /// meets its write whatever spelling the caller used.
+    func listing(snapshotID: String, directory: String) throws -> [CachedListingNode]?
+
+    /// Caches one `restic diff` between two full snapshot IDs, kept raw.
+    /// Only the uncapped `walkDiff` may feed this: a change-limit-capped
+    /// stream must never present itself as the whole answer.
+    func recordDiff(olderID: String, newerID: String, changes: [CachedDiffChange]) throws
+
+    /// The cached diff between two snapshots, or nil when none captured.
+    func diff(olderID: String, newerID: String) throws -> [CachedDiffChange]?
 }

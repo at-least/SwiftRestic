@@ -49,6 +49,9 @@ final class SQLiteIndexStore: IndexStore {
         migrator.registerMigration("index-v2") { db in
             try db.execute(sql: IndexSchema.v2)
         }
+        migrator.registerMigration("index-v3") { db in
+            try db.execute(sql: IndexSchema.v3)
+        }
         return migrator
     }
 
@@ -67,7 +70,7 @@ final class SQLiteIndexStore: IndexStore {
             let cursor = try Row.fetchCursor(db, sql: "SELECT DISTINCT path FROM entry")
             while let row = try cursor.next() {
                 let path: String = row["path"]
-                let name = Self.basename(of: path)
+                let name = IndexPathText.basename(of: path)
                 let rowid = try Int.fetchOne(
                     db,
                     sql: "INSERT INTO search (path, name, is_dir) VALUES (?, ?, NULL) RETURNING rowid",
@@ -129,6 +132,26 @@ final class SQLiteIndexStore: IndexStore {
                     next += 1
                 }
             }
+
+            // The browse caches hold answers keyed by snapshot ID — facts
+            // that can never turn wrong, only dead weight: any row naming an
+            // ID that is not alive now (forgotten, or never reconciled — a
+            // browse that raced a forget) is one the vacuum could never
+            // reclaim. The sweep runs in this same transaction so it cannot
+            // be skipped, and after the inserts above so a row captured for
+            // a snapshot this very listing just made known survives. A
+            // revived snapshot simply re-browses live, one restic round trip
+            // per directory.
+            try db.execute(
+                sql: "DELETE FROM dir_listing WHERE snapshot_id NOT IN (SELECT id FROM snapshot WHERE alive = 1)"
+            )
+            try db.execute(
+                sql: """
+                DELETE FROM diff_result
+                WHERE older_id NOT IN (SELECT id FROM snapshot WHERE alive = 1)
+                    OR newer_id NOT IN (SELECT id FROM snapshot WHERE alive = 1)
+                """
+            )
             return outcome
         }
     }
@@ -235,7 +258,7 @@ final class SQLiteIndexStore: IndexStore {
     /// twin. First writer wins on `is_dir`; the upsert conflicts silently on
     /// known paths so their FTS rows are never duplicated.
     private func indexSearchEntry(_ db: Database, path: String, isDirectory: Bool) throws {
-        let name = Self.basename(of: path)
+        let name = IndexPathText.basename(of: path)
         let rowid = try Int.fetchOne(
             db,
             sql: """
@@ -465,13 +488,6 @@ final class SQLiteIndexStore: IndexStore {
             .joined(separator: " ")
     }
 
-    /// The path's last component, scalar-wise for the same combining-mark
-    /// reason `parent(of:)` in the engine is.
-    static func basename(of path: String) -> String {
-        guard let last = path.unicodeScalars.lastIndex(of: "/") else { return path }
-        return String(path.unicodeScalars[last...].dropFirst())
-    }
-
     /// Raw visibility into run storage: how many entry rows a path has in a
     /// chain. The tests assert merge behavior through this — that two
     /// neighbors plus the middle snapshot really collapsed into one run.
@@ -499,6 +515,60 @@ final class SQLiteIndexStore: IndexStore {
                     )
                 }
         }
+    }
+
+    // MARK: - Browse caches
+
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
+
+    func recordListing(snapshotID: String, directory: String, nodes: [CachedListingNode]) throws {
+        let payload = try Self.encoder.encode(nodes)
+        try db.write { db in
+            try db.execute(
+                sql: "INSERT INTO dir_listing (snapshot_id, dir_path, nodes) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+                arguments: [snapshotID, Self.canonicalDirectory(directory), payload]
+            )
+        }
+    }
+
+    func listing(snapshotID: String, directory: String) throws -> [CachedListingNode]? {
+        try db.read { db in
+            guard let payload = try Data.fetchOne(
+                db,
+                sql: "SELECT nodes FROM dir_listing WHERE snapshot_id = ? AND dir_path = ?",
+                arguments: [snapshotID, Self.canonicalDirectory(directory)]
+            ) else { return nil }
+            return try Self.decoder.decode([CachedListingNode].self, from: payload)
+        }
+    }
+
+    func recordDiff(olderID: String, newerID: String, changes: [CachedDiffChange]) throws {
+        let payload = try Self.encoder.encode(changes)
+        try db.write { db in
+            try db.execute(
+                sql: "INSERT INTO diff_result (older_id, newer_id, changes) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+                arguments: [olderID, newerID, payload]
+            )
+        }
+    }
+
+    func diff(olderID: String, newerID: String) throws -> [CachedDiffChange]? {
+        try db.read { db in
+            guard let payload = try Data.fetchOne(
+                db,
+                sql: "SELECT changes FROM diff_result WHERE older_id = ? AND newer_id = ?",
+                arguments: [olderID, newerID]
+            ) else { return nil }
+            return try Self.decoder.decode([CachedDiffChange].self, from: payload)
+        }
+    }
+
+    /// The directory-cache key: trailing slashes stripped, except the root,
+    /// which stays "/". Delegated to the engine's one normalizer, so a cache
+    /// key and a live `ls` call can never disagree about spelling.
+    static func canonicalDirectory(_ path: String) -> String {
+        ResticService.normalize(path)
     }
 
     // MARK: - Row mapping

@@ -60,4 +60,40 @@ enum IndexSchema {
 
     CREATE VIRTUAL TABLE search_fts USING fts5(name, content='search', content_rowid='rowid');
     """
+
+    /// The browse caches: exact restic output keyed by immutable content IDs.
+    ///
+    /// The entry runs above answer "which snapshots contain a path" and hold
+    /// existence only — deliberately, because the delta backfill route
+    /// (`restic diff`) carries no size or mtime, and guessing would poison
+    /// them. The browser needs size and mtime, so this migration adds the
+    /// two caches that can hold them honestly:
+    ///
+    /// - `dir_listing` holds the browser-rendered fields of one directory's
+    ///   `restic ls` answer, per (snapshot, directory). A snapshot is
+    ///   content-addressed and its content never changes, so a captured
+    ///   listing cannot go stale — the only cleanup it ever needs is the
+    ///   alive-set sweep in `reconcile`.
+    /// - `diff_result` is one `restic diff` between two snapshot IDs, the
+    ///   parsed change rows kept raw (path + modifier). Equally immutable.
+    ///
+    /// Nodes and changes are stored as JSON documents, not normalized rows:
+    /// the only query either table answers is the full listing for one key,
+    /// and one row per key keeps the read a single fetch and the write a
+    /// single statement.
+    static let v3 = """
+    CREATE TABLE dir_listing (
+        snapshot_id TEXT NOT NULL,
+        dir_path TEXT NOT NULL,
+        nodes TEXT NOT NULL,
+        PRIMARY KEY (snapshot_id, dir_path)
+    );
+
+    CREATE TABLE diff_result (
+        older_id TEXT NOT NULL,
+        newer_id TEXT NOT NULL,
+        changes TEXT NOT NULL,
+        PRIMARY KEY (older_id, newer_id)
+    );
+    """
 }

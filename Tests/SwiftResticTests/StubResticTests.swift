@@ -191,6 +191,30 @@ struct StubRestic: Sendable {
                 esac
                 exit 0
                 ;;
+            browserows)
+                # The browse surface: real node rows for `ls`, one change row
+                # for `diff`. The trace's per-invocation start lines are what
+                # lets a test prove a repeat browse reads the cache instead of
+                # spawning restic again.
+                trace "browserows-arm"
+                case " $* " in
+                    *" snapshots "*)
+                        echo "[]"
+                        ;;
+                    *" ls "*)
+                        echo '{"message_type":"node","name":"src","type":"dir","path":"/src","size":0,"mtime":"2026-01-02T03:04:05Z"}'
+                        echo '{"message_type":"node","name":"notes.txt","type":"file","path":"/src/notes.txt","size":42,"mtime":"2026-01-02T03:04:05Z"}'
+                        ;;
+                    *" diff "*)
+                        echo '{"message_type":"change","path":"/src/new.txt","modifier":"+"}'
+                        echo '{"message_type":"change","path":"/src/gone.txt","modifier":"-"}'
+                        ;;
+                    *)
+                        echo "{}"
+                        ;;
+                esac
+                exit 0
+                ;;
             *)
                 # Everything the fault tests do not care about gets an empty answer.
                 trace "default-arm"

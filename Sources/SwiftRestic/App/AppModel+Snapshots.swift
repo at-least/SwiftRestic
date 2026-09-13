@@ -111,9 +111,31 @@ extension AppModel {
         path: String
     ) async throws -> [SnapshotNode] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        // The browse cache first. A snapshot is content-addressed and
+        // immutable, so its directory listings are facts that never go stale:
+        // a hit answers without the restic round trip — the difference
+        // between an instant expand and a fresh process reopening the whole
+        // repository on every chevron click.
+        if let cached = await indexCoordinator.cachedListing(
+            snapshotID: snapshotID,
+            directory: path,
+            repositoryID: repositoryID
+        ) {
+            return ResticService.sortedForBrowser(cached.map(\.snapshotNode))
+        }
         let service = try service()
         let context = try await context(for: repository)
-        return try await service.listDirectory(context, snapshotID: snapshotID, path: path)
+        let nodes = try await service.listDirectory(context, snapshotID: snapshotID, path: path)
+        // Write-through, so the next visit to this directory — the record
+        // switch that re-walks this spine, the collapse and re-expand — is
+        // instant. Best-effort by the coordinator's contract.
+        await indexCoordinator.cacheListing(
+            snapshotID: snapshotID,
+            directory: path,
+            nodes: nodes,
+            repositoryID: repositoryID
+        )
+        return nodes
     }
 
     /// Searches a repository's snapshots for a path pattern.

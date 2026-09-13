@@ -185,6 +185,44 @@ actor IndexCoordinator {
         try store(for: repositoryID).pendingBackfill(limit: 1).isEmpty
     }
 
+    // MARK: - Browse caches
+
+    /// The cached `restic ls` answer for one directory, or nil when nothing
+    /// was captured — or when the cache itself failed. A miss is an
+    /// invitation to restic, never an error.
+    func cachedListing(snapshotID: String, directory: String, repositoryID: UUID) -> [CachedListingNode]? {
+        guard let store = try? store(for: repositoryID) else { return nil }
+        return try? store.listing(snapshotID: snapshotID, directory: directory)
+    }
+
+    /// Captures one directory's listing for next time. Best-effort: a failed
+    /// write costs only the next visit's restic round trip.
+    func cacheListing(snapshotID: String, directory: String, nodes: [SnapshotNode], repositoryID: UUID) {
+        guard let store = try? store(for: repositoryID) else { return }
+        try? store.recordListing(
+            snapshotID: snapshotID,
+            directory: directory,
+            nodes: nodes.map(CachedListingNode.init)
+        )
+    }
+
+    /// The cached diff between two snapshots, nil on miss or cache failure.
+    func cachedDiff(olderID: String, newerID: String, repositoryID: UUID) -> [CachedDiffChange]? {
+        guard let store = try? store(for: repositoryID) else { return nil }
+        return try? store.diff(olderID: olderID, newerID: newerID)
+    }
+
+    /// Captures one diff for next time. Callers pass only complete walks —
+    /// a partial stream must never present itself as the whole answer.
+    func cacheDiff(olderID: String, newerID: String, changes: [ResticDiffChange], repositoryID: UUID) {
+        guard let store = try? store(for: repositoryID) else { return }
+        try? store.recordDiff(
+            olderID: olderID,
+            newerID: newerID,
+            changes: changes.map(CachedDiffChange.init)
+        )
+    }
+
     // MARK: - Lifecycle
 
     /// Closes and deletes a repository's index — the index exists only to

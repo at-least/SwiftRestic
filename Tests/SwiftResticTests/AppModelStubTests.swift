@@ -840,6 +840,92 @@ struct AppModelStubTests {
 
         await harness.model.shutdown()
     }
+
+    // MARK: - Browse caches
+
+    /// AppModel's index coordinator resolves its directory at init through
+    /// `SWIFTRESTIC_CONFIG_DIR`; pinned into scratch space for the test's
+    /// lifetime, browse-cache writes never land in real Application Support.
+    private func withScratchIndexDirectory(
+        _ body: () async throws -> Void
+    ) async rethrows {
+        let indexRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticBrowseIndex-\(UUID().uuidString)")
+        setenv("SWIFTRESTIC_CONFIG_DIR", indexRoot.path, 1)
+        defer {
+            unsetenv("SWIFTRESTIC_CONFIG_DIR")
+            try? FileManager.default.removeItem(at: indexRoot)
+        }
+        try await body()
+    }
+
+    /// The stub logs one `start args=[…]` line per invocation; count the
+    /// runs of one subcommand. `ls`/`diff` are what a browse pays for —
+    /// the bootstrap refresh's `snapshots`/`stats` runs never match.
+    private func stubRuns(_ subcommand: String, in harness: Harness) throws -> Int {
+        let trace = try String(
+            contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
+            encoding: .utf8
+        )
+        return trace.components(separatedBy: "\n").filter { line in
+            line.contains("args=[\(subcommand) ")
+        }.count
+    }
+
+    @Test("a repeat folder browse answers from the cache without spawning restic")
+    func repeatBrowseHitsCache() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "browserows")
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+
+            let first = try await harness.model.children(
+                repositoryID: harness.repository.id,
+                snapshotID: "feedface00000000",
+                path: "/src"
+            )
+            // listDirectory drops the directory's own node — the listing is
+            // its children only.
+            #expect(first.map(\.path) == ["/src/notes.txt"])
+            let notes = try #require(first.first)
+            #expect(notes.size == 42)
+
+            let second = try await harness.model.children(
+                repositoryID: harness.repository.id,
+                snapshotID: "feedface00000000",
+                path: "/src/"
+            )
+            #expect(second == first)
+            #expect(try stubRuns("ls", in: harness) == 1)
+
+            await harness.model.shutdown()
+        }
+    }
+
+    @Test("a repeat record switch reads the cached diff instead of re-walking")
+    func repeatDiffHitsCache() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "browserows")
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+
+            let changes = await harness.model.snapshotChanges(
+                repositoryID: harness.repository.id,
+                olderID: "0000000000000000",
+                newerID: "feedface00000000"
+            )
+            #expect(changes["/src/new.txt"]?.category == .added)
+            #expect(changes["/src/gone.txt"]?.category == .removed)
+
+            let again = await harness.model.snapshotChanges(
+                repositoryID: harness.repository.id,
+                olderID: "0000000000000000",
+                newerID: "feedface00000000"
+            )
+            #expect(again == changes)
+            #expect(try stubRuns("diff", in: harness) == 1)
+
+            await harness.model.shutdown()
+        }
+    }
 }
 
 /// Captures HTTP request bodies on the loopback interface.
@@ -924,4 +1010,5 @@ private final class HTTPCaptureServer: @unchecked Sendable {
             } ?? 0
         return (headerEnd.upperBound - data.startIndex, length)
     }
+
 }

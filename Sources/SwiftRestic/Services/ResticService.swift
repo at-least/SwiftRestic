@@ -290,13 +290,23 @@ struct ResticService: ResticClient {
             guard Self.parent(of: nodePath) == normalized else { continue }
             nodes.append(node)
         }
-        return nodes.sorted { lhs, rhs in
+        return Self.sortedForBrowser(nodes)
+    }
+
+    /// The browser's one row order — directories first, then Finder-style —
+    /// shared by the live `ls` path and the browse-cache read, so a cached
+    /// listing renders identically to a fetched one.
+    static func sortedForBrowser(_ nodes: [SnapshotNode]) -> [SnapshotNode] {
+        nodes.sorted { lhs, rhs in
             if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
     }
 
-    private static func normalize(_ path: String) -> String {
+    /// The engine's one path spelling: trailing slashes stripped, except the
+    /// root, which stays "/". Internal so the index's directory-cache key
+    /// delegates here rather than carrying a twin that could drift.
+    static func normalize(_ path: String) -> String {
         guard path != "/" else { return "/" }
         var value = path
         while value.count > 1, value.hasSuffix("/") { value.removeLast() }
