@@ -580,7 +580,8 @@ struct RootView: View {
 }
 
 /// One dated backup record in the Restore section — the row whose selection
-/// fills the detail pane with that record's files.
+/// fills the detail pane with that record's files. One line, like Arq's: the
+/// checkmark and the moment are the whole record at sidebar size.
 private struct RestoreRecordRow: View {
     let snapshot: Snapshot
 
@@ -590,14 +591,8 @@ private struct RestoreRecordRow: View {
                 .foregroundStyle(Theme.success)
                 .font(.caption)
                 .help("This backup is complete and restorable")
-            VStack(alignment: .leading, spacing: 1) {
-                Text(Format.timestamp(snapshot.time))
-                    .lineLimit(1)
-                Text(snapshot.shortID)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
+            Text(Format.timestamp(snapshot.time))
+                .lineLimit(1)
         }
         .help("Browse this backup's files and restore from it")
     }

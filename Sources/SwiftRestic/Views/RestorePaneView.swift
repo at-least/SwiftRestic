@@ -70,10 +70,6 @@ struct RestorePaneView: View {
         VStack(spacing: 0) {
             toolbar
             Divider()
-            if searchHits != nil || currentPath != nil {
-                breadcrumbBar
-                Divider()
-            }
             browser
             Divider()
             footer
@@ -129,23 +125,6 @@ struct RestorePaneView: View {
         }
     }
 
-    @ViewBuilder
-    private var breadcrumbBar: some View {
-        HStack(spacing: 8) {
-            if let hits = searchHits {
-                Text("Search: \(Format.plural(hits.count, "hit")) in this backup")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if let currentPath {
-                PathBreadcrumb(path: currentPath, roots: record?.paths ?? []) { target in
-                    navigate(to: target)
-                }
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-    }
 
     // MARK: - Browser
 
@@ -287,11 +266,11 @@ struct RestorePaneView: View {
         .listStyle(.inset)
     }
 
+    /// One button, Arq-style: the overwrite consequence is named where the
+    /// decision happens — the destination dialog's message — not as a
+    /// permanent caption under every browse.
     private var footer: some View {
         HStack {
-            Text("Restoring overwrites existing files at the destination.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
             Spacer()
             Button("Restore…") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
