@@ -161,10 +161,12 @@ one run — `SWIFTRESTIC_CAPTURE` names a directory, each pane lands as
 `pane-<name>.png`, and `SWIFTRESTIC_CAPTURE_DELAY` becomes the settle time per
 pane. The sweep is the whole-window regression check: a defect like macOS 26's
 floating title-bar material shows up on every pane, including the ones nobody
-was just then looking at. The capture uses `cacheDisplay` from inside the
-process, so unlike `screencapture` it needs no Screen Recording permission —
-but the session must be unlocked: Tahoe's material views photograph as black
-when the screen is locked, wake-up notwithstanding. All
+was just then looking at. Captures prefer ScreenCaptureKit, which renders
+Tahoe's glass materials correctly but needs a one-time grant (System Settings
+→ Privacy & Security → Screen Recording → SwiftRestic); without it the shots
+fall back to `cacheDisplay`, which draws those materials black on macOS 26,
+and each capture logs which backend produced it. Either way the session must
+be unlocked — a locked screen hides the window from capture entirely. All
 of it is `#if DEBUG`. Launching through `open` matters: a plain child-process
 launch is never activated, and SwiftUI then defers creating the main window
 until activation, long after the capture:

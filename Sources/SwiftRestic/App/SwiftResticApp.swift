@@ -1,4 +1,5 @@
 import AppKit
+import ScreenCaptureKit
 import SwiftUI
 
 /// The app stays resident behind its menu bar item, so quitting is the only
@@ -77,11 +78,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task { @MainActor in
             #if DEBUG
-            debugLog("terminate: shutting down")
+            Self.debugLog("terminate: shutting down")
             #endif
             await model.shutdown()
             #if DEBUG
-            debugLog("terminate: shutdown finished")
+            Self.debugLog("terminate: shutdown finished")
             #endif
             NSApp.reply(toApplicationShouldTerminate: true)
         }
@@ -103,11 +104,14 @@ extension Notification.Name {
 
 #if DEBUG
 extension AppDelegate {
-    /// Debug-only: write a PNG of the main window, then quit.
+    /// Debug-only: write PNG(s) of the main window, then quit.
     ///
-    /// `cacheDisplay` draws the live view hierarchy from inside this process, so
-    /// unlike `screencapture` it needs no Screen Recording permission — which is
-    /// what makes it usable from a terminal session or CI.
+    /// The preferred backend is ScreenCaptureKit, which renders Tahoe's glass
+    /// materials correctly but needs a one-time Screen Recording grant;
+    /// `cacheDisplay` is the permission-free fallback and draws those
+    /// materials black on macOS 26. Which backend produced a given shot is
+    /// logged, so a black capture is never silent. The fallback keeps the
+    /// sweep usable from a terminal session or CI.
     func scheduleDebugCapture() {
         let environment = ProcessInfo.processInfo.environment
         guard let path = environment["SWIFTRESTIC_CAPTURE"], !path.isEmpty else { return }
@@ -121,7 +125,7 @@ extension AppDelegate {
                     let now = NSApp.windows.map { "\(type(of: $0))[\($0.title)] \($0.frame.size) visible=\($0.isVisible)" }
                         .joined(separator: " | ")
                     if now != last {
-                        debugLog("windows @\(Int(Date.timeIntervalSinceReferenceDate)): \(now)")
+                        Self.debugLog("windows @\(Int(Date.timeIntervalSinceReferenceDate)): \(now)")
                         last = now
                     }
                     try? await Task.sleep(for: .seconds(1))
@@ -139,14 +143,14 @@ extension AppDelegate {
             if capturesAllPanes {
                 await captureAllPanes(into: URL(fileURLWithPath: path), settlingFor: .seconds(delay))
             } else {
-                captureMainWindow(to: URL(fileURLWithPath: path))
+                await captureMainWindow(to: URL(fileURLWithPath: path))
             }
             // `NSApp.terminate` never reaches `applicationShouldTerminate` from
             // this unactivated, sheet-bearing debug launch, so shut the model
             // down directly and exit: this path exists only for captures.
-            debugLog("captured; shutting down")
+            Self.debugLog("captured; shutting down")
             await model?.shutdown()
-            debugLog("shutdown finished; exiting")
+            Self.debugLog("shutdown finished; exiting")
             exit(0)
         }
     }
@@ -187,26 +191,27 @@ extension AppDelegate {
         for stop in stops {
             await stop.select()
             try? await Task.sleep(for: settle)
-            wakeDisplayForCapture()
-            captureMainWindow(to: directory.appendingPathComponent("pane-\(stop.name).png"))
-            debugLog("captured pane-\(stop.name).png")
+            await wakeDisplayForCapture()
+            await captureMainWindow(to: directory.appendingPathComponent("pane-\(stop.name).png"))
+            Self.debugLog("captured pane-\(stop.name).png")
         }
     }
 
-    /// `cacheDisplay` resolves Tahoe's glass materials through the window
-    /// server: with the display asleep or the session locked, the panes
-    /// photograph as black. `caffeinate -u` asserts user activity, which
-    /// wakes the display, before each shot. Debug-only and best-effort — a
-    /// failed wake still produces a capture, just possibly a black one.
-    private func wakeDisplayForCapture() {
+    /// `cacheDisplay` needs the window server to resolve Tahoe's glass
+    /// materials, which an asleep display interrupts; `caffeinate -u` asserts
+    /// user activity, which wakes the display, before each shot. Debug-only
+    /// and best-effort — a failed wake still produces a capture, just
+    /// possibly a black one. Async: blocking the main actor here would stall
+    /// the very render the shot needs.
+    private func wakeDisplayForCapture() async {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
         task.arguments = ["-u", "-t", "2"]
         try? task.run()
-        task.waitUntilExit()
+        try? await Task.sleep(for: .seconds(1))
     }
 
-    func debugLog(_ message: String) {
+    static func debugLog(_ message: String) {
         FileHandle.standardError.write(Data((message + "\n").utf8))
     }
 
@@ -214,7 +219,7 @@ extension AppDelegate {
         ProcessInfo.processInfo.environment[name].map { !$0.isEmpty } ?? false
     }
 
-    private func captureMainWindow(to url: URL) {
+    private func captureMainWindow(to url: URL) async {
         // Known artifact, verified live 2026-09: a sheet's tab picker (the
         // Repository/Hooks segmented control) can render as a black pill with
         // an invisible label in these captures. The vibrant control draws
@@ -225,7 +230,7 @@ extension AppDelegate {
         // app was launched without being activated, so check for a sheet first.
         if environmentFlag("SWIFTRESTIC_CAPTURE_VERBOSE") {
             for window in NSApp.windows {
-                debugLog(
+                Self.debugLog(
                     "capture: \(type(of: window)) title=\"\(window.title)\" frame=\(window.frame) sheet=\(window.isSheet) visible=\(window.isVisible) key=\(window.isKeyWindow)"
                 )
             }
@@ -237,16 +242,101 @@ extension AppDelegate {
         })
             ?? NSApp.keyWindow
             ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })
-        guard let window = candidate,
-              // The frame view, not the content view: the toolbar lives in the
-              // title bar and would otherwise be missing from the capture.
-              let view = window.contentView?.superview ?? window.contentView,
+        guard let window = candidate else { return }
+        guard let data = await bestEffortPNG(of: window) else { return }
+        try? data.write(to: url)
+    }
+
+    /// ScreenCaptureKit renders Tahoe's glass materials correctly;
+    /// `cacheDisplay` draws them black on macOS 26 (the whole detail column
+    /// photographs as black). SC is therefore preferred, but it needs Screen
+    /// Recording authorisation — which a fresh checkout, an SSH session or a
+    /// CI runner does not have, and a prompt nobody answers must not hang the
+    /// sweep. The SC task is therefore polled on a real leash: once the leash
+    /// runs out the task is cancelled and left behind, and the permission-free
+    /// fallback photographs the pane — logged, so a black shot names its
+    /// backend.
+    private func bestEffortPNG(of window: NSWindow) async -> Data? {
+        let windowID = CGWindowID(window.windowNumber)
+        let scale = window.backingScaleFactor
+
+        if #available(macOS 14.0, *) {
+            // A lock-guarded box carries the SC result out: the SC task may
+            // ignore cancellation once a system prompt is up, so the leash
+            // abandons it rather than waiting, and cacheDisplay photographs
+            // the pane while the orphan settles.
+            let box = CaptureResultBox()
+            let scCapture = Task.detached(priority: .userInitiated) {
+                let data = try? await Self.screenCaptureKitPNG(windowID: windowID, scale: scale)
+                box.store(data)
+            }
+            var settled = false
+            var waited = 0.0
+            while waited < 6 {
+                try? await Task.sleep(for: .seconds(0.5))
+                waited += 0.5
+                guard let data = box.load() else { continue }
+                settled = true
+                if let data, !data.isEmpty {
+                    Self.debugLog("capture backend: ScreenCaptureKit")
+                    return data
+                }
+                Self.debugLog("capture backend: ScreenCaptureKit failed — cacheDisplay fallback")
+                break
+            }
+            if !settled {
+                scCapture.cancel()
+                Self.debugLog("capture backend: ScreenCaptureKit timed out — cacheDisplay fallback")
+            }
+        }
+
+        // The frame view, not the content view: the toolbar lives in the
+        // title bar and would otherwise be missing from the capture.
+        guard let view = window.contentView?.superview ?? window.contentView,
               let representation = view.bitmapImageRepForCachingDisplay(in: view.bounds)
-        else { return }
+        else { return nil }
         representation.size = view.bounds.size
         view.cacheDisplay(in: view.bounds, to: representation)
-        guard let data = representation.representation(using: .png, properties: [:]) else { return }
-        try? data.write(to: url)
+        Self.debugLog("capture backend: cacheDisplay")
+        return representation.representation(using: .png, properties: [:])
+    }
+
+    /// Lock-guarded slot for the ScreenCaptureKit task's result: `nil` means
+    /// "not settled yet", a stored `nil` means "settled and failed".
+    private final class CaptureResultBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: Data??
+
+        func store(_ data: Data?) {
+            lock.lock(); defer { lock.unlock() }
+            value = .some(data)
+        }
+
+        func load() -> Data?? {
+            lock.lock(); defer { lock.unlock() }
+            return value
+        }
+    }
+
+    /// Own-window capture through ScreenCaptureKit. macOS 26 requires the
+    /// app to hold Screen Recording authorisation for this even for its own
+    /// window; unauthorised calls fail (after showing the system prompt on
+    /// interactive runs) and the caller falls back to `cacheDisplay`.
+    @available(macOS 14.0, *)
+    private static func screenCaptureKitPNG(windowID: CGWindowID, scale: CGFloat) async throws -> Data? {
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
+            Self.debugLog("capture backend: ScreenCaptureKit found no window \(windowID) on screen")
+            return nil
+        }
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(scWindow.frame.width * scale)
+        configuration.height = Int(scWindow.frame.height * scale)
+        configuration.showsCursor = false
+        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+        let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        let representation = NSBitmapImageRep(cgImage: image)
+        return representation.representation(using: .png, properties: [:])
     }
 }
 #endif
