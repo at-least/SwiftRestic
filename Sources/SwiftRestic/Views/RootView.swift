@@ -94,6 +94,7 @@ struct RootView: View {
             guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
             editingPlan = BackupPlan()
         }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
             Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
                 .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
@@ -367,8 +368,11 @@ struct RootView: View {
 
     // MARK: - Detail
 
-    @ViewBuilder
     private var detail: some View {
+        detailContent
+    }
+
+    private var detailContent: some View {
         VStack(spacing: 0) {
             // A restore outlives the pane that started it, so its progress is
             // an app-level fact: this strip sits above every pane, and the
