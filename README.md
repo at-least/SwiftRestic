@@ -167,9 +167,10 @@ Tahoe's glass materials correctly but needs a one-time grant (System Settings
 fall back to `cacheDisplay`, which draws those materials black on macOS 26,
 and each capture logs which backend produced it. Either way the session must
 be unlocked — a locked screen hides the window from capture entirely. All
-of it is `#if DEBUG`. Launching through `open` matters: a plain child-process
-launch is never activated, and SwiftUI then defers creating the main window
-until activation, long after the capture:
+of it is `#if DEBUG`. SwiftUI defers creating the main window until the app is
+activated; the capture path activates the app on purpose at launch for exactly
+that reason, so launching through `open` (as above) and launching the binary
+directly both work:
 
 Three more environment variables shape a capture run: `SWIFTRESTIC_APPEARANCE`
 (`light`/`dark`) pins the appearance instead of following the system,
