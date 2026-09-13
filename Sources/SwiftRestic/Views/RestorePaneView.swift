@@ -28,18 +28,13 @@ struct RestorePaneView: View {
     @State private var loadError: String?
     /// Set when the focused folder does not exist in the selected record.
     @State private var folderMissing = false
+    /// The record the tree on screen was built for. A folder listing that
+    /// lands after a record switch must not install itself into the new
+    /// record's tree.
+    @State private var loadedSnapshotID: String?
     /// Directories with a fetch already running — a double-click racing
     /// itself must not spawn duplicate listings.
     @State private var inFlightFetches: Set<String> = []
-
-    private struct Level: Equatable {
-        var snapshotID: String
-        var path: String?
-    }
-
-    private var level: Level {
-        Level(snapshotID: snapshotID, path: currentPath)
-    }
 
     private var record: Snapshot? {
         model.snapshots(for: repositoryID).first { $0.id == snapshotID }
@@ -70,7 +65,12 @@ struct RestorePaneView: View {
             }
         }
         .navigationTitle("Restore")
-        .task(id: level) { await loadLevel() }
+        // The heavy reload — diff, tree rebuild, folder re-walk — belongs to
+        // record switches only. Plain folder moves (expand, goUp, breadcrumb
+        // jumps) change `currentPath` but must not rebuild anything: the tree
+        // already holds the rows, and re-running the diff on every chevron
+        // click would make a large repository feel broken.
+        .task(id: snapshotID) { await loadLevel() }
     }
 
     private func browserPane(_ record: Snapshot) -> some View {
@@ -462,13 +462,17 @@ struct RestorePaneView: View {
 
     /// The selected record changed: rebuild the tree, walk the preserved
     /// folder's spine back open, and load the change annotations. Search
-    /// results belong to the record they were searched in.
+    /// belongs to the record it was searched in — both the hits and the
+    /// query go, or the field would sit there filtered-looking with its
+    /// clear button gone.
     private func loadLevel() async {
         searchHits = nil
+        searchText = ""
         guard let record else {
             tree = FileTree(roots: [])
             return
         }
+        loadedSnapshotID = record.id
         let spine = Self.spine(of: currentPath, under: record.paths)
         tree.reset(to: record.paths.map(SnapshotNode.directory))
 
@@ -541,13 +545,23 @@ struct RestorePaneView: View {
         navigate(to: path)
         Task {
             defer { inFlightFetches.remove(needed) }
-            let nodes = try? await model.children(
-                repositoryID: repositoryID,
-                snapshotID: record.id,
-                path: needed
-            )
-            guard let nodes else { return }
-            tree.replaceChildren(of: needed, nodes: nodes)
+            do {
+                let nodes = try await model.children(
+                    repositoryID: repositoryID,
+                    snapshotID: record.id,
+                    path: needed
+                )
+                // The fetch may have raced a record switch; the new record's
+                // tree must stay that record's.
+                guard loadedSnapshotID == record.id, !Task.isCancelled else { return }
+                tree.replaceChildren(of: needed, nodes: nodes)
+            } catch {
+                guard loadedSnapshotID == record.id, !Task.isCancelled else { return }
+                // The chevron opened a folder that never arrived — close it
+                // back and say why, instead of an empty expansion.
+                _ = tree.toggleExpanded(path: path)
+                loadError = error.localizedDescription
+            }
         }
     }
 

@@ -231,15 +231,12 @@ struct RepositoryDetailView: View {
                 HStack(spacing: 8) {
                     // Arq's restore entry: expand the sidebar's Restore
                     // section on this repository and select its newest
-                    // backup record — the pane does the rest.
+                    // backup record — the pane does the rest. The button is
+                    // disabled while no records exist; loading them is the
+                    // toolbar Refresh's job, not a silent side effect.
                     Button("Restore Files…") {
-                        Task {
-                            if model.snapshots(for: repositoryID).isEmpty {
-                                await model.refreshSnapshots(repositoryID: repositoryID)
-                            }
-                            if let latest = model.snapshots(for: repositoryID).first {
-                                model.sidebarSelection = .restoreSnapshot(repositoryID, latest.id)
-                            }
+                        if let latest = model.snapshots(for: repositoryID).first {
+                            model.sidebarSelection = .restoreSnapshot(repositoryID, latest.id)
                         }
                     }
                     .controlSize(.small)

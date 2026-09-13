@@ -16,6 +16,9 @@ struct RootView: View {
     @State private var expandedRestoreRepos: Set<UUID> = []
     #if DEBUG
     @State private var didApplyCaptureOverride = false
+    /// Debug-only: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record rows the
+    /// pane needs land with the first listing, so the selection waits for it.
+    @State private var pendingCaptureRestore = false
     #endif
 
     var body: some View {
@@ -367,10 +370,10 @@ struct RootView: View {
     @ViewBuilder
     private var detail: some View {
         VStack(spacing: 0) {
-            // A restore outlives the sheet that started it, so its progress is
+            // A restore outlives the pane that started it, so its progress is
             // an app-level fact: this strip sits above every pane, and the
-            // menu bar line covers the window-closed case. Dismissing the
-            // browser or Find sheet hands the progress over to this strip.
+            // menu bar line covers the window-closed case. Switching panes
+            // hands the progress over to this strip.
             if let progress = model.restoreActivity {
                 OperationProgressView(
                     title: model.restoreDescription.isEmpty ? "Restoring" : model.restoreDescription,
@@ -431,6 +434,10 @@ struct RootView: View {
                     }
                 case let .restoreSnapshot(repositoryID, snapshotID):
                     RestorePaneView(repositoryID: repositoryID, snapshotID: snapshotID)
+                        // Folder state belongs to one repository: switching
+                        // to another must not carry paths or history over —
+                        // the pane's own @State resets with the identity.
+                        .id(repositoryID)
                 case .console:
                     ResticConsoleView()
                 case .activity:
@@ -492,8 +499,6 @@ struct RootView: View {
     ///
     /// Applied once the configuration has actually loaded — `onAppear` fires
     /// before `bootstrap()` finishes, when there is nothing to select yet.
-    @State private var pendingCaptureRestore = false
-
     private func applyCapturePaneOverride() {
         guard !didApplyCaptureOverride else { return }
         guard !model.configuration.plans.isEmpty || !model.configuration.repositories.isEmpty
@@ -509,7 +514,6 @@ struct RootView: View {
         // The restore pane needs a snapshot row to select, and those arrive
         // only after the launch refresh — see the snapshots onChange below.
         case "restore":
-            didApplyCaptureOverride = true
             pendingCaptureRestore = true
         case "repositoryHooks": editingRepository = model.configuration.repositories.first
         // Same sheet on its first tab: captures a specific kind's fields, e.g.
@@ -555,7 +559,7 @@ struct RootView: View {
         case .plan(let id) where model.plan(id: id) == nil,
              .repository(let id) where model.repository(id: id) == nil:
             model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
-        case let .restoreSnapshot(repositoryID, snapshotID)
+        case .restoreSnapshot(let repositoryID, _)
             where model.repository(id: repositoryID) == nil:
             model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
         case let .restoreSnapshot(repositoryID, snapshotID)
