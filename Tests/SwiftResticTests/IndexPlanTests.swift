@@ -1,6 +1,10 @@
 import GRDB
 import Testing
-@testable import SwiftRestic
+
+// No `@testable import SwiftRestic`: the test target compiles the model
+// layer's sources itself, so SQLiteIndexStore is already right here — and
+// importing the app module adds a dependency a cold build cannot satisfy
+// (CI's "no such module 'SwiftRestic'").
 
 /// The planner routes behind `recordContent`'s chunk statements — the thing
 /// a green functional test cannot see. Nothing in the app ever ANALYZEs, so
