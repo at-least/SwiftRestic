@@ -329,7 +329,11 @@ extension AppDelegate {
         init(_ content: SCShareableContent) { self.content = content }
     }
 
-    private static func shareableContentBox() async throws -> ShareableContentBox {
+    /// Nonisolated on purpose: the fetch must run — and box its result — in
+    /// the same nonisolated domain as the class method, or the result's
+    /// crossing into this type's MainActor isolation is itself the send the
+    /// older SDKs reject. Only the Sendable box crosses back.
+    private nonisolated static func shareableContentBox() async throws -> ShareableContentBox {
         ShareableContentBox(try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true))
     }
 
