@@ -211,7 +211,9 @@ extension AppDelegate {
         try? await Task.sleep(for: .seconds(1))
     }
 
-    static func debugLog(_ message: String) {
+    /// Nonisolated: writes one line to stderr, and the capture paths below
+    /// log from the nonisolated ScreenCaptureKit domain.
+    nonisolated static func debugLog(_ message: String) {
         FileHandle.standardError.write(Data((message + "\n").utf8))
     }
 
