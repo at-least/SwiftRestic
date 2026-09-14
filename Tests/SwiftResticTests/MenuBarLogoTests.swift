@@ -3,7 +3,9 @@ import Foundation
 import Testing
 
 /// The running pulse's cadence, tested as the pure function it is rather than
-/// through a live timer or view.
+/// through a live timer or view. MainActor like its subject: the enum's
+/// caches are MainActor-isolated AppKit bitmaps.
+@MainActor
 @Suite("Menu bar logo")
 struct MenuBarLogoTests {
     @Test("the running frame steps on a fixed cadence and wraps")

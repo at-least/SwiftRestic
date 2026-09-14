@@ -19,6 +19,12 @@ import Foundation
 /// 18pt status item reads a tighter arrowhead better than the icon's own
 /// weight does. Keep the ring radius and plate geometry in sync when the
 /// icon changes; the stroke and arrowhead are allowed to diverge on purpose.
+///
+/// MainActor-isolated because the caches are AppKit bitmaps drawn once and
+/// consumed only by menu bar and welcome-screen UI — CI's Swift flags the
+/// unisolated statics as shared mutable non-Sendable state, and the
+/// annotation turns that real constraint into a compiler-enforced one.
+@MainActor
 enum MenuBarLogo {
     /// A standard status item's canvas.
     private static let canvasSize: CGFloat = 18
