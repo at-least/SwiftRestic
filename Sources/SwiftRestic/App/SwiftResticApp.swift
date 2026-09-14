@@ -341,8 +341,14 @@ extension AppDelegate {
     /// app to hold Screen Recording authorisation for this even for its own
     /// window; unauthorised calls fail (after showing the system prompt on
     /// interactive runs) and the caller falls back to `cacheDisplay`.
+    ///
+    /// Nonisolated: the ScreenCaptureKit objects (`SCShareableContent`,
+    /// `SCContentFilter`) are non-Sendable snapshots, and older SDKs reject
+    /// sending them across the MainActor boundary at every await. Working
+    /// in the nonisolated domain keeps fetch, filter and screenshot in one
+    /// place; only the `Data` — plain bytes — travels back.
     @available(macOS 14.0, *)
-    private static func screenCaptureKitPNG(windowID: CGWindowID, scale: CGFloat) async throws -> Data? {
+    private nonisolated static func screenCaptureKitPNG(windowID: CGWindowID, scale: CGFloat) async throws -> Data? {
         let content = try await shareableContentBox().content
         guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
             Self.debugLog("capture backend: ScreenCaptureKit found no window \(windowID) on screen")
