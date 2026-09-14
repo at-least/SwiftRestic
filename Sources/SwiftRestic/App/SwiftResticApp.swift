@@ -318,13 +318,28 @@ extension AppDelegate {
         }
     }
 
+    /// Sendable confinement for the ScreenCaptureKit snapshot: older SDKs
+    /// (macOS 15, what CI compiles against) do not annotate
+    /// `SCShareableContent` as Sendable, so the async class method's result
+    /// cannot cross back into the caller's isolation unboxed. The content
+    /// is an immutable snapshot of the window list, so boxing it right where
+    /// it is fetched — before the only send — is honest.
+    private final class ShareableContentBox: @unchecked Sendable {
+        let content: SCShareableContent
+        init(_ content: SCShareableContent) { self.content = content }
+    }
+
+    private static func shareableContentBox() async throws -> ShareableContentBox {
+        ShareableContentBox(try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true))
+    }
+
     /// Own-window capture through ScreenCaptureKit. macOS 26 requires the
     /// app to hold Screen Recording authorisation for this even for its own
     /// window; unauthorised calls fail (after showing the system prompt on
     /// interactive runs) and the caller falls back to `cacheDisplay`.
     @available(macOS 14.0, *)
     private static func screenCaptureKitPNG(windowID: CGWindowID, scale: CGFloat) async throws -> Data? {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let content = try await shareableContentBox().content
         guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
             Self.debugLog("capture backend: ScreenCaptureKit found no window \(windowID) on screen")
             return nil
