@@ -11,6 +11,20 @@ xcodegen first, and xcodegen snapshots the source file list, so new files are
 invisible to `xcodebuild` until it runs. `./build.sh test` runs unit plus
 end-to-end tests against real restic.
 
+Two rules the flaky-run hunt of 2026-09-14 added:
+
+- Never pipe `xcodebuild` through `head` (or anything that closes its stdout
+  early) — a truncated pipe orphans the invocation, and an agent shell may
+  return before xcodebuild is gone. `./build.sh` already tees the full log;
+  read that, or redirect to a file and tail it.
+- Concurrent `xcodebuild test` sessions on one machine can stomp each other's
+  testmanagerd sessions: the loser's runner is SIGTERM'd mid-run ("Test
+  crashed with signal term"), xcodebuild restarts it, the remaining tests
+  pass, and the run is marked failed. The script therefore refuses to start
+  `test` while another xcodebuild exists, and fails any run whose log shows
+  the restart banner — which also fires for a plain test crash or timeout,
+  so read the xcresult before blaming a collision.
+
 ## Photographing the app
 
 Debug captures are driven by environment variables on a debug build —
