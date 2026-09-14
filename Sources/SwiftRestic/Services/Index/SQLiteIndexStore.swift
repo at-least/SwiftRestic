@@ -29,7 +29,10 @@ final class SQLiteIndexStore: IndexStore {
         try rebuildSearchIfNeeded()
     }
 
-    private static func configuration() -> Configuration {
+    /// Internal so the plan tests open their database exactly as production
+    /// does — a future pragma added here (one that ANALYZEs) is exactly
+    /// what their stat1 assertion exists to catch.
+    static func configuration() -> Configuration {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
             try db.execute(sql: "PRAGMA synchronous = NORMAL")
@@ -41,7 +44,10 @@ final class SQLiteIndexStore: IndexStore {
         return configuration
     }
 
-    private static func migrator() -> DatabaseMigrator {
+    /// Internal so the plan tests build their schema through the production
+    /// migration path — a hand-copied DDL would silently desync the day an
+    /// index changes.
+    static func migrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("index-v1") { db in
             try db.execute(sql: IndexSchema.v1)
@@ -156,6 +162,64 @@ final class SQLiteIndexStore: IndexStore {
         }
     }
 
+    // MARK: - Chunk statements
+
+    /// The SQL of `recordContent`'s per-chunk statements, static so the plan
+    /// tests pin planner routes against the exact text production runs.
+    ///
+    /// The `+` on the boundary terms is load-bearing. Nothing in the app
+    /// ever ANALYZEs, so SQLite plans from its default cost model — and that
+    /// model routes equality on (chain, last_seq) through `entry_chain_last`,
+    /// whose seek visits every run in the chain ending at the boundary, per
+    /// chunk, instead of just the chunk's paths. Measured on a 200 000-run
+    /// database: the extend statement cost 73 ms per chunk through the
+    /// chain-last index and 3 ms through the primary key, and the merge
+    /// statement took the chain-last route even for a single path. The
+    /// dangerous route is the ls fallback run with a fully indexed
+    /// predecessor: every unchanged file's run then ends at the boundary,
+    /// each chunk's visit count equals the whole population, and the
+    /// snapshot's total read cost squares with its size. The plus strips a
+    /// term's indexability and nothing else — identical rows touched,
+    /// identical arguments — and lets the IN list drive the primary key, so
+    /// the cost tracks the chunk. `IndexPlanTests` pin all five plans.
+    static func extendRunSQL(pathPlaceholders: String) -> String {
+        """
+        UPDATE entry SET last_seq = ?
+        WHERE chain = ? AND +last_seq = ? AND path IN (\(pathPlaceholders))
+        """
+    }
+
+    /// Deliberately unguarded: `first_seq` appears in no index but the
+    /// primary key, so the chain-last route is unavailable here — pinned by
+    /// the plan tests in case an index ever changes that.
+    static func reachBackSQL(pathPlaceholders: String) -> String {
+        """
+        UPDATE entry SET first_seq = ?
+        WHERE chain = ? AND first_seq = ? AND path IN (\(pathPlaceholders))
+        """
+    }
+
+    static func seamSelectSQL(pathPlaceholders: String) -> String {
+        """
+        SELECT e1.path AS path, e2.last_seq AS last_seq
+        FROM entry e1 JOIN entry e2
+            ON e1.path = e2.path AND e1.chain = e2.chain
+        WHERE e1.chain = ? AND +e1.last_seq = ? AND e2.first_seq = ?
+            AND e1.path IN (\(pathPlaceholders))
+        """
+    }
+
+    static func seamMergeSQL() -> String {
+        "UPDATE entry SET last_seq = ? WHERE chain = ? AND path = ? AND +last_seq = ?"
+    }
+
+    /// Unguarded like reach-back: `first_seq` appears in no index but the
+    /// primary key, so the chain-last route is unavailable — pinned by the
+    /// plan tests in case an index ever changes that.
+    static func seamDeleteSQL() -> String {
+        "DELETE FROM entry WHERE chain = ? AND path = ? AND first_seq = ?"
+    }
+
     func recordContent(snapshotID: String, entries: [IndexedEntry], final: Bool) throws {
         try db.write { db in
             guard let row = try Row.fetchOne(
@@ -178,19 +242,13 @@ final class SQLiteIndexStore: IndexStore {
                 // A run that ended at seq-1 resumes: the file was there before,
                 // and this snapshot proves it is here now.
                 try db.execute(
-                    sql: """
-                    UPDATE entry SET last_seq = ?
-                    WHERE chain = ? AND last_seq = ? AND path IN (\(placeholders))
-                    """,
+                    sql: Self.extendRunSQL(pathPlaceholders: placeholders),
                     arguments: StatementArguments([seq, chain, seq - 1] + pathArguments)
                 )
                 // A run that starts at seq+1 reaches back: same proof, other
                 // side, the case backfill walking newest-first lives in.
                 try db.execute(
-                    sql: """
-                    UPDATE entry SET first_seq = ?
-                    WHERE chain = ? AND first_seq = ? AND path IN (\(placeholders))
-                    """,
+                    sql: Self.reachBackSQL(pathPlaceholders: placeholders),
                     arguments: StatementArguments([seq, chain, seq + 1] + pathArguments)
                 )
 
@@ -199,24 +257,18 @@ final class SQLiteIndexStore: IndexStore {
                 // neighbors is filled in late.
                 let seams = try Row.fetchAll(
                     db,
-                    sql: """
-                    SELECT e1.path AS path, e2.last_seq AS last_seq
-                    FROM entry e1 JOIN entry e2
-                        ON e1.path = e2.path AND e1.chain = e2.chain
-                    WHERE e1.chain = ? AND e1.last_seq = ? AND e2.first_seq = ?
-                        AND e1.path IN (\(placeholders))
-                    """,
+                    sql: Self.seamSelectSQL(pathPlaceholders: placeholders),
                     arguments: StatementArguments([chain, seq, seq] + pathArguments)
                 )
                 for seam in seams {
                     let path: String = seam["path"]
                     let lastSeq: Int = seam["last_seq"]
                     try db.execute(
-                        sql: "UPDATE entry SET last_seq = ? WHERE chain = ? AND path = ? AND last_seq = ?",
+                        sql: Self.seamMergeSQL(),
                         arguments: [lastSeq, chain, path, seq]
                     )
                     try db.execute(
-                        sql: "DELETE FROM entry WHERE chain = ? AND path = ? AND first_seq = ?",
+                        sql: Self.seamDeleteSQL(),
                         arguments: [chain, path, seq]
                     )
                 }
