@@ -22,11 +22,12 @@ struct RootView: View {
     #endif
 
     var body: some View {
-        observed(over: presented(over: NavigationSplitView {
+        let split = NavigationSplitView {
             sidebar
         } detail: {
             detail
-        }))
+        }
+        return revalidate(over: chrome(over: observed(over: presented(over: split))))
     }
 
     /// The sheets, confirmations, notification observers and toolbar state
@@ -77,9 +78,9 @@ struct RootView: View {
         }
     }
 
-    /// The notification observers, toolbar and lifecycle reactions. Kept
-    /// apart from `presented` for the same reason that function exists: the
-    /// full chain in one expression does not type-check.
+    /// The notification observers. Kept apart from `presented` for the same
+    /// reason that function exists: the full chain in one expression does
+    /// not type-check — on CI's Swift it does not even type-check in halves.
     private func observed<V: View>(over content: V) -> some View {
         content
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowFind)) { _ in
@@ -92,8 +93,23 @@ struct RootView: View {
             guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
             editingPlan = BackupPlan()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowConcepts)) { _ in
+            isShowingConcepts = true
+        }
+    }
+
+    /// The toolbar and the banner announcements.
+    private func chrome<V: View>(over content: V) -> some View {
+        content
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar { toolbarButtons }
+        .onChange(of: model.banners) { announceBanner(from: $0, to: $1) }
+    }
+
+    /// Selection revalidation: the reactions that keep the landing pane and
+    /// the sidebar's highlight truthful as the model changes.
+    private func revalidate<V: View>(over content: V) -> some View {
+        content
         .onAppear {
             // Parked for the AppKit tray, which cannot reach a view
             // environment — see AppModel.openMainWindowAction.
@@ -125,10 +141,6 @@ struct RootView: View {
             applyCapturePaneOverride()
             #endif
         }
-        .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowConcepts)) { _ in
-            isShowingConcepts = true
-        }
-        .onChange(of: model.banners) { announceBanner(from: $0, to: $1) }
     }
 
     /// The VoiceOver channel for transient messages: announced once, here at
