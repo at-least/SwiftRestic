@@ -31,7 +31,25 @@ extension AppModel {
             let service = try service()
             let context = try await context(for: repository)
             let listing = try await service.snapshots(context, planID: nil, timeout: Self.refreshTimeout)
-            let stats = try? await service.stats(context, timeout: Self.refreshTimeout)
+            // A stats failure must not fail the listing (the rows are the
+            // news; the size is decoration), but it must not be invisible
+            // either — the banner says what is missing while the rows stay.
+            // Announced once per failing stretch, not once per refresh.
+            let stats: RepositoryStats?
+            do {
+                stats = try await service.stats(context, timeout: Self.refreshTimeout)
+                statsFailureNoted.remove(repositoryID)
+            } catch {
+                stats = nil
+                if !statsFailureNoted.contains(repositoryID) {
+                    statsFailureNoted.insert(repositoryID)
+                    post(Banner(
+                        title: "Could not read “\(repository.name)”'s size",
+                        message: error.localizedDescription,
+                        isError: false
+                    ))
+                }
+            }
             // The repository can be deleted while its refresh is in flight; a
             // removed entry gets no state, no rows and no banner.
             guard configuration.repository(id: repositoryID) != nil else { return }
@@ -76,6 +94,7 @@ extension AppModel {
             // beside an error are worth more to a backup user than a blank card
             // that reads as "nothing backed up".
             guard configuration.repository(id: repositoryID) != nil else { return }
+            noteAuthFailure(error, repositoryID: repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(error.localizedDescription)
             post(Banner(
                 title: "Could not read “\(repository.name)”",

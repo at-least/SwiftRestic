@@ -277,11 +277,30 @@ struct ResticMessageTests {
         #expect(type == "something_new")
     }
 
+    @Test("a known message_type that fails to decode is malformed, not unknown")
+    func malformedKnownType() {
+        guard case let .malformed(type, reason)? = ResticMessageDecoder.decode(
+            line: #"{"message_type":"status","percent_done":"not a number"}"#
+        ) else {
+            Issue.record("expected a malformed message")
+            return
+        }
+        #expect(type == "status")
+        #expect(reason.contains("percent_done"), "the reason should name the field: \(reason)")
+    }
+
     @Test("forget --json reports removals per group")
-    func forgetCounting() {
+    func forgetCounting() throws {
         let output = #"[{"tags":null,"host":"mac","paths":["/tmp/data"],"keep":[{"id":"a"}],"remove":[{"id":"b"},{"id":"c"}],"reasons":[]},{"tags":null,"host":"mac","paths":["/tmp/data2"],"keep":[{"id":"d"}],"remove":null,"reasons":[]}]"#
-        #expect(ResticService.countRemoved(forgetOutput: output) == 2)
-        #expect(ResticService.countRemoved(forgetOutput: "") == 0)
+        #expect(try ResticService.countRemoved(forgetOutput: output) == 2)
+        #expect(try ResticService.countRemoved(forgetOutput: "") == 0)
+    }
+
+    @Test("undecodable forget output throws instead of reporting zero removals")
+    func forgetGarbageThrows() {
+        #expect(throws: ResticError.self) {
+            try ResticService.countRemoved(forgetOutput: "not json at all")
+        }
     }
 }
 

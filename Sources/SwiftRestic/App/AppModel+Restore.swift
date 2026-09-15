@@ -81,6 +81,7 @@ extension AppModel {
                 onSuccess()
             } catch {
                 record.setOutcome(from: error, cancellationMessage: self.cancellationMessage)
+                self.noteAuthFailure(error, repositoryID: repositoryID)
                 if record.outcome == .cancelled {
                     // The strip vanishing is the only signal a cancelled
                     // restore otherwise leaves — including when it is the

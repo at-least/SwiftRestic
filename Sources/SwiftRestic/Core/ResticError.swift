@@ -17,6 +17,17 @@ enum ResticError: Error, LocalizedError, Equatable {
     case processLaunchFailed(String)
     /// The child outlived its timeout and was terminated.
     case timedOut(seconds: TimeInterval, command: String)
+    /// The child produced no output at all for `seconds` and was terminated
+    /// as hung. The distinction from `timedOut` matters to the reader: a
+    /// total-runtime cap kills work that was merely slow, an idle cap only
+    /// kills work that had stopped reporting — so the message can promise
+    /// more than "timed out".
+    case idleStalled(seconds: TimeInterval, command: String)
+    /// restic exited successfully but its output was not the JSON the command
+    /// promises — a schema change, not a command failure. Reported rather
+    /// than papered over: a backup app's numbers must be right or absent,
+    /// never silently zero.
+    case malformedOutput(command: String, detail: String)
 
     var errorDescription: String? {
         switch self {
@@ -48,7 +59,11 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .processLaunchFailed(reason):
             return "Could not start restic: \(reason)"
         case let .timedOut(seconds, _):
-            return "Timed out after \(Int(seconds))s and was stopped." 
+            return "Timed out after \(Int(seconds))s and was stopped."
+        case let .idleStalled(seconds, _):
+            return "Stopped reporting any progress for \(Int(seconds))s and was stopped as hung — check the repository's connection and try again."
+        case let .malformedOutput(_, detail):
+            return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output — none of its numbers were guessed at."
         }
     }
 

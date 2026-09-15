@@ -20,6 +20,12 @@ enum ResticMessage: Sendable, Equatable {
     case statistics(ResticDiffStatistics)
     /// A line we could recognise as JSON but not map to a known `message_type`.
     case unknown(type: String)
+    /// A line carrying a `message_type` we know whose payload failed to
+    /// decode — restic's schema moved under us. Deliberately not folded into
+    /// `unknown`: an unrecognised type is restic growing (fine to ignore), a
+    /// malformed known type is a reporting gap, and callers count these to
+    /// say so instead of dropping the line silently.
+    case malformed(type: String, reason: String)
 }
 
 // MARK: - Payloads
@@ -365,7 +371,33 @@ enum ResticMessageDecoder {
                 return .unknown(type: probe.messageType)
             }
         } catch {
-            return .unknown(type: probe.messageType)
+            return .malformed(type: probe.messageType, reason: Self.briefDecodingFailure(error))
+        }
+    }
+
+    /// One short line about why a known `message_type` failed to decode —
+    /// enough to name the field and the problem, never the whole dumped
+    /// context, so a run record line stays readable.
+    private static func briefDecodingFailure(_ error: Error) -> String {
+        guard let decoding = error as? DecodingError else {
+            return String(describing: type(of: error))
+        }
+        let context: DecodingError.Context
+        switch decoding {
+        case let .typeMismatch(_, c), let .valueNotFound(_, c), let .keyNotFound(_, c):
+            context = c
+        case let .dataCorrupted(c):
+            context = c
+        @unknown default:
+            return "the payload did not decode"
+        }
+        let field = context.codingPath.last?.stringValue ?? "?"
+        switch decoding {
+        case .typeMismatch: return "field “\(field)” has an unexpected type"
+        case .valueNotFound: return "field “\(field)” was missing a value"
+        case .keyNotFound: return "field “\(field)” is absent"
+        case .dataCorrupted: return "field “\(field)” is corrupt"
+        @unknown default: return "field “\(field)” did not decode"
         }
     }
 

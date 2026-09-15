@@ -136,6 +136,15 @@ struct StubRestic: Sendable {
                 echo '{"message_type":"summary","files_new":0,"total_files_processed":1,"total_bytes_processed":10,"snapshot_id":"feedface00000000"}'
                 exit 3
                 ;;
+            malformed)
+                # A known message_type whose payload does not decode: a restic
+                # newer than the schema the app pins. The run exits clean —
+                # the decoder's downgrade must not let it read as clean too.
+                trace "malformed-arm"
+                echo '{"message_type":"status","percent_done":"not-a-number"}'
+                echo '{"message_type":"summary","files_new":1,"total_files_processed":1,"total_bytes_processed":10,"snapshot_id":"feedface00000000"}'
+                exit 0
+                ;;
             missing)
                 # restic's exit 10: the repository is not there or not initialised.
                 trace "missing-arm"
@@ -405,6 +414,24 @@ struct StubResticTests {
             #expect(code == 17)
             #expect(message.contains("unable to open config file"))
         }
+    }
+
+    @Test("a backup with undecodable messages is a warning, never a clean run")
+    func malformedMessagesSurfaceInTheOutcome() async throws {
+        let fixture = try makeFixture(mode: "malformed")
+        defer { cleanUp(fixture.root) }
+
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+
+        // The run finished and the snapshot is real; what must not happen is
+        // the clean report a silently-downgraded line used to produce.
+        #expect(outcome.exitCode == 0)
+        #expect(outcome.summary?.snapshotID == "feedface00000000")
+        #expect(outcome.completedWithErrors)
+        #expect(
+            outcome.itemErrors.contains { $0.contains("could not be decoded") },
+            "the outcome's warnings were: \(outcome.itemErrors)"
+        )
     }
 
     @Test("a binary that cannot be spawned reports a launch failure")

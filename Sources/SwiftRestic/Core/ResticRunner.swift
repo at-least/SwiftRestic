@@ -15,6 +15,14 @@ struct ResticInvocation: Sendable {
     /// Kill the child after this many seconds. A hook that never returns must not
     /// hang the backup that triggered it.
     var timeout: TimeInterval?
+    /// Kill the child after it has produced no output at all for this many
+    /// seconds — a stall cap, not a runtime cap: every received chunk resets
+    /// the clock. For commands that stream NDJSON while they work (`backup`,
+    /// `restore`, the index walks) total silence means the child is hung, while
+    /// a total cap would kill work that was merely slow. Commands that are
+    /// legitimately silent for long stretches (`prune`, `forget`, a console
+    /// `runRaw`) must not set this.
+    var idleTimeout: TimeInterval?
     /// Keep the whole stdout text rather than a bounded tail. Needed for the
     /// commands that answer with one big JSON array (`snapshots`, `stats`,
     /// `forget`) instead of a line-per-event stream.
@@ -36,6 +44,10 @@ struct ResticRunResult: Sendable {
     var messages: [ResticMessage]
     var stdout: String
     var stderr: String
+    /// Lines carrying a known `message_type` whose payload failed to decode.
+    /// A schema change under us must be countable, not silent — the run
+    /// record reports this number instead of dropping the lines.
+    var malformedCount: Int = 0
 
     /// The fatal error restic reported, if it wrote one as JSON.
     var exitError: ResticExitError? {
@@ -136,18 +148,43 @@ actor ResticRunner {
         }
         defer { watchdog?.cancel() }
 
+        // The stall cap: a once-a-second look at how long since the last
+        // chunk. Polling rather than re-arming a sleep per line, which would
+        // churn tasks at restic's progress rate.
+        let idleWatchdog: Task<Void, Never>? = invocation.idleTimeout.map { seconds in
+            Task { [weak box] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    if let box, box.idleInterval >= seconds {
+                        box.terminate(dueToIdleTimeout: true)
+                        return
+                    }
+                }
+            }
+        }
+        defer { idleWatchdog?.cancel() }
+
         let parseStdout = invocation.stdoutFile == nil
+        // Any chunk on either pipe proves the child is alive and counts
+        // against the stall cap — complete lines are not required.
+        let activity: @Sendable () -> Void = { [weak box] in
+            guard let box else { return }
+            box.ping()
+        }
         let stdoutReader = StreamReader(
             handle: stdoutPipe.fileHandleForReading,
             active: parseStdout,
             textLimit: invocation.retainFullOutput ? .max : StreamReader.defaultTextLimit,
-            retainMessages: invocation.retainMessages
+            retainMessages: invocation.retainMessages,
+            onActivity: activity
         )
         let stderrReader = StreamReader(
             handle: stderrPipe.fileHandleForReading,
             active: true,
             textLimit: StreamReader.defaultTextLimit,
-            retainMessages: true
+            retainMessages: true,
+            onActivity: activity
         )
 
         let exitCode: Int32
@@ -178,8 +215,7 @@ actor ResticRunner {
                     stderrMessages: stderr.messages
                 )
                 try Task.checkCancellation()
-                return code
-            } onCancel: {
+                return code            } onCancel: {
                 box.terminate()
             }
         } catch is CancellationError {
@@ -191,6 +227,13 @@ actor ResticRunner {
 
         try? stdoutFileHandle?.close()
         let captured = takeCaptured(handle: handle)
+
+        if box.idleTimedOut {
+            throw ResticError.idleStalled(
+                seconds: invocation.idleTimeout ?? 0,
+                command: invocation.displayCommand
+            )
+        }
 
         if box.timedOut {
             throw ResticError.timedOut(
@@ -215,7 +258,8 @@ actor ResticRunner {
             exitCode: exitCode,
             messages: captured.messages,
             stdout: captured.stdout,
-            stderr: captured.stderr
+            stderr: captured.stderr,
+            malformedCount: captured.malformedCount
         )
     }
 
@@ -226,7 +270,9 @@ actor ResticRunner {
 
     // MARK: - Capture bookkeeping
 
-    private var captured: [UUID: (messages: [ResticMessage], stdout: String, stderr: String)] = [:]
+    private var captured: [UUID: (
+        messages: [ResticMessage], stdout: String, stderr: String, malformedCount: Int
+    )] = [:]
 
     /// stderr's decoded events are appended after stdout's, so a backup's
     /// per-item errors land after its summary. Order within each stream is
@@ -238,12 +284,21 @@ actor ResticRunner {
         stderr: String,
         stderrMessages: [ResticMessage]
     ) {
-        captured[handle] = (stdout.messages + stderrMessages, stdout.text, stderr)
+        captured[handle] = (
+            stdout.messages + stderrMessages,
+            stdout.text,
+            stderr,
+            stdout.malformedCount + stderrMessages.filter { message in
+                if case .malformed = message { return true } else { return false }
+            }.count
+        )
     }
 
-    private func takeCaptured(handle: UUID) -> (messages: [ResticMessage], stdout: String, stderr: String) {
+    private func takeCaptured(handle: UUID) -> (
+        messages: [ResticMessage], stdout: String, stderr: String, malformedCount: Int
+    ) {
         defer { captured[handle] = nil }
-        return captured[handle] ?? ([], "", "")
+        return captured[handle] ?? ([], "", "", 0)
     }
 
     // MARK: - Environment
@@ -286,14 +341,51 @@ private final class ProcessBox: @unchecked Sendable {
     private let process: Process
     private let lock = NSLock()
     private var wasTimedOut = false
+    private var wasIdleTimedOut = false
+    /// In `systemUptime` terms, not wall-clock time: the uptime clock pauses
+    /// while the Mac sleeps, so a backup that survives a closed lid is not
+    /// read as having been silent for the whole nap.
+    private var lastActivity = ProcessInfo.processInfo.systemUptime
 
-    init(_ process: Process) { self.process = process }
+    init(_ process: Process) {
+        self.process = process
+        self.lastActivity = ProcessInfo.processInfo.systemUptime
+    }
 
     func terminate(dueToTimeout: Bool = false) {
         lock.lock()
-        if dueToTimeout { wasTimedOut = true }
+        let running = process.isRunning
+        // Only a live process can be killed by the watchdog — a child that
+        // exited on its own in the race window between poll and terminate
+        // must still report as the success (or failure) it earned.
+        if dueToTimeout && running { wasTimedOut = true }
         lock.unlock()
-        if process.isRunning { process.terminate() }
+        if running { process.terminate() }
+    }
+
+    /// Ends the process on the stall cap. A separate entry point from
+    /// `terminate(dueToTimeout:)` so the two caps report differently: one
+    /// killed slow work, the other killed silent work.
+    func terminate(dueToIdleTimeout: Bool) {
+        lock.lock()
+        let running = process.isRunning
+        if dueToIdleTimeout && running { wasIdleTimedOut = true }
+        lock.unlock()
+        if running { process.terminate() }
+    }
+
+    /// Marks the child as alive — called for every chunk read off either pipe.
+    func ping() {
+        lock.lock()
+        lastActivity = ProcessInfo.processInfo.systemUptime
+        lock.unlock()
+    }
+
+    /// Seconds since the last chunk was read, in uptime terms.
+    var idleInterval: TimeInterval {
+        lock.lock()
+        defer { lock.unlock() }
+        return ProcessInfo.processInfo.systemUptime - lastActivity
     }
 
     /// Whether the watchdog, rather than the user, ended this process.
@@ -301,6 +393,13 @@ private final class ProcessBox: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return wasTimedOut
+    }
+
+    /// Whether the stall cap, rather than the runtime cap, ended this process.
+    var idleTimedOut: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return wasIdleTimedOut
     }
 }
 
@@ -343,6 +442,7 @@ private struct StreamReader: Sendable {
     struct Outcome: Sendable {
         var messages: [ResticMessage] = []
         var text: String = ""
+        var malformedCount: Int = 0
     }
 
     static let defaultTextLimit = 64 * 1024
@@ -351,12 +451,22 @@ private struct StreamReader: Sendable {
     let active: Bool
     let textLimit: Int
     let retainMessages: Bool
+    /// Fires for every chunk read, before any line splitting — liveness is
+    /// cheaper to prove than progress, and a stall cap only needs liveness.
+    let onActivity: (@Sendable () -> Void)?
 
-    init(handle: FileHandle, active: Bool, textLimit: Int, retainMessages: Bool) {
+    init(
+        handle: FileHandle,
+        active: Bool,
+        textLimit: Int,
+        retainMessages: Bool,
+        onActivity: (@Sendable () -> Void)? = nil
+    ) {
         self.handle = FileHandleBox(handle)
         self.active = active
         self.textLimit = textLimit
         self.retainMessages = retainMessages
+        self.onActivity = onActivity
     }
 
     func readAll(
@@ -380,6 +490,7 @@ private struct StreamReader: Sendable {
                     // runs once per line for the whole stream.
                     if retained.utf8.count < limit { retained += line + "\n" }
                     guard decodeMessages, let message = ResticMessageDecoder.decode(line: line) else { return }
+                    if case .malformed = message { outcome.malformedCount += 1 }
                     // Fatal errors are always kept: the runner reads them back to
                     // build the failure message when the exit code is bad.
                     if keepMessages { outcome.messages.append(message) }
@@ -390,6 +501,7 @@ private struct StreamReader: Sendable {
                 while true {
                     let chunk = box.read(upToCount: 64 * 1024)
                     if chunk.isEmpty { break }
+                    onActivity?()
                     buffer.append(chunk)
                     while let newline = buffer.firstIndex(of: 0x0A) {
                         let lineData = buffer[buffer.startIndex ..< newline]

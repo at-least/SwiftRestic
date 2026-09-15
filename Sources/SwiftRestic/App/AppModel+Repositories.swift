@@ -11,6 +11,12 @@ extension AppModel {
         } catch {
             post(Banner(title: "Keychain", message: error.localizedDescription, isError: true))
         }
+        // The cache key compares the Repository value, which by design carries
+        // no secrets — a password-only or provider-secret-only edit leaves it
+        // unchanged, so the entry dies here rather than serving stale
+        // credentials until an exit-12 happens to clear it (a wrong provider
+        // secret never would).
+        resolvedContexts[repository.id] = nil
         if password?.isEmpty == false { repositoriesMissingPassword.remove(repository.id) }
 
         if let index = configuration.repositories.firstIndex(where: { $0.id == repository.id }) {
@@ -120,6 +126,7 @@ extension AppModel {
         snapshotListingOutcomes[id] = nil
         snapshotsLoadedAt[id] = nil
         repositoriesMissingPassword.remove(id)
+        resolvedContexts[id] = nil
         Task { [indexCoordinator] in await indexCoordinator.dropRepository(repositoryID: id) }
         Task { [secrets] in await secrets.remove(id) }
     }
@@ -131,16 +138,35 @@ extension AppModel {
     func storedPassword(for repositoryID: UUID) async -> String? {
         await secrets.load(repositoryID).password
     }
-
     /// Builds everything a restic command needs, or explains what is missing.
     /// The password rules live once, in the drag path's main-actor-free
-    /// variant (`AppModel.dragContext`) — this delegates to it.
+    /// variant (`AppModel.dragContext`) — this delegates to it, and caches
+    /// the answer. The cache key carries the repository value and the rate
+    /// limits (everything except the secrets, which the key cannot see);
+    /// secret edits are covered by `upsert`'s explicit invalidation, and a
+    /// stale credential by `noteAuthFailure`. Failures are never cached;
+    /// only a fully resolved context is.
     func context(for repository: Repository) async throws -> RepositoryContext {
-        try await Self.dragContext(
+        let key = ResolvedContextKey(repository: repository, settings: configuration.settings)
+        if let cached = resolvedContexts[repository.id], cached.key == key {
+            return cached.context
+        }
+        let context = try await Self.dragContext(
             repository: repository,
             settings: configuration.settings,
             secrets: secrets
         )
+        resolvedContexts[repository.id] = (key, context)
+        return context
+    }
+
+    /// Drops a repository's cached context so the next call re-reads the
+    /// Keychain. Exit 12 (wrong password / no matching key) is the failure a
+    /// stale credential produces; without this, a password fixed outside the
+    /// app would leave every call failing until a restart.
+    func noteAuthFailure(_ error: Error, repositoryID: UUID) {
+        guard case let ResticError.commandFailed(code, _, _) = error, code == 12 else { return }
+        resolvedContexts[repositoryID] = nil
     }
 
     /// The engine seam: everything above `ResticClient` is written against
@@ -151,5 +177,22 @@ extension AppModel {
             throw ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
         }
         return ResticService(runner: runner, binary: binary.url)
+    }
+}
+
+/// Everything a cached `RepositoryContext` depends on, carried beside it so
+/// any relevant edit invalidates by comparison — see `AppModel.context(for:)`.
+/// Deliberately not the whole `AppSettings`: only the rate limits reach a
+/// context, and settings like the console history change far more often than
+/// the limits do.
+struct ResolvedContextKey: Equatable, Sendable {
+    var repository: Repository
+    var uploadLimitKiBps: Int
+    var downloadLimitKiBps: Int
+
+    init(repository: Repository, settings: AppSettings) {
+        self.repository = repository
+        self.uploadLimitKiBps = settings.uploadLimitKiBps
+        self.downloadLimitKiBps = settings.downloadLimitKiBps
     }
 }

@@ -92,6 +92,12 @@ struct BackupOutcome: Sendable {
 
 /// The typed restic commands the app uses, layered over `ResticRunner`.
 struct ResticService: ResticClient {
+    /// Stall cap for commands that stream NDJSON while they work (`backup`,
+    /// `restore`, the index walks): total silence for this long means the
+    /// child is hung — a black-holed network path — while a legitimate run of
+    /// any length keeps reporting. Not applied to legitimately silent
+    /// commands (`prune`, `forget`, `dump`, console `runRaw`).
+    static let streamingIdleTimeout: TimeInterval = 15 * 60
     let runner: ResticRunner
     let binary: URL
 
@@ -330,6 +336,7 @@ struct ResticService: ResticClient {
             invocation: ResticInvocation(
                 arguments: context.globalArguments + ["ls", "--json", "--no-lock", snapshotID],
                 environment: context.environment,
+                idleTimeout: Self.streamingIdleTimeout,
                 retainMessages: false
             ),
             onMessage: { message in
@@ -434,6 +441,7 @@ struct ResticService: ResticClient {
             invocation: ResticInvocation(
                 arguments: context.globalArguments + ["diff", "--json", "--no-lock", olderID, newerID],
                 environment: context.environment,
+                idleTimeout: Self.streamingIdleTimeout,
                 retainMessages: false
             ),
             onMessage: { message in
@@ -467,7 +475,8 @@ struct ResticService: ResticClient {
                 arguments: args,
                 environment: context.environment,
                 // 3 = finished, but some source files were unreadable.
-                allowedExitCodes: [0, ResticError.backupPartialSuccessCode]
+                allowedExitCodes: [0, ResticError.backupPartialSuccessCode],
+                idleTimeout: Self.streamingIdleTimeout
             ),
             onMessage: { message in
                 if case let .status(status) = message {
@@ -476,11 +485,20 @@ struct ResticService: ResticClient {
             }
         )
 
+        var itemErrors = result.itemErrors.map { error in
+            if let item = error.item { "\(item): \(error.message)" } else { error.message }
+        }
+        if result.malformedCount > 0 {
+            // A known message that failed to decode is a reporting gap — the
+            // run's numbers may be wrong, and "wrong" must not look like
+            // "clean". One line, so the run record says so.
+            itemErrors.append(
+                "\(result.malformedCount) restic \(result.malformedCount == 1 ? "message" : "messages") could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete."
+            )
+        }
         return BackupOutcome(
             summary: result.summary,
-            itemErrors: result.itemErrors.map { error in
-                if let item = error.item { "\(item): \(error.message)" } else { error.message }
-            },
+            itemErrors: itemErrors,
             exitCode: result.exitCode
         )
     }
@@ -504,13 +522,26 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        return Self.countRemoved(forgetOutput: result.stdout)
+        return try Self.countRemoved(forgetOutput: result.stdout)
     }
 
     /// `forget --json` answers with an array of per-group keep/remove lists.
-    static func countRemoved(forgetOutput: String) -> Int {
-        guard let data = forgetOutput.data(using: .utf8) else { return 0 }
-        guard let groups = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return 0 }
+    ///
+    /// Undecodable output throws rather than reading as zero: "removed 0
+    /// snapshots" is a claim about the user's history, and a restic update
+    /// that changed the shape must surface, not silently delete the count.
+    /// Empty output stays zero — that is restic having nothing to report.
+    static func countRemoved(forgetOutput: String) throws -> Int {
+        let trimmed = forgetOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+        guard let data = trimmed.data(using: .utf8),
+              let groups = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else {
+            throw ResticError.malformedOutput(
+                command: "forget",
+                detail: "could not read the removal count from restic's answer"
+            )
+        }
         return groups.reduce(0) { total, group in
             total + ((group["remove"] as? [Any])?.count ?? 0)
         }
@@ -537,21 +568,22 @@ struct ResticService: ResticClient {
         if node.isDirectory {
             let target = destinationDirectory.appendingPathComponent(node.name.isEmpty ? "restored" : node.name)
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-            let result = try await runner.run(
-                binary: binary,
-                invocation: ResticInvocation(
-                    arguments: context.globalArguments
+        let result = try await runner.run(
+            binary: binary,
+            invocation: ResticInvocation(
+                arguments: context.globalArguments
                         + ["restore", "--json", "\(snapshotID):\(node.path)", "--target", target.path],
-                    environment: context.environment
-                ),
-                onMessage: { message in
-                    if case let .status(status) = message {
-                        onProgress?(OperationProgress(status: status))
-                    }
+                environment: context.environment,
+                idleTimeout: Self.streamingIdleTimeout
+            ),
+            onMessage: { message in
+                if case let .status(status) = message {
+                    onProgress?(OperationProgress(status: status))
                 }
-            )
-            return result.summary
-        }
+            }
+        )
+        return result.summary
+    }
 
         let target = destinationDirectory.appendingPathComponent(node.name)
         _ = try await runner.run(
@@ -585,7 +617,8 @@ struct ResticService: ResticClient {
             invocation: ResticInvocation(
                 arguments: context.globalArguments
                     + ["restore", "--json", snapshotID, "--target", destinationDirectory.path],
-                environment: context.environment
+                environment: context.environment,
+                idleTimeout: Self.streamingIdleTimeout
             ),
             onMessage: { message in
                 if case let .status(status) = message {

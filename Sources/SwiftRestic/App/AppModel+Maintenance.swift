@@ -147,6 +147,7 @@ extension AppModel {
             return
         } catch {
             record.setOutcome(from: error, cancellationMessage: cancellationMessage)
+            noteAuthFailure(error, repositoryID: repository.id)
         }
 
         // Stamp the timestamp whatever happened. Leaving it unset on failure would
@@ -217,6 +218,7 @@ extension AppModel {
                 try await service.unlock(self.context(for: repository))
                 self.post(Banner(title: "Removed stale locks", message: repository.name, isError: false))
             } catch {
+                self.noteAuthFailure(error, repositoryID: repositoryID)
                 self.post(Banner(title: "Unlock failed", message: error.localizedDescription, isError: true))
             }
         }

@@ -139,6 +139,7 @@ extension AppModel {
             await refreshSnapshots(repositoryID: repository.id)
         } catch {
             record.setOutcome(from: error, cancellationMessage: cancellationMessage)
+            noteAuthFailure(error, repositoryID: repository.id)
             markPlanRun(plan.id, at: startedAt, succeeded: false)
         }
 

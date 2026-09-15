@@ -18,6 +18,7 @@ extension AppModel {
             let result = try await service.runRaw(context, arguments: arguments)
             return result.isEmpty ? "(no output)" : result
         } catch {
+            noteAuthFailure(error, repositoryID: repositoryID)
             return error.localizedDescription
         }
     }

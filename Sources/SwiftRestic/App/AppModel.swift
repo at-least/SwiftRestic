@@ -102,6 +102,15 @@ final class AppModel {
 
     let store: ConfigStore
     let secrets: SecretStore
+    /// Resolved restic contexts per repository (repo string + credentials +
+    /// settings), so a restic call does not re-read the Keychain every time —
+    /// a refresh alone used to pay the read twice. Entries are rebuilt when
+    /// the repository value or rate limits change (`AppModel.context(for:)`'s
+    /// key), and dropped on secret edits (`upsert`), repository removal, and
+    /// auth-class failures (`noteAuthFailure`). Holds secrets no longer than
+    /// the app already holds them in each child's environment.
+    @ObservationIgnored var resolvedContexts:
+        [UUID: (key: ResolvedContextKey, context: RepositoryContext)] = [:]
     /// Where view-state stamps (the seen-problem marks) persist. Injectable
     /// so tests never touch the real defaults, the same way secrets never
     /// touch the login Keychain.
@@ -122,6 +131,11 @@ final class AppModel {
     var restoreTask: Task<Void, Never>?
     var schedulerTask: Task<Void, Never>?
     var saveTask: Task<Void, Never>?
+    /// Repositories whose last refresh already announced a stats failure.
+    /// The banner is a transition signal, not a nag: a repository whose stats
+    /// keep failing says it once, and says it again only after a success in
+    /// between proved the failure was gone.
+    @ObservationIgnored var statsFailureNoted: Set<UUID> = []
     private var isSaving = false
     /// Set while `shutdown` is unwinding. A run cancelled this way was not
     /// stopped by the user, and the run record should say so: "Cancelled" sends
