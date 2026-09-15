@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// The root split view: composes the sidebar and detail child views and
+/// carries the app-level chrome — sheets and confirmations, notification
+/// observers, toolbar, and the selection revalidation that keeps the landing
+/// pane truthful as the model changes.
+///
+/// The four per-concern chains below (`presented`, `observed`, `chrome`,
+/// `revalidate`) are each one modifier stack over the split view. They stay
+/// apart because one expression carrying the whole chain crossed the
+/// compiler's type-check time limit (deterministic on clean builds, and only
+/// after unrelated one-line edits elsewhere — the chain sat right at the
+/// limit). The sidebar and detail column live in `SidebarView` and
+/// `RootDetailView`, each type-checking on its own.
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
@@ -16,10 +28,10 @@ struct RootView: View {
     @State private var expandedRestoreRepos: Set<UUID> = []
     #if DEBUG
     @State private var didApplyCaptureOverride = false
-    /// Debug-only: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record rows the
-    /// pane needs land with the first listing, so the selection waits for it.
-    @State private var pendingCaptureRestore = false
     #endif
+    /// Debug-capture state owned here, consumed by the detail column's
+    /// DEBUG-only capture path — see `RootDetailView.pendingCaptureRestore`.
+    @State private var pendingCaptureRestore = false
 
     var body: some View {
         let split = NavigationSplitView {
@@ -30,11 +42,36 @@ struct RootView: View {
         return revalidate(over: chrome(over: observed(over: presented(over: split))))
     }
 
-    /// The sheets, confirmations, notification observers and toolbar state
-    /// that ride on the root split view. Split out of `body`: one expression
-    /// carrying the whole chain crossed the compiler's type-check time limit
-    /// (deterministic on clean builds, and only after unrelated one-line
-    /// edits elsewhere — the chain sat right at the limit).
+    private var sidebar: some View {
+        SidebarView(
+            expandedRestoreRepos: $expandedRestoreRepos,
+            onEditPlan: { editingPlan = $0 },
+            onNewPlan: { editingPlan = BackupPlan() },
+            onEditRepository: { editingRepository = $0 },
+            onNewRepository: { editingRepository = Repository() },
+            onDeletePlan: { planPendingDeletion = $0 },
+            onRemoveRepository: { repositoryPendingRemoval = $0 }
+        )
+    }
+
+    private var detail: some View {
+        RootDetailView(
+            expandedRestoreRepos: $expandedRestoreRepos,
+            pendingCaptureRestore: $pendingCaptureRestore,
+            onEditPlan: { editingPlan = $0 },
+            onEditRepository: { editingRepository = $0 },
+            onAddRepository: { editingRepository = Repository() },
+            onAddPlan: { editingPlan = BackupPlan() },
+            onRevalidateSelection: revalidateSelection,
+            onConsumePendingNewRepository: consumePendingNewRepository
+        )
+    }
+
+    /// The sheets and confirmation dialogs that ride on the root split view.
+    /// Split out of `body`: one expression carrying the whole chain crossed
+    /// the compiler's type-check time limit (deterministic on clean builds,
+    /// and only after unrelated one-line edits elsewhere — the chain sat
+    /// right at the limit).
     private func presented<V: View>(over content: V) -> some View {
         content
         .sheet(item: $editingPlan) { plan in
@@ -79,8 +116,8 @@ struct RootView: View {
     }
 
     /// The notification observers. Kept apart from `presented` for the same
-    /// reason that function exists: the full chain in one expression does
-    /// not type-check — on CI's Swift it does not even type-check in halves.
+    /// reason that function exists: the full chain in one expression does not
+    /// type-check — on CI's Swift it does not even type-check in halves.
     private func observed<V: View>(over content: V) -> some View {
         content
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowFind)) { _ in
@@ -198,355 +235,6 @@ struct RootView: View {
         )
     }
 
-    // MARK: - Sidebar
-
-    private var sidebar: some View {
-        List(selection: Binding(
-            get: { model.sidebarSelection },
-            set: { model.sidebarSelection = $0 }
-        )) {
-            // The same recent-problem count every surface uses; computed once
-            // per body so the badge and the surfaces it points at agree.
-            let problemCount = OverviewMetrics.problemCount(
-                runs: model.configuration.runs,
-                since: Date.now.addingTimeInterval(-7 * 86_400)
-            )
-            Section {
-                Label("Overview", systemImage: "square.grid.2x2")
-                    .tag(SidebarItem.overview)
-            }
-
-            Section("Backup Plans") {
-                ForEach(model.configuration.plans) { plan in
-                    PlanSidebarRow(plan: plan)
-                        .tag(SidebarItem.plan(plan.id))
-                        .contextMenu { planContextMenu(plan) }
-                }
-                if model.configuration.plans.isEmpty, !model.isBootstrapping {
-                    Text("No plans yet")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Restore") {
-                ForEach(model.configuration.repositories) { repository in
-                    restoreGroup(repository)
-                }
-                if model.configuration.repositories.isEmpty, !model.isBootstrapping {
-                    Text("No repositories to restore from")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Repositories") {
-                ForEach(model.configuration.repositories) { repository in
-                    Label {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(repository.name)
-                                .lineLimit(1)
-                            Text(repository.displayLocation)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    } icon: {
-                        Image(systemName: repository.kind.symbolName)
-                            .foregroundStyle(Theme.tint)
-                    }
-                    .tag(SidebarItem.repository(repository.id))
-                    .contextMenu { repositoryContextMenu(repository) }
-                }
-                if model.configuration.repositories.isEmpty, !model.isBootstrapping {
-                    Text("No repositories yet")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            // Console and Activity are peers, not a lone tool plus a footnote.
-            // Console carries the toolbar's guards: with no repository it
-            // opened a pane whose only content was "Choose…", and a tool that
-            // can never work reads as breakage, not emptiness.
-            Section("Tools") {
-                Label("restic Console", systemImage: "apple.terminal")
-                    .tag(SidebarItem.console)
-                    .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
-                Label("Activity", systemImage: "list.bullet.rectangle")
-                    .tag(SidebarItem.activity)
-                    // The window's unread badge, wired to the same 7-day
-                    // window the tray dot, the Problems tile and the menu's
-                    // problem line share: one count, so no surface can claim
-                    // trouble another denies. It also yields to the
-                    // unconfigured state like the tray's problem face does —
-                    // a removed repository's old failures must not summon
-                    // setup-bound attention — and stays silent when clean.
-                    .badge(
-                        problemCount > 0 && !model.configuration.repositories.isEmpty
-                            ? Text(verbatim: "\(problemCount)")
-                            : nil
-                    )
-            }
-        }
-        .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
-        .safeAreaInset(edge: .bottom) { sidebarFooter }
-    }
-
-    private var sidebarFooter: some View {
-        HStack(spacing: 8) {
-            Menu {
-                Button("New Backup Plan…") { editingPlan = BackupPlan() }
-                    .disabled(model.configuration.repositories.isEmpty)
-                Button("Add Repository…") { editingRepository = Repository() }
-            } label: {
-                Label("Add", systemImage: "plus")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-
-            Spacer()
-
-            if !model.isResticAvailable {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Theme.warning)
-                    .help(model.binaryProblem ?? "restic not found")
-                    .accessibilityLabel(model.binaryProblem ?? "restic not found")
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
-    }
-
-    @ViewBuilder
-    private func planContextMenu(_ plan: BackupPlan) -> some View {
-        Button("Back Up Now") { model.runBackup(planID: plan.id) }
-            // Same guard the menu bar applies: an incomplete plan has nothing
-            // to run, and an error banner is not a substitute for a disabled
-            // item.
-            .disabled(model.isRunning(planID: plan.id) || !plan.isConfigurationComplete)
-        Button("Edit…") { editingPlan = plan }
-        // The sidebar row already wears a pause icon when disabled; the menu
-        // is where that state is changed. Manual runs stay possible either way.
-        Button(plan.isEnabled ? "Pause Scheduled Runs" : "Resume Scheduled Runs") {
-            model.setPlanEnabled(id: plan.id, isEnabled: !plan.isEnabled)
-        }
-        Divider()
-        Button("Delete Plan", role: .destructive) { planPendingDeletion = plan }
-    }
-
-    @ViewBuilder
-    private func repositoryContextMenu(_ repository: Repository) -> some View {
-        Button("Edit…") { editingRepository = repository }
-        Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
-        Divider()
-        Button("Remove from SwiftRestic…", role: .destructive) {
-            repositoryPendingRemoval = repository
-        }
-    }
-
-    // MARK: - Sidebar: Restore
-
-    /// Arq's RESTORE section: each repository expands to its backup
-    /// records, and picking a record shows its files in the detail pane.
-    @ViewBuilder
-    private func restoreGroup(_ repository: Repository) -> some View {
-        let listing = model.snapshots(for: repository.id)
-        DisclosureGroup(isExpanded: Binding(
-            get: { expandedRestoreRepos.contains(repository.id) },
-            set: { opened in
-                if opened {
-                    expandedRestoreRepos.insert(repository.id)
-                    // First expand loads the record list; later refreshes
-                    // come from the launch sweep and the repository's own
-                    // Refresh.
-                    if model.snapshotListingOutcome(for: repository.id) == .idle {
-                        Task { await model.refreshSnapshots(repositoryID: repository.id) }
-                    }
-                } else {
-                    expandedRestoreRepos.remove(repository.id)
-                }
-            }
-        )) {
-            if model.loadingSnapshots.contains(repository.id), listing.isEmpty {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Reading backups…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else if case let .failed(message) = model.snapshotListingOutcome(for: repository.id), listing.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(Format.firstSentence(message))
-                        .font(.caption)
-                        .foregroundStyle(Theme.warning)
-                        .lineLimit(2)
-                    Button("Try Again") {
-                        Task { await model.refreshSnapshots(repositoryID: repository.id) }
-                    }
-                    .controlSize(.small)
-                }
-            } else if listing.isEmpty {
-                Text("No backups yet")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(listing) { snapshot in
-                    RestoreRecordRow(snapshot: snapshot)
-                        .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
-                }
-            }
-        } label: {
-            Label {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(repository.name)
-                        .lineLimit(1)
-                    Text("\(Format.plural(listing.count, "backup"))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } icon: {
-                Image(systemName: repository.kind.symbolName)
-                    .foregroundStyle(Theme.tint)
-            }
-        }
-    }
-
-    // MARK: - Detail
-
-    private var detail: some View {
-        detailContent
-    }
-
-    private var detailContent: some View {
-        VStack(spacing: 0) {
-            // A restore outlives the pane that started it, so its progress is
-            // an app-level fact: this strip sits above every pane, and the
-            // menu bar line covers the window-closed case. Switching panes
-            // hands the progress over to this strip.
-            if let progress = model.restoreActivity {
-                OperationProgressView(
-                    title: model.restoreDescription.isEmpty ? "Restoring" : model.restoreDescription,
-                    progress: progress,
-                    startedAt: nil,
-                    onCancel: { model.cancelRestore() }
-                )
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-            }
-            // The one disabled-state whose cause the user cannot see from the
-            // panes themselves: every restic-backed control is grey, and this
-            // is why.
-            if !model.isResticAvailable {
-                // Built in place, not posted: the condition is the model's
-                // binary state, so there is nothing to dismiss.
-                BannerView(
-                    banner: Banner(
-                        title: "restic is missing",
-                        message: model.binaryProblem ?? "restic could not be found. Install it with `brew install restic`, or set the path in Settings.",
-                        isError: true
-                    ),
-                    isDismissible: false
-                )
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-            }
-            if model.isBootstrapping {
-                // Configuration still being read: a loading state, not the
-                // empty states — an empty sidebar and Welcome here would read
-                // as a fresh install or as breakage.
-                ProgressView("Reading your configuration…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                switch model.sidebarSelection {
-                case .overview:
-                    OverviewView(onShowProblems: {
-                        model.sidebarSelection = .activity
-                    })
-                case let .plan(id):
-                    if let plan = model.plan(id: id) {
-                        PlanDetailView(
-                            planID: plan.id,
-                            onEdit: { editingPlan = plan },
-                            onShowRun: { model.sidebarSelection = .activity }
-                        )
-                    } else {
-                        ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
-                    }
-                case let .repository(id):
-                    if let repository = model.repository(id: id) {
-                        RepositoryDetailView(
-                            repositoryID: repository.id,
-                            onEdit: { editingRepository = repository }
-                        )
-                    } else {
-                        ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
-                    }
-                case let .restoreSnapshot(repositoryID, snapshotID):
-                    RestorePaneView(repositoryID: repositoryID, snapshotID: snapshotID)
-                        // Folder state belongs to one repository: switching
-                        // to another must not carry paths or history over —
-                        // the pane's own @State resets with the identity.
-                        .id(repositoryID)
-                case .console:
-                    ResticConsoleView()
-                case .activity:
-                    ActivityView(onOpenPlan: { planID in
-                        model.sidebarSelection = .plan(planID)
-                    })
-                case .none:
-                    WelcomeView(
-                        onAddRepository: { editingRepository = Repository() },
-                        onAddPlan: { editingPlan = BackupPlan() }
-                    )
-                }
-            }
-        }
-        // The new-repository intent lands on this unconditional stack rather
-        // than the body's modifier chain — the chain is long enough that one
-        // more modifier pushed it past the type-checker's budget, and this
-        // stack exists in every state, so the consumption fires wherever the
-        // window is already open.
-        .onChange(of: model.pendingNewRepository) {
-            consumePendingNewRepository()
-        }
-        // The console row disables on restic availability as well as on an
-        // empty repository list, and only count changes revalidate the
-        // selection — a binary lost while the console pane is open would
-        // otherwise park the selection on a row the sidebar now refuses.
-        .onChange(of: model.isResticAvailable) {
-            revalidateSelection()
-        }
-        // A restore record picked from anywhere (the repository page's
-        // Restore Files button included) must find its group open.
-        .onChange(of: model.sidebarSelection) {
-            if case let .restoreSnapshot(repositoryID, _) = model.sidebarSelection {
-                expandedRestoreRepos.insert(repositoryID)
-            }
-        }
-        // A refresh can drop the selected record (retention ran, the
-        // repository was re-initialised); the pane must not dead-end.
-        .onChange(of: model.snapshots) {
-            revalidateSelection()
-        }
-        #if DEBUG
-        .onChange(of: model.snapshots) {
-            // SWIFTRESTIC_CAPTURE_PANE=restore: the rows the pane needs land
-            // with the first listing, so the selection happens here.
-            guard pendingCaptureRestore,
-                  let repository = model.configuration.repositories.first,
-                  let latest = model.snapshots(for: repository.id).first
-            else { return }
-            pendingCaptureRestore = false
-            expandedRestoreRepos.insert(repository.id)
-            model.sidebarSelection = .restoreSnapshot(repository.id, latest.id)
-        }
-        #endif
-    }
-
     #if DEBUG
     /// Debug-only: lets a capture run choose which pane to render.
     ///
@@ -629,154 +317,5 @@ struct RootView: View {
         default:
             break
         }
-    }
-}
-
-/// One dated backup record in the Restore section — the row whose selection
-/// fills the detail pane with that record's files. One line, like Arq's: the
-/// checkmark and the moment are the whole record at sidebar size.
-private struct RestoreRecordRow: View {
-    let snapshot: Snapshot
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Theme.success)
-                .font(.caption)
-                .help("This backup is complete and restorable")
-            Text(Format.timestamp(snapshot.time))
-                .lineLimit(1)
-        }
-        .help("Browse this backup's files and restore from it")
-    }
-}
-
-private struct PlanSidebarRow: View {
-    @Environment(AppModel.self) private var model
-    let plan: BackupPlan
-
-    var body: some View {
-        HStack(spacing: 8) {
-            // A row wears state, never identity. In rank: the in-flight
-            // spinner, the Mail dot for a failure the user has not seen, the
-            // pause mark. An otherwise idle plan wears nothing.
-            if model.isRunning(planID: plan.id) {
-                ProgressView().controlSize(.small)
-            } else if model.showsProblemDot(for: plan.id) {
-                // Accent blue like Mail's unread dot, never red: the dot is
-                // an invitation ("a failure you haven't seen"), and the alarm
-                // lives in the subtitle's words and hue. It clears when the
-                // plan's page is opened or the next run succeeds.
-                Circle()
-                    .fill(Theme.tint)
-                    .frame(width: 9, height: 9)
-                    .accessibilityLabel("A failed run you haven't seen")
-            } else if !plan.isEnabled {
-                Image(systemName: "pause.circle")
-                    .foregroundStyle(.secondary)
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
-                    .lineLimit(1)
-                Text(subtitle.text)
-                    .font(.caption)
-                    .foregroundStyle(subtitle.hue)
-                    .lineLimit(1)
-            }
-        }
-    }
-
-    // Words and hue move together, so the dot is never a state's only
-    // non-text signal.
-    private var subtitle: (text: String, hue: Color) {
-        if let activity = model.activity[plan.id] {
-            return (activity.phase.displayName, .secondary)
-        }
-        // Paused wears no icon any more; the subtitle is where the state
-        // is named.
-        if !plan.isEnabled {
-            return ("Paused — \(plan.schedule.summary)", .secondary)
-        }
-        // A standing failure is the row's real news, named for as long as it
-        // stands — seen or not — in the warning hue.
-        if let problem = model.currentProblem(for: plan.id) {
-            return ("\(problem.outcome.displayName) — \(Format.relative(problem.finishedAt))", Theme.warning)
-        }
-        if plan.lastSuccessAt != nil {
-            return ("Last backup \(Format.relative(plan.lastSuccessAt))", .secondary)
-        }
-        return (plan.schedule.summary, .secondary)
-    }
-}
-
-struct WelcomeView: View {
-    @Environment(AppModel.self) private var model
-    let onAddRepository: () -> Void
-    let onAddPlan: () -> Void
-
-    var body: some View {
-        VStack(spacing: 22) {
-            Spacer()
-
-            // The app's own mark — the same construction the tray wears — at
-            // hero scale, bare: a welcome screen's job is the mark and the
-            // two buttons, and a macOS welcome wears no plate behind its mark.
-            Image(nsImage: MenuBarLogo.heroImage)
-                .resizable()
-                .foregroundStyle(Theme.tint)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 84, height: 84)
-                .accessibilityHidden(true)
-
-            Text("SwiftRestic")
-                .font(.largeTitle.weight(.bold))
-
-            if let problem = model.binaryProblem {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("restic is not available")
-                            .font(.headline)
-                        Text(problem)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding(Theme.Space.cardPadding)
-                .frame(maxWidth: 460)
-                .cardSurface()
-            }
-
-            VStack(spacing: 8) {
-                HStack(spacing: 10) {
-                    Button("Add a Repository…", action: onAddRepository)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                    Button("New Backup Plan…") {
-                        // The plan's first requirement is where backups go.
-                        // With no repository yet, this button starts there —
-                        // a disabled button with an invisible reason was a
-                        // dead end at the exact moment adoption is decided.
-                        if model.configuration.repositories.isEmpty {
-                            onAddRepository()
-                        } else {
-                            onAddPlan()
-                        }
-                    }
-                    .controlSize(.large)
-                }
-                if model.configuration.repositories.isEmpty {
-                    Text("A backup plan backs up to a repository — add the repository first.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
