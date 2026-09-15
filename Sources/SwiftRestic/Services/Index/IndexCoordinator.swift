@@ -78,7 +78,7 @@ actor IndexCoordinator {
         do {
             let store = try self.store(for: repositoryID)
             while !Task.isCancelled {
-                let batch = try await store.pendingBackfill(limit: 16)
+                let batch = try store.pendingBackfill(limit: 16)
                 guard !batch.isEmpty else { break }
                 var progressed = false
                 for next in batch {

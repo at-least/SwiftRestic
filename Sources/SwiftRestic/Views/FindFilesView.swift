@@ -350,7 +350,6 @@ struct FindFilesView: View {
                 dropped += 1
                 continue
             }
-            let name = (hit.path as NSString).lastPathComponent
             let match = FindMatch(
                 path: hit.path,
                 type: hit.isDirectory == true ? "dir" : "file",

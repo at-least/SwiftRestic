@@ -270,8 +270,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         if let aeDesc = event.aeDesc {
             var desc = aeDesc.pointee
             // The copied descriptor's storage belongs to `event`; the send
-            // must finish before that storage can go away.
-            withExtendedLifetime(event) {
+            // must finish before that storage can go away. No-reply: the
+            // status is deliberately dropped.
+            _ = withExtendedLifetime(event) {
                 AESendMessage(&desc, nil, AESendMode(kAENoReply), kAEDefaultTimeout)
             }
         }

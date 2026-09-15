@@ -22,12 +22,20 @@ struct RootView: View {
     #endif
 
     var body: some View {
-        @Bindable var model = model
-        NavigationSplitView {
+        observed(over: presented(over: NavigationSplitView {
             sidebar
         } detail: {
             detail
-        }
+        }))
+    }
+
+    /// The sheets, confirmations, notification observers and toolbar state
+    /// that ride on the root split view. Split out of `body`: one expression
+    /// carrying the whole chain crossed the compiler's type-check time limit
+    /// (deterministic on clean builds, and only after unrelated one-line
+    /// edits elsewhere — the chain sat right at the limit).
+    private func presented<V: View>(over content: V) -> some View {
+        content
         .sheet(item: $editingPlan) { plan in
             PlanEditorSheet(plan: plan)
                 .environment(model)
@@ -73,6 +81,13 @@ struct RootView: View {
                 Text(model.removalConsequences(for: repository.id))
             }
         }
+    }
+
+    /// The notification observers, toolbar and lifecycle reactions. Kept
+    /// apart from `presented` for the same reason that function exists: the
+    /// full chain in one expression does not type-check.
+    private func observed<V: View>(over content: V) -> some View {
+        content
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowFind)) { _ in
             isShowingFind = true
         }
@@ -139,14 +154,20 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowConcepts)) { _ in
             isShowingConcepts = true
         }
-        .onChange(of: model.banners) { old, new in
-            // The VoiceOver channel for transient messages: announced once,
-            // here at the root, when the message lands — never per rendering
-            // pane, so switching panes cannot re-speak a banner still on
-            // screen, and the queue's dismissals say nothing.
-            guard new.count > old.count, let banner = new.first else { return }
-            AccessibilityNotification.Announcement("\(banner.title). \(banner.message)").post()
-        }
+        .onChange(of: model.banners) { announceBanner(from: $0, to: $1) }
+    }
+
+    /// The VoiceOver channel for transient messages: announced once, here at
+    /// the root, when the message lands — never per rendering pane, so
+    /// switching panes cannot re-speak a banner still on screen, and the
+    /// queue's dismissals say nothing.
+    ///
+    /// Extracted from the root modifier chain: the two-parameter onChange
+    /// closure was the expression that pushed the whole chain past the
+    /// compiler's type-check time limit.
+    private func announceBanner(from old: [Banner], to new: [Banner]) {
+        guard new.count > old.count, let banner = new.first else { return }
+        AccessibilityNotification.Announcement("\(banner.title). \(banner.message)").post()
     }
 
     // MARK: - Sidebar

@@ -47,7 +47,9 @@ struct RestorePaneView: View {
 
     var body: some View {
         Group {
-            if let record {
+            // Nil-test, not a binding: the bound value is never read here —
+            // the browser pane re-reads the property behind its own guards.
+            if record != nil {
                 browserPane()
             } else {
                 ContentUnavailableView {
