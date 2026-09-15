@@ -49,10 +49,7 @@ struct RootView: View {
         }
         .confirmationDialog(
             planPendingDeletion.map { "Delete “\($0.name)”?" } ?? "",
-            isPresented: Binding(
-                get: { planPendingDeletion != nil },
-                set: { if !$0 { planPendingDeletion = nil } }
-            ),
+            isPresented: planDeletionConfirmation,
             titleVisibility: .visible
         ) {
             Button("Delete Plan", role: .destructive) {
@@ -64,10 +61,7 @@ struct RootView: View {
         }
         .confirmationDialog(
             "Remove this repository from SwiftRestic?",
-            isPresented: Binding(
-                get: { repositoryPendingRemoval != nil },
-                set: { if !$0 { repositoryPendingRemoval = nil } }
-            ),
+            isPresented: repositoryRemovalConfirmation,
             titleVisibility: .visible
         ) {
             Button("Remove", role: .destructive) {
@@ -92,34 +86,14 @@ struct RootView: View {
             isShowingFind = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticRunSelected)) { _ in
-            // ⌘B: run whichever plan the sidebar is on. A no-op when the
-            // selection is not a runnable plan — the menu item's name says as
-            // much — and while a sheet is up, where a run would start unseen.
-            guard editingPlan == nil, editingRepository == nil, !isShowingFind
-            else { return }
-            if case let .plan(id) = model.sidebarSelection,
-               let plan = model.plan(id: id),
-               plan.isConfigurationComplete,
-               !model.isRunning(planID: id)
-            {
-                model.runBackup(planID: id)
-            }
+            runSelectedPlanFromNotification()
         }
         .onReceive(NotificationCenter.default.publisher(for: .swiftResticNewPlan)) { _ in
             guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
             editingPlan = BackupPlan()
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .toolbar {
-            Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
-                .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
-                .help("Search snapshots for files, across every snapshot (⇧⌘F)")
-            Button("restic Console", systemImage: "apple.terminal") {
-                model.sidebarSelection = .console
-            }
-            .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
-            .help("Run restic commands directly against a repository")
-        }
+        .toolbar { toolbarButtons }
         .onAppear {
             // Parked for the AppKit tray, which cannot reach a view
             // environment — see AppModel.openMainWindowAction.
@@ -168,6 +142,48 @@ struct RootView: View {
     private func announceBanner(from old: [Banner], to new: [Banner]) {
         guard new.count > old.count, let banner = new.first else { return }
         AccessibilityNotification.Announcement("\(banner.title). \(banner.message)").post()
+    }
+
+    /// ⌘B: run whichever plan the sidebar is on. A no-op when the selection
+    /// is not a runnable plan — the menu item's name says as much — and
+    /// while a sheet is up, where a run would start unseen.
+    private func runSelectedPlanFromNotification() {
+        guard editingPlan == nil, editingRepository == nil, !isShowingFind
+        else { return }
+        if case let .plan(id) = model.sidebarSelection,
+           let plan = model.plan(id: id),
+           plan.isConfigurationComplete,
+           !model.isRunning(planID: id)
+        {
+            model.runBackup(planID: id)
+        }
+    }
+
+    private var toolbarButtons: some ToolbarContent {
+        ToolbarItemGroup {
+            Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
+                .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
+                .help("Search snapshots for files, across every snapshot (⇧⌘F)")
+            Button("restic Console", systemImage: "apple.terminal") {
+                model.sidebarSelection = .console
+            }
+            .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
+            .help("Run restic commands directly against a repository")
+        }
+    }
+
+    private var planDeletionConfirmation: Binding<Bool> {
+        Binding(
+            get: { planPendingDeletion != nil },
+            set: { if !$0 { planPendingDeletion = nil } }
+        )
+    }
+
+    private var repositoryRemovalConfirmation: Binding<Bool> {
+        Binding(
+            get: { repositoryPendingRemoval != nil },
+            set: { if !$0 { repositoryPendingRemoval = nil } }
+        )
     }
 
     // MARK: - Sidebar

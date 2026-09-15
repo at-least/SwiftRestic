@@ -11,7 +11,7 @@ import Foundation
 extension KeyedDecodingContainer {
     func value<T: Decodable>(_ key: Key, default fallback: T) -> T {
         guard let decoded = try? decodeIfPresent(T.self, forKey: key) else { return fallback }
-        return decoded ?? fallback
+        return decoded
     }
 
     func optional<T: Decodable>(_ key: Key, as type: T.Type = T.self) -> T? {
