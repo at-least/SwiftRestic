@@ -11,13 +11,13 @@ extension AppModel {
         node: SnapshotNode,
         to destination: URL
     ) {
-        beginRestore(repositoryID: repositoryID, label: node.name) { service, context in
+        beginRestore(repositoryID: repositoryID, label: node.name) { [weak self] service, context in
             try await service.restore(
                 context,
                 snapshotID: snapshotID,
                 node: node,
                 destinationDirectory: destination
-            ) { [weak self] progress in
+            ) { progress in
                 Task { @MainActor in self?.restoreActivity = progress }
             }
         } onSuccess: { [weak self] in
@@ -33,12 +33,12 @@ extension AppModel {
     /// Restores every file in a snapshot, keeping the original absolute layout
     /// beneath `destination`.
     func restoreWholeSnapshot(repositoryID: UUID, snapshotID: String, to destination: URL) {
-        beginRestore(repositoryID: repositoryID, label: "snapshot \(snapshotID.prefix(8))") { service, context in
+        beginRestore(repositoryID: repositoryID, label: "snapshot \(snapshotID.prefix(8))") { [weak self] service, context in
             try await service.restoreWholeSnapshot(
                 context,
                 snapshotID: snapshotID,
                 destinationDirectory: destination
-            ) { [weak self] progress in
+            ) { progress in
                 Task { @MainActor in self?.restoreActivity = progress }
             }
         } onSuccess: { [weak self] in
