@@ -85,6 +85,9 @@ struct RootView: View {
         .sheet(isPresented: $isShowingFind) {
             FindFilesView().environment(model)
         }
+        .sheet(isPresented: $isShowingConcepts) {
+            ConceptsView()
+        }
         .confirmationDialog(
             planPendingDeletion.map { "Delete “\($0.name)”?" } ?? "",
             isPresented: planDeletionConfirmation,
@@ -250,6 +253,7 @@ struct RootView: View {
         case "repository": model.sidebarSelection = model.configuration.repositories.first.map { .repository($0.id) }
         case "activity": model.sidebarSelection = .activity
         case "find": isShowingFind = true
+        case "concepts": isShowingConcepts = true
         case "console": model.sidebarSelection = .console
         case "overview": model.sidebarSelection = .overview
         // The restore pane needs a snapshot row to select, and those arrive
