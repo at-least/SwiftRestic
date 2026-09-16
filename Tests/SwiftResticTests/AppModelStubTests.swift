@@ -419,6 +419,45 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("quitting while a backup hangs mid-stream unwinds, records, and leaves no child")
+    func shutdownDrainsAHungStreamingRun() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        // The hang is what guarantees the quit lands mid-run — with the
+        // streaming command's idle-watchdog poll task live, which shutdown
+        // must also unwind rather than wait out.
+        let hangEstablished = await StubRestic.waitForHang(
+            matching: harness.stub.sleepMarker, within: 10
+        )
+        if !hangEstablished {
+            let trace = (try? String(
+                contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8
+            )) ?? "no trace"
+            Issue.record("the stub never established its hang within 10 s; trace: [\(trace)]")
+        }
+        #expect(!harness.model.quitInterruptions.isEmpty)
+
+        // Bounded on purpose: a regression here hangs the quit path, and the
+        // test must fail instead of hanging CI.
+        let finished = await withTaskGroup(of: Bool.self) { group -> Bool in
+            group.addTask { await harness.model.shutdown(); return true }
+            group.addTask { try? await Task.sleep(for: .seconds(30)); return false }
+            let first = await group.next()!
+            group.cancelAll()
+            return first
+        }
+        #expect(finished, "shutdown did not finish within 30 s of a hung backup")
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.outcome == .cancelled)
+        #expect(
+            await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 10),
+            "the stub restic process outlived the quit"
+        )
+    }
+
     @Test("a finished backup announces its outcome in the banner queue")
     func finishedBackupAnnouncesItself() async throws {
         let harness = try await makeHarness(mode: "default")

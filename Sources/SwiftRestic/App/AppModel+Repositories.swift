@@ -176,7 +176,13 @@ extension AppModel {
         guard let binary else {
             throw ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
         }
-        return ResticService(runner: runner, binary: binary.url)
+        return ResticService(
+            runner: runner,
+            binary: binary.url,
+            // `resolveBinary` probed the version at launch; an unreadable
+            // answer keeps the stall cap's default (on).
+            streamsRestoreProgress: ResticVersion(parsing: resticVersion)?.streamsRestoreProgress ?? true
+        )
     }
 }
 

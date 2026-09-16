@@ -84,3 +84,48 @@ struct ResticBinary: Sendable {
         return nil
     }
 }
+
+/// The version parts of `restic version`'s first line, for the features the
+/// app gates on rather than displays.
+struct ResticVersion: Equatable, Sendable {
+    var major: Int
+    var minor: Int
+    var patch: Int
+
+    /// Parses "restic 0.19.1 compiled with go1.26.5 darwin/arm64" — the
+    /// whole first line is accepted so callers can hand over `version()`'s
+    /// output as-is. `nil` when no dotted triple follows the name.
+    ///
+    /// Pre-release and build suffixes ride on the patch component
+    /// ("0.18.0-rc.1", "0.19.1+123"): the patch is the digits before the
+    /// first "-" or "+", and a suffix never promotes a version —
+    /// 0.18.0-rc.1 is 0.18.0, not 0.18.1. Dropping unparseable components
+    /// instead would turn "0.15.0-dev" into no-version-at-all, which the
+    /// restore stall cap's default would read as modern restic.
+    init?(parsing output: String) {
+        let firstLine = (output.split(separator: "\n").first.map(String.init) ?? output)
+            .trimmingCharacters(in: .whitespaces)
+        guard let range = firstLine.range(of: "restic ") else { return nil }
+        let token = firstLine[range.upperBound...]
+            .split(separator: " ").first.map(String.init) ?? ""
+        let components = token.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard components.count >= 3,
+              let major = Int(components[0]),
+              let minor = Int(components[1])
+        else { return nil }
+        let patchDigits = components[2]
+            .split(whereSeparator: { $0 == "-" || $0 == "+" })
+            .first.map(String.init) ?? ""
+        guard let patch = Int(patchDigits), patchDigits.allSatisfy(\.isNumber) else { return nil }
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+    }
+
+    /// `restore --json` began streaming progress lines in restic 0.16.
+    /// Before that, a healthy long restore is silent — an idle stall cap
+    /// would kill it as hung — so the cap only applies from this version on.
+    var streamsRestoreProgress: Bool {
+        (major, minor, patch) >= (0, 16, 0)
+    }
+}

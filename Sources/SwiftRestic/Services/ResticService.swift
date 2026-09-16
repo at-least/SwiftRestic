@@ -100,6 +100,13 @@ struct ResticService: ResticClient {
     static let streamingIdleTimeout: TimeInterval = 15 * 60
     let runner: ResticRunner
     let binary: URL
+    /// Whether the located restic streams `restore --json` progress (0.16+):
+    /// the restore commands' idle stall cap applies only when it does — an
+    /// older, legitimately silent restore must not be killed as hung.
+    /// Defaults on: an unreadable version is more likely a transient than an
+    /// ancient binary, and the app's decoding is pinned to modern restic
+    /// output anyway.
+    var streamsRestoreProgress = true
 
     /// Tag stamped on every snapshot a plan creates, so retention and snapshot
     /// listings can be scoped to that plan without touching anyone else's data.
@@ -574,7 +581,7 @@ struct ResticService: ResticClient {
                 arguments: context.globalArguments
                         + ["restore", "--json", "\(snapshotID):\(node.path)", "--target", target.path],
                 environment: context.environment,
-                idleTimeout: Self.streamingIdleTimeout
+                idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
             ),
             onMessage: { message in
                 if case let .status(status) = message {
@@ -618,7 +625,7 @@ struct ResticService: ResticClient {
                 arguments: context.globalArguments
                     + ["restore", "--json", snapshotID, "--target", destinationDirectory.path],
                 environment: context.environment,
-                idleTimeout: Self.streamingIdleTimeout
+                idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
             ),
             onMessage: { message in
                 if case let .status(status) = message {
