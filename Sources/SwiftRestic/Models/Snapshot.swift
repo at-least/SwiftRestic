@@ -51,6 +51,12 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
         case dev, chardev, fifo, socket
     }
 
+    /// Identity is the path, like `Snapshot`'s is its ID: equality and hashing
+    /// follow so `Identifiable`, `Equatable` and set semantics can never
+    /// disagree about which node is which.
+    static func == (lhs: SnapshotNode, rhs: SnapshotNode) -> Bool { lhs.path == rhs.path }
+    func hash(into hasher: inout Hasher) { hasher.combine(path) }
+
     var name: String
     var type: Kind
     var path: String
@@ -112,6 +118,10 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var id: String { path }
     var isDirectory: Bool { type == "dir" }
     var name: String { (path as NSString).lastPathComponent }
+
+    /// Identity is the path, matching `id`; equality and hashing follow.
+    static func == (lhs: FindMatch, rhs: FindMatch) -> Bool { lhs.path == rhs.path }
+    func hash(into hasher: inout Hasher) { hasher.combine(path) }
 
     /// The node shape the restore code already understands.
     var node: SnapshotNode {

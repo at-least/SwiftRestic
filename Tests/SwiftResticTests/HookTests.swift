@@ -67,6 +67,20 @@ struct HookTests {
         #expect(try String(contentsOf: marker, encoding: .utf8) == "Documents abc12345")
     }
 
+    @Test("a hook runs from the home directory, not the app's inherited cwd")
+    func runsFromHomeDirectory() async throws {
+        var hook = BackupHook()
+        hook.name = "report cwd"
+        hook.command = "pwd"
+
+        let outcome = await HookRunner(runner: ResticRunner()).run(hook, context: context())
+
+        #expect(outcome.succeeded)
+        // A Finder-launched GUI app inherits `/`; a hook's relative paths
+        // must not depend on that accident.
+        #expect(outcome.output.contains(NSHomeDirectory()))
+    }
+
     @Test("a non-zero exit is reported, not thrown")
     func failingCommand() async {
         var hook = BackupHook()

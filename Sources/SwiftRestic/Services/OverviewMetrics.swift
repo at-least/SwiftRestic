@@ -21,8 +21,8 @@ struct RepositoryVolume: Identifiable, Sendable, Equatable {
 /// Pure and separate from the view so it can be tested, and so the reduction
 /// happens once when the history changes rather than on every redraw.
 enum OverviewMetrics {
-    /// Categorical colour slots available. A ninth series is never a generated
-    /// hue: everything past the cap folds into "Other".
+    /// Categorical colour slots available. An eighth series is never a
+    /// generated hue: everything past the cap folds into "Other".
     static let seriesCap = 7
     static let otherSeriesName = "Other"
 
@@ -77,8 +77,13 @@ enum OverviewMetrics {
         guard ordered.count > seriesCap else { return ordered }
         // Over the cap the smallest contributors fold together, so the series
         // that matter keep their own colour.
+        // Swift's sort is not stable, so equal totals must be broken by name
+        // themselves — otherwise two tied plans can swap between keeping a
+        // colour and folding into Other between redraws.
         let byVolume = ordered.sorted { lhs, rhs in
-            (totals[lhs]?.values.reduce(0, +) ?? 0) > (totals[rhs]?.values.reduce(0, +) ?? 0)
+            let lhsTotal = totals[lhs]?.values.reduce(0, +) ?? 0
+            let rhsTotal = totals[rhs]?.values.reduce(0, +) ?? 0
+            return lhsTotal == rhsTotal ? lhs < rhs : lhsTotal > rhsTotal
         }
         let keep = Set(byVolume.prefix(seriesCap))
         return ordered.filter(keep.contains)

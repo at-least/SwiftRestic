@@ -575,22 +575,22 @@ struct ResticService: ResticClient {
         if node.isDirectory {
             let target = destinationDirectory.appendingPathComponent(node.name.isEmpty ? "restored" : node.name)
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments
-                        + ["restore", "--json", "\(snapshotID):\(node.path)", "--target", target.path],
-                environment: context.environment,
-                idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
-            ),
-            onMessage: { message in
-                if case let .status(status) = message {
-                    onProgress?(OperationProgress(status: status))
+            let result = try await runner.run(
+                binary: binary,
+                invocation: ResticInvocation(
+                    arguments: context.globalArguments
+                            + ["restore", "--json", "\(snapshotID):\(node.path)", "--target", target.path],
+                    environment: context.environment,
+                    idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
+                ),
+                onMessage: { message in
+                    if case let .status(status) = message {
+                        onProgress?(OperationProgress(status: status))
+                    }
                 }
-            }
-        )
-        return result.summary
-    }
+            )
+            return result.summary
+        }
 
         let target = destinationDirectory.appendingPathComponent(node.name)
         _ = try await runner.run(

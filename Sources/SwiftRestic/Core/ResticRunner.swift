@@ -4,6 +4,11 @@ import Foundation
 struct ResticInvocation: Sendable {
     var arguments: [String]
     var environment: [String: String] = [:]
+    /// Where the child runs. `nil` inherits the app's own working directory,
+    /// which for a Finder-launched GUI app is `/` — a surprise no script
+    /// should have to guess at, so callers that run user-authored commands
+    /// (hooks) name a directory explicitly.
+    var workingDirectory: String?
     /// Exit codes that should not be treated as failure. `backup` adds 3, which
     /// means "finished, but some files could not be read".
     ///
@@ -124,6 +129,9 @@ actor ResticRunner {
         let process = Process()
         process.executableURL = binary
         process.arguments = invocation.arguments
+        if let workingDirectory = invocation.workingDirectory {
+            process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory, isDirectory: true)
+        }
         process.environment = Self.baseEnvironment().merging(invocation.environment) { _, new in new }
 
         let stdoutPipe = Pipe()

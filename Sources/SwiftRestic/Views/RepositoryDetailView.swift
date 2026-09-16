@@ -262,7 +262,9 @@ struct RepositoryDetailView: View {
         // render under the new one's caption nor overwrite its numbers.
         .task(id: repository.id) {
             volumeCapacity = nil
-            let path = repository.localPath
+            // Expanded, or `~/Backups` would probe a literal tilde directory
+            // that can never exist.
+            let path = repository.resolvedLocalPath
             let read = await Task.detached { VolumeCapacity.of(path: path) }.value
             if !Task.isCancelled {
                 volumeCapacity = read

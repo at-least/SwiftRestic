@@ -100,11 +100,14 @@ struct ResticBinaryTests {
 
     @Test("an override that is not an executable file is refused")
     func brokenOverrideIsRefused() {
+        // A missing file is a different sentence than an unexecutable one:
+        // "not executable" would send someone hunting through permissions
+        // for what is really a typo.
         do {
             _ = try ResticBinary.locate(userOverride: "/nonexistent-restic-binary")
             Issue.record("a missing override must not be accepted")
-        } catch let ResticError.binaryNotExecutable(path) {
-            #expect(path == "/nonexistent-restic-binary")
+        } catch let ResticError.binaryNotFound(searched) {
+            #expect(searched == ["/nonexistent-restic-binary"])
         } catch {
             Issue.record("unexpected error: \(error)")
         }

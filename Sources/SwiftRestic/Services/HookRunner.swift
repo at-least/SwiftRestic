@@ -3,8 +3,11 @@ import Foundation
 /// Runs a plan's or a repository's shell hooks.
 ///
 /// Commands go through `/bin/sh -c` with the surrounding run's facts exported as
-/// `SWIFTRESTIC_*` variables. They inherit the app's own privileges, which are
-/// not sandboxed — the plan editor says so next to the command field.
+/// `SWIFTRESTIC_*` variables. They run with the home directory as their working
+/// directory — a GUI app's inherited cwd is `/`, and a hook's relative paths
+/// should never depend on how the app happened to be launched. They inherit the
+/// app's own privileges, which are not sandboxed — the plan editor says so next
+/// to the command field.
 struct HookRunner: Sendable {
     /// What a hook is told about the run that triggered it.
     struct Context: Sendable {
@@ -84,6 +87,7 @@ struct HookRunner: Sendable {
                 invocation: ResticInvocation(
                     arguments: ["-c", hook.command],
                     environment: context.environment,
+                    workingDirectory: NSHomeDirectory(),
                     // The exit code is the hook's answer, not an error to raise.
                     allowedExitCodes: nil,
                     timeout: TimeInterval(max(1, hook.timeoutSeconds)),

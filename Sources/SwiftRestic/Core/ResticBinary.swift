@@ -23,6 +23,12 @@ struct ResticBinary: Sendable {
     static func locate(userOverride: String?) throws -> ResticBinary {
         if let userOverride, !userOverride.trimmingCharacters(in: .whitespaces).isEmpty {
             let url = URL(fileURLWithPath: userOverride)
+            // A missing file is a different sentence than a file the user
+            // cannot execute: "not executable" sends someone hunting through
+            // permissions for what is really a typo.
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw ResticError.binaryNotFound(searched: [url.path])
+            }
             guard Self.isExecutableFile(atPath: url.path) else {
                 throw ResticError.binaryNotExecutable(path: url.path)
             }

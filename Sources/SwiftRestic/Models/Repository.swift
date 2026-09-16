@@ -133,7 +133,11 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var resticRepositoryString: String {
         switch kind {
         case .local:
-            return localPath
+            // restic is spawned without a shell, so `~` would reach it
+            // literally and resolve against `/` — the expansion the shell
+            // would normally do happens here, as it already does for plan
+            // sources and exclude patterns.
+            return resolvedLocalPath
         case .sftp:
             let user = sftpUser.isEmpty ? "" : "\(sftpUser)@"
             return "sftp:\(user)\(sftpHost):\(sftpPath)"
@@ -160,6 +164,14 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     private static func trimSlashes(_ value: String) -> String {
         value.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    /// The local path with `~` expanded — the form every file-system
+    /// consumer (restic, the volume read) needs. `displayLocation` keeps the
+    /// abbreviated form the user typed; this is what actually gets used.
+    var resolvedLocalPath: String {
+        guard localPath.hasPrefix("~") else { return localPath }
+        return (localPath as NSString).expandingTildeInPath
     }
 
     /// Human-readable location shown in the sidebar and detail header.

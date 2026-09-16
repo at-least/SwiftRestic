@@ -547,6 +547,14 @@ struct RepositoryTests {
         local.localPath = "/Volumes/Backup/restic"
         #expect(local.resticRepositoryString == "/Volumes/Backup/restic")
 
+        // restic is spawned without a shell, so the tilde must never reach
+        // it — the expansion the shell would do happens in the model.
+        var tilde = Repository()
+        tilde.kind = .local
+        tilde.localPath = "~/Backups/restic"
+        #expect(tilde.resolvedLocalPath == NSHomeDirectory() + "/Backups/restic")
+        #expect(tilde.resticRepositoryString == NSHomeDirectory() + "/Backups/restic")
+
         var sftp = Repository()
         sftp.kind = .sftp
         sftp.sftpUser = "backup"

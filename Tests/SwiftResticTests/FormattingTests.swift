@@ -141,6 +141,11 @@ struct FormattingTests {
                 == "0.5 GB were written",
             "a decimal point is not a boundary, but the real sentence end still cuts"
         )
+        #expect(
+            Format.firstSentence("The run failed in U.S. region 2 and was stopped.")
+                == "The run failed in U.S. region 2 and was stopped.",
+            "a capital-less continuation after '. ' is an abbreviation, not a boundary"
+        )
         #expect(Format.firstSentence("first\nsecond") == "first", "a newline is a boundary")
         #expect(Format.firstSentence("  padded  ") == "padded", "whitespace is trimmed")
         #expect(Format.firstSentence("") == "", "empty in, empty out")
