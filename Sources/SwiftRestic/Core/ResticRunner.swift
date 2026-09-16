@@ -33,9 +33,22 @@ struct ResticInvocation: Sendable {
     /// stops keeping them at some cap of its own.
     var retainMessages: Bool = true
 
-    /// A redacted rendering for logs and error messages.
+    /// A redacted rendering for logs and error messages. Arguments are
+    /// quoted shell-style, so a path with spaces stays one word on screen
+    /// instead of reading as two arguments the run never received.
     var displayCommand: String {
-        (["restic"] + arguments).joined(separator: " ")
+        (["restic"] + arguments.map(Self.displayQuoted)).joined(separator: " ")
+    }
+
+    /// Single-quote what whitespace or quoting would split or mangle. This
+    /// is not the tokenizer's exact inverse — it renders for a human reading
+    /// a failure, not for re-parsing.
+    private static func displayQuoted(_ argument: String) -> String {
+        let needsQuoting = argument.isEmpty || argument.contains {
+            $0.isWhitespace || $0 == "'" || $0 == "\"" || $0 == "\\"
+        }
+        guard needsQuoting else { return argument }
+        return "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
 
@@ -82,6 +95,11 @@ struct ResticRunResult: Sendable {
 /// so concurrent calls (a snapshot listing during a backup, say) are not
 /// serialised behind each other.
 actor ResticRunner {
+    /// Grace between SIGTERM and SIGKILL when a child is being stopped —
+    /// long enough for restic to flush and a shell to unwind, short enough
+    /// that a quit waiting on the child does not outwait the user's patience.
+    static let killGrace: TimeInterval = 5
+
     private var running: [UUID: ProcessBox] = [:]
 
     /// Runs restic to completion.
@@ -131,13 +149,19 @@ actor ResticRunner {
             exit.complete(finished.terminationStatus)
         }
 
+        // Registered before launch, not after: a quit racing a cold spawn
+        // must not miss a child that is already running. The ProcessBox
+        // treats a not-yet-launched process as not running, so a terminate
+        // that arrives in this window is a harmless no-op, and the defer
+        // covers the launch-failure path.
+        running[handle] = box
+        defer { running[handle] = nil }
+
         do {
             try process.run()
         } catch {
             throw ResticError.processLaunchFailed(error.localizedDescription)
         }
-        running[handle] = box
-        defer { running[handle] = nil }
 
         let watchdog: Task<Void, Never>? = invocation.timeout.map { seconds in
             Task {
@@ -225,7 +249,10 @@ actor ResticRunner {
             throw ResticError.cancelled
         }
 
-        try? stdoutFileHandle?.close()
+        // Closed at function exit, whatever the exit: the cancellation path
+        // throws before the old explicit close ran, leaking the dump's file
+        // descriptor into the actor's lifetime.
+        defer { try? stdoutFileHandle?.close() }
         let captured = takeCaptured(handle: handle)
 
         if box.idleTimedOut {
@@ -360,7 +387,9 @@ private final class ProcessBox: @unchecked Sendable {
         // must still report as the success (or failure) it earned.
         if dueToTimeout && running { wasTimedOut = true }
         lock.unlock()
-        if running { process.terminate() }
+        guard running else { return }
+        process.terminate()
+        escalateToKill()
     }
 
     /// Ends the process on the stall cap. A separate entry point from
@@ -371,7 +400,35 @@ private final class ProcessBox: @unchecked Sendable {
         let running = process.isRunning
         if dueToIdleTimeout && running { wasIdleTimedOut = true }
         lock.unlock()
-        if running { process.terminate() }
+        guard running else { return }
+        process.terminate()
+        escalateToKill()
+    }
+
+    /// SIGTERM is a request, and children may decline it — a shell script
+    /// wearing a `trap "" TERM`, a helper wedged in uninterruptible I/O. A
+    /// runner that cannot stop its children hangs every cancel and the quit
+    /// that drains them, so after the grace it stops asking: SIGKILL. Two
+    /// terminate calls racing arm two escalations; the second finds the
+    /// process already gone. The pid is re-checked before the kill so a
+    /// recycled identifier is never signalled.
+    private func escalateToKill() {
+        let identifier = process.processIdentifier
+        guard identifier > 0 else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(ResticRunner.killGrace))
+            self?.killIfStillRunning(identifier)
+        }
+    }
+
+    /// Synchronous on purpose: the lock must never be taken from an async
+    /// context, so the sleeping escalation lands here to do its checking.
+    private func killIfStillRunning(_ identifier: pid_t) {
+        lock.lock()
+        let running = process.isRunning
+        lock.unlock()
+        guard running, process.processIdentifier == identifier else { return }
+        kill(identifier, SIGKILL)
     }
 
     /// Marks the child as alive — called for every chunk read off either pipe.

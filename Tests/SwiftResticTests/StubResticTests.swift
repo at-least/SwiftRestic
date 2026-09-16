@@ -386,6 +386,33 @@ struct StubResticTests {
         )
     }
 
+    @Test("a child that ignores SIGTERM is killed after the grace and still reported")
+    func ignoredSigtermEscalatesToKill() async throws {
+        let runner = ResticRunner()
+        let startedAt = Date.now
+        do {
+            // `trap "" TERM` makes the shell decline the polite request; the
+            // busy loop never ends on its own. Without the escalation this
+            // run would hang forever.
+            _ = try await runner.run(
+                binary: URL(fileURLWithPath: "/bin/sh"),
+                invocation: ResticInvocation(
+                    arguments: ["-c", #"trap "" TERM; while :; do :; done"#],
+                    timeout: 1
+                )
+            )
+            Issue.record("a command that ignores SIGTERM must be stopped as timed out")
+        } catch let ResticError.timedOut(seconds, _) {
+            #expect(seconds == 1)
+            // The kill grace is measured from the SIGTERM, not the start, so
+            // the whole stop takes at least the grace — and its arrival at
+            // all is the point: a stuck child would hang here forever.
+            let elapsed = Date.now.timeIntervalSince(startedAt)
+            #expect(elapsed >= ResticRunner.killGrace, "SIGKILL escalation never fired (stopped after \(elapsed)s)")
+            #expect(elapsed < 15, "escalation took too long: \(elapsed)s")
+        }
+    }
+
     @Test("a run that dies mid-line still surfaces its real error message")
     func tornFinalLineCannotHideTheError() async throws {
         let fixture = try makeFixture(mode: "torn")
