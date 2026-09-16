@@ -24,6 +24,10 @@ enum BackupRunEngine {
         func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID)
         /// The run's progress reporter, hopping to the sink's own actor —
         /// built by the sink because only it knows its concrete isolation.
+        /// (Sink-built is load-bearing: the toolchain accepts @Sendable
+        /// capture of a concrete main-actor class, not of an existential or
+        /// a generic parameter — compiler probes recorded with commit
+        /// 6635470. A future language mode may loosen this.)
         func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void
         func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool)
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
