@@ -13,6 +13,13 @@ actor IndexCoordinator {
     private let directory: URL
     private var stores: [UUID: SQLiteIndexStore] = [:]
     private var backfillTasks: [UUID: Task<Void, Never>] = [:]
+    /// Repositories the app has removed. A snapshot refresh that was in
+    /// flight when the removal happened still carries its reconcile into
+    /// this actor afterwards — without the tombstone, `store(for:)` would
+    /// dutifully recreate the sqlite file that removal just deleted, and an
+    /// orphan would live on disk forever after. UUIDs are never reused, so a
+    /// tombstone never needs lifting.
+    private var dropped: Set<UUID> = []
     /// The last index error per repository, if any. Text, not an Error: the
     /// value exists to be shown, not matched.
     private(set) var outcomes: [UUID: String] = [:]
@@ -32,6 +39,7 @@ actor IndexCoordinator {
     /// or prune happened) also sweeps the runs those deaths stranded, and
     /// vacuums only when that sweep actually deleted something.
     func reconcile(repositoryID: UUID, snapshots: [Snapshot]) {
+        guard !dropped.contains(repositoryID) else { return }
         do {
             let store = try self.store(for: repositoryID)
             let outcome = try store.reconcile(aliveSnapshots: snapshots)
@@ -54,6 +62,7 @@ actor IndexCoordinator {
     /// `restic ls` in chunks; a cancelled backfill leaves finished chunks
     /// behind, and the snapshot simply stays pending for the next pass.
     func startBackfill(repositoryID: UUID, service: any ResticClient, context: RepositoryContext) {
+        guard !dropped.contains(repositoryID) else { return }
         guard backfillTasks[repositoryID] == nil else { return }
         backfillTasks[repositoryID] = Task {
             await self.runBackfill(repositoryID: repositoryID, service: service, context: context)
@@ -229,8 +238,18 @@ actor IndexCoordinator {
     /// serve its repository, so removal takes it along. Any running backfill
     /// is cancelled first. The WAL and shm sidecars go too: recreating a
     /// database at a path whose stale `-wal` survives is one of SQLite's
-    /// documented corruption routes.
+    /// documented corruption routes. The repository joins the tombstone set,
+    /// so a refresh that was in flight when the removal happened cannot
+    /// recreate the file behind the removal's back.
     func dropRepository(repositoryID: UUID) {
+        dropped.insert(repositoryID)
+        resetRepository(repositoryID: repositoryID)
+    }
+
+    /// `dropRepository` without the tombstone: the recovery hatch a
+    /// user-invoked rebuild drives. The repository still exists — only its
+    /// index is being thrown away — so future reconciles must land.
+    func resetRepository(repositoryID: UUID) {
         cancelBackfill(repositoryID: repositoryID)
         stores[repositoryID] = nil
         outcomes[repositoryID] = nil

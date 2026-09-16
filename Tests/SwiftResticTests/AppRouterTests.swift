@@ -27,3 +27,17 @@ struct AppRouterTests {
         #expect(router.takePendingIntent() == .showFind)
     }
 }
+
+
+/// The documentation links are constant literals — which is exactly why a
+/// typo would hide until clicked. Pin them here so it hides until CI.
+@Suite("app links")
+struct AppLinksTests {
+    @Test("every documentation link parses as https")
+    func linksAreValid() {
+        for url in [AppLinks.documentation, AppLinks.changelog] {
+            #expect(url.scheme == "https")
+            #expect(url.host()?.hasSuffix("readthedocs.io") == true)
+        }
+    }
+}

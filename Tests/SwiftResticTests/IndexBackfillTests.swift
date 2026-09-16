@@ -265,5 +265,33 @@ struct IndexBackfillTests {
 
         await coordinator.dropRepository(repositoryID: repositoryID)
         #expect(!FileManager.default.fileExists(atPath: file.path))
+
+        // A refresh that was in flight when the removal happened still
+        // carries its reconcile into the coordinator afterwards. The store
+        // must refuse to recreate the file for a repository that is gone,
+        // or an orphan would live on disk forever after.
+        await coordinator.reconcile(repositoryID: repositoryID, snapshots: [])
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+
+    @Test("a reset repository reconciles again — only removal is tombstoned")
+    func resetAllowsReconcile() async throws {
+        let indexDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticIndexReset-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: indexDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: indexDirectory) }
+
+        let repositoryID = UUID()
+        let file = indexDirectory.appendingPathComponent(repositoryID.uuidString + ".sqlite")
+        let coordinator = IndexCoordinator(directory: indexDirectory)
+        await coordinator.reconcile(repositoryID: repositoryID, snapshots: [])
+
+        // The rebuild hatch throws the index away without tombstoning: the
+        // repository still exists, so the reconcile that follows must land
+        // and recreate the store.
+        await coordinator.resetRepository(repositoryID: repositoryID)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        await coordinator.reconcile(repositoryID: repositoryID, snapshots: [])
+        #expect(FileManager.default.fileExists(atPath: file.path))
     }
 }
