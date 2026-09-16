@@ -47,6 +47,21 @@ struct ConsoleModelTests {
         #expect(console.output.isEmpty)
     }
 
+    @Test("a line ending inside an open quote is refused, not run mangled")
+    func unterminatedQuoteIsRefused() throws {
+        let (app, console, _) = try makeHarness()
+        app.consoleDidAppear()
+        console.commandText = #"forget --keep-daily "7"#
+
+        console.run()
+
+        // A shell would refuse this line; closing the quote silently would
+        // arm — and confirm — a mangled argument. Nothing may run or arm.
+        #expect(console.pendingDestructive == nil)
+        #expect(!console.isRunning)
+        #expect(console.output.contains("open quote"))
+    }
+
     @Test("confirming a destructive command runs it and records the history")
     func confirmationRuns() async throws {
         let (app, console, _) = try makeHarness()

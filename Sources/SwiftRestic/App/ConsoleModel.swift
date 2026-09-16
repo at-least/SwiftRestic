@@ -75,6 +75,14 @@ final class ConsoleModel {
     func run() {
         let arguments = CommandLineTokenizer.tokenize(commandText)
         guard !arguments.isEmpty, repositoryID != nil else { return }
+        // A shell refuses an unclosed quote; so does the console. Closing it
+        // silently would confirm — or run — a mangled argument the user
+        // never typed, which is exactly the failure a confirmation exists
+        // to prevent.
+        if CommandLineTokenizer.hasUnterminatedQuote(commandText) {
+            output = "The command ends inside an open quote — close it before running."
+            return
+        }
         // Submitting ends any recall walk: the field belongs to the user again.
         endRecall()
         if CommandLineTokenizer.isDestructive(arguments) {

@@ -210,6 +210,22 @@ struct CommandLineTokenizerTests {
         #expect(CommandLineTokenizer.tokenize(#"--tag """#) == ["--tag", ""])
         // A backslash is literal inside single quotes.
         #expect(CommandLineTokenizer.tokenize(#"'a\b'"#) == [#"a\b"#])
+        // POSIX keeps a double-quoted backslash literal except before the
+        // characters it reserves — a Windows path must not lose its slashes.
+        #expect(CommandLineTokenizer.tokenize(#"ls "C:\Users\me""#) == ["ls", #"C:\Users\me"#])
+        #expect(CommandLineTokenizer.tokenize(#"echo "a\$b""#) == ["echo", "a$b"])
+        // And outside quotes it still escapes whatever follows.
+        #expect(CommandLineTokenizer.tokenize(#"ls "a\\b""#) == ["ls", #"a\b"#])
+    }
+
+    @Test("a line ending inside an open quote is refused, not silently closed")
+    func unterminatedQuotes() {
+        #expect(CommandLineTokenizer.hasUnterminatedQuote(#"forget --keep-daily "7"#))
+        #expect(CommandLineTokenizer.hasUnterminatedQuote("snapshots --tag 'weekly"))
+        // A backslash can hide the closing quote, and the walk must know it.
+        #expect(!CommandLineTokenizer.hasUnterminatedQuote(#"ls "/tmp/a\"b""#))
+        #expect(!CommandLineTokenizer.hasUnterminatedQuote("snapshots --compact"))
+        #expect(!CommandLineTokenizer.hasUnterminatedQuote(""))
     }
 
     @Test("commands that change the repository are flagged for confirmation")
@@ -222,6 +238,10 @@ struct CommandLineTokenizerTests {
         #expect(CommandLineTokenizer.isDestructive(["restore", "latest", "--target", "/tmp/x"]))
         // Leading flags must not hide the subcommand.
         #expect(CommandLineTokenizer.isDestructive(["--verbose", "repair", "index"]))
+        // Global flags that take a value: the value must not step in as the
+        // "subcommand" and arm no confirmation for what follows it.
+        #expect(CommandLineTokenizer.isDestructive(["-r", "/repo", "prune"]))
+        #expect(CommandLineTokenizer.isDestructive(["--repo", "/x", "forget", "--keep-daily", "7"]))
 
         #expect(!CommandLineTokenizer.isDestructive(["snapshots"]))
         #expect(!CommandLineTokenizer.isDestructive(["ls", "latest"]))

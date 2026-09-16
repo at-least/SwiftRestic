@@ -11,8 +11,14 @@ enum CommandLineTokenizer {
         var hasCurrent = false
         var quote: Character?
         var escaped = false
+        // Lookahead index: inside double quotes the backslash is only special
+        // before the characters POSIX reserves, which the next character decides.
+        let characters = Array(input)
+        var index = 0
 
-        for character in input {
+        while index < characters.count {
+            let character = characters[index]
+            index += 1
             if escaped {
                 current.append(character)
                 hasCurrent = true
@@ -21,8 +27,20 @@ enum CommandLineTokenizer {
             }
             // A backslash is literal inside single quotes, as in a shell.
             if character == "\\", quote != "'" {
-                escaped = true
-                hasCurrent = true
+                // Inside double quotes the shell keeps the backslash only
+                // before $, `, ", \ and newline; before anything else — a
+                // Windows-style "C:\Users", say — it is the literal character
+                // the user typed. Outside quotes it escapes whatever follows.
+                if quote == "\"",
+                   index < characters.count,
+                   !["$", "`", "\"", "\\", "\n"].contains(characters[index])
+                {
+                    current.append(character)
+                    hasCurrent = true
+                } else {
+                    escaped = true
+                    hasCurrent = true
+                }
                 continue
             }
             if let open = quote {
@@ -59,6 +77,30 @@ enum CommandLineTokenizer {
         return tokens
     }
 
+    /// Whether the input ends inside an open quote. A shell refuses such a
+    /// line; the console must too — silently closing the quote would run a
+    /// mangled argument the user never typed.
+    static func hasUnterminatedQuote(_ input: String) -> Bool {
+        var quote: Character?
+        var escaped = false
+        for character in input {
+            if escaped {
+                escaped = false
+                continue
+            }
+            if character == "\\", quote != "'" {
+                escaped = true
+                continue
+            }
+            if let open = quote {
+                if character == open { quote = nil }
+            } else if character == "'" || character == "\"" {
+                quote = character
+            }
+        }
+        return quote != nil
+    }
+
     /// Renders arguments back to a shell-like command line — the display
     /// inverse of `tokenize`. Joining with spaces alone loses quoting, so a
     /// destructive confirmation would show a different command than the one
@@ -89,7 +131,12 @@ enum CommandLineTokenizer {
     ]
 
     static func isDestructive(_ arguments: [String]) -> Bool {
-        guard let first = arguments.first(where: { !$0.hasPrefix("-") }) else { return false }
-        return destructiveSubcommands.contains(first)
+        // Every token is checked, not just the first non-flag one: restic
+        // accepts its global flags before the subcommand (`-r /repo prune`),
+        // and the flag's value would otherwise step in as the "subcommand"
+        // and arm no confirmation. The cost of the wider net is a needless
+        // Enter press when a flag's *value* spells a subcommand name —
+        // `--tag prune` confirms — which is the safe side to err on.
+        arguments.contains { destructiveSubcommands.contains($0) }
     }
 }
