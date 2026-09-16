@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ActivityView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     /// Route from a failure to the plan that owns it.
     var onOpenPlan: ((UUID) -> Void)?
     @State private var selection: RunRecord.ID?
@@ -13,7 +14,7 @@ struct ActivityView: View {
     ]
 
     private var visibleRuns: [RunRecord] {
-        let base = model.activityShowsProblemsOnly
+        let base = router.activityShowsProblemsOnly
             ? model.configuration.runs.filter { $0.outcome == .failed || $0.outcome == .completedWithErrors }
             : model.configuration.runs
         return base.sorted(using: sortOrder)
@@ -128,7 +129,10 @@ struct ActivityView: View {
             ToolbarItemGroup {
                 // The two-state filter the dashboard's problem rows send you to;
                 // full per-outcome filtering would serve nobody who reaches for it.
-                Picker("Show", selection: $model.activityShowsProblemsOnly) {
+                Picker("Show", selection: Binding(
+                    get: { router.activityShowsProblemsOnly },
+                    set: { router.activityShowsProblemsOnly = $0 }
+                )) {
                     Text("All runs").tag(false)
                     Text("Problems").tag(true)
                 }
@@ -154,20 +158,20 @@ struct ActivityView: View {
         } message: {
             Text("This permanently removes all \(model.configuration.runs.count) run records. Backups and snapshots are not affected.")
         }
-        .task(id: model.activityShowsProblemsOnly) {
+        .task(id: router.activityShowsProblemsOnly) {
             // Arriving from the dashboard's problem rows should land with the
             // newest problem already selected — otherwise the detail panel
             // below sits empty at the exact moment the user wants answers.
-            guard model.activityShowsProblemsOnly,
+            guard router.activityShowsProblemsOnly,
                   !visibleRuns.contains(where: { $0.id == selection })
             else { return }
             selection = visibleRuns.first?.id
         }
         // The "Last backup" tile's landing: the plan page hands over a run to
         // land selected, the way the problems filter hands over a filter.
-        .task(id: model.activityFocusRunID) {
-            guard let id = model.activityFocusRunID else { return }
-            model.activityFocusRunID = nil
+        .task(id: router.activityFocusRunID) {
+            guard let id = router.activityFocusRunID else { return }
+            router.activityFocusRunID = nil
             if visibleRuns.contains(where: { $0.id == id }) {
                 selection = id
             }

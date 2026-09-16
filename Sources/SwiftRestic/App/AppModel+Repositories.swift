@@ -106,10 +106,10 @@ extension AppModel {
     /// dialog.
     func deleteRepository(id: UUID) {
         for plan in configuration.plans where plan.repositoryID == id {
-            planTasks[plan.id]?.cancel()
+            tasks.cancel(.plan(plan.id))
         }
-        maintenanceTasks[id]?.cancel()
-        if restoreRepositoryID == id { restoreTask?.cancel() }
+        tasks.cancel(.maintenance(id))
+        if restoreRepositoryID == id { tasks.cancel(.restore) }
         if console.runningRepositoryID == id { console.cancelRunningCommand() }
         // Cancel-then-forget the menu line: the cancelled child can take
         // seconds to unwind, and `maintenanceLines` derives its rows from the

@@ -59,12 +59,12 @@ extension AppModel {
         operation: @escaping @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?,
         onSuccess: @escaping @MainActor () -> Void
     ) {
-        guard restoreTask == nil else { return }
+        guard !tasks.isOccupied(.restore) else { return }
         restoreActivity = OperationProgress()
         restoreDescription = "Restoring \(label)"
         restoreRepositoryID = repositoryID
 
-        restoreTask = Task { [weak self] in
+        tasks.install(Task { [weak self] in
             guard let self else { return }
             var record = RunRecord(
                 kind: .restore,
@@ -108,11 +108,11 @@ extension AppModel {
             self.restoreActivity = nil
             self.restoreDescription = ""
             self.restoreRepositoryID = nil
-            self.restoreTask = nil
-        }
+            self.tasks.clear(.restore)
+        }, in: .restore)
     }
 
-    func cancelRestore() { restoreTask?.cancel() }
+    func cancelRestore() { tasks.cancel(.restore) }
 
     /// The Arq-style drag restore: restores one node into a fresh throwaway
     /// directory and returns the restored item's URL, which the drag's

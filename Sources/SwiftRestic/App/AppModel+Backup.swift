@@ -4,7 +4,7 @@ extension AppModel {
     // MARK: - Running a backup
 
     func runBackup(planID: UUID) {
-        guard planTasks[planID] == nil else { return }
+        guard !tasks.isOccupied(.plan(planID)) else { return }
         guard let plan = plan(id: planID) else { return }
         guard plan.isConfigurationComplete, let repositoryID = plan.repositoryID,
               let repository = repository(id: repositoryID)
@@ -18,189 +18,73 @@ extension AppModel {
         }
 
         activity[planID] = PlanActivity()
-        planTasks[planID] = Task { [weak self] in
-            await self?.performBackup(plan: plan, repository: repository)
-            self?.planTasks[planID] = nil
+        tasks.install(Task { [weak self] in
+            if let self {
+                await BackupRunEngine.perform(plan: plan, repository: repository, sink: self)
+            }
+            self?.tasks.clear(.plan(planID))
             self?.activity[planID] = nil
-        }
+        }, in: .plan(planID))
     }
 
     /// Waits for a plan's in-flight run to finish, if there is one.
     func waitForRun(planID: UUID) async {
-        await planTasks[planID]?.value
+        await tasks.task(in: .plan(planID))?.value
     }
 
     func cancelBackup(planID: UUID) {
         activity[planID]?.phase = .cancelling
-        planTasks[planID]?.cancel()
+        tasks.cancel(.plan(planID))
     }
 
-    private func performBackup(plan: BackupPlan, repository: Repository) async {
-        let startedAt = Date.now
-        var record = RunRecord(
-            kind: .backup,
-            planID: plan.id,
-            planName: plan.name,
-            repositoryID: repository.id,
-            startedAt: startedAt
-        )
-        let hooks = HookRunner(runner: runner)
-        var hookContext = HookRunner.Context(
-            event: .beforeBackup,
-            planName: plan.name,
-            planID: plan.id.uuidString,
-            repositoryName: repository.name,
-            repositoryID: repository.id.uuidString,
-            outcome: "starting"
-        )
+    func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool) {
+        guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
+        configuration.plans[index].lastRunAt = date
+        if succeeded { configuration.plans[index].lastSuccessAt = date }
+    }
+}
 
-        do {
-            let service = try service()
-            let context = try await context(for: repository)
+// MARK: - The backup engine's view of the model
 
-            if plan.hooks.contains(where: { $0.event == .beforeBackup && $0.isRunnable }) {
-                activity[plan.id]?.phase = .runningHooks
-                let result = await hooks.runHooks(plan.hooks, event: .beforeBackup, context: hookContext)
-                record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
-                )
-                if result.shouldAbort {
-                    record.outcome = .failed
-                    record.failureMessage =
-                        "A before-backup hook failed and is set to cancel the backup."
-                    markPlanRun(plan.id, at: startedAt, succeeded: false)
-                    await finish(record: &record, plan: plan, hooks: hooks, context: hookContext)
-                    return
-                }
-            }
-
-            // Healthchecks measures the run against this ping, so it has to go out
-            // before the backup starts — but concurrently, so a slow endpoint
-            // cannot delay the backup itself.
-            let startEvent = NotificationEvent(
-                stage: .started,
-                planName: plan.name,
-                repositoryName: repository.name
-            )
-            let channels = configuration.settings.notificationChannels
-            pendingPings.append(Task.detached {
-                _ = await NotificationPoster.broadcast(startEvent, to: channels)
-            })
-            pendingPings.removeAll { $0.isCancelled }
-
-            activity[plan.id]?.phase = .backingUp
-            let planID = plan.id
-            let outcome = try await service.backup(context, plan: plan) { [weak self] progress in
-                Task { @MainActor in
-                    guard let self, self.activity[planID] != nil else { return }
-                    self.activity[planID]?.progress = progress
-                }
-            }
-
-            record.snapshotID = outcome.summary?.snapshotID
-            record.filesNew = outcome.summary?.filesNew ?? 0
-            record.filesChanged = outcome.summary?.filesChanged ?? 0
-            record.filesUnmodified = outcome.summary?.filesUnmodified ?? 0
-            record.bytesProcessed = outcome.summary?.totalBytesProcessed ?? 0
-            record.dataAdded = outcome.summary?.dataAdded ?? 0
-            record.itemErrorCount = outcome.itemErrors.count
-            record.itemErrors.append(contentsOf: outcome.itemErrors.prefix(50))
-            record.outcome = record.itemErrors.isEmpty && !outcome.completedWithErrors
-                ? .succeeded
-                : .completedWithErrors
-
-            // The snapshot exists from here on. Mark the run before doing anything
-            // else, so nothing that follows can make a good backup look like a
-            // failed one.
-            markPlanRun(plan.id, at: startedAt, succeeded: true)
-
-            // Retention runs only after a backup that actually produced a
-            // snapshot, so a failed run can never trigger a forget against stale
-            // data.
-            if plan.retention.isSafeToRun, record.snapshotID != nil {
-                activity[plan.id]?.phase = .applyingRetention
-                do {
-                    _ = try await service.forget(context, plan: plan)
-                } catch {
-                    // `forget` needs an exclusive repository lock while `backup`
-                    // only takes a shared one, so a second plan backing up to the
-                    // same repository makes this fail with exit code 11. The data
-                    // is already safe; degrade to a warning instead of reporting
-                    // the whole backup as failed.
-                    record.outcome = .completedWithErrors
-                    record.itemErrors.append("Retention skipped: \(error.localizedDescription)")
-                }
-            }
-
-            // The closing refresh also feeds the snapshot index — which is
-            // why it must stay after retention: the index's restic calls
-            // hold shared locks, and a forget needs the exclusive one. A
-            // cache must never delay, and never fail, the run that feeds it.
-            await refreshSnapshots(repositoryID: repository.id)
-        } catch {
-            record.setOutcome(from: error, cancellationMessage: cancellationMessage)
-            noteAuthFailure(error, repositoryID: repository.id)
-            markPlanRun(plan.id, at: startedAt, succeeded: false)
-        }
-
-        hookContext.snapshotID = record.snapshotID
-        hookContext.filesNew = record.filesNew
-        hookContext.filesChanged = record.filesChanged
-        hookContext.bytesProcessed = record.bytesProcessed
-        hookContext.dataAdded = record.dataAdded
-        await finish(record: &record, plan: plan, hooks: hooks, context: hookContext)
+extension AppModel: BackupRunEngine.Sink {
+    func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID) {
+        activity[planID]?.phase = phase
     }
 
-    /// Runs the after-backup hooks, then stores and announces the run.
-    ///
-    /// A cancelled run runs no hooks: the user asked for it to stop, and firing
-    /// an "after failure" script at that point would be a surprise.
-    private func finish(
-        record: inout RunRecord,
-        plan: BackupPlan,
-        hooks: HookRunner,
-        context: HookRunner.Context
-    ) async {
-        record.finishedAt = .now
-
-        if record.outcome != .cancelled, plan.hooks.contains(where: \.isRunnable) {
-            var hookContext = context
-            hookContext.outcome = record.outcome.rawValue
-            hookContext.errorMessage = record.failureMessage
-            hookContext.durationSeconds = record.duration
-
-            let events: [BackupHook.Event] = switch record.outcome {
-            case .succeeded: [.afterSuccess, .afterAny]
-            case .completedWithErrors: [.afterWarning, .afterAny]
-            case .failed: [.afterFailure, .afterAny]
-            case .cancelled: []
+    func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {
+        { [weak self] progress in
+            Task { @MainActor in
+                guard let self, self.activity[planID] != nil else { return }
+                self.activity[planID]?.progress = progress
             }
-            for event in events {
-                let result = await hooks.runHooks(plan.hooks, event: event, context: hookContext)
-                record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
-                )
-            }
-            // A failing hook is worth surfacing, but never turns a written
-            // snapshot into a failed run.
-            if !record.hookMessages.isEmpty, record.outcome == .succeeded {
-                record.outcome = .completedWithErrors
-            }
-            record.finishedAt = .now
         }
+    }
 
+    func addStartPing(_ event: NotificationEvent) {
+        let channels = configuration.settings.notificationChannels
+        tasks.addBackground(Task.detached {
+            _ = await NotificationPoster.broadcast(event, to: channels)
+        })
+    }
+
+    /// Stores and announces a finished run: history, the in-app banner
+    /// (successes auto-dismiss — success that outlives its moment reads as
+    /// stale — while warnings and failures stay until dismissed), the user
+    /// notification, and the external channels.
+    func deliver(record: RunRecord, plan: BackupPlan) async {
         append(record: record)
         announceInApp(record: record)
         notify(about: record)
         await broadcast(record: record, plan: plan)
     }
 
+    func makeHookRunner() -> HookRunner {
+        HookRunner(runner: runner)
+    }
+
     /// The in-app counterpart to `notify`: a finished backup lands in the
     /// banner queue so "did it work?" is answered in the pane the user is
-    /// looking at, without a trip to Activity. Successes ride the queue's own
-    /// auto-dismiss — success that outlives its moment reads as stale — while
-    /// warnings and failures stay until dismissed, like every other problem
-    /// the queue holds.
+    /// looking at, without a trip to Activity.
     private func announceInApp(record: RunRecord) {
         switch record.outcome {
         case .cancelled:
@@ -229,11 +113,5 @@ extension AppModel {
                 isError: true
             ))
         }
-    }
-
-    private func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool) {
-        guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
-        configuration.plans[index].lastRunAt = date
-        if succeeded { configuration.plans[index].lastSuccessAt = date }
     }
 }

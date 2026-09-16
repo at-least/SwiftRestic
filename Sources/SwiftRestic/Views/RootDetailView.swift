@@ -11,6 +11,7 @@ import SwiftUI
 /// the presenting state stays in `RootView`.
 struct RootDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
 
     /// Which Restore-section repositories are expanded — selecting a record
     /// from anywhere (the repository page's Restore Files button included)
@@ -29,10 +30,6 @@ struct RootDetailView: View {
     let onAddRepository: () -> Void
     let onAddPlan: () -> Void
     let onRevalidateSelection: () -> Void
-    /// The model-carried new-repository intent is consumed here rather than
-    /// in the root's modifier chain: this stack exists in every pane state,
-    /// so the consumption fires wherever the window is already open.
-    let onConsumePendingNewRepository: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,17 +71,17 @@ struct RootDetailView: View {
                 ProgressView("Reading your configuration…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                switch model.sidebarSelection {
+                switch router.selection {
                 case .overview:
                     OverviewView(onShowProblems: {
-                        model.sidebarSelection = .activity
+                        router.selection = .activity
                     })
                 case let .plan(id):
                     if let plan = model.plan(id: id) {
                         PlanDetailView(
                             planID: plan.id,
                             onEdit: { onEditPlan(plan) },
-                            onShowRun: { model.sidebarSelection = .activity }
+                            onShowRun: { router.selection = .activity }
                         )
                     } else {
                         ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
@@ -108,7 +105,7 @@ struct RootDetailView: View {
                     ResticConsoleView()
                 case .activity:
                     ActivityView(onOpenPlan: { planID in
-                        model.sidebarSelection = .plan(planID)
+                        router.selection = .plan(planID)
                     })
                 case .none:
                     WelcomeView(
@@ -117,14 +114,6 @@ struct RootDetailView: View {
                     )
                 }
             }
-        }
-        // The new-repository intent lands on this unconditional stack rather
-        // than the body's modifier chain — the chain is long enough that one
-        // more modifier pushed it past the type-checker's budget, and this
-        // stack exists in every state, so the consumption fires wherever the
-        // window is already open.
-        .onChange(of: model.pendingNewRepository) {
-            onConsumePendingNewRepository()
         }
         // The console row disables on restic availability as well as on an
         // empty repository list, and only count changes revalidate the
@@ -135,8 +124,8 @@ struct RootDetailView: View {
         }
         // A restore record picked from anywhere (the repository page's
         // Restore Files button included) must find its group open.
-        .onChange(of: model.sidebarSelection) {
-            if case let .restoreSnapshot(repositoryID, _) = model.sidebarSelection {
+        .onChange(of: router.selection) {
+            if case let .restoreSnapshot(repositoryID, _) = router.selection {
                 expandedRestoreRepos.insert(repositoryID)
             }
         }
@@ -155,7 +144,7 @@ struct RootDetailView: View {
             else { return }
             pendingCaptureRestore = false
             expandedRestoreRepos.insert(repository.id)
-            model.sidebarSelection = .restoreSnapshot(repository.id, latest.id)
+            router.selection = .restoreSnapshot(repository.id, latest.id)
         }
         #endif
     }

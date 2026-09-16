@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     let repositoryID: UUID
     let onEdit: () -> Void
 
@@ -173,7 +174,7 @@ struct RepositoryDetailView: View {
                 // is a button so the definition is one click from the word,
                 // not a Help-menu hunt.
                 Button {
-                    NotificationCenter.default.post(name: .swiftResticShowConcepts, object: nil)
+                    router.request(.showConcepts)
                 } label: {
                     StatTile(
                         title: "Blobs",
@@ -236,7 +237,7 @@ struct RepositoryDetailView: View {
                     // toolbar Refresh's job, not a silent side effect.
                     Button("Restore Files…") {
                         if let latest = model.snapshots(for: repositoryID).first {
-                            model.sidebarSelection = .restoreSnapshot(repositoryID, latest.id)
+                            router.selection = .restoreSnapshot(repositoryID, latest.id)
                         }
                     }
                     .controlSize(.small)

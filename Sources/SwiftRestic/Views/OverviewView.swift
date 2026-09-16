@@ -4,6 +4,7 @@ import SwiftUI
 /// Dashboard: what is protected, what has been written lately, and what is next.
 struct OverviewView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     /// Opens Activity, which reads `model.activityShowsProblemsOnly`. The
     /// problems card must not be a dead end: a failure the user cannot reach
     /// is a failure they cannot fix.
@@ -276,7 +277,7 @@ struct OverviewView: View {
     }
 
     private func showProblems() {
-        model.activityShowsProblemsOnly = true
+        router.activityShowsProblemsOnly = true
         onShowProblems()
     }
 

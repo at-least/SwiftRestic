@@ -34,7 +34,7 @@ extension AppModel {
     }
 
     func deletePlan(id: UUID) {
-        planTasks[id]?.cancel()
+        tasks.cancel(.plan(id))
         configuration.plans.removeAll { $0.id == id }
         activity[id] = nil
         forgetProblemSeen(planID: id)
@@ -45,9 +45,10 @@ extension AppModel {
     var runningPlanIDs: Set<UUID> { Set(activity.keys) }
 
     /// Whether ⌘B has something to do right now: the sidebar must be on a
-    /// complete, currently idle plan.
-    var canRunSelectedPlan: Bool {
-        guard case let .plan(id) = sidebarSelection,
+    /// complete, currently idle plan. The selection arrives as a parameter —
+    /// it is the router's state, not the model's.
+    func canRunPlan(at selection: SidebarItem?) -> Bool {
+        guard case let .plan(id) = selection,
               let plan = plan(id: id)
         else { return false }
         return plan.isConfigurationComplete && !isRunning(planID: id)

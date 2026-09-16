@@ -10,6 +10,7 @@ import SwiftUI
 /// passed back as closures — the presenting state stays in `RootView`.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
 
     /// Which Restore-section repositories are expanded — the backup records
     /// underneath are the restore pane's entry points. Shared with the detail
@@ -27,8 +28,8 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: Binding(
-            get: { model.sidebarSelection },
-            set: { model.sidebarSelection = $0 }
+            get: { router.selection },
+            set: { router.selection = $0 }
         )) {
             // The same recent-problem count every surface uses; computed once
             // per body so the badge and the surfaces it points at agree.

@@ -76,9 +76,9 @@ extension AppModel {
         guard !isShuttingDown else { return }
         isShuttingDown = true
         schedulerTask?.cancel()
-        let pending = Array(planTasks.values) + Array(maintenanceTasks.values)
-        for task in pending { task.cancel() }
-        restoreTask?.cancel()
+        // Slotted runs only: a start ping in flight is awaited below, never
+        // aborted — its monitor must hear that the run started.
+        tasks.cancelSlots()
         // A confirmed-destructive console command must not outlive the app
         // either — as a sheet it was cancelled on dismissal; quitting cancels.
         console.cancelRunningCommand()
@@ -87,13 +87,10 @@ extension AppModel {
         // Wait for the cancelled runs to finish unwinding. Their `catch` blocks
         // append a run record and set `lastRunAt`, and those edits only reach disk
         // through a 400 ms debounced save that would never fire once the process
-        // exits — so quitting mid-backup would silently lose the run.
-        for task in pending { await task.value }
-        if let restoreTask { await restoreTask.value }
-        // A start ping that never lands would leave a monitor thinking the backup
-        // was never attempted rather than that it was interrupted.
-        for ping in pendingPings { await ping.value }
-        pendingPings.removeAll()
+        // exits — so quitting mid-backup would silently lose the run. The drain
+        // also covers the in-flight start pings: a monitor must not be left
+        // thinking the backup was never attempted.
+        await tasks.drain()
 
         saveTask?.cancel()
         await flushSave()

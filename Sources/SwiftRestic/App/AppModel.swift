@@ -55,35 +55,6 @@ final class AppModel {
     /// and a notification failure can land minutes apart.
     var banners: [Banner] = []
 
-    /// Transient, never persisted: whether Activity shows every run or only
-    /// problems. Overview's problem rows and failures tile turn it on when they
-    /// send the user over.
-    var activityShowsProblemsOnly = false
-
-    /// The run a detail surface asked Activity to land selected — the plan
-    /// page's "Last backup" tile, Arq's "View Latest Backup Record…" pattern:
-    /// the timestamp is the handle to its own record. Transient, never
-    /// persisted; Activity consumes and clears it.
-    var activityFocusRunID: RunRecord.ID?
-
-    /// Set when something asks for the new-repository sheet before the window
-    /// that presents it exists — the tray's `unconfigured` face, or the File
-    /// command with the window closed. RootView consumes and clears it on
-    /// `onAppear` (window opening fresh) or `onChange` (window already on
-    /// screen), so the intent survives no matter which order window creation
-    /// and the request land in. Transient, never persisted.
-    var pendingNewRepository = false
-
-    /// The main window's `openWindow` action, parked here by RootView the
-    /// first time the window appears — the AppKit tray has no view
-    /// environment to call it from, and it outlives the window it was
-    /// captured in (verified live). See TrayStatusItem.openMainWindow.
-    @ObservationIgnored var openMainWindowAction: OpenWindowAction?
-
-    /// The pane the sidebar is showing, bound from RootView so the Backup
-    /// menu can disable against it.
-    var sidebarSelection: SidebarItem?
-
     /// Per plan, when its newest problem was last marked seen — the stamp
     /// behind the sidebar's Mail dot. View state, not configuration: it lives
     /// in UserDefaults (see `ProblemDotsStore`), never in config.json, because
@@ -123,12 +94,10 @@ final class AppModel {
     /// State of the restic console pane (see `ConsoleModel`).
     let console = ConsoleModel()
     var binary: ResticBinary?
-    var planTasks: [UUID: Task<Void, Never>] = [:]
-    var maintenanceTasks: [UUID: Task<Void, Never>] = [:]
-    /// Start pings in flight. Tracked so quitting mid-backup cannot drop the one
-    /// that arms a monitor's timer.
-    var pendingPings: [Task<Void, Never>] = []
-    var restoreTask: Task<Void, Never>?
+    /// In-flight runs and the sends quitting must drain — the structural
+    /// replacement for the per-kind task dictionaries `shutdown` used to
+    /// enumerate by hand. See `TaskRegistry`.
+    @ObservationIgnored let tasks = TaskRegistry()
     var schedulerTask: Task<Void, Never>?
     var saveTask: Task<Void, Never>?
     /// Repositories whose last refresh already announced a stats failure.

@@ -7,14 +7,19 @@ import SwiftUI
 /// running restic terminated before the process goes away.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    var model: AppModel? {
-        didSet {
-            // The tray is AppKit-owned (see TrayStatusItem for why); it is
-            // created once, when the model first reaches the delegate.
-            guard oldValue == nil, let model else { return }
-            tray = TrayStatusItem(model: model)
-        }
+    var model: AppModel?
+    var router: AppRouter?
+
+    /// The tray is AppKit-owned (see TrayStatusItem for why); it is created
+    /// once, when the model and router first reach the delegate together —
+    /// the scene's `task` hands both over as a pair.
+    func wireAppSurface(model: AppModel, router: AppRouter) {
+        guard tray == nil else { return }
+        self.model = model
+        self.router = router
+        tray = TrayStatusItem(model: model, router: router)
     }
+
     private var tray: TrayStatusItem?
     /// Set while the quit confirmation's modal loop is up. The modal run loop
     /// keeps the app alive, so a second ⌘Q re-enters `applicationShouldTerminate`
@@ -90,17 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-extension Notification.Name {
-    /// Posted by the Backup menu. The sheet's state lives in `RootView`, which a
-    /// menu command has no direct way to reach.
-    static let swiftResticShowFind = Notification.Name("SwiftRestic.showFind")
-    /// Posted by the Help menu; same arrangement as `swiftResticShowFind`.
-    static let swiftResticShowConcepts = Notification.Name("SwiftRestic.showConcepts")
-    /// Posted by the Backup menu; RootView knows which plan is selected.
-    static let swiftResticRunSelected = Notification.Name("SwiftRestic.runSelected")
-    /// Posted by the File menu; the new-item sheets are RootView's to present.
-    static let swiftResticNewPlan = Notification.Name("SwiftRestic.newPlan")
-}
+// The Backup and Help menus used to reach RootView through posted
+// `Notification.Name`s; those asks are typed intents on `AppRouter` now
+// (`router.request(_:)`), so the stringly seam is gone entirely.
 
 #if DEBUG
 extension AppDelegate {
@@ -165,28 +162,28 @@ extension AppDelegate {
     /// title-bar material floated over every pane but was only ever checked
     /// where a change had been made.
     private func captureAllPanes(into directory: URL, settlingFor settle: Duration) async {
-        guard let model else { return }
+        guard let model, let router else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         var stops: [(name: String, select: () async -> Void)] = [
-            ("overview", { model.sidebarSelection = .overview }),
+            ("overview", { router.selection = .overview }),
         ]
         if let plan = model.configuration.plans.first {
-            stops.append(("plan", { model.sidebarSelection = .plan(plan.id) }))
+            stops.append(("plan", { router.selection = .plan(plan.id) }))
         }
         if let repository = model.configuration.repositories.first {
-            stops.append(("repository", { model.sidebarSelection = .repository(repository.id) }))
+            stops.append(("repository", { router.selection = .repository(repository.id) }))
             // The restore pane needs record rows, which only exist after a
             // listing; the same first-expand rule the sidebar uses.
             if model.snapshots(for: repository.id).isEmpty {
                 await model.refreshSnapshots(repositoryID: repository.id)
             }
             if let latest = model.snapshots(for: repository.id).first {
-                stops.append(("restore", { model.sidebarSelection = .restoreSnapshot(repository.id, latest.id) }))
+                stops.append(("restore", { router.selection = .restoreSnapshot(repository.id, latest.id) }))
             }
         }
-        stops.append(("console", { model.sidebarSelection = .console }))
-        stops.append(("activity", { model.sidebarSelection = .activity }))
+        stops.append(("console", { router.selection = .console }))
+        stops.append(("activity", { router.selection = .activity }))
 
         for stop in stops {
             await stop.select()
@@ -372,6 +369,7 @@ extension AppDelegate {
 struct SwiftResticApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
+    @State private var router = AppRouter()
     @Environment(\.openWindow) private var openWindow
 
     private static let mainWindowID = "main"
@@ -383,9 +381,10 @@ struct SwiftResticApp: App {
         Window("SwiftRestic", id: Self.mainWindowID) {
             RootView()
                 .environment(model)
+                .environment(router)
                 .frame(minWidth: 940, minHeight: 600)
                 .task {
-                    appDelegate.model = model
+                    appDelegate.wireAppSurface(model: model, router: router)
                     await model.bootstrap()
                 }
         }
@@ -394,29 +393,34 @@ struct SwiftResticApp: App {
             // ⌘N is macOS's reflex for "new thing" — an emptied group here
             // meant adding a repository was always a mouse trip to the sidebar
             // footer. RootView owns the sheets and ignores these while a sheet
-            // is already up.
+            // is already up. Every command that targets the window also opens
+            // it: an intent parked while no window exists would otherwise
+            // ambush a later open — the old notification seam dropped asks
+            // nobody was listening for; these asks open their listener.
             CommandGroup(replacing: .newItem) {
                 Button("New Backup Plan…") {
-                    NotificationCenter.default.post(name: .swiftResticNewPlan, object: nil)
+                    router.request(.newPlan)
+                    openWindow(id: Self.mainWindowID)
                 }
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(model.configuration.repositories.isEmpty)
 
                 Button("Add Repository…") {
-                    // Through the model, not a notification: the intent has to
-                    // survive the window being closed. The command also opens
-                    // the window, like the tray's identical button — a menu
-                    // command that visibly does nothing is a dead key, and an
-                    // unexpired intent would ambush whatever opens the window
-                    // later for other reasons.
-                    model.pendingNewRepository = true
+                    // Through the router's pending intent, not a live action:
+                    // the ask has to survive the window being closed. The
+                    // command also opens the window, like the tray's identical
+                    // button — a menu command that visibly does nothing is a
+                    // dead key, and the root view clears expired asks on
+                    // appear.
+                    router.request(.newRepository)
                     openWindow(id: Self.mainWindowID)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
             CommandGroup(after: .help) {
                 Button("SwiftRestic Concepts…") {
-                    NotificationCenter.default.post(name: .swiftResticShowConcepts, object: nil)
+                    router.request(.showConcepts)
+                    openWindow(id: Self.mainWindowID)
                 }
                 Divider()
                 Button("restic Documentation") {
@@ -435,16 +439,18 @@ struct SwiftResticApp: App {
                 .keyboardShortcut("b", modifiers: [.command, .shift])
 
                 Button("Back Up Selected Plan") {
-                    NotificationCenter.default.post(name: .swiftResticRunSelected, object: nil)
+                    router.request(.runSelectedPlan)
+                    openWindow(id: Self.mainWindowID)
                 }
                 .keyboardShortcut("b", modifiers: .command)
-                // The handler in RootView no-ops when the selection is not a
-                // runnable plan; an enabled menu item over a disabled action
-                // is a menu that lies.
-                .disabled(!model.canRunSelectedPlan)
+                // The consuming handler in RootView no-ops when the selection
+                // is not a runnable plan; an enabled menu item over a disabled
+                // action is a menu that lies.
+                .disabled(!model.canRunPlan(at: router.selection))
 
                 Button("Find Files in Snapshots…") {
-                    NotificationCenter.default.post(name: .swiftResticShowFind, object: nil)
+                    router.request(.showFind)
+                    openWindow(id: Self.mainWindowID)
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
 

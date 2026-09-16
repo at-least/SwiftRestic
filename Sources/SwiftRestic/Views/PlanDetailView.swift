@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlanDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     let planID: UUID
     let onEdit: () -> Void
     /// Sends the pane to Activity — the "Last backup" tile's destination,
@@ -214,8 +215,8 @@ struct PlanDetailView: View {
             .max { $0.startedAt < $1.startedAt }
         if let lastSuccessfulRun, let onShowRun {
             Button {
-                model.activityShowsProblemsOnly = false
-                model.activityFocusRunID = lastSuccessfulRun.id
+                router.activityShowsProblemsOnly = false
+                router.activityFocusRunID = lastSuccessfulRun.id
                 onShowRun()
             } label: {
                 StatTile(

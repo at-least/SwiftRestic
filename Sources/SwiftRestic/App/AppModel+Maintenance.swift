@@ -27,7 +27,7 @@ extension AppModel {
         task: MaintenanceTask,
         readDataPercentOverride: Int? = nil
     ) {
-        guard maintenanceTasks[repositoryID] == nil else { return }
+        guard !tasks.isOccupied(.maintenance(repositoryID)) else { return }
         guard let repository = repository(id: repositoryID) else { return }
         guard !busyRepositoryIDs.contains(repositoryID) else {
             post(Banner(
@@ -39,15 +39,18 @@ extension AppModel {
         }
 
         maintenance[repositoryID] = MaintenanceActivity(task: task)
-        maintenanceTasks[repositoryID] = Task { [weak self] in
-            await self?.performMaintenance(
-                repository: repository,
-                task: task,
-                readDataPercentOverride: readDataPercentOverride
-            )
-            self?.maintenanceTasks[repositoryID] = nil
+        tasks.install(Task { [weak self] in
+            if let self {
+                await MaintenanceRunEngine.perform(
+                    repository: repository,
+                    task: task,
+                    readDataPercentOverride: readDataPercentOverride,
+                    sink: self
+                )
+            }
+            self?.tasks.clear(.maintenance(repositoryID))
             self?.maintenance[repositoryID] = nil
-        }
+        }, in: .maintenance(repositoryID))
     }
 
     /// Convenience for the menu, which always passes an explicit depth.
@@ -56,152 +59,14 @@ extension AppModel {
     }
 
     func cancelMaintenance(repositoryID: UUID) {
-        maintenanceTasks[repositoryID]?.cancel()
+        tasks.cancel(.maintenance(repositoryID))
     }
 
     func waitForMaintenance(repositoryID: UUID) async {
-        await maintenanceTasks[repositoryID]?.value
+        await tasks.task(in: .maintenance(repositoryID))?.value
     }
 
-    private func performMaintenance(
-        repository: Repository,
-        task: MaintenanceTask,
-        readDataPercentOverride: Int?
-    ) async {
-        let startedAt = Date.now
-        var record = RunRecord(
-            kind: task == .prune ? .prune : .check,
-            planName: repository.name,
-            repositoryID: repository.id,
-            startedAt: startedAt
-        )
-        let hooks = HookRunner(runner: runner)
-        let hookContext = HookRunner.Context(
-            event: .beforeMaintenance,
-            repositoryName: repository.name,
-            repositoryID: repository.id.uuidString,
-            maintenanceTask: task.rawValue,
-            outcome: "starting"
-        )
-
-        do {
-            let service = try service()
-            let context = try await context(for: repository)
-
-            if repository.hooks.contains(where: { $0.event == .beforeMaintenance && $0.isRunnable }) {
-                let result = await hooks.runHooks(
-                    repository.hooks,
-                    event: .beforeMaintenance,
-                    context: hookContext
-                )
-                record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
-                )
-                if result.shouldAbort {
-                    record.outcome = .failed
-                    record.failureMessage =
-                        "A before-maintenance hook failed and is set to cancel the \(task.displayName.lowercased())."
-                    // Stamped like any other failure: a hook that always says no
-                    // must not have the scheduler asking again every minute.
-                    stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
-                    await finishMaintenance(
-                        record: &record, repository: repository, hooks: hooks, context: hookContext
-                    )
-                    return
-                }
-            }
-
-            switch task {
-            case .check:
-                let percent = readDataPercentOverride ?? repository.maintenance.checkReadDataPercent
-                let summary = try await service.check(context, readDataSubsetPercent: percent)
-                let errors = summary?.numErrors ?? 0
-                record.outcome = errors == 0 ? .succeeded : .completedWithErrors
-                record.detailText = errors == 0
-                    ? "No errors found."
-                    : "\(errors) error(s). `restic repair` can recover some damage."
-                if summary?.suggestPrune == true {
-                    record.detailText? += " restic suggests running prune."
-                }
-            case .prune:
-                // Prune narrates its progress line by line; surfacing the
-                // newest line is the difference between "working" and "hung"
-                // across a prune that can run for hours. (Restic's lines are
-                // \n-terminated when stdout is a pipe — progress lines like
-                // "[0:00] 100.00%  2 / 2 packs processed" arrive as they
-                // print, no \r in-place updates to split around.)
-                let repositoryID = repository.id
-                record.detailText = try await service.prune(context, dryRun: false) { [weak self] line in
-                    Task { @MainActor in
-                        guard let self, self.maintenance[repositoryID] != nil else { return }
-                        self.maintenance[repositoryID]?.lastOutput = line
-                    }
-                }
-                record.outcome = .succeeded
-            }
-        } catch ResticError.passwordMissing {
-            // Not finished being set up. Record nothing and stamp nothing: the
-            // scheduler skips this repository until a password exists, and the
-            // repository screen must not claim a check happened.
-            repositoriesMissingPassword.insert(repository.id)
-            return
-        } catch {
-            record.setOutcome(from: error, cancellationMessage: cancellationMessage)
-            noteAuthFailure(error, repositoryID: repository.id)
-        }
-
-        // Stamp the timestamp whatever happened. Leaving it unset on failure would
-        // make the scheduler retry every minute against a repository that is very
-        // likely still unreachable.
-        stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
-        await finishMaintenance(record: &record, repository: repository, hooks: hooks, context: hookContext)
-    }
-
-    /// Runs the after-maintenance hooks, then stores and announces the run.
-    ///
-    /// A check that found errors counts as a failure here: that is the outcome a
-    /// repository hook exists to report. A cancelled run fires no hooks.
-    private func finishMaintenance(
-        record: inout RunRecord,
-        repository: Repository,
-        hooks: HookRunner,
-        context: HookRunner.Context
-    ) async {
-        record.finishedAt = .now
-        if record.outcome != .cancelled, repository.hooks.contains(where: \.isRunnable) {
-            var hookContext = context
-            hookContext.outcome = record.outcome.rawValue
-            hookContext.errorMessage = record.failureMessage ?? record.detailText.flatMap {
-                record.outcome == .completedWithErrors ? $0 : nil
-            }
-            hookContext.durationSeconds = record.duration
-            let events: [BackupHook.Event] = switch record.outcome {
-            case .succeeded: [.afterMaintenanceSuccess, .afterAnyMaintenance]
-            case .completedWithErrors, .failed: [.afterMaintenanceFailure, .afterAnyMaintenance]
-            case .cancelled: []
-            }
-            for event in events {
-                let result = await hooks.runHooks(repository.hooks, event: event, context: hookContext)
-                record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
-                )
-            }
-            record.finishedAt = .now
-        }
-
-        append(record: record)
-        if record.outcome == .failed {
-            post(Banner(
-                title: "\(record.kind.rawValue.capitalized) failed on “\(repository.name)”",
-                message: record.failureMessage ?? "",
-                isError: true
-            ))
-        }
-        await broadcast(record: record, plan: nil)
-        await refreshSnapshots(repositoryID: repository.id)
-    }
-
-    private func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date) {
+    func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date) {
         guard let index = configuration.repositories.firstIndex(where: { $0.id == repositoryID })
         else { return }
         switch task {
@@ -223,4 +88,37 @@ extension AppModel {
             }
         }
     }
+}
+
+// MARK: - The maintenance engine's view of the model
+
+extension AppModel: MaintenanceRunEngine.Sink {
+    func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void {
+        { [weak self] line in
+            Task { @MainActor in
+                guard let self, self.maintenance[repositoryID] != nil else { return }
+                self.maintenance[repositoryID]?.lastOutput = line
+            }
+        }
+    }
+
+    func markPasswordMissing(repositoryID: UUID) {
+        repositoriesMissingPassword.insert(repositoryID)
+    }
+
+    /// Stores a finished maintenance run, announces a failure — a check that
+    /// found errors is a failure where hooks are concerned — and notifies
+    /// the external channels.
+    func deliver(record: RunRecord, repository: Repository) async {
+        append(record: record)
+        if record.outcome == .failed {
+            post(Banner(
+                title: "\(record.kind.rawValue.capitalized) failed on “\(repository.name)”",
+                message: record.failureMessage ?? "",
+                isError: true
+            ))
+        }
+        await broadcast(record: record, plan: nil)
+    }
+
 }

@@ -14,6 +14,7 @@ import SwiftUI
 /// `RootDetailView`, each type-checking on its own.
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     @Environment(\.openWindow) private var openWindow
     @State private var editingPlan: BackupPlan?
     @State private var editingRepository: Repository?
@@ -62,8 +63,7 @@ struct RootView: View {
             onEditRepository: { editingRepository = $0 },
             onAddRepository: { editingRepository = Repository() },
             onAddPlan: { editingPlan = BackupPlan() },
-            onRevalidateSelection: revalidateSelection,
-            onConsumePendingNewRepository: consumePendingNewRepository
+            onRevalidateSelection: revalidateSelection
         )
     }
 
@@ -118,23 +118,16 @@ struct RootView: View {
         }
     }
 
-    /// The notification observers. Kept apart from `presented` for the same
-    /// reason that function exists: the full chain in one expression does not
-    /// type-check — on CI's Swift it does not even type-check in halves.
+    /// The intents from the menu bar and the tray. The menu commands and the
+    /// tray have no direct way to reach this view, so they ask the router;
+    /// this is the consumption half, on the same appear-or-change rule that
+    /// keeps an ask alive while the window is closed. Kept apart from
+    /// `presented` for the same reason that function exists: the full chain
+    /// in one expression does not type-check.
     private func observed<V: View>(over content: V) -> some View {
         content
-        .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowFind)) { _ in
-            isShowingFind = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .swiftResticRunSelected)) { _ in
-            runSelectedPlanFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .swiftResticNewPlan)) { _ in
-            guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
-            editingPlan = BackupPlan()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .swiftResticShowConcepts)) { _ in
-            isShowingConcepts = true
+        .onChange(of: router.pendingIntent) {
+            consumeIntent()
         }
     }
 
@@ -152,11 +145,11 @@ struct RootView: View {
         content
         .onAppear {
             // Parked for the AppKit tray, which cannot reach a view
-            // environment — see AppModel.openMainWindowAction.
-            if model.openMainWindowAction == nil {
-                model.openMainWindowAction = openWindow
+            // environment — see AppRouter.openMainWindowAction.
+            if router.openMainWindowAction == nil {
+                router.openMainWindowAction = openWindow
             }
-            consumePendingNewRepository()
+            consumeIntent()
             selectSomething()
             #if DEBUG
             applyCapturePaneOverride()
@@ -199,10 +192,10 @@ struct RootView: View {
     /// ⌘B: run whichever plan the sidebar is on. A no-op when the selection
     /// is not a runnable plan — the menu item's name says as much — and
     /// while a sheet is up, where a run would start unseen.
-    private func runSelectedPlanFromNotification() {
+    private func runSelectedPlan() {
         guard editingPlan == nil, editingRepository == nil, !isShowingFind
         else { return }
-        if case let .plan(id) = model.sidebarSelection,
+        if case let .plan(id) = router.selection,
            let plan = model.plan(id: id),
            plan.isConfigurationComplete,
            !model.isRunning(planID: id)
@@ -217,7 +210,7 @@ struct RootView: View {
                 .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
                 .help("Search snapshots for files, across every snapshot (⇧⌘F)")
             Button("restic Console", systemImage: "apple.terminal") {
-                model.sidebarSelection = .console
+                router.selection = .console
             }
             .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
             .help("Run restic commands directly against a repository")
@@ -249,13 +242,13 @@ struct RootView: View {
         else { return }
         didApplyCaptureOverride = true
         switch ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_PANE"] {
-        case "plan": model.sidebarSelection = model.configuration.plans.first.map { .plan($0.id) }
-        case "repository": model.sidebarSelection = model.configuration.repositories.first.map { .repository($0.id) }
-        case "activity": model.sidebarSelection = .activity
+        case "plan": router.selection = model.configuration.plans.first.map { .plan($0.id) }
+        case "repository": router.selection = model.configuration.repositories.first.map { .repository($0.id) }
+        case "activity": router.selection = .activity
         case "find": isShowingFind = true
         case "concepts": isShowingConcepts = true
-        case "console": model.sidebarSelection = .console
-        case "overview": model.sidebarSelection = .overview
+        case "console": router.selection = .console
+        case "overview": router.selection = .overview
         // The restore pane needs a snapshot row to select, and those arrive
         // only after the launch refresh — see the snapshots onChange below.
         case "restore":
@@ -279,45 +272,55 @@ struct RootView: View {
     private func selectSomething() {
         // Before the configuration is read there is nothing to decide from;
         // the `isBootstrapping` change handler picks the landing pane.
-        guard model.sidebarSelection == nil, !model.isBootstrapping else { return }
+        guard router.selection == nil, !model.isBootstrapping else { return }
         // The dashboard is the useful landing place once anything is configured.
-        model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
+        router.selection = model.configuration.repositories.isEmpty ? nil : .overview
     }
 
-    /// The model-carried "add a repository" intent: a fresh window consumes it
-    /// here on appear, an already open one through `onChange`. The flag clears
-    /// before the guards, so a request arriving while a sheet is up is dropped
-    /// — the same no-op the old notification's guard produced, now without the
-    /// race on whether the window existed to receive it at all.
-    private func consumePendingNewRepository() {
-        guard model.pendingNewRepository else { return }
-        model.pendingNewRepository = false
-        guard editingPlan == nil, editingRepository == nil, !isShowingFind else { return }
-        editingRepository = Repository()
+    /// Applies one consumed intent. An ask arriving while a sheet is up is
+    /// dropped — two sheets cannot present at once — the same no-op the old
+    /// notification guards produced.
+    private func consumeIntent() {
+        guard let intent = router.takePendingIntent() else { return }
+        let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFind || isShowingConcepts
+        switch intent {
+        case .newPlan:
+            guard !sheetsUp else { return }
+            editingPlan = BackupPlan()
+        case .newRepository:
+            guard !sheetsUp else { return }
+            editingRepository = Repository()
+        case .showFind:
+            isShowingFind = true
+        case .showConcepts:
+            isShowingConcepts = true
+        case .runSelectedPlan:
+            runSelectedPlan()
+        }
     }
 
     /// After a deletion the selected plan or repository may no longer exist;
     /// landing on "Plan not found" is a dead end whose only exit is the
     /// sidebar, so retarget to the dashboard instead.
     private func revalidateSelection() {
-        switch model.sidebarSelection {
+        switch router.selection {
         case .plan(let id) where model.plan(id: id) == nil,
              .repository(let id) where model.repository(id: id) == nil:
-            model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
+            router.selection = model.configuration.repositories.isEmpty ? nil : .overview
         case .restoreSnapshot(let repositoryID, _)
             where model.repository(id: repositoryID) == nil:
-            model.sidebarSelection = model.configuration.repositories.isEmpty ? nil : .overview
+            router.selection = model.configuration.repositories.isEmpty ? nil : .overview
         case let .restoreSnapshot(repositoryID, snapshotID)
             where model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }) == nil:
             // The record itself is gone; the repository's newest record (or
             // its page, when none are left) is the nearest honest landing.
-            model.sidebarSelection = model.snapshots(for: repositoryID).first
+            router.selection = model.snapshots(for: repositoryID).first
                 .map { .restoreSnapshot(repositoryID, $0.id) }
                 ?? .repository(repositoryID)
         case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable:
             // The row is now disabled; a selection parked on it would be a
             // pane the sidebar no longer offers.
-            model.sidebarSelection = nil
+            router.selection = nil
         default:
             break
         }

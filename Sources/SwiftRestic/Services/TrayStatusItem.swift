@@ -21,14 +21,16 @@ import Observation
 @MainActor
 final class TrayStatusItem: NSObject, NSMenuDelegate {
     private let model: AppModel
+    private let router: AppRouter
     private let statusItem: NSStatusItem
     private var pulseTimer: Timer?
     /// The per-plan rows' tag → plan mapping, rebuilt with the menu.
     private var planIDsByTag: [Int: UUID] = [:]
     private var nextPlanTag = 1
 
-    init(model: AppModel) {
+    init(model: AppModel, router: AppRouter) {
         self.model = model
+        self.router = router
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.autosaveName = "SwiftResticTray"
         super.init()
@@ -246,13 +248,13 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// Brings the window back, or recreates it after it was closed — the
     /// tray is the only way in once the window is gone. Three bridges in
     /// order of reliability: the `openWindow` action the main window's root
-    /// view parked on the model (captured once, still callable after the
+    /// view parked on the router (captured once, still callable after the
     /// view it came from is gone), an existing window made key, and the
     /// reopen Apple event — the path a Dock click takes, which SwiftUI's
     /// own delegate answers by rebuilding the `Window` scene.
     @objc private func openMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        if let open = model.openMainWindowAction {
+        if let open = router.openMainWindowAction {
             open(id: "main")
             return
         }
@@ -280,10 +282,10 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     }
 
     @objc private func addRepository() {
-        // The intent travels through the model *before* the window opens, so
+        // The intent travels through the router *before* the window opens, so
         // nothing depends on how many run-loop turns the window takes to
         // appear — the same rule the File command follows.
-        model.pendingNewRepository = true
+        router.request(.newRepository)
         openMainWindow()
     }
 
