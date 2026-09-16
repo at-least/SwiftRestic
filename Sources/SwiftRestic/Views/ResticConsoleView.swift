@@ -33,7 +33,7 @@ struct ResticConsoleView: View {
             }
         }
         .navigationTitle("restic Console")
-        .onAppear { model.console.appear(with: model) }
+        .onAppear { model.consoleDidAppear() }
         .confirmationDialog(
             "Run this command?",
             isPresented: Binding(
@@ -43,7 +43,7 @@ struct ResticConsoleView: View {
             titleVisibility: .visible
         ) {
             Button("Run", role: .destructive) {
-                model.console.confirmPending(app: model)
+                model.console.confirmPending()
             }
             Button("Cancel", role: .cancel) { model.console.cancelPending() }
         } message: {
@@ -77,7 +77,7 @@ struct ResticConsoleView: View {
                             .help(entry)
                             .contextMenu {
                                 Button("Remove from History", role: .destructive) {
-                                    model.console.removeFromHistory(entry, app: model)
+                                    model.console.removeFromHistory(entry)
                                 }
                             }
                         }
@@ -106,7 +106,7 @@ struct ResticConsoleView: View {
                 TextField("snapshots --compact", text: $console.commandText)
                     .font(.system(.body, design: .monospaced))
                     .textFieldStyle(.roundedBorder)
-                    .onSubmit { console.run(with: model) }
+                    .onSubmit { console.run() }
                     // Terminal reflexes: ↑ walks into the history, ↓ walks
                     // back out to what was being typed. The model owns the
                     // walk; an .ignored lets the field keep its own handling.
@@ -124,7 +124,7 @@ struct ResticConsoleView: View {
                         }
                         return .ignored
                     }
-                Button("Run") { console.run(with: model) }
+                Button("Run") { console.run() }
                     .buttonStyle(.borderedProminent)
                     .disabled(!console.canRun)
                 // Always occupying their space, only visible while running:

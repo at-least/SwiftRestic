@@ -14,9 +14,24 @@ struct PendingCommand {
 /// that kept its state in the view, so switching panes would have cancelled a
 /// running restic process and thrown its output away; as a first-class pane
 /// it must survive both. Only quitting cancels, via `AppModel.shutdown`.
+///
+/// The two things it needs from the world — running a command and persisting
+/// history — arrive as closures injected by `AppModel` at wiring, so the
+/// console carries no back-reference to its owner: it held one for every
+/// method once, and every method read the whole model for two lines of it.
+/// They cannot be init parameters — the closures capture the owner, and the
+/// owner owns this — so an unwired console says so in the output pane
+/// instead of dropping a confirmed command on the floor in silence.
 @MainActor
 @Observable
 final class ConsoleModel {
+    /// Runs a command against a repository — `AppModel.runConsoleCommand`,
+    /// the engine chokepoint, handed over at wiring.
+    var runCommand: ((_ repositoryID: UUID, _ arguments: [String]) async -> String)?
+    /// Persists the secret-filtered history — the configuration write,
+    /// handed over at wiring.
+    var persistHistory: (([String]) -> Void)?
+
     var repositoryID: UUID?
     var commandText = "snapshots --compact"
     private(set) var output = ""
@@ -40,13 +55,15 @@ final class ConsoleModel {
     private var recalledDraft: String?
     private var runTask: Task<Void, Never>?
 
-    func appear(with app: AppModel) {
-        if repositoryID == nil { repositoryID = app.configuration.repositories.first?.id }
+    /// The pane's appear moment, driven by `AppModel.consoleDidAppear`:
+    /// the model reads its own configuration and hands the values over.
+    func appear(repositoryID defaultRepositoryID: UUID?, persistedHistory: [String]) {
+        if repositoryID == nil { repositoryID = defaultRepositoryID }
         // History outlives the pane: it lives in the configuration, so a
         // command that worked is still here next week. It is also the
         // secret-filtered list, which can be shorter than the session's —
         // an in-progress walk's index would point past it, so the walk ends.
-        history = app.configuration.settings.consoleHistory
+        history = persistedHistory
         endRecall()
     }
 
@@ -55,7 +72,7 @@ final class ConsoleModel {
             && !CommandLineTokenizer.tokenize(commandText).isEmpty
     }
 
-    func run(with app: AppModel) {
+    func run() {
         let arguments = CommandLineTokenizer.tokenize(commandText)
         guard !arguments.isEmpty, repositoryID != nil else { return }
         // Submitting ends any recall walk: the field belongs to the user again.
@@ -63,24 +80,24 @@ final class ConsoleModel {
         if CommandLineTokenizer.isDestructive(arguments) {
             pendingDestructive = PendingCommand(arguments: arguments, text: commandText)
         } else {
-            execute(arguments, record: commandText, app: app)
+            execute(arguments, record: commandText)
         }
     }
 
-    func confirmPending(app: AppModel) {
+    func confirmPending() {
         guard let pending = pendingDestructive else { return }
         pendingDestructive = nil
-        execute(pending.arguments, record: pending.text, app: app)
+        execute(pending.arguments, record: pending.text)
     }
 
     func cancelPending() {
         pendingDestructive = nil
     }
 
-    func removeFromHistory(_ entry: String, app: AppModel) {
+    func removeFromHistory(_ entry: String) {
         history.removeAll { $0 == entry }
         endRecall()
-        persistHistory(in: app)
+        persist()
     }
 
     /// The entry ↑ should show: the newest history entry first, then one
@@ -151,46 +168,44 @@ final class ConsoleModel {
         await runTask?.value
     }
 
-    private func execute(_ arguments: [String], record entry: String, app: AppModel) {
+    private func execute(_ arguments: [String], record entry: String) {
         guard let repositoryID, !isRunning else { return }
+        guard let command = runCommand else {
+            output = "The console was not wired to a repository engine — this is a SwiftRestic bug."
+            return
+        }
         isRunning = true
         runningRepositoryID = repositoryID
         output = "Running…"
         runTask = Task { [weak self] in
-            let result = await app.runConsoleCommand(
-                repositoryID: repositoryID,
-                arguments: arguments
-            )
-            // No cancellation guard here: `runConsoleCommand` answers a stop
-            // with "The operation was cancelled.", and nothing else writes
-            // this state while the command runs — the message must reach
-            // the pane.
+            let result = await command(repositoryID, arguments)
+            // No cancellation guard here: the runner answers a stop with
+            // "The operation was cancelled.", and nothing else writes this
+            // state while the command runs — the message must reach the pane.
             self?.output = result
             self?.isRunning = false
             self?.runningRepositoryID = nil
             self?.runTask = nil
-            self?.record(entry, in: app)
+            self?.record(entry)
         }
     }
 
-    private func record(_ entry: String, in app: AppModel) {
+    private func record(_ entry: String) {
         history.removeAll { $0 == entry }
         history.insert(entry, at: 0)
         history = Array(history.prefix(20))
         // An append shifts every index a walk in progress points at; end the
         // walk rather than let ↑ land on a different command than it showed.
         endRecall()
-        persistHistory(in: app)
+        persist()
     }
 
     /// Sensitive commands stay in this session's sidebar but never reach the
     /// configuration file: it gets rotated and is the first thing attached to
     /// a bug report, and a history miss is a small price next to a stored
     /// secret.
-    private func persistHistory(in app: AppModel) {
-        app.configuration.settings.consoleHistory = history.filter {
-            !Self.mayCarrySecret($0)
-        }
+    private func persist() {
+        persistHistory?(history.filter { !Self.mayCarrySecret($0) })
     }
 
     private static func mayCarrySecret(_ command: String) -> Bool {

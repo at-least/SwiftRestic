@@ -58,7 +58,10 @@ targets:
       # `excludes` below.
       - path: Sources/SwiftRestic/App
         excludes:
+          # The entry point, and the debug-capture scaffolding that extends
+          # its AppDelegate — neither belongs in the test bundle.
           - SwiftResticApp.swift
+          - CaptureSupport.swift
     dependencies:
       - package: GRDB
     settings:

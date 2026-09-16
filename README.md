@@ -78,18 +78,28 @@ checked in so a normal build does not need it.
 
 ```
 Core/       ResticBinary   locate the executable (GUI apps get a bare PATH)
-            ResticRunner   actor: spawn, stream NDJSON, cancel, time out, map exit codes
-            ResticMessage  decode restic's --json union
+            ResticRunner   actor: spawn, stream NDJSON, cancel, time out,
+                            stall-cap (idle watchdog), map exit codes
+            ResticMessage  decode restic's --json union; malformed known
+                            messages are counted, never silently dropped
 Models/     Repository, MaintenancePolicy, BackupPlan, Schedule, RetentionPolicy,
             BackupHook, NotificationChannel, Snapshot, RunRecord
-Services/   ResticService     typed restic commands
+Services/   ResticService     typed restic commands (idle caps on the streaming ones)
             HookRunner        shell hooks, on the same process machinery
             NotificationPoster + payload builders per provider
             OverviewMetrics   dashboard series, kept pure and testable
             SecretStore       Keychain, injectable so tests never touch yours
             ConfigStore, Scheduler, KeychainStore
-App/        AppModel       @MainActor @Observable single source of truth
-Views/      NavigationSplitView UI, Swift Charts dashboard, restic console
+App/        AppModel       @MainActor @Observable — configuration, run state,
+                            banners; the facade the views and scheduler call
+            AppRouter      view state and window intents (selection, sheets
+                            asked for by menus/tray, the Activity focus flags)
+            RunEngines     BackupRunEngine + MaintenanceRunEngine: the run
+                            lifecycles over sink protocols, unit-testable
+            TaskRegistry   the in-flight task census shutdown drains
+            ConsoleModel   the console pane's state (dependencies injected)
+Views/      NavigationSplitView UI, Swift Charts dashboard, restic console;
+            the root composes SidebarView + RootDetailView child views
 ```
 
 Everything runs under Swift 6 strict concurrency. restic executes on the
@@ -98,6 +108,24 @@ The few places Foundation forces the issue — `Process`, its exit handler and
 file handles — use small lock-guarded `@unchecked Sendable` wrappers
 (`ProcessBox`, `ExitWaiter` and `FileHandleBox` in `ResticRunner`,
 `DiffCollector` in `ResticService`).
+
+A few seams worth knowing by name:
+
+- **`ResticClient`** is the engine boundary; `AppModel.service()` is the one
+  place the concrete binary-backed implementation is chosen. Tests substitute
+  it two ways: a scriptable mock (`MockResticClient`, for the run engines)
+  and a fake shell-script restic (fault paths: hangs, torn writes, exit codes).
+- **Resolved contexts are cached** per repository (`AppModel.resolvedContexts`)
+  so a restic call does not re-read the Keychain; the key covers the
+  repository value and rate limits, secret edits invalidate in `upsert`, and
+  exit 12 drops the entry so a fixed password takes effect without a restart.
+- **Streaming commands wear an idle stall cap** (15 min with no output at all
+  ends the run as hung) — measured on `systemUptime`, so a closed lid is not
+  "silence". Legitimately quiet commands (`prune`, `forget`, `dump`, the
+  console) wear none.
+- **Menu commands and the tray ask the router** (`router.request(...)`) for
+  typed intents; the root view consumes them on appear-or-change, and every
+  window-targeting command also opens the window so no ask is parked unheard.
 
 ### Notes on restic's JSON
 
@@ -123,7 +151,7 @@ backup; 10 is a missing repository, 11 a lock, 12 a wrong password.
 ./build.sh test
 ```
 
-Three layers:
+Four layers:
 
 - **Decoding** — restic's JSON pinned against output captured verbatim from
   restic 0.19.1, plus scheduling, retention and repository-string logic.
@@ -132,6 +160,9 @@ Three layers:
   snapshot), diffed, pruned and checked; wrong passwords, missing repositories
   and cancellation are asserted on their real exit codes. Skipped when restic is
   not installed.
+- **The run engines** — `BackupRunEngine`/`MaintenanceRunEngine` sequencing and
+  outcome mapping against a scriptable `MockResticClient` (no process per
+  case), plus the stub-binary fault paths: hangs, torn writes, mid-run deaths.
 - **`AppModel`** — the glue: the scheduler starting a due plan unprompted, the
   run history, retention after a backup, hooks firing around a real backup and a
   real check, and that a failed run is recorded rather than dropped. Secrets are injected

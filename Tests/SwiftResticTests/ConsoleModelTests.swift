@@ -33,10 +33,10 @@ struct ConsoleModelTests {
     @Test("a destructive command arms a confirmation instead of running")
     func destructiveArms() throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
+        app.consoleDidAppear()
         console.commandText = "prune"
 
-        console.run(with: app)
+        console.run()
 
         #expect(console.pendingDestructive != nil)
         #expect(!console.isRunning)
@@ -50,15 +50,15 @@ struct ConsoleModelTests {
     @Test("confirming a destructive command runs it and records the history")
     func confirmationRuns() async throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
+        app.consoleDidAppear()
         console.commandText = "prune"
-        console.run(with: app)
+        console.run()
         guard console.pendingDestructive != nil else {
             Issue.record("expected the command to arm a confirmation")
             return
         }
 
-        console.confirmPending(app: app)
+        console.confirmPending()
         await console.waitForCommand()
 
         #expect(console.output != "Running…")
@@ -74,10 +74,10 @@ struct ConsoleModelTests {
     @Test("a non-destructive command runs without confirmation")
     func plainCommandRuns() async throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
+        app.consoleDidAppear()
         console.commandText = "snapshots --compact"
 
-        console.run(with: app)
+        console.run()
         await console.waitForCommand()
 
         #expect(console.pendingDestructive == nil)
@@ -87,11 +87,11 @@ struct ConsoleModelTests {
     @Test("secret-bearing commands reach the session's history but not the configuration")
     func secretFilter() async throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
+        app.consoleDidAppear()
         console.commandText = "key add new-key"
         // `key` is a destructive subcommand, so it arms first.
-        console.run(with: app)
-        console.confirmPending(app: app)
+        console.run()
+        console.confirmPending()
         await console.waitForCommand()
 
         #expect(console.history.first == "key add new-key")
@@ -101,15 +101,15 @@ struct ConsoleModelTests {
     @Test("re-running a command moves it to the top instead of duplicating it")
     func historyDeduplicates() async throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
+        app.consoleDidAppear()
         console.commandText = "snapshots"
-        console.run(with: app)
+        console.run()
         await console.waitForCommand()
         console.commandText = "version"
-        console.run(with: app)
+        console.run()
         await console.waitForCommand()
         console.commandText = "snapshots"
-        console.run(with: app)
+        console.run()
         await console.waitForCommand()
 
         #expect(console.history == ["snapshots", "version"])
@@ -118,12 +118,12 @@ struct ConsoleModelTests {
     @Test("removing a history entry removes it from both surfaces")
     func removeFromHistory() async throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
+        app.consoleDidAppear()
         console.commandText = "snapshots"
-        console.run(with: app)
+        console.run()
         await console.waitForCommand()
 
-        console.removeFromHistory("snapshots", app: app)
+        console.removeFromHistory("snapshots")
 
         #expect(console.history.isEmpty)
         #expect(app.configuration.settings.consoleHistory.isEmpty)
@@ -132,14 +132,10 @@ struct ConsoleModelTests {
     // MARK: - Arrow recall
 
     /// Seeds history through real runs, the only writer the model allows.
-    private func seedHistory(
-        _ commands: [String],
-        app: AppModel,
-        console: ConsoleModel
-    ) async {
+    private func seedHistory(_ commands: [String], console: ConsoleModel) async {
         for command in commands {
             console.commandText = command
-            console.run(with: app)
+            console.run()
             await console.waitForCommand()
         }
     }
@@ -147,8 +143,8 @@ struct ConsoleModelTests {
     @Test("↑ walks the history newest first and clamps at the oldest; ↓ returns to the draft")
     func arrowRecallWalksHistoryAndReturnsToDraft() async throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
-        await seedHistory(["snapshots --compact", "version"], app: app, console: console)
+        app.consoleDidAppear()
+        await seedHistory(["snapshots --compact", "version"], console: console)
         #expect(console.history.first == "version")
 
         // ↑ from a typed draft takes the newest entry, then walks older…
@@ -167,12 +163,12 @@ struct ConsoleModelTests {
     @Test("submitting a command ends the recall walk")
     func submittingEndsRecall() async throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
-        await seedHistory(["version"], app: app, console: console)
+        app.consoleDidAppear()
+        await seedHistory(["version"], console: console)
 
         #expect(console.recallPrevious(current: "ls") == "version")
         console.commandText = "version"
-        console.run(with: app)
+        console.run()
         await console.waitForCommand()
 
         // The walk is over: ↓ must not conjure a recalled entry.
@@ -193,10 +189,10 @@ extension ConsoleModelTests {
     @Test("re-seeding history from disk ends the walk instead of indexing past it")
     func appearResetsRecallWalk() async throws {
         let (app, console, _) = try makeHarness()
-        console.appear(with: app)
+        app.consoleDidAppear()
         // Two of the three commands carry secrets, so the persisted list the
         // pane re-reads on return is shorter than the session's history.
-        await seedHistory(["aaa", "password one", "password two"], app: app, console: console)
+        await seedHistory(["aaa", "password one", "password two"], console: console)
         #expect(console.history.count == 3)
 
         // Walk to the oldest entry, index 2.
@@ -206,7 +202,7 @@ extension ConsoleModelTests {
 
         // The pane is left and revisited: history re-reads from disk, now
         // without the secret-bearing commands.
-        console.appear(with: app)
+        app.consoleDidAppear()
         #expect(console.history == ["aaa"])
 
         // The walk is over — ↓ must not index past the shrunken list.

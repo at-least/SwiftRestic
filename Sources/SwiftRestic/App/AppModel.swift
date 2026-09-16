@@ -91,7 +91,8 @@ final class AppModel {
     /// rebuild path: its failures are its own, never the refresh's or the
     /// backup's. See `IndexCoordinator`.
     let indexCoordinator = IndexCoordinator()
-    /// State of the restic console pane (see `ConsoleModel`).
+    /// State of the restic console pane (see `ConsoleModel`); its two
+    /// injected closures are set below, at the end of `init`.
     let console = ConsoleModel()
     var binary: ResticBinary?
     /// In-flight runs and the sends quitting must drain — the structural
@@ -120,6 +121,18 @@ final class AppModel {
         self.secrets = secrets
         self.viewDefaults = defaults
         self.problemsSeenAt = ProblemDotsStore.load(from: defaults)
+        // The console's whole view of its owner: run a command, persist the
+        // history. Two closures instead of the back-reference every method
+        // used to take. The fallback matches ResticError.cancelled's words —
+        // a gone owner is the quit unwinding, and the pane should say what
+        // happened the way the rest of the app does.
+        console.runCommand = { [weak self] repositoryID, arguments in
+            await self?.runConsoleCommand(repositoryID: repositoryID, arguments: arguments)
+                ?? "The operation was cancelled."
+        }
+        console.persistHistory = { [weak self] history in
+            self?.configuration.settings.consoleHistory = history
+        }
     }
 
     // MARK: - Persistence
