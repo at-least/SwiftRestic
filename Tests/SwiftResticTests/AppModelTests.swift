@@ -655,3 +655,47 @@ struct KeychainFailureHonestyTests {
         }
     }
 }
+
+
+/// When no generation of the configuration reads, the files on disk are the
+/// only good copy left — and every save's rotation would shuffle the corrupt
+/// live file over them. Refusing saves is the whole protection.
+@Suite("unreadable configuration protection")
+@MainActor
+struct UnreadableConfigurationTests {
+    @Test("nothing is saved over the backup copies when no generation reads")
+    func savesAreRefusedAfterUnreadableLoad() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticUnreadable-\(UUID().uuidString)")
+        let configDirectory = root.appendingPathComponent("config")
+        try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for name in ["config.json", "config.json.1", "config.json.2"] {
+            try Data("{ not json".utf8).write(to: configDirectory.appendingPathComponent(name))
+        }
+
+        let model = AppModel(
+            store: ConfigStore(directory: configDirectory),
+            secrets: .inMemory()
+        )
+        await model.bootstrap()
+        defer { Task { await model.shutdown() } }
+
+        #expect(model.isConfigurationUnreadable, "a fully unreadable configuration must say so")
+
+        // Any edit — and the shutdown flush — must leave the three files
+        // exactly as they were: the rotation behind a save would otherwise
+        // carry the corrupt live file across the good generations, and two
+        // saves would erase the last readable copy.
+        func snapshot() throws -> (names: [String], data: [Data]) {
+            let names = try FileManager.default.contentsOfDirectory(atPath: configDirectory.path).sorted()
+            return (names, try names.map { try Data(contentsOf: configDirectory.appendingPathComponent($0)) })
+        }
+        let before = try snapshot()
+        model.configuration.settings.maxRunHistory = 111
+        await model.flushSave()
+        let after = try snapshot()
+        #expect(after.names == before.names, "a save changed the configuration files")
+        #expect(after.data == before.data, "a save landed over an unreadable configuration's backup copies")
+    }
+}

@@ -241,16 +241,26 @@ actor IndexCoordinator {
     /// documented corruption routes. The repository joins the tombstone set,
     /// so a refresh that was in flight when the removal happened cannot
     /// recreate the file behind the removal's back.
-    func dropRepository(repositoryID: UUID) {
+    func dropRepository(repositoryID: UUID) async {
         dropped.insert(repositoryID)
-        resetRepository(repositoryID: repositoryID)
+        await resetRepository(repositoryID: repositoryID)
     }
 
     /// `dropRepository` without the tombstone: the recovery hatch a
     /// user-invoked rebuild drives. The repository still exists — only its
     /// index is being thrown away — so future reconciles must land.
-    func resetRepository(repositoryID: UUID) {
-        cancelBackfill(repositoryID: repositoryID)
+    ///
+    /// The cancelling backfill is awaited, not merely cancelled: its task
+    /// still holds the store's connection, and a connection that closes
+    /// after these files are deleted — and a fresh database is opened at
+    /// the same path — is one of SQLite's documented corruption routes (a
+    /// stale checkpoint deleting the new database's wal). Awaiting from the
+    /// actor frees it to service the task; cancellation lands at the loop
+    /// and stream checks, so the wait is bounded by the dying child.
+    func resetRepository(repositoryID: UUID) async {
+        backfillTasks[repositoryID]?.cancel()
+        let unwinding = backfillTasks[repositoryID]
+        await unwinding?.value
         stores[repositoryID] = nil
         outcomes[repositoryID] = nil
         removeIndexFiles(at: directory.appendingPathComponent(repositoryID.uuidString + ".sqlite"))
@@ -264,6 +274,11 @@ actor IndexCoordinator {
     /// the fast recovery, not data loss.
     private func store(for repositoryID: UUID) throws -> SQLiteIndexStore {
         if let cached = stores[repositoryID] { return cached }
+        // Every road to a store runs through here, so this is where the
+        // tombstone lives: a restore pane still open, a diff landing after
+        // removal — none of them may recreate the file for a repository
+        // that is gone.
+        guard !dropped.contains(repositoryID) else { throw IndexError.repositoryRemoved }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = directory.appendingPathComponent(repositoryID.uuidString + ".sqlite")
         do {

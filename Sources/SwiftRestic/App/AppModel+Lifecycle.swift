@@ -47,9 +47,11 @@ extension AppModel {
                 ))
             }
         } catch {
+            isConfigurationUnreadable = true
             post(Banner(
                 title: "Could not read your configuration",
-                message: error.localizedDescription,
+                message: error.localizedDescription
+                    + " Your settings were not changed and nothing will be saved over the backup copies — fix the file and restart SwiftRestic.",
                 isError: true
             ))
         }

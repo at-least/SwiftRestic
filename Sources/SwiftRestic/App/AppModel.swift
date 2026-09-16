@@ -107,6 +107,13 @@ final class AppModel {
     /// between proved the failure was gone.
     @ObservationIgnored var statsFailureNoted: Set<UUID> = []
     private var isSaving = false
+    /// Set when bootstrap could not read the configuration from any
+    /// generation. Every save from here on is refused: the live file that is
+    /// on disk is corrupt in unknown ways, and the rotation behind each save
+    /// would shuffle it over the good generations — two saves and every
+    /// backup copy is gone. The user's way out is fixing the file externally
+    /// and restarting; the banner tells them so.
+    @ObservationIgnored var isConfigurationUnreadable = false
     /// Set while `shutdown` is unwinding. A run cancelled this way was not
     /// stopped by the user, and the run record should say so: "Cancelled" sends
     /// someone hunting for a cancel click that never happened.
@@ -149,6 +156,7 @@ final class AppModel {
 
     func flushSave() async {
         guard isLoaded else { return }
+        guard !isConfigurationUnreadable else { return }
         // Another write is in progress: wait for it and then write the newer
         // state. Skipping instead would drop the latest edit for good — nothing
         // else would save it, including the single flush at shutdown.

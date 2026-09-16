@@ -146,6 +146,11 @@ actor ResticRunner {
             process.standardOutput = stdoutPipe
         }
         process.standardError = stderrPipe
+        // Closed at function exit, whatever the exit: the launch-failure and
+        // cancellation paths both throw, and a close that runs only on the
+        // success path leaks the descriptor into the actor's lifetime on
+        // every other one. Installed here, before anything can throw.
+        defer { try? stdoutFileHandle?.close() }
         // No terminal is attached, so a backend that tries to prompt (an SFTP
         // host-key confirmation, say) must fail fast rather than hang on a stdin
         // that will never answer.
@@ -257,10 +262,6 @@ actor ResticRunner {
             throw ResticError.cancelled
         }
 
-        // Closed at function exit, whatever the exit: the cancellation path
-        // throws before the old explicit close ran, leaking the dump's file
-        // descriptor into the actor's lifetime.
-        defer { try? stdoutFileHandle?.close() }
         let captured = takeCaptured(handle: handle)
 
         if box.idleTimedOut {
@@ -418,8 +419,12 @@ private final class ProcessBox: @unchecked Sendable {
     /// runner that cannot stop its children hangs every cancel and the quit
     /// that drains them, so after the grace it stops asking: SIGKILL. Two
     /// terminate calls racing arm two escalations; the second finds the
-    /// process already gone. The pid is re-checked before the kill so a
-    /// recycled identifier is never signalled.
+    /// process already gone (`isRunning` is the real guard — the pid itself
+    /// never changes, so there is nothing to re-verify, and the reuse window
+    /// between the check and the kill is not a real one). A grandchild that
+    /// inherited the pipes can still hold the streams open after the child
+    /// dies; no signal reaches it — the caller's cancellation and the stall
+    /// cap are the answers there.
     private func escalateToKill() {
         let identifier = process.processIdentifier
         guard identifier > 0 else { return }
@@ -435,7 +440,7 @@ private final class ProcessBox: @unchecked Sendable {
         lock.lock()
         let running = process.isRunning
         lock.unlock()
-        guard running, process.processIdentifier == identifier else { return }
+        guard running else { return }
         kill(identifier, SIGKILL)
     }
 

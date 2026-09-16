@@ -132,6 +132,9 @@ extension Array where Element == IndexedSnapshot {
 enum IndexError: Error, Equatable {
     /// `recordContent` named a snapshot the index has never reconciled.
     case unknownSnapshot(String)
+    /// The repository was removed; its index was deleted with it and no new
+    /// one may be opened, however late the caller arrived.
+    case repositoryRemoved
 }
 
 /// Path text helpers shared by the store and the cache row types — neutral
