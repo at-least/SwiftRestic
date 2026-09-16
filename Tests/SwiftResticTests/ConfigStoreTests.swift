@@ -11,9 +11,11 @@ struct ConfigStoreTests {
     @Test("a missing config file is not an error")
     func missingFile() async throws {
         let store = ConfigStore(directory: temporaryDirectory())
-        let configuration = try await store.load()
-        #expect(configuration.plans.isEmpty)
-        #expect(configuration.repositories.isEmpty)
+        let loaded = try await store.load()
+        #expect(loaded.configuration.plans.isEmpty)
+        #expect(loaded.configuration.repositories.isEmpty)
+        #expect(loaded.recoveredFrom == nil)
+        #expect(loaded.decodeNotes.isEmpty)
     }
 
     @Test("configuration survives a save/load round trip")
@@ -41,7 +43,7 @@ struct ConfigStoreTests {
         configuration.settings.uploadLimitKiBps = 512
 
         try await store.save(configuration)
-        let loaded = try await store.load()
+        let loaded = try await store.load().configuration
 
         #expect(loaded.repositories.first?.sftpHost == "nas.local")
         #expect(loaded.plans.first?.name == "Documents")
@@ -84,7 +86,7 @@ struct ConfigStoreTests {
         """
         try Data(json.utf8).write(to: directory.appendingPathComponent("config.json"))
 
-        let loaded = try await ConfigStore(directory: directory).load()
+        let loaded = try await ConfigStore(directory: directory).load().configuration
         #expect(loaded.repositories.count == 1)
         #expect(loaded.plans.count == 1)
         #expect(loaded.plans.first?.schedule.frequency == .hourly)
@@ -133,17 +135,32 @@ struct ConfigStoreTests {
 
 /// The hand-written config above covers *missing* keys. These cover *malformed*
 /// ones: a value of the wrong type, or an enum case a newer build invented, must
-/// fall back to the field's default instead of failing the whole document.
+/// fall back to the field's default instead of failing the whole document — and
+/// the substitution must be reported, never silent.
 @Suite("Tolerant decoding")
 struct TolerantDecodingTests {
+    private func temporaryDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticConfig-\(UUID().uuidString)")
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(T.self, from: Data(json.utf8))
     }
 
-    @Test("an unknown enum raw value falls back to the default case")
+    @Test("an unknown enum raw value falls back to the default case, and says so")
     func unknownEnumCases() throws {
+        let decoder = JSONDecoder()
+        let notes = DecodeNoteBox()
+
+        func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
+            try DecodeNotes.$current.withValue(notes) {
+                try decoder.decode(T.self, from: Data(json.utf8))
+            }
+        }
+
         let repository = try decode(
             Repository.self,
             #"{"name":"NAS","kind":"invented-by-a-newer-build"}"#
@@ -176,6 +193,16 @@ struct TolerantDecodingTests {
         #expect(hook.event == .afterSuccess)
         #expect(hook.failureBehaviour == .ignore)
         #expect(hook.command == "true")
+
+        // The defaults above are substitutions, not readings: each one must
+        // be reported so the app can surface what a newer build's fields
+        // became when this older build read them.
+        let recorded = notes.notes.joined(separator: "\n")
+        #expect(recorded.contains("kind"))
+        #expect(recorded.contains("frequency"))
+        #expect(recorded.contains("outcome"))
+        #expect(recorded.contains("failureBehaviour"))
+        #expect(notes.notes.count == 7)
     }
 
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")
@@ -215,10 +242,73 @@ struct TolerantDecodingTests {
         try Data(json.utf8).write(to: directory.appendingPathComponent("config.json"))
 
         let loaded = try await ConfigStore(directory: directory).load()
-        #expect(loaded.repositories.first?.localPath == "/tmp/repo")
-        let plan = try #require(loaded.plans.first)
+        #expect(loaded.configuration.repositories.first?.localPath == "/tmp/repo")
+        let plan = try #require(loaded.configuration.plans.first)
         #expect(plan.name == "Documents")
         #expect(plan.schedule == Schedule())
         #expect(plan.retention == RetentionPolicy())
+        // Tolerance is not silence: the substitution the plan's corrupted
+        // schedule needed must be one of the load's notes.
+        #expect(loaded.decodeNotes.contains { $0.contains("plans[0].schedule") })
+    }
+
+    @Test("a live file gone missing recovers from the previous generation")
+    func missingLiveFileRecoversFromBackup() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ConfigStore(directory: directory)
+
+        var configuration = AppConfiguration()
+        var repository = Repository()
+        repository.name = "Survivor"
+        configuration.repositories = [repository]
+        try await store.save(configuration)
+        // A second save is what puts the "Survivor" generation into .1.
+        try await store.save(AppConfiguration())
+
+        // The interrupted-save signature: the live file is gone, the previous
+        // generation is all that is left. The store must read it and say so.
+        try FileManager.default.removeItem(at: directory.appendingPathComponent("config.json"))
+        let loaded = try await store.load()
+        #expect(loaded.recoveredFrom == "config.json.1")
+        #expect(loaded.configuration.repositories.first?.name == "Survivor")
+    }
+
+    @Test("a corrupt live file falls back to the newest generation that reads")
+    func corruptLiveFileFallsBack() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ConfigStore(directory: directory)
+
+        var configuration = AppConfiguration()
+        var repository = Repository()
+        repository.name = "Survivor"
+        configuration.repositories = [repository]
+        try await store.save(configuration)
+        try await store.save(AppConfiguration())  // generation .1: an empty config
+        try await store.save(AppConfiguration())  // generation .2: the "Survivor" config
+
+        // Corrupt both the live file and .1: .2 still holds "Survivor".
+        for name in ["config.json", "config.json.1"] {
+            try Data("{ not json".utf8).write(to: directory.appendingPathComponent(name))
+        }
+        let loaded = try await store.load()
+        #expect(loaded.recoveredFrom == "config.json.2")
+        #expect(loaded.configuration.repositories.first?.name == "Survivor")
+    }
+
+    @Test("no readable generation anywhere is an error naming the failure")
+    func nothingReadableThrows() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("{ not json".utf8).write(to: directory.appendingPathComponent("config.json"))
+
+        do {
+            _ = try await ConfigStore(directory: directory).load()
+            Issue.record("a corrupt configuration must not load as anything")
+        } catch let error as ConfigStore.ConfigError {
+            #expect(error.localizedDescription.contains("could not be read"))
+        }
     }
 }

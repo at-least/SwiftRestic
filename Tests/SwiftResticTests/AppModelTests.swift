@@ -419,7 +419,7 @@ struct AppModelTests {
 
         let reloaded = try await ConfigStore(
             directory: harness.root.appendingPathComponent("config")
-        ).load()
+        ).load().configuration
         #expect(reloaded.runs.count == 1, "the in-flight run never reached disk")
         #expect(reloaded.runs.first?.outcome != .failed)
         // Nobody clicked cancel: the record must not send someone hunting for a
@@ -487,7 +487,7 @@ struct AppModelTests {
         await model.flushSave()
         let reloaded = try await ConfigStore(
             directory: harness.root.appendingPathComponent("config")
-        ).load()
+        ).load().configuration
         #expect(reloaded.runs.count == 1)
         #expect(reloaded.runs.first?.outcome == .succeeded)
         #expect(reloaded.plans.first?.lastSuccessAt != nil)

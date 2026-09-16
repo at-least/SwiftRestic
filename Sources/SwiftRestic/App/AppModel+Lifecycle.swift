@@ -25,7 +25,27 @@ extension AppModel {
         isBootstrapping = true
 
         do {
-            configuration = try await store.load()
+            let loaded = try await store.load()
+            configuration = loaded.configuration
+            // A recovered load is not a clean one: the user is reading a copy,
+            // and the next save replaces whatever was wrong with the live
+            // file. Saying nothing would trade a file-system accident for a
+            // silent one.
+            if let recovered = loaded.recoveredFrom {
+                post(Banner(
+                    title: "Your configuration was restored from a backup copy",
+                    message: "config.json could not be read; \(recovered) was loaded instead. Saving will replace both files.",
+                    isError: true
+                ))
+            }
+            if !loaded.decodeNotes.isEmpty {
+                post(Banner(
+                    title: "Some stored settings could not be read",
+                    message: loaded.decodeNotes.prefix(3).joined(separator: " · ")
+                        + (loaded.decodeNotes.count > 3 ? " · …" : ""),
+                    isError: true
+                ))
+            }
         } catch {
             post(Banner(
                 title: "Could not read your configuration",
