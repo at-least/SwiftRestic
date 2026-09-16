@@ -78,8 +78,13 @@ struct RepositoryEditorSheet: View {
                     .disabled(!canSubmit || isWorking)
                 if isWorking { ProgressView().controlSize(.small) }
                 Spacer()
+                // Cancel waits with Save while work is in flight: dismissing
+                // mid-probe would leave a half-finished save — the init the
+                // probe kicked off, the upsert after it — running for an
+                // editor the user believes they cancelled out of.
                 Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
+                    .disabled(isWorking)
                 Button(isNew ? "Add Repository" : "Save") { Task { await save() } }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)

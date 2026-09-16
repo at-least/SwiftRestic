@@ -80,7 +80,7 @@ struct ConceptsView: View {
             .listStyle(.inset)
 
             HStack {
-                Link("restic documentation", destination: URL(string: "https://restic.readthedocs.io")!)
+                Link("restic documentation", destination: AppLinks.documentation)
                 Text("The app pins its decoding to restic 0.19.1's output.")
                     .foregroundStyle(.secondary)
                 Spacer()

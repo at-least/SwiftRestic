@@ -31,6 +31,9 @@ struct RestorePaneView: View {
     /// Directories with a fetch already running — a double-click racing
     /// itself must not spawn duplicate listings.
     @State private var inFlightFetches: Set<String> = []
+    /// The query in flight, so the next keystroke cancels it: a slower older
+    /// search finishing last must not overwrite the newer one's answers.
+    @State private var searchTask: Task<Void, Never>?
 
     private var record: Snapshot? {
         model.snapshots(for: repositoryID).first { $0.id == snapshotID }
@@ -66,6 +69,11 @@ struct RestorePaneView: View {
         // already holds the rows, and re-running the diff on every chevron
         // click would make a large repository feel broken.
         .task(id: snapshotID) { await loadLevel() }
+        .onDisappear {
+            // The pane's queries must not keep running — and keep writing —
+            // after the pane is gone.
+            searchTask?.cancel()
+        }
     }
 
     private func browserPane() -> some View {
@@ -385,6 +393,9 @@ struct RestorePaneView: View {
                 olderID: predecessor.id,
                 newerID: record.id
             )
+            // A record switch during the diff must not install the old
+            // record's change map into the new one's rows.
+            guard !Task.isCancelled else { return }
         } else {
             changes = [:]
         }
@@ -480,19 +491,27 @@ struct RestorePaneView: View {
     private func searchChanged(_ newValue: String) {
         let query = newValue.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty, let record else {
+            searchTask?.cancel()
             searchHits = nil
             return
         }
-        Task {
+        // The results must answer to what was typed and the record they were
+        // searched in: both are snapshotted before the awaits, and anything
+        // that lands after a keystroke or a record switch is discarded —
+        // same contract FindFilesView's search runs under.
+        let searchedRecordID = record.id
+        searchTask?.cancel()
+        searchTask = Task {
             let hits = (try? await model.searchIndex(pattern: query, repositoryID: repositoryID)) ?? []
             var covered: [SearchHit] = []
             for hit in hits {
+                if Task.isCancelled { return }
                 let versions = await model.indexedVersions(ofPath: hit.path, repositoryID: repositoryID)
-                if versions.contains(where: { $0.id == record.id }) {
+                if versions.contains(where: { $0.id == searchedRecordID }) {
                     covered.append(hit)
                 }
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
             searchHits = covered
             selection = nil
         }

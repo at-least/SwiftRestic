@@ -39,11 +39,13 @@ extension AppModel {
 
     /// Throws the index away and rebuilds it from the listing the model
     /// already holds. The recovery hatch for an index the user no longer
-    /// trusts — same path a corrupt file takes, just user-invoked.
+    /// trusts — same path a corrupt file takes, just user-invoked. A reset,
+    /// not a drop: the repository still exists, so the reconcile below must
+    /// land even though it runs through the same coordinator.
     func rebuildIndex(repositoryID: UUID) {
         let listing = snapshots[repositoryID] ?? []
         Task {
-            await indexCoordinator.dropRepository(repositoryID: repositoryID)
+            await indexCoordinator.resetRepository(repositoryID: repositoryID)
             indexReconcile(repositoryID: repositoryID, listing: listing)
         }
     }

@@ -153,7 +153,7 @@ struct ActivityView: View {
             titleVisibility: .visible
         ) {
             Button("Clear History", role: .destructive) {
-                model.configuration.runs.removeAll()
+                model.clearRunHistory()
             }
         } message: {
             Text("This permanently removes all \(model.configuration.runs.count) run records. Backups and snapshots are not affected.")

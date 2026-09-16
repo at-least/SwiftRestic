@@ -50,8 +50,18 @@ struct OverviewView: View {
         }
         .detailPane()
         .navigationTitle("Overview")
-        .task(id: model.configuration.runs.count) { rebuild() }
-        .onChange(of: model.configuration.plans.count) { rebuild() }
+        .task(id: chartSignature) { rebuild() }
+    }
+
+    /// What `rebuild()` reads, as one comparable value. Counts alone were
+    /// not enough: a renamed or reordered plan changes the chart's series
+    /// without changing any count, and the stale series names would colour
+    /// the wrong plans until the next run landed.
+    private var chartSignature: String {
+        let plans = model.configuration.plans
+            .map { "\($0.id)|\($0.name)" }
+            .joined(separator: ";")
+        return "\(plans)#\(model.configuration.runs.count)"
     }
 
     private func rebuild() {

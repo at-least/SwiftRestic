@@ -158,10 +158,10 @@ struct SwiftResticApp: App {
                 }
                 Divider()
                 Button("restic Documentation") {
-                    NSWorkspace.shared.open(URL(string: "https://restic.readthedocs.io")!)
+                    NSWorkspace.shared.open(AppLinks.documentation)
                 }
                 Button("restic Change Log") {
-                    NSWorkspace.shared.open(URL(string: "https://restic.readthedocs.io/en/stable/changelog.html")!)
+                    NSWorkspace.shared.open(AppLinks.changelog)
                 }
             }
             CommandMenu("Backup") {

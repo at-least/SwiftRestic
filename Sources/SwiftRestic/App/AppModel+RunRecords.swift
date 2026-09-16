@@ -17,6 +17,13 @@ extension AppModel {
         }
     }
 
+    /// Wipes the run history. The view-facing name for the destructive
+    /// action, so the mutation lives with its siblings instead of a view
+    /// reaching straight into the configuration.
+    func clearRunHistory() {
+        configuration.runs.removeAll()
+    }
+
     /// Tells the configured webhooks and chat channels how the run went.
     ///
     /// Awaited rather than detached so that quitting straight after a failed

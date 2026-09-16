@@ -104,6 +104,26 @@ struct PlanDetailView: View {
         }
     }
 
+    /// The running-operation strip, as its own view. It reads only this
+    /// plan's activity, so a restic progress tick (~1/sec) re-renders the
+    /// strip instead of the whole pane — `content` also drives the snapshot
+    /// table, whose filter-and-sort must not rerun per tick.
+    private struct OperationStrip: View {
+        @Environment(AppModel.self) private var model
+        let planID: UUID
+
+        var body: some View {
+            if let activity = model.activity[planID] {
+                OperationProgressView(
+                    title: activity.phase.displayName,
+                    progress: activity.progress,
+                    startedAt: activity.startedAt,
+                    onCancel: { model.cancelBackup(planID: planID) }
+                )
+            }
+        }
+    }
+
     @ViewBuilder
     private func content(_ plan: BackupPlan) -> some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -111,14 +131,7 @@ struct PlanDetailView: View {
                 BannerView(banner: banner)
             }
 
-            if let activity = model.activity[plan.id] {
-                OperationProgressView(
-                    title: activity.phase.displayName,
-                    progress: activity.progress,
-                    startedAt: activity.startedAt,
-                    onCancel: { model.cancelBackup(planID: plan.id) }
-                )
-            }
+            OperationStrip(planID: plan.id)
 
             summaryTiles(plan)
             listingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
