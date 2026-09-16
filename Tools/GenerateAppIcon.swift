@@ -80,11 +80,13 @@ func color(_ hex: UInt32) -> CGColor {
 /// head is axis-aligned rather than tangent to the arc; that is what keeps it
 /// reading as an arrow instead of a hook flying off the ring.
 ///
-/// Small sizes get a deliberately coarser glyph. At 16pt the three-plate stack
-/// leaves gaps under half a pixel wide and collapses into a smudge, so those
-/// sizes drop to two plates and a heavier stroke. The choice is keyed on pixel
-/// count rather than point size, so 16pt@2x and 32pt@1x — both 32 pixels —
-/// always render identically.
+/// The stack is the same two-plate construction at every size — the same
+/// numbers `MenuBarLogo` draws in the menu bar — so the Dock icon and the
+/// tray read as one mark. Small sizes still get a deliberately coarser
+/// glyph: at 16px the large rendition's stroke falls under a pixel and
+/// smudges, so those sizes thicken the stroke, widen the arrow's angles, and
+/// drop the shadow. The choice is keyed on pixel count rather than point
+/// size, so 16pt@2x and 32pt@1x — both 32 pixels — always render identically.
 struct Proportions {
     var ringRadius: CGFloat
     var stroke: CGFloat
@@ -94,11 +96,14 @@ struct Proportions {
     var headAngle: CGFloat
     /// Where the stroke starts, in degrees below the left horizontal.
     var tailAngle: CGFloat
-    var plateWidth: CGFloat
-    var plateSpacing: CGFloat
-    /// Bottom plate first; the last one is the newest snapshot and fully opaque.
-    var plateAlphas: [CGFloat]
     var drawsShadow: Bool
+
+    /// The snapshot stack, shared with `MenuBarLogo` — keep the two in sync.
+    /// Bottom plate first; the last one is the newest snapshot and fully
+    /// opaque.
+    static let plateWidth: CGFloat = 0.190
+    static let plateSpacing: CGFloat = 0.160
+    static let plateAlphas: [CGFloat] = [0.60, 1.0]
 
     static func forPixelSize(_ pixels: Int) -> Proportions {
         if pixels <= 32 {
@@ -106,16 +111,12 @@ struct Proportions {
                 // The head hangs higher here so its inner corner clears the top
                 // plate; at this size the two would otherwise fuse into a blob.
                 ringRadius: 0.260, stroke: 0.082, headAngle: 36, tailAngle: 40,
-                plateWidth: 0.190, plateSpacing: 0.160,
-                plateAlphas: [0.60, 1.0],
                 // A blurred shadow only muddies the edge at this size.
                 drawsShadow: false
             )
         } else {
             Proportions(
                 ringRadius: 0.252, stroke: 0.051, headAngle: 30, tailAngle: 36,
-                plateWidth: 0.191, plateSpacing: 0.098,
-                plateAlphas: [0.40, 0.66, 1.0],
                 drawsShadow: true
             )
         }
@@ -219,9 +220,9 @@ func drawIcon(size: CGFloat, into context: CGContext) {
 
     // Snapshot stack. Index 0 is drawn lowest (Core Graphics is y-up), so the
     // ascending alphas put the newest, brightest plate on top.
-    let plateWidth = s * proportions.plateWidth
-    let spacing = s * proportions.plateSpacing
-    let alphas = proportions.plateAlphas
+    let plateWidth = s * Proportions.plateWidth
+    let spacing = s * Proportions.plateSpacing
+    let alphas = Proportions.plateAlphas
     let stackOffset = CGFloat(alphas.count - 1) * spacing / 2
     for (index, alpha) in alphas.enumerated() {
         let y = center.y - stackOffset + CGFloat(index) * spacing

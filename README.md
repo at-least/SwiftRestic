@@ -27,10 +27,13 @@ swift Tools/GenerateAppIcon.swift
 It writes all ten renditions plus `Contents.json` into
 `Sources/SwiftRestic/Assets.xcassets/AppIcon.appiconset/`. Because the artwork is
 vector, every size is rendered natively instead of being downscaled from one
-master, so strokes stay crisp at 16pt. The 16 and 32 pixel renditions deliberately
-use a coarser glyph — two thick plates instead of three thin ones — since at that
-size the gaps in the full stack fall below a pixel and smudge together. The
-variant is chosen by pixel count, so 16pt@2x and 32pt@1x render identically.
+master, so strokes stay crisp at 16pt. The two-plate stack in the middle is the
+same construction at every size — the same numbers the menu bar's icon draws —
+so the Dock icon and the tray read as one mark. The 16 and 32 pixel renditions
+still deliberately draw a coarser glyph: a heavier stroke, wider arrow angles,
+and no shadow, since at that size the large rendition's thin stroke falls below
+a pixel and smudges. The variant is chosen by pixel count, so 16pt@2x and 32pt@1x render
+identically.
 
 Re-run the generator after editing `Tools/GenerateAppIcon.swift`; the PNGs are
 checked in so a normal build does not need it.

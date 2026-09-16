@@ -11,14 +11,16 @@ import Foundation
 /// the unread-badge grammar Mail's Dock icon follows: the mark never
 /// changes silhouette, the dot alone says "open me".
 ///
-/// The ring radius (0.260) and plate geometry mirror the small-size (≤32 px)
-/// construction in `Tools/GenerateAppIcon.swift`, and the head hangs at the
-/// same 36° to clear the top plate — so the tray wears the same silhouette
-/// the Dock icon does at small sizes. The stroke (0.068, vs the generator's
-/// 0.082) and arrowhead proportions are tuned separately for this canvas: an
+/// The plate stack is the app icon's own two-plate construction —
+/// `Tools/GenerateAppIcon.swift` draws the same numbers (0.190 wide, 0.160
+/// apart, alphas 0.60/1.0) at every size, so the tray and the Dock icon read
+/// as one mark. The ring radius (0.260) and the head's 36°
+/// hang mirror the generator's small-size construction, clearing the top
+/// plate. The stroke (0.068, between the generator's 0.082 small and 0.051
+/// large) and arrowhead proportions are tuned separately for this canvas: an
 /// 18pt status item reads a tighter arrowhead better than the icon's own
-/// weight does. Keep the ring radius and plate geometry in sync when the
-/// icon changes; the stroke and arrowhead are allowed to diverge on purpose.
+/// weight does. Keep the plate geometry in sync when the icon changes; the
+/// stroke and arrowhead are allowed to diverge on purpose.
 ///
 /// MainActor-isolated because the caches are AppKit bitmaps drawn once and
 /// consumed only by menu bar and welcome-screen UI — CI's Swift flags the
