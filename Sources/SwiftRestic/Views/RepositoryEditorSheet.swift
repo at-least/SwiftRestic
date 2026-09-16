@@ -381,10 +381,17 @@ struct RepositoryEditorSheet: View {
 
     private func loadExistingSecrets() async {
         guard !isNew else { return }
-        let secrets = await model.storedSecrets(for: draft.id)
-        password = secrets.password ?? ""
-        confirmPassword = password
-        providerSecret = secrets.providerSecret ?? ""
+        do {
+            let secrets = try await model.storedSecrets(for: draft.id)
+            password = secrets.password ?? ""
+            confirmPassword = password
+            providerSecret = secrets.providerSecret ?? ""
+        } catch {
+            // Prefill failed — say so. Blank fields would read as "no
+            // password stored" and a save would silently keep whatever the
+            // Keychain actually holds, hiding the failure either way.
+            status = .failure("Could not read the stored secrets: \(error.localizedDescription)")
+        }
     }
 
     /// Asks the user's rclone what it has configured. Empty on any failure —
@@ -395,8 +402,8 @@ struct RepositoryEditorSheet: View {
         return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
     }
 
-    private func effectivePassword() async -> String {
-        password.isEmpty ? (await model.storedPassword(for: draft.id) ?? "") : password
+    private func effectivePassword() async throws -> String {
+        password.isEmpty ? (try await model.storedPassword(for: draft.id) ?? "") : password
     }
 
     /// Probes the repository, optionally running `restic init` when it is missing.
@@ -425,7 +432,7 @@ struct RepositoryEditorSheet: View {
             let service = try model.service()
             let context = RepositoryContext(
                 repository: draft,
-                password: await effectivePassword(),
+                password: try await effectivePassword(),
                 providerSecret: providerSecret.isEmpty ? nil : providerSecret,
                 settings: model.configuration.settings
             )

@@ -623,3 +623,35 @@ struct UpsertStampTests {
         #expect(model.configuration.repositories[0].name == "NAS (renamed)")
     }
 }
+
+
+/// A Keychain read failure must keep its own name. Read as nil, it borrows
+/// the "no password stored" costume and the app diagnoses the wrong thing.
+@Suite("keychain failure honesty")
+struct KeychainFailureHonestyTests {
+    @Test("a failing keychain read is not a missing password")
+    func keychainErrorKeepsItsName() async {
+        let secrets = SecretStore(
+            load: { (_: UUID) in throw KeychainStore.KeychainError.unexpectedStatus(errSecInteractionNotAllowed) },
+            save: { _, _, _ in },
+            remove: { _ in }
+        )
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/tmp/some-repo"
+
+        do {
+            _ = try await AppModel.dragContext(
+                repository: repository,
+                settings: AppSettings(),
+                secrets: secrets
+            )
+            Issue.record("expected the keychain failure to surface")
+        } catch ResticError.passwordMissing {
+            Issue.record("a keychain failure must not masquerade as a missing password")
+        } catch {
+            // Anything else is the error itself, carried to the run record
+            // and banner with its own words.
+        }
+    }
+}

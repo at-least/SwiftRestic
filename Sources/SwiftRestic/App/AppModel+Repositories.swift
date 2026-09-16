@@ -131,12 +131,12 @@ extension AppModel {
         Task { [secrets] in await secrets.remove(id) }
     }
 
-    func storedSecrets(for repositoryID: UUID) async -> (password: String?, providerSecret: String?) {
-        await secrets.load(repositoryID)
+    func storedSecrets(for repositoryID: UUID) async throws -> (password: String?, providerSecret: String?) {
+        try await secrets.load(repositoryID)
     }
 
-    func storedPassword(for repositoryID: UUID) async -> String? {
-        await secrets.load(repositoryID).password
+    func storedPassword(for repositoryID: UUID) async throws -> String? {
+        try await secrets.load(repositoryID).password
     }
     /// Builds everything a restic command needs, or explains what is missing.
     /// The password rules live once, in the drag path's main-actor-free

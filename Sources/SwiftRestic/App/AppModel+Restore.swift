@@ -178,7 +178,10 @@ extension AppModel {
             )
         }
         #endif
-        let stored = await secrets.load(repository.id)
+        // A Keychain failure surfaces as itself — reading it as nil would
+        // re-dress the error as "no password stored" and send the user to
+        // fix a password that is sitting right there.
+        let stored = try await secrets.load(repository.id)
         guard let password = stored.password, !password.isEmpty else {
             // Deleting a repository cancels its running plans first and
             // removes the secret last, in a detached task — a run suspended

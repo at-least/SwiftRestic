@@ -35,7 +35,7 @@ struct ContextCacheTests {
         let counting = SecretStore(
             load: { id in
                 await counter.increment()
-                return await backing.load(id)
+                return try await backing.load(id)
             },
             save: backing.save,
             remove: backing.remove
