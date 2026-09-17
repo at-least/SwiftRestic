@@ -160,6 +160,29 @@ struct StubRestic: Sendable {
                 echo "Fatal: wrong password or no matching key" >&2
                 exit 12
                 ;;
+            checkdamage)
+                # restic's exit 1 when a check finds damage: the check did its
+                # job, and its summary — the error count the run record names —
+                # still has to arrive, not be read as a command failure.
+                trace "checkdamage-arm"
+                case " $* " in
+                    *" check "*)
+                        echo '{"message_type":"summary","num_errors":2,"broken_packs":null,"suggest_repair_index":false,"suggest_prune":true}'
+                        ;;
+                    *)
+                        echo "[]"
+                        exit 0
+                        ;;
+                esac
+                exit 1
+                ;;
+            checkbroken)
+                # Exit 1 with no summary at all: an answer the app cannot read
+                # a verdict from must fail the check, never pass for healthy.
+                trace "checkbroken-arm"
+                echo "Fatal: repository contains errors" >&2
+                exit 1
+                ;;
             dribble)
                 # A status line first, the rest of the run over a second later:
                 # progress callbacks must arrive in between, not at exit.
@@ -477,6 +500,39 @@ struct StubResticTests {
             // The exact failure, not a generic command failure.
             guard case ResticError.processLaunchFailed(_) = error else {
                 Issue.record("expected a launch failure, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test("a check that finds damage returns its summary instead of failing the command")
+    func checkDamageCarriesItsSummary() async throws {
+        let fixture = try makeFixture(mode: "checkdamage")
+        defer { cleanUp(fixture.root) }
+
+        // restic exits 1 on damage; the summary naming the errors is the whole
+        // point of the run. The engine turns this into completed-with-errors;
+        // here the contract under test is that the service hands the summary
+        // up rather than throwing over it.
+        let summary = try await fixture.service.check(fixture.context, readDataSubsetPercent: nil)
+        #expect(summary?.numErrors == 2)
+        #expect(summary?.suggestPrune == true)
+    }
+
+    @Test("a check exit 1 without an error count is still a failure, not a clean bill")
+    func checkExitOneWithoutErrorsFailsTheCommand() async throws {
+        let fixture = try makeFixture(mode: "checkbroken")
+        defer { cleanUp(fixture.root) }
+
+        // An exit 1 the app cannot read a verdict from must not pass for
+        // "checked, nothing found": the run record would lie about the one
+        // thing a check exists to report.
+        do {
+            _ = try await fixture.service.check(fixture.context, readDataSubsetPercent: nil)
+            Issue.record("expected exit 1 without a summary to fail the check")
+        } catch let error as ResticError {
+            guard case let .commandFailed(code, _, _) = error, code == 1 else {
+                Issue.record("expected commandFailed(1), got \(error)")
                 return
             }
         }

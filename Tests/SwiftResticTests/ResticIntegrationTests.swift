@@ -420,6 +420,84 @@ struct ResticMaintenanceTests {
     }
 }
 
+/// Pins restic's end of the damage contract: a check that finds damage exits
+/// 1, and its `--json` summary naming the errors still arrives — the service
+/// is allowed to hand it up only because restic actually prints it before
+/// dying. Runs against a real repository, like the integration suite; kept
+/// apart only so the damage it inflicts can never touch another fixture.
+@Suite("restic check damage", .serialized, .enabled(if: ResticAvailability.isInstalled))
+struct ResticCheckDamageTests {
+    @Test("a damaged repository's check still carries its error count")
+    func checkOnDamagedRepositoryReportsErrors() async throws {
+        let binary = try ResticBinary.locate(userOverride: nil)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticCheckDamage-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let root = base.resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sourceDirectory = root.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+        // Random bytes, not zeros: compression would shrink them into a pack
+        // too small to aim a corruption at.
+        try Data(randomBytes: 200_000).write(to: sourceDirectory.appendingPathComponent("big.bin"))
+
+        var repository = Repository()
+        repository.name = "Check damage"
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+
+        var plan = BackupPlan()
+        plan.name = "Check damage plan"
+        plan.repositoryID = repository.id
+        plan.sources = [sourceDirectory.path]
+        plan.excludePatterns = []
+
+        let context = RepositoryContext(repository: repository, password: "check-damage-password")
+        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        _ = try await service.initializeRepository(context)
+        _ = try await service.backup(context, plan: plan)
+
+        // Flip one byte in the middle of the largest data pack. restic marks
+        // its packs read-only, so the mode comes back before the write — a
+        // failed corrupt must never read as healthy. Structural `check`
+        // verifies only headers, so the verdict is read with data: a flipped
+        // blob byte is exactly what `--read-data` exists to catch.
+        let dataRoot = root.appendingPathComponent("repo/data")
+        let enumerator = FileManager.default.enumerator(
+            at: dataRoot,
+            includingPropertiesForKeys: [URLResourceKey.isRegularFileKey, .fileSizeKey]
+        )
+        let pack = enumerator?.allObjects
+            .compactMap { $0 as? URL }
+            .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true }
+            .max { (try? $0.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                < (try? $1.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0 }
+        guard let pack else {
+            Issue.record("no data pack found under repo/data to corrupt")
+            return
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: pack.path)
+        var contents = try Data(contentsOf: pack)
+        #expect(contents.count > 1_000, "the largest pack is suspiciously small — corruption would miss it")
+        contents[contents.count / 2] ^= 0xFF
+        try contents.write(to: pack)
+
+        let summary = try await service.check(context, readDataSubsetPercent: 100)
+        #expect(
+            (summary?.numErrors ?? 0) > 0,
+            "check exited 1 on damage but named no errors: \(String(describing: summary))"
+        )
+    }
+}
+
+private extension Data {
+    /// `UInt8.random` in a loop — fine at fixture sizes, and dependency-free.
+    init(randomBytes count: Int) {
+        self = Data((0 ..< count).map { _ in UInt8.random(in: .min ... .max) })
+    }
+}
+
 @Suite("restic diff", .serialized, .enabled(if: ResticAvailability.isInstalled))
 struct ResticDiffTests {
     @Test("a modified, an added and a removed file each show up with the right modifier")

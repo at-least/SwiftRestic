@@ -196,9 +196,29 @@ struct ResticService: ResticClient {
         }
         let result = try await runner.run(
             binary: binary,
-            invocation: ResticInvocation(arguments: args, environment: context.environment)
+            invocation: ResticInvocation(
+                arguments: args,
+                environment: context.environment,
+                // restic exits 1 when a check finds damage — that is the check
+                // doing its job, not the command failing. The verdict still
+                // has to name the damage: an exit 1 without an error count is
+                // a broken run, never a clean bill of health.
+                allowedExitCodes: [0, 1]
+            )
         )
-        return result.summary
+        let summary = result.summary
+        if result.exitCode == 1, (summary?.numErrors ?? 0) == 0 {
+            let message = result.messages.compactMap { message -> String? in
+                if case let .exitError(error) = message { return error.message }
+                return nil
+            }.last ?? ResticRunner.tail(of: result.stderr, limit: 2000)
+            throw ResticError.commandFailed(
+                exitCode: result.exitCode,
+                message: message,
+                command: "check"
+            )
+        }
+        return summary
     }
 
     /// Reclaims the space that `forget` freed.
