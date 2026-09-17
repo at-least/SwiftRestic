@@ -105,6 +105,16 @@ actor ResticRunner {
     /// that a quit waiting on the child does not outwait the user's patience.
     static let killGrace: TimeInterval = 5
 
+    /// How long the pipe readers may keep draining after the child has died.
+    /// A healthy pipe reaches EOF within milliseconds of the child's exit;
+    /// when it does not, someone else is holding the write end — a shell hook
+    /// that backgrounded a long-lived command (`notify-me &`), or restic's own
+    /// backend child after a SIGKILL. Abandoning the pipes then is what lets
+    /// every stop path answer: the invariant is that a run ends at most this
+    /// long after its child dies, whatever a grandchild does. Bytes a
+    /// grandchild writes afterwards get EPIPE, which usually ends it too.
+    static let grandchildGrace: TimeInterval = 2
+
     private var running: [UUID: ProcessBox] = [:]
 
     /// Runs restic to completion.
@@ -223,6 +233,22 @@ actor ResticRunner {
             retainMessages: true,
             onActivity: activity
         )
+
+        // The reaper: a pipe that has not reached EOF within `grandchildGrace`
+        // of the child's death is being held open by an inherited copy — a
+        // backgrounded hook command, a backend child that outlived a SIGKILL —
+        // and no signal of ours can reach it. Abandoning the read then is what
+        // keeps every stop path (caps, cancellation, quit's terminateAll)
+        // answerable; a healthy run never sees it, because EOF lands in
+        // milliseconds. A second waiter on `exit` is exactly why ExitWaiter
+        // keeps a list of continuations rather than one.
+        let reaper = Task {
+            _ = await exit.value()
+            try? await Task.sleep(for: .seconds(Self.grandchildGrace))
+            stdoutReader.abandon()
+            stderrReader.abandon()
+        }
+        defer { reaper.cancel() }
 
         let exitCode: Int32
         do {
@@ -423,8 +449,8 @@ private final class ProcessBox: @unchecked Sendable {
     /// never changes, so there is nothing to re-verify, and the reuse window
     /// between the check and the kill is not a real one). A grandchild that
     /// inherited the pipes can still hold the streams open after the child
-    /// dies; no signal reaches it — the caller's cancellation and the stall
-    /// cap are the answers there.
+    /// dies; no signal reaches it — the reaper's abandonment (`grandchildGrace`)
+    /// is the answer there.
     private func escalateToKill() {
         let identifier = process.processIdentifier
         guard identifier > 0 else { return }
@@ -475,19 +501,26 @@ private final class ProcessBox: @unchecked Sendable {
 
 /// Bridges `Process.terminationHandler` to `async`. The handler is installed
 /// before `run()`, so an immediate exit cannot be missed.
+///
+/// Several parties wait on one exit: `run` itself and the reaper task that
+/// abandons the pipes `grandchildGrace` later — so the waiter list is an
+/// array, never a single slot. A second `value()` overwriting the first
+/// caller's continuation would strand it forever.
 private final class ExitWaiter: @unchecked Sendable {
     private let lock = NSLock()
     private var status: Int32?
-    private var continuation: CheckedContinuation<Int32, Never>?
+    private var continuations: [CheckedContinuation<Int32, Never>] = []
 
     func complete(_ code: Int32) {
         lock.lock()
         guard status == nil else { lock.unlock(); return }
         status = code
-        let waiting = continuation
-        continuation = nil
+        let waiting = continuations
+        continuations = []
         lock.unlock()
-        waiting?.resume(returning: code)
+        for continuation in waiting {
+            continuation.resume(returning: code)
+        }
     }
 
     func value() async -> Int32 {
@@ -497,18 +530,26 @@ private final class ExitWaiter: @unchecked Sendable {
                 lock.unlock()
                 cont.resume(returning: status)
             } else {
-                continuation = cont
+                continuations.append(cont)
                 lock.unlock()
             }
         }
     }
 }
 
-/// Reads one pipe to EOF on a background queue, splitting it into lines.
+/// Reads one pipe to EOF, splitting it into lines, until the pipe ends or
+/// `abandon()` is called.
 ///
 /// Both pipes must be drained concurrently: restic will block on a full stderr
 /// buffer while we are still reading stdout, and the command would never finish.
-private struct StreamReader: Sendable {
+///
+/// The wait is a `poll` over the pipe and a wakeup pipe rather than a plain
+/// blocking read: closing a descriptor another thread is blocked reading does
+/// not wake it on macOS, so abandonment could not be delivered any other way.
+/// The read itself stays raw `read(2)` — Foundation's read buffers on pipes,
+/// which turned restic's progress stream into one lump at process exit
+/// (measured; see `FileHandleBox`).
+private final class StreamReader: @unchecked Sendable {
     struct Outcome: Sendable {
         var messages: [ResticMessage] = []
         var text: String = ""
@@ -525,6 +566,17 @@ private struct StreamReader: Sendable {
     /// cheaper to prove than progress, and a stall cap only needs liveness.
     let onActivity: (@Sendable () -> Void)?
 
+    /// Wakes the reader out of its `poll` when the run is being abandoned.
+    /// The write end is kept open for the reader's lifetime so the signal can
+    /// always be delivered; a `write` after the loop has ended fails with
+    /// EPIPE and is ignored.
+    private let wakeup: Pipe
+    private let lock = NSLock()
+    /// `true` once the loop has ended, by EOF or by abandonment — makes
+    /// `abandon` idempotent and a no-op for an already-finished reader.
+    private var finished = false
+    private var abandonSignalled = false
+
     init(
         handle: FileHandle,
         active: Bool,
@@ -537,6 +589,37 @@ private struct StreamReader: Sendable {
         self.textLimit = textLimit
         self.retainMessages = retainMessages
         self.onActivity = onActivity
+        self.wakeup = Pipe()
+    }
+
+    /// Stops the reader at its next `poll`, returning whatever it has. Safe
+    /// from any thread, any number of times; an inactive or finished reader
+    /// ignores it.
+    func abandon() {
+        lock.lock()
+        if finished || abandonSignalled {
+            lock.unlock()
+            return
+        }
+        abandonSignalled = true
+        lock.unlock()
+        // One byte is the whole message; the pipe's own buffer makes the
+        // write non-blocking.
+        var byte: UInt8 = 0x1
+        _ = write(wakeup.fileHandleForWriting.fileDescriptor, &byte, 1)
+    }
+
+    private var abandonRequested: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return abandonSignalled
+    }
+
+    /// Marks the loop as over, so a later `abandon` cannot resurrect anything.
+    private func markFinished() {
+        lock.lock()
+        finished = true
+        lock.unlock()
     }
 
     func readAll(
@@ -547,7 +630,7 @@ private struct StreamReader: Sendable {
         guard active else { return Outcome() }
         let box = handle
         return await withCheckedContinuation { (cont: CheckedContinuation<Outcome, Never>) in
-            DispatchQueue.global(qos: .utility).async {
+            DispatchQueue.global(qos: .utility).async { [self] in
                 var outcome = Outcome()
                 var buffer = Data()
                 var retained = ""
@@ -568,7 +651,28 @@ private struct StreamReader: Sendable {
                     onMessage?(message)
                 }
 
-                while true {
+                let pipeFD = box.fileDescriptor
+                let wakeupFD = wakeup.fileHandleForReading.fileDescriptor
+                loop: while true {
+                    // Wait for either the pipe or the abandonment signal. An
+                    // EINTR must restart the poll, not read as readiness.
+                    var fds = [pollfd(fd: pipeFD, events: Int16(POLLIN), revents: 0),
+                               pollfd(fd: wakeupFD, events: Int16(POLLIN), revents: 0)]
+                    while true {
+                        let count = Darwin.poll(&fds, 2, -1)
+                        if count < 0, errno == EINTR { continue }
+                        break
+                    }
+                    if fds[1].revents != 0 {
+                        // Abandoned: the child's death plus `grandchildGrace`
+                        // proved someone else is holding the pipe. Drain the
+                        // signal byte and stop with what we have.
+                        var sink = [UInt8](repeating: 0, count: 16)
+                        _ = Darwin.read(wakeupFD, &sink, sink.count)
+                        break loop
+                    }
+                    if fds[0].revents == 0 { continue }
+
                     let chunk = box.read(upToCount: 64 * 1024)
                     if chunk.isEmpty { break }
                     onActivity?()
@@ -576,13 +680,22 @@ private struct StreamReader: Sendable {
                     while let newline = buffer.firstIndex(of: 0x0A) {
                         let lineData = buffer[buffer.startIndex ..< newline]
                         buffer.removeSubrange(buffer.startIndex ... newline)
-                        if let line = String(data: lineData, encoding: .utf8) { consume(line) }
+                        if let line = String(data: lineData, encoding: .utf8) {
+                            consume(line)
+                        } else {
+                            // A line that is not valid UTF-8 cannot decode as
+                            // restic JSON — count it as the reporting gap it
+                            // is, exactly like a known message with a bad
+                            // payload, rather than dropping it silently.
+                            outcome.malformedCount += 1
+                        }
                     }
                 }
                 if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8), !line.isEmpty {
                     consume(line)
                 }
                 box.close()
+                _ = markFinished
                 outcome.text = retained
                 cont.resume(returning: outcome)
             }
@@ -595,6 +708,10 @@ private struct StreamReader: Sendable {
 private final class FileHandleBox: @unchecked Sendable {
     private let handle: FileHandle
     init(_ handle: FileHandle) { self.handle = handle }
+
+    /// The descriptor behind the handle — `StreamReader.poll`s it alongside
+    /// the abandonment wakeup, then reads it raw below.
+    var fileDescriptor: Int32 { handle.fileDescriptor }
 
     /// Raw `read(2)` on the descriptor, not `FileHandle.read(upToCount:)`.
     /// Foundation's read buffers on pipes: measured against an identical
