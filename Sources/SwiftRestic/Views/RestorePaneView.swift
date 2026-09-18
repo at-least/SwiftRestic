@@ -348,9 +348,11 @@ struct RestorePaneView: View {
             }
             return .ignored
         case .delete:
+            guard currentPath != nil else { return .ignored }
             goUp()
             return .handled
         case .upArrow where press.modifiers.contains(.command):
+            guard currentPath != nil else { return .ignored }
             goUp()
             return .handled
         default:

@@ -37,16 +37,11 @@ struct FolderBrowserView: View {
     @State private var loadError: String?
     @State private var indexComplete = false
     @State private var showingSnapshotBrowser: SnapshotBrowserTarget?
-
-    /// Both halves of what decides a (re)load: the folder and the time.
-    private struct Level: Equatable {
-        var path: String?
-        var versionID: String?
-    }
-
-    private var level: Level {
-        Level(path: currentPath, versionID: chosen?.id)
-    }
+    /// The version the listing below (or the fetch in flight for it) belongs
+    /// to. `load()` records the version it is about to publish, so its own
+    /// picker handoff is never mistaken for a user flip; `fetchNodes` records
+    /// the version it fetches, so two racing fetches cannot both write.
+    @State private var listingVersionID: String?
 
     /// The plan's snapshots, newest first — the fallback listing source and
     /// the pseudo-root's contents.
@@ -67,7 +62,25 @@ struct FolderBrowserView: View {
             footer
         }
         .frame(minWidth: 720, minHeight: 460)
-        .task(id: level) { await load() }
+        // The reload key is the folder alone. Keying on the version as well
+        // made `load`'s own walk-down handoff — publishing the version it had
+        // just decided on — cancel the very fetch it had started and re-run
+        // the whole load: a duplicated index query and one restic `ls`
+        // spawned and thrown away, on every step into a folder whose
+        // preserved version did not cover it. The picker's own flips are
+        // handled by the `onChange` below instead.
+        .task(id: currentPath) { await load() }
+        .onChange(of: chosen?.id) { _, newID in
+            guard let newID, let path = currentPath else { return }
+            // Recorded synchronously, before the fetch task can even start:
+            // two flips delivered in the same update lot must each count, or
+            // the second one reads as this view's own handoff and is
+            // swallowed — leaving the first fetch to lose its race with a
+            // spinner it can never clear.
+            guard newID != listingVersionID else { return }
+            listingVersionID = newID
+            Task { await fetchNodes(versionID: newID, path: path) }
+        }
         .sheet(item: $showingSnapshotBrowser) { snapshotTarget in
             SnapshotBrowserView(target: snapshotTarget)
                 .environment(model)
@@ -298,7 +311,7 @@ struct FolderBrowserView: View {
         // Every await is followed by a cancellation guard before any state
         // write. A newer level owns the view the moment it is opened; a stale
         // load that wrote `versions` or `chosen` after losing would clobber
-        // the newer folder's list and re-fire this task through `level`.
+        // the newer folder's list.
         let complete = await model.indexIsComplete(repositoryID: target.repositoryID)
         guard !Task.isCancelled else { return }
         indexComplete = complete
@@ -306,46 +319,80 @@ struct FolderBrowserView: View {
         guard let currentPath else {
             // Pseudo-root: the plan's backed-up folder roots, presented as
             // directory entries. No single path, so no version list applies.
+            let rootVersion = planSnapshots.first.map(snapshotVersion(from:))
+            listingVersionID = rootVersion?.id
             nodes = planSnapshots.first?.paths.map(SnapshotNode.directory) ?? []
             versions = []
-            chosen = planSnapshots.first.map(snapshotVersion(from:))
+            chosen = rootVersion
             isLoading = false
             return
         }
 
         isLoading = true
+        let loadedVersions = await model.indexedVersions(ofPath: currentPath, repositoryID: target.repositoryID)
+            .filter { $0.chain == chain }
+        // Keeping the user's version across a walk down matters — flip
+        // through time, then step inside, and you are still in the same
+        // era. When it does not cover the deeper path, the newest wins.
+        let nextChosen = loadedVersions.preferredVersion(previousID: chosen?.id) ?? fallbackVersion
+        guard !Task.isCancelled else { return }
+        // Recorded before `chosen` moves: the picker handoff must read as
+        // this load's own doing, not as a flip asking for a refetch.
+        listingVersionID = nextChosen?.id
+        versions = loadedVersions
+        chosen = nextChosen
+
+        // Both routes to a version come up empty only when the plan has
+        // no snapshots at all — then there is nothing to list from.
+        guard let nextChosen else {
+            nodes = []
+            isLoading = false
+            return
+        }
+
+        await fetchNodes(versionID: nextChosen.id, path: currentPath)
+    }
+
+    /// The one writer of `nodes`: the folder load and an idle picker flip
+    /// both land here, and every write is guarded on still owning the view —
+    /// a slower older fetch (a flip during a load, a walk away mid-fetch)
+    /// must not overwrite the version or the folder the user is reading now.
+    /// The caller records `listingVersionID` before starting this; the fetch
+    /// itself never does, so the field always names the newest ask.
+    private func fetchNodes(versionID: String, path: String) async {
+        isLoading = true
+        loadError = nil
         do {
-            let loadedVersions = await model.indexedVersions(ofPath: currentPath, repositoryID: target.repositoryID)
-                .filter { $0.chain == chain }
-            // Keeping the user's version across a walk down matters — flip
-            // through time, then step inside, and you are still in the same
-            // era. When it does not cover the deeper path, the newest wins.
-            let nextChosen = loadedVersions.preferredVersion(previousID: chosen?.id) ?? fallbackVersion
-            guard !Task.isCancelled else { return }
-            versions = loadedVersions
-            chosen = nextChosen
-
-            // Both routes to a version come up empty only when the plan has
-            // no snapshots at all — then there is nothing to list from.
-            guard let nextChosen else {
-                nodes = []
-                isLoading = false
-                return
-            }
-
             let loaded = try await model.children(
                 repositoryID: target.repositoryID,
-                snapshotID: nextChosen.id,
-                path: currentPath
+                snapshotID: versionID,
+                path: path
             )
-            guard !Task.isCancelled else { return }
+            guard currentPath == path, chosen?.id == versionID else {
+                clearLoadingIfSuperseded(versionID: versionID, path: path)
+                return
+            }
             nodes = loaded
             loadError = nil
             isLoading = false
         } catch {
-            guard !Task.isCancelled else { return }
+            guard currentPath == path, chosen?.id == versionID else {
+                clearLoadingIfSuperseded(versionID: versionID, path: path)
+                return
+            }
             nodes = []
             loadError = error.localizedDescription
+            isLoading = false
+        }
+    }
+
+    /// A fetch that lost the view to a newer pick or a walk must not write —
+    /// but if no newer fetch has taken over, it is also the one that started
+    /// the spinner, so it stops it. With the synchronous handoff in
+    /// `onChange` the newest fetch always clears the flag itself; this is the
+    /// belt to that brace.
+    private func clearLoadingIfSuperseded(versionID: String, path: String) {
+        if listingVersionID == versionID, currentPath == path {
             isLoading = false
         }
     }

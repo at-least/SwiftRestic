@@ -291,8 +291,10 @@ struct RootView: View {
             guard !sheetsUp else { return }
             editingRepository = Repository()
         case .showFind:
+            guard !sheetsUp else { return }
             isShowingFind = true
         case .showConcepts:
+            guard !sheetsUp else { return }
             isShowingConcepts = true
         case .runSelectedPlan:
             runSelectedPlan()

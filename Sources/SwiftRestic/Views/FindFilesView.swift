@@ -304,6 +304,10 @@ struct FindFilesView: View {
         let searchedLatestOnly = latestOnly
         isSearching = true
         errorMessage = nil
+        // Each search owns the footer's truncation line: an index search that
+        // stopped early must not speak for a later restic-engine search that
+        // ran to completion.
+        resultsTruncated = false
         selection = nil
         searchTask = Task {
             // The engine is chosen per search, not per sheet: a backfill that

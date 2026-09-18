@@ -208,7 +208,17 @@ struct ActivityView: View {
                     HStack(spacing: 10) {
                         Button("Open Plan") { onOpenPlan?(planID) }
                         if model.plan(id: planID)?.isConfigurationComplete == true {
+                            // Disabled while running or restic-less, like the
+                            // plan page's and sidebar's buttons: a clickable
+                            // button that quietly does nothing is a lie the
+                            // model's no-op guard should never have to tell.
                             Button("Back Up Now") { model.runBackup(planID: planID) }
+                                .disabled(model.isRunning(planID: planID) || !model.isResticAvailable)
+                                .help(
+                                    model.isRunning(planID: planID)
+                                        ? "This plan's backup is already running"
+                                        : "Run this plan's backup now"
+                                )
                         }
                     }
                     .controlSize(.small)

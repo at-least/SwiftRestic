@@ -202,7 +202,12 @@ struct PlanDetailView: View {
             }
             StatTile(
                 title: "Last run added",
-                value: Format.bytes(lastRun?.dataAdded)
+                // The run record is the primary source. When the global
+                // history cap has evicted this plan's newest record — a busy
+                // plan can do that to a quiet neighbour — the newest
+                // snapshot's own summary answers the same question, because a
+                // snapshot carries what the backup that wrote it added.
+                value: Format.bytes(lastRun?.dataAdded ?? snapshots.first?.dataAdded)
             )
         }
     }
