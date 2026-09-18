@@ -8,6 +8,10 @@ extension AppModel {
     func upsert(repository: Repository, password: String?, providerSecret: String?) async {
         do {
             try await secrets.save(repository.id, password, providerSecret)
+            // Cleared only on a successful save: a Keychain failure must not
+            // have the model schedule upkeep for a repository whose password
+            // never actually landed.
+            if password?.isEmpty == false { repositoriesMissingPassword.remove(repository.id) }
         } catch {
             post(Banner(title: "Keychain", message: error.localizedDescription, isError: true))
         }
@@ -127,8 +131,14 @@ extension AppModel {
         snapshotsLoadedAt[id] = nil
         repositoriesMissingPassword.remove(id)
         resolvedContexts[id] = nil
-        Task { [indexCoordinator] in await indexCoordinator.dropRepository(repositoryID: id) }
-        Task { [secrets] in await secrets.remove(id) }
+        // Both sends quitting should drain: an untracked index drop could
+        // recreate the file it was deleting, and an untracked keychain
+        // removal that lost the race leaves orphaned secrets no UI path
+        // can ever reach again.
+        tasks.addBackground(Task { [indexCoordinator] in
+            await indexCoordinator.dropRepository(repositoryID: id)
+        })
+        tasks.addBackground(Task { [secrets] in await secrets.remove(id) })
     }
 
     func storedSecrets(for repositoryID: UUID) async throws -> (password: String?, providerSecret: String?) {
@@ -162,10 +172,14 @@ extension AppModel {
 
     /// Drops a repository's cached context so the next call re-reads the
     /// Keychain. Exit 12 (wrong password / no matching key) is the failure a
-    /// stale credential produces; without this, a password fixed outside the
-    /// app would leave every call failing until a restart.
+    /// stale repository credential produces; exit 1 is what a stale provider
+    /// secret surfaces as (restic's fatal-error catch-all — a rejected B2 or
+    /// S3 key exits 1, not 12). Without the drop, a credential fixed outside
+    /// the app would leave every call failing until a restart. The cost is
+    /// one extra Keychain read after any fatal error, which no run frequency
+    /// makes expensive.
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-        guard case let ResticError.commandFailed(code, _, _) = error, code == 12 else { return }
+        guard case let ResticError.commandFailed(code, _, _) = error, code == 12 || code == 1 else { return }
         resolvedContexts[repositoryID] = nil
     }
 

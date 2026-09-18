@@ -4,6 +4,7 @@ extension AppModel {
     // MARK: - Running a backup
 
     func runBackup(planID: UUID) {
+        guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.plan(planID)) else { return }
         guard let plan = plan(id: planID) else { return }
         guard plan.isConfigurationComplete, let repositoryID = plan.repositoryID,

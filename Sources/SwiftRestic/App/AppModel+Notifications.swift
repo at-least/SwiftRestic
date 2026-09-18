@@ -68,6 +68,42 @@ extension AppModel {
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request)
+        Task {
+            // A notification that silently never arrives is the failure mode
+            // a backup app most cannot afford: external channels banner their
+            // delivery errors, and the local one must too. Denied permission
+            // is the common way this happens — say it once per stretch, the
+            // same transition-signal rule the stats banner follows.
+            let center = UNUserNotificationCenter.current()
+            let authorization = await center.notificationSettings().authorizationStatus
+            do {
+                switch authorization {
+                case .authorized, .provisional, .ephemeral:
+                    try await center.add(request)
+                    notificationsProblemNoted = false
+                default:
+                    throw NotificationProblem.permissionDenied
+                }
+            } catch {
+                guard !notificationsProblemNoted else { return }
+                notificationsProblemNoted = true
+                let message: String
+                if let problem = error as? NotificationProblem, problem == .permissionDenied {
+                    message = "macOS notification permission is off — turn SwiftRestic on in System Settings › Notifications to see failure alerts again."
+                } else {
+                    message = error.localizedDescription
+                }
+                post(Banner(
+                    title: "Could not send a notification",
+                    message: message,
+                    isError: true
+                ))
+            }
+        }
+    }
+
+    /// Why a local notification could not be delivered, for the banner text.
+    private enum NotificationProblem: Error {
+        case permissionDenied
     }
 }

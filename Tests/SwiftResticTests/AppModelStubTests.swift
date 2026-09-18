@@ -965,6 +965,20 @@ struct AppModelStubTests {
             await harness.model.shutdown()
         }
     }
+
+    @Test("bootstrapping does not schedule a save over what it just loaded")
+    func bootstrapLeavesTheStoreUnwritten() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // `isLoaded` is already true while bootstrap assigns the loaded
+        // configuration, so the didSet used to schedule a save 400 ms after
+        // every launch — committing any tolerant-decode substitutions before
+        // the banner naming them could be read. No save task may exist after
+        // bootstrap: loading is not a user edit.
+        #expect(harness.model.saveTask == nil)
+        #expect(harness.model.isConfigurationUnreadable == false)
+    }
 }
 
 /// Captures HTTP request bodies on the loopback interface.

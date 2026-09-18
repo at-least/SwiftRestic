@@ -27,6 +27,7 @@ extension AppModel {
         task: MaintenanceTask,
         readDataPercentOverride: Int? = nil
     ) {
+        guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.maintenance(repositoryID)) else { return }
         guard let repository = repository(id: repositoryID) else { return }
         guard !busyRepositoryIDs.contains(repositoryID) else {
@@ -76,7 +77,11 @@ extension AppModel {
     }
 
     func unlockRepository(id repositoryID: UUID) {
-        Task { [weak self] in
+        // Registered with the census rather than left as a bare task: an
+        // in-flight unlock is one of the sends quitting should drain, and an
+        // unregistered one dies silently under `terminateAll` with neither
+        // banner nor record.
+        tasks.addBackground(Task { [weak self] in
             guard let self, let repository = self.repository(id: repositoryID) else { return }
             do {
                 let service = try self.service()
@@ -86,7 +91,7 @@ extension AppModel {
                 self.noteAuthFailure(error, repositoryID: repositoryID)
                 self.post(Banner(title: "Unlock failed", message: error.localizedDescription, isError: true))
             }
-        }
+        })
     }
 }
 

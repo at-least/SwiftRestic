@@ -26,7 +26,14 @@ extension AppModel {
 
         do {
             let loaded = try await store.load()
+            // Writing back what was just loaded is not a user edit, and it must
+            // not become one: with `isLoaded` already true, the didSet would
+            // schedule a save that committed every tolerant-decode substitution
+            // before the banner naming them could be read — and burned a
+            // rotation generation on every clean launch besides.
+            suppressConfigurationSave = true
             configuration = loaded.configuration
+            suppressConfigurationSave = false
             // A recovered load is not a clean one: the user is reading a copy,
             // and the next save replaces whatever was wrong with the live
             // file. Saying nothing would trade a file-system accident for a
@@ -103,7 +110,11 @@ extension AppModel {
         tasks.cancelSlots()
         // A confirmed-destructive console command must not outlive the app
         // either — as a sheet it was cancelled on dismissal; quitting cancels.
+        // Awaited, not merely cancelled: the console's unwind persists the
+        // command history through `persistHistory`, and a command that lands
+        // during the final flushSave below would race the process exit.
         console.cancelRunningCommand()
+        await console.waitForCommand()
         await runner.terminateAll()
 
         // Wait for the cancelled runs to finish unwinding. Their `catch` blocks

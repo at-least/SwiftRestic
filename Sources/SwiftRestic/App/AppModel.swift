@@ -106,6 +106,11 @@ final class AppModel {
     /// keep failing says it once, and says it again only after a success in
     /// between proved the failure was gone.
     @ObservationIgnored var statsFailureNoted: Set<UUID> = []
+    /// A local-notification delivery problem (denied permission, a rejected
+    /// add) already announced. Same transition-signal rule as the stats
+    /// banner: once per failing stretch, so a denial does not nag on every
+    /// failed run.
+    @ObservationIgnored var notificationsProblemNoted = false
     private var isSaving = false
     /// Set when bootstrap could not read the configuration from any
     /// generation. Every save from here on is refused: the live file that is
@@ -118,6 +123,13 @@ final class AppModel {
     /// stopped by the user, and the run record should say so: "Cancelled" sends
     /// someone hunting for a cancel click that never happened.
     var isShuttingDown = false
+    /// Silences the debounced save for one assignment — bootstrap writing back
+    /// what it just loaded. `isLoaded` is already true during the load, so the
+    /// `configuration` didSet would otherwise schedule a save 400 ms after
+    /// launch: a rewrite the user never asked for, and one that makes tolerant
+    /// decoding's substituted defaults permanent before the banner explaining
+    /// them has even been read.
+    @ObservationIgnored var suppressConfigurationSave = false
 
     init(
         store: ConfigStore = ConfigStore(),
@@ -146,6 +158,7 @@ final class AppModel {
 
     /// Coalesces rapid edits (typing in a text field) into one write.
     private func scheduleSave() {
+        guard !suppressConfigurationSave else { return }
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))

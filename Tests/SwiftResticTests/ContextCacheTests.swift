@@ -92,11 +92,18 @@ struct ContextCacheTests {
         #expect(loads.value == 2, "exit 12 must force a fresh secret read")
 
         model.noteAuthFailure(
+            ResticError.commandFailed(exitCode: 1, message: "b2 denied", command: "restic backup"),
+            repositoryID: repository.id
+        )
+        _ = try await model.context(for: repository)
+        #expect(loads.value == 3, "a rejected provider secret exits 1, and must force a fresh read too")
+
+        model.noteAuthFailure(
             ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic backup"),
             repositoryID: repository.id
         )
         _ = try await model.context(for: repository)
-        #expect(loads.value == 2, "a lock failure says nothing about the credentials")
+        #expect(loads.value == 3, "a lock failure says nothing about the credentials")
     }
 
     @Test("changing only the password invalidates the cache")
