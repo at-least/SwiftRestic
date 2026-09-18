@@ -247,6 +247,30 @@ struct MaintenanceRunEngineTests {
         #expect(sink.log == ["context", "password-missing"])
         #expect(sink.deliveredRecords.isEmpty)
     }
+
+    @Test("a successful check whose after-hook failed reads as completed with errors")
+    func failedMaintenanceHookUpgradesTheOutcome() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onCheck(.success(ResticSummary()))
+        var repository = Repository()
+        var hook = BackupHook()
+        hook.name = "notify"
+        hook.event = .afterMaintenanceSuccess
+        hook.command = "exit 3"
+        hook.failureBehaviour = .ignore
+        repository.hooks = [hook]
+        await MaintenanceRunEngine.perform(
+            repository: repository,
+            task: .check,
+            readDataPercentOverride: nil,
+            sink: StubMaintenanceServiceSink(client: client, base: sink)
+        )
+        // Same rule as the backup engine: the hook's failure is recorded and
+        // it turns the record amber — a problem dot, a notifyOnFailure —
+        // without ever calling the check itself a failure.
+        #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
+        #expect(!sink.deliveredRecords[0].hookMessages.isEmpty)
+    }
 }
 
 /// The recording sinks answer `service()` with the mock — a tiny wrapper so

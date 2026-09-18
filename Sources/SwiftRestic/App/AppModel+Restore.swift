@@ -59,7 +59,16 @@ extension AppModel {
         operation: @escaping @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?,
         onSuccess: @escaping @MainActor () -> Void
     ) {
-        guard !tasks.isOccupied(.restore) else { return }
+        guard !tasks.isOccupied(.restore) else {
+            // Every other refused start says why; a restore request that
+            // silently does nothing reads as a broken drop.
+            post(Banner(
+                title: "A restore is already running",
+                message: "One restore at a time — the current one is still in progress.",
+                isError: false
+            ))
+            return
+        }
         restoreActivity = OperationProgress()
         restoreDescription = "Restoring \(label)"
         restoreRepositoryID = repositoryID
@@ -148,9 +157,9 @@ extension AppModel {
             // No progress through the drag path: the drop is the feedback.
             onProgress: nil
         )
-        // The name rule of the service's directory branch: an empty name
-        // only happens for a path-less root, which cannot be dragged.
-        return destination.appendingPathComponent(node.name.isEmpty ? "restored" : node.name)
+        // The same name rule the service's restore branches use: the snapshot
+        // names the item, the destination directory decides where it lands.
+        return destination.appendingPathComponent(ResticService.sanitizedRestoreName(node.name))
     }
 
     /// Everything a restic command needs, from pre-captured values, with no

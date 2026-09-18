@@ -593,7 +593,7 @@ struct ResticService: ResticClient {
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
 
         if node.isDirectory {
-            let target = destinationDirectory.appendingPathComponent(node.name.isEmpty ? "restored" : node.name)
+            let target = destinationDirectory.appendingPathComponent(Self.sanitizedRestoreName(node.name))
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
             let result = try await runner.run(
                 binary: binary,
@@ -612,7 +612,7 @@ struct ResticService: ResticClient {
             return result.summary
         }
 
-        let target = destinationDirectory.appendingPathComponent(node.name)
+        let target = destinationDirectory.appendingPathComponent(Self.sanitizedRestoreName(node.name))
         _ = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
@@ -686,6 +686,22 @@ struct ResticService: ResticClient {
             defer { lock.unlock() }
             return diff
         }
+    }
+
+    /// A snapshot node's name as a local file name to create. restic's trees
+    /// are restored into a directory the user chose, and the names come from
+    /// the snapshot — which a hostile writer to a shared repository can fill
+    /// with anything. `appendingPathComponent` would happily walk out of that
+    /// directory on `/` or `..`, so the name is never trusted: reduced to its
+    /// last component, with the traversal spellings replaced.
+    static func sanitizedRestoreName(_ name: String) -> String {
+        var component = (name as NSString).lastPathComponent
+        // Foundation answers "/" for "/" — a name that would aim the write at
+        // the destination directory itself rather than inside it.
+        if component.isEmpty || component == "." || component == ".." || component == "/" {
+            component = "restored"
+        }
+        return component
     }
 
     /// restic does not expand `~`; the shell normally would.

@@ -343,6 +343,13 @@ enum MaintenanceRunEngine {
                     contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
                 )
             }
+            // Same rule as the backup engine: a failing hook is worth
+            // surfacing, but never undoes what the run did — so a successful
+            // check or prune whose hook failed reads as completed-with-errors,
+            // which is what arms the problem dot and notifyOnFailure.
+            if !record.hookMessages.isEmpty, record.outcome == .succeeded {
+                record.outcome = .completedWithErrors
+            }
             record.finishedAt = .now
         }
 
