@@ -273,8 +273,12 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         id = c.value(.id, default: UUID())
         name = c.value(.name, default: "")
         repositoryID = c.optional(.repositoryID)
-        sources = c.value(.sources, default: [])
-        excludePatterns = c.value(.excludePatterns, default: BackupPlan.defaultExcludes)
+        // Deduplicated because the string-list editors dedupe their own
+        // writes, so a duplicate reaching the rows means a hand-edited
+        // config — and duplicate values would give the path lists' rows
+        // colliding identities. First occurrence wins, order preserved.
+        sources = Self.withoutDuplicates(c.value(.sources, default: []))
+        excludePatterns = Self.withoutDuplicates(c.value(.excludePatterns, default: BackupPlan.defaultExcludes))
         excludeCaches = c.value(.excludeCaches, default: true)
         oneFileSystem = c.value(.oneFileSystem, default: false)
         tags = c.value(.tags, default: [])
@@ -297,6 +301,12 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         "~/.Trash",
         "~/Library/Application Support/Steam",
     ]
+
+    /// First-occurrence-wins deduplication, order preserved.
+    private static func withoutDuplicates(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0).inserted }
+    }
 
     var isConfigurationComplete: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty

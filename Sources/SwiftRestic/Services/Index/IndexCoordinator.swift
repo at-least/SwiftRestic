@@ -357,7 +357,6 @@ final class BackfillBuffer: @unchecked Sendable {
     }
 
     func append(_ entry: IndexedEntry) {
-        guard !Task.isCancelled else { return }
         var chunk: [IndexedEntry]?
         lock.lock()
         if !isCancelled {
