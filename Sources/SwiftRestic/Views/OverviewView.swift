@@ -53,15 +53,16 @@ struct OverviewView: View {
         .task(id: chartSignature) { rebuild() }
     }
 
-    /// What `rebuild()` reads, as one comparable value. Counts alone were
-    /// not enough: a renamed or reordered plan changes the chart's series
-    /// without changing any count, and the stale series names would colour
-    /// the wrong plans until the next run landed.
+    /// What `rebuild()` reads, as one comparable value — the pure reduction
+    /// in `OverviewMetrics`, which the test bundle pins. Counts alone went
+    /// stale: the history trims to its cap, so the count stops changing and
+    /// the chart would stop moving for a busy user; the newest record's
+    /// identity moves with every append, cap or no cap.
     private var chartSignature: String {
-        let plans = model.configuration.plans
-            .map { "\($0.id)|\($0.name)" }
-            .joined(separator: ";")
-        return "\(plans)#\(model.configuration.runs.count)"
+        OverviewMetrics.chartSignature(
+            plans: model.configuration.plans,
+            runs: model.configuration.runs
+        )
     }
 
     private func rebuild() {

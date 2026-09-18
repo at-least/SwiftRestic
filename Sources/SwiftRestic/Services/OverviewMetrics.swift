@@ -117,6 +117,24 @@ enum OverviewMetrics {
                 && ($0.outcome == .failed || $0.outcome == .completedWithErrors)
         }
     }
+
+    /// The dashboard chart's input identity, as one comparable string.
+    ///
+    /// The run count alone went stale: `append` inserts and then trims, so
+    /// once the history reaches its cap the count never changes again, and a
+    /// `.task(id:)` keyed on it would never re-reduce the series. The newest
+    /// record's identity moves with every append, capped or not; the plan
+    /// id+name pairs move on a rename or reorder of the series set.
+    static func chartSignature(plans: [BackupPlan], runs: [RunRecord]) -> String {
+        let planPart = plans
+            .map { "\($0.id.uuidString)|\($0.name)" }
+            .joined(separator: ";")
+        guard let newest = runs.first else { return "\(planPart)#none" }
+        let runPart = "\(newest.id.uuidString)"
+            + "#\(newest.finishedAt.timeIntervalSince1970)"
+            + "#\(newest.outcome.rawValue)"
+        return "\(planPart)#\(runPart)"
+    }
 }
 
 private func < (lhs: (Date, String), rhs: (Date, String)) -> Bool {

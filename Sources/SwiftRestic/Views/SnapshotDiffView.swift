@@ -36,10 +36,15 @@ struct SnapshotDiffView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        // One filter+sort per render: the header and the content each need
+        // the candidates, and a computed property would re-evaluate the sort
+        // at every access — this sheet re-renders on every keystroke in its
+        // filter field.
+        let candidates = self.candidates
+        return VStack(spacing: 0) {
+            header(candidates)
             Divider()
-            content
+            content(candidates)
             Divider()
             footer
         }
@@ -55,12 +60,12 @@ struct SnapshotDiffView: View {
 
     // MARK: - Sections
 
-    private var header: some View {
-        // One pass over the candidates per render: each picker row needs to
-        // know whether its displayed minute is shared, and computing that
-        // inside every row was O(n²) formatter calls on the snapshots this
-        // sheet was built for.
-        let sharedMinutes = sharedDisplayedMinutes
+    private func header(_ candidates: [Snapshot]) -> some View {
+        // Both groupings are one pass over the candidates, with the date
+        // formatters running once per distinct bucket — `DiffCandidateGrouping`
+        // holds the exact costs, and the test bundle pins them.
+        let sharedMinutes = DiffCandidateGrouping.sharedDisplayedMinutes(in: candidates)
+        let grouped = DiffCandidateGrouping.months(in: candidates)
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -81,8 +86,8 @@ struct SnapshotDiffView: View {
                     // Grouped by month: with a year of hourly snapshots the
                     // flat list was a thousand-row scroll, and a header to
                     // park the eye on is the cheapest jump a menu can offer.
-                    ForEach(groupedCandidates, id: \.month) { group in
-                        Section(group.month) {
+                    ForEach(grouped, id: \.label) { group in
+                        Section(group.label) {
                             ForEach(group.snapshots) { snapshot in
                                 Text(comparisonLabel(snapshot, sharedMinutes: sharedMinutes))
                                     .tag(String?.some(snapshot.id))
@@ -107,7 +112,7 @@ struct SnapshotDiffView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(_ candidates: [Snapshot]) -> some View {
         if candidates.isEmpty {
             ContentUnavailableView(
                 "Nothing to compare against",
@@ -277,19 +282,7 @@ struct SnapshotDiffView: View {
             : ResticDiffChange.Category.allCases.filter { $0 != .metadataOnly }
     }
 
-    /// Candidates bucketed by month, newest bucket first — `candidates` is
-    /// already sorted newest first, so first-sight of a month names the group.
-    private var groupedCandidates: [(month: String, snapshots: [Snapshot])] {
-        var order: [String] = []
-        var buckets: [String: [Snapshot]] = [:]
-        for snapshot in candidates {
-            let month = snapshot.time.formatted(.dateTime.month(.wide).year())
-            if buckets[month] == nil { order.append(month) }
-            buckets[month, default: []].append(snapshot)
-        }
-        return order.map { (month: $0, snapshots: buckets[$0] ?? []) }
-    }
-
+    /// The change rows the current kind filter and path search admit.
     private func filteredChanges(_ diff: SnapshotDiff) -> [ResticDiffChange] {
         let needle = searchText.trimmingCharacters(in: .whitespaces)
         return diff.changes.filter { change in
@@ -310,27 +303,11 @@ struct SnapshotDiffView: View {
         return "\(files), \(Format.count(counts.dirs)) folder\(counts.dirs == 1 ? "" : "s")"
     }
 
-    /// The displayed-minute strings two or more candidates share — computed
-    /// once per render, so a picker row answers with a set lookup instead of
-    /// rescanning every candidate with a formatter call apiece.
-    private var sharedDisplayedMinutes: Set<String> {
-        var seen = Set<String>()
-        var shared = Set<String>()
-        for snapshot in candidates {
-            let when = Self.displayedMinute(snapshot.time)
-            if !seen.insert(when).inserted {
-                shared.insert(when)
-            }
-        }
-        return shared
-    }
-
-    private static func displayedMinute(_ time: Date) -> String {
-        time.formatted(date: .abbreviated, time: .shortened)
-    }
-
+    /// One picker row: the displayed minute, plus a relative stamp when
+    /// another candidate displays the same minute — the abbreviated time
+    /// cannot tell snapshots inside the same minute apart.
     private func comparisonLabel(_ snapshot: Snapshot, sharedMinutes: Set<String>) -> String {
-        let when = Self.displayedMinute(snapshot.time)
+        let when = DiffCandidateGrouping.displayedMinute(snapshot.time)
         // The abbreviated time cannot tell snapshots inside the same minute
         // apart; when another candidate shares the displayed minute, a
         // relative stamp says which one came first.

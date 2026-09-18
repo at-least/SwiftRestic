@@ -304,3 +304,63 @@ struct RunOutcomeMarkerTests {
         #expect(RunRecord.Outcome.failed.symbolName?.contains("xmark") == true)
     }
 }
+
+@Suite("Chart signature")
+struct ChartSignatureTests {
+    private func plan(id: UUID, name: String) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.id = id
+        plan.name = name
+        return plan
+    }
+
+    private func date(_ string: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.date(from: string)!
+    }
+
+    private func run(finishedAt: String) -> RunRecord {
+        var record = RunRecord(planName: "Docs", startedAt: date("2026-09-05 01:00:00"))
+        record.finishedAt = date(finishedAt)
+        return record
+    }
+
+    @Test("the signature moves with the newest record even when the history count cannot change")
+    func signatureTracksNewestRunAtConstantCount() {
+        let planID = UUID()
+        let plan = plan(id: planID, name: "Docs")
+        let older = run(finishedAt: "2026-09-04 01:00:00")
+        let newer = run(finishedAt: "2026-09-05 01:00:00")
+        let newest = run(finishedAt: "2026-09-06 01:00:00")
+
+        // At the history cap, appending inserts and then trims: the count
+        // stays fixed while the head record changes. The signature the
+        // Overview chart keys on must still move, or the chart stops
+        // updating for a busy user.
+        let before = OverviewMetrics.chartSignature(plans: [plan], runs: [newer, older])
+        let after = OverviewMetrics.chartSignature(plans: [plan], runs: [newest, newer])
+        #expect(before != after)
+    }
+
+    @Test("a plan rename moves the signature; an untouched setup does not")
+    func signatureTracksPlanNames() {
+        let planID = UUID()
+        let docsPlan = plan(id: planID, name: "Docs")
+        let renamed = plan(id: planID, name: "Documents")
+        let runs = [run(finishedAt: "2026-09-05 01:00:00")]
+
+        #expect(OverviewMetrics.chartSignature(plans: [docsPlan], runs: runs)
+            != OverviewMetrics.chartSignature(plans: [renamed], runs: runs))
+        #expect(OverviewMetrics.chartSignature(plans: [docsPlan], runs: runs)
+            == OverviewMetrics.chartSignature(plans: [docsPlan], runs: runs))
+    }
+
+    @Test("an empty history has one stable signature")
+    func emptyHistoryIsStable() {
+        let plan = plan(id: UUID(), name: "Docs")
+        #expect(OverviewMetrics.chartSignature(plans: [plan], runs: [])
+            == OverviewMetrics.chartSignature(plans: [plan], runs: []))
+    }
+}

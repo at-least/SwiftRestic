@@ -81,18 +81,24 @@ final class TaskRegistry {
         for task in slots.values { task.cancel() }
     }
 
-    /// Awaits every tracked task, then empties the registry. Cancellation is
-    /// the caller's job (terminateAll has to reach the restic children
-    /// before their Swift-side tasks can finish unwinding).
+    /// Awaits every tracked task until the registries are actually empty.
+    /// Cancellation is the caller's job (terminateAll has to reach the restic
+    /// children before their Swift-side tasks can finish unwinding).
     ///
-    /// The census holds for the duration because `shutdown` is re-entry
-    /// guarded and the scheduler — the only source of new runs at quit — is
-    /// cancelled first; anything installed after this loop begins would be
-    /// dropped un-awaited, so that ordering is load-bearing.
+    /// A loop, not one pass: a task installed while the awaits are suspended
+    /// is caught by the next pass instead of being dropped un-awaited, so no
+    /// ordering above the registry is load-bearing any more. Each pass
+    /// awaits a snapshot of the entries present when it began, then removes
+    /// exactly those entries — a completion that lands mid-pass has already
+    /// cleared its own slot, and a fresh install survives to the next pass.
     func drain() async {
-        for task in slots.values { await task.value }
-        for task in background.values { await task.value }
-        slots.removeAll()
-        background.removeAll()
+        while !slots.isEmpty || !background.isEmpty {
+            let awaitedSlots = Array(slots.values)
+            let awaitedBackground = Array(background.values)
+            for task in awaitedSlots { await task.value }
+            for task in awaitedBackground { await task.value }
+            slots = slots.filter { !awaitedSlots.contains($0.value) }
+            background = background.filter { !awaitedBackground.contains($0.value) }
+        }
     }
 }

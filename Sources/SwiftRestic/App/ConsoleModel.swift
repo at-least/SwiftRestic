@@ -59,11 +59,12 @@ final class ConsoleModel {
     /// the model reads its own configuration and hands the values over.
     func appear(repositoryID defaultRepositoryID: UUID?, persistedHistory: [String]) {
         if repositoryID == nil { repositoryID = defaultRepositoryID }
-        // History outlives the pane: it lives in the configuration, so a
-        // command that worked is still here next week. It is also the
-        // secret-filtered list, which can be shorter than the session's —
-        // an in-progress walk's index would point past it, so the walk ends.
-        history = persistedHistory
+        // The session's history outranks the persisted list once it exists:
+        // a secret-carrying command lives only here, and re-reading the
+        // filtered list on every pane re-entry would launder it out of the
+        // sidebar. A fresh session reads the persisted list; removals persist
+        // immediately, so an emptied session stays emptied.
+        if history.isEmpty { history = persistedHistory }
         endRecall()
     }
 

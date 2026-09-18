@@ -130,6 +130,24 @@ struct ConsoleModelTests {
         #expect(console.history == ["snapshots", "version"])
     }
 
+    @Test("a pane re-entry keeps the session's history, secrets included")
+    func appearKeepsSessionHistory() async throws {
+        let (app, console, _) = try makeHarness()
+        app.consoleDidAppear()
+        // Secret-carrying but non-destructive, so seedHistory's plain run()
+        // executes it: `key …` would only arm the confirmation.
+        await seedHistory(["snapshots", "snapshots --password-file secret.txt"], console: console)
+        #expect(console.history.count == 2)
+        // The secret-carrying command reached the session's sidebar only.
+        #expect(app.configuration.settings.consoleHistory == ["snapshots"])
+
+        // Leave the pane and come back: the session's own history — secret
+        // included — is what the sidebar shows, not the shorter persisted
+        // list. Overwriting it here would launder the command away.
+        app.consoleDidAppear()
+        #expect(console.history == ["snapshots --password-file secret.txt", "snapshots"])
+    }
+
     @Test("removing a history entry removes it from both surfaces")
     func removeFromHistory() async throws {
         let (app, console, _) = try makeHarness()
@@ -201,12 +219,12 @@ struct ConsoleModelTests {
 }
 
 extension ConsoleModelTests {
-    @Test("re-seeding history from disk ends the walk instead of indexing past it")
-    func appearResetsRecallWalk() async throws {
+    @Test("a pane re-entry ends an in-flight recall walk and keeps the session's history")
+    func appearEndsRecallWalk() async throws {
         let (app, console, _) = try makeHarness()
         app.consoleDidAppear()
-        // Two of the three commands carry secrets, so the persisted list the
-        // pane re-reads on return is shorter than the session's history.
+        // Two of the three commands carry secrets, so the persisted list is
+        // shorter than the session's history.
         await seedHistory(["aaa", "password one", "password two"], console: console)
         #expect(console.history.count == 3)
 
@@ -215,13 +233,11 @@ extension ConsoleModelTests {
         #expect(console.recallPrevious(current: "") != nil)
         #expect(console.recallPrevious(current: "") != nil)
 
-        // The pane is left and revisited: history re-reads from disk, now
-        // without the secret-bearing commands.
+        // The pane is left and revisited: the walk is over — ↓ must not
+        // conjure a recalled entry — and the session's history survives
+        // whole, secrets included. (Newest first, as typed.)
         app.consoleDidAppear()
-        #expect(console.history == ["aaa"])
-
-        // The walk is over — ↓ must not index past the shrunken list.
         #expect(console.recallNext() == nil)
-        #expect(console.commandText != "")
+        #expect(console.history == ["password two", "password one", "aaa"])
     }
 }
