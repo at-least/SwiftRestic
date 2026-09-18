@@ -653,28 +653,10 @@ private final class StreamReader: @unchecked Sendable {
 
                 let pipeFD = box.fileDescriptor
                 let wakeupFD = wakeup.fileHandleForReading.fileDescriptor
-                loop: while true {
-                    // Wait for either the pipe or the abandonment signal. An
-                    // EINTR must restart the poll, not read as readiness.
-                    var fds = [pollfd(fd: pipeFD, events: Int16(POLLIN), revents: 0),
-                               pollfd(fd: wakeupFD, events: Int16(POLLIN), revents: 0)]
-                    while true {
-                        let count = Darwin.poll(&fds, 2, -1)
-                        if count < 0, errno == EINTR { continue }
-                        break
-                    }
-                    if fds[1].revents != 0 {
-                        // Abandoned: the child's death plus `grandchildGrace`
-                        // proved someone else is holding the pipe. Drain the
-                        // signal byte and stop with what we have.
-                        var sink = [UInt8](repeating: 0, count: 16)
-                        _ = Darwin.read(wakeupFD, &sink, sink.count)
-                        break loop
-                    }
-                    if fds[0].revents == 0 { continue }
-
-                    let chunk = box.read(upToCount: 64 * 1024)
-                    if chunk.isEmpty { break }
+                // Whatever one 64 KB read brings in gets line-split by
+                // `absorb`; both the running loop and the abandonment drain
+                // below go through it.
+                func absorb(_ chunk: Data) {
                     onActivity?()
                     buffer.append(chunk)
                     while let newline = buffer.firstIndex(of: 0x0A) {
@@ -691,11 +673,50 @@ private final class StreamReader: @unchecked Sendable {
                         }
                     }
                 }
+
+                loop: while true {
+                    // Wait for either the pipe or the abandonment signal. An
+                    // EINTR must restart the poll, not read as readiness.
+                    var fds = [pollfd(fd: pipeFD, events: Int16(POLLIN), revents: 0),
+                               pollfd(fd: wakeupFD, events: Int16(POLLIN), revents: 0)]
+                    while true {
+                        let count = Darwin.poll(&fds, 2, -1)
+                        if count < 0, errno == EINTR { continue }
+                        break
+                    }
+                    if fds[1].revents != 0 {
+                        // Abandoned: the child's death plus `grandchildGrace`
+                        // proved someone else is holding the pipe. Drain the
+                        // signal byte, then take whatever the pipe still
+                        // holds readable *right now* — the reaper only fires
+                        // after the child died, so this is the run's last
+                        // bytes, never live output. A zero-timeout poll
+                        // bounds the drain: nothing readable means a
+                        // grandchild still owns the write end, and a plain
+                        // read here would block on it exactly as before.
+                        var sink = [UInt8](repeating: 0, count: 16)
+                        _ = Darwin.read(wakeupFD, &sink, sink.count)
+                        while true {
+                            var readable = [pollfd(fd: pipeFD, events: Int16(POLLIN), revents: 0)]
+                            let ready = Darwin.poll(&readable, 1, 0)
+                            if ready <= 0 || readable[0].revents == 0 { break }
+                            let chunk = box.read(upToCount: 64 * 1024)
+                            if chunk.isEmpty { break }
+                            absorb(chunk)
+                        }
+                        break loop
+                    }
+                    if fds[0].revents == 0 { continue }
+
+                    let chunk = box.read(upToCount: 64 * 1024)
+                    if chunk.isEmpty { break }
+                    absorb(chunk)
+                }
                 if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8), !line.isEmpty {
                     consume(line)
                 }
                 box.close()
-                _ = markFinished
+                markFinished()
                 outcome.text = retained
                 cont.resume(returning: outcome)
             }

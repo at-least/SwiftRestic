@@ -21,7 +21,6 @@ extension AppModel {
         // credentials until an exit-12 happens to clear it (a wrong provider
         // secret never would).
         resolvedContexts[repository.id] = nil
-        if password?.isEmpty == false { repositoriesMissingPassword.remove(repository.id) }
 
         if let index = configuration.repositories.firstIndex(where: { $0.id == repository.id }) {
             // As with plans: maintenance stamps are written by the model while

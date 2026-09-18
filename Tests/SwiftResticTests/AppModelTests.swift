@@ -654,6 +654,34 @@ struct KeychainFailureHonestyTests {
             // and banner with its own words.
         }
     }
+
+    @Test("a failing keychain save leaves the repository waiting for a password")
+    @MainActor
+    func failedSaveKeepsTheMissingPasswordFlag() async {
+        let secrets = SecretStore(
+            load: { (_: UUID) in (password: nil, providerSecret: nil) },
+            save: { (_: UUID, _: String?, _: String?) in
+                throw KeychainStore.KeychainError.unexpectedStatus(errSecInteractionNotAllowed)
+            },
+            remove: { (_: UUID) in }
+        )
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticKeychainSave-\(UUID().uuidString)")
+        let model = AppModel(store: ConfigStore(directory: root), secrets: secrets)
+        model.isLoaded = true
+
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/tmp/some-repo"
+        model.repositoriesMissingPassword.insert(repository.id)
+
+        await model.upsert(repository: repository, password: "new password", providerSecret: nil)
+
+        // The save failed: the repository has no usable password, and the
+        // scheduler must keep treating it as the skip-not-retry case instead
+        // of scheduling upkeep that can only fail.
+        #expect(model.repositoriesMissingPassword.contains(repository.id))
+    }
 }
 
 
