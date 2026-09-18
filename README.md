@@ -121,11 +121,14 @@ A few seams worth knowing by name:
 - **Resolved contexts are cached** per repository (`AppModel.resolvedContexts`)
   so a restic call does not re-read the Keychain; the key covers the
   repository value and rate limits, secret edits invalidate in `upsert`, and
-  exit 12 drops the entry so a fixed password takes effect without a restart.
+  exit 12 — or exit 1, which is how a rejected provider secret surfaces —
+  drops the entry so a fixed password takes effect without a restart.
 - **Streaming commands wear an idle stall cap** (15 min with no output at all
   ends the run as hung) — measured on `systemUptime`, so a closed lid is not
   "silence". Legitimately quiet commands (`prune`, `forget`, `dump`, the
-  console) wear none.
+  console) wear none. When a child dies, its pipes are abandoned two seconds
+  later whatever still holds them: a hook that backgrounds a long-lived
+  command cannot hang the run, its timeout, or the quit that drains it.
 - **Menu commands and the tray ask the router** (`router.request(...)`) for
   typed intents; the root view consumes them on appear-or-change, and every
   window-targeting command also opens the window so no ask is parked unheard.
@@ -146,7 +149,10 @@ captured verbatim from restic 0.19.1.
 
 Exit codes are mapped rather than treated as pass/fail: **3** means "finished,
 but some data could not be read" and is recorded as a warning, not a failed
-backup; 10 is a missing repository, 11 a lock, 12 a wrong password.
+backup; 10 is a missing repository, 11 a lock, 12 a wrong password. `check`
+gets its own reading of 1 — that is restic's verdict that the repository is
+damaged, and the summary's error count arrives with it, so the record says
+what was found rather than that the command failed.
 
 ## Tests
 
@@ -270,14 +276,14 @@ curl -fsS -X POST "$WEBHOOK" \
 when they do not apply, so `[ -n "$SWIFTRESTIC_ERROR" ]` works. A failing hook
 marks the run as *completed with errors* but never turns a written snapshot into
 a failed run. Only a before hook can be set to cancel the run.
-
 Repositories have hooks of their own, in the repository editor, around `check`
 and `prune`: *before*, *after success*, *after failure* and *after every*.
 They get the same variables — the plan ones are present but empty, since
 there is no plan — never the snapshot one, plus
 `SWIFTRESTIC_TASK` (`check` or `prune`). A check that finds errors counts as a
 failure for hook purposes — that is the outcome a repository hook exists to
-report — and a before hook set to cancel still stamps the schedule, so a hook
+report — and a failing hook turns the run record itself amber, the same way a
+backup's does. A before hook set to cancel still stamps the schedule, so a hook
 that always refuses does not turn into a retry every minute.
 
 **A hook's output stays on this Mac.** It is an arbitrary script and can print
@@ -299,7 +305,10 @@ anything. SwiftRestic pings `…/start` before a backup, the bare URL on success
 point of view that is still a backup that did not happen. Chat channels stay
 quiet about cancellations, since whoever cancelled already knows. Quitting the
 app waits for an in-flight start ping rather than dropping it. A notification
-that cannot be delivered is shown to you but never written into the run history.
+that cannot be delivered is shown to you but never written into the run
+history, and that holds for the local system notification too: denied
+permission or a failed delivery names itself in a banner, once per failing
+stretch.
 
 ## Behaviour worth knowing
 
