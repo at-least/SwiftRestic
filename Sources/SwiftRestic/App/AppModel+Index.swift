@@ -50,13 +50,18 @@ extension AppModel {
         }
     }
 
+    /// The search's hit ceiling, shared with the views that report
+    /// truncation — a duplicated constant here and there would drift and
+    /// quietly stop the "showing the first matches" footer from appearing.
+    static let indexSearchLimit = 200
+
     /// Instant basename search over the indexed paths. Throws when the index
     /// itself fails: for a search tool, "the index is broken" must never
     /// read as "nothing matches".
     func searchIndex(
         pattern: String,
         repositoryID: UUID,
-        limit: Int = 200
+        limit: Int = AppModel.indexSearchLimit
     ) async throws -> [SearchHit] {
         try await indexCoordinator.searchPaths(
             matching: pattern,

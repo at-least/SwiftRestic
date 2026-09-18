@@ -383,9 +383,17 @@ struct RepositoryEditorSheet: View {
         guard !isNew else { return }
         do {
             let secrets = try await model.storedSecrets(for: draft.id)
-            password = secrets.password ?? ""
-            confirmPassword = password
-            providerSecret = secrets.providerSecret ?? ""
+            // The prefill must not clobber what arrived during the await:
+            // anything typed into the fields while the Keychain answered is
+            // already the user's edit, and overwriting it would not even
+            // register as a change against the baseline taken above.
+            if password.isEmpty {
+                password = secrets.password ?? ""
+                confirmPassword = password
+            }
+            if providerSecret.isEmpty {
+                providerSecret = secrets.providerSecret ?? ""
+            }
         } catch {
             // Prefill failed — say so. Blank fields would read as "no
             // password stored" and a save would silently keep whatever the

@@ -405,6 +405,12 @@ struct SnapshotTable: View {
     ]
     @State private var filterText = ""
     @State private var selection: Snapshot.ID?
+    /// The snapshots' rendered date text, rebuilt only when the listing
+    /// changes. The filter matches the displayed date, and re-formatting
+    /// every snapshot on every keystroke was a formatter storm on
+    /// year-sized histories — a year of hourly snapshots is ~8.7k
+    /// `.formatted` calls per character typed.
+    @State private var displayTimes: [Snapshot.ID: String] = [:]
 
     /// The sort does not apply itself: `Table(sortOrder:)` only reports the
     /// user's chosen order, so the rows are filtered and sorted here.
@@ -412,13 +418,26 @@ struct SnapshotTable: View {
         let needle = filterText.trimmingCharacters(in: .whitespaces)
         let base = needle.isEmpty ? snapshots : snapshots.filter { snapshot in
             snapshot.id.localizedCaseInsensitiveContains(needle)
-                || snapshot.time.formatted(date: .abbreviated, time: .shortened)
-                    .localizedCaseInsensitiveContains(needle)
+                || displayTimes[snapshot.id]?
+                    .localizedCaseInsensitiveContains(needle) == true
         }
         return base.sorted(using: sortOrder)
     }
 
     var body: some View {
+        content
+            .onChange(of: snapshots, initial: true) { _, snapshots in
+                var times: [Snapshot.ID: String] = [:]
+                times.reserveCapacity(snapshots.count)
+                for snapshot in snapshots {
+                    times[snapshot.id] = snapshot.time.formatted(date: .abbreviated, time: .shortened)
+                }
+                displayTimes = times
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if case let .failed(message) = loadOutcome, snapshots.isEmpty {
             failureRow(message)
         } else if isLoading, snapshots.isEmpty {

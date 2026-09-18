@@ -201,9 +201,11 @@ struct OverviewView: View {
     /// one aggregate number that cannot say which plan it is worried about.
     /// The count survives as a derived caption, never the headline.
     private var protectionCard: some View {
-        Card("Protection") {
+        // The rows feed both the card and its caption; captured once so a
+        // render costs one pass over the plans, not two.
+        let rows = protectionRows
+        return Card("Protection") {
             VStack(alignment: .leading, spacing: 7) {
-                let rows = protectionRows
                 if rows.isEmpty {
                     Text("Add a backup plan to start protecting your data.")
                         .foregroundStyle(.secondary)
@@ -215,7 +217,6 @@ struct OverviewView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } accessory: {
-            let rows = protectionRows
             let known = rows.filter(\.isKnown)
             if !known.isEmpty {
                 Text("\(known.filter(\.isProtected).count) of \(known.count) protected")

@@ -31,6 +31,10 @@ struct RestorePaneView: View {
     /// Directories with a fetch already running — a double-click racing
     /// itself must not spawn duplicate listings.
     @State private var inFlightFetches: Set<String> = []
+    /// The fetch tasks themselves, so the pane's departure can stop them:
+    /// an expand that outlives the pane keeps a restic listing running and
+    /// writes into state nobody reads any more.
+    @State private var fetchTasks: [String: Task<Void, Never>] = [:]
     /// The query in flight, so the next keystroke cancels it: a slower older
     /// search finishing last must not overwrite the newer one's answers.
     @State private var searchTask: Task<Void, Never>?
@@ -73,6 +77,7 @@ struct RestorePaneView: View {
             // The pane's queries must not keep running — and keep writing —
             // after the pane is gone.
             searchTask?.cancel()
+            for (_, task) in fetchTasks { task.cancel() }
         }
     }
 
@@ -452,8 +457,11 @@ struct RestorePaneView: View {
         guard !inFlightFetches.contains(needed) else { return }
         inFlightFetches.insert(needed)
         navigate(to: path)
-        Task {
-            defer { inFlightFetches.remove(needed) }
+        fetchTasks[needed] = Task {
+            defer {
+                inFlightFetches.remove(needed)
+                fetchTasks[needed] = nil
+            }
             do {
                 let nodes = try await model.children(
                     repositoryID: repositoryID,
@@ -502,7 +510,16 @@ struct RestorePaneView: View {
         let searchedRecordID = record.id
         searchTask?.cancel()
         searchTask = Task {
-            let hits = (try? await model.searchIndex(pattern: query, repositoryID: repositoryID)) ?? []
+            // An index failure is its own answer — a confident "no matches"
+            // would be the one lie a search tool cannot tell.
+            let hits: [SearchHit]
+            do {
+                hits = try await model.searchIndex(pattern: query, repositoryID: repositoryID)
+            } catch {
+                guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
+                loadError = (error as? ResticError)?.errorDescription ?? error.localizedDescription
+                return
+            }
             var covered: [SearchHit] = []
             for hit in hits {
                 if Task.isCancelled { return }

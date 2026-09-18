@@ -59,10 +59,17 @@ struct FindFilesView: View {
         .frame(minWidth: 760, minHeight: 480)
         .onAppear {
             if repositoryID == nil { repositoryID = model.configuration.repositories.first?.id }
-            refreshIndexState()
             patternFieldIsFocused = true
         }
-        .onChange(of: repositoryID) { _, _ in refreshIndexState() }
+        // The index-state check re-runs when the repository changes and
+        // cancels itself when the sheet leaves — a plain `Task` here used to
+        // answer after dismissal and write into detached state storage.
+        .task(id: repositoryID) {
+            guard let repositoryID else { indexComplete = nil; return }
+            let ready = await model.indexIsComplete(repositoryID: repositoryID)
+            guard !Task.isCancelled else { return }
+            indexComplete = ready
+        }
         .onDisappear { searchTask?.cancel() }
     }
 
@@ -365,7 +372,7 @@ struct FindFilesView: View {
                 hit: hit
             ))
         }
-        resultsTruncated = dropped > 0 || hits.count >= 200
+        resultsTruncated = dropped > 0 || hits.count >= AppModel.indexSearchLimit
         return rows
     }
 
@@ -382,18 +389,6 @@ struct FindFilesView: View {
         hasSearched = false
         errorMessage = nil
         selection = nil
-    }
-
-    /// Re-reads whether the selected repository's index is ready — the switch
-    /// behind the engine choice and the toggle's visibility. The answer is
-    /// discarded if the user has switched repository meanwhile.
-    private func refreshIndexState() {
-        guard let repositoryID else { indexComplete = nil; return }
-        Task {
-            let ready = await model.indexIsComplete(repositoryID: repositoryID)
-            guard self.repositoryID == repositoryID else { return }
-            indexComplete = ready
-        }
     }
 
     /// Restores the given row through the destination picker, where the

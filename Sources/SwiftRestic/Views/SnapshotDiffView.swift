@@ -56,7 +56,12 @@ struct SnapshotDiffView: View {
     // MARK: - Sections
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // One pass over the candidates per render: each picker row needs to
+        // know whether its displayed minute is shared, and computing that
+        // inside every row was O(n²) formatter calls on the snapshots this
+        // sheet was built for.
+        let sharedMinutes = sharedDisplayedMinutes
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Changes in snapshot \(newer.shortID)")
@@ -79,7 +84,8 @@ struct SnapshotDiffView: View {
                     ForEach(groupedCandidates, id: \.month) { group in
                         Section(group.month) {
                             ForEach(group.snapshots) { snapshot in
-                                Text(comparisonLabel(snapshot)).tag(String?.some(snapshot.id))
+                                Text(comparisonLabel(snapshot, sharedMinutes: sharedMinutes))
+                                    .tag(String?.some(snapshot.id))
                             }
                         }
                     }
@@ -304,15 +310,31 @@ struct SnapshotDiffView: View {
         return "\(files), \(Format.count(counts.dirs)) folder\(counts.dirs == 1 ? "" : "s")"
     }
 
-    private func comparisonLabel(_ snapshot: Snapshot) -> String {
-        let when = snapshot.time.formatted(date: .abbreviated, time: .shortened)
+    /// The displayed-minute strings two or more candidates share — computed
+    /// once per render, so a picker row answers with a set lookup instead of
+    /// rescanning every candidate with a formatter call apiece.
+    private var sharedDisplayedMinutes: Set<String> {
+        var seen = Set<String>()
+        var shared = Set<String>()
+        for snapshot in candidates {
+            let when = Self.displayedMinute(snapshot.time)
+            if !seen.insert(when).inserted {
+                shared.insert(when)
+            }
+        }
+        return shared
+    }
+
+    private static func displayedMinute(_ time: Date) -> String {
+        time.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func comparisonLabel(_ snapshot: Snapshot, sharedMinutes: Set<String>) -> String {
+        let when = Self.displayedMinute(snapshot.time)
         // The abbreviated time cannot tell snapshots inside the same minute
         // apart; when another candidate shares the displayed minute, a
         // relative stamp says which one came first.
-        let sharesDisplayedMinute = candidates.contains { other in
-            other.id != snapshot.id
-                && other.time.formatted(date: .abbreviated, time: .shortened) == when
-        }
+        let sharesDisplayedMinute = sharedMinutes.contains(when)
         return sharesDisplayedMinute
             ? "\(when) · \(Format.relative(snapshot.time)) · \(snapshot.shortID)"
             : "\(when) · \(snapshot.shortID)"
