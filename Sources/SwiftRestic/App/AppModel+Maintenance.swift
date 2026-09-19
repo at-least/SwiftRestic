@@ -126,4 +126,16 @@ extension AppModel: MaintenanceRunEngine.Sink {
         await broadcast(record: record, plan: nil)
     }
 
+    /// The maintenance engine's closing refresh, handed over uncancelled: the
+    /// engine's own task is cancelled when the run was, and an inherited
+    /// cancel would kill the refresh mid-call. Registered on the registry's
+    /// background lane so a quit drains it rather than orphaning its restic
+    /// children past `terminateAll`.
+    func scheduleSnapshotRefresh(repositoryID: UUID) {
+        guard !isShuttingDown else { return }
+        tasks.addBackground(Task { [weak self] in
+            await self?.refreshSnapshots(repositoryID: repositoryID)
+        })
+    }
+
 }

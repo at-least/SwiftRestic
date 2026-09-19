@@ -73,8 +73,14 @@ enum BackupRunEngine {
                 sink.setActivityPhase(.runningHooks, for: plan.id)
                 let result = await hooks.runHooks(plan.hooks, event: .beforeBackup, context: hookContext)
                 record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
+                    contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
                 )
+                if result.cancelled {
+                    // The user stopped the run while a hook was still going:
+                    // a cancellation, never a hook verdict, so the aborted-run
+                    // machinery below must not fire.
+                    throw ResticError.cancelled
+                }
                 if result.shouldAbort {
                     record.outcome = .failed
                     record.failureMessage =
@@ -182,8 +188,11 @@ enum BackupRunEngine {
             for event in events {
                 let result = await hooks.runHooks(plan.hooks, event: event, context: hookContext)
                 record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
+                    contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
                 )
+                // A cancel landing mid-after-hooks stops the remaining events:
+                // the user asked the app to stop, not this hook to fail.
+                if result.cancelled { break }
             }
             // A failing hook is worth surfacing, but never turns a written
             // snapshot into a failed run.
@@ -216,8 +225,12 @@ enum MaintenanceRunEngine {
         func markPasswordMissing(repositoryID: UUID)
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
         func deliver(record: RunRecord, repository: Repository) async
-        func refreshSnapshots(repositoryID: UUID) async
         func makeHookRunner() -> HookRunner
+        /// The closing snapshot refresh, scheduled by the sink so it runs
+        /// outside this task — a cancelled run leaves its task cancelled, and
+        /// an inline refresh would die with it — and inside whatever
+        /// bookkeeping keeps work from outliving a quit.
+        func scheduleSnapshotRefresh(repositoryID: UUID)
     }
 
     static func perform(
@@ -253,8 +266,13 @@ enum MaintenanceRunEngine {
                     context: hookContext
                 )
                 record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
+                    contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
                 )
+                if result.cancelled {
+                    // Same rule as the backup engine: the user's cancel is a
+                    // cancellation, never a hook verdict.
+                    throw ResticError.cancelled
+                }
                 if result.shouldAbort {
                     record.outcome = .failed
                     record.failureMessage =
@@ -340,8 +358,10 @@ enum MaintenanceRunEngine {
             for event in events {
                 let result = await hooks.runHooks(repository.hooks, event: event, context: hookContext)
                 record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded }.map(\.summary)
+                    contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
                 )
+                // A cancel landing mid-after-hooks stops the remaining events.
+                if result.cancelled { break }
             }
             // Same rule as the backup engine: a failing hook is worth
             // surfacing, but never undoes what the run did — so a successful
@@ -354,6 +374,11 @@ enum MaintenanceRunEngine {
         }
 
         await sink.deliver(record: record, repository: repository)
-        await sink.refreshSnapshots(repositoryID: repository.id)
+        // Scheduled by the sink, not awaited here: a cancelled run leaves
+        // this task cancelled, and an inherited cancel would kill the refresh
+        // mid-call and leave the listing stale after every cancelled check or
+        // prune. (A cancel landing inside the refresh itself is answered
+        // quietly by the sink.)
+        sink.scheduleSnapshotRefresh(repositoryID: repository.id)
     }
 }

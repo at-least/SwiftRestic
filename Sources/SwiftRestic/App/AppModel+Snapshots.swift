@@ -39,6 +39,11 @@ extension AppModel {
             do {
                 stats = try await service.stats(context, timeout: Self.refreshTimeout)
                 statsFailureNoted.remove(repositoryID)
+            } catch ResticError.cancelled {
+                // The refresh was stopped mid-read: not a stats failure to
+                // announce, and not a reason to blank a size an earlier read
+                // already established.
+                stats = repositoryStats[repositoryID]
             } catch {
                 stats = nil
                 if !statsFailureNoted.contains(repositoryID) {
@@ -59,6 +64,13 @@ extension AppModel {
             snapshotsLoadedAt[repositoryID] = .now
             repositoriesMissingPassword.remove(repositoryID)
             indexReconcile(repositoryID: repositoryID, listing: listing)
+        } catch ResticError.cancelled {
+            // A cancelled refresh is the user (or shutdown) stopping the app's
+            // own work, not a repository that could not be read: no banner,
+            // no failed outcome. Both a cancelled maintenance run's closing
+            // refresh and a window close during launch's refresh land here;
+            // the next refresh reports the truth.
+            return
         } catch ResticError.passwordMissing {
             // Expected before the user has entered a password; not worth a banner.
             // The listing surfaces stay honest through the outcome: "waiting for

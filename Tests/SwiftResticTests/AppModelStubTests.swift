@@ -255,6 +255,83 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a cancelled stats read keeps the last size and reports nothing")
+    func cancelledStatsIsQuiet() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // Bootstrap's stats read succeeded, so there is a size to lose: a
+        // cancelled read must neither announce a failure nor blank it.
+        let statsAfterBootstrap = try #require(harness.model.repositoryStats[harness.repository.id])
+        #expect(harness.model.banners.isEmpty)
+
+        // Flip the stub into a mode that hangs only `stats`, through the same
+        // upsert path the repository editor takes.
+        var hanging = harness.repository
+        hanging.extraEnvironment["SWIFTRESTIC_STUB"] = "hang-stats"
+        await harness.model.upsert(repository: hanging, password: nil, providerSecret: nil)
+
+        let refreshTask = Task {
+            await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+        }
+        // The listing answers fast; the hang (detectable only as the live
+        // sleep process — the trace line fires for the fast calls too) is
+        // what guarantees the cancel lands inside the stats read, where a
+        // cancel used to surface the "could not read the size" banner and
+        // blank the size.
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its stats hang"
+        )
+
+        refreshTask.cancel()
+        await refreshTask.value
+
+        #expect(
+            harness.model.banners.isEmpty,
+            "banners were \(harness.model.banners.map(\.title))"
+        )
+        #expect(harness.model.repositoryStats[harness.repository.id] == statsAfterBootstrap)
+        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .loaded)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a cancelled listing read does not report the repository unreadable")
+    func cancelledListingIsQuiet() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let bannersAfterBootstrap = harness.model.banners
+
+        // Hang only `snapshots`: this is the window-close-during-launch shape
+        // — the refresh task itself is cancelled mid-listing, with no engine
+        // involved to hand the refresh off uncancelled.
+        harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "hang-listing"
+
+        let refreshTask = Task {
+            await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+        }
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its listing hang"
+        )
+
+        refreshTask.cancel()
+        await refreshTask.value
+
+        let newBanners = harness.model.banners.filter { !bannersAfterBootstrap.contains($0) }
+        #expect(
+            newBanners.isEmpty,
+            "the cancelled listing read posted: \(newBanners.map(\.title))"
+        )
+        // The bootstrap listing stands; a stopped refresh never overwrites it
+        // with a failure state for a repository that was never read wrong.
+        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .loaded)
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Snapshot listing states
 
     @Test("a successful refresh settles the listing as loaded and stamps freshness")
@@ -627,6 +704,95 @@ struct AppModelStubTests {
         )
 
         await harness.model.shutdown()
+    }
+
+    @Test("cancelling a check does not report the repository unreadable")
+    func cancellingCheckPostsNoFailureBanner() async throws {
+        let harness = try await makeHarness(mode: "hang-check")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // The stub's catch-all answers `[]` for stats, which does not decode —
+        // bootstrap posts one "size" banner for that. The subject here is what
+        // the cancelled run posts, so only banners beyond bootstrap's count.
+        let bannersAfterBootstrap = harness.model.banners
+
+        // The stub's trace counts the fast answers the launch refresh got;
+        // growth after the cancel proves the closing refresh actually ran.
+        func answerCount() -> Int {
+            let trace = (try? String(
+                contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
+                encoding: .utf8
+            )) ?? ""
+            return trace.components(separatedBy: "\n").filter { $0.contains("answer-empty") }.count
+        }
+        let answersBeforeCancel = answerCount()
+
+        harness.model.runMaintenance(id: harness.repository.id, task: .check, readDataPercent: 0)
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+        harness.model.cancelMaintenance(repositoryID: harness.repository.id)
+        await harness.model.waitForMaintenance(repositoryID: harness.repository.id)
+
+        // The closing refresh the cancelled run still performs must neither
+        // die with the cancel nor report the healthy repository unreadable:
+        // the user stopped one run, the repository itself is fine.
+        let settled = Date.now.addingTimeInterval(5)
+        while Date.now < settled, answerCount() <= answersBeforeCancel {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(
+            answerCount() > answersBeforeCancel,
+            "the closing refresh never ran after the cancel"
+        )
+        let newBanners = harness.model.banners.filter { !bannersAfterBootstrap.contains($0) }
+        #expect(
+            newBanners.isEmpty,
+            "the cancelled check posted: \(newBanners.map(\.title))"
+        )
+        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .loaded)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("quitting during a cancelled check spawns no work past shutdown")
+    func quitDuringCancelledCheckSpawnsNoWork() async throws {
+        let harness = try await makeHarness(mode: "hang-check")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runMaintenance(id: harness.repository.id, task: .check, readDataPercent: 0)
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+
+        // Counted after the hung check's own start line: the baseline for
+        // "nothing ran after shutdown returned".
+        func traceLineCount() -> Int {
+            let trace = (try? String(
+                contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
+                encoding: .utf8
+            )) ?? ""
+            return trace.components(separatedBy: "\n").filter { $0.hasPrefix("start ") }.count
+        }
+        let linesAtQuit = traceLineCount()
+
+        // Quit cancels the hung check, waits for the run to unwind, and
+        // flushes — the run's closing refresh must neither spawn restic work
+        // past that point nor outlive the drain.
+        await harness.model.shutdown()
+
+        let settle = Date.now.addingTimeInterval(2)
+        while Date.now < settle { try? await Task.sleep(for: .milliseconds(50)) }
+        #expect(
+            traceLineCount() == linesAtQuit,
+            "the stub was invoked \(traceLineCount() - linesAtQuit) time(s) after shutdown returned"
+        )
+        #expect(
+            await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 5),
+            "the stub process outlived the quit"
+        )
     }
 
     // MARK: - Deletion

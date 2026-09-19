@@ -126,6 +126,51 @@ struct BackupRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .failed)
     }
 
+    @Test("cancelling during a before-backup hook reads as cancelled, not a hook failure")
+    func cancelDuringBeforeHookIsACancellation() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticEngineCancel-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let hookStarted = directory.appendingPathComponent("hook-started")
+        let failureRan = directory.appendingPathComponent("after-failure-ran")
+        var plan = makePlan()
+        var gate = BackupHook()
+        gate.name = "gate"
+        gate.event = .beforeBackup
+        gate.command = "touch \(hookStarted.path); sleep 30"
+        gate.failureBehaviour = .abortBackup
+        var aftermath = BackupHook()
+        aftermath.name = "aftermath"
+        aftermath.event = .afterFailure
+        aftermath.command = "touch \(failureRan.path)"
+        plan.hooks = [gate, aftermath]
+
+        let sink = RecordingSink()
+        let client = MockResticClient().onBackup(.success(successOutcome()))
+        let task = Task {
+            await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        }
+        // The hang is what guarantees the cancel lands inside the hook, the
+        // window where a cancel used to be mislabelled.
+        let deadline = Date.now.addingTimeInterval(10)
+        while Date.now < deadline, !FileManager.default.fileExists(atPath: hookStarted.path) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(FileManager.default.fileExists(atPath: hookStarted.path), "the hook never started")
+        task.cancel()
+        await task.value
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .cancelled, "outcome was \(record.outcome)")
+        #expect(record.hookMessages.isEmpty, "messages were \(record.hookMessages)")
+        #expect(
+            !FileManager.default.fileExists(atPath: failureRan.path),
+            "after-failure hooks fired for a user-initiated cancel"
+        )
+    }
+
     @Test("a retention failure degrades to warnings, never fails the run")
     func retentionFailureIsADegradation() async throws {
         let sink = RecordingSink()
@@ -191,7 +236,14 @@ struct MaintenanceRunEngineTests {
         }
 
         func refreshSnapshots(repositoryID: UUID) async {
-            log.append("refresh")
+            log.append("refresh:cancelled=\(Task.isCancelled)")
+        }
+
+        func scheduleSnapshotRefresh(repositoryID: UUID) {
+            log.append("refresh-scheduled")
+            // The sink's whole job: run the refresh outside the engine's
+            // (possibly cancelled) task.
+            Task { await refreshSnapshots(repositoryID: repositoryID) }
         }
 
         func makeHookRunner() -> HookRunner {
@@ -214,6 +266,37 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
         #expect(sink.deliveredRecords[0].detailText == "No errors found.")
         #expect(sink.log.contains("stamp:check"))
+    }
+
+    @Test("a cancelled check still refreshes snapshots, outside the cancelled task")
+    func cancelledCheckRefreshesOutsideTheCancelledTask() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onCheck(.failure(ResticError.cancelled))
+        let task = Task {
+            await MaintenanceRunEngine.perform(
+                repository: Repository(),
+                task: .check,
+                readDataPercentOverride: nil,
+                sink: StubMaintenanceServiceSink(client: client, base: sink)
+            )
+        }
+        task.cancel()
+        await task.value
+
+        #expect(sink.deliveredRecords[0].outcome == .cancelled)
+        // The closing refresh must actually run — the user still wants a
+        // fresh listing after a prune — and it must not inherit the cancel
+        // that stopped the check, or it dies mid-flight and leaves the
+        // listing stale. The scheduled task lands asynchronously, so poll
+        // for it rather than trusting job ordering.
+        let deadline = Date.now.addingTimeInterval(5)
+        while Date.now < deadline, !sink.log.contains("refresh:cancelled=false") {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(
+            sink.log.contains("refresh:cancelled=false"),
+            "log was \(sink.log)"
+        )
     }
 
     @Test("a check that found errors is a warning, and suggests prune when restic does")
@@ -335,5 +418,6 @@ private final class StubMaintenanceServiceSink: MaintenanceRunEngine.Sink {
         await base.deliver(record: record, repository: repository)
     }
     func refreshSnapshots(repositoryID: UUID) async { await base.refreshSnapshots(repositoryID: repositoryID) }
+    func scheduleSnapshotRefresh(repositoryID: UUID) { base.scheduleSnapshotRefresh(repositoryID: repositoryID) }
     func makeHookRunner() -> HookRunner { base.makeHookRunner() }
 }

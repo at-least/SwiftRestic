@@ -166,4 +166,29 @@ struct HookTests {
         #expect(result.shouldAbort)
         #expect(result.outcomes.map(\.hookName) == ["first", "blocker"])
     }
+
+    @Test("a cancelled run is not recorded as a failed hook")
+    func cancelledHookIsNotAFailure() async throws {
+        var hook = BackupHook()
+        hook.name = "slow gate"
+        hook.event = .beforeBackup
+        hook.command = "sleep 30"
+        hook.failureBehaviour = .abortBackup
+
+        let task = Task {
+            await HookRunner(runner: ResticRunner())
+                .runHooks([hook], event: .beforeBackup, context: context(event: .beforeBackup))
+        }
+        task.cancel()
+        let result = await task.value
+
+        // The user's cancel must not masquerade as the hook failing: no
+        // "exited -1" line reading as a hook error, and no abort decision
+        // made on the cancel's behalf.
+        #expect(!result.shouldAbort, "a cancelled hook must not abort the run")
+        #expect(
+            !result.outcomes.contains { $0.summary.contains("exited") },
+            "summaries were: \(result.outcomes.map(\.summary))"
+        )
+    }
 }

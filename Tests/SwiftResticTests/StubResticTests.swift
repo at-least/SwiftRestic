@@ -87,7 +87,7 @@ struct StubRestic: Sendable {
         esac
 
         case "$SWIFTRESTIC_STUB" in
-            hang | hang-backup | hang-restore | hang-check)
+            hang | hang-backup | hang-restore | hang-check | hang-stats | hang-listing)
                 trace "$SWIFTRESTIC_STUB-arm"
                 # The selective modes hang one subcommand only: AppModel fires
                 # follow-up snapshot/stats refreshes once a run ends, and those
@@ -108,6 +108,18 @@ struct StubRestic: Sendable {
                 if [ "$SWIFTRESTIC_STUB" = "hang-check" ]; then
                     case " $* " in
                         *" check "*) ;;
+                        *) hang_this=0 ;;
+                    esac
+                fi
+                if [ "$SWIFTRESTIC_STUB" = "hang-stats" ]; then
+                    case " $* " in
+                        *" stats "*) ;;
+                        *) hang_this=0 ;;
+                    esac
+                fi
+                if [ "$SWIFTRESTIC_STUB" = "hang-listing" ]; then
+                    case " $* " in
+                        *" snapshots "*) ;;
                         *) hang_this=0 ;;
                     esac
                 fi
@@ -209,13 +221,18 @@ struct StubRestic: Sendable {
                 exit 17
                 ;;
             snaprows)
-                # One well-formed snapshot for `snapshots`, empty answers for
-                # everything else: drives the "a listing that succeeded once,
-                # then a refresh failed" scenarios at the model level.
+                # One well-formed snapshot for `snapshots`, a decodable size
+                # for `stats`, empty answers for everything else: drives the
+                # "a listing that succeeded once, then a refresh failed"
+                # scenarios at the model level — with a size the UI can keep
+                # holding onto when a later read is stopped.
                 trace "snaprows-arm"
                 case " $* " in
                     *" snapshots "*)
                         echo '[{"id":"feedface00000000","short_id":"feedface","time":"2026-01-02T03:04:05Z","hostname":"stub","paths":["/src"],"tags":["stub"]}]'
+                        ;;
+                    *" stats "*)
+                        echo '{"total_size":4096,"total_file_count":1}'
                         ;;
                     *)
                         echo "{}"

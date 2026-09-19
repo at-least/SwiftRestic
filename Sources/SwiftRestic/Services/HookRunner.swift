@@ -54,6 +54,10 @@ struct HookRunner: Sendable {
         var exitCode: Int32
         var output: String
         var timedOut: Bool
+        /// The surrounding run was cancelled while this hook ran. Not a
+        /// verdict on the hook — it never got to finish — and never a reason
+        /// to abort anything or fail a run.
+        var cancelled: Bool = false
 
         var succeeded: Bool { exitCode == 0 && !timedOut }
 
@@ -63,6 +67,7 @@ struct HookRunner: Sendable {
         /// later output is where a verbose HTTP client prints its headers, and
         /// this string is persisted to disk.
         var summary: String {
+            if cancelled { return "Hook “\(hookName)” was cancelled before it finished." }
             if timedOut { return "Hook “\(hookName)” timed out and was stopped." }
             if exitCode == 0 { return "Hook “\(hookName)” succeeded." }
             let firstLine = output
@@ -102,6 +107,16 @@ struct HookRunner: Sendable {
                 output: ResticRunner.tail(of: combined, limit: 2000),
                 timedOut: false
             )
+        } catch ResticError.cancelled {
+            // The run was cancelled, not the hook failing: the caller stops
+            // and records a cancellation instead of a hook verdict.
+            return Outcome(
+                hookName: hook.displayName,
+                exitCode: -1,
+                output: "",
+                timedOut: false,
+                cancelled: true
+            )
         } catch ResticError.timedOut {
             return Outcome(hookName: hook.displayName, exitCode: -1, output: "", timedOut: true)
         } catch {
@@ -114,26 +129,34 @@ struct HookRunner: Sendable {
         }
     }
 
-    /// Runs every enabled hook for an event, in the order the user arranged them.
+    /// Runs every enabled hook for an event, in the order the user arranged
+    /// them. Stops at the first hook to ask for an abort — or at a
+    /// cancellation of the surrounding run, which is nobody's verdict.
     ///
-    /// - Returns: the outcomes, and whether one of them asked to abort.
+    /// - Returns: the outcomes, whether one of them asked to abort, and
+    ///   whether the run was cancelled mid-hook.
     func runHooks(
         _ hooks: [BackupHook],
         event: BackupHook.Event,
         context: Context
-    ) async -> (outcomes: [Outcome], shouldAbort: Bool) {
+    ) async -> (outcomes: [Outcome], shouldAbort: Bool, cancelled: Bool) {
         var outcomes: [Outcome] = []
         var shouldAbort = false
+        var cancelled = false
         for hook in hooks where hook.event == event && hook.isRunnable {
             var hookContext = context
             hookContext.event = event
             let outcome = await run(hook, context: hookContext)
             outcomes.append(outcome)
+            if outcome.cancelled {
+                cancelled = true
+                break
+            }
             if !outcome.succeeded, hook.abortsRunOnFailure {
                 shouldAbort = true
                 break
             }
         }
-        return (outcomes, shouldAbort)
+        return (outcomes, shouldAbort, cancelled)
     }
 }
