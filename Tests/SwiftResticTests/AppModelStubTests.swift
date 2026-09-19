@@ -257,6 +257,71 @@ struct AppModelStubTests {
 
     // MARK: - Snapshot refresh error paths
 
+    @Test("a refresh asked while another is running runs after it, not never")
+    func refreshAskedMidFlightRunsAfterward() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // The first listing after this flip hangs; every later call answers.
+        // This is the shape of a backup's closing refresh arriving while a
+        // launch or manual refresh is still in flight.
+        var hanging = harness.repository
+        hanging.extraEnvironment["SWIFTRESTIC_STUB"] = "hang-once"
+        await harness.model.upsert(repository: hanging, password: nil, providerSecret: nil)
+        let loadedAtStart = try #require(harness.model.snapshotsLoadedAt(for: harness.repository.id))
+
+        let firstRefresh = Task {
+            await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+        }
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+
+        // Arrives while the first refresh holds the in-flight slot; returns
+        // immediately — but the just-finished backup's snapshot must not be
+        // invisible until some unrelated later refresh.
+        await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+
+        firstRefresh.cancel()
+        await firstRefresh.value
+
+        // The remembered request runs to completion after the in-flight one
+        // unwinds: the listing answers (the hang is spent) and freshness
+        // advances past the bootstrap stamp.
+        let rerun = Date.now.addingTimeInterval(10)
+        while Date.now < rerun,
+              harness.model.snapshotsLoadedAt(for: harness.repository.id) == loadedAtStart {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(
+            harness.model.snapshotsLoadedAt(for: harness.repository.id) != loadedAtStart,
+            "the refresh requested mid-flight never ran"
+        )
+        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .loaded)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("the notification event carries the full warning count, not the five-item sample")
+    func notificationEventCountsAllWarnings() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        var record = RunRecord(kind: .backup, planName: "Docs", repositoryID: harness.repository.id)
+        record.outcome = .completedWithErrors
+        record.itemErrorCount = 500
+        record.itemErrors = (1...5).map { "unreadable file \($0)" }
+
+        let event = AppModel.notificationEvent(for: record, repositoryName: "Stub Repo")
+        #expect(event.stage == .warned)
+        #expect(event.warningCount == 500)
+        #expect(event.warnings.count == 5, "the sample stays for the excerpt")
+        #expect(event.summary.contains("500 warning(s)"), "summary was: \(event.summary)")
+
+        await harness.model.shutdown()
+    }
+
     @Test("a repository with no password is flagged, and supplying one clears it")
     func missingPasswordIsFlagged() async throws {
         let harness = try await makeHarness(mode: "default", password: nil)

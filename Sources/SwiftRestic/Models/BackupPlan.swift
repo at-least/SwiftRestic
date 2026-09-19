@@ -29,9 +29,20 @@ struct Schedule: Codable, Sendable, Hashable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         frequency = c.value(.frequency, default: .daily)
         intervalHours = c.value(.intervalHours, default: 4)
-        hour = c.value(.hour, default: 2)
-        minute = c.value(.minute, default: 0)
-        weekday = c.value(.weekday, default: 2)
+        hour = Self.clamped(c.value(.hour, default: 2), 0...23, "schedule.hour")
+        minute = Self.clamped(c.value(.minute, default: 0), 0...59, "schedule.minute")
+        weekday = Self.clamped(c.value(.weekday, default: 2), 1...7, "schedule.weekday")
+    }
+
+    /// A type-valid but out-of-range value ("hour": 25 from a hand-edited
+    /// config) decodes cleanly and then matches no wall-clock time — the plan
+    /// would silently never run. Clamping to the nearest valid time keeps it
+    /// alive, and the substitution is reported like every other one.
+    private static func clamped(_ value: Int, _ range: ClosedRange<Int>, _ field: String) -> Int {
+        guard !range.contains(value) else { return value }
+        let nearest = value < range.lowerBound ? range.lowerBound : range.upperBound
+        DecodeNotes.current?.add("“\(field)” \(value) is out of range — read as \(nearest)")
+        return nearest
     }
 
     var summary: String {

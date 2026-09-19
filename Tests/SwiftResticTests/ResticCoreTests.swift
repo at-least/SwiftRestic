@@ -124,6 +124,24 @@ struct ResticBinaryTests {
         }
     }
 
+    @Test("a tilde in the override is expanded, not taken literally")
+    func tildeOverrideIsExpanded() {
+        // Pinning, not fixing: URL(fileURLWithPath:) itself expands "~" on
+        // this Foundation, so a home-relative override resolves — verified by
+        // probe after a review pass claimed otherwise. If a Foundation update
+        // ever stops expanding, this fails before anyone files the bug.
+        do {
+            _ = try ResticBinary.locate(userOverride: "~/definitely-not-here")
+            Issue.record("a missing override must not be accepted")
+        } catch let ResticError.binaryNotFound(searched) {
+            #expect(searched.count == 1)
+            #expect(!searched[0].hasPrefix("~"), "searched literally: \(searched)")
+            #expect(searched[0].hasPrefix(NSHomeDirectory()), "not home-relative: \(searched)")
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
     @Test("a blank override means 'no override', not a broken path")
     func blankOverrideIsIgnored() {
         // Blank must behave exactly like nil: the same binary where one exists,

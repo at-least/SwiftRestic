@@ -96,7 +96,13 @@ struct NotificationEvent: Sendable, Equatable {
     var operation: String = "Backup"
     var snapshotID: String?
     var errorMessage: String?
+    /// Excerpts only — the first few warnings, for the message body. The full
+    /// count lives in `warningCount`; a summary that counted the sample would
+    /// tell a chat room "5 warnings" about a run that hit 500.
     var warnings: [String] = []
+    /// Every warning the run reported. `nil` when nobody counted (a
+    /// hand-built event, or a run with nothing to count).
+    var warningCount: Int?
     var filesNew: Int = 0
     var bytesProcessed: Int64 = 0
     var dataAdded: Int64 = 0
@@ -112,7 +118,7 @@ struct NotificationEvent: Sendable, Equatable {
             return "\(operation) succeeded: \(subject) — \(Format.bytes(dataAdded)) added"
                 + " in \(Format.duration(duration))"
         case .warned:
-            let count = warnings.count
+            let count = warningCount ?? warnings.count
             return "\(operation) finished with \(count) warning(s): \(subject)"
                 + (warnings.first.map { " — \($0)" } ?? "")
         case .failed:

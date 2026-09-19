@@ -128,6 +128,7 @@ extension AppModel {
         repositoryStats[id] = nil
         snapshotListingOutcomes[id] = nil
         snapshotsLoadedAt[id] = nil
+        pendingSnapshotRefreshes.remove(id)
         repositoriesMissingPassword.remove(id)
         resolvedContexts[id] = nil
         // Both sends quitting should drain: an untracked index drop could

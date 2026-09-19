@@ -68,18 +68,19 @@ struct FolderBrowserView: View {
         // the whole load: a duplicated index query and one restic `ls`
         // spawned and thrown away, on every step into a folder whose
         // preserved version did not cover it. The picker's own flips are
-        // handled by the `onChange` below instead.
+        // handled by the task below instead.
         .task(id: currentPath) { await load() }
-        .onChange(of: chosen?.id) { _, newID in
-            guard let newID, let path = currentPath else { return }
-            // Recorded synchronously, before the fetch task can even start:
-            // two flips delivered in the same update lot must each count, or
-            // the second one reads as this view's own handoff and is
-            // swallowed — leaving the first fetch to lose its race with a
-            // spinner it can never clear.
+        // A picker flip re-lists from the chosen version. Keyed on the
+        // version so the modifier owns the fetch's cancellation: a later flip
+        // or the sheet closing stops the previous fetch and its restic child
+        // instead of orphaning them after dismissal. The synchronous
+        // `listingVersionID` handoff still separates `load`'s own walk-down
+        // (recorded before `chosen` moves) from a user's flip.
+        .task(id: chosen?.id) {
+            guard let newID = chosen?.id, let path = currentPath else { return }
             guard newID != listingVersionID else { return }
             listingVersionID = newID
-            Task { await fetchNodes(versionID: newID, path: path) }
+            await fetchNodes(versionID: newID, path: path)
         }
         .sheet(item: $showingSnapshotBrowser) { snapshotTarget in
             SnapshotBrowserView(target: snapshotTarget)

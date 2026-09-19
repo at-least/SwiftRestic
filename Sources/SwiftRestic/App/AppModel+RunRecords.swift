@@ -33,31 +33,9 @@ extension AppModel {
         let channels = configuration.settings.notificationChannels
         guard channels.contains(where: \.isUsable) else { return }
 
-        let stage: NotificationEvent.Stage
-        switch record.outcome {
-        case .succeeded: stage = .succeeded
-        case .completedWithErrors: stage = .warned
-        case .failed: stage = .failed
-        case .cancelled: stage = .cancelled
-        }
-
         if let planID = plan?.id { activity[planID]?.phase = .notifying }
 
-        let event = NotificationEvent(
-            stage: stage,
-            planName: record.planName,
-            repositoryName: repository(id: record.repositoryID)?.name ?? "",
-            operation: record.kind.rawValue.capitalized,
-            snapshotID: record.snapshotID,
-            errorMessage: record.failureMessage,
-            // restic's own warnings only. `hookMessages` deliberately does not
-            // leave the machine.
-            warnings: Array(record.itemErrors.prefix(5)),
-            filesNew: record.filesNew,
-            bytesProcessed: record.bytesProcessed,
-            dataAdded: record.dataAdded,
-            duration: record.duration
-        )
+        let event = Self.notificationEvent(for: record, repositoryName: repository(id: record.repositoryID)?.name ?? "")
 
         let failures = await NotificationPoster.broadcast(event, to: channels)
         if !failures.isEmpty {
@@ -67,5 +45,35 @@ extension AppModel {
                 isError: true
             ))
         }
+    }
+
+    /// Maps a finished run onto what notifications report. Static so the
+    /// mapping (outcome → stage, the sampled excerpts, the full warning
+    /// count) is testable without driving a whole run.
+    static func notificationEvent(for record: RunRecord, repositoryName: String) -> NotificationEvent {
+        let stage: NotificationEvent.Stage
+        switch record.outcome {
+        case .succeeded: stage = .succeeded
+        case .completedWithErrors: stage = .warned
+        case .failed: stage = .failed
+        case .cancelled: stage = .cancelled
+        }
+        return NotificationEvent(
+            stage: stage,
+            planName: record.planName,
+            repositoryName: repositoryName,
+            operation: record.kind.rawValue.capitalized,
+            snapshotID: record.snapshotID,
+            errorMessage: record.failureMessage,
+            // restic's own warnings only. `hookMessages` deliberately does not
+            // leave the machine. The excerpts are for the message body; the
+            // count is what the summary announces.
+            warnings: Array(record.itemErrors.prefix(5)),
+            warningCount: record.itemErrorCount > 0 ? record.itemErrorCount : nil,
+            filesNew: record.filesNew,
+            bytesProcessed: record.bytesProcessed,
+            dataAdded: record.dataAdded,
+            duration: record.duration
+        )
     }
 }

@@ -30,6 +30,11 @@ final class AppModel {
     var snapshots: [UUID: [Snapshot]] = [:]
     var repositoryStats: [UUID: RepositoryStats] = [:]
     var loadingSnapshots: Set<UUID> = []
+    /// Refreshes that arrived while one was already in flight. Each is run
+    /// once the in-flight refresh lands — dropped, the snapshot a just-
+    /// finished backup wrote would stay invisible until some unrelated
+    /// refresh happened along.
+    @ObservationIgnored var pendingSnapshotRefreshes: Set<UUID> = []
     /// The last settled listing outcome per repository. Kept apart from the
     /// rows themselves: a failed refresh must read as "unknown", never as the
     /// empty list it used to be folded into.

@@ -23,9 +23,25 @@ extension AppModel {
 
     func refreshSnapshots(repositoryID: UUID) async {
         guard let repository = repository(id: repositoryID) else { return }
-        guard !loadingSnapshots.contains(repositoryID) else { return }
+        guard !loadingSnapshots.contains(repositoryID) else {
+            // A second refresh while one runs (a backup's closing refresh
+            // racing the launch refresh, say) must not be dropped: the first
+            // one's listing predates whatever the second one needs to see.
+            // Remember it; the in-flight refresh re-runs it when it lands.
+            pendingSnapshotRefreshes.insert(repositoryID)
+            return
+        }
         loadingSnapshots.insert(repositoryID)
-        defer { loadingSnapshots.remove(repositoryID) }
+        defer {
+            loadingSnapshots.remove(repositoryID)
+            if pendingSnapshotRefreshes.remove(repositoryID) != nil {
+                // In a fresh task: this one's cancellation must not bleed
+                // into the rerun (a cancelled in-flight refresh unwinds
+                // through here too), and `refreshSnapshots` re-enters the
+                // guard cleanly.
+                Task { await self.refreshSnapshots(repositoryID: repositoryID) }
+            }
+        }
 
         do {
             let service = try service()

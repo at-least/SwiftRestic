@@ -205,6 +205,36 @@ struct TolerantDecodingTests {
         #expect(notes.notes.count == 7)
     }
 
+    @Test("out-of-range schedule values clamp to the nearest runnable time, and say so")
+    func outOfRangeScheduleClamps() throws {
+        // A hand-edited "hour": 25 decodes cleanly and then never matches a
+        // wall-clock time — the plan would silently never run. Clamping keeps
+        // the plan alive at the nearest valid time and reports the edit.
+        let decoder = JSONDecoder()
+        let notes = DecodeNoteBox()
+        let plan = try DecodeNotes.$current.withValue(notes) {
+            try decoder.decode(
+                BackupPlan.self,
+                from: Data(#"{"schedule":{"frequency":"weekly","hour":25,"minute":99,"weekday":9}}"#.utf8)
+            )
+        }
+        #expect(plan.schedule.hour == 23)
+        #expect(plan.schedule.minute == 59)
+        #expect(plan.schedule.weekday == 7)
+        let recorded = notes.notes.joined(separator: " · ")
+        #expect(recorded.contains("hour"))
+        #expect(recorded.contains("minute"))
+        #expect(recorded.contains("weekday"))
+
+        // In-range values pass through without a word.
+        let quiet = try decoder.decode(
+            BackupPlan.self,
+            from: Data(#"{"schedule":{"frequency":"daily","hour":8,"minute":30}}"#.utf8)
+        )
+        #expect(quiet.schedule.hour == 8)
+        #expect(quiet.schedule.minute == 30)
+    }
+
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")
     func wrongTypedValues() throws {
         // keepLast is a string; keepDaily is untouched next to it.

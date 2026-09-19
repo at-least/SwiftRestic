@@ -87,6 +87,25 @@ struct StubRestic: Sendable {
         esac
 
         case "$SWIFTRESTIC_STUB" in
+            hang-once)
+                # Hangs the very first invocation only, answers every later
+                # one: drives the "a request arrived while the first read
+                # hung" paths deterministically — the flag lives beside the
+                # trace log, so no extra environment is needed.
+                trace "hang-once-arm"
+                flag="$(dirname "$SWIFTRESTIC_TRACE")/hang-once.flag"
+                if [ ! -f "$flag" ]; then
+                    touch "$flag"
+                    trap 'kill -TERM "$sleepChild" 2>/dev/null' TERM
+                    sleep \(sleepMarker) &
+                    sleepChild=$!
+                    wait "$sleepChild"
+                    exit 0
+                fi
+                trace "hang-once-answered"
+                echo "[]"
+                exit 0
+                ;;
             hang | hang-backup | hang-restore | hang-check | hang-stats | hang-listing)
                 trace "$SWIFTRESTIC_STUB-arm"
                 # The selective modes hang one subcommand only: AppModel fires

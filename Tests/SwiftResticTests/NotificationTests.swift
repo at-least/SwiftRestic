@@ -193,3 +193,32 @@ struct NotificationSafetyTests {
         #expect(!outcome.summary.contains("Bearer"))
     }
 }
+
+/// The chat-facing summary must count every warning restic reported, not the
+/// five-item sample the event carries for excerpts.
+@Suite("warning counts")
+struct WarningCountTests {
+    @Test("the warned summary counts all warnings, with or without an explicit count")
+    func warnedSummaryCountsAll() {
+        var event = NotificationEvent(
+            stage: .warned,
+            planName: "Documents",
+            repositoryName: "NAS"
+        )
+        event.warnings = ["warning 1", "warning 2", "warning 3", "warning 4", "warning 5"]
+        event.warningCount = 500
+        #expect(event.summary.contains("500 warning(s)"), "summary was: \(event.summary)")
+        #expect(!event.summary.contains("5 warning(s)"), "summary was: \(event.summary)")
+
+        // Without a count (hand-built events, or a run with none), the
+        // sample's own length is the answer.
+        var bare = event
+        bare.warningCount = nil
+        #expect(bare.summary.contains("5 warning(s)"), "summary was: \(bare.summary)")
+
+        var two = event
+        two.warnings = ["one", "two"]
+        two.warningCount = nil
+        #expect(two.summary.contains("2 warning(s)"), "summary was: \(two.summary)")
+    }
+}
