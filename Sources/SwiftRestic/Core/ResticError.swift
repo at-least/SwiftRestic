@@ -28,6 +28,10 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// than papered over: a backup app's numbers must be right or absent,
     /// never silently zero.
     case malformedOutput(command: String, detail: String)
+    /// A `restic dump` ran to completion but its output could not be moved
+    /// into place at the destination. The staged copy is gone; whatever the
+    /// destination held before is untouched.
+    case dumpMoveFailed(path: String, reason: String)
 
     var errorDescription: String? {
         switch self {
@@ -64,6 +68,8 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "Stopped reporting any progress for \(Int(seconds))s and was stopped as hung — check the repository's connection and try again."
         case let .malformedOutput(_, detail):
             return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output — none of its numbers were guessed at."
+        case let .dumpMoveFailed(path, reason):
+            return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
         }
     }
 

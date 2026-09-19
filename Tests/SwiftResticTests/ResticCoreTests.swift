@@ -304,3 +304,99 @@ struct PasswordPrecedenceTests {
         #expect(context(extra: ["AWS_ACCESS_KEY_ID": "y"]).overriddenExtraEnvironmentKeys.isEmpty)
     }
 }
+
+/// The `stdoutFile` path — single-file restores through `restic dump`. The
+/// destination is user data: a failed or cancelled dump must leave whatever
+/// was there before exactly as it was, and no partial sibling behind.
+@Suite("stdout file dump")
+struct StdoutFileDumpTests {
+    private func makeDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticDump-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func partialSiblings(in directory: URL) -> [String] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        return names.filter { $0.hasSuffix(".partial") }
+    }
+
+    @Test("a successful dump writes the target and leaves no partial sibling")
+    func successfulDumpCommits() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("a.txt")
+
+        _ = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(
+                arguments: ["-c", "printf 'restored bytes'"],
+                stdoutFile: target
+            )
+        )
+
+        #expect(try String(contentsOf: target, encoding: .utf8) == "restored bytes")
+        #expect(partialSiblings(in: directory).isEmpty, "left behind: \(partialSiblings(in: directory))")
+    }
+
+    @Test("a failed dump leaves a pre-existing target untouched")
+    func failedDumpPreservesTarget() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("a.txt")
+        try "old contents".write(to: target, atomically: false, encoding: .utf8)
+
+        await #expect(throws: ResticError.self) {
+            _ = try await ResticRunner().run(
+                binary: URL(fileURLWithPath: "/bin/sh"),
+                invocation: ResticInvocation(
+                    arguments: ["-c", "printf 'partial garbage'; exit 3"],
+                    stdoutFile: target
+                )
+            )
+        }
+
+        #expect(
+            try String(contentsOf: target, encoding: .utf8) == "old contents",
+            "the destination was clobbered by a failed run"
+        )
+        #expect(partialSiblings(in: directory).isEmpty, "left behind: \(partialSiblings(in: directory))")
+    }
+
+    @Test("a cancelled dump leaves a pre-existing target untouched")
+    func cancelledDumpPreservesTarget() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let markerDirectory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: markerDirectory) }
+        let marker = markerDirectory.appendingPathComponent("started")
+        let target = directory.appendingPathComponent("a.txt")
+        try "old contents".write(to: target, atomically: false, encoding: .utf8)
+
+        let task = Task {
+            try await ResticRunner().run(
+                binary: URL(fileURLWithPath: "/bin/sh"),
+                invocation: ResticInvocation(
+                    arguments: ["-c", "touch \(marker.path); printf 'partial'; sleep 30"],
+                    stdoutFile: target
+                )
+            )
+        }
+        // The marker is what guarantees the cancel lands after the dump
+        // started, with the child's stdout already flowing.
+        let deadline = Date.now.addingTimeInterval(10)
+        while Date.now < deadline, !FileManager.default.fileExists(atPath: marker.path) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(FileManager.default.fileExists(atPath: marker.path), "the dump never started")
+        task.cancel()
+        await #expect(throws: ResticError.self) { try await task.value }
+
+        #expect(
+            try String(contentsOf: target, encoding: .utf8) == "old contents",
+            "the destination was clobbered by a cancelled run"
+        )
+        #expect(partialSiblings(in: directory).isEmpty, "left behind: \(partialSiblings(in: directory))")
+    }
+}

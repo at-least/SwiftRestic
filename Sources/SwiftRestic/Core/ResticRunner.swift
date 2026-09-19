@@ -147,10 +147,25 @@ actor ResticRunner {
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         var stdoutFileHandle: FileHandle?
+        var dumpStagingURL: URL?
+        var dumpCommitted = false
         if let stdoutFile = invocation.stdoutFile {
-            FileManager.default.createFile(atPath: stdoutFile.path, contents: nil)
-            let fh = try FileHandle(forWritingTo: stdoutFile)
+            // The dump writes to a hidden sibling and replaces the target by
+            // rename only after the run exits cleanly: a failed, hung or
+            // cancelled run must leave whatever the user already had at the
+            // destination exactly as it was — not a truncated or half-written
+            // replacement that reads as a restored file.
+            let staging = stdoutFile.deletingLastPathComponent()
+                .appendingPathComponent(".\(stdoutFile.lastPathComponent).\(UUID().uuidString).partial")
+            guard FileManager.default.createFile(atPath: staging.path, contents: nil) else {
+                throw ResticError.dumpMoveFailed(
+                    path: stdoutFile.path,
+                    reason: "the directory is not writable"
+                )
+            }
+            let fh = try FileHandle(forWritingTo: staging)
             stdoutFileHandle = fh
+            dumpStagingURL = staging
             process.standardOutput = fh
         } else {
             process.standardOutput = stdoutPipe
@@ -161,6 +176,15 @@ actor ResticRunner {
         // success path leaks the descriptor into the actor's lifetime on
         // every other one. Installed here, before anything can throw.
         defer { try? stdoutFileHandle?.close() }
+        // An uncommitted staging file is garbage on every path that did not
+        // end in a clean rename — the throws below, a cancellation, a
+        // timeout. (It runs before the close above unwinds; removing an
+        // open file is fine on POSIX — the descriptor keeps the inode.)
+        defer {
+            if let staging = dumpStagingURL, !dumpCommitted {
+                try? FileManager.default.removeItem(at: staging)
+            }
+        }
         // No terminal is attached, so a backend that tries to prompt (an SFTP
         // host-key confirmation, say) must fail fast rather than hang on a stdin
         // that will never answer.
@@ -314,6 +338,19 @@ actor ResticRunner {
                 message: message,
                 command: invocation.displayCommand
             )
+        }
+
+        // The run exited cleanly: now, and only now, does the staged dump
+        // replace the destination — atomically, so the target is never a
+        // half-written file regardless of when the process dies.
+        if let staging = dumpStagingURL, let target = invocation.stdoutFile {
+            if Darwin.rename(staging.path, target.path) != 0 {
+                throw ResticError.dumpMoveFailed(
+                    path: target.path,
+                    reason: String(cString: Darwin.strerror(Darwin.errno))
+                )
+            }
+            dumpCommitted = true
         }
 
         return ResticRunResult(
