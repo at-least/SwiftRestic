@@ -34,12 +34,14 @@ extension AppModel {
         loadingSnapshots.insert(repositoryID)
         defer {
             loadingSnapshots.remove(repositoryID)
-            if pendingSnapshotRefreshes.remove(repositoryID) != nil {
-                // In a fresh task: this one's cancellation must not bleed
-                // into the rerun (a cancelled in-flight refresh unwinds
-                // through here too), and `refreshSnapshots` re-enters the
-                // guard cleanly.
-                Task { await self.refreshSnapshots(repositoryID: repositoryID) }
+            if pendingSnapshotRefreshes.remove(repositoryID) != nil, !isShuttingDown {
+                // Registered on the background lane like the maintenance
+                // engine's closing refresh: that lane is what a quit drains,
+                // and the guard keeps a shutdown-time unwind from spawning
+                // restic work past `terminateAll`.
+                tasks.addBackground(Task { [weak self] in
+                    await self?.refreshSnapshots(repositoryID: repositoryID)
+                })
             }
         }
 

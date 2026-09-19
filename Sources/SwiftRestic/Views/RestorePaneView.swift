@@ -408,9 +408,18 @@ struct RestorePaneView: View {
         }
 
         // Re-open the folder the user was in. The first missing ancestor
-        // stops the walk: this backup does not contain that folder.
+        // stops the walk: this backup does not contain that folder — a
+        // listing that answers without it is as much an answer as a failed
+        // fetch, and the pane must say so rather than showing a shallower
+        // tree with breadcrumbs that claim the deeper path.
         var deepest: String?
         for step in spine {
+            guard tree.node(at: step) != nil else {
+                guard !Task.isCancelled else { return }
+                folderMissing = true
+                isLoadingTree = false
+                return
+            }
             if let needed = tree.toggleExpanded(path: step) {
                 do {
                     let nodes = try await model.children(

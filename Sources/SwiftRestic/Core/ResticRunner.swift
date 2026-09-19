@@ -163,7 +163,15 @@ actor ResticRunner {
                     reason: "the directory is not writable"
                 )
             }
-            let fh = try FileHandle(forWritingTo: staging)
+            let fh: FileHandle
+            do {
+                fh = try FileHandle(forWritingTo: staging)
+            } catch {
+                // The staging file exists but was never opened, and the
+                // defers below are not installed yet: clean it up here.
+                try? FileManager.default.removeItem(at: staging)
+                throw error
+            }
             stdoutFileHandle = fh
             dumpStagingURL = staging
             process.standardOutput = fh

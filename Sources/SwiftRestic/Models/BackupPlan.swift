@@ -28,7 +28,10 @@ struct Schedule: Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         frequency = c.value(.frequency, default: .daily)
-        intervalHours = c.value(.intervalHours, default: 4)
+        // The editor's own range (1...24): a value beyond it cannot come from
+        // the stepper, only a hand-edited config — where a huge one would
+        // overflow the scheduler's `intervalHours * 3600` on its next tick.
+        intervalHours = Self.clamped(c.value(.intervalHours, default: 4), 1...24, "schedule.intervalHours")
         hour = Self.clamped(c.value(.hour, default: 2), 0...23, "schedule.hour")
         minute = Self.clamped(c.value(.minute, default: 0), 0...59, "schedule.minute")
         weekday = Self.clamped(c.value(.weekday, default: 2), 1...7, "schedule.weekday")

@@ -322,6 +322,47 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("quitting while a remembered refresh waits spawns no work past shutdown")
+    func quitWithPendingRefreshSpawnsNoWork() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // The in-flight refresh is one the app itself would own — the
+        // maintenance engine's closing refresh, on the registry's background
+        // lane — not a bare task shutdown never promised to await.
+        var hanging = harness.repository
+        hanging.extraEnvironment["SWIFTRESTIC_STUB"] = "hang-once"
+        await harness.model.upsert(repository: hanging, password: nil, providerSecret: nil)
+
+        func traceLineCount() -> Int {
+            let trace = (try? String(
+                contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
+                encoding: .utf8
+            )) ?? ""
+            return trace.components(separatedBy: "\n").filter { $0.hasPrefix("start ") }.count
+        }
+
+        harness.model.scheduleSnapshotRefresh(repositoryID: harness.repository.id)
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+        // Arrives while the first still holds the in-flight slot: remembered.
+        await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+
+        await harness.model.shutdown()
+        let linesAtReturn = traceLineCount()
+
+        // The remembered rerun must not run past the shutdown drain,
+        // unregistered, after terminateAll.
+        let settle = Date.now.addingTimeInterval(2)
+        while Date.now < settle { try? await Task.sleep(for: .milliseconds(50)) }
+        #expect(
+            traceLineCount() == linesAtReturn,
+            "the stub was invoked \(traceLineCount() - linesAtReturn) time(s) after shutdown returned"
+        )
+    }
+
     @Test("a repository with no password is flagged, and supplying one clears it")
     func missingPasswordIsFlagged() async throws {
         let harness = try await makeHarness(mode: "default", password: nil)

@@ -221,10 +221,27 @@ struct TolerantDecodingTests {
         #expect(plan.schedule.hour == 23)
         #expect(plan.schedule.minute == 59)
         #expect(plan.schedule.weekday == 7)
+        // A huge interval would trap the scheduler's `intervalHours * 3600`
+        // the next time it ticks; zero renders "Every 0 hours".
+        let hourly = try DecodeNotes.$current.withValue(notes) {
+            try decoder.decode(
+                BackupPlan.self,
+                from: Data(#"{"schedule":{"frequency":"hourly","intervalHours":9000000000000000}}"#.utf8)
+            )
+        }
+        #expect(hourly.schedule.intervalHours == 24)
+        // The clamped plan schedules without trapping.
+        _ = hourly.schedule.nextRunDate(after: nil, now: Date.now)
+        let zeroPlan = try decoder.decode(
+            BackupPlan.self,
+            from: Data(#"{"schedule":{"frequency":"hourly","intervalHours":0}}"#.utf8)
+        )
+        #expect(zeroPlan.schedule.intervalHours == 1)
         let recorded = notes.notes.joined(separator: " · ")
         #expect(recorded.contains("hour"))
         #expect(recorded.contains("minute"))
         #expect(recorded.contains("weekday"))
+        #expect(recorded.contains("intervalHours"))
 
         // In-range values pass through without a word.
         let quiet = try decoder.decode(
