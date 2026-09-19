@@ -204,6 +204,57 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a late restore-progress hop after the run unwound is dropped")
+    func lateRestoreProgressHopIsDropped() async throws {
+        // hang-restore hangs only the restore/dump command, so launch-time
+        // snapshot refreshes still answer.
+        let harness = try await makeHarness(mode: "hang-restore")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt")
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            node: node,
+            to: harness.root.appendingPathComponent("restored")
+        )
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+
+        // The reporter this run built, captured while the run is still live.
+        let runReporter = harness.model.restoreProgressReporter()
+
+        harness.model.cancelRestore()
+        await waitUntilRestoreFinishes(in: harness.model)
+        #expect(!harness.model.isRestoring)
+
+        // The hop that was in flight when the unwind ran must not resurrect
+        // the strip — a resurrected restoreActivity sticks forever: nothing
+        // else clears it, quit always claims a restore is running, and the
+        // restore buttons stay disabled.
+        runReporter(OperationProgress())
+        let settle = Date.now.addingTimeInterval(1)
+        while Date.now < settle { try? await Task.sleep(for: .milliseconds(20)) }
+        #expect(!harness.model.isRestoring, "a late hop resurrected the restore strip")
+
+        // Positive control: a reporter built after the unwind — for whatever
+        // run comes next — still writes.
+        let freshReporter = harness.model.restoreProgressReporter()
+        freshReporter(OperationProgress())
+        let wrote = Date.now.addingTimeInterval(2)
+        while Date.now < wrote, !harness.model.isRestoring {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(harness.model.isRestoring)
+        // Slot-less tidy: no restore is actually running; leave the model
+        // clean for shutdown.
+        harness.model.restoreActivity = nil
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Snapshot refresh error paths
 
     @Test("a repository with no password is flagged, and supplying one clears it")

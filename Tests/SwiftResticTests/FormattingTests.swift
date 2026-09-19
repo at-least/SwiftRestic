@@ -170,4 +170,34 @@ struct FormattingTests {
         #expect(Format.crumbs(of: "/other/file", roots: ["/other Extended", "/other"]).map(\.target) == ["/other", "/other/file"])
     }
 
+    @Test("a whole-disk root breadcrumbs and chains every absolute path")
+    func rootSlashMatchesEverything() {
+        // "/" contains every absolute path: the naive prefix check
+        // (`path.hasPrefix(root + "/")` → "//") matches nothing at all.
+        #expect(Format.crumbs(of: "/Users/x/Report.pdf", roots: ["/"]).map(\.target)
+            == ["/", "/Users", "/Users/x", "/Users/x/Report.pdf"])
+        #expect(Format.crumbs(of: "/Users/x/Report.pdf", roots: ["/"]).map(\.label)
+            == ["/", "Users", "x", "Report.pdf"])
+
+        // The ancestor chain the restore browser re-opens walks from "/" too.
+        #expect(Format.pathChain(of: "/etc/hosts", roots: ["/"]) == ["/", "/etc", "/etc/hosts"])
+        #expect(Format.pathChain(of: "/", roots: ["/"]) == ["/"])
+    }
+
+    @Test("the containing root is the longest match, not the first")
+    func longestRootWins() {
+        // A whole-disk plan may coexist with narrower roots (a second plan on
+        // the same repository): "/Users/x" is the honest crumb root there.
+        #expect(Format.crumbs(of: "/Users/x/f.txt", roots: ["/", "/Users/x"]).map(\.target)
+            == ["/Users/x", "/Users/x/f.txt"])
+        #expect(Format.pathChain(of: "/Users/x/f.txt", roots: ["/", "/Users/x"])
+            == ["/Users/x", "/Users/x/f.txt"])
+
+        // Outside every narrower root, "/" still answers.
+        #expect(Format.pathChain(of: "/etc/hosts", roots: ["/", "/Users/x"]) == ["/", "/etc", "/etc/hosts"])
+
+        // No root at all: nothing to chain.
+        #expect(Format.pathChain(of: "/etc/hosts", roots: []) == [])
+    }
+
 }

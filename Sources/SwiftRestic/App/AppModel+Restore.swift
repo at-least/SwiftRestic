@@ -5,21 +5,36 @@ extension AppModel {
 
     var isRestoring: Bool { restoreActivity != nil }
 
+    /// The restore progress reporter for the run the model is on right now.
+    /// Progress fires from the runner's reader threads, so a hop can still be
+    /// in flight when a cancelled restore unwinds — the token (rotated at
+    /// unwind) is what keeps such a late hop from resurrecting the strip,
+    /// which nothing else would ever clear.
+    func restoreProgressReporter() -> @Sendable (OperationProgress) -> Void {
+        let token = restoreRunToken
+        return { [weak self] progress in
+            Task { @MainActor in
+                guard let self, self.restoreRunToken == token else { return }
+                self.restoreActivity = progress
+            }
+        }
+    }
+
     func restore(
         repositoryID: UUID,
         snapshotID: String,
         node: SnapshotNode,
         to destination: URL
     ) {
-        beginRestore(repositoryID: repositoryID, label: node.name) { [weak self] service, context in
+        let reporter = restoreProgressReporter()
+        beginRestore(repositoryID: repositoryID, label: node.name) { service, context in
             try await service.restore(
                 context,
                 snapshotID: snapshotID,
                 node: node,
-                destinationDirectory: destination
-            ) { progress in
-                Task { @MainActor in self?.restoreActivity = progress }
-            }
+                destinationDirectory: destination,
+                onProgress: reporter
+            )
         } onSuccess: { [weak self] in
             self?.post(Banner(
                 title: "Restored \(node.name)",
@@ -33,14 +48,14 @@ extension AppModel {
     /// Restores every file in a snapshot, keeping the original absolute layout
     /// beneath `destination`.
     func restoreWholeSnapshot(repositoryID: UUID, snapshotID: String, to destination: URL) {
-        beginRestore(repositoryID: repositoryID, label: "snapshot \(snapshotID.prefix(8))") { [weak self] service, context in
+        let reporter = restoreProgressReporter()
+        beginRestore(repositoryID: repositoryID, label: "snapshot \(snapshotID.prefix(8))") { service, context in
             try await service.restoreWholeSnapshot(
                 context,
                 snapshotID: snapshotID,
-                destinationDirectory: destination
-            ) { progress in
-                Task { @MainActor in self?.restoreActivity = progress }
-            }
+                destinationDirectory: destination,
+                onProgress: reporter
+            )
         } onSuccess: { [weak self] in
             self?.post(Banner(
                 title: "Restored snapshot",
@@ -117,6 +132,9 @@ extension AppModel {
             self.restoreActivity = nil
             self.restoreDescription = ""
             self.restoreRepositoryID = nil
+            // After the strip clears: any progress hop from this run still
+            // in flight must find a changed token and drop.
+            self.restoreRunToken = UUID()
             self.tasks.clear(.restore)
         }, in: .restore)
     }

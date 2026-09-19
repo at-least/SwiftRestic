@@ -116,25 +116,46 @@ enum Format {
         return "\(ByteCountFormatter.string(fromByteCount: perSecond, countStyle: .file))/s"
     }
 
+    /// The root that contains an absolute path, longest match first: a
+    /// whole-disk root (`/`) contains every absolute path, and where it
+    /// coexists with narrower roots the narrower one is the honest answer.
+    /// The naive prefix check (`path.hasPrefix(root + "/")`) can never match
+    /// `/` — it would ask for a leading `//`.
+    static func containingRoot(of path: String, in roots: [String]) -> String? {
+        roots
+            .filter { root in
+                root == "/"
+                    ? path.hasPrefix("/")
+                    : (path == root || path.hasPrefix(root + "/"))
+            }
+            .max { $0.count < $1.count }
+    }
+
+    /// The ancestor chain of a path from its containing root down to itself,
+    /// inclusive — the spine a tree must be expanded along to bring the path
+    /// back on screen. Empty outside every root.
+    static func pathChain(of path: String, roots: [String]) -> [String] {
+        guard let root = containingRoot(of: path, in: roots) else { return [] }
+        var chain = [root]
+        let remainder = root == "/" ? path.dropFirst() : path.dropFirst(root.count + 1)
+        var walked = root
+        for segment in remainder.split(separator: "/") {
+            walked = walked == "/" ? "/\(segment)" : walked + "/\(segment)"
+            chain.append(walked)
+        }
+        return chain
+    }
+
     /// Splits an absolute path into clickable crumbs, walking down from the
     /// deepest root that contains it — `/tmp/src/Documents` under root
     /// `/tmp/src` becomes [(src, /tmp/src), (Documents, /tmp/src/Documents)].
     /// Paths outside every root yield no crumbs: navigation never reaches
     /// above the backed-up scope. Root labels are the root's own basename.
     static func crumbs(of path: String, roots: [String]) -> [(label: String, target: String)] {
-        guard let root = roots.first(where: { path == $0 || path.hasPrefix($0 + "/") }) else {
-            return []
+        pathChain(of: path, roots: roots).map { step in
+            let label = step.split(separator: "/").last.map(String.init) ?? step
+            return (label, step)
         }
-        var crumbs: [(label: String, target: String)] = []
-        let rootLabel = root.split(separator: "/").last.map(String.init) ?? root
-        crumbs.append((rootLabel, root))
-        let remainder = root == "/" ? path.dropFirst() : path.dropFirst(root.count + 1)
-        var walked = root
-        for segment in remainder.split(separator: "/") {
-            walked = walked == "/" ? "/\(segment)" : walked + "/\(segment)"
-            crumbs.append((String(segment), walked))
-        }
-        return crumbs
     }
 
 }

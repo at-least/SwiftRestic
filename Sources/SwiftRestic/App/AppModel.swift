@@ -70,6 +70,10 @@ final class AppModel {
     /// restore; kept beside the task because the task alone cannot be asked
     /// what it is working on.
     var restoreRepositoryID: UUID?
+    /// Which restore run the progress strip belongs to. Rotated when a run
+    /// unwinds so a progress hop still in flight from that run drops instead
+    /// of resurrecting the cleared strip. See `restoreProgressReporter()`.
+    @ObservationIgnored var restoreRunToken = UUID()
 
     let store: ConfigStore
     let secrets: SecretStore

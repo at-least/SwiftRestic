@@ -386,7 +386,7 @@ struct RestorePaneView: View {
             return
         }
         loadedSnapshotID = record.id
-        let spine = Self.spine(of: currentPath, under: record.paths)
+        let spine = currentPath.map { Format.pathChain(of: $0, roots: record.paths) } ?? []
         tree.reset(to: record.paths.map(SnapshotNode.directory))
 
         isLoadingTree = true
@@ -434,22 +434,6 @@ struct RestorePaneView: View {
         isLoadingTree = false
     }
 
-    /// The folder's ancestor chain, deepest-containing-root first — the order
-    /// the tree must be expanded in to bring `currentPath` back on screen.
-    private static func spine(of path: String?, under roots: [String]) -> [String] {
-        guard let path else { return [] }
-        guard let root = roots.first(where: { path == $0 || path.hasPrefix($0 + "/") }) else {
-            return [path]
-        }
-        var spine: [String] = [root]
-        var walked = root
-        for segment in path.dropFirst(root.count + 1).split(separator: "/") {
-            walked = walked == "/" ? "/\(segment)" : walked + "/\(segment)"
-            spine.append(walked)
-        }
-        return spine
-    }
-
     private func expand(path: String) {
         guard let needed = tree.toggleExpanded(path: path) else { return }
         guard let record else { return }
@@ -474,6 +458,10 @@ struct RestorePaneView: View {
                 // tree must stay that record's.
                 guard loadedSnapshotID == record.id, !Task.isCancelled else { return }
                 tree.replaceChildren(of: needed, nodes: nodes)
+                // A folder that answers heals the pane: `loadError` replaces
+                // the whole browser, so a transient failure must not outlive
+                // the next successful read.
+                loadError = nil
             } catch {
                 guard loadedSnapshotID == record.id, !Task.isCancelled else { return }
                 // The chevron opened a folder that never arrived — close it
@@ -503,6 +491,10 @@ struct RestorePaneView: View {
         guard !query.isEmpty, let record else {
             searchTask?.cancel()
             searchHits = nil
+            // Back on the tree means back on the tree: a stale load error
+            // replaces the whole browser, and clearing the search is a fresh
+            // look, not a still-failing one.
+            loadError = nil
             return
         }
         // The results must answer to what was typed and the record they were
@@ -533,6 +525,9 @@ struct RestorePaneView: View {
             guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
             searchHits = covered
             selection = nil
+            // The index answered: a load error from an earlier failed read
+            // must not sit in front of these results or behind them.
+            loadError = nil
         }
     }
 

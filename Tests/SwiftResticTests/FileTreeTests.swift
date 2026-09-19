@@ -107,4 +107,20 @@ struct FileTreeTests {
         tree.replaceChildren(of: "/src", nodes: [file("/src/a.txt"), dir("/src/sub")])
         #expect(tree.rows.map(\.node.path) == ["/src", "/src/a.txt", "/src/sub"])
     }
+
+    @Test("a listing that lands on a folder collapsed mid-fetch is not installed")
+    func collapsedFolderRefusesLateListing() throws {
+        var tree = FileTree(roots: [dir("/src")])
+        _ = tree.toggleExpanded(path: "/src")
+        // The user collapses while the fetch is in flight; the fetch is not
+        // cancelled, so its listing lands on a collapsed folder.
+        _ = tree.toggleExpanded(path: "/src")
+        tree.replaceChildren(of: "/src", nodes: [file("/src/a.txt")])
+
+        // Collapsed stays collapsed: no rows appear under a folder the user
+        // closed, and the folder stays "unloaded" so re-expanding refetches.
+        #expect(tree.rows.map(\.node.path) == ["/src"], "rows were \(tree.rows.map(\.node.path))")
+        #expect(tree.rows[0].childrenLoaded == false)
+        #expect(tree.toggleExpanded(path: "/src") == "/src")
+    }
 }
