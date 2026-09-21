@@ -222,7 +222,7 @@ actor ResticRunner {
             Task {
                 try? await Task.sleep(for: .seconds(seconds))
                 guard !Task.isCancelled else { return }
-                box.terminate(dueToTimeout: true)
+                box.terminate(timeout: true)
             }
         }
         defer { watchdog?.cancel() }
@@ -236,7 +236,7 @@ actor ResticRunner {
                     try? await Task.sleep(for: .seconds(1))
                     guard !Task.isCancelled else { return }
                     if let box, box.idleInterval >= seconds {
-                        box.terminate(dueToIdleTimeout: true)
+                        box.terminate(idleTimeout: true)
                         return
                     }
                 }
@@ -459,26 +459,17 @@ private final class ProcessBox: @unchecked Sendable {
         self.lastActivity = ProcessInfo.processInfo.systemUptime
     }
 
-    func terminate(dueToTimeout: Bool = false) {
+    /// Ends the process. The two flags record *why*: one for the wall-clock
+    /// cap killing slow work, one for the idle cap killing silent work — so
+    /// the two caps report differently.
+    func terminate(timeout: Bool = false, idleTimeout: Bool = false) {
         lock.lock()
         let running = process.isRunning
         // Only a live process can be killed by the watchdog — a child that
         // exited on its own in the race window between poll and terminate
         // must still report as the success (or failure) it earned.
-        if dueToTimeout && running { wasTimedOut = true }
-        lock.unlock()
-        guard running else { return }
-        process.terminate()
-        escalateToKill()
-    }
-
-    /// Ends the process on the stall cap. A separate entry point from
-    /// `terminate(dueToTimeout:)` so the two caps report differently: one
-    /// killed slow work, the other killed silent work.
-    func terminate(dueToIdleTimeout: Bool) {
-        lock.lock()
-        let running = process.isRunning
-        if dueToIdleTimeout && running { wasIdleTimedOut = true }
+        if timeout && running { wasTimedOut = true }
+        if idleTimeout && running { wasIdleTimedOut = true }
         lock.unlock()
         guard running else { return }
         process.terminate()

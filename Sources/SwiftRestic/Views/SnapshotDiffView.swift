@@ -71,7 +71,7 @@ struct SnapshotDiffView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Changes in snapshot \(newer.shortID)")
                         .font(.headline)
-                    Text(newer.time.formatted(date: .abbreviated, time: .shortened))
+                    Text(Format.timestamp(newer.time))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

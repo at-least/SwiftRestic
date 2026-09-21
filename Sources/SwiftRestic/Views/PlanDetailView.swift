@@ -435,7 +435,7 @@ struct SnapshotTable: View {
                 var times: [Snapshot.ID: String] = [:]
                 times.reserveCapacity(snapshots.count)
                 for snapshot in snapshots {
-                    times[snapshot.id] = snapshot.time.formatted(date: .abbreviated, time: .shortened)
+                    times[snapshot.id] = Format.timestamp(snapshot.time)
                 }
                 displayTimes = times
             }
@@ -523,7 +523,7 @@ struct SnapshotTable: View {
                 // model's values are optional (a snapshot can lack a summary)
                 // and a table sorter cannot sort "—".
                 TableColumn("When", value: \.time) { snapshot in
-                    Text(snapshot.time.formatted(date: .abbreviated, time: .shortened))
+                    Text(Format.timestamp(snapshot.time))
                         .monospacedDigit()
                 }
                 .width(min: 150, ideal: 164)

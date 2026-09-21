@@ -543,7 +543,7 @@ struct RestorePaneView: View {
     private func restoreSelection() {
         guard let record, let node = selectedRow else { return }
         guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore “\(node.name)” from \(record.time.formatted(date: .abbreviated, time: .shortened)). Restoring overwrites existing files at the destination.",
+            message: "Choose where to restore “\(node.name)” from \(Format.timestamp(record.time)). Restoring overwrites existing files at the destination.",
             prompt: "Restore"
         ) else { return }
         model.restore(

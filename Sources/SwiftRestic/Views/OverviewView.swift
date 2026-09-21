@@ -112,24 +112,6 @@ struct OverviewView: View {
             return 3
         }
 
-        init(
-            planID: UUID,
-            planName: String,
-            repositoryID: UUID?,
-            stateText: String,
-            isKnown: Bool,
-            isProtected: Bool,
-            didFail: Bool
-        ) {
-            self.planID = planID
-            self.planName = planName
-            self.repositoryID = repositoryID
-            self.stateText = stateText
-            self.isKnown = isKnown
-            self.isProtected = isProtected
-            self.didFail = didFail
-        }
-
         /// Derives straight from the plan, so each listing outcome states
         /// only the part that differs.
         init(

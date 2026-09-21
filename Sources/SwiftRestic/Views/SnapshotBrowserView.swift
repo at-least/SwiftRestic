@@ -49,7 +49,7 @@ struct SnapshotBrowserView: View {
             .help("Go up")
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(target.snapshot.time.formatted(date: .abbreviated, time: .shortened))
+                Text(Format.timestamp(target.snapshot.time))
                     .font(.headline)
                 if let currentPath {
                     // Jump between levels without walking Back through each.

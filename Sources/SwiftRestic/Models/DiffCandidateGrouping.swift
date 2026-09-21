@@ -41,7 +41,7 @@ enum DiffCandidateGrouping {
     /// The minute string a picker row displays. The rows and the shared set
     /// below must spell minutes the same way, so both come through here.
     static func displayedMinute(_ time: Date) -> String {
-        time.formatted(date: .abbreviated, time: .shortened)
+        Format.timestamp(time)
     }
 
     /// The minute strings two or more candidates display alike. Two

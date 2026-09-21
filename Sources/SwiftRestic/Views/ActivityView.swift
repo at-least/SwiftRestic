@@ -67,7 +67,7 @@ struct ActivityView: View {
                     .width(24)
 
                     TableColumn("Started", value: \.startedAt) { run in
-                        Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                        Text(Format.timestamp(run.startedAt))
                             .monospacedDigit()
                     }
                     .width(min: 150, ideal: 170)
