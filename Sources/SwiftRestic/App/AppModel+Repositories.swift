@@ -23,13 +23,7 @@ extension AppModel {
         resolvedContexts[repository.id] = nil
 
         if let index = configuration.repositories.firstIndex(where: { $0.id == repository.id }) {
-            // As with plans: maintenance stamps are written by the model while
-            // the editor held its draft. A check that finished mid-edit must
-            // not look like it never happened, or the scheduler repeats it.
-            var updated = repository
-            updated.maintenance.lastCheckAt = configuration.repositories[index].maintenance.lastCheckAt
-            updated.maintenance.lastPruneAt = configuration.repositories[index].maintenance.lastPruneAt
-            configuration.repositories[index] = updated
+            configuration.repositories[index] = configuration.repositories[index].merging(draft: repository)
         } else {
             configuration.repositories.append(repository)
         }

@@ -194,6 +194,18 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         }
     }
 
+    /// The stored repository wins over an editor's draft for the maintenance
+    /// stamps — the same rule as `BackupPlan.merging(draft:)`: the model
+    /// writes them while the editor holds its older copy, and a check that
+    /// finished mid-edit must not look like it never happened or the
+    /// scheduler repeats it.
+    func merging(draft: Repository) -> Repository {
+        var merged = draft
+        merged.maintenance.lastCheckAt = maintenance.lastCheckAt
+        merged.maintenance.lastPruneAt = maintenance.lastPruneAt
+        return merged
+    }
+
     /// The label the provider secret is shown under in the UI (`nil` when the
     /// backend needs no second credential).
     var secretFieldLabel: String? {

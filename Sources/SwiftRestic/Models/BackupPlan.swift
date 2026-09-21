@@ -328,6 +328,22 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
             && !sources.isEmpty
     }
 
+    /// The stored plan wins over an editor's draft for the run stamps: they
+    /// are written by the model (`markPlanRun`) while the editor held its
+    /// older copy, so a draft carrying stale or absent stamps must not erase
+    /// the plan's own last success. Everything else comes from the draft.
+    /// A new model-written field joins this list — one left out here reverts
+    /// to the draft on the next save. (`isEnabled` and `repositoryID` are
+    /// also model-written, but only by user-driven paths — pause, deletion —
+    /// that cannot run while the modal editor holds a draft, so no draft can
+    /// grow stale against them.)
+    func merging(draft: BackupPlan) -> BackupPlan {
+        var merged = draft
+        merged.lastRunAt = lastRunAt
+        merged.lastSuccessAt = lastSuccessAt
+        return merged
+    }
+
     var nextRunDate: Date? {
         guard isEnabled else { return nil }
         return schedule.nextRunDate(after: lastRunAt)

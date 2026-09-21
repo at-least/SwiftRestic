@@ -10,14 +10,7 @@ extension AppModel {
 
     func upsert(plan: BackupPlan) {
         if let index = configuration.plans.firstIndex(where: { $0.id == plan.id }) {
-            // The editor's draft was taken before the sheet opened, and a run
-            // may have finished since. The stamps are written by the model,
-            // never by the editor, so the stored ones win — otherwise saving
-             // an edit would erase the plan's own last success.
-            var updated = plan
-            updated.lastRunAt = configuration.plans[index].lastRunAt
-            updated.lastSuccessAt = configuration.plans[index].lastSuccessAt
-            configuration.plans[index] = updated
+            configuration.plans[index] = configuration.plans[index].merging(draft: plan)
         } else {
             configuration.plans.append(plan)
         }
