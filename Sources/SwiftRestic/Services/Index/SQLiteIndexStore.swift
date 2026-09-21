@@ -498,6 +498,44 @@ final class SQLiteIndexStore: IndexStore {
         }
     }
 
+    /// The batched form of `versions(ofPath:)`: one query per `chunkSize`
+    /// paths instead of one per path, for callers resolving a whole search
+    /// result at once. Newest-first order within a path is the single-path
+    /// query's; a path the index holds nothing on is absent from the
+    /// dictionary rather than carried as an empty array.
+    func versions(ofPaths paths: [String]) throws -> [String: [IndexedSnapshot]] {
+        var result: [String: [IndexedSnapshot]] = [:]
+        let unique = Array(Set(paths))
+        guard !unique.isEmpty else { return result }
+        try db.read { db in
+            for chunk in unique.chunked(into: Self.chunkSize) {
+                let placeholders = chunk.map { _ in "?" }.joined(separator: ", ")
+                // Element-wise, not sequence concatenation: the array must
+                // stay typed for StatementArguments (see recordContent).
+                let pathArguments = chunk.map { $0 as (any DatabaseValueConvertible)? }
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT e.path AS path, s.id, s.chain, s.seq, s.time, s.alive, s.indexed
+                    FROM snapshot s
+                    JOIN entry e ON e.chain = s.chain
+                        AND s.seq BETWEEN e.first_seq AND e.last_seq
+                    WHERE s.alive = 1 AND e.path IN (\(placeholders))
+                    ORDER BY s.time DESC, s.seq DESC
+                    """,
+                    arguments: StatementArguments(pathArguments)
+                )
+                // The global newest-first ordering, appended in pass order,
+                // preserves the single-path query's per-path order.
+                for row in rows {
+                    let path: String = row["path"]
+                    result[path, default: []].append(Self.indexedSnapshot(from: row))
+                }
+            }
+        }
+        return result
+    }
+
     func searchPaths(matching query: String, limit: Int) throws -> [SearchHit] {
         let match = Self.ftsQuery(from: query)
         guard !match.isEmpty else { return [] }
@@ -626,16 +664,18 @@ final class SQLiteIndexStore: IndexStore {
     // MARK: - Row mapping
 
     private static func snapshots(from rows: [Row]) -> [IndexedSnapshot] {
-        rows.map { row in
-            IndexedSnapshot(
-                id: row["id"],
-                chain: row["chain"],
-                seq: row["seq"],
-                time: row["time"],
-                alive: row["alive"],
-                coverage: IndexCoverage(rawValue: row["indexed"]) ?? .none
-            )
-        }
+        rows.map(indexedSnapshot(from:))
+    }
+
+    private static func indexedSnapshot(from row: Row) -> IndexedSnapshot {
+        IndexedSnapshot(
+            id: row["id"],
+            chain: row["chain"],
+            seq: row["seq"],
+            time: row["time"],
+            alive: row["alive"],
+            coverage: IndexCoverage(rawValue: row["indexed"]) ?? .none
+        )
     }
 }
 

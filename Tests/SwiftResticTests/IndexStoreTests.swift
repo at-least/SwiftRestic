@@ -196,6 +196,54 @@ struct IndexStoreTests {
         #expect(try store.versions(ofPath: "/data/shared.bin").map(\.id) == ["plan-new", "plan-old"])
     }
 
+    @Test("versions(ofPaths:) agrees with versions(ofPath:) per path, and omits unknown paths")
+    func batchedVersionsMatchSinglePath() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [
+            snapshot("s1", time: t0, tags: [planTag]),
+            snapshot("s2", time: t1, tags: [planTag]),
+            snapshot("s3", time: t2, tags: [planTag]),
+        ])
+        try store.recordContent(snapshotID: "s1", entries: [
+            entry("/data/a.txt"), entry("/data/b.txt"),
+        ], final: true)
+        try store.recordContent(snapshotID: "s2", entries: [entry("/data/a.txt")], final: true)
+        try store.recordContent(snapshotID: "s3", entries: [
+            entry("/data/a.txt"), entry("/data/c.txt"),
+        ], final: true)
+
+        let paths = ["/data/a.txt", "/data/b.txt", "/data/c.txt", "/data/never.indexed"]
+        let batched = try store.versions(ofPaths: paths)
+
+        // Per-path agreement with the single-path query, order included —
+        // the batched form is the search walk's bulk answer, and the rows
+        // must read the same as they did one query at a time.
+        for path in ["/data/a.txt", "/data/b.txt", "/data/c.txt"] {
+            let single = try store.versions(ofPath: path).map(\.id)
+            #expect(batched[path]?.map(\.id) == single, "\(path) disagrees with versions(ofPath:)")
+        }
+        // A path the index has never read is absent, not an empty array —
+        // the batched form does not manufacture entries the single-path
+        // query answers as [].
+        #expect(batched["/data/never.indexed"] == nil)
+    }
+
+    @Test("versions(ofPaths:) crosses the chunk boundary without losing paths")
+    func batchedVersionsCrossChunkBoundary() throws {
+        let store = try makeStore()
+        _ = try store.reconcile(aliveSnapshots: [snapshot("s1", time: t0, tags: [planTag])])
+        let all = (0..<450).map { "/many/entry-\($0)" }
+        try store.recordContent(snapshotID: "s1", entries: all.map { entry($0) }, final: true)
+
+        // 450 paths against a 400-path chunk size: the second chunk must
+        // land every path the first did not.
+        let batched = try store.versions(ofPaths: all)
+        #expect(Set(batched.keys) == Set(all))
+        for path in [all[0], all[399], all[400], all[449]] {
+            #expect(batched[path]?.map(\.id) == ["s1"])
+        }
+    }
+
     // MARK: - Version picking (the folder browser's selection rule)
 
     private func version(_ id: String) -> IndexedSnapshot {

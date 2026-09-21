@@ -505,15 +505,17 @@ struct RestorePaneView: View {
                 loadError = (error as? ResticError)?.errorDescription ?? error.localizedDescription
                 return
             }
-            var covered: [SearchHit] = []
-            for hit in hits {
-                if Task.isCancelled { return }
-                let versions = await model.indexedVersions(ofPath: hit.path, repositoryID: repositoryID)
-                if versions.contains(where: { $0.id == searchedRecordID }) {
-                    covered.append(hit)
-                }
-            }
+            // One batched round trip answers every hit's coverage at once;
+            // the guard below owns the answer, so a cancelled or superseded
+            // search discards it exactly as the per-hit walk's own checks
+            // did.
+            let versionsByPath = await model.indexedVersions(
+                ofPaths: hits.map(\.path), repositoryID: repositoryID
+            )
             guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
+            let covered = hits.filter { hit in
+                versionsByPath[hit.path]?.contains { $0.id == searchedRecordID } == true
+            }
             searchHits = covered
             selection = nil
             // The index answered: a load error from an earlier failed read

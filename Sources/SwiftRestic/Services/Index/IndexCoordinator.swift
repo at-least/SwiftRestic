@@ -183,6 +183,12 @@ actor IndexCoordinator {
         try store(for: repositoryID).versions(ofPath: path)
     }
 
+    /// The batched form: a whole search result's versions in one round trip
+    /// per chunk instead of one awaited query per hit.
+    func versions(ofPaths paths: [String], repositoryID: UUID) throws -> [String: [IndexedSnapshot]] {
+        try store(for: repositoryID).versions(ofPaths: paths)
+    }
+
     /// Basename search across every indexed path — instant, no restic walk.
     func searchPaths(matching query: String, repositoryID: UUID, limit: Int) throws -> [SearchHit] {
         try store(for: repositoryID).searchPaths(matching: query, limit: limit)

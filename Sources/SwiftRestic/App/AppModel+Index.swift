@@ -30,6 +30,14 @@ extension AppModel {
         (try? await indexCoordinator.versions(ofPath: path, repositoryID: repositoryID)) ?? []
     }
 
+    /// The batched form of `indexedVersions(ofPath:)` for a whole search
+    /// result: one store round trip per chunk of paths. A path the index has
+    /// not read is absent from the dictionary — the same fact an empty
+    /// array answers one path at a time.
+    func indexedVersions(ofPaths paths: [String], repositoryID: UUID) async -> [String: [IndexedSnapshot]] {
+        (try? await indexCoordinator.versions(ofPaths: paths, repositoryID: repositoryID)) ?? [:]
+    }
+
     /// Whether the index has read every alive snapshot of the repository —
     /// the folder browser's completeness signal. An index that cannot answer
     /// reads as "not complete", never as a failure.

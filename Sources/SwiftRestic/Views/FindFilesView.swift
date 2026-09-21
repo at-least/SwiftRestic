@@ -344,16 +344,18 @@ struct FindFilesView: View {
         }
     }
 
-    /// The index engine: FTS over basenames, then a versions lookup per hit
-    /// so every row names a restorable snapshot. Sorted newest-first by that
-    /// snapshot, matching the restic engine's row order.
+    /// The index engine: FTS over basenames, then one batched versions
+    /// lookup so every row names a restorable snapshot. Sorted newest-first
+    /// by that snapshot, matching the restic engine's row order.
     private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> [Row] {
         let hits = try await model.searchIndex(pattern: pattern, repositoryID: repositoryID)
+        let versionsByPath = await model.indexedVersions(
+            ofPaths: hits.map(\.path), repositoryID: repositoryID
+        )
         var rows: [Row] = []
         var dropped = 0
         for hit in hits {
-            let versions = await model.indexedVersions(ofPath: hit.path, repositoryID: repositoryID)
-            guard let newest = versions.first else {
+            guard let versions = versionsByPath[hit.path], let newest = versions.first else {
                 // Every version of this path has since been pruned; there is
                 // nothing restorable to list. Counted, so the footer can own
                 // the gap instead of letting the row vanish silently.
