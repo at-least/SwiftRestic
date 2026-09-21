@@ -22,8 +22,7 @@ extension AppModel {
             return "No such repository."
         }
         do {
-            let service = try service()
-            let context = try await context(for: repository)
+            let (service, context) = try await resticContext(for: repository)
             let result = try await service.runRaw(context, arguments: arguments)
             return result.isEmpty ? "(no output)" : result
         } catch {

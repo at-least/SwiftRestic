@@ -172,8 +172,7 @@ extension AppModel {
         ) {
             return ResticService.sortedForBrowser(cached.map(\.snapshotNode))
         }
-        let service = try service()
-        let context = try await context(for: repository)
+        let (service, context) = try await resticContext(for: repository)
         let nodes = try await service.listDirectory(context, snapshotID: snapshotID, path: path)
         // Write-through, so the next visit to this directory — the record
         // switch that re-walks this spine, the collapse and re-expand — is
@@ -194,8 +193,7 @@ extension AppModel {
         latestOnly: Bool
     ) async throws -> [FindResult] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
-        let service = try service()
-        let context = try await context(for: repository)
+        let (service, context) = try await resticContext(for: repository)
         return try await service.find(
             context,
             pattern: pattern,
@@ -212,8 +210,7 @@ extension AppModel {
         includeMetadata: Bool
     ) async throws -> SnapshotDiff {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
-        let service = try service()
-        let context = try await context(for: repository)
+        let (service, context) = try await resticContext(for: repository)
         return try await service.diff(
             context,
             olderID: olderID,

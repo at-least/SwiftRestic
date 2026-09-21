@@ -114,23 +114,17 @@ extension AppModel {
         tasks.cancel(.maintenance(id))
         if restoreRepositoryID == id { tasks.cancel(.restore) }
         if console.runningRepositoryID == id { console.cancelRunningCommand() }
-        // Cancel-then-forget the menu line: the cancelled child can take
-        // seconds to unwind, and `maintenanceLines` derives its rows from the
-        // repository list this removal just shrank — without this the menu
-        // would show neither a headline nor a line until the unwind lands.
-        maintenance[id] = nil
+        // Cancel-then-forget, before the repository list shrinks: the
+        // cancelled child can take seconds to unwind, and `maintenanceLines`
+        // derives its rows from the repository list this removal is about to
+        // shrink — without this order the menu would show neither a headline
+        // nor a line until the unwind lands.
+        clearRuntimeState(repositoryID: id)
         configuration.repositories.removeAll { $0.id == id }
         for index in configuration.plans.indices where configuration.plans[index].repositoryID == id {
             configuration.plans[index].repositoryID = nil
             configuration.plans[index].isEnabled = false
         }
-        snapshots[id] = nil
-        repositoryStats[id] = nil
-        snapshotListingOutcomes[id] = nil
-        snapshotsLoadedAt[id] = nil
-        pendingSnapshotRefreshes.remove(id)
-        repositoriesMissingPassword.remove(id)
-        resolvedContexts[id] = nil
         // Both sends quitting should drain: an untracked index drop could
         // recreate the file it was deleting, and an untracked keychain
         // removal that lost the race leaves orphaned secrets no UI path
@@ -139,6 +133,23 @@ extension AppModel {
             await indexCoordinator.dropRepository(repositoryID: id)
         })
         tasks.addBackground(Task { [secrets] in await secrets.remove(id) })
+    }
+
+    /// The per-repository runtime state, dropped in one place — so a new
+    /// dictionary keyed by repository id joins this list instead of hoping
+    /// its removal path remembers. UUIDs are never reused, so an entry
+    /// missed here is never cleared again. (`loadingSnapshots` is absent on
+    /// purpose: it is cleared by the in-flight refresh's own `defer`.)
+    private func clearRuntimeState(repositoryID id: UUID) {
+        maintenance[id] = nil
+        snapshots[id] = nil
+        repositoryStats[id] = nil
+        snapshotListingOutcomes[id] = nil
+        snapshotsLoadedAt[id] = nil
+        pendingSnapshotRefreshes.remove(id)
+        repositoriesMissingPassword.remove(id)
+        statsFailureNoted.remove(id)
+        resolvedContexts[id] = nil
     }
 
     func storedSecrets(for repositoryID: UUID) async throws -> (password: String?, providerSecret: String?) {
@@ -168,6 +179,18 @@ extension AppModel {
         )
         resolvedContexts[repository.id] = (key, context)
         return context
+    }
+
+    /// The read path's opener: the engine plus the repository's decrypted
+    /// context, assembled together — the same pair every restic read used to
+    /// put together by hand. Callers keep their own missing-repository guard,
+    /// because each surface phrases that answer its own way.
+    func resticContext(
+        for repository: Repository
+    ) async throws -> (service: any ResticClient, context: RepositoryContext) {
+        let service = try service()
+        let context = try await context(for: repository)
+        return (service, context)
     }
 
     /// Drops a repository's cached context so the next call re-reads the

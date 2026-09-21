@@ -291,10 +291,7 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        let trimmed = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != "null", let data = trimmed.data(using: .utf8) else { return [] }
-        let decoded = try ResticMessageDecoder.jsonDecoder.decode([Snapshot]?.self, from: data)
-        return (decoded ?? []).sorted { $0.time > $1.time }
+        return try Self.decodeArray(Snapshot.self, from: result.stdout).sorted { $0.time > $1.time }
     }
 
     /// Lists the immediate children of `path` inside a snapshot.
@@ -415,12 +412,7 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        let trimmed = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != "null", let data = trimmed.data(using: .utf8) else {
-            return []
-        }
-        let decoded = try ResticMessageDecoder.jsonDecoder.decode([FindResult]?.self, from: data)
-        return (decoded ?? []).filter { !$0.matches.isEmpty }
+        return try Self.decodeArray(FindResult.self, from: result.stdout).filter { !$0.matches.isEmpty }
     }
 
     /// Compares two snapshots. `+` in the result means present only in `newer`.
@@ -505,11 +497,7 @@ struct ResticService: ResticClient {
                 allowedExitCodes: [0, ResticError.backupPartialSuccessCode],
                 idleTimeout: Self.streamingIdleTimeout
             ),
-            onMessage: { message in
-                if case let .status(status) = message {
-                    onProgress?(OperationProgress(status: status))
-                }
-            }
+            onMessage: Self.progressHandler(onProgress)
         )
 
         var itemErrors = result.itemErrors.map { error in
@@ -603,11 +591,7 @@ struct ResticService: ResticClient {
                     environment: context.environment,
                     idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
                 ),
-                onMessage: { message in
-                    if case let .status(status) = message {
-                        onProgress?(OperationProgress(status: status))
-                    }
-                }
+                onMessage: Self.progressHandler(onProgress)
             )
             return result.summary
         }
@@ -647,16 +631,33 @@ struct ResticService: ResticClient {
                 environment: context.environment,
                 idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
             ),
-            onMessage: { message in
-                if case let .status(status) = message {
-                    onProgress?(OperationProgress(status: status))
-                }
-            }
+            onMessage: Self.progressHandler(onProgress)
         )
         return result.summary
     }
 
     // MARK: - Helpers
+
+    /// restic answers an empty line — or a bare `null` — where a JSON list
+    /// command has nothing to report, so both spellings decode as no entries.
+    private static func decodeArray<T: Decodable>(_ type: T.Type, from stdout: String) throws -> [T] {
+        let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "null", let data = trimmed.data(using: .utf8) else { return [] }
+        let decoded = try ResticMessageDecoder.jsonDecoder.decode([T]?.self, from: data)
+        return decoded ?? []
+    }
+
+    /// The message-to-progress adapter the streaming commands share: restic's
+    /// periodic `status` lines become `OperationProgress` callbacks.
+    private static func progressHandler(
+        _ onProgress: (@Sendable (OperationProgress) -> Void)?
+    ) -> @Sendable (ResticMessage) -> Void {
+        { message in
+            if case let .status(status) = message {
+                onProgress?(OperationProgress(status: status))
+            }
+        }
+    }
 
     /// Gathers `diff` output as it streams, off the main actor, keeping only the
     /// first `limit` changes.
