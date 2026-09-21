@@ -642,8 +642,10 @@ struct RunReporterTokenTests {
     }
 
     /// Lets a reporter's `Task { @MainActor in … }` land before asserting.
+    /// The passing run lands on the first poll; the 1 s bound is for a
+    /// loaded machine, so a slow hop cannot flake the test.
     private func drainReporterHops() async {
-        for _ in 0..<20 {
+        for _ in 0..<200 {
             try? await Task.sleep(for: .milliseconds(5))
         }
     }
