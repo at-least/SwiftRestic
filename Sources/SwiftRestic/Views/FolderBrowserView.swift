@@ -160,27 +160,10 @@ struct FolderBrowserView: View {
             ContentUnavailableView("Empty folder", systemImage: "folder")
         } else {
             List(nodes, selection: $selection) { node in
-                HStack(spacing: 8) {
-                    Image(systemName: icon(for: node))
-                        .foregroundStyle(node.isDirectory ? Color.accentColor : .secondary)
-                        .frame(width: 16)
-                    Text(node.name)
-                        .lineLimit(1)
-                    Spacer()
-                    if !node.isDirectory {
-                        Text(Format.bytes(node.size))
-                            .font(.caption)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(Format.timestamp(node.mtime))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 140, alignment: .trailing)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) { open(node) }
-                .tag(node.id)
+                SnapshotNodeRow(node: node)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { open(node) }
+                    .tag(node.id)
             }
             .listStyle(.inset)
             .onKeyPress(phases: .down) { press in
@@ -192,14 +175,7 @@ struct FolderBrowserView: View {
 
     private var footer: some View {
         VStack(spacing: 10) {
-            if let progress = model.restoreActivity {
-                OperationProgressView(
-                    title: model.restoreDescription,
-                    progress: progress,
-                    startedAt: nil,
-                    onCancel: { model.cancelRestore() }
-                )
-            }
+            RestoreProgressStrip()
 
             statusLine
 
@@ -253,38 +229,18 @@ struct FolderBrowserView: View {
     // MARK: - Actions
 
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
-        switch press.key {
-        case .return:
-            if let node = selectedNode, node.isDirectory {
-                open(node)
-                return .handled
-            }
-            return .ignored
-        case .delete:
-            guard currentPath != nil else { return .ignored }
-            goUp()
-            return .handled
-        case .upArrow where press.modifiers.contains(.command):
-            guard currentPath != nil else { return .ignored }
-            goUp()
-            return .handled
-        default:
-            return .ignored
-        }
+        BrowserListGrammar.keyPress(
+            press,
+            selected: selectedNode,
+            hasParent: currentPath != nil,
+            open: { open($0) },
+            goUp: { goUp() }
+        )
     }
 
     private var selectedNode: SnapshotNode? {
         guard let selection else { return nil }
         return nodes.first { $0.id == selection }
-    }
-
-    private func icon(for node: SnapshotNode) -> String {
-        switch node.type {
-        case .dir: "folder.fill"
-        case .symlink: "arrow.turn.up.right"
-        case .file: "doc"
-        default: "questionmark.square.dashed"
-        }
     }
 
     private func open(_ node: SnapshotNode) {
@@ -300,8 +256,7 @@ struct FolderBrowserView: View {
         if roots.contains(currentPath) {
             self.currentPath = nil
         } else {
-            let parent = (currentPath as NSString).deletingLastPathComponent
-            self.currentPath = parent.isEmpty || parent == "/" ? nil : parent
+            self.currentPath = BrowserListGrammar.parent(of: currentPath)
         }
         selection = nil
     }

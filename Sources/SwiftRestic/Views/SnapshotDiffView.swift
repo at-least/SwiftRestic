@@ -39,14 +39,17 @@ struct SnapshotDiffView: View {
         // One filter+sort per render: the header and the content each need
         // the candidates, and a computed property would re-evaluate the sort
         // at every access — this sheet re-renders on every keystroke in its
-        // filter field.
+        // filter field. The same hoist covers the change list: the list
+        // renders the rows and the footer only counts them, so one filter
+        // pass feeds both.
         let candidates = self.candidates
+        let changeRows = diff.map { filteredChanges($0) }
         return VStack(spacing: 0) {
             header(candidates)
             Divider()
-            content(candidates)
+            content(candidates, changeRows: changeRows)
             Divider()
-            footer
+            footer(changeRows)
         }
         .frame(minWidth: 760, minHeight: 500)
         .onAppear {
@@ -112,7 +115,7 @@ struct SnapshotDiffView: View {
     }
 
     @ViewBuilder
-    private func content(_ candidates: [Snapshot]) -> some View {
+    private func content(_ candidates: [Snapshot], changeRows: [ResticDiffChange]?) -> some View {
         if candidates.isEmpty {
             ContentUnavailableView(
                 "Nothing to compare against",
@@ -134,7 +137,7 @@ struct SnapshotDiffView: View {
                 Divider()
                 filters(diff)
                 Divider()
-                changeList(diff)
+                changeList(diff, rows: changeRows ?? [])
             }
         } else {
             Color.clear
@@ -219,8 +222,7 @@ struct SnapshotDiffView: View {
     }
 
     @ViewBuilder
-    private func changeList(_ diff: SnapshotDiff) -> some View {
-        let rows = filteredChanges(diff)
+    private func changeList(_ diff: SnapshotDiff, rows: [ResticDiffChange]) -> some View {
         if diff.changes.isEmpty {
             ContentUnavailableView(
                 "No differences",
@@ -260,10 +262,10 @@ struct SnapshotDiffView: View {
         }
     }
 
-    private var footer: some View {
+    private func footer(_ changeRows: [ResticDiffChange]?) -> some View {
         HStack {
-            if let diff {
-                Text(footerText(diff))
+            if let diff, let shown = changeRows?.count {
+                Text(footerText(diff, shown: shown))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -336,8 +338,7 @@ struct SnapshotDiffView: View {
         }
     }
 
-    private func footerText(_ diff: SnapshotDiff) -> String {
-        let shown = filteredChanges(diff).count
+    private func footerText(_ diff: SnapshotDiff, shown: Int) -> String {
         var text = shown == diff.changes.count
             ? Format.plural(diff.changes.count, "change")
             : "\(Format.count(shown)) of \(Format.plural(diff.changes.count, "change"))"

@@ -36,17 +36,11 @@ struct RootDetailView: View {
             // A restore outlives the pane that started it, so its progress is
             // an app-level fact: this strip sits above every pane, and the
             // menu bar line covers the window-closed case. Switching panes
-            // hands the progress over to this strip.
-            if let progress = model.restoreActivity {
-                OperationProgressView(
-                    title: model.restoreDescription.isEmpty ? "Restoring" : model.restoreDescription,
-                    progress: progress,
-                    startedAt: nil,
-                    onCancel: { model.cancelRestore() }
-                )
+            // hands the progress over to this strip. The fallback names the
+            // work when no description has arrived.
+            RestoreProgressStrip(fallbackTitle: "Restoring")
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
-            }
             // The one disabled-state whose cause the user cannot see from the
             // panes themselves: every restic-backed control is grey, and this
             // is why.

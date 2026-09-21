@@ -134,34 +134,11 @@ struct PlanDetailView: View {
             OperationStrip(planID: plan.id)
 
             summaryTiles(plan)
-            listingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
+            SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             configurationCard(plan)
             snapshotsCard(plan)
         }
         .detailPane()
-    }
-
-    /// Why a Snapshots tile may read "—", in visible text. The tooltips carry
-    /// the same lines, but a reason only a hovering mouse user can reach is no
-    /// reason at all for a keyboard or VoiceOver user — the same lesson the
-    /// Overview tile row learned.
-    @ViewBuilder
-    private func listingCaveat(outcome: SnapshotListingOutcome) -> some View {
-        switch outcome {
-        case let .failed(message):
-            Label(
-                "Snapshots could not be read — \(Format.firstSentence(message))",
-                systemImage: "exclamationmark.triangle.fill"
-            )
-            .font(.caption)
-            .foregroundStyle(Theme.warning)
-        case .idle:
-            Label("The snapshot list has not finished loading.", systemImage: "clock.arrow.circlepath")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .loaded:
-            EmptyView()
-        }
     }
 
     private func summaryTiles(_ plan: BackupPlan) -> some View {
@@ -181,25 +158,7 @@ struct PlanDetailView: View {
             // A count is only a fact once the listing it derives from has
             // succeeded; before that (or after a failure) the honest face is
             // "—", with the tooltip saying which.
-            switch outcome {
-            case .loaded:
-                StatTile(
-                    title: "Snapshots",
-                    value: Format.count(snapshots.count)
-                )
-            case let .failed(message):
-                StatTile(
-                    title: "Snapshots",
-                    value: "—",
-                    help: message
-                )
-            case .idle:
-                StatTile(
-                    title: "Snapshots",
-                    value: "—",
-                    help: "The snapshot list has not finished loading."
-                )
-            }
+            StatTile.snapshots(outcome: outcome, loadedCount: snapshots.count)
             StatTile(
                 title: "Last run added",
                 // The run record is the primary source. When the global
@@ -351,7 +310,10 @@ struct PlanDetailView: View {
             )
         } accessory: {
             HStack(spacing: 8) {
-                freshnessLabel(
+                // Every number on this card traces to the moment it was read:
+                // an "Updated 7:27 AM" caption, or a spinner while a refresh
+                // is in flight.
+                SnapshotFreshnessLabel(
                     loadedAt: loadedAt,
                     isLoading: model.loadingSnapshots.contains(repositoryID)
                 )
@@ -369,20 +331,6 @@ struct PlanDetailView: View {
                 }
                 .controlSize(.small)
             }
-        }
-    }
-
-    /// Every number on this card traces to the moment it was read: a
-    /// "Updated 7:27 AM" caption, or a spinner while a refresh is in flight.
-    @ViewBuilder
-    private func freshnessLabel(loadedAt: Date?, isLoading: Bool) -> some View {
-        if isLoading {
-            ProgressView().controlSize(.small)
-        } else if let loadedAt {
-            Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
         }
     }
 }
@@ -430,7 +378,12 @@ struct SnapshotTable: View {
     }
 
     var body: some View {
-        content
+        // One filter+sort per render: the empty test, the filter bar's count,
+        // the table and its height all read the visible rows — a computed
+        // property would re-evaluate the sort at every access (the hoist
+        // SnapshotDiffView documents for its own candidates).
+        let visible = visibleSnapshots
+        return content(visible)
             .onChange(of: snapshots, initial: true) { _, snapshots in
                 var times: [Snapshot.ID: String] = [:]
                 times.reserveCapacity(snapshots.count)
@@ -442,7 +395,7 @@ struct SnapshotTable: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(_ visible: [Snapshot]) -> some View {
         if case let .failed(message) = loadOutcome, snapshots.isEmpty {
             failureRow(message)
         } else if isLoading, snapshots.isEmpty {
@@ -467,7 +420,7 @@ struct SnapshotTable: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 8)
             }
-        } else if visibleSnapshots.isEmpty {
+        } else if visible.isEmpty {
             // The listing succeeded but the filter matches nothing: say so
             // with the way back, rather than a content-less table frame that
             // reads as a broken load.
@@ -484,13 +437,13 @@ struct SnapshotTable: View {
                 if case let .failed(message) = loadOutcome {
                     staleListingStrip(message)
                 }
-                filterBar
-                table
+                filterBar(visible)
+                table(visible)
             }
         }
     }
 
-    private var filterBar: some View {
+    private func filterBar(_ visible: [Snapshot]) -> some View {
         HStack(spacing: 8) {
             TextField(
                 "Filter by ID or date",
@@ -505,8 +458,8 @@ struct SnapshotTable: View {
             // no longer shows.
             .onChange(of: filterText) { selection = nil }
 
-            if visibleSnapshots.count != snapshots.count {
-                Text("\(Format.count(visibleSnapshots.count)) of \(Format.plural(snapshots.count, "snapshot"))")
+            if visible.count != snapshots.count {
+                Text("\(Format.count(visible.count)) of \(Format.plural(snapshots.count, "snapshot"))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -516,8 +469,8 @@ struct SnapshotTable: View {
         .padding(.bottom, 6)
     }
 
-    private var table: some View {
-        Table(visibleSnapshots, selection: $selection, sortOrder: $sortOrder) {
+    private func table(_ visible: [Snapshot]) -> some View {
+        Table(visible, selection: $selection, sortOrder: $sortOrder) {
                 // Sortable where a person scans: when it ran, and which
                 // snapshot it is. The numeric columns stay fixed because the
                 // model's values are optional (a snapshot can lack a summary)
@@ -574,14 +527,14 @@ struct SnapshotTable: View {
             // keyboard path.
             .onKeyPress(.return) {
                 guard let selection,
-                      let snapshot = visibleSnapshots.first(where: { $0.id == selection })
+                      let snapshot = visible.first(where: { $0.id == selection })
                 else { return .ignored }
                 onBrowse(snapshot)
                 return .handled
             }
             .contextMenu(forSelectionType: Snapshot.ID.self) { ids in
                 if let id = ids.first, ids.count == 1,
-                   let snapshot = visibleSnapshots.first(where: { $0.id == id }) {
+                   let snapshot = visible.first(where: { $0.id == id }) {
                     Button("Browse Contents…") { onBrowse(snapshot) }
                     if let onCompare {
                         Button("Compare with Previous…") { onCompare(snapshot) }
@@ -594,7 +547,7 @@ struct SnapshotTable: View {
                 }
             } primaryAction: { ids in
                 guard let id = ids.first, ids.count == 1,
-                      let snapshot = visibleSnapshots.first(where: { $0.id == id })
+                      let snapshot = visible.first(where: { $0.id == id })
                 else { return }
                 onBrowse(snapshot)
             }
@@ -608,7 +561,7 @@ struct SnapshotTable: View {
             // the last row's glyphs mid-line. Sized from the *visible* rows so
             // a filter that narrows 300 rows to 2 shrinks the frame with it,
             // and the cap is where the table scrolls its own overflow anyway.
-            .frame(height: min(320, 38 + CGFloat(visibleSnapshots.count) * 34))
+            .frame(height: min(320, 38 + CGFloat(visible.count) * 34))
             .alternatingRowBackgrounds(.disabled)
     }
 

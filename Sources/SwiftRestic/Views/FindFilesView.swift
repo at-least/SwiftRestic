@@ -49,12 +49,17 @@ struct FindFilesView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        // One rows rebuild per render: the emptiness test, the table, its
+        // context menu and the footer all read it — a computed property
+        // would re-run the flatMap and sort at every access (the hoist
+        // SnapshotDiffView documents for its own candidates).
+        let rows = self.rows
+        return VStack(spacing: 0) {
             controls
             Divider()
-            resultsPane
+            resultsPane(rows)
             Divider()
-            footer
+            footer(rows)
         }
         .frame(minWidth: 760, minHeight: 480)
         .onAppear {
@@ -139,7 +144,7 @@ struct FindFilesView: View {
     }
 
     @ViewBuilder
-    private var resultsPane: some View {
+    private func resultsPane(_ rows: [Row]) -> some View {
         if let errorMessage {
             ContentUnavailableView {
                 Label("Search failed", systemImage: "exclamationmark.triangle")
@@ -214,16 +219,9 @@ struct FindFilesView: View {
         }
     }
 
-    private var footer: some View {
+    private func footer(_ rows: [Row]) -> some View {
         VStack(spacing: 10) {
-            if let progress = model.restoreActivity {
-                OperationProgressView(
-                    title: model.restoreDescription,
-                    progress: progress,
-                    startedAt: nil,
-                    onCancel: { model.cancelRestore() }
-                )
-            }
+            RestoreProgressStrip()
             Text("Restoring overwrites existing files at the destination.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -256,13 +254,14 @@ struct FindFilesView: View {
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .help(model.isRestoring ? "The restore keeps running" : "Close")
-                Button("Restore Selected…") { restoreSelection(selectedRow) }
+                let selected = selectedRow(in: rows)
+                Button("Restore Selected…") { restoreSelection(selected) }
                     .buttonStyle(.borderedProminent)
                     // Same grammar as the snapshot browser: Return offers the
                     // restore, always through the destination picker where
                     // the overwrite warning lives.
                     .keyboardShortcut(.defaultAction)
-                    .disabled(selectedRow == nil || model.isRestoring)
+                    .disabled(selected == nil || model.isRestoring)
             }
         }
         .padding(12)
@@ -284,7 +283,7 @@ struct FindFilesView: View {
             .sorted { ($0.snapshotTime ?? .distantPast) > ($1.snapshotTime ?? .distantPast) }
     }
 
-    private var selectedRow: Row? {
+    private func selectedRow(in rows: [Row]) -> Row? {
         guard let selection else { return nil }
         return rows.first { $0.id == selection }
     }

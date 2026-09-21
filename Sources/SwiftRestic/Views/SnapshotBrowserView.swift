@@ -89,32 +89,15 @@ struct SnapshotBrowserView: View {
             ContentUnavailableView("Empty folder", systemImage: "folder")
         } else {
             List(nodes, selection: $selection) { node in
-                HStack(spacing: 8) {
-                    Image(systemName: icon(for: node))
-                        .foregroundStyle(node.isDirectory ? Color.accentColor : .secondary)
-                        .frame(width: 16)
-                    Text(node.name)
-                        .lineLimit(1)
-                    Spacer()
-                    if !node.isDirectory {
-                        Text(Format.bytes(node.size))
-                            .font(.caption)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(Format.timestamp(node.mtime))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 140, alignment: .trailing)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) { open(node) }
-                // Arq's signature restore gesture: drag straight out of the
-                // browser into Finder. The provider promises the file, the
-                // restore runs when Finder asks for it, and the drop location
-                // is the destination.
-                .onDrag { dragProvider(for: node) }
-                .tag(node.id)
+                SnapshotNodeRow(node: node)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { open(node) }
+                    // Arq's signature restore gesture: drag straight out of the
+                    // browser into Finder. The provider promises the file, the
+                    // restore runs when Finder asks for it, and the drop location
+                    // is the destination.
+                    .onDrag { dragProvider(for: node) }
+                    .tag(node.id)
             }
             .listStyle(.inset)
             // A browser navigable only by double-click strands keyboard users
@@ -129,14 +112,7 @@ struct SnapshotBrowserView: View {
 
     private var footer: some View {
         VStack(spacing: 10) {
-            if let progress = model.restoreActivity {
-                OperationProgressView(
-                    title: model.restoreDescription,
-                    progress: progress,
-                    startedAt: nil,
-                    onCancel: { model.cancelRestore() }
-                )
-            }
+            RestoreProgressStrip()
 
             Text("Drag a file or folder to Finder to restore it there. Restoring overwrites existing files at the destination.")
                 .font(.caption)
@@ -251,41 +227,21 @@ struct SnapshotBrowserView: View {
         model.post(Banner(title: "Cannot drag to restore", message: message, isError: true))
     }
 
-    /// Keyboard grammar for the list. Everything unrecognised returns
-    /// `.ignored` so the List keeps its own arrow-key selection movement.
+    /// Keyboard grammar for the list — the shared Finder grammar, with this
+    /// browser's open action.
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
-        switch press.key {
-        case .return:
-            if let node = selectedNode, node.isDirectory {
-                open(node)
-                return .handled
-            }
-            return .ignored
-        case .delete:
-            guard currentPath != nil else { return .ignored }
-            goUp()
-            return .handled
-        case .upArrow where press.modifiers.contains(.command):
-            guard currentPath != nil else { return .ignored }
-            goUp()
-            return .handled
-        default:
-            return .ignored
-        }
+        BrowserListGrammar.keyPress(
+            press,
+            selected: selectedNode,
+            hasParent: currentPath != nil,
+            open: { open($0) },
+            goUp: { goUp() }
+        )
     }
 
     private var selectedNode: SnapshotNode? {
         guard let selection else { return nil }
         return nodes.first { $0.id == selection }
-    }
-
-    private func icon(for node: SnapshotNode) -> String {
-        switch node.type {
-        case .dir: "folder.fill"
-        case .symlink: "arrow.turn.up.right"
-        case .file: "doc"
-        default: "questionmark.square.dashed"
-        }
     }
 
     private func open(_ node: SnapshotNode) {
@@ -300,8 +256,7 @@ struct SnapshotBrowserView: View {
         if target.snapshot.paths.contains(currentPath) {
             self.currentPath = nil
         } else {
-            let parent = (currentPath as NSString).deletingLastPathComponent
-            self.currentPath = parent.isEmpty || parent == "/" ? nil : parent
+            self.currentPath = BrowserListGrammar.parent(of: currentPath)
         }
         selection = nil
     }

@@ -151,25 +151,10 @@ struct RepositoryDetailView: View {
                 // The count is a fact only once the listing has succeeded; a
                 // failed read wears "—" and says so in the tooltip instead of
                 // passing an empty repository off as the truth.
-                switch listingOutcome {
-                case .loaded:
-                    StatTile(
-                        title: "Snapshots",
-                        value: Format.count(stats?.snapshotsCount ?? snapshots.count)
-                    )
-                case let .failed(message):
-                    StatTile(
-                        title: "Snapshots",
-                        value: "—",
-                        help: message
-                    )
-                case .idle:
-                    StatTile(
-                        title: "Snapshots",
-                        value: "—",
-                        help: "The snapshot list has not finished loading."
-                    )
-                }
+                StatTile.snapshots(
+                    outcome: listingOutcome,
+                    loadedCount: stats?.snapshotsCount ?? snapshots.count
+                )
                 // A word restic owns, defined in the Concepts sheet: the tile
                 // is a button so the definition is one click from the word,
                 // not a Help-menu hunt.
@@ -193,7 +178,7 @@ struct RepositoryDetailView: View {
                 )
             }
 
-            listingCaveat(outcome: listingOutcome)
+            SnapshotListingCaveat(outcome: listingOutcome)
 
             volumeStrip(repository)
 
@@ -243,12 +228,12 @@ struct RepositoryDetailView: View {
                     .controlSize(.small)
                     .disabled(snapshots.isEmpty)
                     .help("Browse backups and restore files — expands Restore on the left and selects the newest backup")
-                    if let loadedAt = model.snapshotsLoadedAt(for: repositoryID),
-                       !model.loadingSnapshots.contains(repositoryID) {
-                        Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+                    if let loadedAt = model.snapshotsLoadedAt(for: repositoryID) {
+                        SnapshotFreshnessLabel(
+                            loadedAt: loadedAt,
+                            isLoading: model.loadingSnapshots.contains(repositoryID),
+                            showsSpinner: false
+                        )
                     }
                 }
             }
@@ -305,25 +290,6 @@ struct RepositoryDetailView: View {
             message += " This repository currently holds \(Format.bytes(size))."
         }
         return message
-    }
-
-    @ViewBuilder
-    private func listingCaveat(outcome: SnapshotListingOutcome) -> some View {
-        switch outcome {
-        case let .failed(message):
-            Label(
-                "Snapshots could not be read — \(Format.firstSentence(message))",
-                systemImage: "exclamationmark.triangle.fill"
-            )
-            .font(.caption)
-            .foregroundStyle(Theme.warning)
-        case .idle:
-            Label("The snapshot list has not finished loading.", systemImage: "clock.arrow.circlepath")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .loaded:
-            EmptyView()
-        }
     }
 
     @ViewBuilder

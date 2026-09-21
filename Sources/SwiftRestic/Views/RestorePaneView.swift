@@ -221,7 +221,7 @@ struct RestorePaneView: View {
                         Spacer().frame(width: 12)
                     }
                 }
-                Image(systemName: icon(for: row.node))
+                Image(systemName: row.node.browserIconName)
                     .foregroundStyle(row.node.isDirectory ? Color.accentColor : .secondary)
                     .frame(width: 16)
                 Text(row.node.name)
@@ -330,34 +330,17 @@ struct RestorePaneView: View {
         }
     }
 
-    private func icon(for node: SnapshotNode) -> String {
-        switch node.type {
-        case .dir: "folder.fill"
-        case .symlink: "arrow.turn.up.right"
-        case .file: "doc"
-        default: "questionmark.square.dashed"
-        }
-    }
-
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
-        switch press.key {
-        case .return:
-            if let node = selectedRow, node.isDirectory {
-                expand(path: node.path)
-                return .handled
-            }
-            return .ignored
-        case .delete:
-            guard currentPath != nil else { return .ignored }
-            goUp()
-            return .handled
-        case .upArrow where press.modifiers.contains(.command):
-            guard currentPath != nil else { return .ignored }
-            goUp()
-            return .handled
-        default:
-            return .ignored
-        }
+        // The shared Finder grammar, with this pane's open action: a
+        // directory's Return expands it in place rather than entering it —
+        // the tree already holds every loaded row.
+        BrowserListGrammar.keyPress(
+            press,
+            selected: selectedRow,
+            hasParent: currentPath != nil,
+            open: { expand(path: $0.path) },
+            goUp: { goUp() }
+        )
     }
 
     // MARK: - Navigation
@@ -487,8 +470,7 @@ struct RestorePaneView: View {
         if roots.contains(currentPath) {
             navigate(to: nil)
         } else {
-            let parent = (currentPath as NSString).deletingLastPathComponent
-            navigate(to: parent.isEmpty || parent == "/" ? nil : parent)
+            navigate(to: BrowserListGrammar.parent(of: currentPath))
         }
     }
 

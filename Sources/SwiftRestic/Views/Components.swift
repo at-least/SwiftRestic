@@ -353,6 +353,199 @@ struct OperationProgressView: View {
     }
 }
 
+// MARK: - Restore progress strip
+
+/// The app-level restore strip: while a restore runs, its progress is a fact
+/// above whatever surface is on screen, wired to the model's cancel. A
+/// restore outlives the pane that started it, so every browser surface and
+/// the window's detail column show the same strip instead of private copies.
+struct RestoreProgressStrip: View {
+    @Environment(AppModel.self) private var model
+    /// Replaces an empty description. The app-level strip over the panes has
+    /// no other context to name the work; the sheets sit beside the entry
+    /// point that started the restore, so they show the bare description.
+    var fallbackTitle: String? = nil
+
+    var body: some View {
+        if let progress = model.restoreActivity {
+            OperationProgressView(
+                title: title,
+                progress: progress,
+                startedAt: nil,
+                onCancel: { model.cancelRestore() }
+            )
+        }
+    }
+
+    private var title: String {
+        if model.restoreDescription.isEmpty, let fallbackTitle {
+            return fallbackTitle
+        }
+        return model.restoreDescription
+    }
+}
+
+// MARK: - Snapshot listing outcome
+
+/// Why a Snapshots tile may read "—", in visible text. The tooltips carry
+/// the same lines, but a reason only a hovering mouse user can reach is no
+/// reason at all for a keyboard or VoiceOver user — the same lesson the
+/// Overview tile row learned.
+struct SnapshotListingCaveat: View {
+    let outcome: SnapshotListingOutcome
+
+    var body: some View {
+        switch outcome {
+        case let .failed(message):
+            Label(
+                "Snapshots could not be read — \(Format.firstSentence(message))",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(Theme.warning)
+        case .idle:
+            Label("The snapshot list has not finished loading.", systemImage: "clock.arrow.circlepath")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .loaded:
+            EmptyView()
+        }
+    }
+}
+
+extension StatTile {
+    /// The Snapshots tile's honest faces: a count only once the listing it
+    /// derives from has succeeded; before that (or after a failure) the face
+    /// is "—" with the tooltip saying which. `loadedCount` is what `.loaded`
+    /// displays — each pane counts its own scope.
+    static func snapshots(outcome: SnapshotListingOutcome, loadedCount: Int) -> StatTile {
+        switch outcome {
+        case .loaded:
+            StatTile(title: "Snapshots", value: Format.count(loadedCount))
+        case let .failed(message):
+            StatTile(title: "Snapshots", value: "—", help: message)
+        case .idle:
+            StatTile(
+                title: "Snapshots",
+                value: "—",
+                help: "The snapshot list has not finished loading."
+            )
+        }
+    }
+}
+
+/// Every number on the snapshots card traces to the moment it was read: an
+/// "Updated 7:27 AM" caption, or a spinner while a refresh is in flight.
+/// `showsSpinner: false` renders nothing while a read is in flight —
+/// surfaces without room for a spinner stay quiet instead.
+struct SnapshotFreshnessLabel: View {
+    let loadedAt: Date?
+    let isLoading: Bool
+    var showsSpinner = true
+
+    var body: some View {
+        if isLoading {
+            if showsSpinner {
+                ProgressView().controlSize(.small)
+            }
+        } else if let loadedAt {
+            Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+    }
+}
+
+// MARK: - Snapshot browser chrome
+
+/// The chrome the three snapshot browsers share — one icon map, one keyboard
+/// grammar, one ascent step, one row. These used to live as private per-view
+/// clones that could only drift.
+extension SnapshotNode {
+    /// The list glyph for a node's kind.
+    var browserIconName: String {
+        switch type {
+        case .dir: "folder.fill"
+        case .symlink: "arrow.turn.up.right"
+        case .file: "doc"
+        default: "questionmark.square.dashed"
+        }
+    }
+}
+
+/// The keyboard grammar the browsers' lists speak, and the parent step their
+/// go-up buttons take.
+enum BrowserListGrammar {
+    /// The lists' keyboard grammar. Everything unrecognised returns
+    /// `.ignored` so the List keeps its own arrow-key selection movement.
+    /// Return opens the selected directory through `open`; ⌫ and ⌘↑ ascend
+    /// through `goUp` when a parent exists (`hasParent`) — Finder's own
+    /// grammar.
+    static func keyPress(
+        _ press: KeyPress,
+        selected: SnapshotNode?,
+        hasParent: Bool,
+        open: (SnapshotNode) -> Void,
+        goUp: () -> Void
+    ) -> KeyPress.Result {
+        switch press.key {
+        case .return:
+            if let node = selected, node.isDirectory {
+                open(node)
+                return .handled
+            }
+            return .ignored
+        case .delete:
+            guard hasParent else { return .ignored }
+            goUp()
+            return .handled
+        case .upArrow where press.modifiers.contains(.command):
+            guard hasParent else { return .ignored }
+            goUp()
+            return .handled
+        default:
+            return .ignored
+        }
+    }
+
+    /// The parent of an absolute path for browser ascent: both the empty
+    /// parent and "/" mean "above the top", which the caller renders as its
+    /// pseudo-root.
+    static func parent(of path: String) -> String? {
+        let parent = (path as NSString).deletingLastPathComponent
+        return parent.isEmpty || parent == "/" ? nil : parent
+    }
+}
+
+/// The row the snapshot browsers render for one node: icon, name, and the
+/// size and modification columns. (The restore pane's change-annotated row
+/// is its own shape.)
+struct SnapshotNodeRow: View {
+    let node: SnapshotNode
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: node.browserIconName)
+                .foregroundStyle(node.isDirectory ? Color.accentColor : .secondary)
+                .frame(width: 16)
+            Text(node.name)
+                .lineLimit(1)
+            Spacer()
+            if !node.isDirectory {
+                Text(Format.bytes(node.size))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            Text(Format.timestamp(node.mtime))
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .frame(width: 140, alignment: .trailing)
+        }
+    }
+}
+
 // MARK: - Path list editor
 
 /// A list of paths with add/remove buttons, used for sources and excludes.
