@@ -18,14 +18,28 @@ extension AppModel {
             return
         }
 
-        activity[planID] = PlanActivity()
+        installPlanActivity(planID: planID)
         tasks.install(Task { [weak self] in
             if let self {
                 await BackupRunEngine.perform(plan: plan, repository: repository, sink: self)
             }
             self?.tasks.clear(.plan(planID))
+            // The unwind retires the token as well as the strip, so a hop
+            // from this run drops from here on — restore's own rule.
+            self?.backupRunTokens[planID] = nil
             self?.activity[planID] = nil
         }, in: .plan(planID))
+    }
+
+    /// Installs a fresh run strip: a new run token with it, so any progress
+    /// hop still in flight from the previous run of this plan drops instead
+    /// of writing into this one. The engine's own writes (`setActivityPhase`)
+    /// need no token: they run inside `perform`, sequenced on the main actor
+    /// before the unwind clears the strip — only the runner-invoked reporter
+    /// executes on a background thread and hops over unsequenced.
+    func installPlanActivity(planID: UUID) {
+        backupRunTokens[planID] = UUID()
+        activity[planID] = PlanActivity()
     }
 
     /// Waits for a plan's in-flight run to finish, if there is one.
@@ -53,9 +67,13 @@ extension AppModel: BackupRunEngine.Sink {
     }
 
     func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {
-        { [weak self] progress in
+        let token = backupRunTokens[planID]
+        return { [weak self] progress in
             Task { @MainActor in
-                guard let self, self.activity[planID] != nil else { return }
+                // The token, not the strip's existence, is the guard: after
+                // run N unwinds, a hop from run N must drop even though run
+                // N+1 has already installed its own strip.
+                guard let self, self.backupRunTokens[planID] == token else { return }
                 self.activity[planID]?.progress = progress
             }
         }

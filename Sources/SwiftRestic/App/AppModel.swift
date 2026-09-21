@@ -79,6 +79,15 @@ final class AppModel {
     /// unwinds so a progress hop still in flight from that run drops instead
     /// of resurrecting the cleared strip. See `restoreProgressReporter()`.
     @ObservationIgnored var restoreRunToken = UUID()
+    /// Which backup run each plan's progress strip belongs to — the same
+    /// run-identity rule as `restoreRunToken`, for the plan strips: a hop
+    /// still in flight when run N unwinds must drop instead of writing into
+    /// run N+1's strip. Rotated by `installPlanActivity`. (Maintenance keeps
+    /// its own map — `maintenanceRunTokens` — the key spaces merely look
+    /// alike.)
+    @ObservationIgnored var backupRunTokens: [UUID: UUID] = [:]
+    /// The maintenance mirror of `backupRunTokens`, keyed by repository.
+    @ObservationIgnored var maintenanceRunTokens: [UUID: UUID] = [:]
 
     let store: ConfigStore
     let secrets: SecretStore

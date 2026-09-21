@@ -39,7 +39,7 @@ extension AppModel {
             return
         }
 
-        maintenance[repositoryID] = MaintenanceActivity(task: task)
+        installMaintenanceActivity(repositoryID: repositoryID, task: task)
         tasks.install(Task { [weak self] in
             if let self {
                 await MaintenanceRunEngine.perform(
@@ -50,8 +50,18 @@ extension AppModel {
                 )
             }
             self?.tasks.clear(.maintenance(repositoryID))
+            // Retire the token with the strip — see `runBackup`'s unwind.
+            self?.maintenanceRunTokens[repositoryID] = nil
             self?.maintenance[repositoryID] = nil
         }, in: .maintenance(repositoryID))
+    }
+
+    /// The maintenance mirror of `installPlanActivity`: a fresh activity
+    /// carries a new run token, so a line still in flight from the previous
+    /// job drops instead of writing into this one.
+    func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask) {
+        maintenanceRunTokens[repositoryID] = UUID()
+        maintenance[repositoryID] = MaintenanceActivity(task: task)
     }
 
     /// Convenience for the menu, which always passes an explicit depth.
@@ -99,9 +109,13 @@ extension AppModel {
 
 extension AppModel: MaintenanceRunEngine.Sink {
     func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void {
-        { [weak self] line in
+        let token = maintenanceRunTokens[repositoryID]
+        return { [weak self] line in
             Task { @MainActor in
-                guard let self, self.maintenance[repositoryID] != nil else { return }
+                // The token, not the activity's existence, is the guard: a
+                // line from job N must drop once job N+1 has installed its
+                // own activity.
+                guard let self, self.maintenanceRunTokens[repositoryID] == token else { return }
                 self.maintenance[repositoryID]?.lastOutput = line
             }
         }

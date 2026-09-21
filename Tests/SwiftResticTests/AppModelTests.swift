@@ -624,6 +624,91 @@ struct UpsertStampTests {
     }
 }
 
+/// A progress hop still in flight when a run unwinds must not write into the
+/// next run's strip — the run-identity rule `restoreRunToken` gives restores,
+/// pinned here at the seam the engines use.
+@Suite("Run reporters answer to their own run")
+@MainActor
+struct RunReporterTokenTests {
+    private func makeModel() -> AppModel {
+        var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+        return AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticRunTokens-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory(secrets)
+        )
+    }
+
+    /// Lets a reporter's `Task { @MainActor in … }` land before asserting.
+    private func drainReporterHops() async {
+        for _ in 0..<20 {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    @Test("a late progress hop from a finished backup never lands in the next run's strip")
+    func lateBackupProgressHopDrops() async throws {
+        let model = makeModel()
+        var plan = BackupPlan()
+        plan.name = "Hop"
+        model.upsert(plan: plan)
+
+        // Run 1: a strip is installed and the engine captures its reporter.
+        model.installPlanActivity(planID: plan.id)
+        let reporter = model.progressReporter(planID: plan.id)
+
+        // Run 1 unwinds: token and strip are retired, exactly as the engine
+        // task does.
+        model.backupRunTokens[plan.id] = nil
+        model.activity[plan.id] = nil
+        // A hop still in flight must not resurrect the cleared strip.
+        var staleHop = OperationProgress()
+        staleHop.filesDone = 11
+        reporter(staleHop)
+        await drainReporterHops()
+        #expect(model.activity[plan.id] == nil)
+
+        // Run 2 installs a fresh strip; run 1's hop finally lands.
+        model.installPlanActivity(planID: plan.id)
+        var seed = OperationProgress()
+        seed.filesDone = 1
+        model.activity[plan.id]?.progress = seed
+        reporter(staleHop)
+        await drainReporterHops()
+        #expect(model.activity[plan.id]?.progress.filesDone == 1)
+    }
+
+    @Test("a late maintenance line never lands in the next job's activity")
+    func lateMaintenanceLineDrops() async throws {
+        let model = makeModel()
+        var repository = Repository()
+        repository.name = "NAS"
+        repository.kind = .local
+        repository.localPath = "/tmp/somewhere"
+        try await model.upsert(repository: repository, password: nil, providerSecret: nil)
+
+        model.installMaintenanceActivity(repositoryID: repository.id, task: .prune)
+        let reporter = model.lineReporter(repositoryID: repository.id)
+
+        // Job 1 unwinds: token and activity are retired; a line still in
+        // flight must not resurrect either.
+        model.maintenanceRunTokens[repository.id] = nil
+        model.maintenance[repository.id] = nil
+        reporter("run 1: pruning…")
+        await drainReporterHops()
+        #expect(model.maintenance[repository.id] == nil)
+
+        // Job 2 starts; job 1's line lands late and must not overwrite it.
+        model.installMaintenanceActivity(repositoryID: repository.id, task: .prune)
+        model.maintenance[repository.id]?.lastOutput = "run 2: pruning…"
+        reporter("run 1: pruning…")
+        await drainReporterHops()
+        #expect(model.maintenance[repository.id]?.lastOutput == "run 2: pruning…")
+    }
+}
+
 
 /// A Keychain read failure must keep its own name. Read as nil, it borrows
 /// the "no password stored" costume and the app diagnoses the wrong thing.

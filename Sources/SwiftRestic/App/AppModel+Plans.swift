@@ -30,6 +30,7 @@ extension AppModel {
         tasks.cancel(.plan(id))
         configuration.plans.removeAll { $0.id == id }
         activity[id] = nil
+        backupRunTokens[id] = nil
         forgetProblemSeen(planID: id)
     }
 
