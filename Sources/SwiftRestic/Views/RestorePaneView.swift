@@ -496,22 +496,21 @@ struct RestorePaneView: View {
         searchTask?.cancel()
         searchTask = Task {
             // An index failure is its own answer — a confident "no matches"
-            // would be the one lie a search tool cannot tell.
+            // would be the one lie a search tool cannot tell. The coverage
+            // walk reads through the same index, so its failure says the
+            // same thing and lands in the same catch.
             let hits: [SearchHit]
+            let versionsByPath: [String: [IndexedSnapshot]]
             do {
                 hits = try await model.searchIndex(pattern: query, repositoryID: repositoryID)
+                versionsByPath = try await model.indexedVersions(
+                    ofPaths: hits.map(\.path), repositoryID: repositoryID
+                )
             } catch {
                 guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
                 loadError = (error as? ResticError)?.errorDescription ?? error.localizedDescription
                 return
             }
-            // One batched round trip answers every hit's coverage at once;
-            // the guard below owns the answer, so a cancelled or superseded
-            // search discards it exactly as the per-hit walk's own checks
-            // did.
-            let versionsByPath = await model.indexedVersions(
-                ofPaths: hits.map(\.path), repositoryID: repositoryID
-            )
             guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
             let covered = hits.filter { hit in
                 versionsByPath[hit.path]?.contains { $0.id == searchedRecordID } == true

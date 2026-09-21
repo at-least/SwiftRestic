@@ -349,7 +349,9 @@ struct FindFilesView: View {
     /// by that snapshot, matching the restic engine's row order.
     private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> [Row] {
         let hits = try await model.searchIndex(pattern: pattern, repositoryID: repositoryID)
-        let versionsByPath = await model.indexedVersions(
+        // A thrown index failure propagates to the sheet's own error message;
+        // only pruned paths (absent here) degrade into the dropped count.
+        let versionsByPath = try await model.indexedVersions(
             ofPaths: hits.map(\.path), repositoryID: repositoryID
         )
         var rows: [Row] = []

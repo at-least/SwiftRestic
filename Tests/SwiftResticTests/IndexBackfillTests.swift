@@ -70,6 +70,19 @@ struct IndexBackfillTests {
         #expect(try store.readEntryCount(ofPath: stablePath, chain: planTag) == 1)
         #expect(try store.readEntryCount(ofPath: changedPath, chain: planTag) == 1)
 
+        // The coordinator's batched form — the search flows' bulk lookup —
+        // answers the same paths with the same versions the single-path
+        // query does, and leaves a never-indexed path absent.
+        let batched = try await coordinator.versions(
+            ofPaths: [changedPath, stablePath, "/data/never.indexed"],
+            repositoryID: repository.id
+        )
+        let changedSingle = try store.versions(ofPath: changedPath).map(\.id)
+        let stableSingle = try store.versions(ofPath: stablePath).map(\.id)
+        #expect(batched[changedPath]?.map(\.id) == changedSingle)
+        #expect(batched[stablePath]?.map(\.id) == stableSingle)
+        #expect(batched["/data/never.indexed"] == nil)
+
         // A second pass over everything changes nothing: reconcile is
         // idempotent and both snapshots are already fully read.
         await coordinator.reconcile(repositoryID: repository.id, snapshots: listing)
@@ -293,5 +306,34 @@ struct IndexBackfillTests {
         #expect(!FileManager.default.fileExists(atPath: file.path))
         await coordinator.reconcile(repositoryID: repositoryID, snapshots: [])
         #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+}
+
+/// The coordinator's tombstone contract, without restic: once a repository
+/// is dropped, its index answers by throwing — a search reading through the
+/// coordinator must surface that, never read it as "no versions".
+@Suite("index coordinator tombstones")
+struct IndexCoordinatorTombstoneTests {
+    @Test("versions for a dropped repository throw repositoryRemoved")
+    func droppedRepositoryThrows() async throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticTombstone-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let coordinator = IndexCoordinator(directory: base)
+
+        var repository = Repository()
+        repository.name = "Doomed"
+        repository.kind = .local
+        repository.localPath = base.path
+        await coordinator.reconcile(repositoryID: repository.id, snapshots: [])
+
+        await coordinator.dropRepository(repositoryID: repository.id)
+        do {
+            _ = try await coordinator.versions(ofPaths: ["/data/a"], repositoryID: repository.id)
+            Issue.record("expected repositoryRemoved, got a result")
+        } catch IndexError.repositoryRemoved {
+            // The answer a search must surface, never read as "no versions".
+        }
     }
 }

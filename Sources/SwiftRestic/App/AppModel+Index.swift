@@ -31,11 +31,12 @@ extension AppModel {
     }
 
     /// The batched form of `indexedVersions(ofPath:)` for a whole search
-    /// result: one store round trip per chunk of paths. A path the index has
-    /// not read is absent from the dictionary — the same fact an empty
-    /// array answers one path at a time.
-    func indexedVersions(ofPaths paths: [String], repositoryID: UUID) async -> [String: [IndexedSnapshot]] {
-        (try? await indexCoordinator.versions(ofPaths: paths, repositoryID: repositoryID)) ?? [:]
+    /// result: one store round trip per chunk of paths. Throws when the
+    /// index itself fails — a search that cannot read its index must say so,
+    /// not read as "nothing covered"; a path the index holds nothing on is
+    /// simply absent from the dictionary.
+    func indexedVersions(ofPaths paths: [String], repositoryID: UUID) async throws -> [String: [IndexedSnapshot]] {
+        try await indexCoordinator.versions(ofPaths: paths, repositoryID: repositoryID)
     }
 
     /// Whether the index has read every alive snapshot of the repository —
