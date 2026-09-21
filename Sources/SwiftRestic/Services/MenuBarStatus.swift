@@ -94,7 +94,7 @@ enum MenuBarStatus {
         relative: (Date) -> String = { Format.relative($0) }
     ) -> String? {
         guard !hasNoRepositories else { return nil }
-        let problems = OverviewMetrics.problems(in: runs, since: now.addingTimeInterval(-7 * 86_400))
+        let problems = OverviewMetrics.problems(in: runs, since: OverviewMetrics.problemWindowStart(from: now))
         guard let newest = problems.max(by: { $0.finishedAt < $1.finishedAt }) else { return nil }
 
         // A backup names its plan the way Activity does; a restore names what

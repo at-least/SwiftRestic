@@ -19,12 +19,12 @@ struct OverviewView: View {
 
     private static let windowDays = 30
 
-    /// The problems window, shared by the Problems tile and the failures card
-    /// so the two can never disagree on what "recent" covers. The predicate
-    /// itself is `OverviewMetrics.problems`, which the menu bar's problem
-    /// line also draws from.
+    /// The problems window: the shared `OverviewMetrics` week, so the
+    /// Problems tile and the failures card cannot disagree with the sidebar
+    /// and menu bar on what "recent" covers. The predicate itself is
+    /// `OverviewMetrics.problems`.
     private var problemWindowStart: Date {
-        Date.now.addingTimeInterval(-7 * 86_400)
+        OverviewMetrics.problemWindowStart(from: .now)
     }
 
     var body: some View {

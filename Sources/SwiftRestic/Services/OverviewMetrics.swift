@@ -26,6 +26,14 @@ enum OverviewMetrics {
     static let seriesCap = 7
     static let otherSeriesName = "Other"
 
+    /// The window a "recent problem" counts over. The overview's Problems
+    /// tile, the failures card, the sidebar row and the menu bar's problem
+    /// line all read the same week, so a problem cannot age out of one
+    /// surface before another — one owner, not four spellings of `-7 days`.
+    static func problemWindowStart(from now: Date) -> Date {
+        now.addingTimeInterval(-7 * 86_400)
+    }
+
     /// Daily totals of data written to repositories, one entry per plan per day.
     ///
     /// - Parameter planOrder: plan names in configuration order. Series colours

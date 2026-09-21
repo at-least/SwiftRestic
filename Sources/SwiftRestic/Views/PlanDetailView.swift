@@ -476,7 +476,12 @@ struct SnapshotTable: View {
                 // model's values are optional (a snapshot can lack a summary)
                 // and a table sorter cannot sort "—".
                 TableColumn("When", value: \.time) { snapshot in
-                    Text(Format.timestamp(snapshot.time))
+                    // The displayTimes cache owns this spelling — it is what
+                    // the filter matches against — so the cell reads it
+                    // instead of re-formatting per row per render. The
+                    // fallback covers the first render, before the cache's
+                    // onChange has run; both spellings are identical.
+                    Text(displayTimes[snapshot.id] ?? Format.timestamp(snapshot.time))
                         .monospacedDigit()
                 }
                 .width(min: 150, ideal: 164)

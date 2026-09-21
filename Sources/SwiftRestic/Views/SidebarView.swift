@@ -35,7 +35,7 @@ struct SidebarView: View {
             // per body so the badge and the surfaces it points at agree.
             let problemCount = OverviewMetrics.problemCount(
                 runs: model.configuration.runs,
-                since: Date.now.addingTimeInterval(-7 * 86_400)
+                since: OverviewMetrics.problemWindowStart(from: .now)
             )
             Section {
                 Label("Overview", systemImage: "square.grid.2x2")
