@@ -27,9 +27,15 @@ struct AppModelStubTests {
         planHooks: [BackupHook] = [],
         channels: [NotificationChannel] = []
     ) async throws -> Harness {
-        let root = FileManager.default.temporaryDirectory
+        let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticStubModel-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        // Same canonical root the real-restic harness resolves to: paths here
+        // reach the configuration as-is, and `/tmp` is a symlink to
+        // `/private/tmp` — an unresolved root would spell every path
+        // differently from what the model itself resolves, for no reason the
+        // stub needs.
+        let root = base.resolvingSymlinksInPath()
         let stub = try StubRestic.install(in: root)
 
         var repository = Repository()
