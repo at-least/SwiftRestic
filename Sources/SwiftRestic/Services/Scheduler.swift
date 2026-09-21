@@ -67,6 +67,28 @@ enum Scheduler {
         }
     }
 
+    /// Every enabled, complete plan's next run date, in plan order — the one
+    /// enumeration the scheduler's pick and the dashboard's "Next runs" card
+    /// both derive from, so the card cannot announce a run the scheduler
+    /// will never fire (an incomplete plan used to sit on the card as due
+    /// forever). Dates are raw: the card labels a past one "Due now"; only
+    /// `nextScheduledRun` clamps to `now`.
+    static func upcomingRuns(
+        in plans: [BackupPlan],
+        now: Date = .now,
+        existingRepositoryIDs: Set<UUID>
+    ) -> [(plan: BackupPlan, date: Date)] {
+        plans
+            .filter { $0.isEnabled && $0.isConfigurationComplete }
+            .compactMap { plan -> (BackupPlan, Date)? in
+                guard let repositoryID = plan.repositoryID,
+                      existingRepositoryIDs.contains(repositoryID)
+                else { return nil }
+                guard let date = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now) else { return nil }
+                return (plan, date)
+            }
+    }
+
     /// The soonest upcoming run across all enabled plans, for the menu bar.
     /// A plan whose repository no longer exists is never listed: counting down
     /// to a run that can never start is a lie.
@@ -75,16 +97,8 @@ enum Scheduler {
         now: Date = .now,
         existingRepositoryIDs: Set<UUID>
     ) -> (plan: BackupPlan, date: Date)? {
-        plans
-            .filter { $0.isEnabled && $0.isConfigurationComplete }
-            .compactMap { plan -> (BackupPlan, Date)? in
-                guard let repositoryID = plan.repositoryID,
-                      existingRepositoryIDs.contains(repositoryID)
-                else { return nil }
-                guard let date = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now) else { return nil }
-                return (plan, max(date, now))
-            }
+        upcomingRuns(in: plans, now: now, existingRepositoryIDs: existingRepositoryIDs)
+            .map { (plan: $0.plan, date: max($0.date, now)) }
             .min { $0.1 < $1.1 }
-            .map { (plan: $0.0, date: $0.1) }
     }
 }

@@ -180,6 +180,39 @@ struct SchedulingTests {
         )?.plan.name == "orphaned")
     }
 
+    @Test("upcomingRuns is the scheduler's own enumeration, shared with the Next runs card")
+    func upcomingRunsFiltering() {
+        let repositoryID = UUID()
+        func makePlan(name: String, enabled: Bool, sources: [String], lastRunAt: Date?) -> BackupPlan {
+            var plan = BackupPlan()
+            plan.name = name
+            plan.repositoryID = repositoryID
+            plan.sources = sources
+            plan.isEnabled = enabled
+            plan.schedule.frequency = .hourly
+            plan.schedule.intervalHours = 1
+            plan.lastRunAt = lastRunAt
+            return plan
+        }
+
+        let now = date("2026-09-05 12:00:00")
+        // Ran at 10:00, hourly: next due 11:00 — already past, which is the
+        // card's "Due now" case and proves the date comes back unclamped.
+        let overdue = makePlan(name: "overdue", enabled: true, sources: ["/tmp"], lastRunAt: date("2026-09-05 10:00:00"))
+        let disabled = makePlan(name: "disabled", enabled: false, sources: ["/tmp"], lastRunAt: nil)
+        // The drift the fix closes: an incomplete plan was announced by the
+        // card as due forever while the scheduler will never fire it.
+        let incomplete = makePlan(name: "incomplete", enabled: true, sources: [], lastRunAt: nil)
+
+        let upcoming = Scheduler.upcomingRuns(
+            in: [overdue, disabled, incomplete],
+            now: now,
+            existingRepositoryIDs: [repositoryID]
+        )
+        #expect(upcoming.map(\.plan.name) == ["overdue"])
+        #expect(upcoming.first?.date == date("2026-09-05 11:00:00"))
+    }
+
     @Test("a plan whose repository is busy is held back, not dropped")
     func repositoryBusyDefersPlan() {
         let repositoryID = UUID()
