@@ -151,6 +151,43 @@ struct BrowseCacheTests {
         #expect(try store.listing(snapshotID: "s2", directory: "/src") != nil)
     }
 
+    @Test("the coordinator serves a cache hit already in browser order")
+    func coordinatorSortsCachedListing() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticBrowseCache-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let coordinator = IndexCoordinator(directory: directory)
+        let repository = UUID()
+
+        // Captured in no particular order: Finder order is the browser's row
+        // order, and a hit must arrive in it. Sorting on the main actor is
+        // the cache-hit path paying localizedStandardCompare over a whole
+        // directory exactly when it exists to be instant — the live listing
+        // already sorts off-main inside the service.
+        await coordinator.cacheListing(
+            snapshotID: "s1", directory: "/src",
+            nodes: [
+                node("/src/b.txt").snapshotNode,
+                node("/src/Zeta", kind: .dir, size: nil).snapshotNode,
+                node("/src/a.txt").snapshotNode,
+                node("/src/alpha", kind: .dir, size: nil).snapshotNode,
+            ],
+            repositoryID: repository
+        )
+
+        let read = await coordinator.cachedBrowserListing(
+            snapshotID: "s1", directory: "/src", repositoryID: repository
+        )
+        // Directories first, Finder-style: case-insensitive, so alpha sorts
+        // ahead of Zeta.
+        #expect(read?.map(\.name) == ["alpha", "Zeta", "a.txt", "b.txt"])
+
+        // A miss stays a miss; the wrapper adds no hit of its own.
+        #expect(await coordinator.cachedBrowserListing(
+            snapshotID: "s9", directory: "/src", repositoryID: repository
+        ) == nil)
+    }
+
     @Test("the coordinator serves the caches per repository and canonicalizes lookups")
     func coordinatorPassThrough() async throws {
         let directory = FileManager.default.temporaryDirectory

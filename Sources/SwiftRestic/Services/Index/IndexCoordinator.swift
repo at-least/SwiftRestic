@@ -210,6 +210,19 @@ actor IndexCoordinator {
         return try? store.listing(snapshotID: snapshotID, directory: directory)
     }
 
+    /// The cached listing mapped and sorted into the browser's row order,
+    /// nil on miss. The sort runs on the coordinator's executor so the
+    /// caller — the main actor — never pays the directory-sized
+    /// `localizedStandardCompare` pass that the live `listDirectory` path
+    /// already does off-main inside the service: the hit is the path that
+    /// exists to be instant.
+    func cachedBrowserListing(snapshotID: String, directory: String, repositoryID: UUID) -> [SnapshotNode]? {
+        guard let cached = cachedListing(
+            snapshotID: snapshotID, directory: directory, repositoryID: repositoryID
+        ) else { return nil }
+        return ResticService.sortedForBrowser(cached.map(\.snapshotNode))
+    }
+
     /// Captures one directory's listing for next time. Best-effort: a failed
     /// write costs only the next visit's restic round trip.
     func cacheListing(snapshotID: String, directory: String, nodes: [SnapshotNode], repositoryID: UUID) {

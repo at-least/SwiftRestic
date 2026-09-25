@@ -164,13 +164,14 @@ extension AppModel {
         // immutable, so its directory listings are facts that never go stale:
         // a hit answers without the restic round trip — the difference
         // between an instant expand and a fresh process reopening the whole
-        // repository on every chevron click.
-        if let cached = await indexCoordinator.cachedListing(
+        // repository on every chevron click. The coordinator hands the hit
+        // back already in browser order, so the main actor does no sorting.
+        if let cached = await indexCoordinator.cachedBrowserListing(
             snapshotID: snapshotID,
             directory: path,
             repositoryID: repositoryID
         ) {
-            return ResticService.sortedForBrowser(cached.map(\.snapshotNode))
+            return cached
         }
         let (service, context) = try await resticContext(for: repository)
         let nodes = try await service.listDirectory(context, snapshotID: snapshotID, path: path)
