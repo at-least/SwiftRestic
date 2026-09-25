@@ -156,8 +156,22 @@ extension AppModel {
     /// Registers or removes the login item, reporting whatever macOS says.
     /// The `SMAppService` calls are synchronous XPC round-trips to the
     /// background-task-management daemon, so each runs detached — a wedged
-    /// daemon stalls a background task, not the main actor.
+    /// daemon stalls a background task, not the main actor. Changes
+    /// serialize through a task handle: a second toggle awaits the first,
+    /// so the daemon's final state is the last click's, not whichever XPC
+    /// happened to finish last.
     func setStartsAtLogin(_ enabled: Bool) async {
+        while let inFlight = loginItemChange {
+            await inFlight.value
+        }
+        loginItemChange = Task { [weak self] in
+            await self?.performSetStartsAtLogin(enabled)
+        }
+        await loginItemChange?.value
+        loginItemChange = nil
+    }
+
+    private func performSetStartsAtLogin(_ enabled: Bool) async {
         if enabled, !LoginItem.isInInstallableLocation {
             post(Banner(
                 title: "Cannot start at login from here",

@@ -80,10 +80,13 @@ struct SettingsView: View {
             Section("Scheduling") {
                 Toggle("Start SwiftRestic at login", isOn: Binding(
                     get: { model.startsAtLogin },
-                    // The register/unregister XPC runs off the main actor; the
-                    // toggle flips now and the model confirms (or corrects)
-                    // when the daemon answers.
-                    set: { value in Task { await model.setStartsAtLogin(value) } }
+                    // Optimistic flip: the model var moves now, and the
+                    // daemon's answer (a line or two below in
+                    // setStartsAtLogin) confirms or corrects it.
+                    set: { value in
+                        model.startsAtLogin = value
+                        Task { await model.setStartsAtLogin(value) }
+                    }
                 ))
                 .disabled(!LoginItem.isInInstallableLocation && !model.startsAtLogin)
                 Text(LoginItem.isInInstallableLocation

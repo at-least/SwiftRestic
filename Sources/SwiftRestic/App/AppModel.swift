@@ -126,6 +126,10 @@ final class AppModel {
     @ObservationIgnored let tasks = TaskRegistry()
     var schedulerTask: Task<Void, Never>?
     var saveTask: Task<Void, Never>?
+    /// Serializes the login-item changes: two quick toggles must apply in
+    /// click order, or the daemon ends on whichever XPC finished last
+    /// instead of the user's last click.
+    @ObservationIgnored var loginItemChange: Task<Void, Never>?
     /// Repositories whose last refresh already announced a stats failure.
     /// The banner is a transition signal, not a nag: a repository whose stats
     /// keep failing says it once, and says it again only after a success in
