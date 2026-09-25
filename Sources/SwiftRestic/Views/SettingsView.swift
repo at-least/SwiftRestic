@@ -31,13 +31,13 @@ struct SettingsView: View {
         } message: {
             Text("Closing the main window afterwards leaves scheduled backups running with no visible way back into SwiftRestic — reopening means launching the app again. Keep the item on to always have a way in.")
         }
-        .task { model.refreshLoginItemStatus() }
+        .task { await model.refreshLoginItemStatus() }
         // Approving a login item happens in System Settings, so the only signal
         // that it went through is the user coming back to this app.
         .onReceive(NotificationCenter.default.publisher(
             for: NSApplication.didBecomeActiveNotification
         )) { _ in
-            model.refreshLoginItemStatus()
+            Task { await model.refreshLoginItemStatus() }
         }
     }
 
@@ -80,7 +80,10 @@ struct SettingsView: View {
             Section("Scheduling") {
                 Toggle("Start SwiftRestic at login", isOn: Binding(
                     get: { model.startsAtLogin },
-                    set: { model.setStartsAtLogin($0) }
+                    // The register/unregister XPC runs off the main actor; the
+                    // toggle flips now and the model confirms (or corrects)
+                    // when the daemon answers.
+                    set: { value in Task { await model.setStartsAtLogin(value) } }
                 ))
                 .disabled(!LoginItem.isInInstallableLocation && !model.startsAtLogin)
                 Text(LoginItem.isInInstallableLocation

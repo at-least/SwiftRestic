@@ -7,14 +7,21 @@ extension AppModel {
         schedulerTask?.cancel()
         schedulerTask = Task { [weak self] in
             while !Task.isCancelled {
-                self?.runDuePlans()
+                await self?.runDuePlans()
                 try? await Task.sleep(for: .seconds(60))
             }
         }
     }
 
-    private func runDuePlans() {
-        if configuration.settings.pauseOnBattery, PowerState.isOnBattery { return }
+    /// One scheduler tick. Awaited by the loop above, so ticks never
+    /// overlap — the same no-overlap rule the debounce's flush follows.
+    private func runDuePlans() async {
+        // The battery check is a synchronous IOKit round-trip to powerd —
+        // quick, but it is still IPC; it runs detached so the tick decides
+        // on the main actor without paying it there.
+        if configuration.settings.pauseOnBattery,
+           await Task.detached(priority: .utility) { PowerState.isOnBattery }.value
+        { return }
 
         // Upkeep is considered first: a due prune should not be starved by a
         // backup, which will simply still be due on the next tick.

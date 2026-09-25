@@ -136,7 +136,9 @@ final class AppModel {
     /// banner: once per failing stretch, so a denial does not nag on every
     /// failed run.
     @ObservationIgnored var notificationsProblemNoted = false
-    private var isSaving = false
+    /// The save actually writing, when one is. Awaited (never yield-spun)
+    /// by the next flush — see `flushSave`.
+    @ObservationIgnored private var saveInFlight: Task<Void, Never>?
     /// Set when bootstrap could not read the configuration from any
     /// generation. Every save from here on is refused: the live file that is
     /// on disk is corrupt in unknown ways, and the rotation behind each save
@@ -196,20 +198,28 @@ final class AppModel {
         guard isLoaded else { return }
         guard !isConfigurationUnreadable else { return }
         // Another write is in progress: wait for it and then write the newer
-        // state. Skipping instead would drop the latest edit for good — nothing
-        // else would save it, including the single flush at shutdown.
-        while isSaving { await Task.yield() }
-        isSaving = true
-        defer { isSaving = false }
-        let snapshot = configuration
-        do {
-            try await store.save(snapshot)
-        } catch {
-            post(Banner(
-                title: "Could not save your configuration",
-                message: error.localizedDescription,
-                isError: true
-            ))
+        // state. Skipping instead would drop the latest edit for good —
+        // nothing else would save it, including the single flush at
+        // shutdown. Awaiting the in-flight task suspends this flush instead
+        // of yield-spinning the main actor's queue, and the loop re-checks,
+        // so a save scheduled behind the awaited one drains too.
+        while let inFlight = saveInFlight {
+            await inFlight.value
         }
+        saveInFlight = Task { [weak self] in
+            guard let self else { return }
+            let snapshot = self.configuration
+            do {
+                try await self.store.save(snapshot)
+            } catch {
+                self.post(Banner(
+                    title: "Could not save your configuration",
+                    message: error.localizedDescription,
+                    isError: true
+                ))
+            }
+        }
+        await saveInFlight?.value
+        saveInFlight = nil
     }
 }

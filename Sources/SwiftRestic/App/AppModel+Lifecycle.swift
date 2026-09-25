@@ -71,7 +71,7 @@ extension AppModel {
         // Finder finished with those drops long ago. Not awaited: a slow
         // temp directory must not hold the first screen behind the spinner.
         Task.detached { Self.sweepDragRestoreStaging() }
-        startsAtLogin = LoginItem.isEnabled
+        startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
         await resolveBinary()
         // The loading state covers configuration plus the binary probe: both
         // decide what the first real screen looks like (panes, or the
@@ -134,9 +134,13 @@ extension AppModel {
     /// Finds the restic binary and reads its version, or records why it could not.
     func resolveBinary() async {
         do {
-            let located = try ResticBinary.locate(
-                userOverride: configuration.settings.resticPathOverride
-            )
+            // The locate probes stat every candidate path (and every PATH
+            // entry) — filesystem work, so it runs off the main actor even
+            // though the answer lands back on it.
+            let override = configuration.settings.resticPathOverride
+            let located = try await Task.detached(priority: .userInitiated) {
+                try ResticBinary.locate(userOverride: override)
+            }.value
             binary = located
             binaryProblem = nil
             resticVersion = (try? await service().version()) ?? ""
@@ -150,28 +154,31 @@ extension AppModel {
     var isResticAvailable: Bool { binary != nil }
 
     /// Registers or removes the login item, reporting whatever macOS says.
-    func setStartsAtLogin(_ enabled: Bool) {
+    /// The `SMAppService` calls are synchronous XPC round-trips to the
+    /// background-task-management daemon, so each runs detached — a wedged
+    /// daemon stalls a background task, not the main actor.
+    func setStartsAtLogin(_ enabled: Bool) async {
         if enabled, !LoginItem.isInInstallableLocation {
             post(Banner(
                 title: "Cannot start at login from here",
                 message: LoginItem.notInstalledMessage,
                 isError: true
             ))
-            startsAtLogin = LoginItem.isEnabled
+            startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
             return
         }
         do {
-            try LoginItem.setEnabled(enabled)
-            startsAtLogin = LoginItem.isEnabled
-            if enabled, LoginItem.needsApproval {
+            try await Task.detached { try LoginItem.setEnabled(enabled) }.value
+            startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
+            if enabled, await Task.detached { LoginItem.needsApproval }.value {
                 post(Banner(
                     title: "Approval needed",
-                    message: LoginItem.statusDescription,
+                    message: await Task.detached { LoginItem.statusDescription }.value,
                     isError: false
                 ))
             }
         } catch {
-            startsAtLogin = LoginItem.isEnabled
+            startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
             post(Banner(
                 title: "Could not change the login item",
                 message: error.localizedDescription,
@@ -180,7 +187,9 @@ extension AppModel {
         }
     }
 
-    func refreshLoginItemStatus() { startsAtLogin = LoginItem.isEnabled }
+    func refreshLoginItemStatus() async {
+        startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
+    }
 
     var resticPath: String { binary?.url.path ?? "" }
 }

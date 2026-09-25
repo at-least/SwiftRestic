@@ -406,7 +406,10 @@ struct RepositoryEditorSheet: View {
     /// without rclone the field is simply free text, and the save-time probe
     /// already explains a missing binary.
     private func loadRcloneRemotes() async -> [RcloneRemote] {
-        guard let rclone = ResticBinary.locateHelper(named: "rclone") else { return [] }
+        // The helper lookup stats the PATH — off the main actor, the same
+        // rule resolveBinary's own probe follows.
+        guard let rclone = await Task.detached { ResticBinary.locateHelper(named: "rclone") }.value
+        else { return [] }
         return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
     }
 
@@ -431,7 +434,9 @@ struct RepositoryEditorSheet: View {
 
         // restic shells out to rclone for this backend; catch a missing helper
         // here rather than letting it surface as an opaque failure from restic.
-        if draft.requiresRcloneBinary, ResticBinary.locateHelper(named: "rclone") == nil {
+        if draft.requiresRcloneBinary,
+           await Task.detached { ResticBinary.locateHelper(named: "rclone") }.value == nil
+        {
             status = .failure("rclone is not installed. Install it with `brew install rclone`.")
             return false
         }
