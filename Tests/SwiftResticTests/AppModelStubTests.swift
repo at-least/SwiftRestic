@@ -987,6 +987,7 @@ struct AppModelStubTests {
         // the run is guaranteed in flight against the never-finishing stub.
         harness.model.runBackup(planID: harness.plan.id)
         #expect(harness.model.isRunning(planID: harness.plan.id))
+        #expect(harness.model.planProgress[harness.plan.id] != nil)
         harness.model.deletePlan(id: harness.plan.id)
         await harness.model.waitForRun(planID: harness.plan.id)
 
@@ -996,6 +997,9 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
         #expect(record.failureMessage == "Cancelled")
+        // Deletion retires the progress entry with the phase strip — the pair
+        // is installed and cleared together everywhere.
+        #expect(harness.model.planProgress[harness.plan.id] == nil)
 
         await harness.model.shutdown()
     }

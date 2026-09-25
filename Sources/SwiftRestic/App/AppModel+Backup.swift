@@ -28,18 +28,22 @@ extension AppModel {
             // from this run drops from here on — restore's own rule.
             self?.backupRunTokens[planID] = nil
             self?.activity[planID] = nil
+            self?.planProgress[planID] = nil
         }, in: .plan(planID))
     }
 
-    /// Installs a fresh run strip: a new run token with it, so any progress
-    /// hop still in flight from the previous run of this plan drops instead
-    /// of writing into this one. The engine's own writes (`setActivityPhase`)
-    /// need no token: they run inside `perform`, sequenced on the main actor
-    /// before the unwind clears the strip — only the runner-invoked reporter
-    /// executes on a background thread and hops over unsequenced.
+    /// Installs a fresh run strip — activity for the phase, a zeroed
+    /// progress entry for the numbers — plus a new run token with them, so
+    /// any progress hop still in flight from the previous run of this plan
+    /// drops instead of writing into this one. The engine's own writes
+    /// (`setActivityPhase`) need no token: they run inside `perform`,
+    /// sequenced on the main actor before the unwind clears the strip —
+    /// only the runner-invoked reporter executes on a background thread and
+    /// hops over unsequenced.
     func installPlanActivity(planID: UUID) {
         backupRunTokens[planID] = UUID()
         activity[planID] = PlanActivity()
+        planProgress[planID] = OperationProgress()
     }
 
     /// Waits for a plan's in-flight run to finish, if there is one.
@@ -72,9 +76,12 @@ extension AppModel: BackupRunEngine.Sink {
             Task { @MainActor in
                 // The token, not the strip's existence, is the guard: after
                 // run N unwinds, a hop from run N must drop even though run
-                // N+1 has already installed its own strip.
+                // N+1 has already installed its own strip. The write lands
+                // in `planProgress` — its own observable storage — so the
+                // tick invalidates the running strip, not every view that
+                // reads the plan's phase.
                 guard let self, self.backupRunTokens[planID] == token else { return }
-                self.activity[planID]?.progress = progress
+                self.planProgress[planID] = progress
             }
         }
     }

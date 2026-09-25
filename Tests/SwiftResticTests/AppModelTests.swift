@@ -665,21 +665,26 @@ struct RunReporterTokenTests {
         // task does.
         model.backupRunTokens[plan.id] = nil
         model.activity[plan.id] = nil
+        model.planProgress[plan.id] = nil
         // A hop still in flight must not resurrect the cleared strip.
         var staleHop = OperationProgress()
         staleHop.filesDone = 11
         reporter(staleHop)
         await drainReporterHops()
         #expect(model.activity[plan.id] == nil)
+        #expect(model.planProgress[plan.id] == nil)
 
-        // Run 2 installs a fresh strip; run 1's hop finally lands.
+        // Run 2 installs a fresh strip; run 1's hop finally lands. A fresh
+        // strip starts from zeroed progress, so a new run's strip cannot open
+        // on the previous run's last percentage.
         model.installPlanActivity(planID: plan.id)
+        #expect(model.planProgress[plan.id] == OperationProgress())
         var seed = OperationProgress()
         seed.filesDone = 1
-        model.activity[plan.id]?.progress = seed
+        model.planProgress[plan.id] = seed
         reporter(staleHop)
         await drainReporterHops()
-        #expect(model.activity[plan.id]?.progress.filesDone == 1)
+        #expect(model.planProgress[plan.id]?.filesDone == 1)
     }
 
     @Test("a late maintenance line never lands in the next job's activity")

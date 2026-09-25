@@ -3,6 +3,11 @@ import Foundation
 /// Value types making up `AppModel`'s observable runtime state.
 
 /// Live state of one plan that is currently running.
+///
+/// Progress is deliberately not here: it lives in `AppModel.planProgress`,
+/// its own observable storage, so a once-a-second status tick invalidates
+/// only the views that show the numbers — not every view that reads which
+/// phase a plan is in.
 struct PlanActivity: Sendable, Equatable {
     enum Phase: Sendable, Equatable {
         case starting
@@ -27,7 +32,6 @@ struct PlanActivity: Sendable, Equatable {
     }
 
     var phase: Phase = .starting
-    var progress = OperationProgress()
     var startedAt: Date = .now
 }
 

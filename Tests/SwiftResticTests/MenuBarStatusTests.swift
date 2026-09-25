@@ -14,14 +14,16 @@ struct MenuBarStatusTests {
         return plan
     }
 
-    private func activity(
-        phase: PlanActivity.Phase = .backingUp,
-        fraction: Double = 0
-    ) -> PlanActivity {
+    private func activity(phase: PlanActivity.Phase = .backingUp) -> PlanActivity {
         var activity = PlanActivity()
         activity.phase = phase
-        activity.progress.fraction = fraction
         return activity
+    }
+
+    private func progress(fraction: Double) -> OperationProgress {
+        var value = OperationProgress()
+        value.fraction = fraction
+        return value
     }
 
     @Test("idle with nothing configured says there is no schedule")
@@ -58,19 +60,25 @@ struct MenuBarStatusTests {
     func runningReplacesHeadline() {
         let nightly = plan(name: "Nightly")
         #expect(MenuBarStatus.headline(activity: [nightly.id: activity()], nextRun: nil) == nil)
-        #expect(MenuBarStatus.runningLines(plans: [nightly], activity: [nightly.id: activity()]).map(\.text) == ["Nightly — 0%"])
+        #expect(
+            MenuBarStatus.runningLines(
+                plans: [nightly],
+                activity: [nightly.id: activity()],
+                progress: [nightly.id: progress(fraction: 0)]
+            ).map(\.text) == ["Nightly — 0%"]
+        )
     }
 
     @Test("phases tick over: phase names before restic streams, percentages after")
     func phasesAndPercent() {
-        #expect(MenuBarStatus.progressText(nil) == "…")
-        #expect(MenuBarStatus.progressText(activity(phase: .starting)) == "Starting…")
-        #expect(MenuBarStatus.progressText(activity(phase: .backingUp, fraction: 0)) == "0%")
-        #expect(MenuBarStatus.progressText(activity(phase: .backingUp, fraction: 0.418)) == "42%")
-        #expect(MenuBarStatus.progressText(activity(phase: .backingUp, fraction: 1)) == "100%")
+        #expect(MenuBarStatus.progressText(activity: nil, progress: nil) == "…")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .starting), progress: nil) == "Starting…")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0)) == "0%")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0.418)) == "42%")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 1)) == "100%")
         // Retention and notification phases are named, never shown as a percent.
-        #expect(MenuBarStatus.progressText(activity(phase: .applyingRetention, fraction: 1)) == "Applying retention")
-        #expect(MenuBarStatus.progressText(activity(phase: .cancelling)) == "Cancelling…")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .applyingRetention), progress: progress(fraction: 1)) == "Applying retention")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .cancelling), progress: nil) == "Cancelling…")
     }
 
     @Test("two plans running at once each get a line, in configuration order")
@@ -82,9 +90,10 @@ struct MenuBarStatusTests {
         let lines = MenuBarStatus.runningLines(
             plans: [first, second, third],
             activity: [
-                second.id: activity(fraction: 0.5),
+                second.id: activity(),
                 first.id: activity(phase: .applyingRetention),
-            ]
+            ],
+            progress: [second.id: progress(fraction: 0.5)]
         )
         #expect(lines.map(\.text) == ["First — Applying retention", "Second — 50%"])
         #expect(lines.map(\.id) == [first.id.uuidString, second.id.uuidString])

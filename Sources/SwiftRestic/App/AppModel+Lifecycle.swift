@@ -62,8 +62,10 @@ extension AppModel {
                 isError: true
             ))
         }
-        // Reset any activity left behind by a crash mid-backup.
+        // Reset any activity left behind by a crash mid-backup. The progress
+        // pair is cleared with it everywhere else; bootstrap keeps the rule.
         activity.removeAll()
+        planProgress.removeAll()
         maintenance.removeAll()
         // Drag-restore staging from previous sessions is pure leftovers —
         // Finder finished with those drops long ago. Not awaited: a slow

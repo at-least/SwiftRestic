@@ -105,9 +105,12 @@ struct PlanDetailView: View {
     }
 
     /// The running-operation strip, as its own view. It reads only this
-    /// plan's activity, so a restic progress tick (~1/sec) re-renders the
-    /// strip instead of the whole pane — `content` also drives the snapshot
-    /// table, whose filter-and-sort must not rerun per tick.
+    /// plan's activity and progress — both inside this body, so a restic
+    /// progress tick (~1/sec) re-renders the strip instead of the whole
+    /// pane (progress lives in its own observable storage precisely so
+    /// phase-reading views — the strip's title, the sidebar's rows — stay
+    /// untouched by it), and `content`'s snapshot table never reruns per
+    /// tick.
     private struct OperationStrip: View {
         @Environment(AppModel.self) private var model
         let planID: UUID
@@ -116,7 +119,7 @@ struct PlanDetailView: View {
             if let activity = model.activity[planID] {
                 OperationProgressView(
                     title: activity.phase.displayName,
-                    progress: activity.progress,
+                    progress: model.planProgress[planID] ?? OperationProgress(),
                     startedAt: activity.startedAt,
                     onCancel: { model.cancelBackup(planID: planID) }
                 )

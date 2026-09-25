@@ -150,10 +150,14 @@ enum MenuBarStatus {
 
     static func runningLines(
         plans: [BackupPlan],
-        activity: [UUID: PlanActivity]
+        activity: [UUID: PlanActivity],
+        progress: [UUID: OperationProgress]
     ) -> [RunningLine] {
         plans.filter { activity[$0.id] != nil }.map {
-            RunningLine(id: $0.id.uuidString, text: "\($0.name) — \(progressText(activity[$0.id]))")
+            RunningLine(
+                id: $0.id.uuidString,
+                text: "\($0.name) — \(progressText(activity: activity[$0.id], progress: progress[$0.id]))"
+            )
         }
     }
 
@@ -186,11 +190,14 @@ enum MenuBarStatus {
         return RunningLine(id: "console", text: "Console — command running")
     }
 
-    /// Progress as the menu bar shows it: a percentage once restic is streaming
-    /// status, the phase's name before that.
-    static func progressText(_ activity: PlanActivity?) -> String {
+    /// Progress as the menu bar shows it: a percentage once restic is
+    /// streaming status, the phase's name before that. Progress arrives
+    /// beside the activity, not inside it — the menu is built on open, from
+    /// whatever the pair says then.
+    static func progressText(activity: PlanActivity?, progress: OperationProgress?) -> String {
         guard let activity else { return "…" }
         guard activity.phase == .backingUp else { return activity.phase.displayName }
-        return activity.progress.fraction.formatted(.percent.precision(.fractionLength(0)))
+        let fraction = progress?.fraction ?? 0
+        return fraction.formatted(.percent.precision(.fractionLength(0)))
     }
 }

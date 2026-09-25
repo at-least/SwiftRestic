@@ -163,7 +163,11 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         ) {
             menu.addItem(disabledItem(problem))
         }
-        var lines = MenuBarStatus.runningLines(plans: model.configuration.plans, activity: model.activity)
+        var lines = MenuBarStatus.runningLines(
+            plans: model.configuration.plans,
+            activity: model.activity,
+            progress: model.planProgress
+        )
             + MenuBarStatus.maintenanceLines(
                 repositories: model.configuration.repositories,
                 maintenance: model.maintenance

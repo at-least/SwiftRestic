@@ -25,6 +25,13 @@ final class AppModel {
     var resticVersion: String = ""
     var binaryProblem: String?
     var activity: [UUID: PlanActivity] = [:]
+    /// Live backup progress per plan, in its own observable storage: a
+    /// restic status tick (~1/sec) lands here and invalidates only the views
+    /// that read progress — the running strip and nothing else. `activity`
+    /// keeps the phase strip and the sidebar's rows, which must not
+    /// re-render per tick; the pair is installed and retired together by
+    /// `installPlanActivity` and the run's unwind.
+    var planProgress: [UUID: OperationProgress] = [:]
     /// Repository upkeep currently in flight, keyed by repository.
     var maintenance: [UUID: MaintenanceActivity] = [:]
     var snapshots: [UUID: [Snapshot]] = [:]
