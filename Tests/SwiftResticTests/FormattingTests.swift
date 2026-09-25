@@ -114,6 +114,33 @@ struct FormattingTests {
         #expect(nextYear.hasSuffix("9:00 PM"))
     }
 
+    @Test("repeated and alternating calls keep their own formatting")
+    func formatterReuseStaysCorrect() {
+        // The formatters behind these helpers are long-lived shared instances
+        // (they are paid for per row per render, so construction cannot be the
+        // per-call cost). Alternating inputs are exactly the case a reused
+        // mutable formatter gets wrong — the sub-hour/hour-plus unit switch
+        // leaking from one call into the next — so the pins alternate.
+        for _ in 0..<3 {
+            #expect(Format.duration(90) == "1m 30s")
+            #expect(Format.duration(90 * 60) == "1h 30m")
+            #expect(Format.duration(3600) == "1h")
+        }
+        #expect(!Format.bytes(0).contains("Zero"))
+        #expect(Format.bytes(1_500_000) != Format.bytes(3_000_000))
+        #expect(Format.relative(Date.now) == "Just now")
+        #expect(Format.relative(Date.now.addingTimeInterval(-3_600)) != "Just now")
+    }
+
+    @Test("a timestamp renders a real date, not the sentinel")
+    func timestampRenders() {
+        // Structural only: the exact spelling is the locale's business.
+        let value = Format.timestamp(Date(timeIntervalSince1970: 1_759_000_000))
+        #expect(!value.isEmpty)
+        #expect(value != "—")
+        #expect(value.rangeOfCharacter(from: .decimalDigits) != nil)
+    }
+
     @Test("rate refuses to divide by a meaningless duration")
     func rateGuards() {
         #expect(Format.rate(bytes: 1_000, over: 0) == "—")

@@ -1,15 +1,29 @@
 import Foundation
 
 /// Shared number and date formatting so every view reads the same way.
+///
+/// The formatter-backed helpers are paid for per row per render — lists,
+/// tables, the once-a-second progress strips — and formatter construction is
+/// the expensive half of each call, so the instances are built once. They are
+/// not Sendable (these helpers also run on the notification broadcast's
+/// background task), so every use crosses the same lock pattern
+/// `ResticDateFormat.parse` already established.
 enum Format {
-    static func bytes(_ value: Int64?) -> String {
-        guard let value else { return "—" }
-        // ByteCountFormatter spells zero as "Zero KB" by default, which reads as a
-        // glitch on an axis label or a stat tile.
+    nonisolated(unsafe) private static let byteCounter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
+        // ByteCountFormatter spells zero as "Zero KB" by default, which reads
+        // as a glitch on an axis label or a stat tile.
         formatter.countStyle = .file
         formatter.allowsNonnumericFormatting = false
-        return formatter.string(fromByteCount: value)
+        return formatter
+    }()
+    private static let byteLock = NSLock()
+
+    static func bytes(_ value: Int64?) -> String {
+        guard let value else { return "—" }
+        byteLock.lock()
+        defer { byteLock.unlock() }
+        return byteCounter.string(fromByteCount: value)
     }
 
     static func count(_ value: Int?) -> String {
@@ -47,15 +61,40 @@ enum Format {
         return String(trimmed[..<cut])
     }
 
+    // Two preconfigured instances, not one mutated per call: `allowedUnits`
+    // flips at an hour, and reconfiguring a shared formatter under the lock
+    // would make every short duration wait behind every long one — and leak
+    // the wrong units if the lock ever widened.
+    nonisolated(unsafe) private static let shortDuration: DateComponentsFormatter = {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.minute, .second]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 2
+        return formatter
+    }()
+    nonisolated(unsafe) private static let longDuration: DateComponentsFormatter = {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 2
+        return formatter
+    }()
+    private static let durationLock = NSLock()
+
     static func duration(_ seconds: TimeInterval?) -> String {
         guard let seconds, seconds.isFinite, seconds >= 0 else { return "—" }
         if seconds < 1 { return "<1s" }
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = seconds < 3600 ? [.minute, .second] : [.hour, .minute]
-        formatter.unitsStyle = .abbreviated
-        formatter.maximumUnitCount = 2
-        return formatter.string(from: seconds) ?? "—"
+        durationLock.lock()
+        defer { durationLock.unlock() }
+        return (seconds < 3600 ? shortDuration : longDuration).string(from: seconds) ?? "—"
     }
+
+    nonisolated(unsafe) private static let relativeStamp: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter
+    }()
+    private static let relativeLock = NSLock()
 
     static func relative(_ date: Date?) -> String {
         guard let date else { return "Never" }
@@ -67,14 +106,18 @@ enum Format {
         // now fed it a zero delta, and a run an hour ahead rendered as the
         // nonsense "in 0 seconds".
         if abs(date.timeIntervalSince(now)) < 45 { return "Just now" }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: now)
+        relativeLock.lock()
+        defer { relativeLock.unlock() }
+        return relativeStamp.localizedString(for: date, relativeTo: now)
     }
+
+    // A value type the cached style is safe to share unlocked, unlike the
+    // class formatters above.
+    private static let timestampStyle = Date.FormatStyle(date: .abbreviated, time: .shortened)
 
     static func timestamp(_ date: Date?) -> String {
         guard let date else { return "—" }
-        return date.formatted(date: .abbreviated, time: .shortened)
+        return date.formatted(timestampStyle)
     }
 
     /// A next-run moment, spelled to fit a stat tile. `timestamp`'s full
@@ -113,7 +156,7 @@ enum Format {
     static func rate(bytes: Int64, over seconds: TimeInterval) -> String {
         guard seconds > 0.5, bytes > 0 else { return "—" }
         let perSecond = Int64(Double(bytes) / seconds)
-        return "\(ByteCountFormatter.string(fromByteCount: perSecond, countStyle: .file))/s"
+        return "\(Self.bytes(perSecond))/s"
     }
 
     /// The root that contains an absolute path, longest match first: a
