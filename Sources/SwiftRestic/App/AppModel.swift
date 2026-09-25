@@ -130,6 +130,10 @@ final class AppModel {
     /// click order, or the daemon ends on whichever XPC finished last
     /// instead of the user's last click.
     @ObservationIgnored var loginItemChange: Task<Void, Never>?
+    /// Bumped by every toggle; a daemon read may only write `startsAtLogin`
+    /// while its own generation is still the newest, or it would snap the
+    /// switch back past a newer click's optimistic value.
+    @ObservationIgnored var loginItemGeneration = 0
     /// Repositories whose last refresh already announced a stats failure.
     /// The banner is a transition signal, not a nag: a repository whose stats
     /// keep failing says it once, and says it again only after a success in

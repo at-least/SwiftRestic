@@ -164,26 +164,37 @@ extension AppModel {
         while let inFlight = loginItemChange {
             await inFlight.value
         }
+        loginItemGeneration += 1
+        let generation = loginItemGeneration
         loginItemChange = Task { [weak self] in
-            await self?.performSetStartsAtLogin(enabled)
+            await self?.performSetStartsAtLogin(enabled, generation: generation)
         }
         await loginItemChange?.value
         loginItemChange = nil
     }
 
-    private func performSetStartsAtLogin(_ enabled: Bool) async {
+    private func performSetStartsAtLogin(_ enabled: Bool, generation: Int) async {
+        // The daemon's answer, written only while this change is still the
+        // newest: a newer click's optimistic value already says what the
+        // switch must show, and its own turn will read the daemon after.
+        func syncFromDaemon() async {
+            let enabled = await Task.detached { LoginItem.isEnabled }.value
+            if generation == loginItemGeneration {
+                startsAtLogin = enabled
+            }
+        }
         if enabled, !LoginItem.isInInstallableLocation {
             post(Banner(
                 title: "Cannot start at login from here",
                 message: LoginItem.notInstalledMessage,
                 isError: true
             ))
-            startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
+            await syncFromDaemon()
             return
         }
         do {
             try await Task.detached { try LoginItem.setEnabled(enabled) }.value
-            startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
+            await syncFromDaemon()
             if enabled, await Task.detached { LoginItem.needsApproval }.value {
                 post(Banner(
                     title: "Approval needed",
@@ -192,7 +203,7 @@ extension AppModel {
                 ))
             }
         } catch {
-            startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
+            await syncFromDaemon()
             post(Banner(
                 title: "Could not change the login item",
                 message: error.localizedDescription,
@@ -202,7 +213,13 @@ extension AppModel {
     }
 
     func refreshLoginItemStatus() async {
-        startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
+        let enabled = await Task.detached { LoginItem.isEnabled }.value
+        // A queued or running change owns the switch until it settles — its
+        // optimistic value is what the user last asked for, and a status
+        // read landing beside it must not stomp that back to daemon-stale.
+        if loginItemChange == nil {
+            startsAtLogin = enabled
+        }
     }
 
     var resticPath: String { binary?.url.path ?? "" }
