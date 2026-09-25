@@ -68,6 +68,91 @@ struct OverviewMetricsTests {
         #expect(points.first?.dataAdded == 100)
     }
 
+    // MARK: - Protection rows
+
+    private func plan(_ name: String, repository: UUID?) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.name = name
+        plan.repositoryID = repository
+        return plan
+    }
+
+    private func snapshot(_ id: String, at time: Date) -> Snapshot {
+        let document: [String: Any] = [
+            "id": id,
+            "short_id": String(id.prefix(8)),
+            "time": time.timeIntervalSince1970,
+            "paths": ["/data"],
+            "tags": [],
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: document)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return try! decoder.decode(Snapshot.self, from: data)
+    }
+
+    @Test("protection rows sort by severity and spell each state")
+    func protectionRowsOrderAndSpelling() {
+        let failed = UUID() // listing failed
+        let healthy = UUID() // loaded, and the plan has a snapshot in it
+        let checking = UUID() // idle, refresh in flight
+        let empty = UUID() // loaded, but the repository holds nothing
+        let adopted = UUID() // loaded, snapshots exist, none from this plan
+        let plans = [
+            plan("Fine", repository: healthy),
+            plan("NoRepo", repository: nil),
+            plan("Checking", repository: checking),
+            plan("Failed", repository: failed),
+            plan("Empty", repository: empty),
+            plan("Adopted", repository: adopted),
+        ]
+        let latest = snapshot("snapHealthy", at: date("2026-09-05 10:00:00"))
+        let rows = OverviewMetrics.protectionRows(
+            plans: plans,
+            latestSnapshot: { repository, _ in repository == healthy ? latest : nil },
+            repositoryHasSnapshots: { $0 == healthy || $0 == adopted },
+            listingOutcome: { repository in
+                switch repository {
+                case failed: .failed("Repository /nas is not reachable. Check the host and try again.")
+                case checking: .idle
+                default: .loaded
+                }
+            },
+            isChecking: { $0 == checking }
+        )
+
+        // Unreadable first, then exposed, then pending, protected last; ties
+        // inside a rank keep the plan order.
+        #expect(rows.map(\.planName) == ["Failed", "NoRepo", "Empty", "Adopted", "Checking", "Fine"])
+        // The protected line is relative-spelled and locale-owned, so it is
+        // pinned by prefix below, not by literal.
+        #expect(Array(rows.map(\.stateText).prefix(5)) == [
+            "Can't read snapshots — Repository /nas is not reachable",
+            "No repository set",
+            "No snapshots yet",
+            "The repository has snapshots, but none from this plan yet.",
+            "Checking…",
+        ])
+        #expect(rows.last?.stateText.hasPrefix("Latest backup ") == true)
+        #expect(rows.last?.isProtected == true)
+        // The failure row is the only unknown-and-failing one.
+        #expect(rows.filter(\.didFail).map(\.planName) == ["Failed"])
+    }
+
+    @Test("an idle repository that is not refreshing says so, not Checking…")
+    func idleNotChecking() {
+        let idle = UUID()
+        let rows = OverviewMetrics.protectionRows(
+            plans: [plan("Waiting", repository: idle)],
+            latestSnapshot: { _, _ in nil },
+            repositoryHasSnapshots: { _ in false },
+            listingOutcome: { _ in .idle },
+            isChecking: { _ in false }
+        )
+        #expect(rows.map(\.stateText) == ["Snapshot list not loaded yet"])
+        #expect(rows.first?.isKnown == false)
+    }
+
     @Test("runs older than the window are dropped")
     func windowing() {
         let runs = [

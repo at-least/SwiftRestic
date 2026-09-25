@@ -16,6 +16,46 @@ struct RepositoryVolume: Identifiable, Sendable, Equatable {
     var bytes: Int64
 }
 
+/// One plan's row on the dashboard's Protection card. Data only — the hues it
+/// wears live in the view.
+struct ProtectionRow: Identifiable, Sendable, Equatable {
+    let planID: UUID
+    let planName: String
+    let repositoryID: UUID?
+    let stateText: String
+    let isKnown: Bool
+    let isProtected: Bool
+    let didFail: Bool
+    var id: UUID { planID }
+
+    /// Scanning order is severity, not sidebar order: unreadable first,
+    /// then exposed, then pending, protected last.
+    var severityRank: Int {
+        if didFail { return 0 }
+        if isKnown, !isProtected { return 1 }
+        if !isKnown { return 2 }
+        return 3
+    }
+
+    /// Derives straight from the plan, so each listing outcome states
+    /// only the part that differs.
+    init(
+        plan: BackupPlan,
+        stateText: String,
+        isKnown: Bool,
+        isProtected: Bool,
+        didFail: Bool
+    ) {
+        planID = plan.id
+        planName = plan.name.isEmpty ? "Untitled Plan" : plan.name
+        repositoryID = plan.repositoryID
+        self.stateText = stateText
+        self.isKnown = isKnown
+        self.isProtected = isProtected
+        self.didFail = didFail
+    }
+}
+
 /// Derives the dashboard's series from the run history.
 ///
 /// Pure and separate from the view so it can be tested, and so the reduction
@@ -142,6 +182,66 @@ enum OverviewMetrics {
             + "#\(newest.finishedAt.timeIntervalSince1970)"
             + "#\(newest.outcome.rawValue)"
         return "\(planPart)#\(runPart)"
+    }
+
+    /// The Protection card's rows, one per plan. The lookups arrive as
+    /// closures so the derivation stays pure — and testable — while the view
+    /// keeps its observation on the model state behind them.
+    static func protectionRows(
+        plans: [BackupPlan],
+        latestSnapshot: (_ repositoryID: UUID, _ planID: UUID) -> Snapshot?,
+        repositoryHasSnapshots: (UUID) -> Bool,
+        listingOutcome: (UUID) -> SnapshotListingOutcome,
+        isChecking: (UUID) -> Bool
+    ) -> [ProtectionRow] {
+        // Stable severity sort: Swift's sort is not documented stable, so the
+        // plan order breaks ties inside each rank.
+        plans
+            .map { plan -> ProtectionRow in
+                guard let repositoryID = plan.repositoryID else {
+                    return ProtectionRow(
+                        plan: plan,
+                        stateText: "No repository set",
+                        isKnown: true, isProtected: false, didFail: false
+                    )
+                }
+                let latest = latestSnapshot(repositoryID, plan.id)
+                switch listingOutcome(repositoryID) {
+                case .loaded:
+                    let line: String
+                    if let latest {
+                        line = "Latest backup \(latest.time.formatted(.relative(presentation: .named)))"
+                    } else if !repositoryHasSnapshots(repositoryID) {
+                        line = "No snapshots yet"
+                    } else {
+                        // The repository has snapshots, but none tagged from
+                        // this plan — the same distinction Plan Detail draws.
+                        // A bare "No snapshots yet" reads as a false statement
+                        // about a repository the user adopted with snapshots
+                        // already in it.
+                        line = "The repository has snapshots, but none from this plan yet."
+                    }
+                    return ProtectionRow(plan: plan, stateText: line, isKnown: true, isProtected: latest != nil, didFail: false)
+                case let .failed(message):
+                    return ProtectionRow(
+                        plan: plan,
+                        stateText: "Can't read snapshots — \(Format.firstSentence(message))",
+                        isKnown: false, isProtected: false, didFail: true
+                    )
+                case .idle:
+                    let checking = isChecking(repositoryID)
+                    return ProtectionRow(
+                        plan: plan,
+                        stateText: checking ? "Checking…" : "Snapshot list not loaded yet",
+                        isKnown: false, isProtected: false, didFail: false
+                    )
+                }
+            }
+            .enumerated()
+            .sorted { lhs, rhs in
+                (lhs.element.severityRank, lhs.offset) < (rhs.element.severityRank, rhs.offset)
+            }
+            .map(\.element)
     }
 }
 

@@ -77,106 +77,32 @@ struct OverviewView: View {
 
     // MARK: - Tiles
 
-    /// One plan's protection state as the card states it: what is known,
-    /// whether it protects, and the line the user is owed when it does not.
+    /// The row type and its derivation live in `OverviewMetrics`, testable
+    /// and shared with nothing — the view keeps only the hue each state
+    /// wears.
     ///
     /// No row wears a glyph, trouble included: the state line's words carry
     /// every state and its hue carries the alarm, so scannability comes from
     /// severity ordering and the tinted line instead of a symbol competing
     /// for the eye.
-    private struct ProtectionRow: Identifiable {
-        let planID: UUID
-        let planName: String
-        let repositoryID: UUID?
-        let stateText: String
-        let isKnown: Bool
-        let isProtected: Bool
-        let didFail: Bool
-        var id: UUID { planID }
-
-        /// The state line's weight: "not protected" is the row's real news
-        /// and reads at full weight; a pending or protected line stays quiet,
-        /// and a failure keeps its warning hue.
-        var stateHue: Color {
-            if didFail { return Theme.warning }
-            if isKnown, !isProtected { return .primary }
-            return .secondary
-        }
-
-        /// Scanning order is severity, not sidebar order: unreadable first,
-        /// then exposed, then pending, protected last.
-        var severityRank: Int {
-            if didFail { return 0 }
-            if isKnown, !isProtected { return 1 }
-            if !isKnown { return 2 }
-            return 3
-        }
-
-        /// Derives straight from the plan, so each listing outcome states
-        /// only the part that differs.
-        init(
-            plan: BackupPlan,
-            stateText: String,
-            isKnown: Bool,
-            isProtected: Bool,
-            didFail: Bool
-        ) {
-            planID = plan.id
-            planName = plan.name.isEmpty ? "Untitled Plan" : plan.name
-            repositoryID = plan.repositoryID
-            self.stateText = stateText
-            self.isKnown = isKnown
-            self.isProtected = isProtected
-            self.didFail = didFail
-        }
-    }
-
     private var protectionRows: [ProtectionRow] {
-        // Stable severity sort: Swift's sort is not documented stable, so the
-        // plan order breaks ties inside each rank.
-        model.configuration.plans
-            .map { plan -> ProtectionRow in
-                guard let repositoryID = plan.repositoryID else {
-                    return ProtectionRow(
-                        plan: plan,
-                        stateText: "No repository set",
-                        isKnown: true, isProtected: false, didFail: false
-                    )
-                }
-                let latest = model.snapshots(for: repositoryID, planID: plan.id).first
-                switch model.snapshotListingOutcome(for: repositoryID) {
-                case .loaded:
-                    let line: String
-                    if let latest {
-                        line = "Latest backup \(latest.time.formatted(.relative(presentation: .named)))"
-                    } else if model.snapshots(for: repositoryID).isEmpty {
-                        line = "No snapshots yet"
-                    } else {
-                        // The repository has snapshots, but none tagged from this
-                        // plan — the same distinction Plan Detail draws. A bare
-                        // "No snapshots yet" reads as a false statement about a
-                        // repository the user adopted with snapshots already in it.
-                        line = "The repository has snapshots, but none from this plan yet."
-                    }
-                    return ProtectionRow(plan: plan, stateText: line, isKnown: true, isProtected: latest != nil, didFail: false)
-                case let .failed(message):
-                    return ProtectionRow(
-                        plan: plan,
-                        stateText: "Can't read snapshots — \(Format.firstSentence(message))",
-                        isKnown: false, isProtected: false, didFail: true
-                    )
-                case .idle:
-                    let checking = model.loadingSnapshots.contains(repositoryID)
-                    return ProtectionRow(
-                        plan: plan,
-                        stateText: checking ? "Checking…" : "Snapshot list not loaded yet",
-                        isKnown: false, isProtected: false, didFail: false
-                    )
-                }
+        // One pass over the plans, with the model lookups behind closures so
+        // this view keeps its observation on the state the rows read.
+        OverviewMetrics.protectionRows(
+            plans: model.configuration.plans,
+            latestSnapshot: { repositoryID, planID in
+                model.snapshots(for: repositoryID, planID: planID).first
+            },
+            repositoryHasSnapshots: { repositoryID in
+                !model.snapshots(for: repositoryID).isEmpty
+            },
+            listingOutcome: { repositoryID in
+                model.snapshotListingOutcome(for: repositoryID)
+            },
+            isChecking: { repositoryID in
+                model.loadingSnapshots.contains(repositoryID)
             }
-            .enumerated()
-            .sorted { ($0.element.severityRank, $0.offset) < ($1.element.severityRank, $1.offset) }
-            .map(\.element)
+        )
     }
 
     /// Protection, the dashboard's actual subject: one row per plan with its
@@ -547,5 +473,16 @@ struct OverviewView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+private extension ProtectionRow {
+    /// "Not protected" is the row's real news and reads at full weight; a
+    /// pending or protected line stays quiet, and a failure keeps its
+    /// warning hue.
+    var stateHue: Color {
+        if didFail { return Theme.warning }
+        if isKnown, !isProtected { return .primary }
+        return .secondary
     }
 }
