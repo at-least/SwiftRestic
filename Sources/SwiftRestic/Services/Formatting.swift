@@ -4,10 +4,10 @@ import Foundation
 ///
 /// The formatter-backed helpers are paid for per row per render — lists,
 /// tables, the once-a-second progress strips — and formatter construction is
-/// the expensive half of each call, so the instances are built once. They are
-/// not Sendable (these helpers also run on the notification broadcast's
-/// background task), so every use crosses the same lock pattern
-/// `ResticDateFormat.parse` already established.
+/// the expensive half of each call, so the instances are built once. Not all
+/// of them are Sendable across SDKs (these helpers also run on the
+/// notification broadcast's background task), so every use crosses the lock
+/// pattern `ResticDateFormat.parse` already established.
 enum Format {
     nonisolated(unsafe) private static let byteCounter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
@@ -65,14 +65,14 @@ enum Format {
     // flips at an hour, and reconfiguring a shared formatter under the lock
     // would make every short duration wait behind every long one — and leak
     // the wrong units if the lock ever widened.
-    nonisolated(unsafe) private static let shortDuration: DateComponentsFormatter = {
+    private static let shortDuration: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.minute, .second]
         formatter.unitsStyle = .abbreviated
         formatter.maximumUnitCount = 2
         return formatter
     }()
-    nonisolated(unsafe) private static let longDuration: DateComponentsFormatter = {
+    private static let longDuration: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute]
         formatter.unitsStyle = .abbreviated

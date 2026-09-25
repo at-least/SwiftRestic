@@ -22,7 +22,12 @@ struct ActivityView: View {
 
     var body: some View {
         @Bindable var model = model
-        VStack(alignment: .leading, spacing: 0) {
+        // One filter+sort per render: the empty-state check, the table and
+        // the detail lookup all need the same list, and the computed property
+        // would re-run the history's sort at every access (the hoist
+        // SnapshotDiffView documents for its own candidates).
+        let runs = visibleRuns
+        return VStack(alignment: .leading, spacing: 0) {
             // Activity is where failures get read, so it carries the banner
             // queue like the other panes — a refresh error must be visible
             // here too, not only on the pane that happened to be open.
@@ -39,14 +44,14 @@ struct ActivityView: View {
                     systemImage: "list.bullet.rectangle",
                     description: Text("Runs appear here once a plan has finished.")
                 )
-            } else if visibleRuns.isEmpty {
+            } else if runs.isEmpty {
                 ContentUnavailableView(
                     "No problems recorded",
                     systemImage: "checkmark.circle",
                     description: Text("Every run in the history succeeded. Turn the filter off to see them.")
                 )
             } else {
-                Table(visibleRuns, selection: $selection, sortOrder: $sortOrder) {
+                Table(runs, selection: $selection, sortOrder: $sortOrder) {
                     TableColumn("") { run in
                         // Only trouble wears a glyph; a clean run leaves the
                         // cell empty, the way Mail's unread column does. The

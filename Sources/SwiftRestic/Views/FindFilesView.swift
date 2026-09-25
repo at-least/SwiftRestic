@@ -20,6 +20,12 @@ struct FindFilesView: View {
     /// Rows straight from the index engine; nil means the restic engine owns
     /// the table and `results` is the source.
     @State private var indexRows: [Row]?
+    /// The table's rows, built once when a search's results land. A computed
+    /// property would rebuild the snapshot-time dictionary and re-sort on
+    /// every re-render — every keystroke in the pattern field — though a
+    /// row's snapshot id (and therefore its time) is fixed by the search
+    /// that produced it.
+    @State private var rows: [Row] = []
     /// Whether the repository's index has finished its backfill. nil = not
     /// known yet for the selected repository.
     @State private var indexComplete: Bool?
@@ -49,12 +55,7 @@ struct FindFilesView: View {
     }
 
     var body: some View {
-        // One rows rebuild per render: the emptiness test, the table, its
-        // context menu and the footer all read it — a computed property
-        // would re-run the flatMap and sort at every access (the hoist
-        // SnapshotDiffView documents for its own candidates).
-        let rows = self.rows
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             controls
             Divider()
             resultsPane(rows)
@@ -269,20 +270,6 @@ struct FindFilesView: View {
 
     // MARK: - Data
 
-    private var rows: [Row] {
-        if let indexRows { return indexRows }
-        let snapshots = repositoryID.map { model.snapshots(for: $0) } ?? []
-        let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
-        return results
-            .flatMap { result in
-                result.matches.map {
-                    Row(match: $0, snapshotID: result.snapshot, snapshotTime: times[result.snapshot])
-                }
-            }
-            // Newest snapshot first: that is usually the copy the user wants back.
-            .sorted { ($0.snapshotTime ?? .distantPast) > ($1.snapshotTime ?? .distantPast) }
-    }
-
     private func selectedRow(in rows: [Row]) -> Row? {
         guard let selection else { return nil }
         return rows.first { $0.id == selection }
@@ -316,12 +303,13 @@ struct FindFilesView: View {
             indexComplete = ready
             do {
                 if ready {
-                    let rows = try await searchViaIndex(
+                    let built = try await searchViaIndex(
                         pattern: searchedPattern, repositoryID: searchedRepository
                     )
                     guard !Task.isCancelled else { return }
-                    indexRows = rows
+                    indexRows = built
                     results = []
+                    rows = built
                 } else {
                     let found = try await model.findFiles(
                         repositoryID: searchedRepository,
@@ -331,11 +319,25 @@ struct FindFilesView: View {
                     guard !Task.isCancelled else { return }
                     results = found
                     indexRows = nil
+                    // Snapshot times resolve against the repository as of
+                    // this search — the row's snapshot id is already fixed,
+                    // so a later render must not re-derive or re-sort it.
+                    let snapshots = model.snapshots(for: searchedRepository)
+                    let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
+                    rows = found
+                        .flatMap { result in
+                            result.matches.map {
+                                Row(match: $0, snapshotID: result.snapshot, snapshotTime: times[result.snapshot])
+                            }
+                        }
+                        // Newest snapshot first: that is usually the copy the user wants back.
+                        .sorted { ($0.snapshotTime ?? .distantPast) > ($1.snapshotTime ?? .distantPast) }
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 results = []
                 indexRows = nil
+                rows = []
                 errorMessage = error.localizedDescription
             }
             hasSearched = true
@@ -392,6 +394,7 @@ struct FindFilesView: View {
         isSearching = false
         results = []
         indexRows = nil
+        rows = []
         resultsTruncated = false
         hasSearched = false
         errorMessage = nil

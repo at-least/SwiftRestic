@@ -53,11 +53,16 @@ struct RestorePaneView: View {
     }
 
     var body: some View {
-        Group {
+        // One snapshot-list scan per render: the nil-test here and the
+        // footer's restore button both need the record, and the computed
+        // property re-scans the repository's whole snapshot list at every
+        // access.
+        let currentRecord = record
+        return Group {
             // Nil-test, not a binding: the bound value is never read here —
             // the browser pane re-reads the property behind its own guards.
-            if record != nil {
-                browserPane()
+            if currentRecord != nil {
+                browserPane(record: currentRecord)
             } else {
                 ContentUnavailableView {
                     Label("Backup not found", systemImage: "questionmark.folder")
@@ -81,13 +86,13 @@ struct RestorePaneView: View {
         }
     }
 
-    private func browserPane() -> some View {
+    private func browserPane(record: Snapshot?) -> some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
             browser
             Divider()
-            footer
+            footer(record: record)
         }
         .frame(minWidth: 640)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -284,7 +289,7 @@ struct RestorePaneView: View {
     /// One button, Arq-style: the overwrite consequence is named where the
     /// decision happens — the destination dialog's message — not as a
     /// permanent caption under every browse.
-    private var footer: some View {
+    private func footer(record: Snapshot?) -> some View {
         HStack {
             Spacer()
             Button("Restore…") { restoreSelection() }
