@@ -25,6 +25,14 @@ struct SnapshotDiffView: View {
     @State private var loadError: String?
     @State private var filter: ResticDiffChange.Category?
     @State private var searchText = ""
+    /// The query the filter actually applies: `searchText` as it settles —
+    /// every keystroke restarts the debounce task below, so typing a word
+    /// filters once at the end, not once per character over up to twenty
+    /// thousand changes.
+    @State private var appliedSearchText = ""
+    /// The diff's pre-lowercased search index, rebuilt when a diff lands —
+    /// not on every keystroke it exists to serve.
+    @State private var search = DiffChangeSearch(changes: [])
 
     private var newer: Snapshot { target.snapshot }
 
@@ -59,6 +67,12 @@ struct SnapshotDiffView: View {
             }
         }
         .task(id: "\(olderID ?? "")|\(includeMetadata)") { await load() }
+        .task(id: searchText) {
+            // Restarted by every keystroke: only the settled query filters.
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            appliedSearchText = searchText
+        }
     }
 
     // MARK: - Sections
@@ -284,16 +298,12 @@ struct SnapshotDiffView: View {
             : ResticDiffChange.Category.allCases.filter { $0 != .metadataOnly }
     }
 
-    /// The change rows the current kind filter and path search admit.
+    /// The change rows the current kind filter and path search admit. The
+    /// scan rides the diff's pre-lowercased index (`DiffChangeSearch`), so
+    /// the cost is a contains per change, not a case-insensitive Unicode
+    /// search per path per keystroke.
     private func filteredChanges(_ diff: SnapshotDiff) -> [ResticDiffChange] {
-        let needle = searchText.trimmingCharacters(in: .whitespaces)
-        return diff.changes.filter { change in
-            if let filter, change.category != filter { return false }
-            if !needle.isEmpty, change.path.range(of: needle, options: .caseInsensitive) == nil {
-                return false
-            }
-            return true
-        }
+        search.matches(category: filter, needle: appliedSearchText)
     }
 
     /// Files and folders separately, so the tile agrees with the list: restic
@@ -348,9 +358,16 @@ struct SnapshotDiffView: View {
         return text
     }
 
+    /// Installs a load's answer, rebuilding the search index with it — the
+    /// index and the diff must never describe different change lists.
+    private func installDiff(_ value: SnapshotDiff?) {
+        diff = value
+        search = DiffChangeSearch(changes: value?.changes ?? [])
+    }
+
     private func load() async {
         guard let olderID, olderID != newer.id else {
-            diff = nil
+            installDiff(nil)
             return
         }
         isLoading = true
@@ -366,7 +383,7 @@ struct SnapshotDiffView: View {
             // cancelled process still unwinds after the replacement has started;
             // a stale run must not write over the live one.
             guard !Task.isCancelled else { return }
-            diff = result
+            installDiff(result)
             loadError = nil
             if filter == .metadataOnly, !includeMetadata { filter = nil }
         } catch is CancellationError {
@@ -375,7 +392,7 @@ struct SnapshotDiffView: View {
             return
         } catch {
             guard !Task.isCancelled else { return }
-            diff = nil
+            installDiff(nil)
             loadError = error.localizedDescription
         }
         isLoading = false

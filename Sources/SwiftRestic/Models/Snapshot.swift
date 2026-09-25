@@ -195,6 +195,32 @@ struct SnapshotDiff: Sendable, Equatable {
     }
 }
 
+/// Case-insensitive path search over a loaded diff, with each path's
+/// lowercase form computed once per load. A keystroke in the filter field
+/// then runs a plain `contains` over prepared strings instead of a
+/// case-insensitive Unicode scan per path — the sheet re-renders on every
+/// keystroke, and a diff may hold twenty thousand changes.
+struct DiffChangeSearch: Sendable {
+    private let entries: [(change: ResticDiffChange, key: String)]
+
+    init(changes: [ResticDiffChange]) {
+        entries = changes.map { ($0, $0.path.lowercased()) }
+    }
+
+    /// The changes the category gate and path search admit. The needle
+    /// arrives as typed — surrounding whitespace is tolerated, and an empty
+    /// needle admits everything the category allows.
+    func matches(category: ResticDiffChange.Category?, needle: String) -> [ResticDiffChange] {
+        let key = needle.trimmingCharacters(in: .whitespaces).lowercased()
+        return entries.filter { entry in
+            if let category, entry.change.category != category { return false }
+            if !key.isEmpty, !entry.key.contains(key) { return false }
+            return true
+        }
+        .map(\.change)
+    }
+}
+
 extension Snapshot {
     /// The snapshot this one is most naturally compared against: the newest
     /// earlier one that backed up the same paths from the same host.

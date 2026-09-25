@@ -49,6 +49,31 @@ struct SnapshotDiffTests {
         #expect(diff.count(of: .metadataOnly) == 0)
         #expect(diff.olderID == "old" && diff.newerID == "new")
     }
+
+    @Test("path search matches case-insensitively on prepared lowercase forms")
+    func diffChangeSearch() {
+        let changes = [
+            ResticDiffChange(path: "/Users/me/Reports/Q3.PDF", modifier: "+"),
+            ResticDiffChange(path: "/Users/me/old.txt", modifier: "-"),
+            ResticDiffChange(path: "/Users/me/notes.md", modifier: "M"),
+        ]
+        let search = DiffChangeSearch(changes: changes)
+
+        // A mixed-case needle finds a mixed-case path.
+        #expect(search.matches(category: nil, needle: "q3.pdf").map(\.path)
+            == ["/Users/me/Reports/Q3.PDF"])
+        // The category gate composes with the needle.
+        #expect(search.matches(category: .removed, needle: "USERS").map(\.path)
+            == ["/Users/me/old.txt"])
+        #expect(search.matches(category: .removed, needle: "q3.pdf").isEmpty)
+        // An empty or whitespace-only needle admits everything the category allows.
+        #expect(search.matches(category: nil, needle: "   ").count == 3)
+        #expect(search.matches(category: nil, needle: "").count == 3)
+        // A miss is empty, never a crash.
+        #expect(search.matches(category: nil, needle: "zzz").isEmpty)
+        // The needle is matched as a substring anywhere in the path.
+        #expect(search.matches(category: nil, needle: "reports/q3").count == 1)
+    }
 }
 
 @Suite("Diff candidate grouping")
