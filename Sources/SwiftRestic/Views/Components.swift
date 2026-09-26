@@ -502,7 +502,7 @@ struct SnapshotCompletenessMark: View {
 
 // MARK: - Snapshot browser chrome
 
-/// The chrome the three snapshot browsers share — one icon map, one keyboard
+/// The chrome the snapshot browsers share — one icon map, one keyboard
 /// grammar, one ascent step, one row. These used to live as private per-view
 /// clones that could only drift.
 extension SnapshotNode {
@@ -561,9 +561,9 @@ enum BrowserListGrammar {
     }
 }
 
-/// The row the snapshot browsers render for one node: icon, name, and the
-/// size and modification columns. (The restore pane's change-annotated row
-/// is its own shape.)
+/// The row Browse Folders renders for one node: icon, name, and the size
+/// and modification columns. (The restore pane's change-annotated row is
+/// its own shape.)
 struct SnapshotNodeRow: View {
     let node: SnapshotNode
 

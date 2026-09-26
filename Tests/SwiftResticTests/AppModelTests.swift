@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UniformTypeIdentifiers
 
 /// Exercises the glue between the scheduler, `ResticService` and the stored run
 /// history — the layer where a real backup can succeed while the app still
@@ -162,6 +163,85 @@ struct AppModelTests {
         #expect(model.configuration.runs.allSatisfy { $0.kind == .backup })
 
         await model.shutdown()
+    }
+
+    @Test("the Restore pane's drag provider promises a file's or a folder's content, restored on demand")
+    func dragProviderPromisesContent() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let snapshot = try #require(
+            model.snapshots(for: harness.repository.id, planID: harness.plan.id).first
+        )
+
+        // A file is promised as data — never as a file URL, which Finder
+        // refuses — and named after the node.
+        let file = SnapshotNode(
+            name: "a.txt",
+            type: .file,
+            path: harness.sourceDirectory.appendingPathComponent("a.txt").path
+        )
+        let fileProvider = model.dragRestoreProvider(
+            repositoryID: harness.repository.id, snapshotID: snapshot.id, node: file
+        )
+        #expect(fileProvider.registeredTypeIdentifiers == [UTType.data.identifier])
+        #expect(fileProvider.suggestedName == "a.txt")
+        let fileLoad = await Self.load(fileProvider, type: .data)
+        #expect(fileLoad.error == nil)
+        #expect(fileLoad.contents == ["<file> one"])
+
+        // A folder — here a snapshot root, the shape the pane's top rows
+        // have — is promised as a folder and arrives whole.
+        let folder = SnapshotNode(name: "source", type: .dir, path: harness.sourceDirectory.path)
+        let folderProvider = model.dragRestoreProvider(
+            repositoryID: harness.repository.id, snapshotID: snapshot.id, node: folder
+        )
+        #expect(folderProvider.registeredTypeIdentifiers == [UTType.folder.identifier])
+        #expect(folderProvider.suggestedName == "source")
+        let folderLoad = await Self.load(folderProvider, type: .folder)
+        #expect(folderLoad.error == nil)
+        #expect(folderLoad.contents == ["a.txt", "b.txt"])
+
+        // A drag restore is not a UI restore: it borrows neither the progress
+        // strip nor the run history, and a drop that landed posts no banner.
+        #expect(model.restoreActivity == nil)
+        #expect(model.configuration.runs.allSatisfy { $0.kind == .backup })
+        #expect(!model.banners.contains { $0.title == "Drag restore failed" })
+
+        await model.shutdown()
+    }
+
+    /// Loads a promise in-process, the way a drop site would, and reads the
+    /// copy inside the completion — the system deletes it when the handler
+    /// returns. A file reads as `<file> <contents>`; a folder as its sorted
+    /// relative paths.
+    private static func load(
+        _ provider: NSItemProvider,
+        type: UTType
+    ) async -> (contents: [String], error: String?) {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadFileRepresentation(forTypeIdentifier: type.identifier) { url, error in
+                guard let url else {
+                    continuation.resume(returning: ([], error.map { "\($0)" } ?? "no URL"))
+                    return
+                }
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+                    continuation.resume(returning: ([], "nothing at \(url.path)"))
+                    return
+                }
+                if isDirectory.boolValue {
+                    let entries = (FileManager.default.enumerator(atPath: url.path)?.allObjects as? [String]) ?? []
+                    continuation.resume(returning: (entries.sorted(), nil))
+                } else {
+                    let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                    continuation.resume(returning: (["<file> \(text)"], nil))
+                }
+            }
+        }
     }
 
     @Test("the launch sweep removes old drag staging and nothing else")

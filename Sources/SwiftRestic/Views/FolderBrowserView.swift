@@ -8,13 +8,13 @@ struct FolderBrowserTarget: Identifiable {
 
 /// Browses by folder first, version second — the Arq/Time Machine order.
 ///
-/// The snapshot-first browser answers "what is inside this snapshot"; this
-/// answers "when did this folder look different". Each level is listed from
-/// one snapshot, and the version picker above the list flips that snapshot
-/// without losing the folder — the index answers which versions cover the
-/// path, restic lists the level. Walking down re-derives the version list
-/// for the deeper path, keeping the user's chosen snapshot when it still
-/// covers it.
+/// The snapshot-first browser — the Restore pane — answers "what is inside
+/// this snapshot"; this answers "when did this folder look different". Each
+/// level is listed from one snapshot, and the version picker above the list
+/// flips that snapshot without losing the folder — the index answers which
+/// versions cover the path, restic lists the level. Walking down re-derives
+/// the version list for the deeper path, keeping the user's chosen snapshot
+/// when it still covers it.
 ///
 /// The index is a cache with a backfill: until it finishes, a version list
 /// may be missing older entries. The browser degrades instead of lying —
@@ -24,6 +24,9 @@ struct FolderBrowserView: View {
     @Environment(\.dismiss) private var dismiss
 
     let target: FolderBrowserTarget
+    /// Hands the version and folder being read to the Restore pane. The
+    /// host routes; this sheet only closes first.
+    let onShowInRestore: (_ snapshotID: String, _ folder: String?) -> Void
 
     /// `nil` = the pseudo-root that lists the plan's backed-up folder roots.
     @State private var currentPath: String?
@@ -36,7 +39,6 @@ struct FolderBrowserView: View {
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var indexComplete = false
-    @State private var showingSnapshotBrowser: SnapshotBrowserTarget?
     /// The version the listing below (or the fetch in flight for it) belongs
     /// to. `load()` records the version it is about to publish, so its own
     /// picker handoff is never mistaken for a user flip; `fetchNodes` records
@@ -81,10 +83,6 @@ struct FolderBrowserView: View {
             guard newID != listingVersionID else { return }
             listingVersionID = newID
             await fetchNodes(versionID: newID, path: path)
-        }
-        .sheet(item: $showingSnapshotBrowser) { snapshotTarget in
-            SnapshotBrowserView(target: snapshotTarget)
-                .environment(model)
         }
     }
 
@@ -180,11 +178,15 @@ struct FolderBrowserView: View {
             statusLine
 
             HStack {
-                Button("Browse One Snapshot…") {
-                    showingSnapshotBrowser = snapshotBrowserTarget
+                Button("Show in Restore") {
+                    guard let record = restoreRecord else { return }
+                    // Read before the sheet goes: the pane opens this folder.
+                    let folder = currentPath
+                    dismiss()
+                    onShowInRestore(record.id, folder)
                 }
-                .disabled(snapshotBrowserTarget == nil)
-                .help("The snapshot-first browser: drag out to Finder, restore the whole snapshot")
+                .disabled(restoreRecord == nil)
+                .help("Open this version under Restore at this folder — drag to Finder, see what changed, or restore the whole backup")
                 Spacer()
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -209,7 +211,7 @@ struct FolderBrowserView: View {
                 .foregroundStyle(.secondary)
         } else {
             Label(
-                "The version index is still reading this repository — some older versions may be missing. Browse One Snapshot always shows a complete tree.",
+                "The version index is still reading this repository — some older versions may be missing. Show in Restore always shows a complete tree.",
                 systemImage: "clock.arrow.circlepath"
             )
             .font(.caption)
@@ -219,11 +221,8 @@ struct FolderBrowserView: View {
 
     /// The snapshot-first escape hatch, opened at the version the user is
     /// reading — not discarded to the newest.
-    private var snapshotBrowserTarget: SnapshotBrowserTarget? {
-        let snapshot = planSnapshots.first { $0.id == chosen?.id } ?? planSnapshots.first
-        return snapshot.map {
-            SnapshotBrowserTarget(repositoryID: target.repositoryID, snapshot: $0)
-        }
+    private var restoreRecord: Snapshot? {
+        planSnapshots.first { $0.id == chosen?.id } ?? planSnapshots.first
     }
 
     // MARK: - Actions

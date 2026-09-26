@@ -26,6 +26,32 @@ struct AppRouterTests {
         router.request(.showFind)
         #expect(router.takePendingIntent() == .showFind)
     }
+
+    @Test("a Show in Restore focus steers only its own record's load, and only once")
+    func restoreFocusIsForItsRecordOnlyAndOnce() {
+        let router = AppRouter()
+        let repository = UUID()
+
+        router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
+        #expect(router.selection == .restoreSnapshot(repository, "s1"))
+        // Another record's load finds nothing — and spends the request, so a
+        // stale ask can never steer a later, unrelated load.
+        #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s2") == nil)
+        #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
+        // Nor does the same snapshot ID under another repository.
+        router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
+        #expect(router.takeRestoreFocus(repositoryID: UUID(), snapshotID: "s1") == nil)
+
+        router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
+        #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == "/D/Taxes")
+        #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
+
+        // A plain route afterwards clears an older focused ask.
+        router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
+        router.showRestore(repositoryID: repository, snapshotID: "s1")
+        #expect(router.selection == .restoreSnapshot(repository, "s1"))
+        #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
+    }
 }
 
 

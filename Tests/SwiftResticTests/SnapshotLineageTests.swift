@@ -204,6 +204,35 @@ struct SnapshotLineageTests {
         #expect(model.lineageLabel(of: docs, repositoryID: repositoryID) == nil)
     }
 
+    @Test("a plan's Restore Files… lands on the plan's own newest backup, not the repository's")
+    @MainActor
+    func newestRecordIsThePlansOwn() throws {
+        let model = AppModel(
+            store: ConfigStore(directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("SwiftResticNewest-\(UUID().uuidString)")),
+            secrets: .inMemory()
+        )
+        let repositoryID = UUID()
+        let planA = UUID()
+        let planB = UUID()
+        // The demo's shape: the repository's newest backup is another plan's
+        // (Documents at 02:00 on Sep 26); plan A's newest is a day older.
+        let b1 = try snapshot("b1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Documents"],
+                              tags: [ResticService.planTag(planB)])
+        let a1 = try snapshot("a1", time: "2026-09-25T03:00:00Z", paths: ["/Data/Photos"],
+                              tags: [ResticService.planTag(planA)])
+        // Newest first, as ResticService.snapshots sorts the listing.
+        model.snapshots[repositoryID] = [b1, a1]
+
+        #expect(model.newestRecord(repositoryID: repositoryID, planID: planA)?.id == "a1")
+        #expect(model.newestRecord(repositoryID: repositoryID, planID: planB)?.id == "b1")
+        // The repository page asks without a plan: the repository's newest.
+        #expect(model.newestRecord(repositoryID: repositoryID)?.id == "b1")
+        // A plan with no backups here, or an unknown repository: nowhere to land.
+        #expect(model.newestRecord(repositoryID: repositoryID, planID: UUID()) == nil)
+        #expect(model.newestRecord(repositoryID: UUID()) == nil)
+    }
+
     @Test("the restore header says what the Change column compares against, and why it is blank")
     func restoreHeaderCaption() throws {
         let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/Data/Documents"])

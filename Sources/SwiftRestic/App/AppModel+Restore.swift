@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 extension AppModel {
     // MARK: - Restore
@@ -140,6 +141,84 @@ extension AppModel {
     }
 
     func cancelRestore() { tasks.cancel(.restore) }
+
+    /// Arq's signature restore gesture — drag an item out of the Restore
+    /// pane into Finder — as a promised-file provider: the file does not
+    /// exist yet, so the drag hands Finder a promise and the restore runs
+    /// when the drop asks for the contents. The drop location is the
+    /// destination.
+    ///
+    /// The load handler must not touch the main actor: it runs while the
+    /// drag session holds the main thread synchronously waiting on this
+    /// promise (`loadURLSynchronously` → semaphore, under
+    /// `_dragUntilMouseUp` — measured deadlock), so everything model-derived
+    /// is captured here, *before* the session starts, and the restore runs
+    /// entirely in the background. Only the failure banner hops to main,
+    /// after the promise resolves and the drag has ended.
+    func dragRestoreProvider(repositoryID: UUID, snapshotID: String, node: SnapshotNode) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.suggestedName = node.name
+        // A provider with nothing registered offers the drop nothing — and
+        // saying *why* right here, at drag start, beats a drop that Finder
+        // refuses with no explanation of its own.
+        guard let repository = repository(id: repositoryID) else {
+            postDragImpossibleBanner("The repository no longer exists — pick a backup from a current repository under Restore.")
+            return provider
+        }
+        guard let service = try? service() else {
+            postDragImpossibleBanner(binaryProblem ?? "restic could not be found.")
+            return provider
+        }
+        let secrets = self.secrets
+        let settings = configuration.settings
+
+        // The promise is typed by *content*, not as a file URL: `public.file-url`
+        // declares the file's contents are a URL bookmark (what a .webloc is),
+        // and Finder answers that with the prohibited cursor (measured live —
+        // the drag offered, the drop refused). A content-typed promise is the
+        // shape Finder's drop sites accept. `public.data` is the root physical
+        // type every file conforms to; a directory's content type is `folder`.
+        let contentType: UTType = node.isDirectory ? .folder : .data
+        provider.registerFileRepresentation(
+            forTypeIdentifier: contentType.identifier,
+            fileOptions: [],
+            visibility: .all
+        ) { [weak self] completion in
+            Task<Void, Never>(priority: .userInitiated) {
+                do {
+                    let url = try await AppModel.restoredFileForDrag(
+                        service: service,
+                        secrets: secrets,
+                        repository: repository,
+                        settings: settings,
+                        snapshotID: snapshotID,
+                        node: node
+                    )
+                    completion(url, false, nil)
+                } catch {
+                    completion(nil, false, error)
+                    // The drag is over by now (the promise resolved or
+                    // failed), so the main actor is draining again — and a
+                    // drag failing during shutdown stays as quiet as the
+                    // UI restore's own failure path.
+                    await MainActor.run { [weak self] in
+                        guard let self, !self.isShuttingDown else { return }
+                        let message = (error as? ResticError)?.errorDescription ?? error.localizedDescription
+                        self.post(Banner(title: "Drag restore failed", message: message, isError: true))
+                    }
+                }
+            }
+            return nil
+        }
+        return provider
+    }
+
+    /// Dragging is possible but the drop can never land (no repository, no
+    /// binary) — named at the moment the drag begins, since the provider
+    /// itself has nothing to say.
+    private func postDragImpossibleBanner(_ message: String) {
+        post(Banner(title: "Cannot drag to restore", message: message, isError: true))
+    }
 
     /// The Arq-style drag restore: restores one node into a fresh throwaway
     /// directory and returns the restored item's URL, which the drag's

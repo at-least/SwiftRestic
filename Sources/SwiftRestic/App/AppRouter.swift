@@ -47,6 +47,19 @@ final class AppRouter {
     /// they send the user over.
     var activityShowsProblemsOnly = false
 
+    /// A folder the Restore pane should open and select when it next loads
+    /// this exact record — Browse Folders' "Show in Restore", which closes
+    /// the folder browser the user was reading and must not lose their place.
+    struct RestoreFocus: Equatable {
+        var repositoryID: UUID
+        var snapshotID: String
+        var path: String
+    }
+
+    /// Transient, never persisted. Keyed on the record so a stale request can
+    /// never steer an unrelated load; the pane spends it on its next load.
+    private(set) var restoreFocus: RestoreFocus?
+
     /// The main window's `openWindow` action, parked by the root view the
     /// first time the window appears — the AppKit tray has no view
     /// environment to call it from, and it outlives the window it was
@@ -64,5 +77,29 @@ final class AppRouter {
     func takePendingIntent() -> Intent? {
         defer { pendingIntent = nil }
         return pendingIntent
+    }
+
+    /// The one route into a backup's contents from outside the sidebar —
+    /// the Snapshots tables' Browse, Restore Files…, Show in Restore: select
+    /// the record under Restore, where the Change column, search, drag and
+    /// whole-backup restore all live, whichever button was pressed. A plain
+    /// route clears an older focus request rather than inheriting it.
+    func showRestore(repositoryID: UUID, snapshotID: String, focusPath: String? = nil) {
+        restoreFocus = focusPath.map {
+            RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
+        }
+        selection = .restoreSnapshot(repositoryID, snapshotID)
+    }
+
+    /// The Restore pane's consumption half: the focus path, only when it was
+    /// asked for this record. Spent either way — a load of another record
+    /// means the request is stale.
+    func takeRestoreFocus(repositoryID: UUID, snapshotID: String) -> String? {
+        defer { restoreFocus = nil }
+        guard let restoreFocus,
+              restoreFocus.repositoryID == repositoryID,
+              restoreFocus.snapshotID == snapshotID
+        else { return nil }
+        return restoreFocus.path
     }
 }

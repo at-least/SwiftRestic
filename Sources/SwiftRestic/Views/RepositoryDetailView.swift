@@ -6,7 +6,6 @@ struct RepositoryDetailView: View {
     let repositoryID: UUID
     let onEdit: () -> Void
 
-    @State private var browsing: SnapshotBrowserTarget?
     @State private var comparing: SnapshotDiffTarget?
     @State private var isConfirmingRemoval = false
     @State private var isConfirmingPrune = false
@@ -57,9 +56,6 @@ struct RepositoryDetailView: View {
                     .labelStyle(.titleAndIcon)
                     .help("Change this repository's location, credentials and maintenance")
             }
-        }
-        .sheet(item: $browsing) { target in
-            SnapshotBrowserView(target: target).environment(model)
         }
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target).environment(model)
@@ -204,7 +200,7 @@ struct RepositoryDetailView: View {
                     isLoading: model.loadingSnapshots.contains(repositoryID),
                     loadOutcome: listingOutcome,
                     onBrowse: { snapshot in
-                        browsing = SnapshotBrowserTarget(repositoryID: repositoryID, snapshot: snapshot)
+                        router.showRestore(repositoryID: repositoryID, snapshotID: snapshot.id)
                     },
                     onCompare: { snapshot in
                         comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
@@ -221,8 +217,8 @@ struct RepositoryDetailView: View {
                     // disabled while no records exist; loading them is the
                     // toolbar Refresh's job, not a silent side effect.
                     Button("Restore Files…") {
-                        if let latest = model.snapshots(for: repositoryID).first {
-                            router.selection = .restoreSnapshot(repositoryID, latest.id)
+                        if let latest = model.newestRecord(repositoryID: repositoryID) {
+                            router.showRestore(repositoryID: repositoryID, snapshotID: latest.id)
                         }
                     }
                     .controlSize(.small)

@@ -4,11 +4,17 @@ import SwiftUI
 /// the sidebar's Restore section — Arq's arrangement, where picking a
 /// dated record in the source list shows its files in the main pane.
 ///
+/// The app's one snapshot-first browser: the Snapshots tables' Browse, both
+/// Restore Files… buttons and Browse Folders' Show in Restore all land here
+/// (`AppRouter.showRestore`), so the Change column, search, drag-to-Finder
+/// and whole-backup restore never depend on which button you came through.
+///
 /// The record is identified, not chosen here: the sidebar owns the timeline.
 /// Switching records keeps the folder you are in; the restore progress strip
 /// lives on the window above every pane, so it outlives a pane switch too.
 struct RestorePaneView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
 
     let repositoryID: UUID
     let snapshotID: String
@@ -43,6 +49,10 @@ struct RestorePaneView: View {
     /// The query in flight, so the next keystroke cancels it: a slower older
     /// search finishing last must not overwrite the newer one's answers.
     @State private var searchTask: Task<Void, Never>?
+    /// A routed focus folder the tree should scroll to once it is on screen —
+    /// set by `loadLevel`, spent by the list. Plain record switches keep
+    /// their folder open but never scroll.
+    @State private var revealPath: String?
 
     private var record: Snapshot? {
         model.snapshots(for: repositoryID).first { $0.id == snapshotID }
@@ -230,61 +240,74 @@ struct RestorePaneView: View {
     }
 
     private var treeList: some View {
-        List(tree.rows, selection: $selection) { row in
-            HStack(spacing: 6) {
-                Spacer().frame(width: CGFloat(row.depth) * 16)
-                Group {
-                    if row.node.isDirectory {
-                        Button {
-                            expand(path: row.node.path)
-                        } label: {
-                            Image(systemName: row.expanded ? "chevron.down" : "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .frame(width: 12)
-                        }
-                        .buttonStyle(.plain)
-                        .help(row.expanded ? "Collapse" : "Expand")
-                    } else {
-                        Spacer().frame(width: 12)
-                    }
-                }
-                Image(systemName: row.node.browserIconName)
-                    .foregroundStyle(row.node.isDirectory ? Color.accentColor : .secondary)
-                    .frame(width: 16)
-                Text(row.node.name)
-                    .lineLimit(1)
-                Spacer()
-                changeBadge(for: row.node.path)
-                Text(Format.timestamp(row.node.mtime))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 140, alignment: .trailing)
-                // Reserved even for directories: a branch-less cell becomes
-                // an EmptyView, and EmptyView drops `.frame` — the mtime
-                // column would slide into the Size column's spot.
+        ScrollViewReader { proxy in
+            List(tree.rows, selection: $selection) { row in
+                HStack(spacing: 6) {
+                    Spacer().frame(width: CGFloat(row.depth) * 16)
                     Group {
                         if row.node.isDirectory {
-                            Text(verbatim: "")
+                            Button {
+                                expand(path: row.node.path)
+                            } label: {
+                                Image(systemName: row.expanded ? "chevron.down" : "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .frame(width: 12)
+                            }
+                            .buttonStyle(.plain)
+                            .help(row.expanded ? "Collapse" : "Expand")
                         } else {
-                            Text(Format.bytes(row.node.size))
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
+                            Spacer().frame(width: 12)
                         }
                     }
-                    .font(.caption)
-                    .frame(width: 70, alignment: .trailing)
+                    Image(systemName: row.node.browserIconName)
+                        .foregroundStyle(row.node.isDirectory ? Color.accentColor : .secondary)
+                        .frame(width: 16)
+                    Text(row.node.name)
+                        .lineLimit(1)
+                    Spacer()
+                    changeBadge(for: row.node.path)
+                    Text(Format.timestamp(row.node.mtime))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 140, alignment: .trailing)
+                    // Reserved even for directories: a branch-less cell becomes
+                    // an EmptyView, and EmptyView drops `.frame` — the mtime
+                    // column would slide into the Size column's spot.
+                        Group {
+                            if row.node.isDirectory {
+                                Text(verbatim: "")
+                            } else {
+                                Text(Format.bytes(row.node.size))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .font(.caption)
+                        .frame(width: 70, alignment: .trailing)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    if row.node.isDirectory { expand(path: row.node.path) }
+                }
+                // Arq's signature restore gesture: drag straight out of the tree
+                // into Finder. Tree rows only — a search hit's kind is the
+                // index's guess, and a folder dumped as a file lands as a tar.
+                .onDrag { dragProvider(for: row.node) }
+                .tag(row.id)
             }
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) {
-                if row.node.isDirectory { expand(path: row.node.path) }
+            .listStyle(.inset)
+            .onKeyPress(phases: .down) { press in
+                handleKeyPress(press)
             }
-            .tag(row.id)
+            .help("Return expands a folder; ⌘↑ or ⌫ goes up; double-click also expands; drag an item to Finder to restore it there")
+            // Initial as well: the routed focus is set while the spinner stands
+            // in for this list, so the list meets it on its first appearance.
+            .onChange(of: revealPath, initial: true) { _, target in
+                guard let target else { return }
+                proxy.scrollTo(target, anchor: .center)
+                revealPath = nil
+            }
         }
-        .listStyle(.inset)
-        .onKeyPress(phases: .down) { press in
-            handleKeyPress(press)
-        }
-        .help("Return expands a folder; ⌘↑ or ⌫ goes up; double-click also expands")
     }
 
     private func searchResults(_ hits: [SearchHit]) -> some View {
@@ -308,12 +331,25 @@ struct RestorePaneView: View {
         .listStyle(.inset)
     }
 
-    /// One button, Arq-style: the overwrite consequence is named where the
-    /// decision happens — the destination dialog's message — not as a
-    /// permanent caption under every browse.
+    /// Arq's three ways out of a record, in one row: the primary Restore…
+    /// for the selection on the right, the whole backup as the secondary
+    /// action on the left, and the drag named in between — Arq's "Drag and
+    /// drop to the desktop or a Finder window or click Restore:". The hint
+    /// shows only over the tree, the one list whose rows drag. The overwrite
+    /// consequence is named where the decision happens — the destination
+    /// dialog's message — not as a permanent caption under every browse.
     private func footer(record: Snapshot?) -> some View {
-        HStack {
-            Spacer()
+        HStack(spacing: 12) {
+            Button("Restore Entire Backup…") { restoreWholeRecord() }
+                .disabled(model.isRestoring || record == nil)
+                .help("Restore everything in this backup — each folder is recreated under its full original path inside the folder you choose")
+            Spacer(minLength: 12)
+            if treeIsShowing {
+                Text("Drag an item to Finder to restore it there.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             Button("Restore…") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -321,6 +357,12 @@ struct RestorePaneView: View {
                 .help("Restore the selected item from this backup (Return)")
         }
         .padding(12)
+    }
+
+    /// The browser's final branch — the tree list, and nothing standing in
+    /// for it (spinner, error, search results, missing folder, empty folder).
+    private var treeIsShowing: Bool {
+        !isLoadingTree && loadError == nil && searchHits == nil && !folderMissing && !tree.rows.isEmpty
     }
 
     // MARK: - Rows
@@ -355,6 +397,14 @@ struct RestorePaneView: View {
                 Spacer().frame(width: 44)
             }
         }
+    }
+
+    /// The record a drag names is the one the rows on screen were built
+    /// for: the `snapshotID` prop moves on a record switch one update before
+    /// `loadLevel` rebuilds the tree.
+    private func dragProvider(for node: SnapshotNode) -> NSItemProvider {
+        guard let loadedSnapshotID else { return NSItemProvider() }
+        return model.dragRestoreProvider(repositoryID: repositoryID, snapshotID: loadedSnapshotID, node: node)
     }
 
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
@@ -395,6 +445,13 @@ struct RestorePaneView: View {
             tree = FileTree(roots: [])
             comparison = nil
             return
+        }
+        // Show in Restore's folder, when the route asked for this record:
+        // walked open by the same spine a record switch re-walks. A path
+        // outside the record's roots is dropped, not walked.
+        let focus = router.takeRestoreFocus(repositoryID: repositoryID, snapshotID: record.id)
+        if let focus, !Format.pathChain(of: focus, roots: record.paths).isEmpty {
+            currentPath = focus
         }
         loadedSnapshotID = record.id
         let spine = currentPath.map { Format.pathChain(of: $0, roots: record.paths) } ?? []
@@ -457,6 +514,11 @@ struct RestorePaneView: View {
         }
         if let deepest { currentPath = deepest }
         guard !Task.isCancelled else { return }
+        // The routed folder is open: select it and bring it on screen.
+        if let focus, deepest == focus {
+            selection = focus
+            revealPath = focus
+        }
         isLoadingTree = false
     }
 
@@ -567,6 +629,26 @@ struct RestorePaneView: View {
             repositoryID: repositoryID,
             snapshotID: record.id,
             node: node,
+            to: destination
+        )
+    }
+
+    /// The whole record, named the way the header and the sidebar name it
+    /// and dated, with the layout restic will produce: `restore <id>
+    /// --target` recreates every absolute path under the target.
+    private func restoreWholeRecord() {
+        guard let record else { return }
+        let name = SnapshotLineage.displayName(
+            of: record,
+            label: model.lineageLabel(of: record, repositoryID: repositoryID)
+        )
+        guard let destination = FilePicker.chooseDirectory(
+            message: "Choose where to restore the entire “\(name)” backup from \(Format.timestamp(record.time)). Its folders are recreated under their full original paths inside the folder you choose. Restoring overwrites existing files at the destination.",
+            prompt: "Restore"
+        ) else { return }
+        model.restoreWholeSnapshot(
+            repositoryID: repositoryID,
+            snapshotID: record.id,
             to: destination
         )
     }

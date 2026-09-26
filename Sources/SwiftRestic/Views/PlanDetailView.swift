@@ -9,7 +9,6 @@ struct PlanDetailView: View {
     /// wired by RootView so this view owns no navigation of its own.
     var onShowRun: (() -> Void)? = nil
 
-    @State private var browsing: SnapshotBrowserTarget?
     @State private var comparing: SnapshotDiffTarget?
     @State private var browsingFolders: FolderBrowserTarget?
     @State private var isConfirmingDeletion = false
@@ -75,13 +74,13 @@ struct PlanDetailView: View {
                 }
             }
         }
-        .sheet(item: $browsing) { target in
-            SnapshotBrowserView(target: target)
-                .environment(model)
-        }
         .sheet(item: $browsingFolders) { target in
-            FolderBrowserView(target: target)
-                .environment(model)
+            // Show in Restore leaves this page for the Restore pane, at the
+            // version and folder the folder browser was showing.
+            FolderBrowserView(target: target, onShowInRestore: { snapshotID, folder in
+                router.showRestore(repositoryID: target.repositoryID, snapshotID: snapshotID, focusPath: folder)
+            })
+            .environment(model)
         }
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target)
@@ -382,7 +381,7 @@ struct PlanDetailView: View {
                     ? "No snapshots yet — they appear here after the first backup."
                     : "This repository has snapshots, but none from this plan yet.",
                 onBrowse: { snapshot in
-                    browsing = SnapshotBrowserTarget(repositoryID: repositoryID, snapshot: snapshot)
+                    router.showRestore(repositoryID: repositoryID, snapshotID: snapshot.id)
                 },
                 onCompare: { snapshot in
                     comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
@@ -400,6 +399,18 @@ struct PlanDetailView: View {
                     loadedAt: loadedAt,
                     isLoading: model.loadingSnapshots.contains(repositoryID)
                 )
+                // Arq's "Restoring from an Active Backup Plan": expand the
+                // sidebar's Restore section and select this plan's newest
+                // backup — the plan's own, not whichever plan sharing the
+                // repository ran last.
+                Button("Restore Files…") {
+                    if let latest = model.newestRecord(repositoryID: repositoryID, planID: plan.id) {
+                        router.showRestore(repositoryID: repositoryID, snapshotID: latest.id)
+                    }
+                }
+                .controlSize(.small)
+                .disabled(snapshots.isEmpty)
+                .help("Browse this plan's backups and restore files — expands Restore on the left and selects this plan's newest backup")
                 // The folder-first entry: pick a folder, then flip through the
                 // snapshots that contain it. Needs at least one snapshot to
                 // stand in as the newest version.
@@ -611,6 +622,7 @@ struct SnapshotTable: View {
                 TableColumn("") { snapshot in
                     HStack(spacing: 6) {
                         Button("Browse") { onBrowse(snapshot) }
+                            .help("Show this snapshot's files under Restore")
                         if let onCompare {
                             Button("Compare") { onCompare(snapshot) }
                                 .help("What changed since the previous snapshot")
@@ -624,9 +636,8 @@ struct SnapshotTable: View {
             // The row context menu and double-click mirror the two buttons,
             // so the table's most-repeated actions have a keyboard-and-menu
             // path and not only a mouse-only pair of small buttons.
-            // Return on a selected row opens it, the same grammar the
-            // browser sheet speaks — the context menu alone is not a
-            // keyboard path.
+            // Return on a selected row opens it, the Restore pane's
+            // grammar — the context menu alone is not a keyboard path.
             .onKeyPress(.return) {
                 guard let selection,
                       let snapshot = visible.first(where: { $0.id == selection })
@@ -637,7 +648,8 @@ struct SnapshotTable: View {
             .contextMenu(forSelectionType: Snapshot.ID.self) { ids in
                 if let id = ids.first, ids.count == 1,
                    let snapshot = visible.first(where: { $0.id == id }) {
-                    Button("Browse Contents…") { onBrowse(snapshot) }
+                    // No ellipsis: it switches panes, it opens no window.
+                    Button("Browse Contents") { onBrowse(snapshot) }
                     if let onCompare {
                         Button("Compare with Previous…") { onCompare(snapshot) }
                     }

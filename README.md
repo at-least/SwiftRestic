@@ -53,14 +53,19 @@ checked in so a normal build does not need it.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day.
-- **Browsing and restore** — walk a snapshot one directory at a time, restore a
-  single file, a subtree, or the whole snapshot. Per-node restores land in the
+- **Browsing and restore** — every *Browse*, *Restore Files…* and *Show in
+  Restore* opens the one browser, under the sidebar's Restore section: a
+  backup's folders as a tree, with a Change column and search, and three ways
+  to restore — drag an item to Finder, select one and choose *Restore…*, or
+  *Restore Entire Backup…*, which recreates its folders under their full
+  original paths inside the folder you choose. Per-node restores land in the
   chosen folder with no absolute path rebuilt above them. The sidebar's Restore
   section groups a repository's backups by the folders and Mac they came from
   (restic's own `host,paths` grouping), and the file list's Change column
   compares each backup with the previous one in its group; the pane's header
   names the open backup and says what its Change column is compared with, or
-  that it is the first of its group.
+  that it is the first of its group. On a plan's page, *Browse Folders…* walks
+  one folder through every snapshot that contains it.
 - **Find files across snapshots** — search every snapshot for a name or glob when
   you do not know which backup still has the file, then restore the match. ⇧⌘F.
 - **Compare snapshots** — *Compare* on any snapshot runs `restic diff` against

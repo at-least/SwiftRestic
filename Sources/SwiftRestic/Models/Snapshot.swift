@@ -107,6 +107,15 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
     }
 }
 
+extension SnapshotNode {
+    /// Synthesises a directory node for a path restic never handed us as JSON —
+    /// used for the snapshot's own root paths at the top of the browsers.
+    static func directory(path: String) -> SnapshotNode {
+        let name = (path as NSString).lastPathComponent
+        return SnapshotNode(name: name.isEmpty ? path : name, type: .dir, path: path)
+    }
+}
+
 /// One file `restic find --json` matched, inside one snapshot.
 struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var path: String
