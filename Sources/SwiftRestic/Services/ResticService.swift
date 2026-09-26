@@ -114,6 +114,9 @@ struct ResticService: ResticClient {
     /// ancient binary, and the app's decoding is pinned to modern restic
     /// output anyway.
     var streamsRestoreProgress = true
+    /// Whether the located restic takes `restore --overwrite` (0.17+).
+    /// Defaults on, for the same reason as the stall cap.
+    var supportsRestoreOverwrite = true
 
     /// Tag stamped on every snapshot a plan creates, so retention and snapshot
     /// listings can be scoped to that plan without touching anyone else's data.
@@ -604,24 +607,42 @@ struct ResticService: ResticClient {
     /// Directories go through `restic restore <id>:<path>`, which makes the given
     /// subtree the root of the output. Single files go through `restic dump`,
     /// which writes exactly one file and nothing else.
+    ///
+    /// From restic 0.17 on, `overwrite` always reaches restic explicitly,
+    /// even for Replace, whose `always` is restic's default: the command
+    /// line in the run's log then says what was asked (older restic: see
+    /// `overwriteArguments`). Replace is `always`, never `if-changed`, which
+    /// trusts size and modification time. Keep is `never`, which is not an
+    /// absolute keep (restic 0.19.1, probed): it still deletes a file that
+    /// stands where the backup has a folder of the same name, and gives a
+    /// folder that already exists the backed-up permissions and dates. The
+    /// landing itself is safe — `createDirectory` below fails on a file
+    /// there before restic runs. `restic dump` has no overwrite option, so
+    /// the file branch keeps in-app: an existing landing skips the dump
+    /// entirely, and the runner's commit refuses a name that appeared while
+    /// it ran.
     @discardableResult
     func restore(
         _ context: RepositoryContext,
         snapshotID: String,
         node: SnapshotNode,
         destinationDirectory: URL,
+        overwrite: RestoreOverwritePolicy,
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> ResticSummary? {
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
 
         let target = Self.restoredItemURL(for: node, in: destinationDirectory)
         if node.isDirectory {
+            // Judged before the folder below exists: it is what Keep keeps.
+            let overwriteArguments = try overwriteArguments(overwrite, landing: target)
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
             let result = try await runner.run(
                 binary: binary,
                 invocation: ResticInvocation(
                     arguments: context.globalArguments
-                            + ["restore", "--json", "\(snapshotID):\(node.path)", "--target", target.path],
+                        + ["restore", "--json", "\(snapshotID):\(node.path)", "--target", target.path]
+                        + overwriteArguments,
                     environment: context.environment,
                     idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
                 ),
@@ -630,14 +651,25 @@ struct ResticService: ResticClient {
             return result.summary
         }
 
-        _ = try await runner.run(
+        // lstat, not fileExists: a dangling symlink holds the name too. The
+        // check spares the download; the commit below closes the window.
+        if overwrite == .keepExisting, RestoreDestinationRules.itemExists(at: target) {
+            RunTranscript.current?.note("Kept the file already at \(target.path); restic dump did not run.")
+            return Self.keptFileSummary(node: node)
+        }
+        let result = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
                 arguments: context.globalArguments + ["dump", snapshotID, node.path],
                 environment: context.environment,
-                stdoutFile: target
+                stdoutFile: target,
+                stdoutFileReplacesExisting: overwrite == .replaceExisting
             )
         )
+        if result.keptExistingStdoutFile {
+            RunTranscript.current?.note("Kept the file that appeared at \(target.path) during the dump; the dump was discarded.")
+            return Self.keptFileSummary(node: node)
+        }
         // A node the index synthesized (a search hit) carries no size; the
         // committed file says what landed.
         let written = node.size ?? (
@@ -651,6 +683,41 @@ struct ResticService: ResticClient {
         return summary
     }
 
+    /// The `--overwrite` arguments for a restore into `landing`. A restic
+    /// older than 0.17 rejects the flag and always replaces, so Replace
+    /// needs nothing there, and Keep is honest only where there is nothing
+    /// to keep — a folder that does not exist yet or is empty, as a drag's
+    /// fresh UUID directory is. Anything else is refused before restic
+    /// runs, not replaced; something appearing in the moment between this
+    /// look and restic's start is the one gap.
+    private func overwriteArguments(_ policy: RestoreOverwritePolicy, landing: URL) throws -> [String] {
+        if supportsRestoreOverwrite { return ["--overwrite", policy.resticValue] }
+        guard policy == .keepExisting, Self.holdsAnything(landing) else { return [] }
+        throw ResticError.keepNeedsNewerRestic(path: landing.path)
+    }
+
+    /// Anything at `url` a restore could replace: a file or link (lstat), or
+    /// a folder with entries. A folder that cannot be listed counts as full.
+    private static func holdsAnything(_ url: URL) -> Bool {
+        guard RestoreDestinationRules.itemExists(at: url) else { return false }
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: url.path) else { return true }
+        return !entries.isEmpty
+    }
+
+    /// A single file Keep left alone, in the shape restic's own summary
+    /// gives a directory restore's kept files. The callers also note it in
+    /// the run's log, which otherwise would hold no command at all when the
+    /// dump never ran.
+    private static func keptFileSummary(node: SnapshotNode) -> ResticSummary {
+        var summary = ResticSummary()
+        summary.totalFiles = 1
+        summary.filesRestored = 0
+        summary.filesSkipped = 1
+        summary.totalBytes = node.size
+        summary.bytesSkipped = node.size
+        return summary
+    }
+
     /// Restores an entire snapshot, keeping the original directory layout below
     /// `destinationDirectory`.
     @discardableResult
@@ -658,14 +725,17 @@ struct ResticService: ResticClient {
         _ context: RepositoryContext,
         snapshotID: String,
         destinationDirectory: URL,
+        overwrite: RestoreOverwritePolicy,
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> ResticSummary? {
+        let overwriteArguments = try overwriteArguments(overwrite, landing: destinationDirectory)
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
         let result = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
                 arguments: context.globalArguments
-                    + ["restore", "--json", snapshotID, "--target", destinationDirectory.path],
+                    + ["restore", "--json", snapshotID, "--target", destinationDirectory.path]
+                    + overwriteArguments,
                 environment: context.environment,
                 idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
             ),

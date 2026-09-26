@@ -53,6 +53,8 @@ struct RestorePaneView: View {
     /// set by `loadLevel`, spent by the list. Plain record switches keep
     /// their folder open but never scroll.
     @State private var revealPath: String?
+    /// The restore waiting in the destination sheet.
+    @State private var destinationRequest: RestoreDestinationRequest?
 
     private var record: Snapshot? {
         model.snapshots(for: repositoryID).first { $0.id == snapshotID }
@@ -92,6 +94,10 @@ struct RestorePaneView: View {
         // already holds the rows, and re-running the diff on every chevron
         // click would make a large repository feel broken.
         .task(id: snapshotID) { await loadLevel() }
+        .sheet(item: $destinationRequest) { request in
+            RestoreDestinationSheet(request: request)
+                .environment(model)
+        }
         .onDisappear {
             // The pane's queries must not keep running — and keep writing —
             // after the pane is gone.
@@ -102,12 +108,24 @@ struct RestorePaneView: View {
 
     private func browserPane(record: Snapshot?) -> some View {
         VStack(spacing: 0) {
+            // A restore started here ends here: the result — Reveal in
+            // Finder, what Keep kept, a failure — lands at the top of the
+            // pane, where Activity and the console carry the same queue,
+            // right under the window's restore strip whose place it takes.
+            // Its own view, so a banner never re-renders the tree. It claims
+            // height before the tree does: an equal share, which the stack
+            // gives by default, cut three queued restore banners to a line
+            // each and dropped the newest one's "Kept N existing files" —
+            // while the tree, which scrolls, keeps a floor of a few rows.
+            RestorePaneBanners()
+                .layoutPriority(1)
             toolbar(record: record)
             Divider()
             // Its own view, reading the run history itself: a new run
             // record re-renders the strip, never the tree below it.
             IncompleteSnapshotStrip(snapshotID: snapshotID)
             browser
+                .frame(minHeight: 120)
             Divider()
             footer(record: record)
         }
@@ -335,9 +353,9 @@ struct RestorePaneView: View {
     /// for the selection on the right, the whole backup as the secondary
     /// action on the left, and the drag named in between — Arq's "Drag and
     /// drop to the desktop or a Finder window or click Restore:". The hint
-    /// shows only over the tree, the one list whose rows drag. The overwrite
-    /// consequence is named where the decision happens — the destination
-    /// dialog's message — not as a permanent caption under every browse.
+    /// shows only over the tree, the one list whose rows drag. The
+    /// keep/replace decision happens in the destination sheet, not as a
+    /// permanent caption under every browse.
     private func footer(record: Snapshot?) -> some View {
         HStack(spacing: 12) {
             Button("Restore Entire Backup…") { restoreWholeRecord() }
@@ -621,36 +639,65 @@ struct RestorePaneView: View {
 
     private func restoreSelection() {
         guard let record, let node = selectedRow else { return }
-        guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore “\(node.name)” from \(Format.timestamp(record.time)). Restoring overwrites existing files at the destination.",
-            prompt: "Restore"
-        ) else { return }
-        model.restore(
-            repositoryID: repositoryID,
-            snapshotID: record.id,
-            node: node,
-            to: destination
-        )
+        let repositoryID = repositoryID
+        destinationRequest = RestoreDestinationRequest(
+            subject: .item(name: node.name, path: node.path, isDirectory: node.isDirectory),
+            backupTime: record.time,
+            snapshotShortID: record.shortID
+        ) { destination, overwrite in
+            model.restore(
+                repositoryID: repositoryID,
+                snapshotID: record.id,
+                node: node,
+                to: destination,
+                overwrite: overwrite
+            )
+        }
     }
 
     /// The whole record, named the way the header and the sidebar name it
-    /// and dated, with the layout restic will produce: `restore <id>
-    /// --target` recreates every absolute path under the target.
+    /// and dated; the sheet says the layout restic will produce: `restore
+    /// <id> --target` recreates every absolute path under the target.
     private func restoreWholeRecord() {
         guard let record else { return }
-        let name = SnapshotLineage.displayName(
-            of: record,
-            label: model.lineageLabel(of: record, repositoryID: repositoryID)
-        )
-        guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore the entire “\(name)” backup from \(Format.timestamp(record.time)). Its folders are recreated under their full original paths inside the folder you choose. Restoring overwrites existing files at the destination.",
-            prompt: "Restore"
-        ) else { return }
-        model.restoreWholeSnapshot(
-            repositoryID: repositoryID,
-            snapshotID: record.id,
-            to: destination
-        )
+        let repositoryID = repositoryID
+        destinationRequest = RestoreDestinationRequest(
+            subject: .wholeSnapshot(paths: record.paths),
+            backupName: SnapshotLineage.displayName(
+                of: record,
+                label: model.lineageLabel(of: record, repositoryID: repositoryID)
+            ),
+            backupTime: record.time,
+            snapshotShortID: record.shortID
+        ) { destination, overwrite in
+            model.restoreWholeSnapshot(
+                repositoryID: repositoryID,
+                snapshotID: record.id,
+                to: destination,
+                overwrite: overwrite
+            )
+        }
+    }
+}
+
+/// The shared banner queue at the top of the Restore pane. Never
+/// height-pinned (BannerView's rule): the pane does not scroll as a whole.
+/// Newer banners claim height first, so when the pane runs short the oldest
+/// is the one cut, never the result of the restore just finished.
+private struct RestorePaneBanners: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if !model.banners.isEmpty {
+            VStack(spacing: 8) {
+                let banners = model.banners
+                ForEach(Array(banners.enumerated()), id: \.element.id) { index, banner in
+                    BannerView(banner: banner)
+                        .layoutPriority(Double(banners.count - index))
+                }
+            }
+            .padding([.horizontal, .top], 12)
+        }
     }
 }
 

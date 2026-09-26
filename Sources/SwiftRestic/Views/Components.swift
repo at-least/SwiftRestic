@@ -97,9 +97,9 @@ struct BannerView: View {
                         // detail column for a minimum size at zero width, where
                         // a height-pinned message wraps to about a character
                         // per line, and the non-scrolling hosts (Activity, the
-                        // console, the restic-missing strip) then lay out
-                        // thousands of points taller than the window and
-                        // render blank.
+                        // console, the Restore pane, the restic-missing strip)
+                        // then lay out thousands of points taller than the
+                        // window and render blank.
                         Text(banner.message)
                             .font(.callout)
                             .foregroundStyle(.secondary)
@@ -713,8 +713,10 @@ enum FilePicker {
         return panel.runModal() == .OK ? panel.urls : nil
     }
 
+    /// `directoryURL` is where the panel opens; nil leaves it to AppKit's
+    /// own memory of the last folder.
     @MainActor
-    static func chooseDirectory(message: String, prompt: String = "Choose") -> URL? {
+    static func chooseDirectory(message: String, prompt: String = "Choose", directoryURL: URL? = nil) -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -722,6 +724,7 @@ enum FilePicker {
         panel.allowsMultipleSelection = false
         panel.message = message
         panel.prompt = prompt
+        if let directoryURL { panel.directoryURL = directoryURL }
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
 

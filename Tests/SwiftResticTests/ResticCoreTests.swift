@@ -417,6 +417,71 @@ struct StdoutFileDumpTests {
         )
         #expect(partialSiblings(in: directory).isEmpty, "left behind: \(partialSiblings(in: directory))")
     }
+
+    @Test("a no-replace dump commit keeps a target that appeared during the run")
+    func noReplaceCommitKeepsTarget() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("a.txt")
+
+        // The child itself creates the target mid-run — a user's copy or an
+        // iCloud re-download landing while a long dump streams — after any
+        // check the caller made before starting it.
+        let result = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(
+                arguments: ["-c", "printf mine > '\(target.path)'; printf new"],
+                stdoutFile: target,
+                stdoutFileReplacesExisting: false
+            )
+        )
+
+        #expect(result.keptExistingStdoutFile)
+        #expect(try String(contentsOf: target, encoding: .utf8) == "mine", "the no-replace commit replaced the target")
+        #expect(partialSiblings(in: directory).isEmpty, "left behind: \(partialSiblings(in: directory))")
+
+        // On a free name the same commit lands the dump and says so.
+        let free = directory.appendingPathComponent("b.txt")
+        let landed = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(
+                arguments: ["-c", "printf new"],
+                stdoutFile: free,
+                stdoutFileReplacesExisting: false
+            )
+        )
+        #expect(!landed.keptExistingStdoutFile)
+        #expect(try String(contentsOf: free, encoding: .utf8) == "new")
+        #expect(partialSiblings(in: directory).isEmpty, "left behind: \(partialSiblings(in: directory))")
+    }
+
+    @Test("a volume that refuses RENAME_EXCL still gets its dump, and still keeps a taken name")
+    func noReplaceCommitWithoutExclusiveRename() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // exFAT on macOS 26 answers ENOTSUP to RENAME_EXCL even for a free
+        // name (probed on a mounted image); the injected rename says the same.
+        let refusesFlag: (String, String) -> Int32 = { _, _ in ENOTSUP }
+
+        let free = directory.appendingPathComponent("a.txt")
+        let freeStaging = directory.appendingPathComponent(".a.txt.1.partial")
+        try Data("new".utf8).write(to: freeStaging)
+        let landed = try ResticRunner.commitStagedDump(
+            freeStaging, to: free, replacingExisting: false, renameExclusive: refusesFlag
+        )
+        #expect(landed == .committed)
+        #expect(try String(contentsOf: free, encoding: .utf8) == "new")
+
+        let taken = directory.appendingPathComponent("b.txt")
+        try Data("mine".utf8).write(to: taken)
+        let takenStaging = directory.appendingPathComponent(".b.txt.1.partial")
+        try Data("new".utf8).write(to: takenStaging)
+        let kept = try ResticRunner.commitStagedDump(
+            takenStaging, to: taken, replacingExisting: false, renameExclusive: refusesFlag
+        )
+        #expect(kept == .keptExisting)
+        #expect(try String(contentsOf: taken, encoding: .utf8) == "mine", "the fallback replaced a taken name")
+    }
 }
 
 /// What a backup's unreadable-item lines are built from: restic's error

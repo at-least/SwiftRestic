@@ -41,6 +41,8 @@ struct FindFilesView: View {
     /// The sheet exists to answer one question, so the field that receives it
     /// takes focus on arrival — typing starts immediately.
     @FocusState private var patternFieldIsFocused: Bool
+    /// The restore waiting in the destination sheet, over this one.
+    @State private var destinationRequest: RestoreDestinationRequest?
 
     private struct Row: Identifiable {
         var id: String { "\(snapshotID)/\(match.path)" }
@@ -63,6 +65,10 @@ struct FindFilesView: View {
             footer(rows)
         }
         .frame(minWidth: 760, minHeight: 480)
+        .sheet(item: $destinationRequest) { request in
+            RestoreDestinationSheet(request: request)
+                .environment(model)
+        }
         .onAppear {
             if repositoryID == nil { repositoryID = model.configuration.repositories.first?.id }
             patternFieldIsFocused = true
@@ -223,9 +229,6 @@ struct FindFilesView: View {
     private func footer(_ rows: [Row]) -> some View {
         VStack(spacing: 10) {
             RestoreProgressStrip()
-            Text("Restoring overwrites existing files at the destination.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
 
             HStack {
                 if !rows.isEmpty {
@@ -258,9 +261,9 @@ struct FindFilesView: View {
                 let selected = selectedRow(in: rows)
                 Button("Restore Selected…") { restoreSelection(selected) }
                     .buttonStyle(.borderedProminent)
-                    // Same grammar as the snapshot browser: Return offers the
-                    // restore, always through the destination picker where
-                    // the overwrite warning lives.
+                    // Same grammar as the Restore pane: Return offers the
+                    // restore, always through the destination sheet, where
+                    // the keep/replace choice lives.
                     .keyboardShortcut(.defaultAction)
                     .disabled(selected == nil || model.isRestoring)
             }
@@ -401,28 +404,33 @@ struct FindFilesView: View {
         selection = nil
     }
 
-    /// Restores the given row through the destination picker, where the
-    /// overwrite warning lives.
-    ///
+    /// Restores the given row through the destination sheet, where the
+    /// keep/replace choice lives.
+    private func restoreSelection(_ row: Row?) {
+        guard let row, let repositoryID else { return }
+        destinationRequest = RestoreDestinationRequest(
+            subject: .item(name: row.match.name, path: row.match.path, isDirectory: row.match.isDirectory),
+            backupTime: row.snapshotTime,
+            snapshotShortID: String(row.snapshotID.prefix(8))
+        ) { destination, overwrite in
+            restore(row, repositoryID: repositoryID, to: destination, overwrite: overwrite)
+        }
+    }
+
     /// Index rows resolve their node from the snapshot itself, no matter what
     /// kind the index recorded: the search table's kind is first-writer-wins,
     /// and a path that changed from file to directory would otherwise take
     /// `dump` — which happily writes a folder's tar into one file, no error.
     /// A listing that cannot answer fails the restore loudly instead.
-    private func restoreSelection(_ row: Row?) {
-        guard let row, let repositoryID else { return }
-        guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore “\(row.match.name)”. Restoring overwrites existing files at the destination.",
-            prompt: "Restore"
-        ) else { return }
-
+    private func restore(_ row: Row, repositoryID: UUID, to destination: URL, overwrite: RestoreOverwritePolicy) {
         if row.hit == nil {
             // A restic-engine row: the node came from restic itself.
             model.restore(
                 repositoryID: repositoryID,
                 snapshotID: row.snapshotID,
                 node: row.match.node,
-                to: destination
+                to: destination,
+                overwrite: overwrite
             )
             return
         }
@@ -445,7 +453,8 @@ struct FindFilesView: View {
                     repositoryID: repositoryID,
                     snapshotID: row.snapshotID,
                     node: node,
-                    to: destination
+                    to: destination,
+                    overwrite: overwrite
                 )
             } catch {
                 errorMessage = (error as? ResticError)?.errorDescription ?? error.localizedDescription

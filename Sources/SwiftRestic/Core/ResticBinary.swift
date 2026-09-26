@@ -134,4 +134,11 @@ struct ResticVersion: Equatable, Sendable {
     var streamsRestoreProgress: Bool {
         (major, minor, patch) >= (0, 16, 0)
     }
+
+    /// `restore --overwrite` arrived in restic 0.17; an older restic
+    /// rejects the flag ("unknown flag: --overwrite", exit 1) and always
+    /// replaces.
+    var supportsRestoreOverwrite: Bool {
+        (major, minor, patch) >= (0, 17, 0)
+    }
 }

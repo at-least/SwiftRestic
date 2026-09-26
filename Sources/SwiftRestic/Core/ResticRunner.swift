@@ -17,6 +17,11 @@ struct ResticInvocation: Sendable {
     var allowedExitCodes: Set<Int32>? = [0]
     /// Where raw stdout should go instead of being parsed (used by `restic dump`).
     var stdoutFile: URL?
+    /// Whether the finished dump may replace something already at
+    /// `stdoutFile`. When false, the commit refuses an occupied name
+    /// atomically — including one that appeared while the dump ran — and
+    /// reports it in `ResticRunResult.keptExistingStdoutFile`.
+    var stdoutFileReplacesExisting: Bool = true
     /// Kill the child after this many seconds. A hook that never returns must not
     /// hang the backup that triggered it.
     var timeout: TimeInterval?
@@ -66,6 +71,9 @@ struct ResticRunResult: Sendable {
     /// A schema change under us must be countable, not silent — the run
     /// record reports this number instead of dropping the lines.
     var malformedCount: Int = 0
+    /// A no-replace dump found its target taken at commit time and left it
+    /// alone; the staged output was discarded.
+    var keptExistingStdoutFile: Bool = false
 
     /// The fatal error restic reported, if it wrote one as JSON.
     var exitError: ResticExitError? {
@@ -370,16 +378,25 @@ actor ResticRunner {
         }
 
         // The run exited cleanly: now, and only now, does the staged dump
-        // replace the destination — atomically, so the target is never a
-        // half-written file regardless of when the process dies.
+        // land at the destination — atomically, so the target is never a
+        // half-written file regardless of when the process dies. Whether it
+        // may replace what is already there is the caller's choice: without
+        // it, RENAME_EXCL refuses an occupied name in the same atomic step,
+        // so a file that appeared during a minutes-long dump (a user's copy,
+        // an iCloud re-download) is kept too, not only one a pre-check saw.
+        var keptExisting = false
         if let staging = dumpStagingURL, let target = invocation.stdoutFile {
-            if Darwin.rename(staging.path, target.path) != 0 {
-                throw ResticError.dumpMoveFailed(
-                    path: target.path,
-                    reason: String(cString: Darwin.strerror(Darwin.errno))
-                )
+            switch try Self.commitStagedDump(
+                staging,
+                to: target,
+                replacingExisting: invocation.stdoutFileReplacesExisting
+            ) {
+            case .committed:
+                dumpCommitted = true
+            case .keptExisting:
+                // The staging file goes with the defer above, uncommitted.
+                keptExisting = true
             }
-            dumpCommitted = true
         }
 
         return ResticRunResult(
@@ -387,8 +404,59 @@ actor ResticRunner {
             messages: captured.messages,
             stdout: captured.stdout,
             stderr: captured.stderr,
-            malformedCount: captured.malformedCount
+            malformedCount: captured.malformedCount,
+            keptExistingStdoutFile: keptExisting
         )
+    }
+
+    /// How a finished dump's staged output was placed.
+    enum DumpCommit: Equatable {
+        case committed
+        /// No-replace only: the target was taken, and the staged output
+        /// was left for the caller's cleanup.
+        case keptExisting
+    }
+
+    /// Moves a finished dump's staging file onto its target: `rename(2)`
+    /// when it may replace what is there, `renamex_np(RENAME_EXCL)`
+    /// otherwise. `renameExclusive` answers 0 or the errno; it is a
+    /// parameter so the volumes that refuse the flag can be tested without
+    /// mounting one.
+    static func commitStagedDump(
+        _ staging: URL,
+        to target: URL,
+        replacingExisting: Bool,
+        renameExclusive: (String, String) -> Int32 = { from, to in
+            renamex_np(from, to, UInt32(RENAME_EXCL)) == 0 ? 0 : Darwin.errno
+        }
+    ) throws -> DumpCommit {
+        func moveFailed(_ failure: Int32) -> ResticError {
+            .dumpMoveFailed(path: target.path, reason: String(cString: Darwin.strerror(failure)))
+        }
+        if replacingExisting {
+            guard Darwin.rename(staging.path, target.path) == 0 else { throw moveFailed(Darwin.errno) }
+            return .committed
+        }
+        switch renameExclusive(staging.path, target.path) {
+        case 0:
+            return .committed
+        case EEXIST:
+            return .keptExisting
+        case ENOTSUP:
+            // A volume without VOL_CAP_INT_RENAME_EXCL refuses the flag even
+            // for a free name: exFAT on macOS 26 does (probed on a mounted
+            // image, where it still answers EEXIST for a taken one). Look,
+            // then rename — lstat, so a dangling symlink counts as taken.
+            // The gap between the two is the one non-atomic window, and it
+            // exists only on such volumes.
+            if (try? FileManager.default.attributesOfItem(atPath: target.path)) != nil {
+                return .keptExisting
+            }
+            guard Darwin.rename(staging.path, target.path) == 0 else { throw moveFailed(Darwin.errno) }
+            return .committed
+        case let failure:
+            throw moveFailed(failure)
+        }
     }
 
     /// Terminates every running restic process. Used when the app quits.

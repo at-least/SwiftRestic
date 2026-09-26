@@ -98,12 +98,15 @@ protocol ResticClient: Sendable {
 
     // MARK: - Restore
 
+    /// `overwrite` has no default, here or below: every caller states what
+    /// happens to a file already at the destination.
     @discardableResult
     func restore(
         _ context: RepositoryContext,
         snapshotID: String,
         node: SnapshotNode,
         destinationDirectory: URL,
+        overwrite: RestoreOverwritePolicy,
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> ResticSummary?
 
@@ -112,6 +115,7 @@ protocol ResticClient: Sendable {
         _ context: RepositoryContext,
         snapshotID: String,
         destinationDirectory: URL,
+        overwrite: RestoreOverwritePolicy,
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> ResticSummary?
 }

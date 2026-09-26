@@ -44,6 +44,8 @@ struct FolderBrowserView: View {
     /// picker handoff is never mistaken for a user flip; `fetchNodes` records
     /// the version it fetches, so two racing fetches cannot both write.
     @State private var listingVersionID: String?
+    /// The restore waiting in the destination sheet, over this one.
+    @State private var destinationRequest: RestoreDestinationRequest?
 
     /// The plan's snapshots, newest first — the fallback listing source and
     /// the pseudo-root's contents.
@@ -64,6 +66,10 @@ struct FolderBrowserView: View {
             footer
         }
         .frame(minWidth: 720, minHeight: 460)
+        .sheet(item: $destinationRequest) { request in
+            RestoreDestinationSheet(request: request)
+                .environment(model)
+        }
         // The reload key is the folder alone. Keying on the version as well
         // made `load`'s own walk-down handoff — publishing the version it had
         // just decided on — cancel the very fetch it had started and re-run
@@ -371,15 +377,19 @@ struct FolderBrowserView: View {
 
     private func restoreSelection() {
         guard let node = selectedNode, let chosen else { return }
-        guard let destination = FilePicker.chooseDirectory(
-            message: "Choose where to restore “\(node.name)” as of \(Format.timestamp(chosen.time)). Restoring overwrites existing files at the destination.",
-            prompt: "Restore"
-        ) else { return }
-        model.restore(
-            repositoryID: target.repositoryID,
-            snapshotID: chosen.id,
-            node: node,
-            to: destination
-        )
+        let repositoryID = target.repositoryID
+        destinationRequest = RestoreDestinationRequest(
+            subject: .item(name: node.name, path: node.path, isDirectory: node.isDirectory),
+            backupTime: chosen.time,
+            snapshotShortID: String(chosen.id.prefix(8))
+        ) { destination, overwrite in
+            model.restore(
+                repositoryID: repositoryID,
+                snapshotID: chosen.id,
+                node: node,
+                to: destination,
+                overwrite: overwrite
+            )
+        }
     }
 }

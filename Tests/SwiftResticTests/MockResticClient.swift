@@ -208,9 +208,10 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         snapshotID: String,
         node: SnapshotNode,
         destinationDirectory: URL,
+        overwrite: RestoreOverwritePolicy,
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> ResticSummary? {
-        record("restore")
+        record("restore:\(overwrite.resticValue)")
         return nil
     }
 
@@ -218,9 +219,10 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         _ context: RepositoryContext,
         snapshotID: String,
         destinationDirectory: URL,
+        overwrite: RestoreOverwritePolicy,
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> ResticSummary? {
-        record("restoreWhole")
+        record("restoreWhole:\(overwrite.resticValue)")
         return nil
     }
 }

@@ -127,7 +127,8 @@ struct ResticIntegrationTests {
             fixture.context,
             snapshotID: snapshot.id,
             node: fileNode,
-            destinationDirectory: fileDestination
+            destinationDirectory: fileDestination,
+            overwrite: .replaceExisting
         )
         let restoredFile = fileDestination.appendingPathComponent("a.txt")
         #expect(try String(contentsOf: restoredFile, encoding: .utf8) == "hello world")
@@ -139,7 +140,8 @@ struct ResticIntegrationTests {
             fixture.context,
             snapshotID: snapshot.id,
             node: dirNode,
-            destinationDirectory: dirDestination
+            destinationDirectory: dirDestination,
+            overwrite: .replaceExisting
         )
         #expect(summary?.filesRestored == 1)
         let restoredNested = dirDestination
@@ -152,7 +154,8 @@ struct ResticIntegrationTests {
         _ = try await fixture.service.restoreWholeSnapshot(
             fixture.context,
             snapshotID: snapshot.id,
-            destinationDirectory: wholeDestination
+            destinationDirectory: wholeDestination,
+            overwrite: .replaceExisting
         )
         let rebuilt = wholeDestination.appendingPathComponent(
             fixture.sourceDirectory.path
@@ -432,19 +435,133 @@ struct ResticIntegrationTests {
             fixture.context,
             snapshotID: snapshotID,
             node: sub,
-            destinationDirectory: destination
+            destinationDirectory: destination,
+            overwrite: .replaceExisting
         )
         #expect(first?.filesRestored == 1)
-        // restic's default overwrite rule skips an identical file, and the
-        // summary then carries no files_restored key at all.
+        // Replace (restic's `always`, also its default) skips an identical
+        // file, and the summary then carries no files_restored key at all.
         let second = try await fixture.service.restore(
             fixture.context,
             snapshotID: snapshotID,
             node: sub,
-            destinationDirectory: destination
+            destinationDirectory: destination,
+            overwrite: .replaceExisting
         )
         #expect(second?.filesRestored == nil)
         #expect(second?.filesSkipped == 1)
+    }
+
+    /// The fixture backed up, and its root folder's listing.
+    private func backedUpChildren(_ fixture: Fixture) async throws -> (snapshotID: String, children: [SnapshotNode]) {
+        _ = try await fixture.service.initializeRepository(fixture.context)
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        let snapshotID = try #require(outcome.summary?.snapshotID)
+        let children = try await fixture.service.listDirectory(
+            fixture.context,
+            snapshotID: snapshotID,
+            path: fixture.sourceDirectory.path
+        )
+        return (snapshotID, children)
+    }
+
+    @Test("keep-existing restore leaves files already at the destination as they were")
+    func keepExistingFolderRestore() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let (snapshotID, children) = try await backedUpChildren(fixture)
+        let sub = try #require(children.first { $0.name == "sub" })
+        let destination = fixture.root.appendingPathComponent("restore-keep")
+        let restored = destination.appendingPathComponent("sub/b.txt")
+
+        _ = try await fixture.service.restore(
+            fixture.context, snapshotID: snapshotID, node: sub,
+            destinationDirectory: destination, overwrite: .replaceExisting
+        )
+        try "local edit".write(to: restored, atomically: false, encoding: .utf8)
+
+        let kept = try await fixture.service.restore(
+            fixture.context, snapshotID: snapshotID, node: sub,
+            destinationDirectory: destination, overwrite: .keepExisting
+        )
+        #expect(try String(contentsOf: restored, encoding: .utf8) == "local edit", "Keep replaced the user's file")
+        #expect(kept?.filesSkipped == 1)
+
+        _ = try await fixture.service.restore(
+            fixture.context, snapshotID: snapshotID, node: sub,
+            destinationDirectory: destination, overwrite: .replaceExisting
+        )
+        #expect(try String(contentsOf: restored, encoding: .utf8) == "nested", "Replace left the edited file")
+    }
+
+    @Test("keep-existing single-file restore keeps an existing file and reports it skipped")
+    func keepExistingFileRestore() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let (snapshotID, children) = try await backedUpChildren(fixture)
+        let file = try #require(children.first { $0.name == "a.txt" })
+        let destination = fixture.root.appendingPathComponent("restore-keep-file")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let existing = destination.appendingPathComponent("a.txt")
+        try "mine".write(to: existing, atomically: false, encoding: .utf8)
+
+        let summary = try await fixture.service.restore(
+            fixture.context, snapshotID: snapshotID, node: file,
+            destinationDirectory: destination, overwrite: .keepExisting
+        )
+
+        #expect(try String(contentsOf: existing, encoding: .utf8) == "mine", "Keep replaced the user's file")
+        #expect(summary?.filesSkipped == 1)
+        #expect(summary?.filesRestored == 0)
+        let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+        #expect(!names.contains { $0.hasSuffix(".partial") }, "left behind: \(names)")
+    }
+
+    @Test("whole-snapshot keep-existing restore passes the policy to restic")
+    func keepExistingWholeRestore() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let (snapshotID, _) = try await backedUpChildren(fixture)
+        let destination = fixture.root.appendingPathComponent("restore-keep-all")
+        let existing = destination
+            .appendingPathComponent(fixture.sourceDirectory.path)
+            .appendingPathComponent("a.txt")
+        try FileManager.default.createDirectory(at: existing.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "mine".write(to: existing, atomically: false, encoding: .utf8)
+
+        let summary = try await fixture.service.restoreWholeSnapshot(
+            fixture.context, snapshotID: snapshotID,
+            destinationDirectory: destination, overwrite: .keepExisting
+        )
+
+        #expect(try String(contentsOf: existing, encoding: .utf8) == "mine", "Keep replaced the user's file")
+        #expect((summary?.filesSkipped ?? 0) >= 1)
+    }
+
+    @Test("replace restores a file whose size and modification time match the backup")
+    func replaceChecksContentNotSizeAndTime() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        // Same length, same modification time, different bytes: what
+        // `if-changed` trusts and `always` does not.
+        let stamp = Date(timeIntervalSince1970: 1_767_225_600)
+        let twin = fixture.sourceDirectory.appendingPathComponent("sub/twin.txt")
+        try "same-size-A".write(to: twin, atomically: false, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: twin.path)
+        let (snapshotID, children) = try await backedUpChildren(fixture)
+        let sub = try #require(children.first { $0.name == "sub" })
+
+        let destination = fixture.root.appendingPathComponent("restore-twin")
+        let restored = destination.appendingPathComponent("sub/twin.txt")
+        try FileManager.default.createDirectory(at: restored.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "same-size-B".write(to: restored, atomically: false, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: restored.path)
+
+        _ = try await fixture.service.restore(
+            fixture.context, snapshotID: snapshotID, node: sub,
+            destinationDirectory: destination, overwrite: .replaceExisting
+        )
+        #expect(try String(contentsOf: restored, encoding: .utf8) == "same-size-A", "Replace trusted size and time over content")
     }
 
     @Test("the default excludes keep a Git repository restorable, object store included")
@@ -475,7 +592,8 @@ struct ResticIntegrationTests {
         _ = try await fixture.service.restoreWholeSnapshot(
             fixture.context,
             snapshotID: snapshotID,
-            destinationDirectory: destination
+            destinationDirectory: destination,
+            overwrite: .replaceExisting
         )
         let restored = { (url: URL) in destination.appendingPathComponent(url.path) }
         #expect(FileManager.default.fileExists(atPath: restored(object).path))
@@ -761,7 +879,8 @@ struct ResticFindTests {
             context,
             snapshotID: result.snapshot,
             node: match.node,
-            destinationDirectory: destination
+            destinationDirectory: destination,
+            overwrite: .replaceExisting
         )
         let restored = destination.appendingPathComponent("recovery-codes.txt")
         #expect(try String(contentsOf: restored, encoding: .utf8) == "the codes")

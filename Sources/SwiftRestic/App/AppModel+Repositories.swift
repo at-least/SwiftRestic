@@ -208,12 +208,14 @@ extension AppModel {
         guard let binary else {
             throw ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
         }
+        let version = ResticVersion(parsing: resticVersion)
         return ResticService(
             runner: runner,
             binary: binary.url,
             // `resolveBinary` probed the version at launch; an unreadable
-            // answer keeps the stall cap's default (on).
-            streamsRestoreProgress: ResticVersion(parsing: resticVersion)?.streamsRestoreProgress ?? true
+            // answer keeps the defaults (stall cap on, --overwrite passed).
+            streamsRestoreProgress: version?.streamsRestoreProgress ?? true,
+            supportsRestoreOverwrite: version?.supportsRestoreOverwrite ?? true
         )
     }
 }

@@ -59,7 +59,16 @@ checked in so a normal build does not need it.
   to restore — drag an item to Finder, select one and choose *Restore…*, or
   *Restore Entire Backup…*, which recreates its folders under their full
   original paths inside the folder you choose. Per-node restores land in the
-  chosen folder with no absolute path rebuilt above them. The sidebar's Restore
+  chosen folder with no absolute path rebuilt above them. *Restore…* and
+  *Restore Entire Backup…* ask where — the Desktop, another folder, or an
+  item's original location — and whether files already there are kept (the
+  default: restic's `--overwrite never`, which still replaces a file standing
+  where the backup has a folder of that name, and gives folders that already
+  exist the backed-up permissions and dates) or replaced (`--overwrite
+  always`, which compares contents rather than trusting size and date),
+  confirming first when something is actually there to replace; restic before
+  0.17 has no `--overwrite`, so with it keeping restores a folder or a whole
+  backup only where nothing is there yet, and refuses otherwise. The sidebar's Restore
   section groups a repository's backups by the folders and Mac they came from
   (restic's own `host,paths` grouping), and the file list's Change column
   compares each backup with the previous one in its group; the pane's header

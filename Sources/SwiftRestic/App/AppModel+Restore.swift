@@ -21,40 +21,52 @@ extension AppModel {
         }
     }
 
+    /// `overwrite` is the destination sheet's choice for files already at
+    /// the landing — required, like the service's, so no caller inherits a
+    /// destructive default.
     func restore(
         repositoryID: UUID,
         snapshotID: String,
         node: SnapshotNode,
-        to destination: URL
+        to destination: URL,
+        overwrite: RestoreOverwritePolicy
     ) {
         let reporter = restoreProgressReporter()
+        let landing = ResticService.restoredItemURL(for: node, in: destination)
         beginRestore(
             repositoryID: repositoryID,
             label: node.name,
             snapshotID: snapshotID,
             sourcePath: node.path,
-            destinationPath: ResticService.restoredItemURL(for: node, in: destination).path
+            destinationPath: landing.path
         ) { service, context in
             try await service.restore(
                 context,
                 snapshotID: snapshotID,
                 node: node,
                 destinationDirectory: destination,
+                overwrite: overwrite,
                 onProgress: reporter
             )
-        } onSuccess: { [weak self] in
-            self?.post(Banner(
-                title: "Restored \(node.name)",
-                message: destination.path,
-                isError: false,
-                revealPath: destination.path
+        } onSuccess: { [weak self] summary in
+            self?.post(Self.restoreBanner(
+                itemName: node.name,
+                isDirectory: node.isDirectory,
+                landing: landing,
+                summary: summary,
+                policy: overwrite
             ))
         }
     }
 
     /// Restores every file in a snapshot, keeping the original absolute layout
     /// beneath `destination`.
-    func restoreWholeSnapshot(repositoryID: UUID, snapshotID: String, to destination: URL) {
+    func restoreWholeSnapshot(
+        repositoryID: UUID,
+        snapshotID: String,
+        to destination: URL,
+        overwrite: RestoreOverwritePolicy
+    ) {
         let reporter = restoreProgressReporter()
         beginRestore(
             repositoryID: repositoryID,
@@ -67,15 +79,65 @@ extension AppModel {
                 context,
                 snapshotID: snapshotID,
                 destinationDirectory: destination,
+                overwrite: overwrite,
                 onProgress: reporter
             )
-        } onSuccess: { [weak self] in
-            self?.post(Banner(
-                title: "Restored snapshot",
-                message: destination.path,
-                isError: false,
-                revealPath: destination.path
+        } onSuccess: { [weak self] summary in
+            self?.post(Self.restoreBanner(
+                itemName: nil,
+                isDirectory: true,
+                landing: destination,
+                summary: summary,
+                policy: overwrite
             ))
+        }
+    }
+
+    /// The banner a finished restore posts: where it landed — the item
+    /// itself, which Reveal in Finder selects, or the folder a whole backup
+    /// went into — and, under Keep, what restic left as it was. restic's
+    /// files_restored counts directories too (a repeat whole-backup restore
+    /// "restored" 12 while all 4 files were kept), so only files_skipped
+    /// means kept. Under Replace a skipped file already matched the backup,
+    /// which is not worth a line. "Backup", the restore surfaces' word: the
+    /// Restore pane shows this banner too.
+    nonisolated static func restoreBanner(
+        itemName: String?,
+        isDirectory: Bool,
+        landing: URL,
+        summary: ResticSummary?,
+        policy: RestoreOverwritePolicy
+    ) -> Banner {
+        let kept = policy == .keepExisting ? summary?.filesSkipped ?? 0 : 0
+        guard let itemName else {
+            return Banner(
+                title: "Restored the whole backup",
+                message: [landing.path, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
+                isError: false,
+                revealPath: landing.path
+            )
+        }
+        if !isDirectory, kept > 0, (summary?.filesRestored ?? 0) == 0 {
+            return Banner(
+                title: "Kept the existing “\(itemName)”",
+                message: "\(landing.path)\nA file with this name was already there, so nothing was restored.",
+                isError: false,
+                revealPath: landing.path
+            )
+        }
+        return Banner(
+            title: "Restored \(itemName)",
+            message: [landing.path, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
+            isError: false,
+            revealPath: landing.path
+        )
+    }
+
+    private nonisolated static func keptLine(_ count: Int) -> String? {
+        switch count {
+        case 0: nil
+        case 1: "Kept 1 existing file as it was."
+        default: "Kept \(Format.count(count)) existing files as they were."
         }
     }
 
@@ -92,7 +154,7 @@ extension AppModel {
         sourcePath: String?,
         destinationPath: String,
         operation: @escaping @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?,
-        onSuccess: @escaping @MainActor () -> Void
+        onSuccess: @escaping @MainActor (ResticSummary?) -> Void
     ) {
         guard !tasks.isOccupied(.restore) else {
             // Every other refused start says why; a restore request that
@@ -138,7 +200,7 @@ extension AppModel {
                 record.filesRestored = summary?.filesRestored ?? 0
                 record.filesSkipped = summary?.filesSkipped ?? 0
                 record.bytesProcessed = summary?.bytesRestored ?? 0
-                onSuccess()
+                onSuccess(summary)
             } catch {
                 record.setOutcome(from: error, cancellationMessage: self.cancellationMessage)
                 self.noteAuthFailure(error, repositoryID: repositoryID)
@@ -288,6 +350,9 @@ extension AppModel {
             snapshotID: snapshotID,
             node: node,
             destinationDirectory: destination,
+            // A fresh UUID directory holds nothing to keep or replace; keep
+            // is the mode that cannot clobber if that ever changes.
+            overwrite: .keepExisting,
             // No progress through the drag path: the drop is the feedback.
             onProgress: nil
         )

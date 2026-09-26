@@ -32,6 +32,10 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// into place at the destination. The staged copy is gone; whatever the
     /// destination held before is untouched.
     case dumpMoveFailed(path: String, reason: String)
+    /// A Keep restore onto something that is already there, with a restic
+    /// older than 0.17: it has no `--overwrite` and would replace it.
+    /// Refused before restic runs.
+    case keepNeedsNewerRestic(path: String)
 
     var errorDescription: String? {
         switch self {
@@ -70,6 +74,8 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output — none of its numbers were guessed at."
         case let .dumpMoveFailed(path, reason):
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
+        case let .keepNeedsNewerRestic(path):
+            return "Keeping the files already at \(path) needs restic 0.17 or later — this restic would replace them, so nothing was restored. Update restic, restore into an empty folder, or choose “Replace it with the backed-up version”."
         }
     }
 

@@ -119,7 +119,8 @@ struct AppModelStubTests {
             repositoryID: harness.repository.id,
             snapshotID: "latest",
             node: node,
-            to: destination
+            to: destination,
+            overwrite: .replaceExisting
         )
         await waitUntilRestoreFinishes(in: harness.model)
 
@@ -153,7 +154,8 @@ struct AppModelStubTests {
             repositoryID: harness.repository.id,
             snapshotID: "latest",
             node: node,
-            to: harness.root.appendingPathComponent("restored")
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
         )
         await waitUntilRestoreFinishes(in: harness.model)
 
@@ -161,6 +163,47 @@ struct AppModelStubTests {
         #expect(record.outcome == .succeeded)
         // The default arm's dump writes "[]\n": three bytes landed.
         #expect(record.bytesProcessed == 3)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a keep-existing restore asks restic for --overwrite never and says what it kept")
+    func keepExistingRestoreSaysWhatItKept() async throws {
+        let harness = try await makeHarness(mode: "restoreskip")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        // The stub calls itself 0.0.0, which predates --overwrite (0.17); the
+        // flag under test is the one a current restic gets.
+        harness.model.resticVersion = "restic 0.19.1 compiled with go1.26.5 on darwin/arm64"
+
+        let node = SnapshotNode(name: "Project", type: .dir, path: "/src/Project")
+        let destination = harness.root.appendingPathComponent("restored")
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            node: node,
+            to: destination,
+            overwrite: .keepExisting
+        )
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        let trace = try String(
+            contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
+            encoding: .utf8
+        )
+        // The repository travels in the environment, so `restore` can be the
+        // first argument, right after the bracket.
+        let restoreStart = trace.split(separator: "\n").first { line in
+            line.hasPrefix("start args=[") && line.replacingOccurrences(of: "[", with: " ").contains(" restore ")
+        }
+        #expect(restoreStart?.contains("--overwrite never") == true, "restore started as: \(restoreStart ?? "nothing")")
+
+        let landing = destination.appendingPathComponent("Project")
+        let banner = try #require(harness.model.banners.first)
+        #expect(banner.title == "Restored Project")
+        #expect(banner.message.contains("Kept 3 existing files as they were."), "banner said: \(banner.message)")
+        #expect(banner.revealPath == landing.path)
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.filesSkipped == 3)
 
         await harness.model.shutdown()
     }
@@ -175,7 +218,8 @@ struct AppModelStubTests {
             repositoryID: harness.repository.id,
             snapshotID: "latest",
             node: node,
-            to: harness.root.appendingPathComponent("restored")
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
         )
         await waitUntilRestoreFinishes(in: harness.model)
 
@@ -200,7 +244,8 @@ struct AppModelStubTests {
             repositoryID: harness.repository.id,
             snapshotID: "latest",
             node: node,
-            to: harness.root.appendingPathComponent("restored")
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
         )
 
         // The hang is what guarantees the cancel lands mid-run, so wait for it
@@ -250,7 +295,8 @@ struct AppModelStubTests {
             repositoryID: harness.repository.id,
             snapshotID: "latest",
             node: node,
-            to: harness.root.appendingPathComponent("restored")
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
         )
         #expect(
             await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
@@ -1087,7 +1133,8 @@ struct AppModelStubTests {
             repositoryID: harness.repository.id,
             snapshotID: "latest",
             node: node,
-            to: harness.root.appendingPathComponent("restored")
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
         )
         // Same guarantee as the backup case: the hang proves the restore is
         // genuinely in flight before the deletion lands.
@@ -1133,7 +1180,8 @@ struct AppModelStubTests {
             repositoryID: harness.repository.id,
             snapshotID: "latest",
             node: node,
-            to: harness.root.appendingPathComponent("restored")
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
         )
         #expect(
             await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
@@ -1501,7 +1549,7 @@ struct AppModelStubTests {
             from: Data(#"{"name":"a.txt","type":"file","path":"/src/a.txt","size":12}"#.utf8)
         )
         let destination = harness.root.appendingPathComponent("restored")
-        harness.model.restore(repositoryID: harness.repository.id, snapshotID: "latest", node: node, to: destination)
+        harness.model.restore(repositoryID: harness.repository.id, snapshotID: "latest", node: node, to: destination, overwrite: .replaceExisting)
         await waitUntilRestoreFinishes(in: harness.model)
 
         let record = try #require(harness.model.configuration.runs.first)
@@ -1530,7 +1578,7 @@ struct AppModelStubTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         let destination = harness.root.appendingPathComponent("whole")
-        harness.model.restoreWholeSnapshot(repositoryID: harness.repository.id, snapshotID: "latest", to: destination)
+        harness.model.restoreWholeSnapshot(repositoryID: harness.repository.id, snapshotID: "latest", to: destination, overwrite: .replaceExisting)
         await waitUntilRestoreFinishes(in: harness.model)
 
         let record = try #require(harness.model.configuration.runs.first)

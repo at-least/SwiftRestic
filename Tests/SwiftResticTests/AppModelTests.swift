@@ -985,3 +985,74 @@ struct RunSnapshotLinkTests {
             == .repositoryGone)
     }
 }
+
+/// The banner a finished restore posts: where the item landed, and — under
+/// Keep — what restic left alone, since a restore that kept files must not
+/// read like one that replaced them.
+@Suite("restore banner")
+struct RestoreBannerTests {
+    private func summary(restored: Int?, skipped: Int?) -> ResticSummary {
+        var summary = ResticSummary()
+        summary.filesRestored = restored
+        summary.filesSkipped = skipped
+        return summary
+    }
+
+    @Test("restore banner names what Keep kept and reveals the restored item")
+    func restoreBannerWording() {
+        let landing = URL(fileURLWithPath: "/Users/x/Restored/Project")
+
+        let kept = AppModel.restoreBanner(
+            itemName: "Project", isDirectory: true, landing: landing,
+            summary: summary(restored: 1, skipped: 3), policy: .keepExisting
+        )
+        #expect(kept.title == "Restored Project")
+        #expect(kept.message == "/Users/x/Restored/Project\nKept 3 existing files as they were.")
+        #expect(kept.revealPath == "/Users/x/Restored/Project")
+        #expect(!kept.isError)
+
+        let keptOne = AppModel.restoreBanner(
+            itemName: "Project", isDirectory: true, landing: landing,
+            summary: summary(restored: 1, skipped: 1), policy: .keepExisting
+        )
+        #expect(keptOne.message == "/Users/x/Restored/Project\nKept 1 existing file as it was.")
+
+        // Replace skips only files that already match the backup: nothing was
+        // kept that differs, so nothing is said.
+        let replaced = AppModel.restoreBanner(
+            itemName: "Project", isDirectory: true, landing: landing,
+            summary: summary(restored: 1, skipped: 3), policy: .replaceExisting
+        )
+        #expect(replaced.title == "Restored Project")
+        #expect(replaced.message == "/Users/x/Restored/Project")
+        #expect(replaced.revealPath == "/Users/x/Restored/Project")
+
+        let fileLanding = URL(fileURLWithPath: "/Users/x/Restored/a.txt")
+        let keptFile = AppModel.restoreBanner(
+            itemName: "a.txt", isDirectory: false, landing: fileLanding,
+            summary: summary(restored: 0, skipped: 1), policy: .keepExisting
+        )
+        #expect(keptFile.title == "Kept the existing “a.txt”")
+        #expect(keptFile.message == "/Users/x/Restored/a.txt\nA file with this name was already there, so nothing was restored.")
+        #expect(keptFile.revealPath == "/Users/x/Restored/a.txt")
+
+        let silent = AppModel.restoreBanner(
+            itemName: "a.txt", isDirectory: false, landing: fileLanding,
+            summary: summary(restored: 1, skipped: nil), policy: .keepExisting
+        )
+        #expect(silent.title == "Restored a.txt")
+        #expect(silent.message == "/Users/x/Restored/a.txt")
+
+        // A whole backup lands as a folder of recreated paths: the banner
+        // names that folder and reveals it. "Backup", the restore surfaces'
+        // word, now that the Restore pane shows this banner too.
+        let destination = URL(fileURLWithPath: "/Users/x/Restored")
+        let whole = AppModel.restoreBanner(
+            itemName: nil, isDirectory: true, landing: destination,
+            summary: summary(restored: 12, skipped: 4), policy: .keepExisting
+        )
+        #expect(whole.title == "Restored the whole backup")
+        #expect(whole.message == "/Users/x/Restored\nKept 4 existing files as they were.")
+        #expect(whole.revealPath == "/Users/x/Restored")
+    }
+}

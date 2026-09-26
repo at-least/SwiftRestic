@@ -26,6 +26,16 @@ struct ResticVersionTests {
         #expect(current.streamsRestoreProgress)
     }
 
+    @Test("restore --overwrite starts at 0.17")
+    func restoreOverwriteGate() throws {
+        let before = try #require(ResticVersion(parsing: "restic 0.16.5 compiled with go1.22.4 on darwin/arm64"))
+        let at = try #require(ResticVersion(parsing: "restic 0.17.0 compiled with go1.22.5"))
+        let current = try #require(ResticVersion(parsing: "restic 0.19.1 compiled with go1.26.5"))
+        #expect(!before.supportsRestoreOverwrite)
+        #expect(at.supportsRestoreOverwrite)
+        #expect(current.supportsRestoreOverwrite)
+    }
+
     @Test("pre-release and build suffixes ride on the patch, never promote it")
     func suffixes() throws {
         // A dev build of 0.15 is still 0.15 — the restore stall cap's whole

@@ -322,6 +322,37 @@ struct StubRestic: Sendable {
                 echo "[]"
                 exit 0
                 ;;
+            restoreskip)
+                # A restore into a folder that already holds most of the
+                # backup's files: restic keeps them and says so in its
+                # summary. The arguments land in the trace's start line.
+                trace "restoreskip-arm"
+                case " $* " in
+                    *" restore "*)
+                        echo '{"message_type":"summary","total_files":3,"files_restored":1,"files_skipped":3,"bytes_skipped":30}'
+                        exit 0
+                        ;;
+                esac
+                echo "[]"
+                exit 0
+                ;;
+            dumpappears)
+                # A single-file restore whose landing is taken while the dump
+                # runs — a user's copy, an iCloud re-download: `dump` writes
+                # "mine" at <trace dir>/restored/<the file's name>, where the
+                # test restores to, and only then prints the backed-up bytes.
+                trace "dumpappears-arm"
+                case " $* " in
+                    *" dump "*)
+                        for last in "$@"; do :; done
+                        printf mine > "$(dirname "$SWIFTRESTIC_TRACE")/restored/$(basename "$last")"
+                        printf new
+                        exit 0
+                        ;;
+                esac
+                echo "[]"
+                exit 0
+                ;;
             *)
                 # Everything the fault tests do not care about gets an empty answer.
                 trace "default-arm"
@@ -639,6 +670,82 @@ struct StubResticTests {
         #expect(!entries.contains { if case .exit = $0.kind { true } else { false } })
         // A signal's termination status is not an exit code.
         #expect(transcript.contents.firstExitCode == nil)
+    }
+
+    @Test("Keep keeps a file that appeared while its dump ran, and says so in the log")
+    func keepSurvivesAFileAppearingMidDump() async throws {
+        let fixture = try makeFixture(mode: "dumpappears")
+        defer { cleanUp(fixture.root) }
+        let destination = fixture.root.appendingPathComponent("restored")
+        let landing = destination.appendingPathComponent("a.txt")
+        let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt", size: 3)
+
+        // The landing is free when the restore starts, so the pre-check lets
+        // the dump run; only the commit can see the file the stub plants.
+        let transcript = RunTranscript()
+        let summary = try await RunTranscript.$current.withValue(transcript) {
+            try await fixture.service.restore(
+                fixture.context,
+                snapshotID: "latest",
+                node: node,
+                destinationDirectory: destination,
+                overwrite: .keepExisting
+            )
+        }
+
+        #expect(try String(contentsOf: landing, encoding: .utf8) == "mine", "Keep replaced a file that appeared mid-dump")
+        #expect(summary?.filesSkipped == 1)
+        #expect(summary?.filesRestored == 0)
+        let notes = transcript.contents.entries.filter { $0.kind == .note }.map(\.text)
+        #expect(notes.contains { $0.contains("appeared at \(landing.path) during the dump") }, "notes were \(notes)")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: destination.path).filter { $0.hasSuffix(".partial") }
+        #expect(leftovers.isEmpty, "left behind: \(leftovers)")
+    }
+
+    @Test("below restic 0.17 no --overwrite is passed, and Keep refuses what it cannot keep")
+    func restoreWithoutOverwriteFlag() async throws {
+        let fixture = try makeFixture(mode: "restoreskip")
+        defer { cleanUp(fixture.root) }
+        // restic 0.16 answers "unknown flag: --overwrite" and always replaces.
+        let old = ResticService(runner: ResticRunner(), binary: fixture.stub.url, supportsRestoreOverwrite: false)
+        let project = SnapshotNode(name: "Project", type: .dir, path: "/src/Project")
+        let occupied = fixture.root.appendingPathComponent("occupied")
+        try FileManager.default.createDirectory(at: occupied.appendingPathComponent("Project"), withIntermediateDirectories: true)
+        try Data("mine".utf8).write(to: occupied.appendingPathComponent("Project/a.txt"))
+
+        func restoreStarts() throws -> [String] {
+            let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+            // The repository travels in the environment, so `restore` can be
+            // the first argument, right after the bracket.
+            return trace.split(separator: "\n").map(String.init).filter { line in
+                line.hasPrefix("start args=[") && line.replacingOccurrences(of: "[", with: " ").contains(" restore ")
+            }
+        }
+
+        // Replace needs no flag: restic's own default is `always`.
+        try await old.restore(fixture.context, snapshotID: "latest", node: project, destinationDirectory: occupied, overwrite: .replaceExisting)
+        // Keep into a landing that holds nothing has nothing to keep — a
+        // fresh folder, or a drag's UUID directory.
+        try await old.restore(fixture.context, snapshotID: "latest", node: project, destinationDirectory: fixture.root.appendingPathComponent("fresh"), overwrite: .keepExisting)
+        try await old.restoreWholeSnapshot(fixture.context, snapshotID: "latest", destinationDirectory: fixture.root.appendingPathComponent("fresh-whole"), overwrite: .keepExisting)
+        let ran = try restoreStarts()
+        #expect(ran.count == 3, "restores started: \(ran)")
+        #expect(!ran.contains { $0.contains("--overwrite") }, "restores started: \(ran)")
+
+        // Keep onto files that are there is refused before restic runs.
+        let landing = occupied.appendingPathComponent("Project")
+        await #expect(throws: ResticError.keepNeedsNewerRestic(path: landing.path)) {
+            try await old.restore(fixture.context, snapshotID: "latest", node: project, destinationDirectory: occupied, overwrite: .keepExisting)
+        }
+        await #expect(throws: ResticError.keepNeedsNewerRestic(path: occupied.path)) {
+            try await old.restoreWholeSnapshot(fixture.context, snapshotID: "latest", destinationDirectory: occupied, overwrite: .keepExisting)
+        }
+        #expect(try restoreStarts().count == 3)
+        #expect(try String(contentsOf: landing.appendingPathComponent("a.txt"), encoding: .utf8) == "mine")
+
+        // A current restic gets the flag, whatever the destination holds.
+        try await fixture.service.restore(fixture.context, snapshotID: "latest", node: project, destinationDirectory: occupied, overwrite: .keepExisting)
+        #expect(try restoreStarts().last?.contains("--overwrite never") == true)
     }
 
     @Test("a binary that cannot be spawned reports a launch failure")
