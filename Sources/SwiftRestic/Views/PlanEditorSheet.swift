@@ -11,6 +11,14 @@ struct PlanEditorSheet: View {
     @State private var initial: BackupPlan?
     @State private var isConfirmingDiscard = false
     @State private var tab: Tab = .general
+    /// The retention tab's projection, computed off the render path under
+    /// `RetentionProjection.key` — the simulation walks up to 30,000
+    /// synthetic runs with Calendar decomposition, which is tens of
+    /// milliseconds at the stepper maxima. As body state it was re-paid on
+    /// every sheet re-render (every keystroke in any field, every stepper
+    /// click); now only a change to the inputs project actually reads can
+    /// re-run it.
+    @State private var projection: RetentionProjection.Outcome?
     private let isNew: Bool
 
     private enum Tab: Hashable { case general, files, schedule, retention, hooks }
@@ -273,10 +281,7 @@ struct PlanEditorSheet: View {
                 Toggle("Also prune (reclaims space, much slower)", isOn: $draft.retention.runPrune)
                     .disabled(!draft.retention.isEnabled)
                 LabeledContent("Summary", value: draft.retention.summary)
-                if draft.retention.isEnabled, let projection = RetentionProjection.project(
-                    policy: draft.retention,
-                    schedule: draft.schedule
-                ) {
+                if draft.retention.isEnabled, let projection {
                     // Retention is where users decide what gets deleted; the
                     // bucket arithmetic is impossible to eyeball, so project
                     // the outcome instead of restating the rules.
@@ -326,6 +331,24 @@ struct PlanEditorSheet: View {
             }
         }
         .formStyle(.grouped)
+        .task(id: RetentionProjection.key(policy: draft.retention, schedule: draft.schedule)) {
+            await computeProjection()
+        }
+    }
+
+    /// Re-runs only under `RetentionProjection.key` — a change to the inputs
+    /// the simulation reads — and lands its answer back on the main actor.
+    /// The cancellation guard keeps a slow simulation whose inputs were
+    /// replaced mid-flight (a stepper held down) from overwriting the newer
+    /// one's answer.
+    private func computeProjection() async {
+        let policy = draft.retention
+        let schedule = draft.schedule
+        let outcome = await Task.detached(priority: .userInitiated) {
+            RetentionProjection.project(policy: policy, schedule: schedule)
+        }.value
+        guard !Task.isCancelled else { return }
+        projection = outcome
     }
 
     /// The reach question and the bucket machinery, kept in sync on the model

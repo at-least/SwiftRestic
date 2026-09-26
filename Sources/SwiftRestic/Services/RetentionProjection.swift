@@ -17,6 +17,38 @@ enum RetentionProjection {
         var historyDays: Int
     }
 
+    /// The editor's identity for a projection's inputs. `project` reads the
+    /// policy's enabled flag and keep rules plus the schedule's cadence — and
+    /// nothing else — so exactly those fields feed the key: an edit that
+    /// cannot change the answer must not re-pay the simulation.
+    struct Key: Equatable, Sendable {
+        var isEnabled: Bool
+        var keepLast: Int
+        var keepHourly: Int
+        var keepDaily: Int
+        var keepWeekly: Int
+        var keepMonthly: Int
+        var keepYearly: Int
+        var frequency: Schedule.Frequency
+        var intervalHours: Int
+    }
+
+    /// The key for one policy-and-schedule pair — the identity the editor
+    /// recomputes the projection under.
+    static func key(policy: RetentionPolicy, schedule: Schedule) -> Key {
+        Key(
+            isEnabled: policy.isEnabled,
+            keepLast: policy.keepLast,
+            keepHourly: policy.keepHourly,
+            keepDaily: policy.keepDaily,
+            keepWeekly: policy.keepWeekly,
+            keepMonthly: policy.keepMonthly,
+            keepYearly: policy.keepYearly,
+            frequency: schedule.frequency,
+            intervalHours: schedule.intervalHours
+        )
+    }
+
     /// - Returns: `nil` when there is nothing to project — manual plans have
     ///   no cadence, a disabled policy deletes nothing, and an all-zero
     ///   policy is already flagged by the editor's own warning.

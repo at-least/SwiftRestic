@@ -129,4 +129,42 @@ struct RetentionProjectionTests {
         #expect(outcome.keptSnapshots == 5)
         #expect(outcome.historyDays == 4)
     }
+
+    @Test("the projection key covers exactly the inputs project reads")
+    func projectionKeyCoversProjectInputs() {
+        // The projection runs off the render path now, keyed by its inputs:
+        // anything it does not read must not move the key, or editing the
+        // schedule's wall-clock fields (or the prune toggle) on another tab
+        // would re-pay a simulation the answer cannot have changed.
+        var morning = hourlySchedule
+        morning.hour = 9
+        morning.minute = 30
+        var evening = hourlySchedule
+        evening.hour = 22
+        evening.minute = 45
+        evening.weekday = 6
+        #expect(RetentionProjection.key(policy: policy(hourly: 3), schedule: morning)
+            == RetentionProjection.key(policy: policy(hourly: 3), schedule: evening))
+
+        var withPrune = policy(daily: 7)
+        withPrune.runPrune = true
+        #expect(RetentionProjection.key(policy: withPrune, schedule: hourlySchedule)
+            == RetentionProjection.key(policy: policy(daily: 7), schedule: hourlySchedule))
+
+        // Everything project does read moves the key.
+        #expect(RetentionProjection.key(policy: policy(hourly: 3), schedule: hourlySchedule)
+            != RetentionProjection.key(policy: policy(hourly: 4), schedule: hourlySchedule))
+        var disabled = policy(hourly: 3)
+        disabled.isEnabled = false
+        #expect(RetentionProjection.key(policy: disabled, schedule: hourlySchedule)
+            != RetentionProjection.key(policy: policy(hourly: 3), schedule: hourlySchedule))
+        var daily = hourlySchedule
+        daily.frequency = .daily
+        #expect(RetentionProjection.key(policy: policy(hourly: 3), schedule: daily)
+            != RetentionProjection.key(policy: policy(hourly: 3), schedule: hourlySchedule))
+        var everyTwo = hourlySchedule
+        everyTwo.intervalHours = 2
+        #expect(RetentionProjection.key(policy: policy(hourly: 3), schedule: everyTwo)
+            != RetentionProjection.key(policy: policy(hourly: 3), schedule: hourlySchedule))
+    }
 }
