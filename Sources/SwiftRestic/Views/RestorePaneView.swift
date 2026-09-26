@@ -240,12 +240,15 @@ struct RestorePaneView: View {
     /// carry, aligned to the same fixed gutters.
     private var columnHeader: some View {
         HStack(spacing: 6) {
-            Spacer().frame(width: 12)
+            // The rows' depth indent: zero wide at the top level, but still
+            // a slot the row's stack spaces.
+            Spacer().frame(width: 0)
+            Spacer().frame(width: 20)
             Spacer().frame(width: 16)
             Text("Item")
             Spacer(minLength: 12)
             Text("Change")
-                .frame(width: 44, alignment: .leading)
+                .frame(width: 56, alignment: .leading)
             Text("Last Modified")
                 .frame(width: 140, alignment: .trailing)
             Text("Size")
@@ -253,7 +256,10 @@ struct RestorePaneView: View {
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
+        // The inset list's row content starts and ends 16 pt inside the
+        // pane (measured on macOS 26); at 10 the header stood 12 pt left of
+        // the names and 6 pt right of the Change words.
+        .padding(.horizontal, 16)
         .padding(.vertical, 5)
     }
 
@@ -264,22 +270,18 @@ struct RestorePaneView: View {
                     Spacer().frame(width: CGFloat(row.depth) * 16)
                     Group {
                         if row.node.isDirectory {
-                            Button {
-                                expand(path: row.node.path)
-                            } label: {
-                                Image(systemName: row.expanded ? "chevron.down" : "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .frame(width: 12)
-                            }
-                            .buttonStyle(.plain)
-                            .help(row.expanded ? "Collapse" : "Expand")
+                            disclosure(for: row)
                         } else {
-                            Spacer().frame(width: 12)
+                            Spacer().frame(width: 20)
                         }
                     }
+                    // SF Symbols' own labels name the picture ("Move" for
+                    // folder.fill, "Document" for doc); the kind is what the
+                    // row means.
                     Image(systemName: row.node.browserIconName)
                         .foregroundStyle(row.node.isDirectory ? Color.accentColor : .secondary)
                         .frame(width: 16)
+                        .accessibilityLabel(row.node.kindName)
                     Text(row.node.name)
                         .lineLimit(1)
                     Spacer()
@@ -303,21 +305,39 @@ struct RestorePaneView: View {
                         .font(.caption)
                         .frame(width: 70, alignment: .trailing)
                 }
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
-                    if row.node.isDirectory { expand(path: row.node.path) }
-                }
                 // Arq's signature restore gesture: drag straight out of the tree
                 // into Finder. Tree rows only — a search hit's kind is the
                 // index's guess, and a folder dumped as a file lands as a tar.
-                .onDrag { dragProvider(for: row.node) }
+                //
+                // The list's own drag, not `.onDrag`, and no gesture on the
+                // row at all: a SwiftUI gesture claims every click inside
+                // what it covers, so a click on a row's name or icon never
+                // selected it (`.onDrag` alone did that, and so did the old
+                // double-click `.onTapGesture`; the old contentShape spread
+                // it over the whole row). Measured with HID-level clicks on
+                // macOS 26, where rows shaped like these selected on their
+                // name, icon and blank space and dragged from all three.
+                .itemProvider { listDragProvider(for: row.node) }
                 .tag(row.id)
             }
             .listStyle(.inset)
-            .onKeyPress(phases: .down) { press in
-                handleKeyPress(press)
+            // Double-click, the list's way: it expands a folder, as the
+            // chevron does, and leaves a file alone. The list also sends
+            // Return here — Return is spent in `handleKeyPress` first.
+            .contextMenu(forSelectionType: String.self) { _ in
+                EmptyView()
+            } primaryAction: { ids in
+                guard ids.count == 1, let path = ids.first,
+                      tree.node(at: path)?.isDirectory == true
+                else { return }
+                expand(path: path)
             }
-            .help("Return expands a folder; ⌘↑ or ⌫ goes up; double-click also expands; drag an item to Finder to restore it there")
+            .onKeyPress(phases: .down) { press in
+                // Left's parent may sit above the visible rows; the list
+                // does not follow a selection it did not make itself.
+                handleKeyPress(press) { proxy.scrollTo($0) }
+            }
+            .help("→ or Return expands a folder; ← collapses it or selects the folder above; ⌘↑ or ⌫ goes up; double-click also expands; drag an item to Finder to restore it there")
             // Initial as well: the routed focus is set while the spinner stands
             // in for this list, so the list meets it on its first appearance.
             .onChange(of: revealPath, initial: true) { _, target in
@@ -328,12 +348,38 @@ struct RestorePaneView: View {
         }
     }
 
+    /// A folder row's disclosure chevron: the macOS minimum control size,
+    /// 20×20, hanging 2 pt past its 16-pt layout box above and below so the
+    /// row stays 24 pt like a file row. Measured with HID-level clicks and
+    /// drags on a probe of this row (macOS 26): the padding sits outside the
+    /// Button, because inside the label the Button hit-tests only its 20×16
+    /// box; and the Button carries the row's drag itself, because the list's
+    /// drag never starts on the Button — without it the square was the one
+    /// part of the row a drag to Finder could not start from. Labelled for
+    /// its folder: the symbol's own labels are "Forward" and "Go Down".
+    private func disclosure(for row: FileTreeRow) -> some View {
+        Button {
+            expand(path: row.node.path)
+        } label: {
+            Image(systemName: row.expanded ? "chevron.down" : "chevron.right")
+                .font(.caption.weight(.semibold))
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, -2)
+        .onDrag { dragProvider(for: row.node) }
+        .help(row.expanded ? "Collapse" : "Expand")
+        .accessibilityLabel(row.expanded ? "Collapse \(row.node.name)" : "Expand \(row.node.name)")
+    }
+
     private func searchResults(_ hits: [SearchHit]) -> some View {
         List(hits, selection: $selection) { hit in
             HStack(spacing: 6) {
                 Image(systemName: hit.isDirectory == true ? "folder.fill" : "doc")
                     .foregroundStyle(hit.isDirectory == true ? Color.accentColor : .secondary)
                     .frame(width: 16)
+                    .accessibilityLabel(hit.isDirectory == true ? "Folder" : "File")
                 Text((hit.path as NSString).lastPathComponent)
                     .lineLimit(1)
                 Spacer()
@@ -402,17 +448,21 @@ struct RestorePaneView: View {
         return tree.node(at: selection)
     }
 
+    /// Arq's Change column: the word, in the text colour. restic's "+" and
+    /// "M" were all VoiceOver had to read, and green or orange caption text
+    /// measured 2.2–2.3:1 on the light list background, under the 4.5:1
+    /// small text needs. The tooltip keeps what exactly changed ("content
+    /// changed", "type changed", "bitrot detected").
     private func changeBadge(for path: String) -> some View {
         Group {
             if let change = changes[path] {
-                Text(verbatim: change.modifier)
-                    .font(.caption2.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(change.category == .added ? Theme.success : Theme.warning)
+                Text(change.category.displayName)
+                    .font(.caption)
+                    .lineLimit(1)
                     .help(change.explanation)
-                    .frame(width: 44, alignment: .leading)
+                    .frame(width: 56, alignment: .leading)
             } else {
-                Spacer().frame(width: 44)
+                Spacer().frame(width: 56)
             }
         }
     }
@@ -425,11 +475,75 @@ struct RestorePaneView: View {
         return model.dragRestoreProvider(repositoryID: repositoryID, snapshotID: loadedSnapshotID, node: node)
     }
 
-    private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
+    /// The list's drag asks on every mouse-down on a row, not only when a
+    /// drag begins (a probe's provider counted one call per plain click), so
+    /// a drag that can never land offers nothing here rather than posting
+    /// `dragRestoreProvider`'s "Cannot drag to restore" at each click. The
+    /// pane already says why: a record whose repository is gone is not
+    /// found, and a missing restic has its strip over every pane. The
+    /// chevron's own drag asks only when a drag starts, and keeps the
+    /// banner.
+    private func listDragProvider(for node: SnapshotNode) -> NSItemProvider? {
+        guard model.repository(id: repositoryID) != nil, model.isResticAvailable else { return nil }
+        return dragProvider(for: node)
+    }
+
+    /// → and ← first — the outline's own keys, which only a tree has — then
+    /// the shared Finder grammar. `reveal` scrolls a row the keys selected
+    /// into view.
+    private func handleKeyPress(_ press: KeyPress, reveal: @escaping (String) -> Void) -> KeyPress.Result {
+        // Plain arrows on a selected row only: a modified arrow keeps its
+        // system meaning (Option-→ would expand every descendant in a native
+        // outline — here, one `restic ls` per folder), and with nothing
+        // selected the List moves as it always does.
+        let arrow: FileTree.HorizontalArrow? = switch press.key {
+        case .leftArrow: .left
+        case .rightArrow: .right
+        default: nil
+        }
+        if let arrow, let selected = selection,
+           press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]) {
+            switch tree.arrowStep(arrow, from: selected) {
+            case .expand(let path), .collapse(let path):
+                // The step already knows the direction; expand toggles.
+                expand(path: path)
+            case .selectParent(let path):
+                // The list applies a selection set in code only to rows it
+                // has realized, on or near the screen: selecting a parent
+                // scrolled out of view straight away left the child selected
+                // as well — two selected rows, and the next ↓ went on from
+                // the child. So the child comes into view and is deselected
+                // in this turn, and the parent is selected and scrolled to
+                // in the next (probed on macOS 26 with this list's shape:
+                // one selected row whether the parent was on screen or not,
+                // and with the child scrolled away before the key).
+                reveal(selected)
+                selection = nil
+                Task {
+                    selection = path
+                    reveal(path)
+                }
+            case .stay:
+                break
+            }
+            // Spent either way, as the native outline spends it.
+            return .handled
+        }
+        // Return on a file is the footer's Restore…, as before the list had
+        // a primary action: left unhandled, the list now hands Return to
+        // its double-click action and the default button never sees it
+        // (measured on a probe). The same gate as the button.
+        if press.key == .return,
+           press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]),
+           let node = selectedRow, !node.isDirectory {
+            guard !model.isRestoring, record != nil else { return .ignored }
+            restoreSelection()
+            return .handled
+        }
         // The shared Finder grammar, with this pane's open action: a
         // directory's Return expands it in place rather than entering it —
         // the tree already holds every loaded row.
-        BrowserListGrammar.keyPress(
+        return BrowserListGrammar.keyPress(
             press,
             selected: selectedRow,
             hasParent: currentPath != nil,
@@ -548,7 +662,10 @@ struct RestorePaneView: View {
         // skipping the duplicate spares a restic round trip).
         guard !inFlightFetches.contains(needed) else { return }
         inFlightFetches.insert(needed)
-        navigate(to: path)
+        // A focus change that keeps the row selected, as NSOutlineView's
+        // does — not `navigate(to:)`, whose deselect would send the next ↓
+        // back to the top of the list.
+        currentPath = path
         fetchTasks[needed] = Task {
             defer {
                 inFlightFetches.remove(needed)
@@ -571,8 +688,9 @@ struct RestorePaneView: View {
             } catch {
                 guard loadedSnapshotID == record.id, !Task.isCancelled else { return }
                 // The chevron opened a folder that never arrived — close it
-                // back and say why, instead of an empty expansion.
-                _ = tree.toggleExpanded(path: path)
+                // back and say why, instead of an empty expansion. Close,
+                // not toggle: a ← or chevron that closed it meanwhile stands.
+                tree.collapse(path: path)
                 loadError = error.localizedDescription
             }
         }

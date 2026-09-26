@@ -74,7 +74,9 @@ checked in so a normal build does not need it.
   compares each backup with the previous one in its group; the pane's header
   names the open backup and says what its Change column is compared with, or
   that it is the first of its group. On a plan's page, *Browse Folders…* walks
-  one folder through every snapshot that contains it.
+  one folder through every snapshot that contains it. The file list answers
+  Finder's outline keys: → opens a folder, ← closes it or steps to the folder
+  that holds the selection.
 - **Find files across snapshots** — search every snapshot for a name or glob when
   you do not know which backup still has the file, then restore the match. ⇧⌘F.
 - **Compare snapshots** — *Compare* on any snapshot runs `restic diff` against

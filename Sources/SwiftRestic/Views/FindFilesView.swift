@@ -176,6 +176,8 @@ struct FindFilesView: View {
                     HStack(spacing: 6) {
                         Image(systemName: row.match.isDirectory ? "folder.fill" : "doc")
                             .foregroundStyle(row.match.isDirectory ? Color.accentColor : .secondary)
+                            // The kind, not the symbol's "Move" / "Document".
+                            .accessibilityLabel(row.match.isDirectory ? "Folder" : "File")
                         Text(row.match.name).lineLimit(1)
                     }
                 }

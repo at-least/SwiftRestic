@@ -58,8 +58,12 @@ struct ActivityView: View {
                     TableColumn("") { run in
                         // Only trouble wears a glyph; a clean run leaves the
                         // cell empty, the way Mail's unread column does. The
-                        // invisible text keeps the verdict in VoiceOver —
-                        // `hidden()` would silence it, opacity does not.
+                        // invisible text keeps the verdict in VoiceOver. It
+                        // is clear ink: `hidden()` would silence it, and so
+                        // does `opacity(0)` on macOS 26, which drops the text
+                        // from the accessibility tree — a clean run's cell
+                        // read as an empty group (SnapshotCompletenessMark
+                        // measured the same).
                         if let symbolName = run.outcome.symbolName {
                             Image(systemName: symbolName)
                                 .foregroundStyle(color(for: run.outcome))
@@ -67,7 +71,7 @@ struct ActivityView: View {
                                 .accessibilityLabel(run.outcome.displayName)
                         } else {
                             Text(run.outcome.displayName)
-                                .opacity(0)
+                                .foregroundStyle(.clear)
                                 .lineLimit(1)
                                 .accessibilityLabel(run.outcome.displayName)
                         }

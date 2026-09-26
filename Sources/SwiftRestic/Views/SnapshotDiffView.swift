@@ -291,6 +291,7 @@ struct SnapshotDiffView: View {
                         Image(systemName: change.isDirectory ? "folder" : "doc")
                             .foregroundStyle(.secondary)
                             .frame(width: 16)
+                            .accessibilityLabel(change.isDirectory ? "Folder" : "File")
                         Text(change.path)
                             .lineLimit(1)
                             .truncationMode(.head)

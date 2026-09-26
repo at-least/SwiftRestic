@@ -81,8 +81,59 @@ struct FileTree: Equatable {
         }
     }
 
+    /// Closes a directory row if it is open; a closed one stays closed. A
+    /// failed listing closes its folder through this, not a toggle: the
+    /// user may have closed it — by ← or its chevron — while the listing
+    /// was in flight, and a toggle would reopen it, empty, with no listing
+    /// coming.
+    mutating func collapse(path: String) {
+        guard rows.first(where: { $0.node.path == path })?.expanded == true else { return }
+        _ = toggleExpanded(path: path)
+    }
+
     /// The row's full node, for restore actions.
     func node(at path: String) -> SnapshotNode? {
         rows.first { $0.node.path == path }?.node
+    }
+}
+
+extension FileTree {
+    /// The two horizontal arrows the tree answers.
+    enum HorizontalArrow: Sendable { case left, right }
+
+    /// What a Left or Right arrow does to the selected row — NSOutlineView's
+    /// own grammar, probed on macOS 26: Right opens a closed folder and
+    /// otherwise does nothing; Left closes an open folder, otherwise selects
+    /// the folder the row sits in, and does nothing on a top-level row.
+    /// Option-Right's expand-everything is left out on purpose: every folder
+    /// is a `restic ls` round trip.
+    enum ArrowStep: Equatable, Sendable {
+        case expand(String)
+        case collapse(String)
+        case selectParent(String)
+        case stay
+    }
+
+    /// The step for `arrow` on the row at `path`. A folder whose listing is
+    /// still in flight counts as open — it shows as open — so Left closes
+    /// it and Right asks nothing more. A path that is not a row (a search
+    /// hit left selected) stays.
+    func arrowStep(_ arrow: HorizontalArrow, from path: String) -> ArrowStep {
+        guard let index = rows.firstIndex(where: { $0.node.path == path }) else { return .stay }
+        let row = rows[index]
+        switch arrow {
+        case .right:
+            return row.node.isDirectory && !row.expanded ? .expand(path) : .stay
+        case .left:
+            if row.node.isDirectory, row.expanded { return .collapse(path) }
+            guard row.depth > 0 else { return .stay }
+            // The parent is the nearest row above at one level shallower —
+            // by depth, not the row directly above, which may sit inside an
+            // open sibling folder.
+            for candidate in rows[..<index].reversed() where candidate.depth == row.depth - 1 {
+                return .selectParent(candidate.node.path)
+            }
+            return .stay
+        }
     }
 }

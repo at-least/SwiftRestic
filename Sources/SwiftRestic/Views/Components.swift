@@ -84,9 +84,16 @@ struct BannerView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
+            // The success check is decoration beside a title that already
+            // says what happened, and its SF label read "Selected" to
+            // VoiceOver. The error triangle stays, named for what it means
+            // rather than SF's "Warning": not every error title says it
+            // failed ("Keychain").
             Image(systemName: symbol)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(hue)
+                .accessibilityLabel(banner.isError ? "Error" : "")
+                .accessibilityHidden(!banner.isError)
             // Title and message read as one utterance; the Reveal action and
             // the dismiss button stay their own elements beside them.
             VStack(alignment: .leading, spacing: 4) {
@@ -276,13 +283,21 @@ struct ExpandableCaption: View {
                 Text(summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // The macOS minimum control size, 20×20, without growing the
+                // caption line: the square hangs 4 pt past its layout box
+                // above and below. The padding sits outside the Button —
+                // inside the label, the Button hit-tests only the 20×12 box
+                // (measured with HID-level clicks, macOS 26).
                 Button {
                     isExpanded.toggle()
                 } label: {
                     Image(systemName: "info.circle")
                         .font(.caption)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
+                .padding(.vertical, -4)
                 .foregroundStyle(Theme.tint)
                 .help("More about this")
                 .accessibilityLabel("More about this")
@@ -474,7 +489,7 @@ struct SnapshotFreshnessLabel: View {
 /// record here makes no claim at all. The caller's fixed-width slot lines
 /// neighbouring text up whether or not a glyph shows.
 ///
-/// The invisible label is clear ink, not Activity's `opacity(0)`: on
+/// The invisible label is clear ink, as in Activity's outcome column: on
 /// macOS 26 a zero-opacity Text or Image is dropped from the accessibility
 /// tree in both a List row and a Table cell, and in a sidebar row it
 /// folds into the timestamp beside it, label lost. A clear Text survives
@@ -520,6 +535,17 @@ extension SnapshotNode {
         case .symlink: "arrow.turn.up.right"
         case .file: "doc"
         default: "questionmark.square.dashed"
+        }
+    }
+
+    /// What the glyph means, for VoiceOver. SF Symbols' own labels name the
+    /// picture, not the meaning — folder.fill reads "Move", doc "Document".
+    var kindName: String {
+        switch type {
+        case .dir: "Folder"
+        case .symlink: "Symbolic link"
+        case .file: "File"
+        default: "Special file"
         }
     }
 }
@@ -579,6 +605,7 @@ struct SnapshotNodeRow: View {
             Image(systemName: node.browserIconName)
                 .foregroundStyle(node.isDirectory ? Color.accentColor : .secondary)
                 .frame(width: 16)
+                .accessibilityLabel(node.kindName)
             Text(node.name)
                 .lineLimit(1)
             Spacer()
@@ -782,9 +809,13 @@ struct PathBreadcrumb: View {
             HStack(spacing: 4) {
                 ForEach(Array(crumbs.enumerated()), id: \.offset) { index, crumb in
                     if index > 0 {
+                        // A separator, not a control: its SF label is
+                        // "Forward", between crumbs VoiceOver already reads
+                        // in order.
                         Image(systemName: "chevron.right")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
                     if crumb.target == path {
                         Text(crumb.label)

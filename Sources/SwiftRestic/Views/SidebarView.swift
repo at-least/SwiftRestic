@@ -337,7 +337,14 @@ private struct RestoreRecordRow: View {
             Text(Format.timestamp(snapshot.time))
                 .lineLimit(1)
                 .help("Browse this backup's files and restore from it")
+                // The date leads the combined utterance, as in a list of
+                // dates it should; the mark sits first only on screen.
+                .accessibilitySortPriority(1)
         }
+        // One utterance per record: the mark's label, when it has one,
+        // merges with the date, so there is no second row label to keep
+        // in step with it.
+        .accessibilityElement(children: .combine)
     }
 }
 

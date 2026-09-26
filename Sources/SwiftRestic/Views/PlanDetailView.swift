@@ -334,8 +334,11 @@ struct PlanDetailView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     } icon: {
+                        // Every source wears it, a file too: decoration,
+                        // whose SF label ("Move") would only mislead.
                         Image(systemName: "folder.fill")
                             .foregroundStyle(Theme.tint)
+                            .accessibilityHidden(true)
                     }
                     .font(.callout)
                 }
