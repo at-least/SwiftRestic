@@ -949,3 +949,39 @@ struct UnreadableConfigurationTests {
         #expect(after.data == before.data, "a save landed over an unreadable configuration's backup copies")
     }
 }
+
+/// The drawer's snapshot link: whether a run's snapshot can still be opened,
+/// and why not when it cannot.
+@Suite("run snapshot link")
+struct RunSnapshotLinkTests {
+    private func snapshot(_ id: String) throws -> Snapshot {
+        try ResticMessageDecoder.jsonDecoder.decode(
+            Snapshot.self,
+            from: Data(#"{"id":"\#(id)","short_id":"\#(id.prefix(8))","time":"2026-09-25T18:00:00Z","paths":["/src"]}"#.utf8)
+        )
+    }
+
+    @Test("a run's snapshot link says available, removed, unavailable or repository gone")
+    func resolve() throws {
+        let full = "abf728998814d029436dc76f64e5204a4d2336134e43b921a53e52e53144137f"
+        let listing = [try snapshot(full), try snapshot("73d9b51de71d34eb451a02fefd7e94ca3daa4e6c817f27549d2ff6bbf54d093f")]
+
+        let byFull = RunSnapshotLink.resolve(snapshotID: full, repositoryExists: true, listing: listing, outcome: .loaded)
+        #expect(byFull == .available(listing[0]))
+        // Records that named a snapshot by its short ID still find it.
+        let byShort = RunSnapshotLink.resolve(snapshotID: "abf72899", repositoryExists: true, listing: listing, outcome: .loaded)
+        #expect(byShort == .available(listing[0]))
+        // A stale listing that still holds it is good enough to open it.
+        #expect(RunSnapshotLink.resolve(snapshotID: full, repositoryExists: true, listing: listing, outcome: .failed("offline"))
+            == .available(listing[0]))
+
+        let gone = "672523f5c8ba09c0944bb548d670cf24a9c8b5061c74a140f8232b5f8f5e1005"
+        #expect(RunSnapshotLink.resolve(snapshotID: gone, repositoryExists: true, listing: listing, outcome: .loaded) == .removed)
+        // Not loaded yet, or unreadable: nobody knows, so nothing is claimed.
+        #expect(RunSnapshotLink.resolve(snapshotID: gone, repositoryExists: true, listing: [], outcome: .idle) == .unavailable)
+        #expect(RunSnapshotLink.resolve(snapshotID: gone, repositoryExists: true, listing: listing, outcome: .failed("offline"))
+            == .unavailable)
+        #expect(RunSnapshotLink.resolve(snapshotID: full, repositoryExists: false, listing: listing, outcome: .loaded)
+            == .repositoryGone)
+    }
+}

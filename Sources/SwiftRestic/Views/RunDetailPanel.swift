@@ -1,0 +1,355 @@
+import SwiftUI
+
+/// Activity's drawer: what the selected run did and where to go from it —
+/// the snapshot it wrote or read (Browse, Compare with Previous…), its
+/// numbers, restic's exit code, the messages it left, and the log. Shown
+/// for every selected run, clean ones included: the plan page's Last backup
+/// tile lands on exactly such a run, and an empty pane under the selection
+/// read as "nothing to see".
+///
+/// A fixed 220 pt, scrolling inside, with the buttons pinned under the
+/// scroll view so Show Log… stays in reach below fifty unreadable items.
+/// The fixed frame is also what keeps this drawer honest in Activity's
+/// non-scrolling host: its answer to the split view's zero-width minimum
+/// query is 220, whatever the text inside would wrap to.
+struct RunDetailPanel: View {
+    @Environment(AppModel.self) private var model
+    let run: RunRecord
+    var onOpenPlan: ((UUID) -> Void)?
+    var onCompare: (SnapshotDiffTarget) -> Void
+    var onShowLog: (RunRecord) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    header
+                    // A problem run leads with what went wrong, as this
+                    // drawer always has: below the grid, the first item line
+                    // of an exit-3 backup sat half under the fold. A clean
+                    // run leads with what it made.
+                    if run.outcome == .succeeded {
+                        DetailGrid { rows }
+                        messages
+                    } else {
+                        messages
+                        DetailGrid { rows }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+            }
+            Divider()
+            buttons
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+        }
+        .frame(height: 220)
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            // Decorative beside words that already say the outcome — the
+            // table cell keeps the glyph's own label.
+            if let symbolName = run.outcome.symbolName {
+                Image(systemName: symbolName)
+                    .foregroundStyle(ChartPalette.status(run.outcome))
+                    .accessibilityHidden(true)
+            }
+            Text("\(run.outcome.displayName) · finished \(Format.timestamp(run.finishedAt))")
+                .font(.headline)
+        }
+    }
+
+    // MARK: - Facts
+
+    private var repositoryName: String? { model.repository(id: run.repositoryID)?.name }
+
+    @ViewBuilder
+    private var rows: some View {
+        switch run.kind {
+        case .backup:
+            if run.snapshotID != nil {
+                DetailRow("Snapshot") { RunSnapshotRow(run: run, onCompare: onCompare) }
+            }
+            if RunRecordPresentation.hasBackupNumbers(run) {
+                DetailRow(
+                    "Files",
+                    "\(Format.count(run.filesNew)) new · \(Format.count(run.filesChanged)) changed · \(Format.count(run.filesUnmodified)) unmodified"
+                )
+                DetailRow("Size", "Processed \(Format.bytes(run.bytesProcessed)) · added \(Format.bytes(run.dataAdded))")
+            }
+            repositoryRow
+            exitRow
+        case .restore:
+            if run.snapshotID != nil {
+                DetailRow("Snapshot") { RunSnapshotRow(run: run, onCompare: onCompare) }
+            }
+            // Records from before restores kept these have no destination;
+            // their rows are left out rather than guessed.
+            if let destination = run.destinationPath {
+                // "Snapshot" beside the Snapshot row, as Copy Details says it;
+                // "backup" is the Restore pane's word.
+                DetailRow("Item") {
+                    Text(run.sourcePath ?? "Entire snapshot")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .help(run.sourcePath ?? "Every folder in the snapshot, under its full original path")
+                }
+                DetailRow(run.outcome == .succeeded ? "Restored to" : "Destination") {
+                    RevealRow(path: destination, runID: run.id)
+                }
+            }
+            if run.outcome == .succeeded, run.filesRestored + run.filesSkipped > 0 {
+                DetailRow("Files", RunRecordPresentation.restoreFiles(run))
+            }
+            repositoryRow
+            exitRow
+        default:
+            repositoryRow
+            if run.kind == .check, let result = run.detailText {
+                DetailRow("Result") { Text(result).textSelection(.enabled) }
+            }
+            exitRow
+        }
+    }
+
+    private var repositoryRow: some View {
+        DetailRow("Repository", repositoryName ?? "No longer set up in SwiftRestic")
+    }
+
+    @ViewBuilder
+    private var exitRow: some View {
+        if let code = run.exitCode, let text = RunRecordPresentation.exitCodeText(code) {
+            DetailRow("restic exit") { Text(text).textSelection(.enabled) }
+        }
+    }
+
+    // MARK: - Messages
+
+    /// What the run left in words, as before: the failure in red, prune's
+    /// output tail, restic's item lines, and the hooks' own lines — which
+    /// stay here, on this Mac, and never reach Copy Details. The unreadable
+    /// items come under restic's count and end with how many were not
+    /// stored, the way Copy Details and the Restore strip say it.
+    @ViewBuilder
+    private var messages: some View {
+        let hasMessages = run.failureMessage != nil || (run.kind == .prune && run.detailText != nil)
+            || !run.itemErrors.isEmpty || !run.hookMessages.isEmpty
+        let unreadable = run.unreadableItems
+        let unlisted = run.itemErrorCount - unreadable.count
+        if hasMessages {
+            VStack(alignment: .leading, spacing: 6) {
+                if let failure = run.failureMessage {
+                    Text(failure)
+                        .foregroundStyle(Theme.danger)
+                        .textSelection(.enabled)
+                }
+                if run.kind == .prune, let detail = run.detailText {
+                    Text(detail)
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                if run.itemErrorCount > 0 {
+                    Text("Unreadable items (\(Format.count(run.itemErrorCount)))")
+                        .font(.callout.weight(.semibold))
+                }
+                ForEach(Array(unreadable.enumerated()), id: \.offset) { _, message in
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                if unlisted > 0 {
+                    Text("… and \(Format.count(unlisted)) more")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                // The decoding gap and the retention skip explain themselves.
+                ForEach(Array(run.itemErrors.dropFirst(unreadable.count).enumerated()), id: \.offset) { _, message in
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                ForEach(Array(run.hookMessages.enumerated()), id: \.offset) { _, message in
+                    Label(message, systemImage: "terminal")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+
+    // MARK: - Buttons
+
+    private var buttons: some View {
+        HStack(spacing: 10) {
+            if let planID = run.planID, let plan = model.plan(id: planID) {
+                Button("Open Plan") { onOpenPlan?(planID) }
+                // A retry only where there is something to retry: a clean
+                // record's next step is not a pointless re-run.
+                if run.kind == .backup, run.outcome != .succeeded, plan.isConfigurationComplete {
+                    // Disabled while running or restic-less, like the plan
+                    // page's and sidebar's buttons: a clickable button that
+                    // quietly does nothing is a lie the model's no-op guard
+                    // should never have to tell.
+                    Button("Back Up Now") { model.runBackup(planID: planID) }
+                        .disabled(model.isRunning(planID: planID) || !model.isResticAvailable)
+                        .help(
+                            model.isRunning(planID: planID)
+                                ? "This plan's backup is already running"
+                                : "Run this plan's backup now"
+                        )
+                }
+            }
+            Spacer(minLength: 0)
+            Button("Show Log…") { onShowLog(run) }
+                .disabled(!run.hasLog)
+                .help(
+                    run.hasLog
+                        ? "Show what restic printed during this run"
+                        : "No log was saved for this run — runs recorded before SwiftRestic kept logs have none."
+                )
+            Button("Copy Details") {
+                let text = RunRecordPresentation.detailsText(
+                    for: run,
+                    repositoryName: repositoryName,
+                    versionsNow: .current(resticVersion: model.resticVersion)
+                )
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+            .help("Copy this run's details as plain text")
+        }
+        .controlSize(.small)
+    }
+}
+
+/// The drawer's Snapshot row, in its own view so the listing lookup behind
+/// it reruns only when the run or the repository's listing changes — not on
+/// every write the drawer's other rows observe. Browse and Compare go where
+/// the Snapshots tables' own buttons go.
+private struct RunSnapshotRow: View {
+    @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
+    let run: RunRecord
+    let onCompare: (SnapshotDiffTarget) -> Void
+
+    var body: some View {
+        let snapshotID = run.snapshotID ?? ""
+        let short = String(snapshotID.prefix(8))
+        let link = model.snapshotLink(for: run)
+        HStack(spacing: 8) {
+            switch link {
+            case let .available(snapshot)?:
+                identifier(short, made: run.kind == .restore ? (run.snapshotTime ?? snapshot.time) : nil)
+                completenessMark(for: snapshot.id)
+                browseButton(snapshot.id)
+                if run.kind == .backup {
+                    Button("Compare with Previous…") {
+                        if let repositoryID = run.repositoryID {
+                            onCompare(SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot))
+                        }
+                    }
+                    .help("See what changed since the previous backup of these folders")
+                }
+            case .removed?:
+                Text("\(short) — no longer in the repository")
+                    .monospaced()
+                    .textSelection(.enabled)
+                    .help("Removed after this run — by retention, a prune, or another restic client.")
+                    .accessibilityLabel("Snapshot \(short), no longer in the repository")
+            case .unavailable?:
+                let help = "This repository's snapshot list isn't loaded right now."
+                identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
+                completenessMark(for: snapshotID)
+                Button("Browse") {}
+                    .disabled(true)
+                    .help(help)
+                if run.kind == .backup {
+                    Button("Compare with Previous…") {}
+                        .disabled(true)
+                        .help(help)
+                }
+            case .repositoryGone?, nil:
+                identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
+                    .help("This repository is no longer set up in SwiftRestic.")
+            }
+        }
+        .controlSize(.small)
+    }
+
+    private func identifier(_ short: String, made: Date?) -> some View {
+        HStack(spacing: 4) {
+            Text(short)
+                .monospaced()
+                .textSelection(.enabled)
+                .accessibilityLabel("Snapshot \(short)")
+            if let made {
+                Text("· \(Format.timestamp(made))")
+            }
+        }
+    }
+
+    /// 09's mark: the run itself for a backup, the backup that wrote it for
+    /// a restore. A fixed slot, as in the sidebar.
+    private func completenessMark(for snapshotID: String) -> some View {
+        SnapshotCompletenessMark(run: run.kind == .backup ? run : model.backupRun(forSnapshot: snapshotID))
+            .font(.caption)
+            .frame(width: 14)
+    }
+
+    private func browseButton(_ snapshotID: String) -> some View {
+        Button("Browse") {
+            if let repositoryID = run.repositoryID {
+                router.showRestore(repositoryID: repositoryID, snapshotID: snapshotID)
+            }
+        }
+        .help("Show this snapshot's files under Restore")
+    }
+}
+
+/// A restore's landing path with Reveal in Finder. Whether anything is still
+/// there is asked off the main actor when the run is shown — a destination
+/// on an unreachable network volume can stall `fileExists`, and the render
+/// path must never wait on that.
+private struct RevealRow: View {
+    let path: String
+    let runID: UUID
+    /// Nil until the check lands; the button waits disabled until then.
+    @State private var exists: Bool?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(path)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .help(path)
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            }
+            .controlSize(.small)
+            .disabled(exists != true)
+            .help(exists == false ? "Nothing is at this path any more." : "Show the restored item in Finder")
+        }
+        .task(id: runID) {
+            exists = nil
+            let path = path
+            let found = await Task.detached(priority: .utility) {
+                FileManager.default.fileExists(atPath: path)
+            }.value
+            // The selection moved to another restore while a stalled check
+            // waited: cancelling this task does not stop the detached one
+            // returning, and its answer is about a path no longer shown.
+            guard !Task.isCancelled else { return }
+            exists = found
+        }
+    }
+}

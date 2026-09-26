@@ -13,6 +13,7 @@ struct BackupRunEngineTests {
     final class RecordingSink: BackupRunEngine.Sink {
         var log: [String] = []
         var deliveredRecords: [RunRecord] = []
+        var deliveredTranscripts: [RunTranscript.Contents] = []
 
         var cancellationMessage = "cancelled in test"
 
@@ -47,9 +48,15 @@ struct BackupRunEngineTests {
             log.append("refresh")
         }
 
-        func deliver(record: RunRecord, plan: BackupPlan) async {
+        func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
             log.append("deliver:\(record.outcome)")
             deliveredRecords.append(record)
+            deliveredTranscripts.append(transcript)
+        }
+
+        /// The notes the engine wrote into the delivered run's transcript.
+        var deliveredNotes: [String] {
+            deliveredTranscripts.flatMap { $0.entries.filter { $0.kind == .note }.map(\.text) }
         }
 
         func makeHookRunner() -> HookRunner {
@@ -331,6 +338,98 @@ struct BackupRunEngineTests {
         #expect(record.itemErrors[50] == "2 restic messages could not be decoded")
         #expect(record.itemErrors[51].hasPrefix("Retention skipped"))
     }
+
+    private func hook(_ name: String, event: BackupHook.Event, command: String) -> BackupHook {
+        var hook = BackupHook()
+        hook.name = name
+        hook.event = event
+        hook.command = command
+        return hook
+    }
+
+    @Test("backup and forget run inside the run's transcript; hooks are noted by verdict")
+    func backupAndForgetAreTranscribed() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onBackup(.success(successOutcome()))
+        var plan = makePlan()
+        plan.hooks = [
+            hook("prepare", event: .beforeBackup, command: "true"),
+            hook("celebrate", event: .afterSuccess, command: "true"),
+        ]
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        #expect(client.transcriptBound["backup"] == true)
+        #expect(client.transcriptBound["forget"] == true)
+        #expect(sink.deliveredTranscripts.count == 1)
+        let notes = sink.deliveredNotes
+        #expect(notes.contains("Hook “prepare” succeeded."), "notes were \(notes)")
+        #expect(notes.contains("Hook “celebrate” succeeded."), "notes were \(notes)")
+        #expect(notes.contains("Retention removed 0 snapshots"), "notes were \(notes)")
+    }
+
+    @Test("a failed forget is noted in the log as a retention skip")
+    func failedForgetIsNoted() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient()
+            .onBackup(.success(successOutcome()))
+            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget")))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        #expect(sink.deliveredRecords.first?.outcome == .completedWithErrors)
+        #expect(sink.deliveredNotes.contains { $0.hasPrefix("Retention skipped:") }, "notes were \(sink.deliveredNotes)")
+    }
+
+    @Test("the record's exit code is the first restic exit the transcript saw")
+    func recordKeepsTheFirstExitCode() async throws {
+        // A partial backup, then a clean forget: the run's code is the
+        // backup's own (09's success path agrees; this pins the pair).
+        let partial = RecordingSink()
+        var outcome = successOutcome()
+        outcome.exitCode = 3
+        outcome.itemErrors = ["/src/a: permission denied"]
+        await BackupRunEngine.perform(
+            plan: makePlan(),
+            repository: Repository(),
+            sink: StubServiceSink(
+                client: MockResticClient().onBackup(.success(outcome)).onExit("backup", 3).onExit("forget", 0),
+                base: partial
+            )
+        )
+        #expect(partial.deliveredRecords.first?.exitCode == 3)
+
+        // A failed backup: nothing on the success path set it, and restic's
+        // own code must still reach the record.
+        let failed = RecordingSink()
+        await BackupRunEngine.perform(
+            plan: makePlan(),
+            repository: Repository(),
+            sink: StubServiceSink(
+                client: MockResticClient()
+                    .onBackup(.failure(ResticError.commandFailed(exitCode: 12, message: "wrong password", command: "restic backup")))
+                    .onExit("backup", 12),
+                base: failed
+            )
+        )
+        let failedRecord = try #require(failed.deliveredRecords.first)
+        #expect(failedRecord.outcome == .failed)
+        #expect(failedRecord.exitCode == 12)
+
+        // A before-hook that aborts: restic never ran, so there is no code.
+        let aborted = RecordingSink()
+        var plan = makePlan()
+        var gate = hook("gate", event: .beforeBackup, command: "exit 1")
+        gate.failureBehaviour = .abortBackup
+        plan.hooks = [gate]
+        await BackupRunEngine.perform(
+            plan: plan,
+            repository: Repository(),
+            sink: StubServiceSink(client: MockResticClient().onExit("backup", 0), base: aborted)
+        )
+        let abortedRecord = try #require(aborted.deliveredRecords.first)
+        #expect(abortedRecord.outcome == .failed)
+        #expect(abortedRecord.exitCode == nil)
+        #expect(aborted.deliveredNotes == ["Hook “gate” exited 1."])
+    }
 }
 
 @MainActor
@@ -339,6 +438,7 @@ struct MaintenanceRunEngineTests {
     final class RecordingSink: MaintenanceRunEngine.Sink {
         var log: [String] = []
         var deliveredRecords: [RunRecord] = []
+        var deliveredTranscripts: [RunTranscript.Contents] = []
         var cancellationMessage = "cancelled in test"
 
         func service() throws -> any ResticClient { throw ResticError.repositoryMissing }
@@ -363,9 +463,10 @@ struct MaintenanceRunEngineTests {
             log.append("auth-noted")
         }
 
-        func deliver(record: RunRecord, repository: Repository) async {
+        func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
             log.append("deliver:\(record.outcome)")
             deliveredRecords.append(record)
+            deliveredTranscripts.append(transcript)
         }
 
         func refreshSnapshots(repositoryID: UUID) async {
@@ -487,6 +588,23 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
         #expect(!sink.deliveredRecords[0].hookMessages.isEmpty)
     }
+
+    @Test("check runs inside the run's transcript and its delivery carries it")
+    func checkIsTranscribed() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onCheck(.success(ResticSummary())).onExit("check", 0)
+        await MaintenanceRunEngine.perform(
+            repository: Repository(),
+            task: .check,
+            readDataPercentOverride: nil,
+            sink: StubMaintenanceServiceSink(client: client, base: sink)
+        )
+        #expect(client.transcriptBound["check"] == true)
+        #expect(sink.deliveredRecords.count == 1)
+        #expect(sink.deliveredTranscripts.count == 1)
+        #expect(sink.deliveredRecords.first?.exitCode == 0)
+        #expect(sink.deliveredTranscripts.first?.firstExitCode == 0)
+    }
 }
 
 /// The recording sinks answer `service()` with the mock — a tiny wrapper so
@@ -519,7 +637,9 @@ private final class StubServiceSink: BackupRunEngine.Sink {
     }
     func addStartPing(_ event: NotificationEvent) { base.addStartPing(event) }
     func refreshSnapshots(repositoryID: UUID) async { await base.refreshSnapshots(repositoryID: repositoryID) }
-    func deliver(record: RunRecord, plan: BackupPlan) async { await base.deliver(record: record, plan: plan) }
+    func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
+        await base.deliver(record: record, plan: plan, transcript: transcript)
+    }
     func makeHookRunner() -> HookRunner { base.makeHookRunner() }
 }
 
@@ -547,8 +667,8 @@ private final class StubMaintenanceServiceSink: MaintenanceRunEngine.Sink {
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
         base.noteAuthFailure(error, repositoryID: repositoryID)
     }
-    func deliver(record: RunRecord, repository: Repository) async {
-        await base.deliver(record: record, repository: repository)
+    func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
+        await base.deliver(record: record, repository: repository, transcript: transcript)
     }
     func refreshSnapshots(repositoryID: UUID) async { await base.refreshSnapshots(repositoryID: repositoryID) }
     func scheduleSnapshotRefresh(repositoryID: UUID) { base.scheduleSnapshotRefresh(repositoryID: repositoryID) }

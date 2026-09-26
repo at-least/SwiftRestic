@@ -28,7 +28,13 @@ extension AppModel {
         to destination: URL
     ) {
         let reporter = restoreProgressReporter()
-        beginRestore(repositoryID: repositoryID, label: node.name) { service, context in
+        beginRestore(
+            repositoryID: repositoryID,
+            label: node.name,
+            snapshotID: snapshotID,
+            sourcePath: node.path,
+            destinationPath: ResticService.restoredItemURL(for: node, in: destination).path
+        ) { service, context in
             try await service.restore(
                 context,
                 snapshotID: snapshotID,
@@ -50,7 +56,13 @@ extension AppModel {
     /// beneath `destination`.
     func restoreWholeSnapshot(repositoryID: UUID, snapshotID: String, to destination: URL) {
         let reporter = restoreProgressReporter()
-        beginRestore(repositoryID: repositoryID, label: "snapshot \(snapshotID.prefix(8))") { service, context in
+        beginRestore(
+            repositoryID: repositoryID,
+            label: "snapshot \(snapshotID.prefix(8))",
+            snapshotID: snapshotID,
+            sourcePath: nil,
+            destinationPath: destination.path
+        ) { service, context in
             try await service.restoreWholeSnapshot(
                 context,
                 snapshotID: snapshotID,
@@ -68,10 +80,17 @@ extension AppModel {
     }
 
     /// Shared bookkeeping for both restore shapes: one at a time, progress
-    /// published, and the outcome written to the run history either way.
+    /// published, and the outcome written to the run history either way —
+    /// with the backup it read (`snapshotID` as asked for), the item
+    /// (`sourcePath`, nil for a whole backup) and where it lands
+    /// (`destinationPath`: the restored item itself, or the folder a whole
+    /// backup goes into), plus the run's log.
     private func beginRestore(
         repositoryID: UUID,
         label: String,
+        snapshotID: String,
+        sourcePath: String?,
+        destinationPath: String,
         operation: @escaping @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?,
         onSuccess: @escaping @MainActor () -> Void
     ) {
@@ -96,12 +115,28 @@ extension AppModel {
                 planName: label,
                 repositoryID: repositoryID
             )
+            record.snapshotID = snapshotID
+            record.snapshotTime = self.snapshots(for: repositoryID)
+                .first { $0.id == snapshotID || $0.shortID == snapshotID }?.time
+            record.sourcePath = sourcePath
+            record.destinationPath = destinationPath
+            // Bound around the restore's own restic call only, like the
+            // run engines'.
+            let transcript = RunTranscript()
             do {
                 guard let repository = self.repository(id: repositoryID) else {
                     throw ResticError.repositoryMissing
                 }
-                let summary = try await operation(self.service(), self.context(for: repository))
+                let service = try self.service()
+                let context = try await self.context(for: repository)
+                let summary = try await RunTranscript.$current.withValue(transcript) {
+                    try await operation(service, context)
+                }
                 record.outcome = .succeeded
+                // A repeat restore answers with files_skipped alone — no
+                // files_restored key — so both are kept, zero when absent.
+                record.filesRestored = summary?.filesRestored ?? 0
+                record.filesSkipped = summary?.filesSkipped ?? 0
                 record.bytesProcessed = summary?.bytesRestored ?? 0
                 onSuccess()
             } catch {
@@ -129,6 +164,8 @@ extension AppModel {
                 }
             }
             record.finishedAt = .now
+            record.exitCode = transcript.contents.firstExitCode
+            await self.seal(&record, transcript: transcript.contents)
             self.append(record: record)
             self.restoreActivity = nil
             self.restoreDescription = ""
@@ -254,9 +291,10 @@ extension AppModel {
             // No progress through the drag path: the drop is the feedback.
             onProgress: nil
         )
-        // The same name rule the service's restore branches use: the snapshot
-        // names the item, the destination directory decides where it lands.
-        return destination.appendingPathComponent(ResticService.sanitizedRestoreName(node.name))
+        // The one landing rule the service's restore branches and the run
+        // record use: the snapshot names the item, the destination
+        // directory decides where it lands.
+        return ResticService.restoredItemURL(for: node, in: destination)
     }
 
     /// Everything a restic command needs, from pre-captured values, with no

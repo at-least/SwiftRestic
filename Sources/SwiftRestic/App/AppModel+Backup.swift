@@ -93,11 +93,13 @@ extension AppModel: BackupRunEngine.Sink {
         })
     }
 
-    /// Stores and announces a finished run: history, the in-app banner
-    /// (successes auto-dismiss — success that outlives its moment reads as
-    /// stale — while warnings and failures stay until dismissed), the user
-    /// notification, and the external channels.
-    func deliver(record: RunRecord, plan: BackupPlan) async {
+    /// Stores and announces a finished run: its log, history, the in-app
+    /// banner (successes auto-dismiss — success that outlives its moment
+    /// reads as stale — while warnings and failures stay until dismissed),
+    /// the user notification, and the external channels.
+    func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
+        var record = record
+        await seal(&record, transcript: transcript)
         append(record: record)
         announceInApp(record: record)
         notify(about: record)

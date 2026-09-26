@@ -39,9 +39,9 @@ enum BackupRunEngine {
         /// it must stay after retention: the index's restic calls hold
         /// shared locks, and a forget needs the exclusive one.
         func refreshSnapshots(repositoryID: UUID) async
-        /// Stores and announces a finished run: run history, banner, user
-        /// notification, external channels.
-        func deliver(record: RunRecord, plan: BackupPlan) async
+        /// Stores and announces a finished run: its log, run history,
+        /// banner, user notification, external channels.
+        func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
         /// Runs the plan's shell hooks around the run.
         func makeHookRunner() -> HookRunner
     }
@@ -56,6 +56,10 @@ enum BackupRunEngine {
             startedAt: startedAt
         )
         let hooks = sink.makeHookRunner()
+        // What restic said, for the run's log: bound around the restic
+        // service calls only — hooks shield themselves, and the closing
+        // refresh is not part of the run.
+        let transcript = RunTranscript()
         var hookContext = HookRunner.Context(
             event: .beforeBackup,
             planName: plan.name,
@@ -75,6 +79,7 @@ enum BackupRunEngine {
                 record.hookMessages.append(
                     contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
                 )
+                for outcome in result.outcomes { transcript.note(outcome.logLine) }
                 if result.cancelled {
                     // The user stopped the run while a hook was still going:
                     // a cancellation, never a hook verdict, so the aborted-run
@@ -86,7 +91,10 @@ enum BackupRunEngine {
                     record.failureMessage =
                         "A before-backup hook failed and is set to cancel the backup."
                     sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
-                    await finish(record: &record, plan: plan, hooks: hooks, context: hookContext, sink: sink)
+                    await finish(
+                        record: &record, plan: plan, hooks: hooks, context: hookContext,
+                        transcript: transcript, sink: sink
+                    )
                     return
                 }
             }
@@ -102,11 +110,13 @@ enum BackupRunEngine {
             sink.addStartPing(startEvent)
 
             sink.setActivityPhase(.backingUp, for: plan.id)
-            let outcome = try await service.backup(
-                context,
-                plan: plan,
-                onProgress: sink.progressReporter(planID: plan.id)
-            )
+            let outcome = try await RunTranscript.$current.withValue(transcript) {
+                try await service.backup(
+                    context,
+                    plan: plan,
+                    onProgress: sink.progressReporter(planID: plan.id)
+                )
+            }
 
             record.snapshotID = outcome.summary?.snapshotID
             record.filesNew = outcome.summary?.filesNew ?? 0
@@ -138,7 +148,10 @@ enum BackupRunEngine {
             if plan.retention.isSafeToRun, record.snapshotID != nil {
                 sink.setActivityPhase(.applyingRetention, for: plan.id)
                 do {
-                    _ = try await service.forget(context, plan: plan)
+                    let removed = try await RunTranscript.$current.withValue(transcript) {
+                        try await service.forget(context, plan: plan)
+                    }
+                    transcript.note("Retention removed \(Format.plural(removed, "snapshot"))")
                 } catch {
                     // `forget` needs an exclusive repository lock while `backup`
                     // only takes a shared one, so a second plan backing up to the
@@ -146,7 +159,9 @@ enum BackupRunEngine {
                     // is already safe; degrade to a warning instead of reporting
                     // the whole backup as failed.
                     record.outcome = .completedWithErrors
-                    record.itemErrors.append(RunRecord.retentionSkippedPrefix + error.localizedDescription)
+                    let line = RunRecord.retentionSkippedPrefix + error.localizedDescription
+                    record.itemErrors.append(line)
+                    transcript.note(line)
                 }
             }
 
@@ -163,7 +178,10 @@ enum BackupRunEngine {
         hookContext.filesChanged = record.filesChanged
         hookContext.bytesProcessed = record.bytesProcessed
         hookContext.dataAdded = record.dataAdded
-        await finish(record: &record, plan: plan, hooks: hooks, context: hookContext, sink: sink)
+        await finish(
+            record: &record, plan: plan, hooks: hooks, context: hookContext,
+            transcript: transcript, sink: sink
+        )
     }
 
     /// Runs the after-backup hooks, then hands the finished run to the sink
@@ -176,6 +194,7 @@ enum BackupRunEngine {
         plan: BackupPlan,
         hooks: HookRunner,
         context: HookRunner.Context,
+        transcript: RunTranscript,
         sink: Sink
     ) async {
         record.finishedAt = .now
@@ -197,6 +216,7 @@ enum BackupRunEngine {
                 record.hookMessages.append(
                     contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
                 )
+                for outcome in result.outcomes { transcript.note(outcome.logLine) }
                 // A cancel landing mid-after-hooks stops the remaining events:
                 // the user asked the app to stop, not this hook to fail.
                 if result.cancelled { break }
@@ -209,7 +229,11 @@ enum BackupRunEngine {
             record.finishedAt = .now
         }
 
-        await sink.deliver(record: record, plan: plan)
+        // The success path took the backup's own code; anything that threw
+        // gets the first exit restic reached, and nil when it reached none.
+        let contents = transcript.contents
+        if record.exitCode == nil { record.exitCode = contents.firstExitCode }
+        await sink.deliver(record: record, plan: plan, transcript: contents)
     }
 }
 
@@ -231,7 +255,7 @@ enum MaintenanceRunEngine {
         /// Not-yet-configured repositories record nothing and stamp nothing.
         func markPasswordMissing(repositoryID: UUID)
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
-        func deliver(record: RunRecord, repository: Repository) async
+        func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async
         func makeHookRunner() -> HookRunner
         /// The closing snapshot refresh, scheduled by the sink so it runs
         /// outside this task — a cancelled run leaves its task cancelled, and
@@ -254,6 +278,9 @@ enum MaintenanceRunEngine {
             startedAt: startedAt
         )
         let hooks = sink.makeHookRunner()
+        // The backup engine's rule: restic's words for the log, bound around
+        // the service call only.
+        let transcript = RunTranscript()
         let hookContext = HookRunner.Context(
             event: .beforeMaintenance,
             repositoryName: repository.name,
@@ -275,6 +302,7 @@ enum MaintenanceRunEngine {
                 record.hookMessages.append(
                     contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
                 )
+                for outcome in result.outcomes { transcript.note(outcome.logLine) }
                 if result.cancelled {
                     // Same rule as the backup engine: the user's cancel is a
                     // cancellation, never a hook verdict.
@@ -287,7 +315,10 @@ enum MaintenanceRunEngine {
                     // Stamped like any other failure: a hook that always says no
                     // must not have the scheduler asking again every minute.
                     sink.stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
-                    await finish(record: &record, repository: repository, hooks: hooks, context: hookContext, sink: sink)
+                    await finish(
+                        record: &record, repository: repository, hooks: hooks, context: hookContext,
+                        transcript: transcript, sink: sink
+                    )
                     return
                 }
             }
@@ -295,7 +326,9 @@ enum MaintenanceRunEngine {
             switch task {
             case .check:
                 let percent = readDataPercentOverride ?? repository.maintenance.checkReadDataPercent
-                let summary = try await service.check(context, readDataSubsetPercent: percent)
+                let summary = try await RunTranscript.$current.withValue(transcript) {
+                    try await service.check(context, readDataSubsetPercent: percent)
+                }
                 let errors = summary?.numErrors ?? 0
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors
                 record.detailText = errors == 0
@@ -311,11 +344,13 @@ enum MaintenanceRunEngine {
                 // \n-terminated when stdout is a pipe — progress lines like
                 // "[0:00] 100.00%  2 / 2 packs processed" arrive as they
                 // print, no \r in-place updates to split around.)
-                record.detailText = try await service.prune(
-                    context,
-                    dryRun: false,
-                    onRawLine: sink.lineReporter(repositoryID: repository.id)
-                )
+                record.detailText = try await RunTranscript.$current.withValue(transcript) {
+                    try await service.prune(
+                        context,
+                        dryRun: false,
+                        onRawLine: sink.lineReporter(repositoryID: repository.id)
+                    )
+                }
                 record.outcome = .succeeded
             }
         } catch ResticError.passwordMissing {
@@ -333,7 +368,10 @@ enum MaintenanceRunEngine {
         // make the scheduler retry every minute against a repository that is very
         // likely still unreachable.
         sink.stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
-        await finish(record: &record, repository: repository, hooks: hooks, context: hookContext, sink: sink)
+        await finish(
+            record: &record, repository: repository, hooks: hooks, context: hookContext,
+            transcript: transcript, sink: sink
+        )
     }
 
     /// Runs the after-maintenance hooks, then hands the finished run to the
@@ -346,6 +384,7 @@ enum MaintenanceRunEngine {
         repository: Repository,
         hooks: HookRunner,
         context: HookRunner.Context,
+        transcript: RunTranscript,
         sink: Sink
     ) async {
         record.finishedAt = .now
@@ -367,6 +406,7 @@ enum MaintenanceRunEngine {
                 record.hookMessages.append(
                     contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
                 )
+                for outcome in result.outcomes { transcript.note(outcome.logLine) }
                 // A cancel landing mid-after-hooks stops the remaining events.
                 if result.cancelled { break }
             }
@@ -380,7 +420,9 @@ enum MaintenanceRunEngine {
             record.finishedAt = .now
         }
 
-        await sink.deliver(record: record, repository: repository)
+        let contents = transcript.contents
+        if record.exitCode == nil { record.exitCode = contents.firstExitCode }
+        await sink.deliver(record: record, repository: repository, transcript: contents)
         // Scheduled by the sink, not awaited here: a cancelled run leaves
         // this task cancelled, and an inherited cancel would kill the refresh
         // mid-call and leave the listing stale after every cancelled check or

@@ -614,8 +614,8 @@ struct ResticService: ResticClient {
     ) async throws -> ResticSummary? {
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
 
+        let target = Self.restoredItemURL(for: node, in: destinationDirectory)
         if node.isDirectory {
-            let target = destinationDirectory.appendingPathComponent(Self.sanitizedRestoreName(node.name))
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
             let result = try await runner.run(
                 binary: binary,
@@ -630,7 +630,6 @@ struct ResticService: ResticClient {
             return result.summary
         }
 
-        let target = destinationDirectory.appendingPathComponent(Self.sanitizedRestoreName(node.name))
         _ = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
@@ -639,11 +638,16 @@ struct ResticService: ResticClient {
                 stdoutFile: target
             )
         )
+        // A node the index synthesized (a search hit) carries no size; the
+        // committed file says what landed.
+        let written = node.size ?? (
+            try? FileManager.default.attributesOfItem(atPath: target.path)[.size] as? NSNumber
+        )?.int64Value
         var summary = ResticSummary()
         summary.totalFiles = 1
         summary.filesRestored = 1
-        summary.totalBytes = node.size
-        summary.bytesRestored = node.size
+        summary.totalBytes = written
+        summary.bytesRestored = written
         return summary
     }
 
@@ -721,6 +725,18 @@ struct ResticService: ResticClient {
             defer { lock.unlock() }
             return diff
         }
+    }
+
+    /// Where a restored item lands inside the directory it was restored
+    /// into — the one landing rule, shared by both restore branches, the
+    /// drag path and the run record's destination, so Reveal in Finder
+    /// selects exactly what the restore wrote.
+    static func restoredItemURL(named name: String, in directory: URL) -> URL {
+        directory.appendingPathComponent(sanitizedRestoreName(name))
+    }
+
+    static func restoredItemURL(for node: SnapshotNode, in directory: URL) -> URL {
+        restoredItemURL(named: node.name, in: directory)
     }
 
     /// A snapshot node's name as a local file name to create. restic's trees

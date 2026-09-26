@@ -304,6 +304,24 @@ struct StubRestic: Sendable {
                 esac
                 exit 0
                 ;;
+            missingsource)
+                # One source folder gone (an unmounted volume, a renamed
+                # folder): restic 0.19.1 names it only in plain text on
+                # stderr, writes the snapshot of the rest and exits 3 — no
+                # message_type:error event at all. Everything else answers
+                # empty.
+                trace "missingsource-arm"
+                case " $* " in
+                    *" backup "*)
+                        echo "/src/gone does not exist, skipping" >&2
+                        echo '{"message_type":"summary","files_new":1,"files_changed":0,"files_unmodified":2,"total_files_processed":3,"total_bytes_processed":5000,"data_added":5300,"snapshot_id":"61b0f11423fd96e36f2fb2ddefdb4d41a4331adf2041828fcef2f679eaf97bfe"}'
+                        echo '{"message_type":"exit_error","code":3,"message":"Warning: at least one source file could not be read"}' >&2
+                        exit 3
+                        ;;
+                esac
+                echo "[]"
+                exit 0
+                ;;
             *)
                 # Everything the fault tests do not care about gets an empty answer.
                 trace "default-arm"
@@ -543,6 +561,84 @@ struct StubResticTests {
             outcome.decodingWarning?.contains("could not be decoded") == true && outcome.itemErrors.isEmpty,
             "the outcome's warning was \(outcome.decodingWarning ?? "nil"), its items \(outcome.itemErrors)"
         )
+    }
+
+    @Test("the runner writes the command, restic's non-progress lines and the exit code into a bound transcript")
+    func runnerFillsABoundTranscript() async throws {
+        let fixture = try makeFixture(mode: "dribble")
+        defer { cleanUp(fixture.root) }
+
+        let transcript = RunTranscript()
+        let bound = try await RunTranscript.$current.withValue(transcript) {
+            try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        }
+        let entries = transcript.contents.entries
+
+        let commands = entries.filter { $0.kind == .command }
+        #expect(commands.count == 1)
+        #expect(commands.first?.text.hasPrefix("restic ") == true, "command was \(commands.first?.text ?? "none")")
+        #expect(commands.first?.text.contains("backup --json") == true)
+        // The two progress ticks are dropped; the summary is restic's answer.
+        #expect(!entries.contains { $0.text.contains(#""message_type":"status""#) }, "entries were \(entries.map(\.text))")
+        #expect(entries.contains { $0.kind == .output(.stdout) && $0.text.contains(#""message_type":"summary""#) })
+        #expect(entries.last?.kind == .exit(0))
+        #expect(transcript.contents.firstExitCode == 0)
+
+        // Unbound, the same run behaves as before and writes nowhere.
+        let before = transcript.contents.entries.count
+        let unbound = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        #expect(transcript.contents.entries.count == before)
+        #expect(unbound.summary == bound.summary)
+        #expect(unbound.exitCode == bound.exitCode)
+    }
+
+    @Test("a failing command still leaves its words and exit code in the transcript")
+    func failingCommandLeavesItsWords() async throws {
+        let fixture = try makeFixture(mode: "plainfail")
+        defer { cleanUp(fixture.root) }
+
+        let transcript = RunTranscript()
+        do {
+            _ = try await RunTranscript.$current.withValue(transcript) {
+                try await fixture.service.backup(fixture.context, plan: fixture.plan)
+            }
+            Issue.record("expected the exit-17 run to fail")
+        } catch let ResticError.commandFailed(code, _, _) {
+            #expect(code == 17)
+        }
+        let entries = transcript.contents.entries
+        #expect(entries.contains { $0.kind == .output(.stderr) && $0.text == "Fatal: unable to open config file" },
+                "entries were \(entries.map(\.text))")
+        #expect(entries.last?.kind == .exit(17))
+        #expect(transcript.contents.firstExitCode == 17)
+    }
+
+    @Test("a cancelled command notes the stop instead of an exit code")
+    func cancelledCommandNotesTheStop() async throws {
+        let fixture = try makeFixture(mode: "hang")
+        defer { cleanUp(fixture.root) }
+
+        let transcript = RunTranscript()
+        let service = fixture.service
+        let context = fixture.context
+        let plan = fixture.plan
+        let task = Task {
+            try await RunTranscript.$current.withValue(transcript) {
+                try await service.backup(context, plan: plan)
+            }
+        }
+        #expect(
+            await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+        task.cancel()
+        _ = try? await task.value
+
+        let entries = transcript.contents.entries
+        #expect(entries.contains { $0.kind == .note && $0.text.contains("Stopped") }, "entries were \(entries.map(\.text))")
+        #expect(!entries.contains { if case .exit = $0.kind { true } else { false } })
+        // A signal's termination status is not an exit code.
+        #expect(transcript.contents.firstExitCode == nil)
     }
 
     @Test("a binary that cannot be spawned reports a launch failure")

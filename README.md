@@ -84,8 +84,10 @@ checked in so a normal build does not need it.
 - **Alerts** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
 - **restic console** — run any restic command against a repository and read its
   own output, for the things the UI does not cover.
-- **Activity** — every run recorded with its outcome, duration, bytes added and
-  the list of files restic could not read.
+- **Activity** — every run recorded with its outcome, duration, bytes added, the
+  files restic could not read, and a plain-text log of what restic printed
+  (Show Log…, Copy Details); restores record which backup, which item and where
+  it went.
 
 ## Architecture
 
@@ -259,6 +261,12 @@ not a headless SSH box.
   UI *and* stop the scheduler until the dialog is answered.
 - Hook output is treated as potentially sensitive: kept to a first line, stored
   apart from restic's warnings, and never sent to an external channel.
+- Each run's log is kept beside `config.json` in `Logs/<run-id>.log` and deleted
+  with its run record. It holds the restic command lines (which name your source
+  folders) and restic's own messages (which can name the repository's location,
+  with any password in it masked) — never the password or repository
+  credentials, which travel in the environment, and never a hook's command or
+  output.
 
 ## Locking
 

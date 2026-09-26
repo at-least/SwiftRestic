@@ -125,10 +125,12 @@ extension AppModel: MaintenanceRunEngine.Sink {
         repositoriesMissingPassword.insert(repositoryID)
     }
 
-    /// Stores a finished maintenance run, announces a failure — a check that
-    /// found errors is a failure where hooks are concerned — and notifies
-    /// the external channels.
-    func deliver(record: RunRecord, repository: Repository) async {
+    /// Stores a finished maintenance run with its log, announces a failure
+    /// — a check that found errors is a failure where hooks are concerned —
+    /// and notifies the external channels.
+    func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
+        var record = record
+        await seal(&record, transcript: transcript)
         append(record: record)
         if record.outcome == .failed {
             post(Banner(

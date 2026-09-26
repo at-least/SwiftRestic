@@ -129,6 +129,12 @@ actor ResticRunner {
     ///   diff) must not pass it: there is no back-pressure.
     /// - Throws: `ResticError.commandFailed` for a disallowed exit code, or
     ///   `ResticError.cancelled` if the surrounding task was cancelled.
+    ///
+    /// When a `RunTranscript` is bound (a run engine's service call), the
+    /// command line, every line either stream printed and the exit code are
+    /// recorded into it; a child stopped by a cancel or a cap leaves a note
+    /// instead of an exit code, because a signal's termination status is
+    /// not one.
     func run(
         binary: URL,
         invocation: ResticInvocation,
@@ -136,6 +142,10 @@ actor ResticRunner {
         onRawLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> ResticRunResult {
         let handle = UUID()
+        // Read once, here in the caller's task: the pipe readers run on GCD
+        // threads, where task-locals are not visible — they get the
+        // reference itself.
+        let transcript = RunTranscript.current
         let process = Process()
         process.executableURL = binary
         process.arguments = invocation.arguments
@@ -212,10 +222,13 @@ actor ResticRunner {
         running[handle] = box
         defer { running[handle] = nil }
 
+        transcript?.command(invocation.displayCommand)
         do {
             try process.run()
         } catch {
-            throw ResticError.processLaunchFailed(error.localizedDescription)
+            let failure = ResticError.processLaunchFailed(error.localizedDescription)
+            transcript?.note(failure.localizedDescription)
+            throw failure
         }
 
         let watchdog: Task<Void, Never>? = invocation.timeout.map { seconds in
@@ -265,6 +278,10 @@ actor ResticRunner {
             retainMessages: true,
             onActivity: activity
         )
+        // A dump's stdout goes to its file with the reader inactive, so the
+        // restored bytes never reach the transcript.
+        let stdoutLine = Self.transcriptFeed(transcript, stream: .stdout)
+        let stderrLine = Self.transcriptFeed(transcript, stream: .stderr)
 
         // The reaper: a pipe that has not reached EOF within `grandchildGrace`
         // of the child's death is being held open by an inherited copy — a
@@ -292,12 +309,14 @@ actor ResticRunner {
                 async let stderrOutcome = stderrReader.readAll(
                     decodeMessages: true,
                     onMessage: onMessage,
-                    onRawLine: onRawLine
+                    onRawLine: onRawLine,
+                    onLine: stderrLine
                 )
                 let stdoutOutcome = await stdoutReader.readAll(
                     decodeMessages: true,
                     onMessage: onMessage,
-                    onRawLine: onRawLine
+                    onRawLine: onRawLine,
+                    onLine: stdoutLine
                 )
                 let stderr = await stderrOutcome
                 let code = await exit.value()
@@ -317,24 +336,26 @@ actor ResticRunner {
             // Nothing will read this run's captured output; dropping it keeps a
             // cancelled command from squatting on memory inside the actor.
             _ = takeCaptured(handle: handle)
+            transcript?.note("Stopped: cancelled")
             throw ResticError.cancelled
         }
 
         let captured = takeCaptured(handle: handle)
 
         if box.idleTimedOut {
-            throw ResticError.idleStalled(
-                seconds: invocation.idleTimeout ?? 0,
-                command: invocation.displayCommand
-            )
+            let seconds = invocation.idleTimeout ?? 0
+            transcript?.note("Stopped: no output for \(Int(seconds)) s")
+            throw ResticError.idleStalled(seconds: seconds, command: invocation.displayCommand)
         }
 
         if box.timedOut {
-            throw ResticError.timedOut(
-                seconds: invocation.timeout ?? 0,
-                command: invocation.displayCommand
-            )
+            let seconds = invocation.timeout ?? 0
+            transcript?.note("Stopped: timed out after \(Int(seconds)) s")
+            throw ResticError.timedOut(seconds: seconds, command: invocation.displayCommand)
         }
+
+        // Before the verdict below, so a failing exit is logged too.
+        transcript?.exited(exitCode)
 
         if let allowed = invocation.allowedExitCodes, !allowed.contains(exitCode) {
             let message = captured.messages.compactMap { message -> String? in
@@ -430,6 +451,16 @@ actor ResticRunner {
         // Keep restic's own progress printer quiet; we drive progress from JSON.
         env["RESTIC_PROGRESS_FPS"] = "1"
         return env
+    }
+
+    /// A reader's line callback that records into the run's transcript, or
+    /// none when no transcript is bound.
+    private static func transcriptFeed(
+        _ transcript: RunTranscript?,
+        stream: RunTranscript.Stream
+    ) -> (@Sendable (String, ResticMessage?) -> Void)? {
+        guard let transcript else { return nil }
+        return { line, message in transcript.output(line, message: message, stream: stream) }
     }
 
     static func tail(of text: String, limit: Int) -> String {
@@ -658,10 +689,13 @@ private final class StreamReader: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// - Parameter onLine: every line with what it decoded to (nil for a
+    ///   line that is not restic JSON) — the run transcript's feed.
     func readAll(
         decodeMessages: Bool,
         onMessage: (@Sendable (ResticMessage) -> Void)?,
-        onRawLine: (@Sendable (String) -> Void)? = nil
+        onRawLine: (@Sendable (String) -> Void)? = nil,
+        onLine: (@Sendable (String, ResticMessage?) -> Void)? = nil
     ) async -> Outcome {
         guard active else { return Outcome() }
         let box = handle
@@ -678,7 +712,9 @@ private final class StreamReader: @unchecked Sendable {
                     // utf8.count, not count: grapheme counting is O(n) and this
                     // runs once per line for the whole stream.
                     if retained.utf8.count < limit { retained += line + "\n" }
-                    guard decodeMessages, let message = ResticMessageDecoder.decode(line: line) else { return }
+                    let decoded = decodeMessages ? ResticMessageDecoder.decode(line: line) : nil
+                    onLine?(line, decoded)
+                    guard let message = decoded else { return }
                     if case .malformed = message { outcome.malformedCount += 1 }
                     // Fatal errors are always kept: the runner reads them back to
                     // build the failure message when the exit code is bad.

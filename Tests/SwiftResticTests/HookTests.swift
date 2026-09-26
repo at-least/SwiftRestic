@@ -167,6 +167,35 @@ struct HookTests {
         #expect(result.outcomes.map(\.hookName) == ["first", "blocker"])
     }
 
+    @Test("a hook never writes into the run's transcript, not even its command line")
+    func hookStaysOutOfTheTranscript() async {
+        var hook = BackupHook()
+        hook.name = "token"
+        hook.command = "echo token=abc123"
+
+        let transcript = RunTranscript()
+        let outcome = await RunTranscript.$current.withValue(transcript) {
+            await HookRunner(runner: ResticRunner()).run(hook, context: context())
+        }
+        #expect(outcome.succeeded)
+        // A script's command and output can carry secrets; the run's log is
+        // copied to the clipboard on request, so neither may reach it.
+        #expect(transcript.contents.entries.isEmpty, "entries were \(transcript.contents.entries.map(\.text))")
+    }
+
+    @Test("a hook's log line carries its verdict, never its output")
+    func hookLogLine() {
+        let failed = HookRunner.Outcome(hookName: "n", exitCode: 1, output: "Authorization: Bearer x", timedOut: false)
+        #expect(failed.logLine == "Hook “n” exited 1.")
+        #expect(!failed.logLine.contains("Bearer"))
+        let succeeded = HookRunner.Outcome(hookName: "n", exitCode: 0, output: "secret", timedOut: false)
+        #expect(succeeded.logLine == "Hook “n” succeeded.")
+        let timedOut = HookRunner.Outcome(hookName: "n", exitCode: -1, output: "secret", timedOut: true)
+        #expect(timedOut.logLine == "Hook “n” timed out and was stopped.")
+        let cancelled = HookRunner.Outcome(hookName: "n", exitCode: -1, output: "", timedOut: false, cancelled: true)
+        #expect(cancelled.logLine == "Hook “n” was cancelled before it finished.")
+    }
+
     @Test("a cancelled run is not recorded as a failed hook")
     func cancelledHookIsNotAFailure() async throws {
         var hook = BackupHook()

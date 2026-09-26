@@ -1,6 +1,6 @@
 import Foundation
 
-/// The stored outcome of one backup, prune or check run.
+/// The stored outcome of one backup, check, prune or restore run.
 struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable {
         case backup, forget, check, prune, restore, initialize
@@ -65,10 +65,12 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// the decoding-gap line with them; the lines stored after the unreadable
     /// items are never counted.
     var itemErrorCount: Int = 0
-    /// restic's exit code for the `backup` command itself: 0, or 3 when some
-    /// source data could not be read — any other code throws before a record
-    /// keeps it. Nil on runs restic never finished and on records from before
-    /// this field existed.
+    /// restic's exit code for the run's own command — the `backup` (0, or 3
+    /// when some source data could not be read), else the first exit the
+    /// run's transcript saw: a failed backup's, a check's, a prune's, a
+    /// restore's. Nil when restic never reached an exit (a before-hook
+    /// abort, a launch failure, a stop by cancel or a cap) and on records
+    /// from before this field existed.
     var exitCode: Int32?
     /// Results of failing hooks.
     ///
@@ -82,6 +84,30 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// Tail of what the command printed. `prune` has no JSON output at all, so
     /// this is the only record of what it did.
     var detailText: String?
+    /// restic's `version` line when the run was stored, for Copy Details and
+    /// the log header. Nil on records from before it was kept.
+    var resticVersion: String?
+    /// Whether `Logs/<id>.log` was written for this run. False on records
+    /// from before logs existed and when the write failed, so Show Log…
+    /// can say so without a file check on the render path.
+    var hasLog: Bool = false
+
+    // Restores only. A restore's `snapshotID` is the backup it read, as the
+    // restore was asked for it — never the snapshot a run wrote, which is
+    // why the snapshot→run join filters on `kind == .backup`.
+
+    /// When the backup restored from was made, if the listing knew it.
+    var snapshotTime: Date?
+    /// The item restored, or nil for a whole backup.
+    var sourcePath: String?
+    /// Where it landed: the restored item itself (what Reveal in Finder
+    /// selects), or for a whole backup, the folder it was restored into.
+    var destinationPath: String?
+    var filesRestored: Int = 0
+    /// Files restic left as they were because the destination already held
+    /// them — all a repeat restore reports (`files_skipped`, no
+    /// `files_restored` key).
+    var filesSkipped: Int = 0
 
     init(
         kind: Kind = .backup,
@@ -120,6 +146,13 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         hookMessages = c.value(.hookMessages, default: [])
         failureMessage = c.optional(.failureMessage)
         detailText = c.optional(.detailText)
+        resticVersion = c.optional(.resticVersion)
+        hasLog = c.value(.hasLog, default: false)
+        snapshotTime = c.optional(.snapshotTime)
+        sourcePath = c.optional(.sourcePath)
+        destinationPath = c.optional(.destinationPath)
+        filesRestored = c.value(.filesRestored, default: 0)
+        filesSkipped = c.value(.filesSkipped, default: 0)
     }
 
     var duration: TimeInterval { max(0, finishedAt.timeIntervalSince(startedAt)) }

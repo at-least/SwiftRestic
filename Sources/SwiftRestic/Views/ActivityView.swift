@@ -7,6 +7,9 @@ struct ActivityView: View {
     var onOpenPlan: ((UUID) -> Void)?
     @State private var selection: RunRecord.ID?
     @State private var isConfirmingClear = false
+    /// The drawer's Compare with Previous… and Show Log… sheets.
+    @State private var comparing: SnapshotDiffTarget?
+    @State private var loggedRun: RunRecord?
     // Newest first by default: the "what happened" surface is scanned by
     // recency, and the stored history's order is neither.
     @State private var sortOrder: [KeyPathComparator<RunRecord>] = [
@@ -101,7 +104,7 @@ struct ActivityView: View {
                     .width(min: 70, ideal: 84)
 
                     TableColumn("Detail") { run in
-                        Text(detail(for: run))
+                        Text(RunRecordPresentation.detail(for: run))
                             .foregroundStyle(run.outcome == .failed ? Theme.danger : .secondary)
                             // A failure's first sentence is the one thing the
                             // user came for; never cut it at the scan surface.
@@ -121,11 +124,16 @@ struct ActivityView: View {
                 // outcome glyphs and the Detail column keep rows scannable.
                 .alternatingRowBackgrounds(.disabled)
 
-                if let selected = visibleRuns.first(where: { $0.id == selection }),
-                   !selected.itemErrors.isEmpty || !selected.hookMessages.isEmpty
-                   || selected.failureMessage != nil || selected.detailText != nil {
+                // Every selected run opens the drawer, a clean one too: the
+                // plan page's Last backup tile lands on exactly such a run.
+                if let selected = runs.first(where: { $0.id == selection }) {
                     Divider()
-                    detailPanel(selected)
+                    RunDetailPanel(
+                        run: selected,
+                        onOpenPlan: onOpenPlan,
+                        onCompare: { comparing = $0 },
+                        onShowLog: { loggedRun = $0 }
+                    )
                 }
             }
         }
@@ -161,7 +169,15 @@ struct ActivityView: View {
                 model.clearRunHistory()
             }
         } message: {
-            Text("This permanently removes all \(model.configuration.runs.count) run records. Backups and snapshots are not affected.")
+            Text("This permanently removes all \(model.configuration.runs.count) run records and their logs. Backups and snapshots are not affected.")
+        }
+        .sheet(item: $comparing) { target in
+            SnapshotDiffView(target: target)
+                .environment(model)
+        }
+        .sheet(item: $loggedRun) { run in
+            RunLogSheet(run: run)
+                .environment(model)
         }
         .task(id: router.activityShowsProblemsOnly) {
             // Arriving from the dashboard's problem rows should land with the
@@ -181,71 +197,6 @@ struct ActivityView: View {
                 selection = id
             }
         }
-    }
-
-    private func detailPanel(_ run: RunRecord) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
-                if let failure = run.failureMessage {
-                    Text(failure)
-                        .foregroundStyle(Theme.danger)
-                        .textSelection(.enabled)
-                }
-                if let detail = run.detailText {
-                    Text(detail)
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-                ForEach(Array(run.itemErrors.enumerated()), id: \.offset) { _, message in
-                    Text(message)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-                ForEach(Array(run.hookMessages.enumerated()), id: \.offset) { _, message in
-                    Label(message, systemImage: "terminal")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-                if let planID = run.planID, model.plan(id: planID) != nil {
-                    HStack(spacing: 10) {
-                        Button("Open Plan") { onOpenPlan?(planID) }
-                        if model.plan(id: planID)?.isConfigurationComplete == true {
-                            // Disabled while running or restic-less, like the
-                            // plan page's and sidebar's buttons: a clickable
-                            // button that quietly does nothing is a lie the
-                            // model's no-op guard should never have to tell.
-                            Button("Back Up Now") { model.runBackup(planID: planID) }
-                                .disabled(model.isRunning(planID: planID) || !model.isResticAvailable)
-                                .help(
-                                    model.isRunning(planID: planID)
-                                        ? "This plan's backup is already running"
-                                        : "Run this plan's backup now"
-                                )
-                        }
-                    }
-                    .controlSize(.small)
-                    .padding(.top, 2)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-        }
-        .frame(height: 150)
-    }
-
-    private func detail(for run: RunRecord) -> String {
-        if let failure = run.failureMessage { return failure }
-        if !run.itemErrors.isEmpty {
-            return Format.plural(max(run.itemErrorCount, run.itemErrors.count), "unreadable item")
-        }
-        if !run.hookMessages.isEmpty { return Format.plural(run.hookMessages.count, "hook issue") }
-        if run.kind == .backup {
-            return "\(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed"
-        }
-        return run.outcome.displayName
     }
 
     private func color(for outcome: RunRecord.Outcome) -> Color {

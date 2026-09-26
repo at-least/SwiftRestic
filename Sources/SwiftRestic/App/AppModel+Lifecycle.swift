@@ -23,6 +23,7 @@ extension AppModel {
         guard !isLoaded else { return }
         isLoaded = true
         isBootstrapping = true
+        let launchDate = Date.now
 
         do {
             let loaded = try await store.load()
@@ -71,6 +72,20 @@ extension AppModel {
         // Finder finished with those drops long ago. Not awaited: a slow
         // temp directory must not hold the first screen behind the spinner.
         Task.detached { Self.sweepDragRestoreStaging() }
+        // Logs whose records are gone — a crash between a log's write and
+        // the save that would have kept its record, a trim the quit never
+        // drained. Only from a configuration that read: an unreadable one
+        // decodes as an empty history, which would sweep every log. Only
+        // files older than this launch: a run finishing mid-sweep has
+        // written its log, not yet its record. On the background lane, so
+        // quitting waits for it.
+        if !isConfigurationUnreadable {
+            let logs = runLogs
+            let recorded = Set(configuration.runs.map(\.id))
+            tasks.addBackground(Task.detached(priority: .utility) {
+                logs.sweep(keeping: recorded, olderThan: launchDate)
+            })
+        }
         startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
         await resolveBinary()
         // The loading state covers configuration plus the binary probe: both

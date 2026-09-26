@@ -21,6 +21,12 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     /// Order of arrival across every method, for sequencing assertions.
     private var log: [String] = []
+    /// Whether a run's transcript was bound when each transcribed method
+    /// ran — the engines bind one around restic calls only.
+    private var bound: [String: Bool] = [:]
+    /// The exit code each method writes into a bound transcript, standing in
+    /// for the runner, which is what records exits for real.
+    private var exits: [String: Int32] = [:]
 
     /// All lock use lives in synchronous helpers: `NSLock` is unavailable in
     /// async contexts, and every `ResticClient` method is async.
@@ -50,11 +56,30 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return self
     }
 
+    /// Scripts the exit code `method` leaves in the run's transcript.
+    func onExit(_ method: String, _ code: Int32) -> Self {
+        locked { exits[method] = code }
+        return self
+    }
+
     private func record(_ name: String) {
         locked { log.append(name) }
     }
 
+    /// For the methods a run engine transcribes: notes whether a transcript
+    /// was bound, and writes the scripted exit into it the way the runner
+    /// would.
+    private func transcribe(_ name: String) {
+        let transcript = RunTranscript.current
+        let code = locked {
+            bound[name] = transcript != nil
+            return exits[name]
+        }
+        if let code { transcript?.exited(code) }
+    }
+
     var callLog: [String] { locked { log } }
+    var transcriptBound: [String: Bool] { locked { bound } }
 
     // MARK: - ResticClient
 
@@ -87,6 +112,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         readDataSubsetPercent: Int?
     ) async throws -> ResticSummary? {
         record("check")
+        transcribe("check")
         return try locked { checkScript }.get()
     }
 
@@ -96,6 +122,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         onRawLine: (@Sendable (String) -> Void)?
     ) async throws -> String {
         record("prune")
+        transcribe("prune")
         return try locked { pruneScript }.get()
     }
 
@@ -165,12 +192,14 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> BackupOutcome {
         record("backup")
+        transcribe("backup")
         onProgress?(OperationProgress())
         return try locked { backupScript }.get()
     }
 
     func forget(_ context: RepositoryContext, plan: BackupPlan) async throws -> Int {
         record("forget")
+        transcribe("forget")
         return try locked { forgetScript }.get()
     }
 

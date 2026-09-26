@@ -77,6 +77,17 @@ struct HookRunner: Sendable {
             let detail = firstLine.isEmpty ? "" : " — \(firstLine)"
             return "Hook “\(hookName)” exited \(exitCode)\(detail)"
         }
+
+        /// The hook's verdict for the run's log — never any of its output.
+        /// The log is what Copy Log puts on the clipboard for a forum post,
+        /// and a script's output is where a verbose HTTP client prints its
+        /// `Authorization` header.
+        var logLine: String {
+            if cancelled { return "Hook “\(hookName)” was cancelled before it finished." }
+            if timedOut { return "Hook “\(hookName)” timed out and was stopped." }
+            if exitCode == 0 { return "Hook “\(hookName)” succeeded." }
+            return "Hook “\(hookName)” exited \(exitCode)."
+        }
     }
 
     static let shell = URL(fileURLWithPath: "/bin/sh")
@@ -85,7 +96,18 @@ struct HookRunner: Sendable {
 
     /// Runs one hook to completion. Never throws for a non-zero exit: the caller
     /// decides what a failing hook means.
+    ///
+    /// Shielded from the run's transcript: the runner would otherwise record
+    /// the hook's command line and every line it printed into the run's log,
+    /// which Copy Log puts on the clipboard. The engines note the verdict
+    /// (`Outcome.logLine`) instead.
     func run(_ hook: BackupHook, context: Context) async -> Outcome {
+        await RunTranscript.$current.withValue(nil) {
+            await runUnrecorded(hook, context: context)
+        }
+    }
+
+    private func runUnrecorded(_ hook: BackupHook, context: Context) async -> Outcome {
         do {
             let result = try await runner.run(
                 binary: Self.shell,

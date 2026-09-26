@@ -137,6 +137,34 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a restored file with no known size records the bytes actually written")
+    func restoredFileWithoutSizeRecordsWrittenBytes() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // The shape the Restore pane's search hits build: the index knows a
+        // path and a kind, never a size.
+        let node = try ResticMessageDecoder.jsonDecoder.decode(
+            SnapshotNode.self,
+            from: Data(#"{"name":"a.txt","type":"file","path":"/src/a.txt"}"#.utf8)
+        )
+        #expect(node.size == nil)
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            node: node,
+            to: harness.root.appendingPathComponent("restored")
+        )
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.outcome == .succeeded)
+        // The default arm's dump writes "[]\n": three bytes landed.
+        #expect(record.bytesProcessed == 3)
+
+        await harness.model.shutdown()
+    }
+
     @Test("a failing restore is recorded and names the failure in a banner")
     func restoringFailureIsRecorded() async throws {
         let harness = try await makeHarness(mode: "plainfail")
@@ -1368,6 +1396,259 @@ struct AppModelStubTests {
 
             await harness.model.shutdown()
         }
+    }
+
+    // MARK: - Run logs
+
+    private func logsDirectory(_ harness: Harness) -> URL {
+        harness.root.appendingPathComponent("config").appendingPathComponent("Logs")
+    }
+
+    private func logText(for record: RunRecord, in harness: Harness) throws -> String {
+        try String(
+            contentsOf: logsDirectory(harness).appendingPathComponent("\(record.id.uuidString).log"),
+            encoding: .utf8
+        )
+    }
+
+    private func logNames(in directory: URL) -> Set<String> {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        return Set(names.filter { $0.hasSuffix(".log") })
+    }
+
+    @Test("a finished backup leaves its log beside the configuration")
+    func finishedBackupLeavesItsLog() async throws {
+        let harness = try await makeHarness(mode: "warn")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.hasLog)
+        #expect(record.exitCode == 3)
+        #expect(record.resticVersion == "restic 0.0.0-stub compiled with sh on darwin")
+
+        let log = try logText(for: record, in: harness)
+        #expect(log.hasPrefix("SwiftRestic"), "log began \(log.prefix(80))")
+        #expect(log.contains("$    restic backup --json"))
+        #expect(log.contains("permission denied"))
+        // The warn arm answers forget with exit 3 too: both exits are logged,
+        // and the run's own code is the backup's.
+        #expect(log.components(separatedBy: "exit 3").count - 1 == 2, "log was \(log)")
+        #expect(log.contains("$    restic forget --json"))
+        #expect(log.contains("note Retention skipped: "))
+        #expect(log.contains("Completed with errors"))
+        // The password and the repository's environment travel beside the
+        // command line, never in it.
+        #expect(!log.contains("test-password"))
+        #expect(!log.contains("stub-trace.log"))
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a log that cannot be written leaves the run recorded, with hasLog false")
+    func unwritableLogLeavesHasLogFalse() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // A plain file where the Logs folder belongs: creating the folder
+        // throws, as a full disk or a read-only volume would.
+        let logs = logsDirectory(harness)
+        try Data("not a folder".utf8).write(to: logs)
+
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .backup)
+        #expect(record.outcome == .succeeded)
+        // Show Log… reads this: a true here would offer a log that is not there.
+        #expect(record.hasLog == false)
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: logs.path, isDirectory: &isDirectory) && !isDirectory.boolValue)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a missing source folder is named in the log although restic sends no error event")
+    func missingSourceIsNamedInTheLog() async throws {
+        let harness = try await makeHarness(mode: "missingsource")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.outcome == .completedWithErrors)
+        #expect(record.itemErrors == ["/src/gone does not exist, skipping"])
+        #expect(record.exitCode == 3)
+        #expect(RunRecordPresentation.detail(for: record) == "1 unreadable item")
+        let log = try logText(for: record, in: harness)
+        #expect(log.contains("err  /src/gone does not exist, skipping"), "log was \(log)")
+        #expect(log.contains("note Retention removed 0 snapshots"))
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a restore record says which backup, which item and where it went")
+    func restoreRecordNamesItsBackupAndLanding() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let node = try ResticMessageDecoder.jsonDecoder.decode(
+            SnapshotNode.self,
+            from: Data(#"{"name":"a.txt","type":"file","path":"/src/a.txt","size":12}"#.utf8)
+        )
+        let destination = harness.root.appendingPathComponent("restored")
+        harness.model.restore(repositoryID: harness.repository.id, snapshotID: "latest", node: node, to: destination)
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .restore)
+        #expect(record.snapshotID == "latest")
+        #expect(record.sourcePath == "/src/a.txt")
+        #expect(record.destinationPath == destination.appendingPathComponent("a.txt").path)
+        #expect(record.filesRestored == 1)
+        #expect(record.filesSkipped == 0)
+        #expect(record.bytesProcessed == 12)
+        #expect(record.exitCode == 0)
+        #expect(record.hasLog)
+        let log = try logText(for: record, in: harness)
+        #expect(log.contains("$    restic dump latest /src/a.txt"), "log was \(log)")
+        #expect(log.contains("exit 0"))
+        #expect(log.contains("Restored to \(destination.appendingPathComponent("a.txt").path)"))
+        // A restore is never the run that wrote a snapshot.
+        #expect(harness.model.backupRun(forSnapshot: "latest") == nil)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a whole-backup restore records the folder it restored into")
+    func wholeRestoreRecordNamesItsTarget() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let destination = harness.root.appendingPathComponent("whole")
+        harness.model.restoreWholeSnapshot(repositoryID: harness.repository.id, snapshotID: "latest", to: destination)
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .restore)
+        #expect(record.snapshotID == "latest")
+        #expect(record.sourcePath == nil)
+        #expect(record.destinationPath == destination.path)
+        #expect(record.hasLog)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("trimming the history deletes the trimmed runs' logs")
+    func trimmedRunsLoseTheirLogs() async throws {
+        // maxRunHistory only raises the floor of 20, so 5 is still capped at 20.
+        let harness = try await makeHarness(mode: "default", maxRunHistory: 5)
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        for _ in 0 ..< 22 {
+            harness.model.runBackup(planID: harness.plan.id)
+            await harness.model.waitForRun(planID: harness.plan.id)
+        }
+        let kept = harness.model.configuration.runs
+        #expect(kept.count == 20)
+        #expect(kept.allSatisfy { $0.hasLog })
+        // Shutdown drains the background lane the removals run on.
+        await harness.model.shutdown()
+
+        #expect(logNames(in: logsDirectory(harness)) == Set(kept.map { "\($0.id.uuidString).log" }))
+    }
+
+    @Test("clearing the history deletes its logs")
+    func clearedHistoryLosesItsLogs() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        for _ in 0 ..< 2 {
+            harness.model.runBackup(planID: harness.plan.id)
+            await harness.model.waitForRun(planID: harness.plan.id)
+        }
+        #expect(logNames(in: logsDirectory(harness)).count == 2)
+        harness.model.clearRunHistory()
+        await harness.model.shutdown()
+
+        #expect(logNames(in: logsDirectory(harness)).isEmpty)
+    }
+
+    /// A configuration directory for the launch-sweep tests, bootstrapped
+    /// against the stub so nothing reaches for a real restic.
+    private func sweepFixture() throws -> (root: URL, config: URL, logs: URL, stub: StubRestic) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticLogSweep-\(UUID().uuidString)")
+            .resolvingSymlinksInPath()
+        let config = root.appendingPathComponent("config")
+        let logs = config.appendingPathComponent("Logs")
+        try FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+        return (root, config, logs, try StubRestic.install(in: root))
+    }
+
+    @Test("launch sweeps orphan logs only from a readable configuration, only old ones, only <UUID>.log")
+    func launchSweepsOrphanLogs() async throws {
+        let fixture = try sweepFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        var run = RunRecord(kind: .backup, planName: "Kept")
+        run.hasLog = true
+        var configuration = AppConfiguration()
+        configuration.runs = [run]
+        configuration.settings.resticPathOverride = fixture.stub.url.path
+        try await ConfigStore(directory: fixture.config).save(configuration)
+
+        let old = Date(timeIntervalSince1970: 1_577_836_800) // 2020-01-01
+        let known = fixture.logs.appendingPathComponent("\(run.id.uuidString).log")
+        let orphan = fixture.logs.appendingPathComponent("\(UUID().uuidString).log")
+        let fresh = fixture.logs.appendingPathComponent("\(UUID().uuidString).log")
+        let notes = fixture.logs.appendingPathComponent("notes.txt")
+        for url in [known, orphan, fresh, notes] {
+            try "log".write(to: url, atomically: true, encoding: .utf8)
+        }
+        for url in [known, orphan, notes] {
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
+        }
+        // Written after launch: a run finishing while the sweep walks.
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date.now.addingTimeInterval(3600)],
+            ofItemAtPath: fresh.path
+        )
+
+        let model = AppModel(store: ConfigStore(directory: fixture.config), secrets: .inMemory())
+        await model.bootstrap()
+        await model.shutdown()
+
+        #expect(FileManager.default.fileExists(atPath: known.path))
+        #expect(!FileManager.default.fileExists(atPath: orphan.path), "an orphan log from before launch survived")
+        #expect(FileManager.default.fileExists(atPath: fresh.path))
+        #expect(FileManager.default.fileExists(atPath: notes.path))
+    }
+
+    @Test("an unreadable configuration sweeps no logs")
+    func unreadableConfigurationSweepsNothing() async throws {
+        let fixture = try sweepFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        // No generation reads, so the history is unknown — not empty.
+        try Data("{ not json".utf8).write(to: fixture.config.appendingPathComponent("config.json"))
+        let log = fixture.logs.appendingPathComponent("\(UUID().uuidString).log")
+        try "log".write(to: log, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 1_577_836_800)],
+            ofItemAtPath: log.path
+        )
+
+        let model = AppModel(store: ConfigStore(directory: fixture.config), secrets: .inMemory())
+        await model.bootstrap()
+        await model.shutdown()
+
+        #expect(model.isConfigurationUnreadable)
+        #expect(FileManager.default.fileExists(atPath: log.path))
     }
 
     @Test("bootstrapping does not schedule a save over what it just loaded")

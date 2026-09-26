@@ -387,6 +387,66 @@ struct ResticIntegrationTests {
         #expect(outcome.itemErrors == ["\(missing) does not exist, skipping"])
     }
 
+    @Test("a missing source folder exits 3 with no error event, and only the transcript keeps restic's words")
+    func missingSourceIsTranscribed() async throws {
+        var fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        let missing = fixture.root.appendingPathComponent("gone").path
+        fixture.plan.sources = [fixture.sourceDirectory.path, missing]
+        let transcript = RunTranscript()
+        let service = fixture.service
+        let context = fixture.context
+        let plan = fixture.plan
+        let outcome = try await RunTranscript.$current.withValue(transcript) {
+            try await service.backup(context, plan: plan)
+        }
+
+        #expect(outcome.exitCode == 3)
+        let entries = transcript.contents.entries
+        #expect(entries.first?.kind == .command)
+        #expect(entries.first?.text.hasPrefix("restic backup --json") == true, "first entry was \(entries.first?.text ?? "none")")
+        #expect(entries.contains { entry in
+            if case .output = entry.kind { entry.text.contains("gone does not exist, skipping") } else { false }
+        }, "entries were \(entries.map(\.text))")
+        #expect(entries.contains { $0.kind == .exit(3) })
+    }
+
+    @Test("a repeat restore reports skipped files, not restored ones")
+    func repeatRestoreReportsSkippedFiles() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        let snapshotID = try #require(outcome.summary?.snapshotID)
+        let children = try await fixture.service.listDirectory(
+            fixture.context,
+            snapshotID: snapshotID,
+            path: fixture.sourceDirectory.path
+        )
+        let sub = try #require(children.first { $0.name == "sub" })
+        let destination = fixture.root.appendingPathComponent("restore-twice")
+
+        let first = try await fixture.service.restore(
+            fixture.context,
+            snapshotID: snapshotID,
+            node: sub,
+            destinationDirectory: destination
+        )
+        #expect(first?.filesRestored == 1)
+        // restic's default overwrite rule skips an identical file, and the
+        // summary then carries no files_restored key at all.
+        let second = try await fixture.service.restore(
+            fixture.context,
+            snapshotID: snapshotID,
+            node: sub,
+            destinationDirectory: destination
+        )
+        #expect(second?.filesRestored == nil)
+        #expect(second?.filesSkipped == 1)
+    }
+
     @Test("the default excludes keep a Git repository restorable, object store included")
     func defaultExcludesKeepGitHistory() async throws {
         var fixture = try makeFixture()

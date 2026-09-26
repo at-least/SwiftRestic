@@ -187,6 +187,46 @@ struct TolerantDecodingTests {
         #expect(roundTripped.snapshotCompleteness == .incomplete)
     }
 
+    @Test("a run record saved before logs and restore details decodes with safe defaults")
+    func runRecordLogAndRestoreFieldsDefault() throws {
+        // The demo's Sep 26 Documents record, as an earlier build wrote it.
+        let legacy = try decode(
+            RunRecord.self,
+            #"{"bytesProcessed":250000,"dataAdded":900,"filesChanged":1,"filesNew":0,"filesUnmodified":16,"finishedAt":"2026-09-25T18:00:10Z","hookMessages":[],"id":"44444444-4444-4444-8444-000000000005","itemErrorCount":0,"itemErrors":[],"kind":"backup","outcome":"succeeded","planID":"22222222-2222-4222-8222-222222222222","planName":"Documents","repositoryID":"11111111-1111-4111-8111-111111111111","snapshotID":"abf728998814d029436dc76f64e5204a4d2336134e43b921a53e52e53144137f","startedAt":"2026-09-25T18:00:00Z"}"#
+        )
+        #expect(legacy.filesChanged == 1)
+        #expect(legacy.hasLog == false)
+        #expect(legacy.exitCode == nil)
+        #expect(legacy.resticVersion == nil)
+        #expect(legacy.snapshotTime == nil)
+        #expect(legacy.sourcePath == nil)
+        #expect(legacy.destinationPath == nil)
+        #expect(legacy.filesRestored == 0)
+        #expect(legacy.filesSkipped == 0)
+
+        var restore = RunRecord(kind: .restore, planName: "Budget.numbers")
+        restore.snapshotID = "abf72899"
+        restore.hasLog = true
+        restore.exitCode = 0
+        restore.resticVersion = "restic 0.19.1 compiled with go1.26.5 on darwin/arm64"
+        restore.snapshotTime = Date(timeIntervalSince1970: 1_790_359_200)
+        restore.sourcePath = "/src/Documents/Budget.numbers"
+        restore.destinationPath = "/tmp/restored/Budget.numbers"
+        restore.filesRestored = 1
+        restore.filesSkipped = 2
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let roundTripped = try decode(RunRecord.self, String(decoding: try encoder.encode(restore), as: UTF8.self))
+        #expect(roundTripped.hasLog)
+        #expect(roundTripped.exitCode == 0)
+        #expect(roundTripped.resticVersion == restore.resticVersion)
+        #expect(roundTripped.snapshotTime == restore.snapshotTime)
+        #expect(roundTripped.sourcePath == restore.sourcePath)
+        #expect(roundTripped.destinationPath == restore.destinationPath)
+        #expect(roundTripped.filesRestored == 1)
+        #expect(roundTripped.filesSkipped == 2)
+    }
+
     @Test("an unknown enum raw value falls back to the default case, and says so")
     func unknownEnumCases() throws {
         let decoder = JSONDecoder()
