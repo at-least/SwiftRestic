@@ -173,10 +173,11 @@ struct WelcomeView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("restic is not available")
                             .font(.headline)
+                        // Not height-pinned, for BannerView's reason: this
+                        // column does not scroll.
                         Text(problem)
                             .font(.callout)
                             .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(Theme.Space.cardPadding)

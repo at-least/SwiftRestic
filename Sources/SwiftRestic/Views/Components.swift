@@ -93,11 +93,17 @@ struct BannerView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(banner.title).font(.headline)
                     if !banner.message.isEmpty {
+                        // Never fixedSize(vertical:): the split view asks its
+                        // detail column for a minimum size at zero width, where
+                        // a height-pinned message wraps to about a character
+                        // per line, and the non-scrolling hosts (Activity, the
+                        // console, the restic-missing strip) then lay out
+                        // thousands of points taller than the window and
+                        // render blank.
                         Text(banner.message)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .accessibilityElement(children: .combine)
@@ -282,11 +288,12 @@ struct ExpandableCaption: View {
                 .accessibilityLabel("More about this")
             }
             if isExpanded {
+                // Not height-pinned, for BannerView's reason: the console
+                // hosts this caption outside any scroll view.
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
