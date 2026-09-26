@@ -23,6 +23,10 @@ struct Schedule: Codable, Sendable, Hashable {
     /// 1 = Sunday, matching `Calendar.component(.weekday:)`.
     var weekday: Int = 2
 
+    /// The editor's minute field: two digits, as every summary states the
+    /// time ("Daily at 02:05") — a bare "0" beside the hour read as a count.
+    static let minuteStyle: IntegerFormatStyle<Int> = .number.grouping(.never).precision(.integerLength(2...))
+
     init() {}
 
     init(from decoder: any Decoder) throws {

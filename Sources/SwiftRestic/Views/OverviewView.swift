@@ -81,10 +81,10 @@ struct OverviewView: View {
     /// and shared with nothing — the view keeps only the hue each state
     /// wears.
     ///
-    /// No row wears a glyph, trouble included: the state line's words carry
-    /// every state and its hue carries the alarm, so scannability comes from
-    /// severity ordering and the tinted line instead of a symbol competing
-    /// for the eye.
+    /// The state line's words carry every state, and scannability comes
+    /// from severity ordering. Only an unreadable listing adds a glyph: the
+    /// warning triangle carries the alarm, since the words stay secondary —
+    /// orange caption text measured 2.05:1 on the card.
     private var protectionRows: [ProtectionRow] {
         // One pass over the plans, with the model lookups behind closures so
         // this view keeps its observation on the state the rows read.
@@ -141,11 +141,20 @@ struct OverviewView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.planName)
                     .lineLimit(1)
-                Text(row.stateText)
-                    .font(.caption)
-                    .foregroundStyle(row.stateHue)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    // Beside words that say it: decoration to VoiceOver.
+                    if row.didFail {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .imageScale(.small)
+                            .foregroundStyle(Theme.warning)
+                            .accessibilityHidden(true)
+                    }
+                    Text(row.stateText)
+                        .foregroundStyle(row.stateHue)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.caption)
             }
             Spacer(minLength: 12)
             if row.didFail, let repositoryID = row.repositoryID {
@@ -478,10 +487,9 @@ struct OverviewView: View {
 
 private extension ProtectionRow {
     /// "Not protected" is the row's real news and reads at full weight; a
-    /// pending or protected line stays quiet, and a failure keeps its
-    /// warning hue.
+    /// pending or protected line stays quiet, and so do a failure's words —
+    /// its glyph wears the warning hue.
     var stateHue: Color {
-        if didFail { return Theme.warning }
         if isKnown, !isProtected { return .primary }
         return .secondary
     }

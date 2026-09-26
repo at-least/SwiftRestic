@@ -18,6 +18,9 @@ struct RestorePaneView: View {
 
     let repositoryID: UUID
     let snapshotID: String
+    /// "Search All Backups…": the host opens Find Files on this repository
+    /// with the query filled in.
+    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     @State private var tree = FileTree(roots: [])
     /// The folder the tree is focused on — kept across record switches.
@@ -29,7 +32,8 @@ struct RestorePaneView: View {
     /// comparison whose marks are on screen.
     @State private var comparison: ChangeComparison?
     @State private var searchText = ""
-    @State private var searchHits: [SearchHit]?
+    /// The search's answer for the open backup; nil while not searching.
+    @State private var searchResult: RestorePaneSearch?
     @State private var selection: String?
     @State private var isLoadingTree = false
     @State private var loadError: String?
@@ -55,6 +59,14 @@ struct RestorePaneView: View {
     @State private var revealPath: String?
     /// The restore waiting in the destination sheet.
     @State private var destinationRequest: RestoreDestinationRequest?
+    /// The tree rows' content width, measured on the rows: a legacy
+    /// scroller takes its width out of the rows but not out of the column
+    /// header above the list, which has no other way to know it is there.
+    /// A box only the header reads, not a width of the pane's own: the
+    /// width changes on every step of a window resize, and as pane state
+    /// each step re-rendered the whole tree (a replica with 20,000 rows:
+    /// 59 pane re-renders and 190 ms per step, against none and 6 ms).
+    @State private var rowContentWidth = RowContentWidth()
 
     private var record: Snapshot? {
         model.snapshots(for: repositoryID).first { $0.id == snapshotID }
@@ -124,24 +136,36 @@ struct RestorePaneView: View {
             // Its own view, reading the run history itself: a new run
             // record re-renders the strip, never the tree below it.
             IncompleteSnapshotStrip(snapshotID: snapshotID)
+            // Filling, whatever stands in for the tree: an empty search
+            // result's ContentUnavailableView answered its own height, and
+            // the whole pane floated mid-window with bands above and below.
             browser
-                .frame(minHeight: 120)
+                .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity)
             Divider()
             footer(record: record)
         }
-        .frame(minWidth: 640)
+        // Fits the narrowest detail column the window allows: its 940-pt
+        // minimum less the sidebar at its 340-pt maximum and the split's
+        // 8 pt (SwiftResticApp.swift, SidebarView.swift). The sheet this
+        // pane grew out of asked for 640, which pushed the split view 48 pt
+        // wider than the window — measured 988 in 940, clipping Restore…
+        // and the search field. Still a minimum: it also bounds the split
+        // view's zero-width sizing query (a7a4609).
+        .frame(minWidth: 592)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Toolbar (top)
 
     /// The open backup's name and what its Change column is compared with,
-    /// then the search field. fd691ee dropped this header on the grounds that
-    /// the sidebar's selection names the record and the column speaks for
-    /// itself; neither holds. With the sidebar hidden nothing else names the
-    /// open backup — the window title is always "Restore" — and a blank
-    /// Change column can mean a first backup, no changes, a comparison still
-    /// running, or a failed one. Only this line tells them apart.
+    /// then the search field, which searches the open backup — the window
+    /// toolbar's Find Files searches every backup. fd691ee dropped this
+    /// header on the grounds that the sidebar's selection names the record
+    /// and the column speaks for itself; neither holds. With the sidebar
+    /// hidden nothing else names the open backup — the window title is
+    /// always "Restore" — and a blank Change column can mean a first backup,
+    /// no changes, a comparison still running, or a failed one. Only this
+    /// line tells them apart.
     private func toolbar(record: Snapshot?) -> some View {
         HStack(alignment: .center, spacing: 12) {
             if let record {
@@ -156,45 +180,15 @@ struct RestorePaneView: View {
                 .layoutPriority(1)
             }
             Spacer(minLength: 0)
-            searchField
+            SearchField(placeholder: "Search this backup", text: $searchText)
                 .frame(width: 230)
+                .onChange(of: searchText) { _, newValue in
+                    searchChanged(newValue)
+                }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
     }
-
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField(
-                "Search this repository's backups",
-                text: $searchText
-            )
-            .textFieldStyle(.plain)
-            if searchHits != nil {
-                Button {
-                    searchText = ""
-                    searchHits = nil
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Clear search")
-            }
-        }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .background(
-            Color.primary.opacity(0.06),
-            in: RoundedRectangle(cornerRadius: 6)
-        )
-        .onChange(of: searchText) { _, newValue in
-            searchChanged(newValue)
-        }
-    }
-
 
     // MARK: - Browser
 
@@ -209,15 +203,19 @@ struct RestorePaneView: View {
             } description: {
                 Text(loadError).textSelection(.enabled)
             }
-        } else if let hits = searchHits {
-            if hits.isEmpty {
-                ContentUnavailableView(
-                    "No matches in this backup",
-                    systemImage: "magnifyingglass",
-                    description: Text("Other backups may hold it — clear the search and pick another backup under Restore on the left.")
-                )
+        } else if let result = searchResult {
+            if result.inThisBackup.isEmpty {
+                // Not a dead end: the index knows whether other backups
+                // hold a match, and Find Files lists them with their dates.
+                ContentUnavailableView {
+                    Label("No matches in this backup", systemImage: "magnifyingglass")
+                } description: {
+                    Text(result.note ?? "No other backup matches either, as far as the search index has read.")
+                } actions: {
+                    searchAllButton
+                }
             } else {
-                searchResults(hits)
+                searchResults(result.inThisBackup)
             }
         } else if folderMissing {
             ContentUnavailableView {
@@ -229,38 +227,11 @@ struct RestorePaneView: View {
             ContentUnavailableView("Empty folder", systemImage: "folder")
         } else {
             VStack(spacing: 0) {
-                columnHeader
+                TreeColumnHeader(rowContentWidth: rowContentWidth)
                 Divider()
                 treeList
             }
         }
-    }
-
-    /// Arq's table header over the outline: the columns the rows below
-    /// carry, aligned to the same fixed gutters.
-    private var columnHeader: some View {
-        HStack(spacing: 6) {
-            // The rows' depth indent: zero wide at the top level, but still
-            // a slot the row's stack spaces.
-            Spacer().frame(width: 0)
-            Spacer().frame(width: 20)
-            Spacer().frame(width: 16)
-            Text("Item")
-            Spacer(minLength: 12)
-            Text("Change")
-                .frame(width: 56, alignment: .leading)
-            Text("Last Modified")
-                .frame(width: 140, alignment: .trailing)
-            Text("Size")
-                .frame(width: 70, alignment: .trailing)
-        }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(.secondary)
-        // The inset list's row content starts and ends 16 pt inside the
-        // pane (measured on macOS 26); at 10 the header stood 12 pt left of
-        // the names and 6 pt right of the Change words.
-        .padding(.horizontal, 16)
-        .padding(.vertical, 5)
     }
 
     private var treeList: some View {
@@ -304,6 +275,11 @@ struct RestorePaneView: View {
                         }
                         .font(.caption)
                         .frame(width: 70, alignment: .trailing)
+                }
+                // The column header copies this width (a geometry read, not a
+                // gesture: the row stays free of them, see below).
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                    if rowContentWidth.value != width { rowContentWidth.value = width }
                 }
                 // Arq's signature restore gesture: drag straight out of the tree
                 // into Finder. Tree rows only — a search hit's kind is the
@@ -399,16 +375,32 @@ struct RestorePaneView: View {
     /// for the selection on the right, the whole backup as the secondary
     /// action on the left, and the drag named in between — Arq's "Drag and
     /// drop to the desktop or a Finder window or click Restore:". The hint
-    /// shows only over the tree, the one list whose rows drag. The
-    /// keep/replace decision happens in the destination sheet, not as a
-    /// permanent caption under every browse.
+    /// shows only over the tree, the one list whose rows drag. While a
+    /// search lists hits and other backups hold more, the middle says so
+    /// instead and offers the way there — never both. The keep/replace
+    /// decision happens in the destination sheet, not as a permanent caption
+    /// under every browse.
     private func footer(record: Snapshot?) -> some View {
         HStack(spacing: 12) {
+            // Titles stay whole; the note beside them is what gives way. At
+            // the pane's 592-pt minimum the search note squeezed this title
+            // to "Restore Entire Backu…".
             Button("Restore Entire Backup…") { restoreWholeRecord() }
                 .disabled(model.isRestoring || record == nil)
                 .help("Restore everything in this backup — each folder is recreated under its full original path inside the folder you choose")
+                .fixedSize()
             Spacer(minLength: 12)
-            if treeIsShowing {
+            // An empty result says it in the empty state, button included.
+            if let result = searchResult, !result.inThisBackup.isEmpty, let note = result.note {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .help(note)
+                searchAllButton
+                    .controlSize(.small)
+                    .fixedSize()
+            } else if treeIsShowing {
                 Text("Drag an item to Finder to restore it there.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -426,7 +418,17 @@ struct RestorePaneView: View {
     /// The browser's final branch — the tree list, and nothing standing in
     /// for it (spinner, error, search results, missing folder, empty folder).
     private var treeIsShowing: Bool {
-        !isLoadingTree && loadError == nil && searchHits == nil && !folderMissing && !tree.rows.isEmpty
+        !isLoadingTree && loadError == nil && searchResult == nil && !folderMissing && !tree.rows.isEmpty
+    }
+
+    /// One title, help and guard wherever the pane offers it: Find Files
+    /// needs restic, as the toolbar's own button does.
+    private var searchAllButton: some View {
+        Button("Search All Backups…") {
+            onSearchAllBackups(repositoryID, searchText.trimmingCharacters(in: .whitespaces))
+        }
+        .disabled(!model.isResticAvailable)
+        .help("Open Find Files with this search, across every backup in this repository")
     }
 
     // MARK: - Rows
@@ -436,7 +438,7 @@ struct RestorePaneView: View {
     /// paths the selected backup contains.
     private var selectedRow: SnapshotNode? {
         guard let selection else { return nil }
-        if let hits = searchHits,
+        if let hits = searchResult?.inThisBackup,
            let hit = hits.first(where: { $0.path == selection }) {
             let name = (hit.path as NSString).lastPathComponent
             return SnapshotNode(
@@ -568,10 +570,9 @@ struct RestorePaneView: View {
     /// The selected record changed: rebuild the tree, walk the preserved
     /// folder's spine back open, and load the change annotations. Search
     /// belongs to the record it was searched in — both the hits and the
-    /// query go, or the field would sit there filtered-looking with its
-    /// clear button gone.
+    /// query go, so a record switch never shows another backup's search.
     private func loadLevel() async {
-        searchHits = nil
+        searchResult = nil
         searchText = ""
         guard let record else {
             tree = FileTree(roots: [])
@@ -706,14 +707,15 @@ struct RestorePaneView: View {
         }
     }
 
-    /// Search runs against the index (instant) and is filtered to paths the
+    /// Search runs against the index (instant) and lists the paths the
     /// selected record contains — the tree must stay honest about which
-    /// backup it is showing.
+    /// backup it is showing — while counting the matches only other backups
+    /// hold.
     private func searchChanged(_ newValue: String) {
         let query = newValue.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty, let record else {
             searchTask?.cancel()
-            searchHits = nil
+            searchResult = nil
             // Back on the tree means back on the tree: a stale load error
             // replaces the whole browser, and clearing the search is a fresh
             // look, not a still-failing one.
@@ -731,6 +733,14 @@ struct RestorePaneView: View {
             // would be the one lie a search tool cannot tell. The coverage
             // walk reads through the same index, so its failure says the
             // same thing and lands in the same catch.
+            //
+            // Whether the index has read every backup is asked before the
+            // search, not after: a backup once read stays read, so an index
+            // complete before the query has read the open backup the hits
+            // are split against. Until then the open backup itself may be
+            // unread, and its own files would look as if only other backups
+            // held them — FindFilesView and FolderBrowserView ask the same.
+            let indexIsComplete = await model.indexIsComplete(repositoryID: repositoryID)
             let hits: [SearchHit]
             let versionsByPath: [String: [IndexedSnapshot]]
             do {
@@ -744,10 +754,15 @@ struct RestorePaneView: View {
                 return
             }
             guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
-            let covered = hits.filter { hit in
-                versionsByPath[hit.path]?.contains { $0.id == searchedRecordID } == true
-            }
-            searchHits = covered
+            // The pane lists what the open backup holds; the rest is counted,
+            // not dropped — it is where "Search All Backups…" leads.
+            searchResult = RestorePaneSearch(
+                hits: hits,
+                versionsByPath: versionsByPath,
+                recordID: searchedRecordID,
+                limit: AppModel.indexSearchLimit,
+                indexIsComplete: indexIsComplete
+            )
             selection = nil
             // The index answered: a load error from an earlier failed read
             // must not sit in front of these results or behind them.
@@ -905,7 +920,10 @@ private struct IncompleteSnapshotStrip: View {
                     ? "This backup is incomplete: restic could not read \(Format.plural(unreadable, "item")) when it was made."
                     : "This backup is incomplete: restic could not read some of the source data when it was made, and did not name it.")
                     .font(.callout.weight(.medium))
-                    .fixedSize(horizontal: false, vertical: true)
+                    // Not height-pinned, for BannerView's reason: the pane
+                    // does not scroll, and a pinned text answers the split
+                    // view's zero-width sizing query a character per line.
+                    // Only the pane's minimum width kept this one safe.
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     Text(line)
                         .font(.caption)
@@ -936,5 +954,53 @@ private struct IncompleteSnapshotStrip: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.warning.opacity(0.08))
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// The tree rows' measured content width, written by the rows and read by
+/// the column header alone.
+@Observable
+@MainActor
+private final class RowContentWidth {
+    var value: CGFloat?
+}
+
+/// Arq's table header over the outline: the columns the rows below carry,
+/// aligned to the same fixed gutters. Its own view, so the rows' width —
+/// which moves with every resize step — re-renders the header, never the
+/// tree.
+private struct TreeColumnHeader: View {
+    let rowContentWidth: RowContentWidth
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // The rows' depth indent: zero wide at the top level, but still
+            // a slot the row's stack spaces.
+            Spacer().frame(width: 0)
+            Spacer().frame(width: 20)
+            Spacer().frame(width: 16)
+            Text("Item")
+            Spacer(minLength: 12)
+            Text("Change")
+                .frame(width: 56, alignment: .leading)
+            Text("Last Modified")
+                .frame(width: 140, alignment: .trailing)
+            Text("Size")
+                .frame(width: 70, alignment: .trailing)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        // No wider than the rows' content: with a legacy scroller showing,
+        // the rows narrow by its width and their trailing columns stood
+        // 17 pt left of these titles (measured on macOS 26). A cap, not a
+        // width: a fixed width held the list open at its old size when the
+        // pane narrowed, so the rows never shrank to report the new one.
+        .frame(maxWidth: rowContentWidth.value, alignment: .leading)
+        // The inset list's row content starts and ends 16 pt inside the
+        // pane (measured on macOS 26); at 10 the header stood 12 pt left of
+        // the names and 6 pt right of the Change words.
+        .padding(.horizontal, 16)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

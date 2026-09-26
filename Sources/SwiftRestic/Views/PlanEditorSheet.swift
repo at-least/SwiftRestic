@@ -241,24 +241,38 @@ struct PlanEditorSheet: View {
         .formStyle(.grouped)
     }
 
+    /// "At 02 : 05" on one line, in the 24-hour form every schedule summary
+    /// uses. The field's own "Minute" label wrapped to "Min / ute" in its
+    /// 56-pt frame beside a bare "0"; the labels now reach VoiceOver only.
     private var timeOfDayPickers: some View {
-        HStack {
-            Picker("At", selection: $draft.schedule.hour) {
-                ForEach(0 ... 23, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
+        LabeledContent("At") {
+            HStack(spacing: 4) {
+                Picker("Hour", selection: $draft.schedule.hour) {
+                    ForEach(0 ... 23, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
+                }
+                // Hidden labels still name the controls to VoiceOver; an
+                // added accessibilityLabel read "Hour, Hour".
+                .labelsHidden()
+                .fixedSize()
+                Text(verbatim: ":")
+                    .accessibilityHidden(true)
+                // Any minute, not a hidden 15-minute grid: a typed :05 or :20
+                // failed invisibly before, and "every 6 hours at :20" was
+                // inexpressible. Bordered, so "00" reads as a field and not
+                // as a label beside the popup.
+                TextField(
+                    "Minute",
+                    value: Binding(
+                        get: { draft.schedule.minute },
+                        set: { draft.schedule.minute = min(59, max(0, $0)) }
+                    ),
+                    format: Schedule.minuteStyle
+                )
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.center)
+                .frame(width: 40)
             }
-            .frame(width: 130)
-            // Any minute, not a hidden 15-minute grid: a typed :05 or :20
-            // failed invisibly before, and "every 6 hours at :20" was
-            // inexpressible.
-            TextField(
-                "Minute",
-                value: Binding(
-                    get: { draft.schedule.minute },
-                    set: { draft.schedule.minute = min(59, max(0, $0)) }
-                ),
-                format: .number.grouping(.never)
-            )
-            .frame(width: 56)
         }
     }
 

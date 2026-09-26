@@ -10,8 +10,17 @@ import SwiftUI
 /// snapshot, no network. Otherwise the search falls back to `restic find`,
 /// which walks the trees and takes as long as the history is deep.
 struct FindFilesView: View {
+    /// A search to start on arrival: the Restore pane's "Search All
+    /// Backups…" carries its repository and query here.
+    struct Prefill: Equatable, Sendable {
+        let repositoryID: UUID
+        let pattern: String
+    }
+
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+
+    private let prefill: Prefill?
 
     @State private var repositoryID: UUID?
     @State private var pattern = ""
@@ -44,6 +53,12 @@ struct FindFilesView: View {
     /// The restore waiting in the destination sheet, over this one.
     @State private var destinationRequest: RestoreDestinationRequest?
 
+    init(prefill: Prefill? = nil) {
+        self.prefill = prefill
+        _repositoryID = State(initialValue: prefill?.repositoryID)
+        _pattern = State(initialValue: prefill?.pattern ?? "")
+    }
+
     private struct Row: Identifiable {
         var id: String { "\(snapshotID)/\(match.path)" }
         var match: FindMatch
@@ -72,6 +87,8 @@ struct FindFilesView: View {
         .onAppear {
             if repositoryID == nil { repositoryID = model.configuration.repositories.first?.id }
             patternFieldIsFocused = true
+            // A handed-over search runs at once; `search` picks the engine.
+            if prefill != nil, canSearch { search() }
         }
         // The index-state check re-runs when the repository changes and
         // cancels itself when the sheet leaves — a plain `Task` here used to

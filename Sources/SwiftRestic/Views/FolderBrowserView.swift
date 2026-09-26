@@ -163,13 +163,25 @@ struct FolderBrowserView: View {
         } else if nodes.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
         } else {
+            // No gesture on the row: a SwiftUI gesture on a List row claims
+            // every click inside what it covers, so a click on a name or
+            // icon never selected the row — and with the old contentShape a
+            // click anywhere on it, leaving Restore Selected… disabled
+            // (measured with HID-level clicks on macOS 26). Double-click is
+            // the list's own primary action, as in the Restore pane.
             List(nodes, selection: $selection) { node in
                 SnapshotNodeRow(node: node)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { open(node) }
                     .tag(node.id)
             }
             .listStyle(.inset)
+            .contextMenu(forSelectionType: SnapshotNode.ID.self) { _ in
+                EmptyView()
+            } primaryAction: { ids in
+                guard ids.count == 1, let id = ids.first,
+                      let node = nodes.first(where: { $0.id == id })
+                else { return }
+                open(node)
+            }
             .onKeyPress(phases: .down) { press in
                 handleKeyPress(press)
             }
@@ -234,7 +246,18 @@ struct FolderBrowserView: View {
     // MARK: - Actions
 
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
-        BrowserListGrammar.keyPress(
+        // Return on a file is Restore Selected…, under the button's own
+        // gate: left unhandled, the list hands Return to its double-click
+        // action and the default button never sees it (the Restore pane
+        // measured this on a probe).
+        if press.key == .return,
+           press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]),
+           let node = selectedNode, !node.isDirectory {
+            guard !model.isRestoring, chosen != nil else { return .ignored }
+            restoreSelection()
+            return .handled
+        }
+        return BrowserListGrammar.keyPress(
             press,
             selected: selectedNode,
             hasParent: currentPath != nil,

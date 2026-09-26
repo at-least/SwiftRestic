@@ -16,6 +16,17 @@ struct SchedulingTests {
         return formatter.date(from: string)!
     }
 
+    @Test("the minute field shows two digits")
+    func minuteShowsTwoDigits() throws {
+        // The locale is pinned: under ar_EG the style renders 5 as '٠٥'.
+        let style = Schedule.minuteStyle.locale(Locale(identifier: "en_US"))
+        #expect(style.format(0) == "00")
+        #expect(style.format(5) == "05")
+        #expect(style.format(59) == "59")
+        #expect(try style.parseStrategy.parse("7") == 7)
+        #expect(try style.parseStrategy.parse("07") == 7)
+    }
+
     @Test("a manual plan is never due")
     func manualNeverDue() {
         var schedule = Schedule()

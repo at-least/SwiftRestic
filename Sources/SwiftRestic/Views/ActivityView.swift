@@ -78,47 +78,79 @@ struct ActivityView: View {
                     }
                     .width(24)
 
+                    // Widths: the caps on the fixed-length columns send the
+                    // spare width to Detail, the one column whose text runs
+                    // long — without them Kind, Duration and Added took it
+                    // and Detail stayed at 110 pt in the default window.
+                    // Measured on macOS 26, a table created in a window, or
+                    // narrowed to it, puts every capped column at its
+                    // minimum and the rest into Detail, while widening
+                    // shares the growth out evenly up to the caps. So each
+                    // minimum is what its column shows on arrival —
+                    // Started's is the widest timestamp, "May 31, 2026 at
+                    // 10:00 AM" (161.6 pt), Subject's holds a plan name like
+                    // "Photos Library" (88.1 pt) — and the caps decide what
+                    // widening leaves Detail: 202 pt when the default window
+                    // is regrown from the minimum one (185 beside a legacy
+                    // scroller). A row is 16 + the column widths + 6 × 17 +
+                    // 16 pt wide, and the 940-pt window with the sidebar at
+                    // its default 260 plus the split's 8 pt leaves the table
+                    // 672, so the minimums may add up to 538 (they are 536).
+                    // A legacy scroller takes 17 of those points: with one
+                    // showing, as with the sidebar dragged wider, the
+                    // minimum-size window scrolls the table 15 pt sideways —
+                    // fitting it would leave Subject or Detail too narrow.
                     TableColumn("Started", value: \.startedAt) { run in
                         Text(Format.timestamp(run.startedAt))
                             .monospacedDigit()
                     }
-                    .width(min: 150, ideal: 170)
+                    .width(min: 162, ideal: 164, max: 164)
 
                     // Check and prune runs belong to a repository, backups to
                     // a plan — the column names the subject, the Kind column
                     // names the operation.
                     TableColumn("Subject", value: \.planName) { run in
                         Text(run.planName.isEmpty ? "—" : run.planName)
+                            .help(run.planName)
                     }
+                    .width(min: 96, ideal: 112, max: 120)
 
                     TableColumn("Kind") { run in
                         Text(run.kind.rawValue.capitalized)
                     }
-                    .width(min: 66, ideal: 76)
+                    .width(min: 52, ideal: 56, max: 56)
 
                     TableColumn("Duration", value: \.duration) { run in
                         Text(Format.duration(run.duration)).monospacedDigit()
                     }
-                    .width(min: 70, ideal: 80)
+                    .width(min: 58, ideal: 64, max: 64)
 
                     TableColumn("Added", value: \.dataAdded) { run in
                         Text(run.dataAdded > 0 ? Format.bytes(run.dataAdded) : "—")
                             .monospacedDigit()
                     }
-                    .width(min: 70, ideal: 84)
+                    .width(min: 64, ideal: 68, max: 68)
 
                     TableColumn("Detail") { run in
-                        Text(RunRecordPresentation.detail(for: run))
+                        let detail = RunRecordPresentation.detail(for: run)
+                        Text(detail)
                             .foregroundStyle(run.outcome == .failed ? Theme.danger : .secondary)
-                            // A failure's first sentence is the one thing the
-                            // user came for; never cut it at the scan surface.
-                            .lineLimit(run.failureMessage != nil ? 2 : 1)
+                            // One line on every row. A second line for
+                            // failures kept its height only in rows the table
+                            // was created with: a failed run inserted while
+                            // Activity was open stayed 24 pt tall and cut its
+                            // two lines in half. The whole sentence is the
+                            // tooltip, and the drawer leads a problem run
+                            // with it.
+                            .lineLimit(1)
                             // Failure messages lead with the subject ("which
                             // repository") and end with the verdict ("why").
                             // Tail truncation removed exactly the verdict, so
-                            // a long path now sacrifices its middle instead.
+                            // a long path sacrifices its middle instead.
                             .truncationMode(run.failureMessage != nil ? .middle : .tail)
+                            .help(detail)
                     }
+                    .width(min: 80, ideal: 200)
                 }
                 // A full-height table that outlives its records paints striped
                 // phantom rows under the last one — an uncanny loading

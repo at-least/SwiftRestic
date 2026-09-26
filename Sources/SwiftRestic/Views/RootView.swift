@@ -19,6 +19,10 @@ struct RootView: View {
     @State private var editingPlan: BackupPlan?
     @State private var editingRepository: Repository?
     @State private var isShowingFind = false
+    /// What the Restore pane's "Search All Backups…" hands Find Files. Only
+    /// that button sets it; the sheet's dismissal clears it, so the toolbar,
+    /// ⇧⌘F and every other way in still open an empty search.
+    @State private var findPrefill: FindFilesView.Prefill?
     @State private var isShowingConcepts = false
     // Destructive actions armed from the sidebar context menus. The detail
     // pages confirm their own; these menus must not be a faster way around.
@@ -63,7 +67,11 @@ struct RootView: View {
             onEditRepository: { editingRepository = $0 },
             onAddRepository: { editingRepository = Repository() },
             onAddPlan: { editingPlan = BackupPlan() },
-            onRevalidateSelection: revalidateSelection
+            onRevalidateSelection: revalidateSelection,
+            onSearchAllBackups: { repositoryID, query in
+                findPrefill = FindFilesView.Prefill(repositoryID: repositoryID, pattern: query)
+                isShowingFind = true
+            }
         )
     }
 
@@ -73,7 +81,11 @@ struct RootView: View {
     /// and only after unrelated one-line edits elsewhere — the chain sat
     /// right at the limit).
     private func presented<V: View>(over content: V) -> some View {
-        content
+        // Read here, not inside the sheet's closure: read only there, the
+        // prefill set together with `isShowingFind` never reached the sheet
+        // — Find Files opened with an empty pattern (seen live).
+        let prefill = findPrefill
+        return content
         .sheet(item: $editingPlan) { plan in
             PlanEditorSheet(plan: plan)
                 .environment(model)
@@ -82,8 +94,8 @@ struct RootView: View {
             RepositoryEditorSheet(repository: repository)
                 .environment(model)
         }
-        .sheet(isPresented: $isShowingFind) {
-            FindFilesView().environment(model)
+        .sheet(isPresented: $isShowingFind, onDismiss: { findPrefill = nil }) {
+            FindFilesView(prefill: prefill).environment(model)
         }
         .sheet(isPresented: $isShowingConcepts) {
             ConceptsView()

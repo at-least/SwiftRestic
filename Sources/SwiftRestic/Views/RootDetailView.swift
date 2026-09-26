@@ -30,6 +30,8 @@ struct RootDetailView: View {
     let onAddRepository: () -> Void
     let onAddPlan: () -> Void
     let onRevalidateSelection: () -> Void
+    /// The Restore pane's "Search All Backups…": Find Files, prefilled.
+    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -90,7 +92,11 @@ struct RootDetailView: View {
                         ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
                     }
                 case let .restoreSnapshot(repositoryID, snapshotID):
-                    RestorePaneView(repositoryID: repositoryID, snapshotID: snapshotID)
+                    RestorePaneView(
+                        repositoryID: repositoryID,
+                        snapshotID: snapshotID,
+                        onSearchAllBackups: onSearchAllBackups
+                    )
                         // Folder state belongs to one repository: switching
                         // to another must not carry paths or history over —
                         // the pane's own @State resets with the identity.

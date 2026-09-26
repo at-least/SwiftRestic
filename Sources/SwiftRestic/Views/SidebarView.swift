@@ -217,10 +217,18 @@ struct SidebarView: View {
                 }
             } else if case let .failed(message) = model.snapshotListingOutcome(for: repository.id), listing.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(Format.firstSentence(message))
-                        .font(.caption)
-                        .foregroundStyle(Theme.warning)
-                        .lineLimit(2)
+                    // Orange only on the glyph, the words secondary — the
+                    // plan rows' contrast rule.
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .imageScale(.small)
+                            .foregroundStyle(Theme.warning)
+                            .accessibilityHidden(true)
+                        Text(Format.firstSentence(message))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    .font(.caption)
                     Button("Try Again") {
                         Task { await model.refreshSnapshots(repositoryID: repository.id) }
                     }
@@ -353,55 +361,98 @@ private struct PlanSidebarRow: View {
     let plan: BackupPlan
 
     var body: some View {
-        HStack(spacing: 8) {
-            // A row wears state, never identity. In rank: the in-flight
-            // spinner, the Mail dot for a failure the user has not seen, the
-            // pause mark. An otherwise idle plan wears nothing.
-            if model.isRunning(planID: plan.id) {
-                ProgressView().controlSize(.small)
-            } else if model.showsProblemDot(for: plan.id) {
-                // Accent blue like Mail's unread dot, never red: the dot is
-                // an invitation ("a failure you haven't seen"), and the alarm
-                // lives in the subtitle's words and hue. It clears when the
-                // plan's page is opened or the next run succeeds.
-                Circle()
-                    .fill(Theme.tint)
-                    .frame(width: 9, height: 9)
-                    .accessibilityLabel("A failed run you haven't seen")
-            } else if !plan.isEnabled {
-                Image(systemName: "pause.circle")
-                    .foregroundStyle(.secondary)
+        let caption = subtitle
+        HStack(spacing: 4) {
+            // A fixed leading slot on every row, marker or not, so every plan
+            // name starts at the same x — 26 + 4 = 30 pt, the title inset of
+            // the Label rows under Restore and Repositories at the default
+            // sidebar icon size (measured equal). The marker sat inline
+            // before, and a dotted Photos stood 17 pt right of an idle name.
+            // Color.clear holds the slot's width: an empty marker is an
+            // EmptyView, and EmptyView drops `.frame`.
+            ZStack {
+                Color.clear
+                marker
             }
+            .frame(width: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
                     .lineLimit(1)
-                Text(subtitle.text)
-                    .font(.caption)
-                    .foregroundStyle(subtitle.hue)
-                    .lineLimit(1)
+                HStack(spacing: 3) {
+                    // The glyph carries the severity, the words stay in the
+                    // secondary colour: orange caption text measured 2.16:1
+                    // on the light sidebar. Beside words that say it, the
+                    // glyph is decoration to VoiceOver.
+                    if let outcome = caption.outcome, let symbol = outcome.symbolName {
+                        Image(systemName: symbol)
+                            .imageScale(.small)
+                            .foregroundStyle(ChartPalette.status(outcome))
+                            .accessibilityHidden(true)
+                    }
+                    // Middle truncation: the slot narrows the column, and a
+                    // tail cut would take "ago" — when it happened. The
+                    // tooltip and VoiceOver keep the whole line.
+                    Text(caption.text)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(caption.text)
+                }
+                .font(.caption)
             }
         }
     }
 
-    // Words and hue move together, so the dot is never a state's only
-    // non-text signal.
-    private var subtitle: (text: String, hue: Color) {
+    /// A row wears state, never identity. In rank: the in-flight spinner,
+    /// the Mail dot for a problem the user has not seen, the pause mark. An
+    /// otherwise idle plan wears nothing.
+    @ViewBuilder
+    private var marker: some View {
+        if model.isRunning(planID: plan.id) {
+            ProgressView().controlSize(.small)
+        } else if let label = model.unseenProblemLabel(for: plan.id) {
+            // Accent blue like Mail's unread dot, never red: the dot is an
+            // invitation ("a problem you haven't seen"), and the alarm lives
+            // in the subtitle's glyph and words. It clears when the plan's
+            // page is opened or the next run succeeds. Its label names the
+            // outcome — a completed-with-errors run is not a failure.
+            Circle()
+                .fill(Theme.tint)
+                .frame(width: 9, height: 9)
+                .help(label)
+                .accessibilityLabel(label)
+        } else if !plan.isEnabled {
+            // The subtitle already says "Paused — …".
+            Image(systemName: "pause.circle")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
+    }
+
+    // The words name every state; a problem adds its outcome, whose glyph
+    // leads the words, so on an unpaused plan the dot is never the
+    // problem's only sign. A paused plan's words name the pause instead:
+    // there an unseen problem shows only as the dot, whose tooltip and
+    // VoiceOver label say which outcome it stands for.
+    private var subtitle: (text: String, outcome: RunRecord.Outcome?) {
         if let activity = model.activity[plan.id] {
-            return (activity.phase.displayName, .secondary)
+            return (activity.phase.displayName, nil)
         }
-        // Paused wears no icon any more; the subtitle is where the state
-        // is named.
+        // The pause glyph marks the row (unless the dot outranks it); the
+        // subtitle names the state and the schedule it holds.
         if !plan.isEnabled {
-            return ("Paused — \(plan.schedule.summary)", .secondary)
+            return ("Paused — \(plan.schedule.summary)", nil)
         }
-        // A standing failure is the row's real news, named for as long as it
-        // stands — seen or not — in the warning hue.
+        // A standing problem is the row's real news, named for as long as it
+        // stands — seen or not. The glyph carries the severity: red for a
+        // failed run (restic exit 1, no snapshot), orange for one that
+        // completed with errors (exit 3, an incomplete snapshot).
         if let problem = model.currentProblem(for: plan.id) {
-            return ("\(problem.outcome.displayName) — \(Format.relative(problem.finishedAt))", Theme.warning)
+            return ("\(problem.outcome.displayName) — \(Format.relative(problem.finishedAt))", problem.outcome)
         }
         if plan.lastSuccessAt != nil {
-            return ("Last backup \(Format.relative(plan.lastSuccessAt))", .secondary)
+            return ("Last backup \(Format.relative(plan.lastSuccessAt))", nil)
         }
-        return (plan.schedule.summary, .secondary)
+        return (plan.schedule.summary, nil)
     }
 }

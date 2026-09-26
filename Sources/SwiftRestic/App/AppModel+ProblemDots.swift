@@ -23,8 +23,22 @@ extension AppModel {
     /// stamps it seen; a later successful run heals the dot away even unseen
     /// — the next run fixed it, so there is nothing left to intervene in.
     func showsProblemDot(for planID: UUID) -> Bool {
-        guard let problem = currentProblem(for: planID) else { return false }
-        return problem.finishedAt > (problemsSeenAt[planID] ?? .distantPast)
+        unseenProblem(for: planID) != nil
+    }
+
+    /// What the dot says to VoiceOver and in its tooltip: the outcome it
+    /// stands for, since a run that completed with errors wears the same dot
+    /// as a failure. Nil when there is no dot.
+    func unseenProblemLabel(for planID: UUID) -> String? {
+        unseenProblem(for: planID).map { "\($0.outcome.displayName), not yet viewed" }
+    }
+
+    /// The standing problem behind the dot, while it is unseen.
+    private func unseenProblem(for planID: UUID) -> RunRecord? {
+        guard let problem = currentProblem(for: planID),
+              problem.finishedAt > (problemsSeenAt[planID] ?? .distantPast)
+        else { return nil }
+        return problem
     }
 
     /// Opening the plan's page is the Mail "read". A no-op when nothing is
