@@ -146,7 +146,7 @@ enum BackupRunEngine {
                     // is already safe; degrade to a warning instead of reporting
                     // the whole backup as failed.
                     record.outcome = .completedWithErrors
-                    record.itemErrors.append("Retention skipped: \(error.localizedDescription)")
+                    record.itemErrors.append(RunRecord.retentionSkippedPrefix + error.localizedDescription)
                 }
             }
 

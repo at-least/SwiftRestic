@@ -130,6 +130,19 @@ extension RunRecord {
     /// real total past it.
     static let storedItemErrorLimit = 50
 
+    /// The start of the line the backup engine stores after the unreadable
+    /// items when retention could not run behind a written snapshot. Shared
+    /// because the plan page recognises the line by it: a spelling changed
+    /// in the engine alone would silently drop the "Retention skipped" fact.
+    /// Records already in history carry these exact bytes.
+    static let retentionSkippedPrefix = "Retention skipped: "
+
+    /// What a completed-with-errors backup says when nothing more specific
+    /// explains it — restic exited 3 and named nothing. The in-app banner and
+    /// the plan page's status row both fall back to it, so the two agree
+    /// word for word.
+    static let unexplainedWarningMessage = "Finished, but restic reported problems."
+
     /// Whether the snapshot a backup wrote holds everything it was asked to.
     /// restic keeps no such fact in the snapshot itself (`snapshots --json`
     /// has no error field), so the run record is the only place it lives.

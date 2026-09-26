@@ -26,9 +26,11 @@ struct PlanDetailView: View {
         }
         .navigationTitle(plan?.name ?? "Plan")
         // Opening the page is the Mail "read": whatever failure the sidebar's
-        // dot was announcing is seen now. The dot for a run that fails while
-        // the page is already open stays, like a message arriving into the
-        // mailbox you are reading — leaving and returning clears it.
+        // dot was announcing is seen now — honestly, because the status row
+        // under the tiles shows that failure for as long as it stands. The
+        // dot for a run that fails while the page is already open stays,
+        // like a message arriving into the mailbox you are reading — leaving
+        // and returning clears it.
         .onAppear { model.markProblemSeen(planID: planID) }
         .toolbar {
             ToolbarItemGroup {
@@ -127,6 +129,78 @@ struct PlanDetailView: View {
         }
     }
 
+    /// The plan's standing problem: what went wrong, when, restic's first
+    /// words about it and the counts behind them, with the way to the full
+    /// record. No dismiss button — it lasts exactly as long as the problem,
+    /// and a retry is the toolbar's Back Up Now a few points away.
+    private struct PlanProblemRow: View {
+        let summary: PlanProblemSummary
+        var onShowInActivity: (() -> Void)?
+
+        var body: some View {
+            HStack(alignment: .top, spacing: 10) {
+                // Activity's glyph and hue for the outcome. Beside a headline
+                // that names it: decoration to VoiceOver.
+                Image(systemName: summary.outcome.symbolName ?? "exclamationmark.triangle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(ChartPalette.status(summary.outcome))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(summary.headline)
+                            .font(.headline)
+                        Text(Format.relative(summary.finishedAt))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .help(Format.timestamp(summary.finishedAt))
+                    }
+                    if let message = summary.message {
+                        // Middle truncation, as Activity's Detail column does
+                        // for failures: restic's messages lead with the
+                        // subject and end with the verdict.
+                        Text(message)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .lineLimit(3)
+                            .truncationMode(.middle)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .help(message)
+                    }
+                    if !summary.facts.isEmpty {
+                        Text(summary.facts.joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 12)
+                if let onShowInActivity {
+                    // The visible title is the accessible name, as on the
+                    // Restore pane's incomplete-backup strip: a longer label
+                    // would hide "Show in Activity" from Voice Control.
+                    Button("Show in Activity", action: onShowInActivity)
+                        .controlSize(.small)
+                        .help("Select this run in Activity to read every message it recorded")
+                }
+            }
+            .padding(Theme.Space.cardPadding)
+            .cardSurface()
+        }
+    }
+
+    /// The row's landing: Activity with the problem run selected. A problem
+    /// run shows under both of Activity's filters, so the user's filter
+    /// stays as it was — only the "Last backup" tile, which can land on a
+    /// clean run, has to clear it.
+    private func showInActivity(_ run: RunRecord) -> (() -> Void)? {
+        guard let onShowRun else { return nil }
+        return {
+            router.activityFocusRunID = run.id
+            onShowRun()
+        }
+    }
+
     @ViewBuilder
     private func content(_ plan: BackupPlan) -> some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -137,6 +211,11 @@ struct PlanDetailView: View {
             OperationStrip(planID: plan.id)
 
             summaryTiles(plan)
+            // The plan's standing problem, on the plan's own page: present
+            // exactly while the sidebar names it, gone once a run succeeds.
+            if let problem = model.currentProblem(for: plan.id) {
+                PlanProblemRow(summary: PlanStatus.summary(of: problem), onShowInActivity: showInActivity(problem))
+            }
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             configurationCard(plan)
             snapshotsCard(plan)
@@ -148,16 +227,17 @@ struct PlanDetailView: View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
         let lastRun = model.configuration.runs.first { $0.planID == plan.id }
         let outcome = model.snapshotListingOutcome(for: plan.repositoryID)
+        // The scheduler's own answer, so a paused plan reads "Paused" and one
+        // it skips never shows a date. Tile-sized on the face, full form in
+        // the tooltip: the plain timestamp truncated away its AM/PM exactly
+        // when that was the part that said morning or evening.
+        let next = PlanStatus.nextBackupTile(
+            for: plan,
+            existingRepositoryIDs: Set(model.configuration.repositories.map(\.id))
+        )
         return HStack(spacing: Theme.Space.tile) {
             lastBackupTile(plan)
-            StatTile(
-                title: "Next backup",
-                // Tile-sized on the face, full form in the tooltip: the plain
-                // timestamp truncated away its AM/PM exactly when that was
-                // the part that said morning or evening.
-                value: plan.nextRunDate.map { Format.tileTimestamp($0) } ?? "Manually",
-                help: plan.nextRunDate.map { Format.timestamp($0) }
-            )
+            StatTile(title: "Next backup", value: next.value, help: next.help)
             // A count is only a fact once the listing it derives from has
             // succeeded; before that (or after a failure) the honest face is
             // "—", with the tooltip saying which.

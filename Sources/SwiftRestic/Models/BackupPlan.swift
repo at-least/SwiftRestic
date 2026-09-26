@@ -347,9 +347,4 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         merged.lastSuccessAt = lastSuccessAt
         return merged
     }
-
-    var nextRunDate: Date? {
-        guard isEnabled else { return nil }
-        return schedule.nextRunDate(after: lastRunAt)
-    }
 }

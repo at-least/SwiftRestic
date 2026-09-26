@@ -130,7 +130,7 @@ extension AppModel: BackupRunEngine.Sink {
             let count = max(record.itemErrorCount, record.itemErrors.count)
             let message = record.itemErrors.first.map {
                 "\($0) — \(Format.plural(count, "unreadable item")) in total."
-            } ?? record.failureMessage ?? "Finished, but restic reported problems."
+            } ?? record.failureMessage ?? RunRecord.unexplainedWarningMessage
             post(Banner(title: "“\(record.planName)” finished with warnings", message: message, isError: true))
         case .failed:
             post(Banner(

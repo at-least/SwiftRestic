@@ -187,6 +187,26 @@ struct BackupRunEngineTests {
         #expect(sink.log.contains("mark:true"))
     }
 
+    @Test("a retention skip is never summarised as an unreadable item")
+    func retentionSkipIsNotAnUnreadableItem() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient()
+            .onBackup(.success(successOutcome()))
+            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget")))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        let record = try #require(sink.deliveredRecords.first)
+        let summary = PlanStatus.summary(of: record)
+        // The engine and the plan row key on the same spelling.
+        #expect(summary.message?.hasPrefix(RunRecord.retentionSkippedPrefix) == true, "message was \(String(describing: summary.message))")
+        // The message already says it; the row does not repeat it as a fact.
+        #expect(summary.facts.isEmpty, "facts were \(summary.facts)")
+        #expect(!summary.facts.contains { $0.contains("unreadable") })
+        // Standalone (Activity's Detail column builds on this), the skip is
+        // named — and still nothing is called unreadable.
+        #expect(PlanStatus.facts(for: record) == ["Retention skipped"])
+    }
+
     @Test("item errors from restic read as completed-with-errors")
     func partialReadRun() async throws {
         let sink = RecordingSink()
@@ -197,6 +217,19 @@ struct BackupRunEngineTests {
 
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
         #expect(sink.deliveredRecords[0].itemErrors == ["/etc/x: permission denied"])
+    }
+
+    @Test("restic's item errors are summarised as unreadable items")
+    func partialReadRunSummary() async throws {
+        let sink = RecordingSink()
+        let outcome = BackupOutcome(summary: nil, itemErrors: ["/etc/x: permission denied"], exitCode: 3)
+        let client = MockResticClient().onBackup(.success(outcome))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        let summary = PlanStatus.summary(of: try #require(sink.deliveredRecords.first))
+        #expect(summary.headline == "Backup completed with errors")
+        #expect(summary.message == "/etc/x: permission denied")
+        #expect(summary.facts == ["1 unreadable item"])
     }
 
     @Test("restic's exit 3 is stored, and marks the snapshot it wrote incomplete")
