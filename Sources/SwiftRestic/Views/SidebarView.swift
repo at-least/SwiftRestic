@@ -17,6 +17,11 @@ struct SidebarView: View {
     /// column: selecting a record from anywhere must find its group open.
     @Binding var expandedRestoreRepos: Set<UUID>
 
+    /// Lineage groups under Restore that the user folded shut. Groups start
+    /// open, as Arq's tree does, and a record selected from anywhere reopens
+    /// its group — the promise `expandedRestoreRepos` keeps one level up.
+    @State private var collapsedRestoreLineages: Set<RestoreLineageID> = []
+
     let onEditPlan: (BackupPlan) -> Void
     let onNewPlan: () -> Void
     let onEditRepository: (Repository) -> Void
@@ -119,6 +124,12 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         .safeAreaInset(edge: .bottom) { sidebarFooter }
+        .onChange(of: router.selection) {
+            guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
+                  let snapshot = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
+            else { return }
+            collapsedRestoreLineages.remove(RestoreLineageID(repositoryID: repositoryID, key: snapshot.lineageKey))
+        }
     }
 
     private var sidebarFooter: some View {
@@ -220,9 +231,20 @@ struct SidebarView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(listing) { snapshot in
-                    RestoreRecordRow(snapshot: snapshot)
-                        .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+                // One lineage — one plan, or a repository only one tree ever
+                // went into — stays a flat list: a group level would only
+                // repeat the repository row above it.
+                let lineages = model.lineages(for: repository.id)
+                if lineages.count > 1 {
+                    let labels = SnapshotLineage.labels(for: lineages, plans: model.configuration.plans)
+                    ForEach(lineages) { lineage in
+                        lineageGroup(lineage, label: labels[lineage.key], repositoryID: repository.id)
+                    }
+                } else {
+                    ForEach(listing) { snapshot in
+                        RestoreRecordRow(snapshot: snapshot)
+                            .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+                    }
                 }
             }
         } label: {
@@ -240,6 +262,58 @@ struct SidebarView: View {
             }
         }
     }
+
+    /// One lineage's records — Arq's backed-up-folder level, so a
+    /// repository several plans share no longer interleaves their dates, and
+    /// the row below a record is the one its Change column compares against.
+    private func lineageGroup(
+        _ lineage: SnapshotLineage,
+        label: SnapshotLineage.Label?,
+        repositoryID: UUID
+    ) -> some View {
+        let id = RestoreLineageID(repositoryID: repositoryID, key: lineage.key)
+        let caption = [Format.plural(lineage.snapshots.count, "backup"), label?.qualifier]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+        return DisclosureGroup(isExpanded: Binding(
+            get: { !collapsedRestoreLineages.contains(id) },
+            set: { opened in
+                if opened {
+                    collapsedRestoreLineages.remove(id)
+                } else {
+                    collapsedRestoreLineages.insert(id)
+                }
+            }
+        )) {
+            ForEach(lineage.snapshots) { snapshot in
+                RestoreRecordRow(snapshot: snapshot)
+                    .tag(SidebarItem.restoreSnapshot(repositoryID, snapshot.id))
+            }
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label?.title ?? "Backups")
+                        .lineLimit(1)
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            } icon: {
+                Image(systemName: "folder")
+                    .foregroundStyle(Theme.tint)
+            }
+            .help(label?.detail ?? "")
+        }
+    }
+}
+
+/// A lineage group under Restore, per repository: the same folders from the
+/// same host can live in two repositories, and each group folds on its own.
+private struct RestoreLineageID: Hashable {
+    let repositoryID: UUID
+    let key: SnapshotLineage.Key
 }
 
 /// One dated backup record in the Restore section — the row whose selection

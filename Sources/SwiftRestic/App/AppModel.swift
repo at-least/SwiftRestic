@@ -34,7 +34,22 @@ final class AppModel {
     var planProgress: [UUID: OperationProgress] = [:]
     /// Repository upkeep currently in flight, keyed by repository.
     var maintenance: [UUID: MaintenanceActivity] = [:]
-    var snapshots: [UUID: [Snapshot]] = [:]
+    var snapshots: [UUID: [Snapshot]] = [:] {
+        didSet {
+            // Array `!=` short-circuits on shared storage, so only the
+            // repository whose listing was written regroups.
+            for id in Set(oldValue.keys).union(snapshots.keys) where oldValue[id] != snapshots[id] {
+                snapshotLineages[id] = snapshots[id].map(SnapshotLineage.grouping)
+            }
+        }
+    }
+    /// `snapshots` grouped by lineage, derived once per listing write. The
+    /// sidebar's body re-runs on every selection and configuration change for
+    /// every repository, collapsed ones included, and grouping there cost
+    /// 12–18 ms per sidebar update at two repositories of ~8.7k snapshots
+    /// against ~3 ms without it (measured in a SwiftUI harness mirroring the
+    /// sidebar, 2026-09-26 — not in the running app).
+    private(set) var snapshotLineages: [UUID: [SnapshotLineage]] = [:]
     var repositoryStats: [UUID: RepositoryStats] = [:]
     var loadingSnapshots: Set<UUID> = []
     /// Refreshes that arrived while one was already in flight. Each is run

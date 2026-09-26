@@ -228,10 +228,12 @@ extension Snapshot {
     /// A repository shared by several plans, or several Macs, holds snapshots of
     /// unrelated trees side by side. Diffing against "the row above" in that list
     /// shows every file as added and every other file as removed, which is noise;
-    /// this mirrors restic's own `--group-by host,paths` grouping instead.
+    /// this mirrors restic's own `--group-by host,paths` grouping instead —
+    /// the same `SnapshotLineage` the Restore section groups records by.
     func previousComparable(in snapshots: [Snapshot]) -> Snapshot? {
-        snapshots
-            .filter { $0.id != id && $0.time < time && $0.paths == paths && $0.hostname == hostname }
+        let key = lineageKey
+        return snapshots
+            .filter { $0.id != id && $0.time < time && $0.lineageKey == key }
             .max { $0.time < $1.time }
     }
 }

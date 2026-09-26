@@ -43,13 +43,12 @@ struct RestorePaneView: View {
         model.snapshots(for: repositoryID).first { $0.id == snapshotID }
     }
 
-    /// The backup immediately before the selected one — what the Change
-    /// column compares against.
+    /// What the Change column compares against: the previous backup of the
+    /// same folders from the same host, not the row above in a repository
+    /// several plans share. Nil for a lineage's first backup, which shows no
+    /// marks rather than a diff against an unrelated tree.
     private var predecessor: Snapshot? {
-        let listing = model.snapshots(for: repositoryID)
-        guard let index = listing.firstIndex(where: { $0.id == snapshotID }) else { return nil }
-        let older = index + 1
-        return older < listing.count ? listing[older] : nil
+        SnapshotLineage.changeBaseline(for: snapshotID, in: model.snapshots(for: repositoryID))
     }
 
     var body: some View {

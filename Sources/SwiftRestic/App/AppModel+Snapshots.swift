@@ -147,6 +147,12 @@ extension AppModel {
         return snapshotsLoadedAt[repositoryID]
     }
 
+    /// The repository's snapshots grouped the way the Restore section shows
+    /// them, the lineage with the newest backup first.
+    func lineages(for repositoryID: UUID) -> [SnapshotLineage] {
+        snapshotLineages[repositoryID] ?? []
+    }
+
     func snapshots(for repositoryID: UUID?, planID: UUID? = nil) -> [Snapshot] {
         guard let repositoryID, let all = snapshots[repositoryID] else { return [] }
         guard let planID else { return all }

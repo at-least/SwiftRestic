@@ -75,9 +75,13 @@ struct SnapshotDiffView: View {
         }
         .frame(minWidth: 760, minHeight: 500)
         .onAppear {
+            // The previous backup of the same folders from the same host, or
+            // nothing: a lineage's first backup has no natural baseline, and
+            // falling back to whatever is older — usually another plan's
+            // tree — listed every file as added. The picker still reaches
+            // any snapshot on purpose.
             if olderID == nil {
                 olderID = newer.previousComparable(in: model.snapshots(for: target.repositoryID))?.id
-                    ?? candidates.first?.id
             }
         }
         .task(id: "\(olderID ?? "")|\(includeMetadata)") { await load() }
@@ -117,6 +121,11 @@ struct SnapshotDiffView: View {
 
             HStack(spacing: 8) {
                 Picker("Compared with", selection: $olderID) {
+                    // The no-baseline state needs a row of its own, or the
+                    // picker holds a selection none of its items carry.
+                    if olderID == nil {
+                        Text("Choose a snapshot").tag(String?.none)
+                    }
                     // Grouped by month: with a year of hourly snapshots the
                     // flat list was a thousand-row scroll, and a header to
                     // park the eye on is the cheapest jump a menu can offer.
@@ -133,7 +142,7 @@ struct SnapshotDiffView: View {
                 .disabled(candidates.isEmpty)
 
                 if let older = candidates.first(where: { $0.id == olderID }),
-                   older.paths != newer.paths || older.hostname != newer.hostname {
+                   older.lineageKey != newer.lineageKey {
                     Label("Different folders or host — most entries will show as added or removed", systemImage: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -152,6 +161,12 @@ struct SnapshotDiffView: View {
                 "Nothing to compare against",
                 systemImage: "clock.arrow.circlepath",
                 description: Text("This is the oldest snapshot in the repository.")
+            )
+        } else if olderID == nil {
+            ContentUnavailableView(
+                "No earlier backup of these folders",
+                systemImage: "clock.arrow.circlepath",
+                description: Text("This is the first snapshot of these folders from \(newer.hostname ?? "this host"). Choose another snapshot above to compare with it anyway.")
             )
         } else if isLoading {
             ProgressView("Comparing…")
