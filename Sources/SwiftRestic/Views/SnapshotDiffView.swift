@@ -26,13 +26,21 @@ struct SnapshotDiffView: View {
     @State private var filter: ResticDiffChange.Category?
     @State private var searchText = ""
     /// The query the filter actually applies: `searchText` as it settles —
-    /// every keystroke restarts the debounce task below, so typing a word
-    /// filters once at the end, not once per character over up to twenty
+    /// every keystroke restarts the debounce task below, and the row scan
+    /// runs under this settled value (see `computeRows`), so typing a word
+    /// scans once at the end, not once per character over up to twenty
     /// thousand changes.
     @State private var appliedSearchText = ""
     /// The diff's pre-lowercased search index, rebuilt when a diff lands —
     /// not on every keystroke it exists to serve.
     @State private var search = DiffChangeSearch(changes: [])
+    /// The change rows the category gate and settled needle admit, computed
+    /// off the render path (see `computeRows`). `nil` means no pass has
+    /// landed for the current inputs yet.
+    @State private var filteredRows: [ResticDiffChange]?
+    /// Bumped by every `installDiff`, so a new diff's rows recompute even
+    /// when its filter and needle read the same as the last one's.
+    @State private var diffLoad = 0
 
     private var newer: Snapshot { target.snapshot }
 
@@ -43,21 +51,27 @@ struct SnapshotDiffView: View {
             .sorted { $0.time > $1.time }
     }
 
+    /// One identity for the row pass's inputs: which diff, which category
+    /// gate, which settled needle. A change to any of the three is the only
+    /// thing that may re-run the scan.
+    private struct RowFilterKey: Equatable {
+        var load: Int
+        var category: ResticDiffChange.Category?
+        var needle: String
+    }
+
     var body: some View {
         // One filter+sort per render: the header and the content each need
         // the candidates, and a computed property would re-evaluate the sort
         // at every access — this sheet re-renders on every keystroke in its
-        // filter field. The same hoist covers the change list: the list
-        // renders the rows and the footer only counts them, so one filter
-        // pass feeds both.
+        // filter field.
         let candidates = self.candidates
-        let changeRows = diff.map { filteredChanges($0) }
         return VStack(spacing: 0) {
             header(candidates)
             Divider()
-            content(candidates, changeRows: changeRows)
+            content(candidates, rows: filteredRows)
             Divider()
-            footer(changeRows)
+            footer(filteredRows)
         }
         .frame(minWidth: 760, minHeight: 500)
         .onAppear {
@@ -72,6 +86,9 @@ struct SnapshotDiffView: View {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             appliedSearchText = searchText
+        }
+        .task(id: RowFilterKey(load: diffLoad, category: filter, needle: appliedSearchText)) {
+            await computeRows()
         }
     }
 
@@ -129,7 +146,7 @@ struct SnapshotDiffView: View {
     }
 
     @ViewBuilder
-    private func content(_ candidates: [Snapshot], changeRows: [ResticDiffChange]?) -> some View {
+    private func content(_ candidates: [Snapshot], rows: [ResticDiffChange]?) -> some View {
         if candidates.isEmpty {
             ContentUnavailableView(
                 "Nothing to compare against",
@@ -151,7 +168,7 @@ struct SnapshotDiffView: View {
                 Divider()
                 filters(diff)
                 Divider()
-                changeList(diff, rows: changeRows ?? [])
+                changeList(diff, rows: rows)
             }
         } else {
             Color.clear
@@ -236,43 +253,51 @@ struct SnapshotDiffView: View {
     }
 
     @ViewBuilder
-    private func changeList(_ diff: SnapshotDiff, rows: [ResticDiffChange]) -> some View {
+    private func changeList(_ diff: SnapshotDiff, rows: [ResticDiffChange]?) -> some View {
         if diff.changes.isEmpty {
             ContentUnavailableView(
                 "No differences",
                 systemImage: "equal.circle",
                 description: Text("The two snapshots contain the same files.")
             )
-        } else if rows.isEmpty {
-            ContentUnavailableView.search(text: searchText)
-        } else {
-            List(rows) { change in
-                HStack(spacing: 8) {
-                    Text(glyph(for: change))
-                        .font(.system(.body, design: .monospaced).weight(.semibold))
-                        .foregroundStyle(color(for: change.category))
-                        .frame(width: 22, alignment: .center)
-                        .help(change.explanation)
-                        // VoiceOver reads "plus"; the explanation says "added".
-                        .accessibilityLabel(change.explanation)
-                    Image(systemName: change.isDirectory ? "folder" : "doc")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16)
-                    Text(change.path)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .textSelection(.enabled)
-                    Spacer()
-                    if change.modifier.count > 1 {
-                        Text(change.modifier)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.tertiary)
+        } else if let rows {
+            if rows.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+            } else {
+                List(rows) { change in
+                    HStack(spacing: 8) {
+                        Text(glyph(for: change))
+                            .font(.system(.body, design: .monospaced).weight(.semibold))
+                            .foregroundStyle(color(for: change.category))
+                            .frame(width: 22, alignment: .center)
                             .help(change.explanation)
+                            // VoiceOver reads "plus"; the explanation says "added".
                             .accessibilityLabel(change.explanation)
+                        Image(systemName: change.isDirectory ? "folder" : "doc")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 16)
+                        Text(change.path)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                            .textSelection(.enabled)
+                        Spacer()
+                        if change.modifier.count > 1 {
+                            Text(change.modifier)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                                .help(change.explanation)
+                                .accessibilityLabel(change.explanation)
+                        }
                     }
                 }
+                .listStyle(.inset)
             }
-            .listStyle(.inset)
+        } else {
+            // The filter pass for these inputs is still in flight — a blank
+            // instant here would read as "no matches" for a query that has
+            // not answered yet.
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -298,12 +323,27 @@ struct SnapshotDiffView: View {
             : ResticDiffChange.Category.allCases.filter { $0 != .metadataOnly }
     }
 
-    /// The change rows the current kind filter and path search admit. The
-    /// scan rides the diff's pre-lowercased index (`DiffChangeSearch`), so
-    /// the cost is a contains per change, not a case-insensitive Unicode
-    /// search per path per keystroke.
-    private func filteredChanges(_ diff: SnapshotDiff) -> [ResticDiffChange] {
-        search.matches(category: filter, needle: appliedSearchText)
+    /// The change rows the current kind filter and path search admit,
+    /// computed off the render path. As a body local this pass ran on every
+    /// re-render — every keystroke re-renders the sheet, and the debounce
+    /// only settles the needle, it never gated the scan — at a cost linear
+    /// in the change list (44 ms at the 20,000-change cap, measured), all
+    /// on the main actor. Keyed by `RowFilterKey` it now runs once per
+    /// settled query in a detached task; the cancellation guard drops a
+    /// scan whose inputs were replaced mid-flight.
+    private func computeRows() async {
+        guard diff != nil else {
+            filteredRows = nil
+            return
+        }
+        let search = self.search
+        let category = filter
+        let needle = appliedSearchText
+        let rows = await Task.detached(priority: .userInitiated) {
+            search.matches(category: category, needle: needle)
+        }.value
+        guard !Task.isCancelled else { return }
+        filteredRows = rows
     }
 
     /// Files and folders separately, so the tile agrees with the list: restic
@@ -359,10 +399,15 @@ struct SnapshotDiffView: View {
     }
 
     /// Installs a load's answer, rebuilding the search index with it — the
-    /// index and the diff must never describe different change lists.
+    /// index and the diff must never describe different change lists. The
+    /// previous diff's rows retire here too: left in place they would render
+    /// against the new diff's totals until the fresh pass lands, and a
+    /// spinner for those frames is the honest state.
     private func installDiff(_ value: SnapshotDiff?) {
         diff = value
         search = DiffChangeSearch(changes: value?.changes ?? [])
+        filteredRows = nil
+        diffLoad += 1
     }
 
     private func load() async {
