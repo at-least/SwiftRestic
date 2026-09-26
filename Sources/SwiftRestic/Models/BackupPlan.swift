@@ -305,11 +305,15 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         chartIndex = c.optional(.chartIndex)
     }
 
-    /// Noise that is never worth storing, mirroring what Arq excludes by default.
+    /// Noise that is never worth storing: files the Finder, package managers
+    /// and caches regenerate on their own. Nothing here may be the only copy
+    /// of anything — `**/.git/objects` once was, and a restored Git working
+    /// copy without its object store is "not a git repository": history,
+    /// unpushed commits and stashes gone. Plans saved before its removal
+    /// keep the pattern in their own list.
     static let defaultExcludes = [
         ".DS_Store",
         "**/node_modules",
-        "**/.git/objects",
         "~/Library/Caches",
         "~/Library/Containers/*/Data/Library/Caches",
         "~/.Trash",

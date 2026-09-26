@@ -150,6 +150,15 @@ struct TolerantDecodingTests {
         return try decoder.decode(T.self, from: Data(json.utf8))
     }
 
+    @Test("no default exclude reaches into a Git repository, for new plans or ones saved without the key")
+    func defaultExcludesSpareGit() throws {
+        let decoded = try decode(BackupPlan.self, #"{"name":"Docs"}"#)
+        for patterns in [BackupPlan().excludePatterns, decoded.excludePatterns] {
+            #expect(!patterns.isEmpty, "the defaults must still apply")
+            #expect(!patterns.contains { $0.contains(".git") })
+        }
+    }
+
     @Test("an unknown enum raw value falls back to the default case, and says so")
     func unknownEnumCases() throws {
         let decoder = JSONDecoder()

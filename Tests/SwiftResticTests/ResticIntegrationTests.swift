@@ -346,6 +346,42 @@ struct ResticIntegrationTests {
         #expect(snapshots.map(\.id) == [snapshotID])
     }
 
+    @Test("the default excludes keep a Git repository restorable, object store included")
+    func defaultExcludesKeepGitHistory() async throws {
+        var fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // The shape `git init` + one commit leaves: loose objects under
+        // .git/objects are the history itself — without them a restored
+        // working copy answers every git command with "not a git repository".
+        let git = fixture.sourceDirectory.appendingPathComponent("project/.git")
+        let object = git.appendingPathComponent("objects/ab/cdef0123456789")
+        try FileManager.default.createDirectory(at: object.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "loose object".write(to: object, atomically: true, encoding: .utf8)
+        try "ref: refs/heads/main\n".write(to: git.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+        // A default that must still apply, so this test cannot pass merely
+        // because no exclude reached restic.
+        let modules = fixture.sourceDirectory.appendingPathComponent("project/node_modules/left-pad")
+        try FileManager.default.createDirectory(at: modules, withIntermediateDirectories: true)
+        try "module".write(to: modules.appendingPathComponent("index.js"), atomically: true, encoding: .utf8)
+        fixture.plan.excludePatterns = BackupPlan.defaultExcludes
+
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        let snapshotID = try #require(outcome.summary?.snapshotID)
+
+        let destination = fixture.root.appendingPathComponent("restore-all")
+        _ = try await fixture.service.restoreWholeSnapshot(
+            fixture.context,
+            snapshotID: snapshotID,
+            destinationDirectory: destination
+        )
+        let restored = { (url: URL) in destination.appendingPathComponent(url.path) }
+        #expect(FileManager.default.fileExists(atPath: restored(object).path))
+        #expect(FileManager.default.fileExists(atPath: restored(git.appendingPathComponent("HEAD")).path))
+        #expect(!FileManager.default.fileExists(atPath: restored(modules).path))
+    }
+
     @Test("check reports a healthy repository")
     func check() async throws {
         let fixture = try makeFixture()
