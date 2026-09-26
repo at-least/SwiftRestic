@@ -159,6 +159,34 @@ struct TolerantDecodingTests {
         }
     }
 
+    @Test("a run record from before the exit code was stored never claims a complete snapshot")
+    func legacyRunRecordsNeverClaimComplete() throws {
+        // Before the field existed, restic's per-item errors were the only
+        // trace of an exit 3; a record without them proves nothing either way.
+        let flagged = try decode(RunRecord.self, #"{"kind":"backup","snapshotID":"73d9b51d","itemErrorCount":1}"#)
+        #expect(flagged.exitCode == nil)
+        #expect(flagged.snapshotCompleteness == .incomplete)
+        let silent = try decode(RunRecord.self, #"{"kind":"backup","snapshotID":"abf72899","itemErrorCount":0}"#)
+        #expect(silent.snapshotCompleteness == .unknown)
+        let clean = try decode(RunRecord.self, #"{"kind":"backup","snapshotID":"abf72899","exitCode":0}"#)
+        #expect(clean.snapshotCompleteness == .complete)
+        // A restore names the snapshot it read, never the state it was
+        // written in; a backup that wrote nothing has no snapshot to judge.
+        let restore = try decode(RunRecord.self, #"{"kind":"restore","snapshotID":"abf72899","exitCode":0}"#)
+        #expect(restore.snapshotCompleteness == nil)
+        let nothing = try decode(RunRecord.self, #"{"kind":"backup","exitCode":3}"#)
+        #expect(nothing.snapshotCompleteness == nil)
+
+        var partial = RunRecord()
+        partial.snapshotID = "cafe0000"
+        partial.exitCode = 3
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let roundTripped = try decode(RunRecord.self, String(decoding: try encoder.encode(partial), as: UTF8.self))
+        #expect(roundTripped.exitCode == 3)
+        #expect(roundTripped.snapshotCompleteness == .incomplete)
+    }
+
     @Test("an unknown enum raw value falls back to the default case, and says so")
     func unknownEnumCases() throws {
         let decoder = JSONDecoder()

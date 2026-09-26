@@ -242,7 +242,7 @@ struct SidebarView: View {
                     }
                 } else {
                     ForEach(listing) { snapshot in
-                        RestoreRecordRow(snapshot: snapshot)
+                        RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
                             .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
                     }
                 }
@@ -286,7 +286,7 @@ struct SidebarView: View {
             }
         )) {
             ForEach(lineage.snapshots) { snapshot in
-                RestoreRecordRow(snapshot: snapshot)
+                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
                     .tag(SidebarItem.restoreSnapshot(repositoryID, snapshot.id))
             }
         } label: {
@@ -318,20 +318,26 @@ private struct RestoreLineageID: Hashable {
 
 /// One dated backup record in the Restore section — the row whose selection
 /// fills the detail pane with that record's files. One line, like Arq's: the
-/// checkmark and the moment are the whole record at sidebar size.
+/// completeness mark and the moment are the whole record at sidebar size.
 private struct RestoreRecordRow: View {
     let snapshot: Snapshot
+    /// The backup run that wrote it, when the history still holds one.
+    let run: RunRecord?
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Theme.success)
+            // A fixed slot, so every timestamp starts at the same x whether
+            // or not its row wears the incomplete triangle.
+            SnapshotCompletenessMark(run: run)
                 .font(.caption)
-                .help("This backup is complete and restorable")
+                .frame(width: 14)
+            // The row's help sits on the timestamp, not the HStack: a help
+            // on the HStack overwrites the mark's own ("Incomplete: …") in
+            // the accessibility tree.
             Text(Format.timestamp(snapshot.time))
                 .lineLimit(1)
+                .help("Browse this backup's files and restore from it")
         }
-        .help("Browse this backup's files and restore from it")
     }
 }
 

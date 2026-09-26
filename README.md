@@ -243,7 +243,10 @@ not a headless SSH box.
   a single-user Mac; a password-command or file-descriptor handoff would close it.
 - Grant **Full Disk Access** in System Settings › Privacy & Security. Without it
   macOS silently withholds `~/Documents`, `~/Desktop` and similar folders, and
-  restic records them as unreadable rather than failing loudly.
+  restic records them as unreadable rather than failing loudly — the run still
+  writes a snapshot, but an *incomplete* one (restic's exit code 3), which
+  SwiftRestic marks with a warning triangle under Restore and in the Snapshots
+  tables; the Restore pane lists what could not be read.
 - Keychain calls are made off the main actor. They block, and macOS can put an
   authorisation dialog in front of them; on the main actor that would freeze the
   UI *and* stop the scheduler until the dialog is answered.

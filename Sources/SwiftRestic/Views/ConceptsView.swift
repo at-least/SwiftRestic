@@ -15,7 +15,7 @@ struct ConceptsView: View {
     private let concepts: [Concept] = [
         Concept(
             term: "Snapshot",
-            definition: "One completed backup — a frozen copy of your folders at a moment in time. Snapshots are never partial: a failed run writes nothing."
+            definition: "One backup — a frozen copy of your folders at a moment in time. A failed run writes nothing, but a run that could not read some files still writes a snapshot without them: restic calls it incomplete (exit code 3), and SwiftRestic marks it with a warning triangle and lists what could not be read."
         ),
         Concept(
             term: "Repository",

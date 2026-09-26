@@ -734,6 +734,27 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a backup restic finished with exit 3 marks its snapshot incomplete, counting the one unread item")
+    func stubExitThreeMarksTheSnapshotIncomplete() async throws {
+        let harness = try await makeHarness(mode: "warn")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        // The warn arm answers `forget` with exit 3 and no JSON too, so the
+        // record also carries a "Retention skipped" line — stored after the
+        // unreadable item and never counted as one.
+        let run = try #require(harness.model.backupRun(forSnapshot: "feedface00000000"))
+        #expect(run.exitCode == 3)
+        #expect(run.snapshotCompleteness == .incomplete)
+        #expect(Format.snapshotCompleteness(run) == "Incomplete: 1 item could not be read")
+        #expect(Array(run.unreadableItems) == ["/etc/secret-target: permission denied"])
+        #expect(run.itemErrors.last?.hasPrefix("Retention skipped") == true, "lines were \(run.itemErrors)")
+
+        await harness.model.shutdown()
+    }
+
     @Test("a failed backup names the failure in a banner")
     func failedBackupNamesTheFailure() async throws {
         let harness = try await makeHarness(mode: "plainfail")

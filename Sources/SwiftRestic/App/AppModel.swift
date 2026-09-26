@@ -17,7 +17,27 @@ final class AppModel {
     // MARK: Persisted state
 
     var configuration = AppConfiguration() {
-        didSet { scheduleSave() }
+        didSet {
+            // Array `!=` short-circuits on shared storage, so an edit that
+            // leaves the history alone costs no element comparison.
+            if oldValue.runs != configuration.runs {
+                backupRunsBySnapshot = RunRecord.backupRunsBySnapshot(configuration.runs)
+            }
+            scheduleSave()
+        }
+    }
+    /// The backup run that wrote each snapshot, derived once per history
+    /// write rather than by every row that shows a snapshot (the Restore
+    /// sidebar, the Snapshots tables): 0.3 ms to build over 2,000 records
+    /// (swiftc probe, 2026-09-26). A snapshot whose run was trimmed from the
+    /// history, or never recorded here, is simply absent — unknown, never
+    /// complete.
+    private(set) var backupRunsBySnapshot: [String: RunRecord] = [:]
+
+    /// The backup run that wrote a snapshot, while the history still holds
+    /// it — the join behind the incomplete marks.
+    func backupRun(forSnapshot id: String) -> RunRecord? {
+        backupRunsBySnapshot[id]
     }
 
     // MARK: Runtime state

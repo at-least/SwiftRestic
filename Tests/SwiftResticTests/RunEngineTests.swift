@@ -198,6 +198,106 @@ struct BackupRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
         #expect(sink.deliveredRecords[0].itemErrors == ["/etc/x: permission denied"])
     }
+
+    @Test("restic's exit 3 is stored, and marks the snapshot it wrote incomplete")
+    func exitThreeRecordsAnIncompleteSnapshot() async throws {
+        let sink = RecordingSink()
+        var outcome = successOutcome()
+        outcome.itemErrors = ["/src/a.pdf: permission denied", "/src/Missing does not exist, skipping"]
+        outcome.exitCode = 3
+        let client = MockResticClient().onBackup(.success(outcome))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.exitCode == 3)
+        #expect(record.snapshotCompleteness == .incomplete)
+        #expect(record.itemErrorCount == 2)
+        #expect(Array(record.unreadableItems) == outcome.itemErrors)
+    }
+
+    @Test("warnings that leave every file in the snapshot never mark it incomplete")
+    func completeSnapshotsStayCompleteThroughWarnings() async throws {
+        // A skipped retention step: the snapshot is whole, only the forget
+        // after it failed.
+        let retention = RecordingSink()
+        await BackupRunEngine.perform(
+            plan: makePlan(),
+            repository: Repository(),
+            sink: StubServiceSink(
+                client: MockResticClient()
+                    .onBackup(.success(successOutcome()))
+                    .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget"))),
+                base: retention
+            )
+        )
+
+        // A reporting gap in restic's output: the run must never read clean,
+        // but nothing restic read was lost, so nothing is counted unreadable.
+        let decoding = RecordingSink()
+        var gap = successOutcome()
+        gap.decodingWarning = "1 restic message could not be decoded"
+        await BackupRunEngine.perform(
+            plan: makePlan(),
+            repository: Repository(),
+            sink: StubServiceSink(client: MockResticClient().onBackup(.success(gap)), base: decoding)
+        )
+
+        // A failing after-success hook: the user's script, not the snapshot.
+        let hook = RecordingSink()
+        var plan = makePlan()
+        var failing = BackupHook()
+        failing.name = "notify"
+        failing.event = .afterSuccess
+        failing.command = "exit 1"
+        plan.hooks = [failing]
+        await BackupRunEngine.perform(
+            plan: plan,
+            repository: Repository(),
+            sink: StubServiceSink(client: MockResticClient().onBackup(.success(successOutcome())), base: hook)
+        )
+
+        let retentionRecord = try #require(retention.deliveredRecords.first)
+        #expect(retentionRecord.outcome == .completedWithErrors)
+        #expect(retentionRecord.itemErrors.contains { $0.hasPrefix("Retention skipped") })
+
+        let decodingRecord = try #require(decoding.deliveredRecords.first)
+        #expect(decodingRecord.outcome == .completedWithErrors)
+        #expect(decodingRecord.itemErrors == ["1 restic message could not be decoded"])
+        #expect(decodingRecord.itemErrorCount == 0)
+
+        let hookRecord = try #require(hook.deliveredRecords.first)
+        #expect(hookRecord.outcome == .completedWithErrors)
+        #expect(!hookRecord.hookMessages.isEmpty)
+
+        for record in [retentionRecord, decodingRecord, hookRecord] {
+            #expect(record.exitCode == 0)
+            #expect(record.snapshotCompleteness == .complete, "\(record.itemErrors) \(record.hookMessages)")
+        }
+    }
+
+    @Test("the unreadable items stop before the decoding and retention lines stored after them")
+    func unreadableItemsExcludeTrailingLines() async throws {
+        let sink = RecordingSink()
+        var outcome = successOutcome()
+        outcome.itemErrors = (1 ... 60).map { "/src/file\($0).pdf: permission denied" }
+        outcome.decodingWarning = "2 restic messages could not be decoded"
+        outcome.exitCode = 3
+        let client = MockResticClient()
+            .onBackup(.success(outcome))
+            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget")))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.itemErrorCount == 60)
+        #expect(record.unreadableItems.count == RunRecord.storedItemErrorLimit)
+        #expect(record.unreadableItems.count == 50)
+        #expect(!record.unreadableItems.contains { $0.contains("Retention skipped") || $0.contains("could not be decoded") })
+        // The order the invariant promises: unreadable lines, then the
+        // decoding warning, then the retention line — last.
+        try #require(record.itemErrors.count == 52, "lines were \(record.itemErrors.suffix(3))")
+        #expect(record.itemErrors[50] == "2 restic messages could not be decoded")
+        #expect(record.itemErrors[51].hasPrefix("Retention skipped"))
+    }
 }
 
 @MainActor

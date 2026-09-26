@@ -81,12 +81,19 @@ struct OperationProgress: Sendable, Equatable {
 /// The result of one `restic backup`.
 struct BackupOutcome: Sendable {
     var summary: ResticSummary?
+    /// restic's unreadable items, one line per item — skipped sources first,
+    /// then deduplicated error events in arrival order. See
+    /// `ResticService.unreadableItems(errors:stderr:)`.
     var itemErrors: [String]
     var exitCode: Int32
+    /// A reporting gap: restic messages that failed to decode. Kept apart
+    /// from `itemErrors` because nothing restic read was lost — but the run
+    /// must not read clean either.
+    var decodingWarning: String? = nil
 
     /// Exit code 3 means restic finished but skipped files it could not read.
     var completedWithErrors: Bool {
-        exitCode == ResticError.backupPartialSuccessCode || !itemErrors.isEmpty
+        exitCode == ResticError.backupPartialSuccessCode || !itemErrors.isEmpty || decodingWarning != nil
     }
 }
 
@@ -500,22 +507,49 @@ struct ResticService: ResticClient {
             onMessage: Self.progressHandler(onProgress)
         )
 
-        var itemErrors = result.itemErrors.map { error in
-            if let item = error.item { "\(item): \(error.message)" } else { error.message }
-        }
-        if result.malformedCount > 0 {
-            // A known message that failed to decode is a reporting gap — the
-            // run's numbers may be wrong, and "wrong" must not look like
-            // "clean". One line, so the run record says so.
-            itemErrors.append(
-                "\(result.malformedCount) restic \(result.malformedCount == 1 ? "message" : "messages") could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete."
-            )
-        }
+        // A known message that failed to decode is a reporting gap — the
+        // run's numbers may be wrong, and "wrong" must not look like "clean".
+        // One line, so the run record says so; beside the unreadable items,
+        // never counted among them.
+        let decodingWarning = result.malformedCount > 0
+            ? "\(result.malformedCount) restic \(result.malformedCount == 1 ? "message" : "messages") could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete."
+            : nil
         return BackupOutcome(
             summary: result.summary,
-            itemErrors: itemErrors,
-            exitCode: result.exitCode
+            itemErrors: Self.unreadableItems(errors: result.itemErrors, stderr: result.stderr),
+            exitCode: result.exitCode,
+            decodingWarning: decodingWarning
         )
+    }
+
+    /// What a backup could not read, one line per item: the sources restic
+    /// skipped, verbatim, then its error events deduplicated by item (the
+    /// first message wins; an event without an item is keyed by its message).
+    ///
+    /// Both halves exist because restic 0.19.1 reports them differently. A
+    /// folder it cannot list arrives twice — once `during: scan`, once
+    /// `during: archival`, with the identical item — so counting events said
+    /// "5 items" for three. A missing or inaccessible source arrives as no
+    /// event at all, only plain text (`cmd_backup.go`'s filterExisting warns
+    /// "%v does not exist, skipping" / "%v cannot be accessed, skipping")
+    /// before it exits 3 — the case that drops a whole top-level folder, and
+    /// the only unreadable item restic names outside JSON. Those lines are
+    /// written before archival starts, so they always fall inside the
+    /// runner's retained head of stderr. The wording is pinned to 0.19.1 like
+    /// the rest of the decoding; a reworded restic degrades to an unnamed
+    /// exit 3, never to a complete snapshot, because the exit code alone
+    /// decides that.
+    static func unreadableItems(errors: [ResticErrorMessage], stderr: String) -> [String] {
+        var seen: Set<String> = []
+        var lines: [String] = []
+        for line in stderr.split(whereSeparator: \.isNewline).map(String.init)
+        where line.hasSuffix(" does not exist, skipping") || line.hasSuffix(" cannot be accessed, skipping") {
+            if seen.insert(line).inserted { lines.append(line) }
+        }
+        for error in errors where seen.insert(error.item ?? error.message).inserted {
+            lines.append(error.item.map { "\($0): \(error.message)" } ?? error.message)
+        }
+        return lines
     }
 
     /// Applies a plan's retention policy. Refuses to run when the policy has no

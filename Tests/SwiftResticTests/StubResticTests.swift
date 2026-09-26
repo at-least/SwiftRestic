@@ -514,9 +514,13 @@ struct StubResticTests {
         #expect(outcome.exitCode == 0)
         #expect(outcome.summary?.snapshotID == "feedface00000000")
         #expect(outcome.completedWithErrors)
+        // The gap is reported beside the unreadable items, not among them:
+        // nothing restic read was lost, so nothing is counted as unreadable.
+        // That the line still reaches the run record is pinned in
+        // BackupRunEngineTests.completeSnapshotsStayCompleteThroughWarnings.
         #expect(
-            outcome.itemErrors.contains { $0.contains("could not be decoded") },
-            "the outcome's warnings were: \(outcome.itemErrors)"
+            outcome.decodingWarning?.contains("could not be decoded") == true && outcome.itemErrors.isEmpty,
+            "the outcome's warning was \(outcome.decodingWarning ?? "nil"), its items \(outcome.itemErrors)"
         )
     }
 

@@ -418,3 +418,74 @@ struct StdoutFileDumpTests {
         #expect(partialSiblings(in: directory).isEmpty, "left behind: \(partialSiblings(in: directory))")
     }
 }
+
+/// What a backup's unreadable-item lines are built from: restic's error
+/// events plus its plain-text skipped-source warnings, one line per item.
+/// The inputs are restic 0.19.1's own output, recorded from a probe run
+/// against a throwaway repository.
+@Suite("Unreadable items")
+struct UnreadableItemsTests {
+    private func errors(_ lines: [String]) throws -> [ResticErrorMessage] {
+        try lines.map { line in
+            guard case let .error(error) = try #require(ResticMessageDecoder.decode(line: line)) else {
+                throw ResticError.malformedOutput(command: "test", detail: "not an error event: \(line)")
+            }
+            return error
+        }
+    }
+
+    @Test("a folder reported during scan and again during archival is one item")
+    func unreadableItemsDedupeScanAndArchival() throws {
+        // An unreadable file and two unreadable folders under an absolute
+        // source: five events, three items. restic names each folder once
+        // `during: scan` and once `during: archival`, with the same item.
+        let events = try errors([
+            #"{"message_type":"error","error":{"message":"openfile for readdirnames failed: open /src/deep: permission denied"},"during":"scan","item":"/src/deep"}"#,
+            #"{"message_type":"error","error":{"message":"openfile for readdirnames failed: open /src/lockeddir: permission denied"},"during":"scan","item":"/src/lockeddir"}"#,
+            #"{"message_type":"error","error":{"message":"openfile for readdirnames failed: open /src/deep: permission denied"},"during":"archival","item":"/src/deep"}"#,
+            #"{"message_type":"error","error":{"message":"open /src/locked.pdf: permission denied"},"during":"archival","item":"/src/locked.pdf"}"#,
+            #"{"message_type":"error","error":{"message":"openfile for readdirnames failed: open /src/lockeddir: permission denied"},"during":"archival","item":"/src/lockeddir"}"#,
+        ])
+        #expect(ResticService.unreadableItems(errors: events, stderr: "") == [
+            "/src/deep: openfile for readdirnames failed: open /src/deep: permission denied",
+            "/src/lockeddir: openfile for readdirnames failed: open /src/lockeddir: permission denied",
+            "/src/locked.pdf: open /src/locked.pdf: permission denied",
+        ])
+
+        // An event without an item is keyed by its message: the same words
+        // twice are one line, different words stay apart.
+        let itemless = try errors([
+            #"{"message_type":"error","error":{"message":"walk failed"}}"#,
+            #"{"message_type":"error","error":{"message":"walk failed"}}"#,
+            #"{"message_type":"error","error":{"message":"another failure"}}"#,
+        ])
+        #expect(ResticService.unreadableItems(errors: itemless, stderr: "") == ["walk failed", "another failure"])
+    }
+
+    @Test("a source restic skipped is named from its plain-text warning, ahead of the error events")
+    func unreadableItemsNameSkippedSources() throws {
+        // restic reports a missing or inaccessible source only as text on
+        // stderr, never as an error event; the exclude warning shares the
+        // ", skipping" tail but is not about an unread item.
+        let stderr = """
+        /x/does-not-exist does not exist, skipping
+        /y cannot be accessed, skipping
+        pattern "*.tmp" does not match any files, skipping
+        {"message_type":"error","error":{"message":"open /src/a.pdf: permission denied"},"during":"archival","item":"/src/a.pdf"}
+        {"message_type":"exit_error","code":3,"message":"Warning: at least one source file could not be read"}
+
+        """
+        let events = try errors([
+            #"{"message_type":"error","error":{"message":"open /src/a.pdf: permission denied"},"during":"archival","item":"/src/a.pdf"}"#,
+        ])
+        #expect(ResticService.unreadableItems(errors: events, stderr: stderr) == [
+            "/x/does-not-exist does not exist, skipping",
+            "/y cannot be accessed, skipping",
+            "/src/a.pdf: open /src/a.pdf: permission denied",
+        ])
+        #expect(ResticService.unreadableItems(errors: [], stderr: stderr) == [
+            "/x/does-not-exist does not exist, skipping",
+            "/y cannot be accessed, skipping",
+        ])
+    }
+}

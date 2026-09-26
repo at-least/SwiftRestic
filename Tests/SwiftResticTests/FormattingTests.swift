@@ -52,6 +52,27 @@ struct FormattingTests {
         #expect(Format.plural(2, "match", "matches") == "2 matches")
     }
 
+    @Test("a snapshot's completeness reads as a count of what restic could not read, or not at all")
+    func snapshotCompletenessLabels() {
+        func backup(exitCode: Int32?, unreadable: Int) -> RunRecord {
+            var record = RunRecord(kind: .backup)
+            record.snapshotID = "cafe0000"
+            record.exitCode = exitCode
+            record.itemErrorCount = unreadable
+            return record
+        }
+        #expect(Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 3)) == "Incomplete: 3 items could not be read")
+        #expect(Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 1)) == "Incomplete: 1 item could not be read")
+        #expect(
+            Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 0))
+                == "Incomplete: restic could not read some of the source data"
+        )
+        #expect(Format.snapshotCompleteness(backup(exitCode: 0, unreadable: 0)) == "Complete")
+        // No exit code and no errors: nothing is known, so nothing is said.
+        #expect(Format.snapshotCompleteness(backup(exitCode: nil, unreadable: 0)) == nil)
+        #expect(Format.snapshotCompleteness(nil) == nil)
+    }
+
     @Test("zero bytes stays numeric")
     func zeroBytes() {
         // ByteCountFormatter spells zero as "Zero KB" unless told not to; on an

@@ -558,6 +558,56 @@ struct BannerQueueTests {
     }
 }
 
+/// The snapshot → backup-run join behind the incomplete marks: derived when
+/// the run history is written, never rebuilt by the rows that read it.
+@Suite("Snapshot run lookup")
+@MainActor
+struct SnapshotRunLookupTests {
+    private func backup(_ snapshotID: String?) -> RunRecord {
+        var record = RunRecord(kind: .backup, planName: "Docs")
+        record.snapshotID = snapshotID
+        return record
+    }
+
+    @Test("the model keeps each snapshot's backup run in step with the history")
+    func modelKeepsSnapshotRunsInStep() {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticSnapshotRuns-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory()
+        )
+        model.configuration.settings.maxRunHistory = 20
+
+        let wrote = backup("s1")
+        model.append(record: wrote)
+        #expect(model.backupRun(forSnapshot: "s1")?.id == wrote.id)
+
+        // A restore that read the snapshot is not what wrote it.
+        var restore = RunRecord(kind: .restore)
+        restore.snapshotID = "s1"
+        model.append(record: restore)
+        #expect(model.backupRun(forSnapshot: "s1")?.id == wrote.id)
+
+        // Trimmed out of the history: the join forgets it rather than
+        // keeping a mark the history no longer backs.
+        for _ in 0 ..< 20 { model.append(record: backup(nil)) }
+        #expect(!model.configuration.runs.contains { $0.id == wrote.id })
+        #expect(model.backupRun(forSnapshot: "s1") == nil)
+
+        model.append(record: backup("s2"))
+        #expect(model.backupRun(forSnapshot: "s2") != nil)
+        model.clearRunHistory()
+        #expect(model.backupRun(forSnapshot: "s2") == nil)
+
+        // Any write to the history counts, not only the model's own helpers.
+        let assigned = backup("s3")
+        model.configuration.runs = [assigned]
+        #expect(model.backupRun(forSnapshot: "s3")?.id == assigned.id)
+    }
+}
+
 /// Saving an editor draft must never erase what the model wrote while the
 /// sheet was open: the run and maintenance stamps are the scheduler's and the
 /// dashboard's ground truth.

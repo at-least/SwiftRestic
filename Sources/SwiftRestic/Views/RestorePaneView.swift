@@ -89,6 +89,9 @@ struct RestorePaneView: View {
         VStack(spacing: 0) {
             toolbar
             Divider()
+            // Its own view, reading the run history itself: a new run
+            // record re-renders the strip, never the tree below it.
+            IncompleteSnapshotStrip(snapshotID: snapshotID)
             browser
             Divider()
             footer(record: record)
@@ -539,5 +542,74 @@ struct RestorePaneView: View {
             node: node,
             to: destination
         )
+    }
+}
+
+/// Shown above the tree for a backup restic wrote with exit code 3: what it
+/// could not read, in place — "is my file missing from this backup?" is
+/// answered here, not only in Activity. The first few items inline; the
+/// drawer in Activity holds every stored line, and the button lands there
+/// on the run that wrote it. Renders nothing (and no divider) otherwise.
+private struct IncompleteSnapshotStrip: View {
+    @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
+
+    let snapshotID: String
+
+    /// Enough to answer the question for the usual one or two items without
+    /// growing into a second scrolling list above the tree.
+    private static let shownItems = 3
+
+    var body: some View {
+        if let run = model.backupRun(forSnapshot: snapshotID), run.snapshotCompleteness == .incomplete {
+            strip(run)
+            Divider()
+        }
+    }
+
+    private func strip(_ run: RunRecord) -> some View {
+        let unreadable = run.itemErrorCount
+        let lines = Array(run.unreadableItems.prefix(Self.shownItems))
+        return HStack(alignment: .top, spacing: 8) {
+            // Beside words that say the same thing: decoration to VoiceOver.
+            Image(systemName: RunRecord.Outcome.completedWithErrors.symbolName ?? "exclamationmark.triangle.fill")
+                .foregroundStyle(ChartPalette.status(.completedWithErrors))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(unreadable > 0
+                    ? "This backup is incomplete: restic could not read \(Format.plural(unreadable, "item")) when it was made."
+                    : "This backup is incomplete: restic could not read some of the source data when it was made, and did not name it.")
+                    .font(.callout.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(line)
+                        .textSelection(.enabled)
+                }
+                if unreadable > lines.count, !lines.isEmpty {
+                    Text("and \(Format.count(unreadable - lines.count)) more")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            Button("Show in Activity") {
+                // A problem run, so the problems filter already shows it;
+                // the landing leaves that filter as the user set it.
+                router.activityFocusRunID = run.id
+                router.selection = .activity
+            }
+            .controlSize(.small)
+            .help("Select the run that made this backup in Activity")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.warning.opacity(0.08))
+        .accessibilityElement(children: .contain)
     }
 }

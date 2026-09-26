@@ -457,6 +457,49 @@ struct SnapshotFreshnessLabel: View {
     }
 }
 
+// MARK: - Snapshot completeness
+
+/// A snapshot's completeness, where snapshots are listed (the Restore
+/// sidebar, the Snapshots tables). Only trouble wears a glyph — the rule
+/// Activity's outcome column follows — and it is the completed-with-errors
+/// triangle, because that is what the run behind it was. A known-complete
+/// snapshot keeps an invisible "Complete" for VoiceOver; one with no run
+/// record here makes no claim at all. The caller's fixed-width slot lines
+/// neighbouring text up whether or not a glyph shows.
+///
+/// The invisible label is clear ink, not Activity's `opacity(0)`: on
+/// macOS 26 a zero-opacity Text or Image is dropped from the accessibility
+/// tree in both a List row and a Table cell, and in a sidebar row it
+/// folds into the timestamp beside it, label lost. A clear Text survives
+/// as its own static text in both (AX probe harness, 2026-09-26).
+struct SnapshotCompletenessMark: View {
+    let run: RunRecord?
+
+    private static let outcome = RunRecord.Outcome.completedWithErrors
+    private static let symbolName = outcome.symbolName ?? "exclamationmark.triangle.fill"
+
+    var body: some View {
+        switch run?.snapshotCompleteness {
+        case .incomplete?:
+            let label = Format.snapshotCompleteness(run) ?? ""
+            Image(systemName: Self.symbolName)
+                .foregroundStyle(ChartPalette.status(Self.outcome))
+                .help(label)
+                .accessibilityLabel(label)
+        case .complete?:
+            Text("Complete")
+                .foregroundStyle(.clear)
+                .lineLimit(1)
+                .accessibilityLabel("Complete")
+        case .unknown?, nil:
+            // Holds the slot — an empty branch would collapse it, and the
+            // row's text would shift left of its neighbours'.
+            Image(systemName: Self.symbolName)
+                .hidden()
+        }
+    }
+}
+
 // MARK: - Snapshot browser chrome
 
 /// The chrome the three snapshot browsers share — one icon map, one keyboard

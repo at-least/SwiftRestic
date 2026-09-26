@@ -341,6 +341,10 @@ struct PlanDetailView: View {
 /// Sortable, filterable list of snapshots with "Browse" and "Compare"
 /// affordances per row — as buttons, in a context menu, and on double-click.
 struct SnapshotTable: View {
+    /// For the completeness column's run lookup. Both hosts (the plan pane
+    /// and the repository pane's All Snapshots) sit in the main window's
+    /// environment.
+    @Environment(AppModel.self) private var model
     let snapshots: [Snapshot]
     var isLoading = false
     /// The owning repository's last settled listing outcome. Without it, a
@@ -386,7 +390,10 @@ struct SnapshotTable: View {
         // property would re-evaluate the sort at every access (the hoist
         // SnapshotDiffView documents for its own candidates).
         let visible = visibleSnapshots
-        return content(visible)
+        // Read once per render, like `visible`: every cell's lookup then
+        // hits the same dictionary.
+        let runs = model.backupRunsBySnapshot
+        return content(visible, runs: runs)
             .onChange(of: snapshots, initial: true) { _, snapshots in
                 var times: [Snapshot.ID: String] = [:]
                 times.reserveCapacity(snapshots.count)
@@ -398,7 +405,7 @@ struct SnapshotTable: View {
     }
 
     @ViewBuilder
-    private func content(_ visible: [Snapshot]) -> some View {
+    private func content(_ visible: [Snapshot], runs: [String: RunRecord]) -> some View {
         if case let .failed(message) = loadOutcome, snapshots.isEmpty {
             failureRow(message)
         } else if isLoading, snapshots.isEmpty {
@@ -441,7 +448,7 @@ struct SnapshotTable: View {
                     staleListingStrip(message)
                 }
                 filterBar(visible)
-                table(visible)
+                table(visible, runs: runs)
             }
         }
     }
@@ -472,8 +479,15 @@ struct SnapshotTable: View {
         .padding(.bottom, 6)
     }
 
-    private func table(_ visible: [Snapshot]) -> some View {
+    private func table(_ visible: [Snapshot], runs: [String: RunRecord]) -> some View {
         Table(visible, selection: $selection, sortOrder: $sortOrder) {
+                // Only an incomplete snapshot wears a glyph, the way
+                // Activity's leading outcome column only marks trouble.
+                TableColumn("") { snapshot in
+                    SnapshotCompletenessMark(run: runs[snapshot.id])
+                }
+                .width(24)
+
                 // Sortable where a person scans: when it ran, and which
                 // snapshot it is. The numeric columns stay fixed because the
                 // model's values are optional (a snapshot can lack a summary)

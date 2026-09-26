@@ -114,8 +114,15 @@ enum BackupRunEngine {
             record.filesUnmodified = outcome.summary?.filesUnmodified ?? 0
             record.bytesProcessed = outcome.summary?.totalBytesProcessed ?? 0
             record.dataAdded = outcome.summary?.dataAdded ?? 0
+            record.exitCode = outcome.exitCode
+            // The unreadable items first, then the decoding gap, then (below)
+            // any retention line — `RunRecord.unreadableItems` slices this
+            // order, and only the unreadable items are counted.
             record.itemErrorCount = outcome.itemErrors.count
-            record.itemErrors.append(contentsOf: outcome.itemErrors.prefix(50))
+            record.itemErrors.append(contentsOf: outcome.itemErrors.prefix(RunRecord.storedItemErrorLimit))
+            if let decodingWarning = outcome.decodingWarning {
+                record.itemErrors.append(decodingWarning)
+            }
             record.outcome = record.itemErrors.isEmpty && !outcome.completedWithErrors
                 ? .succeeded
                 : .completedWithErrors

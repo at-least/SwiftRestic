@@ -153,6 +153,26 @@ enum Format {
         return date.formatted(style().year().month().day().hour().minute())
     }
 
+    /// What a snapshot's mark says, as its tooltip and its VoiceOver label.
+    /// A count when restic named what it could not read — a permanently
+    /// unreadable file marks every snapshot, and the number keeps that from
+    /// reading as fresh alarm each time. Nil when nothing is known (no run
+    /// record, or one from before the exit code was stored), so the mark
+    /// makes no claim.
+    static func snapshotCompleteness(_ run: RunRecord?) -> String? {
+        switch run?.snapshotCompleteness {
+        case .incomplete?:
+            let unreadable = run?.itemErrorCount ?? 0
+            return unreadable > 0
+                ? "Incomplete: \(plural(unreadable, "item")) could not be read"
+                : "Incomplete: restic could not read some of the source data"
+        case .complete?:
+            return "Complete"
+        case .unknown?, nil:
+            return nil
+        }
+    }
+
     static func rate(bytes: Int64, over seconds: TimeInterval) -> String {
         guard seconds > 0.5, bytes > 0 else { return "—" }
         let perSecond = Int64(Double(bytes) / seconds)

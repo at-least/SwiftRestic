@@ -346,6 +346,47 @@ struct ResticIntegrationTests {
         #expect(snapshots.map(\.id) == [snapshotID])
     }
 
+    @Test("an unreadable folder is one unreadable item, though restic reports it twice")
+    func unreadableDirectoryIsOneItem() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // restic names a folder it cannot list once while scanning and again
+        // while archiving, with the identical item string — one item, two
+        // events. The folder needs a child, or there is nothing to withhold.
+        let locked = fixture.sourceDirectory.appendingPathComponent("lockeddir")
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+        try "inside".write(to: locked.appendingPathComponent("c.txt"), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
+
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+
+        #expect(outcome.exitCode == ResticError.backupPartialSuccessCode)
+        #expect(outcome.itemErrors.count == 1, "the outcome's lines were: \(outcome.itemErrors)")
+        #expect(outcome.itemErrors.first?.hasPrefix(locked.path + ":") == true)
+    }
+
+    @Test("a missing source folder is named, though restic sends no error event for it")
+    func missingSourceIsNamed() async throws {
+        var fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // An unmounted volume or a renamed folder: restic skips the source
+        // with a plain-text warning, still writes a snapshot of the rest, and
+        // exits 3 — the case that drops a whole top-level folder.
+        let missing = fixture.root.appendingPathComponent("does-not-exist").path
+        fixture.plan.sources = [fixture.sourceDirectory.path, missing]
+
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+
+        #expect(outcome.exitCode == ResticError.backupPartialSuccessCode)
+        #expect(outcome.summary?.snapshotID != nil, "a skipped source must still leave a snapshot of the rest")
+        #expect(outcome.itemErrors == ["\(missing) does not exist, skipping"])
+    }
+
     @Test("the default excludes keep a Git repository restorable, object store included")
     func defaultExcludesKeepGitHistory() async throws {
         var fixture = try makeFixture()
