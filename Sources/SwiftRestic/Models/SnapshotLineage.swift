@@ -128,6 +128,20 @@ extension SnapshotLineage {
         return labels
     }
 
+    /// The one way a backup is named outside the sidebar's group rows — the
+    /// restore pane's header and any prompt that says which backup it acts
+    /// on: its lineage's title, qualified exactly as the sidebar qualifies
+    /// the group, so the two never disagree.
+    static func displayName(of record: Snapshot, label: Label?) -> String {
+        if let label {
+            return [label.title, label.qualifier].compactMap { $0 }.joined(separator: " · ")
+        }
+        // Only reachable while the lineages lag the listing, which the
+        // model's didSet rules out; the folders still say which backup.
+        let folders = record.paths.map { ($0 as NSString).lastPathComponent }
+        return folders.isEmpty ? "Backup" : folders.joined(separator: ", ")
+    }
+
     private static func title(of lineage: SnapshotLineage, plans: [BackupPlan]) -> String {
         if let plan = soleWriter(of: lineage, plans: plans), !plan.name.isEmpty {
             return plan.name

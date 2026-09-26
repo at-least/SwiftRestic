@@ -157,4 +157,88 @@ struct SnapshotLineageTests {
         #expect(hosts[laptop.lineageKey]?.qualifier == "laptop · /Data/Work")
         #expect(hosts[home.lineageKey]?.qualifier == "mac · /Data/Work")
     }
+
+    @Test("the restore header names the open backup the way the sidebar names its group")
+    @MainActor
+    func restoreHeaderName() throws {
+        // Named apart from its folder, so the plan's name — what the sidebar
+        // shows — is told apart from the folder the backup holds.
+        var documentsPlan = BackupPlan()
+        documentsPlan.name = "Paperwork"
+        let docs = try snapshot("d1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Documents"],
+                                tags: [ResticService.planTag(documentsPlan.id)])
+        let docsLabels = SnapshotLineage.labels(for: SnapshotLineage.grouping([docs]), plans: [documentsPlan])
+        let heading = RestoreRecordHeading(record: docs, label: docsLabels[docs.lineageKey], comparison: nil)
+        #expect(heading.name == "Paperwork")
+        #expect(SnapshotLineage.displayName(of: docs, label: docsLabels[docs.lineageKey]) == "Paperwork")
+        // Computed, not a literal: the day reads the same in any locale or zone.
+        #expect(heading.time == Format.timestamp(docs.time))
+
+        // The `qualifiers` fixture: a plan whose folders changed. The older
+        // lineage wears the qualifier the sidebar gives its group.
+        var work = BackupPlan()
+        work.name = "Work"
+        let tag = ResticService.planTag(work.id)
+        let before = try snapshot("w1", time: "2026-09-20T02:00:00Z", paths: ["/Data/Work"], tags: [tag])
+        let after = try snapshot("w2", time: "2026-09-26T02:00:00Z", paths: ["/Data/Clients", "/Data/Work"], tags: [tag])
+        let workLabels = SnapshotLineage.labels(for: SnapshotLineage.grouping([before, after]), plans: [work])
+        #expect(RestoreRecordHeading(record: before, label: workLabels[before.lineageKey], comparison: .firstBackup).name
+            == "Work · /Data/Work")
+        // The one rule later restore surfaces reuse, not a second lookup.
+        #expect(SnapshotLineage.displayName(of: before, label: workLabels[before.lineageKey]) == "Work · /Data/Work")
+
+        // No label: the folders still say which backup.
+        #expect(RestoreRecordHeading(record: after, label: nil, comparison: nil).name == "Clients, Work")
+        #expect(SnapshotLineage.displayName(of: after, label: nil) == "Clients, Work")
+
+        // The model's lookup reads the same lineages and plans the sidebar does.
+        let model = AppModel(
+            store: ConfigStore(directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("SwiftResticHeading-\(UUID().uuidString)")),
+            secrets: .inMemory()
+        )
+        let repositoryID = UUID()
+        model.configuration.plans = [work]
+        model.snapshots[repositoryID] = [after, before]
+        #expect(model.lineageLabel(of: before, repositoryID: repositoryID) == workLabels[before.lineageKey])
+        #expect(model.lineageLabel(of: docs, repositoryID: repositoryID) == nil)
+    }
+
+    @Test("the restore header says what the Change column compares against, and why it is blank")
+    func restoreHeaderCaption() throws {
+        let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/Data/Documents"])
+        let record = try snapshot("abf72899aaaaaaaa", time: "2026-09-26T02:00:00Z", paths: ["/Data/Documents"])
+        let since = Format.timestamp(baseline.time)
+        func heading(_ comparison: ChangeComparison?) -> RestoreRecordHeading {
+            RestoreRecordHeading(record: record, label: nil, comparison: comparison)
+        }
+
+        #expect(heading(nil).caption == "abf72899")
+        #expect(heading(.firstBackup).caption == "abf72899 · No earlier backup of these folders, so no changes are marked")
+        #expect(heading(.comparing(baseline: baseline)).caption == "abf72899 · Comparing with \(since)…")
+        #expect(heading(.compared(baseline: baseline, changeCount: 1)).caption == "abf72899 · 1 change since \(since)")
+        #expect(heading(.compared(baseline: baseline, changeCount: 3)).caption == "abf72899 · 3 changes since \(since)")
+        // restic diff lists nothing when nothing changed: an honest zero.
+        #expect(heading(.compared(baseline: baseline, changeCount: 0)).caption == "abf72899 · No changes since \(since)")
+        // restic's first sentence in the caption; the whole reason in the tooltip.
+        let failed = heading(.failed(baseline: baseline, reason: "restic reported a fatal error — Fatal: injected. More."))
+        #expect(failed.caption == "abf72899 · Could not compare with \(since): restic reported a fatal error — Fatal: injected")
+        #expect(failed.detail.hasSuffix(" restic diff failed: restic reported a fatal error — Fatal: injected. More."))
+
+        // Only a failed comparison wears the warning glyph.
+        #expect(failed.isProblem)
+        let calm: [ChangeComparison?] = [nil, .firstBackup, .comparing(baseline: baseline),
+                                         .compared(baseline: baseline, changeCount: 2)]
+        #expect(calm.allSatisfy { !heading($0).isProblem })
+
+        // The tooltip names both full IDs, or says why there is no baseline —
+        // in the restore surfaces' word: the open record is a backup.
+        #expect(heading(nil).detail == "Backup abf72899aaaaaaaa.")
+        #expect(heading(.compared(baseline: baseline, changeCount: 1)).detail
+            == "Backup abf72899aaaaaaaa, compared with 73d9b51de71d34eb — the previous backup of these folders "
+            + "from the same Mac. Changes to permissions or timestamps alone are not marked.")
+        #expect(heading(.firstBackup).detail
+            == "Backup abf72899aaaaaaaa. The Change column compares a backup with the previous one of the same "
+            + "folders from the same Mac, and this is the first.")
+    }
 }

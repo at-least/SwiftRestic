@@ -80,19 +80,20 @@ extension AppModel {
     }
 
     /// What changed between two snapshots, keyed by normalized path — the
-    /// restore browser's Change column. Empty on failure; the column then
-    /// reads as "no change information" rather than "unchanged".
+    /// restore browser's Change column — and, when `restic diff` did not
+    /// finish, why. A blank row reads as "unchanged" only when the
+    /// comparison completed; the pane's header says so when it did not.
     ///
     /// A diff between two content-addressed snapshots is an immutable fact,
     /// so completed walks are cached and a repeat record switch skips the
     /// walk entirely. Only a completed walk is cached: a stream that died
-    /// partway keeps today's behavior — a partial map on screen — but never
-    /// presents itself as the whole answer on the next switch.
+    /// partway keeps its partial map on screen, flagged as a failure, and
+    /// never presents itself as the whole answer on the next switch.
     func snapshotChanges(
         repositoryID: UUID,
         olderID: String,
         newerID: String
-    ) async -> [String: ResticDiffChange] {
+    ) async -> ChangeMarks {
         if let cached = await indexCoordinator.cachedDiff(
             olderID: olderID,
             newerID: newerID,
@@ -102,14 +103,14 @@ extension AppModel {
             for change in cached {
                 map[ChangeMap.key(change.path)] = change.resticDiffChange
             }
-            return map
+            return ChangeMarks(changes: map)
         }
-        guard let repository = repository(id: repositoryID),
-              let service = try? service(),
-              let context = try? await context(for: repository)
-        else { return [:] }
+        guard let repository = repository(id: repositoryID) else {
+            return ChangeMarks(changes: [:], failure: ResticError.repositoryMissing.localizedDescription)
+        }
         let collector = ChangeMap()
         do {
+            let (service, context) = try await resticContext(for: repository)
             try await service.walkDiff(context, olderID: olderID, newerID: newerID) { change in
                 collector.insert(change)
             }
@@ -122,9 +123,19 @@ extension AppModel {
         } catch {
             // The map keeps whatever streamed before the failure; nothing
             // lands in the cache.
+            return ChangeMarks(changes: collector.map, failure: error.localizedDescription)
         }
-        return collector.map
+        return ChangeMarks(changes: collector.map)
     }
+}
+
+/// One comparison's marks for the restore browser's Change column.
+struct ChangeMarks: Equatable, Sendable {
+    var changes: [String: ResticDiffChange]
+    /// Why `restic diff` stopped short; nil when it finished. What streamed
+    /// before a failure stays — each mark is still true — but a blank row
+    /// no longer means unchanged.
+    var failure: String? = nil
 }
 
 /// Lock-guarded accumulation of one diff's changes — the stream's callbacks

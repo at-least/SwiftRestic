@@ -1305,16 +1305,66 @@ struct AppModelStubTests {
                 olderID: "0000000000000000",
                 newerID: "feedface00000000"
             )
-            #expect(changes["/src/new.txt"]?.category == .added)
-            #expect(changes["/src/gone.txt"]?.category == .removed)
+            #expect(changes.changes["/src/new.txt"]?.category == .added)
+            #expect(changes.changes["/src/gone.txt"]?.category == .removed)
+            #expect(changes.failure == nil)
 
             let again = await harness.model.snapshotChanges(
                 repositoryID: harness.repository.id,
                 olderID: "0000000000000000",
                 newerID: "feedface00000000"
             )
+            // A cache hit is a complete comparison, not a partial one.
             #expect(again == changes)
+            #expect(again.failure == nil)
             #expect(try stubRuns("diff", in: harness) == 1)
+
+            await harness.model.shutdown()
+        }
+    }
+
+    @Test("a diff that fails partway says so, keeps what streamed, and caches nothing")
+    func failedDiffIsReported() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "difffail")
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+
+            let marks = await harness.model.snapshotChanges(
+                repositoryID: harness.repository.id,
+                olderID: "0000000000000000",
+                newerID: "feedface00000000"
+            )
+            // The change that streamed before restic died is still true.
+            #expect(marks.changes["/src/new.txt"]?.category == .added)
+            #expect(marks.failure?.contains("no matching ID found") == true, "failure was \(String(describing: marks.failure))")
+
+            // Nothing was cached: the same switch asks restic again.
+            let again = await harness.model.snapshotChanges(
+                repositoryID: harness.repository.id,
+                olderID: "0000000000000000",
+                newerID: "feedface00000000"
+            )
+            #expect(again.failure != nil)
+            #expect(try stubRuns("diff", in: harness) == 2)
+
+            await harness.model.shutdown()
+        }
+    }
+
+    @Test("a diff with no password to run it reports why instead of marking nothing")
+    func diffWithoutPasswordIsReported() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "difffail", password: nil)
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+
+            let marks = await harness.model.snapshotChanges(
+                repositoryID: harness.repository.id,
+                olderID: "0000000000000000",
+                newerID: "feedface00000000"
+            )
+            #expect(marks.changes.isEmpty)
+            #expect(marks.failure?.contains("password") == true, "failure was \(String(describing: marks.failure))")
+            #expect(((try? stubRuns("diff", in: harness)) ?? 0) == 0)
 
             await harness.model.shutdown()
         }

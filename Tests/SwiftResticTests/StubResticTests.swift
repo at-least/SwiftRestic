@@ -283,6 +283,27 @@ struct StubRestic: Sendable {
                 esac
                 exit 0
                 ;;
+            difffail)
+                # A diff that dies partway: one change streams, then restic's
+                # fatal error on stderr (where real restic writes it) and exit
+                # 1. The Change column must say the comparison stopped short
+                # rather than pass the partial map off as the whole answer.
+                trace "difffail-arm"
+                case " $* " in
+                    *" snapshots "*)
+                        echo "[]"
+                        ;;
+                    *" diff "*)
+                        echo '{"message_type":"change","path":"/src/new.txt","modifier":"+"}'
+                        echo '{"message_type":"exit_error","code":1,"message":"Fatal: no matching ID found for prefix \\"feedface\\""}' >&2
+                        exit 1
+                        ;;
+                    *)
+                        echo "{}"
+                        ;;
+                esac
+                exit 0
+                ;;
             *)
                 # Everything the fault tests do not care about gets an empty answer.
                 trace "default-arm"

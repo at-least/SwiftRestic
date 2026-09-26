@@ -58,7 +58,9 @@ checked in so a normal build does not need it.
   chosen folder with no absolute path rebuilt above them. The sidebar's Restore
   section groups a repository's backups by the folders and Mac they came from
   (restic's own `host,paths` grouping), and the file list's Change column
-  compares each backup with the previous one in its group.
+  compares each backup with the previous one in its group; the pane's header
+  names the open backup and says what its Change column is compared with, or
+  that it is the first of its group.
 - **Find files across snapshots** — search every snapshot for a name or glob when
   you do not know which backup still has the file, then restore the match. ⇧⌘F.
 - **Compare snapshots** — *Compare* on any snapshot runs `restic diff` against

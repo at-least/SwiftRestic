@@ -153,6 +153,14 @@ extension AppModel {
         snapshotLineages[repositoryID] ?? []
     }
 
+    /// How the Restore section labels the lineage `record` belongs to — the
+    /// same lookup its group rows make, for surfaces that name one backup
+    /// (with `SnapshotLineage.displayName(of:label:)`) instead of a second
+    /// rule of their own.
+    func lineageLabel(of record: Snapshot, repositoryID: UUID) -> SnapshotLineage.Label? {
+        SnapshotLineage.labels(for: lineages(for: repositoryID), plans: configuration.plans)[record.lineageKey]
+    }
+
     func snapshots(for repositoryID: UUID?, planID: UUID? = nil) -> [Snapshot] {
         guard let repositoryID, let all = snapshots[repositoryID] else { return [] }
         guard let planID else { return all }

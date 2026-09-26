@@ -17,6 +17,11 @@ struct RestorePaneView: View {
     /// The folder the tree is focused on — kept across record switches.
     @State private var currentPath: String?
     @State private var changes: [String: ResticDiffChange] = [:]
+    /// What `changes` was computed against, for the header. Written beside
+    /// the map in `loadLevel`, never re-derived from the listing: the diff
+    /// does not rerun when the listing changes, and the header must name the
+    /// comparison whose marks are on screen.
+    @State private var comparison: ChangeComparison?
     @State private var searchText = ""
     @State private var searchHits: [SearchHit]?
     @State private var selection: String?
@@ -87,7 +92,7 @@ struct RestorePaneView: View {
 
     private func browserPane(record: Snapshot?) -> some View {
         VStack(spacing: 0) {
-            toolbar
+            toolbar(record: record)
             Divider()
             // Its own view, reading the run history itself: a new run
             // record re-renders the strip, never the tree below it.
@@ -102,12 +107,27 @@ struct RestorePaneView: View {
 
     // MARK: - Toolbar (top)
 
-    /// The header row is the search field and nothing else: which record is
-    /// open is visible in the sidebar's selection, and the Change column
-    /// speaks for itself — the pane repeats neither.
-    private var toolbar: some View {
-        HStack {
-            Spacer()
+    /// The open backup's name and what its Change column is compared with,
+    /// then the search field. fd691ee dropped this header on the grounds that
+    /// the sidebar's selection names the record and the column speaks for
+    /// itself; neither holds. With the sidebar hidden nothing else names the
+    /// open backup — the window title is always "Restore" — and a blank
+    /// Change column can mean a first backup, no changes, a comparison still
+    /// running, or a failed one. Only this line tells them apart.
+    private func toolbar(record: Snapshot?) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            if let record {
+                RestoreRecordHeader(
+                    repositoryID: repositoryID,
+                    record: record,
+                    // For the frame between a record switch and loadLevel's
+                    // first line, `comparison` still belongs to the previous
+                    // record; the header shows none rather than that one.
+                    comparison: loadedSnapshotID == record.id ? comparison : nil
+                )
+                .layoutPriority(1)
+            }
+            Spacer(minLength: 0)
             searchField
                 .frame(width: 230)
         }
@@ -373,6 +393,7 @@ struct RestorePaneView: View {
         searchText = ""
         guard let record else {
             tree = FileTree(roots: [])
+            comparison = nil
             return
         }
         loadedSnapshotID = record.id
@@ -385,16 +406,22 @@ struct RestorePaneView: View {
 
         // Changes against the previous backup — one restic diff, streamed.
         if let predecessor {
-            changes = await model.snapshotChanges(
+            comparison = .comparing(baseline: predecessor)
+            let marks = await model.snapshotChanges(
                 repositoryID: repositoryID,
                 olderID: predecessor.id,
                 newerID: record.id
             )
             // A record switch during the diff must not install the old
-            // record's change map into the new one's rows.
+            // record's change map into the new one's rows, nor its baseline
+            // into the new one's header: both are written after this guard.
             guard !Task.isCancelled else { return }
+            changes = marks.changes
+            comparison = marks.failure.map { .failed(baseline: predecessor, reason: $0) }
+                ?? .compared(baseline: predecessor, changeCount: marks.changes.count)
         } else {
             changes = [:]
+            comparison = .firstBackup
         }
 
         // Re-open the folder the user was in. The first missing ancestor
@@ -542,6 +569,57 @@ struct RestorePaneView: View {
             node: node,
             to: destination
         )
+    }
+}
+
+/// The toolbar's leading side: which backup is open, and what its Change
+/// column compares it with. Its own view because it reads the plans and the
+/// lineages: a run-record or settings write re-renders this line, never the
+/// tree beside it.
+private struct RestoreRecordHeader: View {
+    @Environment(AppModel.self) private var model
+
+    let repositoryID: UUID
+    let record: Snapshot
+    let comparison: ChangeComparison?
+
+    var body: some View {
+        let heading = RestoreRecordHeading(
+            record: record,
+            label: model.lineageLabel(of: record, repositoryID: repositoryID),
+            comparison: comparison
+        )
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                // The name gives way in the middle; the day never does.
+                Text(heading.name)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(verbatim: "—")
+                    .accessibilityHidden(true)
+                Text(heading.time)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .font(.subheadline.weight(.semibold))
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 4) {
+                // Orange only on the glyph, beside words that already say
+                // it: the caption stays secondary for contrast.
+                if heading.isProblem {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
+                }
+                Text(heading.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .font(.caption)
+        }
+        .help(heading.detail)
     }
 }
 
