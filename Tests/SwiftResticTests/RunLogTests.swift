@@ -133,6 +133,17 @@ struct RunLogTests {
         #expect(text.contains("Restored 1 file, \(Format.bytes(14)); 0 kept as they were"))
         #expect(text.contains("Restored to /tmp/restored/Budget.numbers"))
         #expect(text.contains("No restic command ran."))
+
+        record.filesSkipped = 1
+        let kept = RunLog.render(
+            record: record,
+            repositoryName: nil,
+            repositoryKind: nil,
+            versions: versions,
+            transcript: RunTranscript.Contents(),
+            timeZone: TimeZone(identifier: "UTC")!
+        )
+        #expect(kept.contains("Restored 1 file, \(Format.bytes(14)); 1 kept as it was"), "log was \(kept)")
     }
 
     @Test("the store writes, reads, removes and sweeps only <UUID>.log files")

@@ -99,7 +99,18 @@ struct RunRecordPresentationTests {
             $0.filesSkipped = 1
             $0.bytesProcessed = 2048
         })
-        #expect(partlyKept == "2 files, \(Format.bytes(2048)) · 1 kept as they were")
+        #expect(partlyKept == "2 files, \(Format.bytes(2048)) · 1 kept as it was")
+        // One kept file is singular, as the restore banner says it
+        // ("Kept 1 existing file as it was.").
+        #expect(detail(restore {
+            $0.filesSkipped = 1
+            $0.bytesProcessed = 0
+        }) == "1 file kept as it was — nothing restored")
+        #expect(RunRecordPresentation.restoreFiles(restore {
+            $0.filesRestored = 2
+            $0.filesSkipped = 1
+            $0.bytesProcessed = 14
+        }) == "2 restored · 1 kept as it was · \(Format.bytes(14))")
 
         // Records from before restores kept their counts.
         #expect(detail(restore()) == "Succeeded")

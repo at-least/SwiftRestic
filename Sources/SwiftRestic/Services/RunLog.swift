@@ -99,7 +99,7 @@ enum RunLog {
             if record.outcome == .succeeded {
                 lines.append(
                     "Restored \(Format.plural(record.filesRestored, "file")), \(Format.bytes(record.bytesProcessed));"
-                        + " \(record.filesSkipped) kept as they were"
+                        + " \(record.filesSkipped) \(RunRecordPresentation.kept(record.filesSkipped))"
                 )
                 if let destination = record.destinationPath { lines.append("Restored to \(destination)") }
             } else if let destination = record.destinationPath {

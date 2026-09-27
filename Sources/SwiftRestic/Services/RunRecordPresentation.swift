@@ -62,11 +62,18 @@ enum RunRecordPresentation {
     private static func restoreDetail(_ run: RunRecord) -> String? {
         guard run.outcome == .succeeded else { return nil }
         if run.filesRestored == 0, run.filesSkipped > 0 {
-            return "\(Format.plural(run.filesSkipped, "file")) kept as they were — nothing restored"
+            return "\(Format.plural(run.filesSkipped, "file")) \(kept(run.filesSkipped)) — nothing restored"
         }
         guard run.filesRestored > 0 else { return nil }
         let restored = "\(Format.plural(run.filesRestored, "file")), \(Format.bytes(run.bytesProcessed))"
-        return run.filesSkipped > 0 ? "\(restored) · \(Format.count(run.filesSkipped)) kept as they were" : restored
+        return run.filesSkipped > 0 ? "\(restored) · \(Format.count(run.filesSkipped)) \(kept(run.filesSkipped))" : restored
+    }
+
+    /// What Keep did with files already at the landing, in the restore
+    /// banner's number: "kept as it was" for one, "kept as they were" for
+    /// the rest.
+    static func kept(_ count: Int) -> String {
+        count == 1 ? "kept as it was" : "kept as they were"
     }
 
     /// restic's exit code for the drawer and Copy Details, explained only
@@ -96,7 +103,7 @@ enum RunRecordPresentation {
     /// A restore's counts: "1 restored · 2 kept as they were · 14 bytes".
     static func restoreFiles(_ run: RunRecord) -> String {
         var text = "\(Format.count(run.filesRestored)) restored"
-        if run.filesSkipped > 0 { text += " · \(Format.count(run.filesSkipped)) kept as they were" }
+        if run.filesSkipped > 0 { text += " · \(Format.count(run.filesSkipped)) \(kept(run.filesSkipped))" }
         return text + " · \(Format.bytes(run.bytesProcessed))"
     }
 
