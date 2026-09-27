@@ -73,19 +73,19 @@ checked in so a normal build does not need it.
   where the backup has a folder of that name, and gives folders that already
   exist the backed-up permissions and dates) or replaced (`--overwrite
   always`, which compares contents rather than trusting size and date),
-  confirming first when something is actually there to replace; restic before
-  0.17 has no `--overwrite`, so with it keeping restores a folder or a whole
-  backup only where nothing is there yet, and refuses otherwise. The sidebar's Restore
-  section groups a repository's backups by the folders and Mac they came from
-  (restic's own `host,paths` grouping), and the file list's Change column
-  compares each backup with the previous one in its group; the pane's header
-  names the open backup and says what its Change column is compared with, or
-  that it is the first of its group. On a plan's page, *Browse Folders…* walks
-  one folder through every snapshot that contains it. The file list answers
-  Finder's outline keys: → opens a folder, ← closes it or steps to the folder
-  that holds the selection. Its search covers the open backup and says how
-  many matches only other backups hold; *Search All Backups…* carries the
-  search on in Find Files.
+  confirming first when something is actually there to replace. restic before
+  0.17 has no `--overwrite`; with such a restic, keeping restores a folder or a
+  whole backup only where nothing is there yet, and refuses otherwise. The
+  sidebar's Restore section groups a repository's backups by the folders and Mac
+  they came from (restic's own `host,paths` grouping), and the file list's
+  Change column compares each backup with the previous one in its group; the
+  pane's header names the open backup and says what its Change column is
+  compared with, or that it is the first of its group. On a plan's page, *Browse
+  Folders…* walks one folder through every snapshot that contains it. The file
+  list answers Finder's outline keys: → opens a folder, ← closes it or steps to
+  the folder that holds the selection. Its search covers the open backup and
+  says how many matches only other backups hold; *Search All Backups…* carries
+  the search on in Find Files.
 - **Find files across snapshots** — search every snapshot for a name or glob when
   you do not know which backup still has the file, then restore the match. ⇧⌘F.
 - **Compare snapshots** — *Compare* on any snapshot runs `restic diff` against
@@ -115,7 +115,11 @@ checked in so a normal build does not need it.
   record uses. Items with nothing to act on are greyed out. ⌘B backs up the
   selected plan, ⌘. stops it, ⇧⌘B backs up every plan, ⇧⌘F finds files and ⌘R
   refreshes every repository's snapshots; *Pause Backups* is there as well as in
-  the menu bar. A menu command asked while a sheet is up beeps and does nothing.
+  the menu bar. While a sheet is up, a command that opens a sheet or acts on the
+  selected plan or repository beeps and does nothing; *Back Up All Plans Now*,
+  *Pause Backups*, *Resume Backups*, *Pause and Stop Running Backups* and
+  *Refresh All Snapshots* still act, since no sheet holds a draft of what they
+  change.
 
 ## Architecture
 
