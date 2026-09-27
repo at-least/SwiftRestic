@@ -105,9 +105,15 @@ extension AppModel {
         isLoaded = true
         isBootstrapping = true
         let launchDate = Date.now
+        // Whether the history in memory is the one on disk: not when no
+        // generation read, and not when tolerant decoding substituted
+        // anything — one damaged run drops the whole `runs` array to its
+        // default.
+        var historyIsWhole = false
 
         do {
             let loaded = try await store.load()
+            historyIsWhole = loaded.decodeNotes.isEmpty
             // Writing back what was just loaded is not a user edit, and it must
             // not become one: with `isLoaded` already true, the didSet would
             // schedule a save that committed every tolerant-decode substitution
@@ -155,12 +161,14 @@ extension AppModel {
         Task.detached { Self.sweepDragRestoreStaging() }
         // Logs whose records are gone — a crash between a log's write and
         // the save that would have kept its record, a trim the quit never
-        // drained. Only from a configuration that read: an unreadable one
-        // decodes as an empty history, which would sweep every log. Only
-        // files older than this launch: a run finishing mid-sweep has
-        // written its log, not yet its record. On the background lane, so
-        // quitting waits for it.
-        if !isConfigurationUnreadable {
+        // drained. Only from a history that read whole: an unreadable
+        // configuration, or a `runs` array tolerant decoding dropped,
+        // reads as an empty history, which would sweep every log while the
+        // records still sit in config.json for the user to fix. Only files
+        // older than this launch: a run finishing mid-sweep has written its
+        // log, not yet its record. On the background lane, so quitting
+        // waits for it.
+        if historyIsWhole {
             let logs = runLogs
             let recorded = Set(configuration.runs.map(\.id))
             tasks.addBackground(Task.detached(priority: .utility) {

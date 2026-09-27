@@ -2051,6 +2051,41 @@ struct AppModelStubTests {
         #expect(FileManager.default.fileExists(atPath: log.path))
     }
 
+    @Test("a history the load could not read in full sweeps no logs")
+    func partlyUnreadableHistorySweepsNothing() async throws {
+        let fixture = try sweepFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        var run = RunRecord(kind: .backup, planName: "Kept")
+        run.hasLog = true
+        var configuration = AppConfiguration()
+        configuration.runs = [run]
+        configuration.settings.resticPathOverride = fixture.stub.url.path
+        try await ConfigStore(directory: fixture.config).save(configuration)
+        // One element that is not a record — a hand edit, a damaged write —
+        // drops the whole history to its default, with a decode note: the
+        // file reads, but the history in memory is not the one on disk.
+        let file = fixture.config.appendingPathComponent("config.json")
+        var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        json["runs"] = try #require(json["runs"] as? [Any]) + [NSNull()]
+        try JSONSerialization.data(withJSONObject: json).write(to: file)
+
+        let log = fixture.logs.appendingPathComponent("\(run.id.uuidString).log")
+        try "log".write(to: log, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 1_577_836_800)],
+            ofItemAtPath: log.path
+        )
+
+        let model = AppModel(store: ConfigStore(directory: fixture.config), secrets: .inMemory())
+        await model.bootstrap()
+        await model.shutdown()
+
+        #expect(!model.isConfigurationUnreadable)
+        #expect(model.configuration.runs.isEmpty, "the fixture no longer drops the history: \(model.configuration.runs.count) runs")
+        #expect(FileManager.default.fileExists(atPath: log.path), "the log of a record still in config.json was swept")
+    }
+
     @Test("bootstrapping does not schedule a save over what it just loaded")
     func bootstrapLeavesTheStoreUnwritten() async throws {
         let harness = try await makeHarness(mode: "default")
