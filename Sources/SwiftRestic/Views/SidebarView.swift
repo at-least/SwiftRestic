@@ -26,8 +26,8 @@ struct SidebarView: View {
     let onNewPlan: () -> Void
     let onEditRepository: (Repository) -> Void
     let onNewRepository: () -> Void
-    /// Arms the deletion confirmation — the sidebar's menus must not be a
-    /// faster way around the detail pages' own confirmations.
+    /// Arms the shared deletion confirmation — the sidebar's menus must not
+    /// be a faster way around it.
     let onDeletePlan: (BackupPlan) -> Void
     let onRemoveRepository: (Repository) -> Void
 
@@ -164,13 +164,12 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func planContextMenu(_ plan: BackupPlan) -> some View {
+        let commands = model.planCommands(for: .plan(plan.id))
         Button("Back Up Now") { model.runBackup(planID: plan.id) }
             // The rule every Back Up Now follows, the menu bar's included:
             // enabled only for a complete, idle plan with restic to run it —
             // an error banner is not a substitute for a disabled item.
-            .disabled(
-                model.isRunning(planID: plan.id) || !plan.isConfigurationComplete || !model.isResticAvailable
-            )
+            .disabled(!commands.canBackUp)
         Button("Edit…") { onEditPlan(plan) }
         // The plan toolbar's pair, word for word. The row wears the pause
         // glyph while the schedule is held; manual runs stay possible either
@@ -189,14 +188,24 @@ struct SidebarView: View {
                 }
             }
         }
+        Button("Apply Retention Now…") { router.request(.applyRetention(plan.id)) }
+            .disabled(!commands.canApplyRetention)
         Divider()
-        Button("Delete Plan", role: .destructive) { onDeletePlan(plan) }
+        Button("Delete Plan…", role: .destructive) { onDeletePlan(plan) }
     }
 
     @ViewBuilder
     private func repositoryContextMenu(_ repository: Repository) -> some View {
+        let commands = model.repositoryCommands(for: .repository(repository.id))
         Button("Edit…") { onEditRepository(repository) }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
+        Divider()
+        // The two the pane and the menu bar offer that a row most often
+        // wants; the shared confirmations ask first.
+        Button("Check…") { router.request(.confirm(.check(repository.id))) }
+            .disabled(!commands.canMaintain)
+        Button("Prune Now…", role: .destructive) { router.request(.confirm(.prune(repository.id))) }
+            .disabled(!commands.canMaintain)
         Divider()
         Button("Remove from SwiftRestic…", role: .destructive) {
             onRemoveRepository(repository)

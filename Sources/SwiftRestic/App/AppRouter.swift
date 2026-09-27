@@ -18,14 +18,25 @@ import SwiftUI
 final class AppRouter {
     /// What the user asked for, from a menu command or the tray. Consumed by
     /// the root view: cleared the moment it is seen, then applied only when
-    /// no sheet is already up — the same no-op the old notification guards
-    /// produced, minus the race on whether a window existed to receive it.
+    /// no sheet is already up — refused with a beep otherwise, where the old
+    /// notification guards dropped it silently — minus the race on whether
+    /// a window existed to receive it.
     enum Intent: Equatable {
         case newPlan
         case newRepository
         case showFind
         case showConcepts
         case runSelectedPlan
+        // The Plan and Repository menus. They carry their target rather
+        // than read the selection when consumed: the ask may wait for a
+        // window, and the selection may move meanwhile.
+        case stopPlan(UUID)
+        case pauseSchedule(UUID, PauseLength)
+        case resumeSchedule(UUID)
+        case editPlan(UUID)
+        case editRepository(UUID)
+        case applyRetention(UUID)
+        case confirm(CommandConfirmation)
     }
 
     /// The pane the sidebar is showing.
@@ -102,4 +113,20 @@ final class AppRouter {
         else { return nil }
         return restoreFocus.path
     }
+}
+
+/// The destructive (or slow) actions that ask first, wherever they are
+/// asked from — the menu bar, a pane's toolbar, a sidebar menu. One dialog
+/// presents them all (`CommandPresentations`), with the model's words
+/// (`AppModel.confirmationCopy(for:)`), so no two surfaces can word one
+/// action two ways.
+enum CommandConfirmation: Hashable, Identifiable {
+    case deletePlan(UUID)
+    case removeRepository(UUID)
+    case check(UUID)
+    case prune(UUID)
+    case unlock(UUID)
+    case rebuildIndex(UUID)
+
+    var id: Self { self }
 }

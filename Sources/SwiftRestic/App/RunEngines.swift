@@ -436,3 +436,61 @@ enum MaintenanceRunEngine {
         sink.scheduleSnapshotRefresh(repositoryID: repository.id)
     }
 }
+
+/// Apply Retention Now…'s run: the plan's `forget`, outside a backup. It
+/// runs in the plan's own slot — so Stop, the sidebar's spinner, quitting
+/// and the busy repository all work as for a backup — but it is not one:
+/// no hooks (README: `forget` has none of its own), no run stamp, and
+/// nothing past the in-app banner and the Activity record. A manual,
+/// attended run needs no alert, and a "succeeded" ping would reset a
+/// Healthchecks dead-man's switch for a run that backed nothing up.
+@MainActor
+enum RetentionRunEngine {
+    /// The backup engine's sink, minus everything a backup has and this run
+    /// does not. Delivery has its own name: AppModel's `deliver(record:
+    /// plan:transcript:)` notifies and broadcasts, which this run must not.
+    @MainActor
+    protocol Sink: AnyObject {
+        func cancellationMessage(for planID: UUID) -> String
+        func service() throws -> any ResticClient
+        func context(for repository: Repository) async throws -> RepositoryContext
+        func noteAuthFailure(_ error: Error, repositoryID: UUID)
+        /// Stores the run and announces it in the window only.
+        func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
+        /// The maintenance engine's closing refresh, scheduled outside this
+        /// (possibly cancelled) task.
+        func scheduleSnapshotRefresh(repositoryID: UUID)
+    }
+
+    static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
+        var record = RunRecord(
+            kind: .forget,
+            planID: plan.id,
+            planName: plan.name,
+            repositoryID: repository.id,
+            startedAt: .now
+        )
+        // The backup engine's rule: restic's words for the log, bound
+        // around the service call only.
+        let transcript = RunTranscript()
+        do {
+            let service = try sink.service()
+            let context = try await sink.context(for: repository)
+            let removed = try await RunTranscript.$current.withValue(transcript) {
+                try await service.forget(context, plan: plan)
+            }
+            record.outcome = .succeeded
+            record.detailText = RetentionPreview.appliedSummary(removed: removed, pruned: plan.retention.runPrune)
+        } catch {
+            record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
+            sink.noteAuthFailure(error, repositoryID: repository.id)
+        }
+        record.finishedAt = .now
+        let contents = transcript.contents
+        if record.exitCode == nil { record.exitCode = contents.firstExitCode }
+        await sink.deliverRetention(record: record, plan: plan, transcript: contents)
+        // Whatever happened: a forget stopped or failed partway may already
+        // have removed snapshots, and the refresh must not inherit a cancel.
+        sink.scheduleSnapshotRefresh(repositoryID: repository.id)
+    }
+}

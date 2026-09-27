@@ -113,6 +113,25 @@ enum Scheduler {
         }
     }
 
+    /// A repository page's Next check or Next prune, as the scheduler will
+    /// start it: the app-wide hold holds upkeep too, so a timed hold moves
+    /// the date to its end and a due task under an open-ended one (Until I
+    /// Resume, the battery) reads "Waiting" — the Overview's word — never
+    /// "Due now".
+    static func nextMaintenanceText(
+        _ task: MaintenanceTask,
+        of repository: Repository,
+        hold: ScheduleHold?,
+        now: Date = .now
+    ) -> String {
+        guard let due = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt) else {
+            return "Off"
+        }
+        let date = max(due, hold?.resumesAt ?? .distantPast)
+        guard date > now else { return hold == nil ? "Due now" : "Waiting" }
+        return Format.timestamp(date)
+    }
+
     /// Every enabled, complete plan's next run date, in plan order — the one
     /// enumeration the scheduler's pick and the dashboard's "Next runs" card
     /// both derive from, so the card cannot announce a run the scheduler

@@ -57,12 +57,17 @@ extension AppModel {
         ProblemDotsStore.save(problemsSeenAt, to: viewDefaults)
     }
 
+    /// Backups only: a plan's health is whether its backups work. Apply
+    /// Retention Now… records its forget under the plan's ID, and without
+    /// the kind a successful forget healed a standing backup failure while
+    /// a failed one became the plan's problem. Such runs still count in
+    /// Activity and the 7-day problem count, as check and prune do.
     private func newestRun(
         for planID: UUID,
         outcomeIn outcomes: Set<RunRecord.Outcome>
     ) -> RunRecord? {
         configuration.runs
-            .filter { $0.planID == planID && outcomes.contains($0.outcome) }
+            .filter { $0.planID == planID && $0.kind == .backup && outcomes.contains($0.outcome) }
             .max { $0.finishedAt < $1.finishedAt }
     }
 }

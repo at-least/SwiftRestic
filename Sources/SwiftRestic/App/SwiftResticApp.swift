@@ -141,9 +141,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// The Backup and Help menus used to reach RootView through posted
-// `Notification.Name`s; those asks are typed intents on `AppRouter` now
-// (`router.request(_:)`), so the stringly seam is gone entirely.
+// The menus used to reach RootView through posted `Notification.Name`s;
+// those asks are typed intents on `AppRouter` now (`router.request(_:)`), so
+// the stringly seam is gone entirely.
 
 
 @main
@@ -173,11 +173,12 @@ struct SwiftResticApp: App {
         .commands {
             // ⌘N is macOS's reflex for "new thing" — an emptied group here
             // meant adding a repository was always a mouse trip to the sidebar
-            // footer. RootView owns the sheets and ignores these while a sheet
-            // is already up. Every command that targets the window also opens
-            // it: an intent parked while no window exists would otherwise
-            // ambush a later open — the old notification seam dropped asks
-            // nobody was listening for; these asks open their listener.
+            // footer. RootView owns the sheets and refuses these, with a beep,
+            // while a sheet is already up. Every command that targets the
+            // window also opens it: an intent parked while no window exists
+            // would otherwise ambush a later open — the old notification seam
+            // dropped asks nobody was listening for; these asks open their
+            // listener.
             CommandGroup(replacing: .newItem) {
                 Button("New Backup Plan…") {
                     router.request(.newPlan)
@@ -211,35 +212,8 @@ struct SwiftResticApp: App {
                     NSWorkspace.shared.open(AppLinks.changelog)
                 }
             }
-            CommandMenu("Backup") {
-                Button("Back Up All Plans Now") {
-                    for plan in model.configuration.plans where plan.isConfigurationComplete {
-                        model.runBackup(planID: plan.id)
-                    }
-                }
-                .keyboardShortcut("b", modifiers: [.command, .shift])
-
-                Button("Back Up Selected Plan") {
-                    router.request(.runSelectedPlan)
-                    openWindow(id: Self.mainWindowID)
-                }
-                .keyboardShortcut("b", modifiers: .command)
-                // The consuming handler in RootView no-ops when the selection
-                // is not a runnable plan; an enabled menu item over a disabled
-                // action is a menu that lies.
-                .disabled(!model.canRunPlan(at: router.selection))
-
-                Button("Find Files in Snapshots…") {
-                    router.request(.showFind)
-                    openWindow(id: Self.mainWindowID)
-                }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
-
-                Button("Refresh All Snapshots") {
-                    Task { await model.refreshAllSnapshots() }
-                }
-                .keyboardShortcut("r", modifiers: .command)
-            }
+            planMenu
+            repositoryMenu
         }
 
         Settings {
@@ -247,5 +221,160 @@ struct SwiftResticApp: App {
                 .environment(model)
         }
 
+    }
+
+    /// An ask for the root view, which also opens the window: an intent
+    /// parked while no window exists would otherwise ambush a later open.
+    /// RootView refuses it — with a beep — while any sheet is up, where a
+    /// Pause Schedule would be undone by the plan editor's save
+    /// (`BackupPlan.merging(draft:)` keeps the draft's `isEnabled`).
+    private func ask(_ intent: AppRouter.Intent) {
+        router.request(intent)
+        openWindow(id: Self.mainWindowID)
+    }
+
+    /// Arq's Backup Plan menu: everything a plan's toolbar and sidebar menu
+    /// offer, acting on the plan selected in the sidebar and greyed out when
+    /// the selection is anything else — an enabled item over an action that
+    /// does nothing is a menu that lies. Titles stay put, so Help-menu search
+    /// and muscle memory find them; only the two state toggles change.
+    private var planMenu: some Commands {
+        CommandMenu("Plan") {
+            let p = model.planCommands(for: router.selection)
+            Button("Back Up Now") { ask(.runSelectedPlan) }
+                .keyboardShortcut("b", modifiers: .command)
+                .disabled(!p.canBackUp)
+            // The Mac's Stop key. Routed like the rest, so under a sheet it
+            // can at worst be swallowed, never stop a run nobody sees.
+            Button(p.stopTitle) {
+                if let id = p.planID { ask(.stopPlan(id)) }
+            }
+            .keyboardShortcut(".", modifiers: .command)
+            .disabled(!p.canStop)
+            Button("Back Up All Plans Now") {
+                for plan in model.configuration.plans where plan.isConfigurationComplete {
+                    model.runBackup(planID: plan.id)
+                }
+            }
+            .keyboardShortcut("b", modifiers: [.command, .shift])
+            .disabled(!p.canBackUpAll)
+
+            Divider()
+
+            // The tray's app-wide pause, here too: with the menu bar item
+            // hidden it was the only way in. Direct calls, as the tray's:
+            // no editor holds a draft of these settings.
+            if p.backupsPaused {
+                Button("Resume Backups") { model.resumeBackups() }
+            } else {
+                lengthsMenu("Pause Backups", isEnabled: p.canPauseBackups) { length in
+                    model.pauseBackups(for: length)
+                }
+            }
+            // Never the default: a stopped backup starts over.
+            lengthsMenu("Pause and Stop Running Backups", isEnabled: p.canPauseAndStopBackups) { length in
+                model.pauseBackups(for: length, stoppingRunningBackups: true)
+            }
+
+            Divider()
+
+            Button("Edit Plan…") {
+                if let id = p.planID { ask(.editPlan(id)) }
+            }
+            .disabled(!p.canEdit)
+            // The plan toolbar's pair, lengths and all.
+            if p.isScheduleActive {
+                lengthsMenu(p.scheduleTitle, isEnabled: p.canToggleSchedule) { length in
+                    if let id = p.planID { ask(.pauseSchedule(id, length)) }
+                }
+            } else {
+                Button(p.scheduleTitle) {
+                    if let id = p.planID { ask(.resumeSchedule(id)) }
+                }
+                .disabled(!p.canToggleSchedule)
+            }
+            Button("Apply Retention Now…") {
+                if let id = p.planID { ask(.applyRetention(id)) }
+            }
+            .disabled(!p.canApplyRetention)
+
+            Divider()
+
+            Button("Delete Plan…") {
+                if let id = p.planID { ask(.confirm(.deletePlan(id))) }
+            }
+            .disabled(!p.canDelete)
+        }
+    }
+
+    /// A submenu of the three pause lengths. `.disabled` on a Menu in the
+    /// menu bar greys only its items: the submenu's own row stays enabled
+    /// (measured via Accessibility — "Pause Schedule" read enabled over
+    /// three greyed lengths with Overview selected), an item that opens onto
+    /// nothing it can do. So a submenu that cannot act is a plain disabled
+    /// item of the same title.
+    @ViewBuilder
+    private func lengthsMenu(
+        _ title: String,
+        isEnabled: Bool,
+        action: @escaping @MainActor (PauseLength) -> Void
+    ) -> some View {
+        if isEnabled {
+            Menu(title) {
+                ForEach(PauseLength.allCases) { length in
+                    Button(length.menuTitle) { action(length) }
+                }
+            }
+        } else {
+            Button(title) {}
+                .disabled(true)
+        }
+    }
+
+    /// The repository selected in the sidebar — or the one a selected
+    /// Restore record or plan uses — with the pane's Maintenance menu.
+    /// Nothing destructive has a key.
+    private var repositoryMenu: some Commands {
+        CommandMenu("Repository") {
+            let r = model.repositoryCommands(for: router.selection)
+            Button("Find Files in Snapshots…") { ask(.showFind) }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(!r.canFind)
+            Button("Refresh All Snapshots") {
+                Task { await model.refreshAllSnapshots() }
+            }
+            .keyboardShortcut("r", modifiers: .command)
+            .disabled(!r.canRefreshAll)
+
+            Divider()
+
+            Button("Check…") {
+                if let id = r.repositoryID { ask(.confirm(.check(id))) }
+            }
+            .disabled(!r.canMaintain)
+            Button("Prune Now…") {
+                if let id = r.repositoryID { ask(.confirm(.prune(id))) }
+            }
+            .disabled(!r.canMaintain)
+            Button("Remove Stale Locks…") {
+                if let id = r.repositoryID { ask(.confirm(.unlock(id))) }
+            }
+            .disabled(!r.canMaintain)
+            Button("Rebuild Search Index…") {
+                if let id = r.repositoryID { ask(.confirm(.rebuildIndex(id))) }
+            }
+            .disabled(!r.canMaintain)
+
+            Divider()
+
+            Button("Edit Repository…") {
+                if let id = r.repositoryID { ask(.editRepository(id)) }
+            }
+            .disabled(!r.canEdit)
+            Button("Remove from SwiftRestic…") {
+                if let id = r.repositoryID { ask(.confirm(.removeRepository(id))) }
+            }
+            .disabled(!r.canRemove)
+        }
     }
 }

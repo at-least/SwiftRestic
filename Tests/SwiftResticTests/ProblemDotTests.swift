@@ -26,9 +26,11 @@ struct ProblemDotTests {
     private func record(
         _ outcome: RunRecord.Outcome,
         finishedAt: Date,
-        planID: UUID? = nil
+        planID: UUID? = nil,
+        kind: RunRecord.Kind = .backup
     ) -> RunRecord {
         var record = RunRecord()
+        record.kind = kind
         record.planID = planID ?? self.planID
         record.outcome = outcome
         record.finishedAt = finishedAt
@@ -130,6 +132,32 @@ struct ProblemDotTests {
 
         #expect(!model.showsProblemDot(for: planID))
         #expect(model.currentProblem(for: planID) == nil)
+    }
+
+    @Test("a retention run carries the plan's ID but does not heal its backup failure")
+    func aRetentionRunDoesNotHealABackupFailure() {
+        let model = makeModel()
+        // Apply Retention Now… records a forget under the plan: it removed
+        // snapshots, it did not back anything up, so the failure stands.
+        model.configuration.runs = [
+            record(.succeeded, finishedAt: hour2, kind: .forget),
+            record(.failed, finishedAt: hour1),
+        ]
+
+        #expect(model.currentProblem(for: planID)?.kind == .backup)
+        #expect(model.currentProblem(for: planID)?.outcome == .failed)
+        #expect(model.showsProblemDot(for: planID))
+    }
+
+    @Test("a failed retention run is not the plan's problem")
+    func aFailedRetentionRunIsNotThePlansProblem() {
+        let model = makeModel()
+        // It stays in Activity and in the 7-day count; the plan's row and
+        // status speak for its backups only.
+        model.configuration.runs = [record(.failed, finishedAt: hour1, kind: .forget)]
+
+        #expect(model.currentProblem(for: planID) == nil)
+        #expect(!model.showsProblemDot(for: planID))
     }
 
     @Test("another plan's failure does not dot this plan")

@@ -1286,6 +1286,171 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    // MARK: - Apply Retention Now
+
+    @Test("applying retention records a forget without stamping the plan or alerting a channel")
+    func applyingRetentionRecordsAForgetWithoutStampingThePlan() async throws {
+        let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
+        defer { server.stop() }
+        server.start()
+        let readyDeadline = Date.now.addingTimeInterval(5)
+        while server.port == 0, Date.now < readyDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        var channel = NotificationChannel()
+        channel.name = "Capture"
+        channel.kind = .webhook
+        channel.url = "http://127.0.0.1:\(server.port)/hook"
+
+        // The harness plan keeps the default retention (keep 24 hourly, 7
+        // daily, …), which is safe to run.
+        let harness = try await makeHarness(mode: "default", channels: [channel])
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+        #expect(harness.plan.retention.isSafeToRun)
+
+        harness.model.applyRetention(planID: planID)
+        // In the plan's own slot: Stop, the sidebar's spinner and the busy
+        // repository the scheduler holds other work back for.
+        #expect(harness.model.isRunning(planID: planID))
+        #expect(harness.model.activity[planID]?.phase == .applyingRetention)
+        #expect(harness.model.busyRepositoryIDs.contains(harness.repository.id))
+        await harness.model.waitForRun(planID: planID)
+        #expect(!harness.model.isRunning(planID: planID))
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .forget)
+        #expect(record.outcome == .succeeded)
+        #expect(record.planID == planID)
+        #expect(record.detailText == "No snapshots needed removing.")
+        // Not a backup: the plan's run stamps stay where the backups left them.
+        #expect(harness.model.plan(id: planID)?.lastRunAt == nil)
+        #expect(harness.model.plan(id: planID)?.lastSuccessAt == nil)
+        #expect(await bannerTitled("Applied retention to “Stub Plan”", in: harness.model) != nil)
+
+        // Attended and not a backup: nothing leaves the Mac — a Healthchecks
+        // ping would reset the dead-man's switch for a run that backed
+        // nothing up. The backup afterwards proves the channel listens.
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(server.captured.isEmpty, "the retention run reached the channel: \(server.captured)")
+        harness.model.runBackup(planID: planID)
+        await harness.model.waitForRun(planID: planID)
+        let deadline = Date.now.addingTimeInterval(5)
+        while server.captured.isEmpty, Date.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        // Each payload names its run's kind, so a retention payload that
+        // arrived late cannot pass for the backup's.
+        try await Task.sleep(for: .milliseconds(300))
+        let operations = server.captured.compactMap { body in
+            (try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])?["operation"] as? String
+        }
+        #expect(operations.contains("Backup"), "the backup's payload never arrived, so the silence above proves nothing: \(server.captured)")
+        #expect(operations.allSatisfy { $0 == "Backup" }, "the retention run reached the channel: \(server.captured)")
+
+        await harness.model.shutdown()
+    }
+
+    @Test("stopping a retention run records it cancelled and stamps nothing")
+    func stoppingARetentionRunRecordsItCancelled() async throws {
+        let harness = try await makeHarness(mode: "hang-forget")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+
+        harness.model.applyRetention(planID: planID)
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        let state = harness.model.planCommands(for: .plan(planID))
+        #expect(state.stopTitle == "Stop Applying Retention")
+        #expect(state.canStop)
+        #expect(!state.canBackUp)
+
+        harness.model.cancelBackup(planID: planID)
+        await harness.model.waitForRun(planID: planID)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .forget)
+        #expect(record.outcome == .cancelled)
+        #expect(record.failureMessage == "Cancelled")
+        #expect(harness.model.plan(id: planID)?.lastRunAt == nil)
+        #expect(await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 10))
+
+        await harness.model.shutdown()
+    }
+
+    @Test("quitting during Apply Retention Now… names the slot the plan still owes")
+    func quitDuringRetentionRunKeepsTheSlotDue() async throws {
+        let harness = try await makeHarness(mode: "hang-forget")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+
+        // Scheduled and never run, so its slot is due; twelve hours off the
+        // clock, so the next one is never seconds away. Set and started in
+        // one turn: the tick cannot start a backup in between.
+        let hour = (Calendar.current.component(.hour, from: .now) + 12) % 24
+        harness.model.configuration.plans[0].schedule.frequency = .daily
+        harness.model.configuration.plans[0].schedule.hour = hour
+        harness.model.configuration.plans[0].lastRunAt = nil
+        let now = Date.now
+        let idle = try #require(harness.model.quitScheduleNotice(now: now))
+        #expect(idle.hasPrefix("Stub Plan is due now. "))
+        harness.model.applyRetention(planID: planID)
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+
+        // Unlike a backup's, this run's cancel stamps nothing, so the slot
+        // is still owed after the quit, as it was before the run began.
+        #expect(harness.model.quitScheduleNotice(now: now) == idle)
+
+        harness.model.cancelBackup(planID: planID)
+        await harness.model.waitForRun(planID: planID)
+        #expect(harness.model.configuration.plans[0].lastRunAt == nil)
+        #expect(harness.model.quitScheduleNotice(now: now) == idle)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("Apply Retention Now… on a busy repository says so and starts nothing")
+    func applyingRetentionOnABusyRepositoryStartsNothing() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+        let runsBefore = harness.model.configuration.runs.count
+
+        // A check holds the repository: a forget beside it would fail on
+        // restic's lock, so the ask is refused in words instead.
+        harness.model.maintenance[harness.repository.id] = MaintenanceActivity(task: .check)
+        harness.model.applyRetention(planID: planID)
+        #expect(!harness.model.isRunning(planID: planID))
+        #expect(harness.model.activity[planID] == nil)
+        await harness.model.waitForRun(planID: planID)
+        #expect(harness.model.configuration.runs.count == runsBefore)
+        let banner = try #require(await bannerTitled("“Stub Repo” is busy", in: harness.model))
+        #expect(banner.message == "A backup or another maintenance job is already using this repository.")
+
+        harness.model.maintenance[harness.repository.id] = nil
+        await harness.model.shutdown()
+    }
+
+    @Test("Pause and Stop ends a retention run too, and its mark leaves with the run")
+    func pauseAndStopEndsARetentionRun() async throws {
+        let harness = try await makeHarness(mode: "hang-forget")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+
+        harness.model.applyRetention(planID: planID)
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        harness.model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
+        await harness.model.waitForRun(planID: planID)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .forget)
+        #expect(record.failureMessage == "Stopped by Pause Backups")
+        // Left behind, the mark would word a later plain Stop of this plan
+        // as the pause's.
+        #expect(!harness.model.pauseStoppedPlanIDs.contains(planID))
+
+        await harness.model.shutdown()
+    }
+
     @Test("deleting a repository cancels the backup running against it")
     func deletingRepositoryCancelsRunningBackup() async throws {
         let harness = try await makeHarness(mode: "hang-backup")

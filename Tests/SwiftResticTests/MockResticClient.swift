@@ -13,6 +13,8 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     private var backupScript: Result<BackupOutcome, Error> =
         .success(BackupOutcome(summary: nil, itemErrors: [], exitCode: 0))
     private var forgetScript: Result<Int, Error> = .success(0)
+    private var forgetPreviewScript: Result<RetentionPreview, Error> =
+        .success(RetentionPreview(kept: [], removed: []))
     private var checkScript: Result<ResticSummary?, Error> = .success(nil)
     private var pruneScript: Result<String, Error> = .success("")
     private var snapshotsScript: Result<[Snapshot], Error> = .success([])
@@ -43,6 +45,11 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     func onForget(_ result: Result<Int, Error>) -> Self {
         locked { forgetScript = result }
+        return self
+    }
+
+    func onForgetPreview(_ result: Result<RetentionPreview, Error>) -> Self {
+        locked { forgetPreviewScript = result }
         return self
     }
 
@@ -201,6 +208,12 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         record("forget")
         transcribe("forget")
         return try locked { forgetScript }.get()
+    }
+
+    /// Not transcribed: the preview is a read the sheet asks for, not a run.
+    func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview {
+        record("forgetPreview")
+        return try locked { forgetPreviewScript }.get()
     }
 
     func restore(

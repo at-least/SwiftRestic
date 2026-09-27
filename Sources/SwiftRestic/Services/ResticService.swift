@@ -558,14 +558,29 @@ struct ResticService: ResticClient {
         return lines
     }
 
+    /// The one argument list for a plan's retention, dry or real, so the
+    /// preview can never evaluate different rules from the forget it
+    /// previews. The dry run adds `--no-lock`: without it a dry run needs
+    /// the exclusive lock (exit 11 while a backup holds its shared one, and
+    /// a scheduled backup starting meanwhile would fail), and restic refuses
+    /// `--no-lock` on a real forget (exit 1) — probed on 0.19.1. A dry run
+    /// never prunes: `--prune` would prune for real.
+    static func forgetArguments(plan: BackupPlan, dryRun: Bool) -> [String] {
+        var args = ["forget", "--json", "--tag", planTag(plan.id)] + plan.retention.forgetArguments
+        if dryRun {
+            args += ["--dry-run", "--no-lock"]
+        } else if plan.retention.runPrune {
+            args.append("--prune")
+        }
+        return args
+    }
+
     /// Applies a plan's retention policy. Refuses to run when the policy has no
     /// `--keep-*` rule, which restic would read as "delete everything".
     @discardableResult
     func forget(_ context: RepositoryContext, plan: BackupPlan) async throws -> Int {
         guard plan.retention.isSafeToRun else { return 0 }
-        var args = context.globalArguments + ["forget", "--json", "--tag", Self.planTag(plan.id)]
-        args += plan.retention.forgetArguments
-        if plan.retention.runPrune { args.append("--prune") }
+        let args = context.globalArguments + Self.forgetArguments(plan: plan, dryRun: false)
 
         let result = try await runner.run(
             binary: binary,
@@ -578,6 +593,23 @@ struct ResticService: ResticClient {
             )
         )
         return try Self.countRemoved(forgetOutput: result.stdout)
+    }
+
+    /// What the plan's retention would remove right now, without removing
+    /// it or locking the repository — Apply Retention Now…'s preview, safe
+    /// to run beside a backup. The same refusal as `forget`: a policy with
+    /// no rule previews nothing rather than "everything".
+    func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview {
+        guard plan.retention.isSafeToRun else { return RetentionPreview(kept: [], removed: []) }
+        let result = try await runner.run(
+            binary: binary,
+            invocation: ResticInvocation(
+                arguments: context.globalArguments + Self.forgetArguments(plan: plan, dryRun: true),
+                environment: context.environment,
+                retainFullOutput: true
+            )
+        )
+        return try RetentionPreview(forgetOutput: result.stdout)
     }
 
     /// `forget --json` answers with an array of per-group keep/remove lists.

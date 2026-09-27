@@ -33,6 +33,10 @@ struct PlanActivity: Sendable, Equatable {
 
     var phase: Phase = .starting
     var startedAt: Date = .now
+    /// False for Apply Retention Now…'s forget, which runs in the plan's
+    /// slot but is no backup: however it ends — a quit's cancel included —
+    /// it stamps no slot as run.
+    var isBackup = true
 }
 
 /// Live state of one repository's check or prune.
@@ -58,8 +62,8 @@ struct Banner: Identifiable, Equatable {
 }
 
 /// Which pane the sidebar is showing. Lives beside the model because menu-bar
-/// commands must read it: a "Back Up Selected Plan" item that stays enabled
-/// over a non-plan selection is a menu that lies.
+/// commands must read it: a Plan menu "Back Up Now" that stays enabled over
+/// a non-plan selection is a menu that lies.
 enum SidebarItem: Hashable {
     case overview
     case plan(UUID)

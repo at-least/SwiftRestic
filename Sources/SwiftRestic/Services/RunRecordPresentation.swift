@@ -29,6 +29,10 @@ enum RunRecordPresentation {
             return "\(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed"
         case .restore:
             return restoreDetail(run) ?? run.outcome.displayName
+        case .forget:
+            // Apply Retention Now…'s count ("Removed 2 snapshots. Their data
+            // stays until the next prune."), one short line.
+            return run.detailText ?? run.outcome.displayName
         default:
             return run.outcome.displayName
         }
@@ -112,7 +116,8 @@ enum RunRecordPresentation {
             if run.outcome == .succeeded, run.filesRestored + run.filesSkipped > 0 {
                 lines.append("Files: \(restoreFiles(run))")
             }
-        case .check:
+        case .check, .forget:
+            // A check's verdict, or what Apply Retention Now… removed.
             if let result = run.detailText { lines.append("Result: \(result)") }
         default:
             break

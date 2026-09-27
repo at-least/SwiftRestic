@@ -27,6 +27,33 @@ struct AppRouterTests {
         #expect(router.takePendingIntent() == .showFind)
     }
 
+    @Test("the menus' intents carry their target, and a newer ask replaces an older one")
+    func intentsCarryTheirTarget() {
+        let router = AppRouter()
+        let a = UUID()
+        let b = UUID()
+        let plan = UUID()
+
+        router.request(.confirm(.prune(a)))
+        router.request(.confirm(.prune(b)))
+        #expect(router.takePendingIntent() == .confirm(.prune(b)))
+
+        for intent: AppRouter.Intent in [
+            .applyRetention(plan),
+            .pauseSchedule(plan, .oneHour),
+            .resumeSchedule(plan),
+            .stopPlan(plan),
+            .editPlan(plan),
+            .editRepository(a),
+            .confirm(.deletePlan(plan)),
+        ] {
+            router.request(intent)
+            #expect(router.takePendingIntent() == intent)
+        }
+        #expect(AppRouter.Intent.pauseSchedule(plan, .oneHour) != .pauseSchedule(plan, .untilResumed))
+        #expect(CommandConfirmation.check(a).id == .check(a))
+    }
+
     @Test("a Show in Restore focus steers only its own record's load, and only once")
     func restoreFocusIsForItsRecordOnlyAndOnce() {
         let router = AppRouter()

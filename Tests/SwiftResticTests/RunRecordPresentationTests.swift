@@ -110,6 +110,25 @@ struct RunRecordPresentationTests {
         #expect(detail(failedCheck) == "Completed with errors")
     }
 
+    @Test("a retention run's Detail says what it removed, or why it did not")
+    func retentionRunDetail() {
+        var applied = RunRecord(kind: .forget, planName: "Documents")
+        applied.detailText = "Removed 2 snapshots. Their data stays until the next prune."
+        #expect(RunRecordPresentation.detail(for: applied)
+            == "Removed 2 snapshots. Their data stays until the next prune.")
+
+        var failed = RunRecord(kind: .forget, planName: "Documents")
+        failed.outcome = .failed
+        failed.failureMessage = "The repository is already locked"
+        #expect(RunRecordPresentation.detail(for: failed) == "The repository is already locked")
+
+        // A forget recorded before a count was kept (a stopped one, say)
+        // falls back to its outcome.
+        var bare = RunRecord(kind: .forget, planName: "Documents")
+        bare.outcome = .succeeded
+        #expect(RunRecordPresentation.detail(for: bare) == "Succeeded")
+    }
+
     @Test("the Detail column and the plan page's facts agree word for word")
     func detailAgreesWithPlanFacts() {
         let record = backup {
@@ -166,6 +185,21 @@ struct RunRecordPresentationTests {
         // A hook's output stays on this Mac: counted, never quoted.
         #expect(!text.contains("Bearer"))
         #expect(!text.contains("curl"))
+    }
+
+    @Test("Copy Details for a retention run says what it removed")
+    func copyDetailsForARetentionRun() {
+        var record = RunRecord(kind: .forget, planName: "Documents")
+        record.outcome = .succeeded
+        record.detailText = "Removed 2 snapshots. Their data stays until the next prune."
+        let text = RunRecordPresentation.detailsText(
+            for: record,
+            repositoryName: "Home NAS",
+            versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1")
+        )
+        let lines = text.components(separatedBy: "\n")
+        #expect(lines.first == "Forget of “Documents” — Succeeded")
+        #expect(lines.contains("Result: Removed 2 snapshots. Their data stays until the next prune."), "details were \(lines)")
     }
 
     @Test("Copy Details for a restore names the backup, the item and where it landed")

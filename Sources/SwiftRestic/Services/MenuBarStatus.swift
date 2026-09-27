@@ -197,14 +197,23 @@ enum MenuBarStatus {
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
-            case _?:
+            case let phase?:
                 // No percentage: restic's measures reading, not uploading —
                 // a throttled probe run read 100% at 327 s and uploaded until
                 // 819 s — and "Stop (100%)" would make stopping look free.
                 // The running line above keeps restic's figure.
-                return PlanRow(planID: plan.id, title: "Stop “\(name)” Backup", action: .stop, isEnabled: true)
+                let title = stopsRetention(phase) ? "Stop Applying Retention to “\(name)”" : "Stop “\(name)” Backup"
+                return PlanRow(planID: plan.id, title: title, action: .stop, isEnabled: true)
             }
         }
+    }
+
+    /// Whether Stop, in this phase of a plan's run, ends a forget rather
+    /// than a backup: Apply Retention Now…'s run, or a backup's own
+    /// retention step, whose snapshot is already written. The one rule the
+    /// tray's row and the Plan menu's Stop item both word themselves by.
+    static func stopsRetention(_ phase: PlanActivity.Phase?) -> Bool {
+        phase == .applyingRetention
     }
 
     /// One line per job in flight, in the order plans, upkeep, restore — the

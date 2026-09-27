@@ -642,6 +642,35 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.dueMaintenance(in: [repository], now: date("2026-09-16 00:00:01")).count == 1)
     }
 
+    @Test("the repository page's Next check and Next prune wait under a hold, and move to a timed hold's end")
+    func nextMaintenanceUnderAHold() {
+        let repository = repository {
+            $0.maintenance.checkIntervalDays = 7
+            $0.maintenance.pruneEnabled = true
+            $0.maintenance.pruneIntervalDays = 30
+        }
+        let now = date("2026-09-10 00:00:00")
+        let prune = date("2026-10-01 00:00:00")
+        // The check fell due on the 8th.
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: nil, now: now) == "Due now")
+        // The hold holds checks and prunes too: due, but not now.
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: .paused(until: nil), now: now) == "Waiting")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: .onBattery, now: now) == "Waiting")
+        // A timed hold moves it to the end, where the scheduler picks it up.
+        let end = date("2026-09-10 01:00:00")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: .paused(until: end), now: now)
+            == Format.timestamp(end))
+        // A date beyond the hold keeps its own.
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, hold: nil, now: now) == Format.timestamp(prune))
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, hold: .paused(until: end), now: now)
+            == Format.timestamp(prune))
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, hold: .onBattery, now: now)
+            == Format.timestamp(prune))
+
+        let off = self.repository { $0.maintenance.checkEnabled = false }
+        #expect(Scheduler.nextMaintenanceText(.check, of: off, hold: .paused(until: nil), now: now) == "Off")
+    }
+
     @Test("the policy summary names both tasks and a deep check's read percentage")
     func policySummary() {
         #expect(MaintenancePolicy().summary == "Check every 7d")

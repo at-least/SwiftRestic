@@ -11,7 +11,6 @@ struct PlanDetailView: View {
 
     @State private var comparing: SnapshotDiffTarget?
     @State private var browsingFolders: FolderBrowserTarget?
-    @State private var isConfirmingDeletion = false
 
     private var plan: BackupPlan? { model.plan(id: planID) }
 
@@ -34,15 +33,22 @@ struct PlanDetailView: View {
         .toolbar {
             ToolbarItemGroup {
                 if let plan {
+                    // The Plan menu's predicates, so this toolbar and the
+                    // menu bar cannot disagree about either button.
+                    let commands = model.planCommands(for: .plan(plan.id))
                     if model.isRunning(planID: plan.id) {
-                        Button("Cancel", systemImage: "stop.fill") {
+                        // "Stop", as every command that ends a run says;
+                        // the progress strip keeps its Cancel.
+                        Button("Stop", systemImage: "stop.fill") {
                             model.cancelBackup(planID: plan.id)
                         }
+                        .disabled(!commands.canStop)
+                        .help("\(commands.stopTitle) (⌘.) — recorded as cancelled")
                     } else {
                         Button("Back Up Now", systemImage: "arrow.up.circle.fill") {
                             model.runBackup(planID: plan.id)
                         }
-                        .disabled(!plan.isConfigurationComplete || !model.isResticAvailable)
+                        .disabled(!commands.canBackUp)
                         .labelStyle(.titleAndIcon)
                         .help("Run this plan's backup now")
                     }
@@ -55,7 +61,9 @@ struct PlanDetailView: View {
                     // toolbar — the more destructive act had the worse
                     // affordance.
                     Button("Delete Plan", systemImage: "trash", role: .destructive) {
-                        isConfirmingDeletion = true
+                        // The one delete confirmation, shared with the
+                        // sidebar and the Plan menu (CommandPresentations).
+                        router.request(.confirm(.deletePlan(plan.id)))
                     }
                     .labelStyle(.titleAndIcon)
                     .help("Remove this plan and its schedule; snapshots are not deleted")
@@ -73,23 +81,6 @@ struct PlanDetailView: View {
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target)
                 .environment(model)
-        }
-        .confirmationDialog(
-            "Delete “\(plan?.name ?? "")”?",
-            isPresented: $isConfirmingDeletion,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Plan", role: .destructive) {
-                if let plan { model.deletePlan(id: plan.id) }
-            }
-        } message: {
-            // Same promise the sidebar's dialog makes, plus the one thing this
-            // pane can see that the sidebar cannot: a run in flight.
-            Text(
-                model.isRunning(planID: planID)
-                    ? "The running backup will be stopped and recorded as cancelled. Snapshots already written to the repository are not deleted."
-                    : "The plan and its schedule are removed. Snapshots already written to the repository are not deleted."
-            )
         }
     }
 
@@ -266,7 +257,9 @@ struct PlanDetailView: View {
 
     private func summaryTiles(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
-        let lastRun = model.configuration.runs.first { $0.planID == plan.id }
+        // A backup's, never Apply Retention Now…'s forget, which carries the
+        // plan's ID and added nothing.
+        let lastRun = model.configuration.runs.first { $0.planID == plan.id && $0.kind == .backup }
         let outcome = model.snapshotListingOutcome(for: plan.repositoryID)
         // The scheduler's own answer, so a paused plan reads "Paused" and one
         // it skips never shows a date. Tile-sized on the face, full form in
@@ -345,6 +338,22 @@ struct PlanDetailView: View {
         return plan.schedule.summary
     }
 
+    /// The rules, and the way to apply them now rather than after the next
+    /// backup — a paused or failing plan's history otherwise never thins.
+    private func retentionRow(_ plan: BackupPlan) -> some View {
+        let commands = model.planCommands(for: .plan(plan.id))
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(plan.retention.summary)
+            Spacer(minLength: 8)
+            Button("Apply Now…") {
+                router.request(.applyRetention(plan.id))
+            }
+            .controlSize(.small)
+            .disabled(!commands.canApplyRetention)
+            .help(commands.retentionBlocker ?? "Preview what this plan's retention rules would remove now, then confirm")
+        }
+    }
+
     private func configurationCard(_ plan: BackupPlan) -> some View {
         Card("Configuration") {
             VStack(alignment: .leading, spacing: 10) {
@@ -357,7 +366,9 @@ struct PlanDetailView: View {
                         }
                     }
                     DetailRow("Schedule", scheduleSummary(plan))
-                    DetailRow("Retention", plan.retention.summary)
+                    DetailRow("Retention") {
+                        retentionRow(plan)
+                    }
                     DetailRow("Excludes", Format.plural(plan.excludePatterns.count, "pattern"))
                     if !plan.hooks.isEmpty {
                         DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")

@@ -7,11 +7,6 @@ struct RepositoryDetailView: View {
     let onEdit: () -> Void
 
     @State private var comparing: SnapshotDiffTarget?
-    @State private var isConfirmingRemoval = false
-    @State private var isConfirmingPrune = false
-    @State private var isConfirmingUnlock = false
-    @State private var isConfirmingCheck = false
-    @State private var isConfirmingIndexRebuild = false
     /// Read off the body: `resourceValues` is synchronous filesystem IO, and
     /// a spun-down external disk can take seconds to answer — re-run on every
     /// re-eval (progress ticks, banners) that would also stall the main
@@ -35,22 +30,33 @@ struct RepositoryDetailView: View {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
                 .help("Re-read snapshots and statistics")
+                // The Repository menu's items and rule, item for item: restic
+                // work waits while the repository is busy; removal never
+                // does — its dialog names the work it will cancel. Each asks
+                // through the one shared confirmation.
+                let commands = model.repositoryCommands(for: .repository(repositoryID))
                 Menu("Maintenance", systemImage: "wrench.and.screwdriver") {
-                    Button("Check…") { isConfirmingCheck = true }
+                    Button("Check…") { router.request(.confirm(.check(repositoryID))) }
+                        .disabled(!commands.canMaintain)
                     Divider()
-                    Button("Prune Now", role: .destructive) { isConfirmingPrune = true }
-                    Button("Remove Stale Locks", role: .destructive) { isConfirmingUnlock = true }
-                    Button("Rebuild Search Index…", role: .destructive) { isConfirmingIndexRebuild = true }
+                    Button("Prune Now…", role: .destructive) { router.request(.confirm(.prune(repositoryID))) }
+                        .disabled(!commands.canMaintain)
+                    Button("Remove Stale Locks…", role: .destructive) { router.request(.confirm(.unlock(repositoryID))) }
+                        .disabled(!commands.canMaintain)
+                    Button("Rebuild Search Index…", role: .destructive) {
+                        router.request(.confirm(.rebuildIndex(repositoryID)))
+                    }
+                    .disabled(!commands.canMaintain)
                     Divider()
                     // The most destructive act on this pane — it pauses every
                     // plan pointing here — sits with the pane's other
                     // consequential actions, not at the bottom of a scroll.
                     Button("Remove from SwiftRestic…", role: .destructive) {
-                        isConfirmingRemoval = true
+                        router.request(.confirm(.removeRepository(repositoryID)))
                     }
+                    .disabled(!commands.canRemove)
                 }
                 .labelStyle(.titleAndIcon)
-                .disabled(model.busyRepositoryIDs.contains(repositoryID))
                 .help("Verify the repository's integrity, or run destructive maintenance")
                 Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                     .labelStyle(.titleAndIcon)
@@ -65,67 +71,6 @@ struct RepositoryDetailView: View {
             applyCaptureSheetOverride()
         }
         #endif
-        .confirmationDialog(
-            "Remove this repository from SwiftRestic?",
-            isPresented: $isConfirmingRemoval,
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) { model.deleteRepository(id: repositoryID) }
-        } message: {
-            // Same source as the sidebar's removal dialog: one wording, one
-            // place, testable at the model level.
-            Text(model.removalConsequences(for: repositoryID))
-        }
-        .confirmationDialog(
-            "Prune this repository now?",
-            isPresented: $isConfirmingPrune,
-            titleVisibility: .visible
-        ) {
-            Button("Prune", role: .destructive) {
-                model.runMaintenance(id: repositoryID, task: .prune)
-            }
-        } message: {
-            Text("Pruning permanently removes the data of deleted snapshots and locks the repository exclusively — backups to it are held back until it finishes.")
-        }
-        .confirmationDialog(
-            "Rebuild this repository's search index?",
-            isPresented: $isConfirmingIndexRebuild,
-            titleVisibility: .visible
-        ) {
-            Button("Rebuild Index", role: .destructive) {
-                model.rebuildIndex(repositoryID: repositoryID)
-            }
-        } message: {
-            Text("The local search index is deleted and read back from the repository, snapshot by snapshot. The repository itself is not touched, but folder version lists and Find stay incomplete until the rebuild finishes.")
-        }
-        .confirmationDialog(
-            "Check this repository's integrity?",
-            isPresented: $isConfirmingCheck,
-            titleVisibility: .visible
-        ) {
-            Button("Check Structure") {
-                model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 0)
-            }
-            Button("Check + Read 5% of Data") {
-                model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 5)
-            }
-            Button("Check + Read All Data") {
-                model.runMaintenance(id: repositoryID, task: .check, readDataPercent: 100)
-            }
-        } message: {
-            Text(checkMessage)
-        }
-        .confirmationDialog(
-            "Remove stale locks on this repository?",
-            isPresented: $isConfirmingUnlock,
-            titleVisibility: .visible
-        ) {
-            Button("Remove Locks", role: .destructive) {
-                model.unlockRepository(id: repositoryID)
-            }
-        } message: {
-            Text("This removes locks left behind by interrupted restic processes. If restic is running somewhere else right now, removing its lock can corrupt the repository.")
-        }
     }
 
     @ViewBuilder
@@ -278,16 +223,6 @@ struct RepositoryDetailView: View {
         }
     }
 
-    /// "Slow" is a different unit of slow on a 4 TB repository than on a
-    /// memory stick, so the check dialog says which one the user is holding.
-    private var checkMessage: String {
-        var message = "Structure checks are fast; reading data finds more problems at the cost of time. The repository is locked while the check runs, so backups to it are held back until it finishes."
-        if let size = model.repositoryStats[repositoryID]?.totalSize {
-            message += " This repository currently holds \(Format.bytes(size))."
-        }
-        return message
-    }
-
     @ViewBuilder
     private func maintenanceCard(_ repository: Repository) -> some View {
         Card("Maintenance") {
@@ -329,10 +264,13 @@ struct RepositoryDetailView: View {
                 DetailGrid {
                     DetailRow("Policy", repository.maintenance.summary)
                     DetailRow("Last check", Format.relative(repository.maintenance.lastCheckAt))
-                    DetailRow("Next check", nextText(.check, repository))
+                    // As the scheduler will start them: the hold holds upkeep
+                    // too, so a due task reads "Waiting", never "Due now".
+                    let hold = model.scheduleHold
+                    DetailRow("Next check", Scheduler.nextMaintenanceText(.check, of: repository, hold: hold))
                     if repository.maintenance.pruneEnabled {
                         DetailRow("Last prune", Format.relative(repository.maintenance.lastPruneAt))
-                        DetailRow("Next prune", nextText(.prune, repository))
+                        DetailRow("Next prune", Scheduler.nextMaintenanceText(.prune, of: repository, hold: hold))
                     }
                 }
 
@@ -355,13 +293,6 @@ struct RepositoryDetailView: View {
                 )
             }
         }
-    }
-
-    private func nextText(_ task: MaintenanceTask, _ repository: Repository) -> String {
-        guard let date = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt) else {
-            return "Off"
-        }
-        return date <= .now ? "Due now" : Format.timestamp(date)
     }
 
     private var planCount: Int {

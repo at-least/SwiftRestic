@@ -106,7 +106,7 @@ struct StubRestic: Sendable {
                 echo "[]"
                 exit 0
                 ;;
-            hang | hang-backup | hang-restore | hang-check | hang-stats | hang-listing)
+            hang | hang-backup | hang-restore | hang-check | hang-stats | hang-listing | hang-forget)
                 trace "$SWIFTRESTIC_STUB-arm"
                 # The selective modes hang one subcommand only: AppModel fires
                 # follow-up snapshot/stats refreshes once a run ends, and those
@@ -139,6 +139,12 @@ struct StubRestic: Sendable {
                 if [ "$SWIFTRESTIC_STUB" = "hang-listing" ]; then
                     case " $* " in
                         *" snapshots "*) ;;
+                        *) hang_this=0 ;;
+                    esac
+                fi
+                if [ "$SWIFTRESTIC_STUB" = "hang-forget" ]; then
+                    case " $* " in
+                        *" forget "*) ;;
                         *) hang_this=0 ;;
                     esac
                 fi
@@ -802,6 +808,31 @@ struct StubResticTests {
         let summary = try await fixture.service.check(fixture.context, readDataSubsetPercent: nil)
         #expect(summary?.numErrors == 2)
         #expect(summary?.suggestPrune == true)
+    }
+
+    @Test("the retention preview is a lock-free dry run that never prunes")
+    func forgetPreviewRunsALockFreeDryRun() async throws {
+        let fixture = try makeFixture(mode: "default")
+        defer { cleanUp(fixture.root) }
+        var plan = fixture.plan
+        // Also prune is on: the real forget would prune, the preview must not.
+        plan.retention.runPrune = true
+
+        let preview = try await fixture.service.forgetPreview(fixture.context, plan: plan)
+        // The default arm answers "[]": nothing kept, nothing removed.
+        #expect(preview == RetentionPreview(kept: [], removed: []))
+
+        let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+        let start = try #require(
+            trace.split(separator: "\n").map(String.init).first { $0.hasPrefix("start args=[") && $0.contains("forget") },
+            "trace: \(trace)"
+        )
+        // Without --no-lock the dry run takes the exclusive lock: it exits
+        // 11 during a backup and would fail a backup that started meanwhile.
+        for flag in ["forget", "--dry-run", "--no-lock", "--json", "--tag \(ResticService.planTag(plan.id))"] {
+            #expect(start.contains(flag), "start line: \(start)")
+        }
+        #expect(!start.contains("--prune"), "start line: \(start)")
     }
 
     @Test("a check exit 1 without an error count is still a failure, not a clean bill")

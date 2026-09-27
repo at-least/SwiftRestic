@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The root split view: composes the sidebar and detail child views and
@@ -24,10 +25,11 @@ struct RootView: View {
     /// ⇧⌘F and every other way in still open an empty search.
     @State private var findPrefill: FindFilesView.Prefill?
     @State private var isShowingConcepts = false
-    // Destructive actions armed from the sidebar context menus. The detail
-    // pages confirm their own; these menus must not be a faster way around.
-    @State private var planPendingDeletion: BackupPlan?
-    @State private var repositoryPendingRemoval: Repository?
+    /// The one confirmation up, from whichever surface asked — the menu
+    /// bar, a pane's toolbar, a sidebar menu. See `CommandPresentations`.
+    @State private var pendingConfirmation: CommandConfirmation?
+    /// Apply Retention Now…'s sheet, for the plan it previews.
+    @State private var retentionTarget: RetentionTarget?
     /// Which Restore-section repositories are expanded in the sidebar — the
     /// backup records underneath are the restore pane's entry points.
     @State private var expandedRestoreRepos: Set<UUID> = []
@@ -54,8 +56,8 @@ struct RootView: View {
             onNewPlan: { editingPlan = BackupPlan() },
             onEditRepository: { editingRepository = $0 },
             onNewRepository: { editingRepository = Repository() },
-            onDeletePlan: { planPendingDeletion = $0 },
-            onRemoveRepository: { repositoryPendingRemoval = $0 }
+            onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
+            onRemoveRepository: { pendingConfirmation = .removeRepository($0.id) }
         )
     }
 
@@ -100,34 +102,12 @@ struct RootView: View {
         .sheet(isPresented: $isShowingConcepts) {
             ConceptsView()
         }
-        .confirmationDialog(
-            planPendingDeletion.map { "Delete “\($0.name)”?" } ?? "",
-            isPresented: planDeletionConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Plan", role: .destructive) {
-                if let plan = planPendingDeletion { model.deletePlan(id: plan.id) }
-                planPendingDeletion = nil
-            }
-        } message: {
-            Text("The plan and its schedule are removed. Snapshots already written to the repository are not deleted.")
-        }
-        .confirmationDialog(
-            "Remove this repository from SwiftRestic?",
-            isPresented: repositoryRemovalConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                if let repository = repositoryPendingRemoval { model.deleteRepository(id: repository.id) }
-                repositoryPendingRemoval = nil
-            }
-        } message: {
-            // Wording comes from the model so the disclosed consequences can
-            // never drift from what removal actually does.
-            if let repository = repositoryPendingRemoval {
-                Text(model.removalConsequences(for: repository.id))
-            }
-        }
+        // The destructive confirmations and the retention sheet, in a
+        // modifier of their own: this chain sits at the type-check limit.
+        .modifier(CommandPresentations(
+            pendingConfirmation: $pendingConfirmation,
+            retentionTarget: $retentionTarget
+        ))
     }
 
     /// The intents from the menu bar and the tray. The menu commands and the
@@ -201,19 +181,12 @@ struct RootView: View {
         AccessibilityNotification.Announcement("\(banner.title). \(banner.message)").post()
     }
 
-    /// ⌘B: run whichever plan the sidebar is on. A no-op when the selection
-    /// is not a runnable plan — the menu item's name says as much — and
-    /// while a sheet is up, where a run would start unseen.
+    /// ⌘B: run whichever plan the sidebar is on — when the Plan menu's
+    /// Back Up Now would be enabled for it (complete, idle, restic found).
     private func runSelectedPlan() {
-        guard editingPlan == nil, editingRepository == nil, !isShowingFind
-        else { return }
-        if case let .plan(id) = router.selection,
-           let plan = model.plan(id: id),
-           plan.isConfigurationComplete,
-           !model.isRunning(planID: id)
-        {
-            model.runBackup(planID: id)
-        }
+        let state = model.planCommands(for: router.selection)
+        guard state.canBackUp, let id = state.planID else { return }
+        model.runBackup(planID: id)
     }
 
     private var toolbarButtons: some ToolbarContent {
@@ -227,20 +200,6 @@ struct RootView: View {
             .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
             .help("Run restic commands directly against a repository")
         }
-    }
-
-    private var planDeletionConfirmation: Binding<Bool> {
-        Binding(
-            get: { planPendingDeletion != nil },
-            set: { if !$0 { planPendingDeletion = nil } }
-        )
-    }
-
-    private var repositoryRemovalConfirmation: Binding<Bool> {
-        Binding(
-            get: { repositoryPendingRemoval != nil },
-            set: { if !$0 { repositoryPendingRemoval = nil } }
-        )
     }
 
     #if DEBUG
@@ -290,26 +249,59 @@ struct RootView: View {
     }
 
     /// Applies one consumed intent. An ask arriving while a sheet is up is
-    /// dropped — two sheets cannot present at once — the same no-op the old
-    /// notification guards produced.
+    /// dropped with a beep — macOS's "not now" — since two sheets cannot
+    /// present at once, and because the main menu stays live under a sheet:
+    /// a Pause Schedule under the plan editor would be undone by its save
+    /// (`merging(draft:)` keeps the draft's `isEnabled`), a Remove from
+    /// SwiftRestic… would leave the editor saving against a repository
+    /// that is gone. The panes' own sheets (Compare, Browse Folders) are
+    /// invisible from here, so AppKit is asked: SwiftUI presents every
+    /// sheet as the window's attached sheet (seen in the AX tree as an
+    /// AXSheet). Each ask is checked again against the model — it may
+    /// have waited for a window while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
         let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFind || isShowingConcepts
+            || pendingConfirmation != nil || retentionTarget != nil
+            || NSApp.windows.contains { $0.attachedSheet != nil }
+        guard !sheetsUp else {
+            NSSound.beep()
+            return
+        }
         switch intent {
         case .newPlan:
-            guard !sheetsUp else { return }
             editingPlan = BackupPlan()
         case .newRepository:
-            guard !sheetsUp else { return }
             editingRepository = Repository()
         case .showFind:
-            guard !sheetsUp else { return }
             isShowingFind = true
         case .showConcepts:
-            guard !sheetsUp else { return }
             isShowingConcepts = true
         case .runSelectedPlan:
             runSelectedPlan()
+        case let .stopPlan(id):
+            if model.planCommands(for: .plan(id)).canStop { model.cancelBackup(planID: id) }
+        case let .pauseSchedule(id, length):
+            let state = model.planCommands(for: .plan(id))
+            if state.canToggleSchedule, state.isScheduleActive {
+                model.pausePlanSchedule(id: id, for: length)
+            }
+        case let .resumeSchedule(id):
+            if !model.planCommands(for: .plan(id)).isScheduleActive {
+                model.resumePlanSchedule(id: id)
+            }
+        case let .editPlan(id):
+            editingPlan = model.plan(id: id)
+        case let .editRepository(id):
+            editingRepository = model.repository(id: id)
+        case let .applyRetention(id):
+            if model.planCommands(for: .plan(id)).canApplyRetention {
+                retentionTarget = RetentionTarget(planID: id)
+            }
+        case let .confirm(confirmation):
+            if model.confirmationCopy(for: confirmation) != nil {
+                pendingConfirmation = confirmation
+            }
         }
     }
 

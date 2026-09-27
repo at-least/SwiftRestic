@@ -631,6 +631,94 @@ struct MaintenanceRunEngineTests {
     }
 }
 
+/// Apply Retention Now…'s run: a forget recorded under the plan, with no
+/// hooks, no run stamp and no alert beyond what the sink delivers.
+@MainActor
+@Suite("retention run engine")
+struct RetentionRunEngineTests {
+    /// Answers `service()` with the mock itself: this sink has nothing else
+    /// to keep apart from the log.
+    final class RecordingSink: RetentionRunEngine.Sink {
+        let client: MockResticClient
+        var log: [String] = []
+        var deliveredRecords: [RunRecord] = []
+        var deliveredTranscripts: [RunTranscript.Contents] = []
+        init(client: MockResticClient) { self.client = client }
+
+        func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
+        func service() throws -> any ResticClient { client }
+        func context(for repository: Repository) async throws -> RepositoryContext {
+            log.append("context")
+            return RepositoryContext(repository: repository, password: "test")
+        }
+        func noteAuthFailure(_ error: Error, repositoryID: UUID) {
+            log.append("auth-noted")
+        }
+        func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
+            log.append("deliver:\(record.outcome)")
+            deliveredRecords.append(record)
+            deliveredTranscripts.append(transcript)
+        }
+        func scheduleSnapshotRefresh(repositoryID: UUID) {
+            log.append("schedule-refresh")
+        }
+    }
+
+    private func makePlan() -> BackupPlan {
+        var plan = BackupPlan()
+        plan.name = "Retention Plan"
+        plan.repositoryID = Repository().id
+        plan.sources = ["/tmp/engine-source"]
+        return plan
+    }
+
+    @Test("a clean run records a forget under the plan and refreshes the listing")
+    func cleanRunRecordsAForget() async throws {
+        let client = MockResticClient().onForget(.success(2)).onExit("forget", 0)
+        let sink = RecordingSink(client: client)
+        let plan = makePlan()
+        await RetentionRunEngine.perform(plan: plan, repository: Repository(), sink: sink)
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.kind == .forget)
+        #expect(record.planID == plan.id)
+        #expect(record.planName == "Retention Plan")
+        #expect(record.outcome == .succeeded)
+        #expect(record.detailText == "Removed 2 snapshots. Their data stays until the next prune.")
+        #expect(record.exitCode == 0)
+        // The sink has no markPlanRun, so no stamp is possible; no hooks run
+        // and no backup is asked for.
+        #expect(sink.log == ["context", "deliver:succeeded", "schedule-refresh"], "log was \(sink.log)")
+        #expect(client.callLog == ["forget"])
+        #expect(client.transcriptBound["forget"] == true)
+    }
+
+    @Test("a locked repository fails the run, and a stop reads cancelled")
+    func lockedRepositoryFailsAndCancelReadsCancelled() async throws {
+        let locked = MockResticClient().onForget(.failure(
+            ResticError.commandFailed(exitCode: 11, message: "repository is already locked", command: "forget")
+        ))
+        let lockedSink = RecordingSink(client: locked)
+        let plan = makePlan()
+        await RetentionRunEngine.perform(plan: plan, repository: Repository(), sink: lockedSink)
+        let failed = try #require(lockedSink.deliveredRecords.first)
+        #expect(failed.outcome == .failed)
+        #expect(failed.failureMessage?.contains("locked") == true)
+        #expect(lockedSink.log.contains("auth-noted"))
+        // A forget that failed may still have removed some snapshots before
+        // it did: the listing is refreshed whatever happened.
+        #expect(lockedSink.log.last == "schedule-refresh")
+
+        let stopped = MockResticClient().onForget(.failure(CancellationError()))
+        let stoppedSink = RecordingSink(client: stopped)
+        await RetentionRunEngine.perform(plan: plan, repository: Repository(), sink: stoppedSink)
+        let cancelled = try #require(stoppedSink.deliveredRecords.first)
+        #expect(cancelled.outcome == .cancelled)
+        #expect(cancelled.failureMessage == stoppedSink.cancellationMessage(for: plan.id))
+        #expect(stoppedSink.log.last == "schedule-refresh")
+    }
+}
+
 /// The recording sinks answer `service()` with the mock — a tiny wrapper so
 /// the sink classes above stay pure logs.
 @MainActor

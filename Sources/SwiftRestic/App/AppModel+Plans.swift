@@ -60,14 +60,4 @@ extension AppModel {
     func isRunning(planID: UUID) -> Bool { activity[planID] != nil }
 
     var runningPlanIDs: Set<UUID> { Set(activity.keys) }
-
-    /// Whether ⌘B has something to do right now: the sidebar must be on a
-    /// complete, currently idle plan. The selection arrives as a parameter —
-    /// it is the router's state, not the model's.
-    func canRunPlan(at selection: SidebarItem?) -> Bool {
-        guard case let .plan(id) = selection,
-              let plan = plan(id: id)
-        else { return false }
-        return plan.isConfigurationComplete && !isRunning(planID: id)
-    }
 }

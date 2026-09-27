@@ -269,6 +269,95 @@ struct ResticIntegrationTests {
         #expect(try await fixture.service.snapshots(fixture.context).count == 1)
     }
 
+    @Test("the retention preview is a dry run that works while a backup holds the lock")
+    func retentionPreviewIsDryAndLockFree() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // Spaced a second apart: restic stamps whole seconds, and keep-last's
+        // "newest" must be exact for the IDs below to be.
+        var planIDs: [String] = []
+        for index in 0 ..< 3 {
+            try "change \(index)".write(
+                to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+            let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+            planIDs.append(try #require(outcome.summary?.snapshotID))
+            try await Task.sleep(for: .milliseconds(1100))
+        }
+        var otherPlan = fixture.plan
+        otherPlan.id = UUID()
+        otherPlan.name = "Other"
+        let otherOutcome = try await fixture.service.backup(fixture.context, plan: otherPlan)
+        let other = try #require(otherOutcome.summary?.snapshotID)
+
+        var plan = fixture.plan
+        plan.retention = RetentionPolicy(
+            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
+            keepWeekly: 0, keepMonthly: 0, keepYearly: 0,
+            runPrune: true
+        )
+
+        // A backup of its own holds a lock while the preview runs — the
+        // situation a user opening the sheet mid-backup is in.
+        let binary = try ResticBinary.locate(userOverride: nil)
+        let holder = Process()
+        holder.executableURL = binary.url
+        holder.arguments = ["backup", "--stdin-from-command", "--stdin-filename", "hold", "--", "/bin/sleep", "30"]
+        var environment = ProcessInfo.processInfo.environment
+        environment["RESTIC_REPOSITORY"] = fixture.root.appendingPathComponent("repo").path
+        environment["RESTIC_PASSWORD"] = Self.password
+        holder.environment = environment
+        holder.standardOutput = FileHandle.nullDevice
+        holder.standardError = FileHandle.nullDevice
+        try holder.run()
+        // A failed expectation must not leave restic holding the lock.
+        defer { holder.terminate() }
+        let locks = fixture.root.appendingPathComponent("repo/locks")
+        let lockDeadline = Date.now.addingTimeInterval(20)
+        while ((try? FileManager.default.contentsOfDirectory(atPath: locks.path)) ?? []).isEmpty, Date.now < lockDeadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(!((try? FileManager.default.contentsOfDirectory(atPath: locks.path)) ?? []).isEmpty,
+                "the holder never took its lock")
+
+        let preview = try await fixture.service.forgetPreview(fixture.context, plan: plan)
+        #expect(Set(preview.removed.map(\.id)) == Set(planIDs.prefix(2)))
+        #expect(preview.kept.map(\.id) == [planIDs[2]])
+        #expect(!(preview.kept + preview.removed).contains { $0.id == other })
+
+        // The control: the real forget needs the exclusive lock, so the lock
+        // the preview read past is real.
+        do {
+            try await fixture.service.forget(fixture.context, plan: plan)
+            Issue.record("forget ran while a backup held the repository")
+        } catch let error as ResticError {
+            guard case let .commandFailed(code, _, _) = error, code == 11 else {
+                Issue.record("expected commandFailed(11), got \(error)")
+                return
+            }
+        }
+
+        holder.terminate()
+        await Self.waitForExit(holder)
+        // Nothing was removed — neither by the dry run nor by the refused forget.
+        #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
+    }
+
+    /// Polls rather than `waitUntilExit()`: from this suite's async tests
+    /// that call never returned — twice, 3 and 9 minutes, the terminated
+    /// restic long gone from the process table, the waiting thread parked
+    /// in its run loop — while `isRunning` turned false within 0.21 s.
+    private static func waitForExit(_ process: Process, within seconds: TimeInterval = 30) async {
+        let deadline = Date.now.addingTimeInterval(seconds)
+        while process.isRunning, Date.now < deadline {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
     @Test("a wrong password surfaces restic's exit code 12")
     func wrongPassword() async throws {
         let fixture = try makeFixture()

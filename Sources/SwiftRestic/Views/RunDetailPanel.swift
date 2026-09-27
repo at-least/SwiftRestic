@@ -110,7 +110,9 @@ struct RunDetailPanel: View {
             exitRow
         default:
             repositoryRow
-            if run.kind == .check, let result = run.detailText {
+            // A check's verdict, or what Apply Retention Now… removed —
+            // Copy Details' Result line.
+            if run.kind == .check || run.kind == .forget, let result = run.detailText {
                 DetailRow("Result") { Text(result).textSelection(.enabled) }
             }
             exitRow

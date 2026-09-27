@@ -96,7 +96,9 @@ checked in so a normal build does not need it.
 - **Start at login** — the scheduler only runs while the app runs, so SwiftRestic
   can register itself as a login item and sit in the menu bar.
 - **Maintenance** — scheduled `check` and `prune` per repository, on a day
-  interval, plus manual runs, stale lock removal and repository stats.
+  interval, plus manual runs, stale lock removal and repository stats, and a
+  plan's retention applied on demand (*Plan › Apply Retention Now…* previews
+  with `restic forget --dry-run --no-lock`, then asks).
 - **Hooks** — shell commands before a backup and after success, warnings or
   failure, and per repository before and after a check or prune. Context arrives
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
@@ -108,6 +110,12 @@ checked in so a normal build does not need it.
   files restic could not read, and a plain-text log of what restic printed
   (Show Log…, Copy Details); restores record which backup, which item and where
   it went.
+- **Menus** — the *Plan* and *Repository* menus act on what the sidebar has
+  selected: a plan, a repository, or the repository a selected plan or Restore
+  record uses. Items with nothing to act on are greyed out. ⌘B backs up the
+  selected plan, ⌘. stops it, ⇧⌘B backs up every plan, ⇧⌘F finds files and ⌘R
+  refreshes every repository's snapshots; *Pause Backups* is there as well as in
+  the menu bar. A menu command asked while a sheet is up beeps and does nothing.
 
 ## Architecture
 
@@ -349,7 +357,10 @@ restic's own warnings, and it is never included in what goes out to a webhook or
 chat channel.
 
 `forget` has no hooks of its own: it runs inside the backup that triggered it,
-so the plan's after-backup hooks cover it.
+so the plan's after-backup hooks cover it — nor does *Apply Retention Now…*,
+which runs no hooks and sends no alerts: the banner and Activity announce it,
+and a Healthchecks ping would reset the dead-man's switch for a run that backed
+nothing up.
 
 ## Alerts
 
