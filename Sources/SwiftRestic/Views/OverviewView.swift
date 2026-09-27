@@ -5,9 +5,10 @@ import SwiftUI
 struct OverviewView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    /// Opens Activity, which reads `model.activityShowsProblemsOnly`. The
-    /// problems card must not be a dead end: a failure the user cannot reach
-    /// is a failure they cannot fix.
+    /// Opens Activity, after the Problems tile has set the router's
+    /// problems filter or a problem row the run to land on. The problems
+    /// card must not be a dead end: a failure the user cannot reach is a
+    /// failure they cannot fix.
     var onShowProblems: () -> Void = {}
 
     /// Series are reduced once when the history changes, not on every redraw —
@@ -207,6 +208,15 @@ struct OverviewView: View {
 
     private func showProblems() {
         router.activityShowsProblemsOnly = true
+        onShowProblems()
+    }
+
+    /// A problem row's landing: Activity with that run selected. A problem
+    /// run shows under both of Activity's filters, so the user's filter
+    /// stays as it was — the plan row's and the incomplete strip's rule.
+    /// The Problems tile keeps the filter landing.
+    private func showInActivity(_ run: RunRecord) {
+        router.activityFocusRunID = run.id
         onShowProblems()
     }
 
@@ -487,7 +497,7 @@ struct OverviewView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(failures)) { run in
-                        Button(action: showProblems) {
+                        Button { showInActivity(run) } label: {
                             HStack(spacing: 6) {
                                 // This card lists only problems, so the
                                 // outcome is said in words right under the
