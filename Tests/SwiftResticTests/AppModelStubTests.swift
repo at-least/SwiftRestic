@@ -1943,6 +1943,39 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a whole-backup restore's progress names the backup the way its sheet did")
+    func wholeRestoreProgressNamesTheBackup() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let id = "abf728998814d029436dc76f64e5204a4d2336134e43b921a53e52e53144137f"
+        let json = #"{"id":"\#(id)","short_id":"abf72899","time":"2026-09-25T18:00:00Z","paths":["\#(harness.root.path)"],"hostname":"mac","tags":["\#(ResticService.planTag(harness.plan.id))"]}"#
+        let snapshot = try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        harness.model.snapshots[harness.repository.id] = [snapshot]
+        // The name the destination sheet and the Restore pane's header use.
+        let name = SnapshotLineage.displayName(
+            of: snapshot,
+            label: harness.model.lineageLabel(of: snapshot, repositoryID: harness.repository.id)
+        )
+        #expect(name == "Stub Plan")
+
+        let destination = harness.root.appendingPathComponent("whole")
+        harness.model.restoreWholeSnapshot(repositoryID: harness.repository.id, snapshotID: id, to: destination, overwrite: .replaceExisting)
+        // The strip sits over every pane, the Restore pane's included.
+        #expect(harness.model.restoreDescription == "Restoring the whole “\(name)” backup")
+        await waitUntilRestoreFinishes(in: harness.model)
+        // Activity keeps the drawer's snapshot vocabulary: the ID names it.
+        #expect(harness.model.configuration.runs.first?.planName == "snapshot abf72899")
+
+        // Asked for by a name the listing does not hold, it still says what
+        // it restores.
+        harness.model.restoreWholeSnapshot(repositoryID: harness.repository.id, snapshotID: "latest", to: destination, overwrite: .replaceExisting)
+        #expect(harness.model.restoreDescription == "Restoring the whole backup")
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        await harness.model.shutdown()
+    }
+
     @Test("trimming the history deletes the trimmed runs' logs")
     func trimmedRunsLoseTheirLogs() async throws {
         // maxRunHistory only raises the floor of 20, so 5 is still capped at 20.

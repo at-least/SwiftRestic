@@ -36,6 +36,7 @@ extension AppModel {
         beginRestore(
             repositoryID: repositoryID,
             label: node.name,
+            description: "Restoring \(node.name)",
             snapshotID: snapshotID,
             sourcePath: node.path,
             destinationPath: landing.path
@@ -68,9 +69,15 @@ extension AppModel {
         overwrite: RestoreOverwritePolicy
     ) {
         let reporter = restoreProgressReporter()
+        // The strip over every pane, the Restore pane's included, names the
+        // backup as the sheet that started it did (SnapshotLineage's one
+        // naming rule); the record keeps the ID, the drawer's vocabulary.
+        let backup = snapshots(for: repositoryID).first { $0.id == snapshotID || $0.shortID == snapshotID }
+        let name = backup.map { SnapshotLineage.displayName(of: $0, label: lineageLabel(of: $0, repositoryID: repositoryID)) }
         beginRestore(
             repositoryID: repositoryID,
             label: "snapshot \(snapshotID.prefix(8))",
+            description: name.map { "Restoring the whole “\($0)” backup" } ?? "Restoring the whole backup",
             snapshotID: snapshotID,
             sourcePath: nil,
             destinationPath: destination.path
@@ -146,10 +153,12 @@ extension AppModel {
     /// with the backup it read (`snapshotID` as asked for), the item
     /// (`sourcePath`, nil for a whole backup) and where it lands
     /// (`destinationPath`: the restored item itself, or the folder a whole
-    /// backup goes into), plus the run's log.
+    /// backup goes into), plus the run's log. `label` is the record's
+    /// subject in Activity, `description` the progress strip's title.
     private func beginRestore(
         repositoryID: UUID,
         label: String,
+        description: String,
         snapshotID: String,
         sourcePath: String?,
         destinationPath: String,
@@ -167,7 +176,7 @@ extension AppModel {
             return
         }
         restoreActivity = OperationProgress()
-        restoreDescription = "Restoring \(label)"
+        restoreDescription = description
         restoreRepositoryID = repositoryID
 
         tasks.install(Task { [weak self] in
