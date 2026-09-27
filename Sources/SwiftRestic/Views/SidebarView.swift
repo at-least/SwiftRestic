@@ -106,7 +106,6 @@ struct SidebarView: View {
                     .tag(SidebarItem.console)
                     .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
                 Label("Activity", systemImage: "list.bullet.rectangle")
-                    .tag(SidebarItem.activity)
                     // The window's unread badge, wired to the same 7-day
                     // window the tray dot, the Problems tile and the menu's
                     // problem line share: one count, so no surface can claim
@@ -119,6 +118,11 @@ struct SidebarView: View {
                             ? Text(verbatim: "\(problemCount)")
                             : nil
                     )
+                    // The tag must come after the badge. With .tag inside
+                    // .badge — a nil badge too — neither a click nor
+                    // Accessibility could select the row (probed on macOS 26);
+                    // .disabled and .contextMenu after .tag do no such harm.
+                    .tag(SidebarItem.activity)
             }
         }
         .listStyle(.sidebar)
