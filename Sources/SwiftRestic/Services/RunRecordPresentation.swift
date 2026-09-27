@@ -38,6 +38,25 @@ enum RunRecordPresentation {
         }
     }
 
+    /// The in-app banner's message for a backup that finished with
+    /// warnings: the first unreadable item and restic's count of them —
+    /// never the stored lines. Without one, what the plan row explains the
+    /// warning with (the line stored after the items — a skipped retention
+    /// step, a decoding gap — else a hook's complaint), led by an unnamed
+    /// exit 3 as the facts lead with it, so a retention line never passes
+    /// for the whole story. The fix, when the app knows one, is the
+    /// caller's to add.
+    static func warningBannerMessage(for run: RunRecord) -> String {
+        if let item = run.unreadableItems.first {
+            return "\(item) — \(Format.plural(run.itemErrorCount, "unreadable item")) in total."
+        }
+        let explanation = run.itemErrors.first ?? run.hookMessages.first ?? run.failureMessage
+        guard PlanStatus.facts(for: run).first == PlanStatus.unnamedUnreadFact else {
+            return explanation ?? RunRecord.unexplainedWarningMessage
+        }
+        return ([PlanStatus.unnamedUnreadFact + "."] + [explanation].compactMap { $0 }).joined(separator: " ")
+    }
+
     /// Nil for a restore that says nothing countable — the records from
     /// before restores kept their counts read "Succeeded", as they did.
     private static func restoreDetail(_ run: RunRecord) -> String? {

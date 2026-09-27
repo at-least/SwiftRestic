@@ -110,6 +110,57 @@ struct RunRecordPresentationTests {
         #expect(detail(failedCheck) == "Completed with errors")
     }
 
+    @Test("the warning banner says what the plan row says, the unnamed exit 3 and a hook's complaint included")
+    func warningBannerWording() {
+        let message = RunRecordPresentation.warningBannerMessage(for:)
+        let retention = RunRecord.retentionSkippedPrefix + "repository is already locked by PID 123 on host"
+
+        // The first unreadable item and restic's count, never the stored lines.
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.itemErrors = ["/a: permission denied", retention]
+            $0.itemErrorCount = 1
+        }) == "/a: permission denied — 1 unreadable item in total.")
+
+        // A retention skip alone says it, reason and all.
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.itemErrors = [retention]
+        }) == retention)
+
+        // restic exited 3 and named nothing: that leads, as it leads the
+        // facts, so the retention line does not pass for the whole story.
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.exitCode = 3
+            $0.itemErrors = [retention]
+        }) == "Some source data could not be read. \(retention)")
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.exitCode = 3
+        }) == "Some source data could not be read.")
+
+        // A failing hook is not restic reporting problems.
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.hookMessages = ["Hook “notify” exited 1"]
+        }) == "Hook “notify” exited 1")
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.exitCode = 3
+            $0.hookMessages = ["Hook “notify” exited 1"]
+        }) == "Some source data could not be read. Hook “notify” exited 1")
+
+        // A reporting gap explains itself; nothing at all falls back.
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.itemErrors = ["2 of restic's messages could not be read."]
+        }) == "2 of restic's messages could not be read.")
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+        }) == RunRecord.unexplainedWarningMessage)
+    }
+
     @Test("a retention run's Detail says what it removed, or why it did not")
     func retentionRunDetail() {
         var applied = RunRecord(kind: .forget, planName: "Documents")

@@ -33,7 +33,7 @@ struct PlanCaption: Equatable, Sendable {
 /// status row for a problem that still stands, and the Next backup tile.
 enum PlanStatus {
     private static let retentionSkippedFact = "Retention skipped"
-    private static let unnamedUnreadFact = "Some source data could not be read"
+    static let unnamedUnreadFact = "Some source data could not be read"
 
     /// A run's problems as short countable facts, in a fixed order: the
     /// unreadable items (or, for a backup restic ended with exit 3 without
