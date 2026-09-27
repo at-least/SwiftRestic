@@ -553,4 +553,30 @@ struct UnreadableItemsTests {
             "/y cannot be accessed, skipping",
         ])
     }
+
+    @Test("restic's trailing newline stays out of the stored line, and a copy without it is still the same item")
+    func unreadableItemsDropTrailingWhitespace() throws {
+        // restic 0.19.1 ends its extended-attribute errors with a newline:
+        // the first two events are a real run's on ~/Library/Safari without
+        // Full Disk Access (2026-09-27), home folder renamed. The stored line
+        // lands in the banner, the plan row, the drawer and Copy Details,
+        // where the newline broke the sentence.
+        let events = try errors([
+            #"{"message_type":"error","error":{"message":"can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted\n"},"during":"archival","item":"/Users/u/Library/Safari"}"#,
+            #"{"message_type":"error","error":{"message":"can not obtain extended attribute com.apple.quarantine for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.quarantine: operation not permitted\n"},"during":"archival","item":"/Users/u/Library/Safari"}"#,
+            #"{"message_type":"error","error":{"message":"open /src/a.pdf: permission denied\r\n"},"during":"archival","item":"/src/a.pdf"}"#,
+            #"{"message_type":"error","error":{"message":"open /src/a.pdf: permission denied"},"during":"archival","item":"/src/a.pdf"}"#,
+            #"{"message_type":"error","error":{"message":"open /src/b.pdf: permission denied \t"},"during":"archival","item":"/src/b.pdf"}"#,
+            #"{"message_type":"error","error":{"message":"walk failed\n"}}"#,
+            #"{"message_type":"error","error":{"message":"walk failed"}}"#,
+        ])
+        let lines = ResticService.unreadableItems(errors: events, stderr: "")
+        #expect(lines == [
+            "/Users/u/Library/Safari: can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted",
+            "/src/a.pdf: open /src/a.pdf: permission denied",
+            "/src/b.pdf: open /src/b.pdf: permission denied",
+            "walk failed",
+        ])
+        #expect(!lines.contains { $0.last?.isWhitespace == true })
+    }
 }

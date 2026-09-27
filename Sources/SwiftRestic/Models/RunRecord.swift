@@ -150,7 +150,9 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         filesUnmodified = c.value(.filesUnmodified, default: 0)
         bytesProcessed = c.value(.bytesProcessed, default: 0)
         dataAdded = c.value(.dataAdded, default: 0)
-        itemErrors = c.value(.itemErrors, default: [])
+        // Lines stored before the source dropped restic's trailing newline
+        // keep it in config.json; read here, every surface gets them clean.
+        itemErrors = c.value(.itemErrors, default: [String]()).map(Self.storedItemError)
         itemErrorCount = c.value(.itemErrorCount, default: 0)
         exitCode = c.optional(.exitCode)
         itemErrorTally = c.optional(.itemErrorTally)
@@ -174,6 +176,18 @@ extension RunRecord {
     /// How many item-error lines a record stores; `itemErrorCount` keeps the
     /// real total past it.
     static let storedItemErrorLimit = 50
+
+    /// An item-error line as stored and shown: without trailing whitespace.
+    /// restic 0.19.1 ends its extended-attribute errors with a newline
+    /// ("…com.apple.macl: operation not permitted\n", a real run on
+    /// ~/Library/Safari without Full Disk Access), which broke the banner's,
+    /// the plan row's, the drawer's and Copy Details' sentences. Only the
+    /// tail goes: a line starts with the item's own path, never touched.
+    static func storedItemError(_ line: String) -> String {
+        var line = line
+        while line.last?.isWhitespace == true { line.removeLast() }
+        return line
+    }
 
     /// The start of the line the backup engine stores after the unreadable
     /// items when retention could not run behind a written snapshot. Shared

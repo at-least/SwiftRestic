@@ -549,8 +549,11 @@ struct ResticService: ResticClient {
         where line.hasSuffix(" does not exist, skipping") || line.hasSuffix(" cannot be accessed, skipping") {
             if seen.insert(line).inserted { lines.append(line) }
         }
-        for error in errors where seen.insert(error.item ?? error.message).inserted {
-            lines.append(error.item.map { "\($0): \(error.message)" } ?? error.message)
+        for error in errors {
+            // Without restic's trailing newline, and keyed by the same text,
+            // so an item-less message with and without one is one line.
+            let line = RunRecord.storedItemError(error.item.map { "\($0): \(error.message)" } ?? error.message)
+            if seen.insert(error.item ?? line).inserted { lines.append(line) }
         }
         return lines
     }

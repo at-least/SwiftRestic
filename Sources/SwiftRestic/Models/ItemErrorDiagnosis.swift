@@ -41,7 +41,8 @@ enum ItemErrorDiagnosis {
     /// Trailing whitespace is not part of the verdict: restic ends its
     /// extended-attribute errors with a newline ("xattr.get …/Safari
     /// com.apple.macl: operation not permitted\n", a real run without the
-    /// grant, 2026-09-27), and the stored line keeps it.
+    /// grant, 2026-09-27). `RunRecord.storedItemError` now drops it from
+    /// stored lines; the verdict does not rely on that.
     static func kind(of line: String) -> Kind {
         let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if line.hasSuffix(": operation not permitted") { return .blockedByMacOS }

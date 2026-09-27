@@ -294,6 +294,28 @@ struct TolerantDecodingTests {
         #expect(try await store.load().configuration.settings.schedulePause == SchedulePause(until: nil))
     }
 
+    @Test("a run record stored with restic's trailing newline reads without it")
+    func runRecordItemErrorsLoseTrailingWhitespace() throws {
+        // Lines stored before the newline was dropped at the source keep it
+        // in config.json; every surface reads them through this decoder.
+        // Only the tail goes: an item's own path at the head is never touched.
+        let legacy = try decode(
+            RunRecord.self,
+            #"{"kind":"backup","itemErrorCount":2,"itemErrors":["/Users/u/Library/Safari: can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted\n"," /odd name : open  /odd name : permission denied\r\n","Retention skipped: repository is already locked \n"]}"#
+        )
+        #expect(legacy.itemErrors == [
+            "/Users/u/Library/Safari: can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted",
+            " /odd name : open  /odd name : permission denied",
+            "Retention skipped: repository is already locked",
+        ])
+        #expect(Array(legacy.unreadableItems) == Array(legacy.itemErrors.prefix(2)))
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let saved = String(decoding: try encoder.encode(legacy), as: UTF8.self)
+        #expect(!saved.contains(#"\n"#), "saved again, the newline is gone: \(saved)")
+    }
+
     @Test("an unknown enum raw value falls back to the default case, and says so")
     func unknownEnumCases() throws {
         let decoder = JSONDecoder()
