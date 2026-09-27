@@ -451,12 +451,16 @@ struct OverviewView: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             } else if date <= .now {
-                                // Icon + word, not colour alone: orange
-                                // caption text on light surfaces sat right
-                                // at the contrast floor.
-                                Label("Due now", systemImage: "clock.badge.exclamationmark")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(Theme.warning)
+                                // Icon + word, not colour alone, and only
+                                // the glyph wears the warning hue: the word
+                                // in orange measured 2.33:1 on the card.
+                                Label {
+                                    Text("Due now")
+                                } icon: {
+                                    Image(systemName: "clock.badge.exclamationmark")
+                                        .foregroundStyle(Theme.warning)
+                                }
+                                .font(.caption.weight(.semibold))
                             } else {
                                 Text(Format.timestamp(date))
                                     .font(.callout.monospacedDigit())

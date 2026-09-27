@@ -419,12 +419,16 @@ struct SnapshotListingCaveat: View {
     var body: some View {
         switch outcome {
         case let .failed(message):
-            Label(
-                "Snapshots could not be read — \(Format.firstSentence(message))",
-                systemImage: "exclamationmark.triangle.fill"
-            )
+            // The glyph carries the alarm and the words stay secondary:
+            // the sentence in orange measured 2.33:1 on the repository page.
+            Label {
+                Text("Snapshots could not be read — \(Format.firstSentence(message))")
+                    .foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Theme.warning)
+            }
             .font(.caption)
-            .foregroundStyle(Theme.warning)
         case .idle:
             Label("The snapshot list has not finished loading.", systemImage: "clock.arrow.circlepath")
                 .font(.caption)
