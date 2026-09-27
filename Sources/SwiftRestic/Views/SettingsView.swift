@@ -35,13 +35,6 @@ struct SettingsView: View {
             await model.refreshFullDiskAccess()
             await model.refreshLoginItemStatus()
         }
-        // Approving a login item happens in System Settings, so the only signal
-        // that it went through is the user coming back to this app.
-        .onReceive(NotificationCenter.default.publisher(
-            for: NSApplication.didBecomeActiveNotification
-        )) { _ in
-            Task { await model.refreshLoginItemStatus() }
-        }
     }
 
     private func generalTab(model: AppModel) -> some View {
@@ -91,7 +84,7 @@ struct SettingsView: View {
                     )
                 )
                 ExpandableCaption(
-                    summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing.",
+                    summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing until you quit or log out.",
                     detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), dims while backups are paused or waiting for power on battery, wears a warning mark while a run from the last seven days failed or finished with errors, and asks with a question mark until a repository is set up."
                 )
             }
@@ -112,13 +105,10 @@ struct SettingsView: View {
             Section("Scheduling") {
                 Toggle("Start SwiftRestic at login", isOn: Binding(
                     get: { model.startsAtLogin },
-                    // Optimistic flip: the model var moves now, and the
-                    // daemon's answer (a line or two below in
-                    // setStartsAtLogin) confirms or corrects it.
-                    set: { value in
-                        model.startsAtLogin = value
-                        Task { await model.setStartsAtLogin(value) }
-                    }
+                    // Optimistic flip, shared with the plan editor's and the
+                    // Overview's Start at Login: the model var moves now,
+                    // and the daemon's answer confirms or corrects it.
+                    set: { value in model.requestStartsAtLogin(value) }
                 ))
                 .disabled(!LoginItem.isInInstallableLocation && !model.startsAtLogin)
                 Text(LoginItem.isInInstallableLocation

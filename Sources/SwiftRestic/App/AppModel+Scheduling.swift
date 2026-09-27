@@ -124,4 +124,23 @@ extension AppModel {
             heldUntil: scheduleHold?.resumesAt
         )
     }
+
+    /// The Overview's start-at-login caveat: `nil` while nothing is
+    /// scheduled or the app already starts at login. The enumeration is the
+    /// ungated one on purpose — a paused or on-battery schedule is still a
+    /// schedule, and it dies with the process all the same.
+    /// `isInstallable` is for tests; the app passes nothing and gets
+    /// `loginItemInstallable`.
+    func loginItemOffer(isInstallable: Bool? = nil, now: Date = .now) -> LoginItemAdvice.Offer? {
+        guard !Scheduler.upcomingRuns(
+            in: configuration.plans,
+            now: now,
+            existingRepositoryIDs: Set(configuration.repositories.map(\.id))
+        ).isEmpty else { return nil }
+        return LoginItemAdvice.offer(
+            startsAtLogin: startsAtLogin,
+            needsApproval: loginItemNeedsApproval,
+            isInstallable: isInstallable ?? loginItemInstallable
+        )
+    }
 }

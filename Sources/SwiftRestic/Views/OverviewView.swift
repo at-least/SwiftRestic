@@ -454,6 +454,13 @@ struct OverviewView: View {
                             }
                         }
                     }
+                    // Last, under the rows it qualifies: they promise runs,
+                    // and this is the condition on that promise. "Nothing
+                    // scheduled." has nothing to qualify.
+                    if let offer = model.loginItemOffer() {
+                        Divider()
+                        LoginItemOfferLine(offer: offer)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

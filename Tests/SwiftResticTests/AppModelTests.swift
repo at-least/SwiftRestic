@@ -866,6 +866,181 @@ struct PausingTests {
     }
 }
 
+/// The scheduler lives in the app's process, so a schedule dies with it. What
+/// the Overview, the plan editor and the quit alert say about that, from
+/// the model's side.
+@Suite("Start at login surfaces")
+@MainActor
+struct StartAtLoginSurfaceTests {
+    private func makeModel() -> (model: AppModel, plan: BackupPlan) {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticLoginItem-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory()
+        )
+        var repository = Repository()
+        repository.name = "NAS"
+        repository.kind = .local
+        repository.localPath = "/tmp/somewhere"
+        var plan = BackupPlan()
+        plan.name = "Documents"
+        plan.repositoryID = repository.id
+        plan.sources = ["/tmp"]
+        plan.schedule.frequency = .daily
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan]
+        return (model, plan)
+    }
+
+    @Test("the Next runs caveat shows only while a scheduled run is ahead and the app will not start at login")
+    func nextRunsCaveat() {
+        let (model, _) = makeModel()
+        #expect(model.loginItemOffer(isInstallable: true) == .startAtLogin)
+        model.loginItemNeedsApproval = true
+        #expect(model.loginItemOffer(isInstallable: true) == .awaitingApproval)
+        model.loginItemNeedsApproval = false
+        #expect(model.loginItemOffer(isInstallable: false) == .moveToApplications)
+        model.startsAtLogin = true
+        #expect(model.loginItemOffer(isInstallable: true) == nil)
+        model.startsAtLogin = false
+
+        // A paused schedule is still a schedule that dies with the process.
+        model.pauseBackups(for: .untilResumed)
+        #expect(model.loginItemOffer(isInstallable: true) == .startAtLogin)
+        model.resumeBackups()
+        model.pausePlanSchedule(id: model.configuration.plans[0].id, for: .oneHour)
+        #expect(model.loginItemOffer(isInstallable: true) == .startAtLogin)
+        model.configuration.plans[0].pausedUntil = nil
+
+        model.configuration.plans[0].schedule.frequency = .manual
+        #expect(model.loginItemOffer(isInstallable: true) == nil)
+        model.configuration.plans[0].schedule.frequency = .daily
+        model.configuration.plans[0].isEnabled = false
+        #expect(model.loginItemOffer(isInstallable: true) == nil)
+        model.configuration.plans[0].isEnabled = true
+        #expect(model.loginItemOffer(isInstallable: true) == .startAtLogin)
+        model.configuration.repositories = []
+        #expect(model.loginItemOffer(isInstallable: true) == nil)
+    }
+
+    @Test("an idle quit asks only when the user chose it — a quit requested from outside never waits")
+    func idleQuitAsksOnlyWhenChosen() throws {
+        let (model, plan) = makeModel()
+        let chosen = try #require(model.quitConfirmation(userChoseQuit: true))
+        #expect(!chosen.interruptsWork)
+        #expect(chosen.message.contains(plan.name))
+        #expect(chosen.message.contains("nothing will run until you open it again"))
+        // Logout, restart, shutdown, the Dock and AppleScript all arrive as
+        // a quit the user did not choose here: an idle app never holds them.
+        #expect(model.quitConfirmation(userChoseQuit: false) == nil)
+
+        model.startsAtLogin = true
+        #expect(model.quitConfirmation(userChoseQuit: true) == nil)
+        model.startsAtLogin = false
+        model.configuration.plans[0].schedule.frequency = .manual
+        #expect(model.quitConfirmation(userChoseQuit: true) == nil)
+    }
+
+    /// `Format.relative` reads the real clock, so a notice's date is
+    /// anchored there — a fixed date read "is next due 2 days ago" and
+    /// still passed a prefix check. The daily slot sits twelve hours off
+    /// that clock, so "due" and "next" cannot tie whenever this runs.
+    private func anchorToRealClock(_ model: AppModel) -> Date {
+        let now = Date.now
+        model.configuration.plans[0].schedule.hour = (Calendar.current.component(.hour, from: now) + 12) % 24
+        return now
+    }
+
+    @Test("a scheduled run already overdue is named as due now, not in the past")
+    func overdueRunIsDueNow() throws {
+        let (model, _) = makeModel()
+        let now = anchorToRealClock(model)
+        // Never run: the slot that passed is due, and the pick clamps to now.
+        let overdue = try #require(model.quitScheduleNotice(now: now))
+        #expect(overdue.hasPrefix("Documents is due now."))
+        model.configuration.plans[0].lastRunAt = now
+        let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: now, now: now))
+        let upcoming = try #require(model.quitScheduleNotice(now: now))
+        #expect(upcoming.hasPrefix("Documents is next due \(Format.relative(next))."))
+        #expect(!upcoming.contains(" ago"))
+        // Seconds away is due now too: the relative phrase for it is
+        // "Just now", and "is next due Just now" is no sentence.
+        model.configuration.plans[0].schedule.frequency = .hourly
+        model.configuration.plans[0].schedule.intervalHours = 1
+        model.configuration.plans[0].lastRunAt = now.addingTimeInterval(-3600 + 30)
+        let imminent = try #require(model.quitScheduleNotice(now: now))
+        #expect(imminent.hasPrefix("Documents is due now."))
+    }
+
+    @Test("under a hold the quit sentence names it first, as the Next runs card does")
+    func quitNoticeNamesTheHold() throws {
+        let (model, _) = makeModel()
+        let now = anchorToRealClock(model)
+        // A timed hold moves a due run to its end, where the scheduler
+        // picks it up, and says whose end that is.
+        model.pauseBackups(for: .oneHour, now: now)
+        let end = try #require(model.configuration.settings.schedulePause?.until)
+        let timed = try #require(model.quitScheduleNotice(now: now))
+        #expect(timed.hasPrefix(
+            "\(ScheduleHold.paused(until: end).summary(now: now)). Documents is next due \(Format.relative(end))."
+        ))
+        #expect(!timed.contains(" ago"))
+
+        // An open-ended hold sets no date. A slot still ahead keeps its
+        // date, which the scheduler keeps only if the hold lifts by then —
+        // so the hold is named, as the card names it above its rows …
+        model.pauseBackups(for: .untilResumed, now: now)
+        model.configuration.plans[0].lastRunAt = now
+        let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: now, now: now))
+        let paused = try #require(model.quitScheduleNotice(now: now))
+        #expect(paused.hasPrefix("Backups paused until you resume. Documents is next due \(Format.relative(next))."))
+        // … and a due run waits, never "due now".
+        model.configuration.plans[0].lastRunAt = nil
+        let pausedDue = try #require(model.quitScheduleNotice(now: now))
+        #expect(pausedDue.hasPrefix("Backups paused until you resume. Documents is waiting to run."))
+
+        model.resumeBackups()
+        model.configuration.settings.pauseOnBattery = true
+        model.isOnBattery = true
+        model.configuration.plans[0].lastRunAt = now
+        let battery = try #require(model.quitScheduleNotice(now: now))
+        #expect(battery.hasPrefix(
+            "Backups wait for power — this Mac is on battery. Documents is next due \(Format.relative(next))."
+        ))
+        model.configuration.plans[0].lastRunAt = nil
+        let batteryDue = try #require(model.quitScheduleNotice(now: now))
+        #expect(batteryDue.hasPrefix("Backups wait for power — this Mac is on battery. Documents is waiting to run."))
+
+        // Only a hold in force at `now` counts.
+        model.isOnBattery = false
+        let clear = try #require(model.quitScheduleNotice(now: now))
+        #expect(clear.hasPrefix("Documents is due now."))
+    }
+
+    @Test("a backup the quit stops has its slot counted as run, as the stop will stamp it — unless Pause and Stop ended it")
+    func runInFlightIsNotTheMissedRun() throws {
+        let (model, plan) = makeModel()
+        let now = anchorToRealClock(model)
+        // Due, and running: the quit's cancel stamps the run's start, so
+        // this slot is covered and the one missed is the next.
+        let startedAt = now.addingTimeInterval(-60)
+        model.activity[plan.id] = PlanActivity(phase: .backingUp, startedAt: startedAt)
+        let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: startedAt, now: now))
+        let running = try #require(model.quitScheduleNotice(now: now))
+        #expect(running.hasPrefix("Documents is next due \(Format.relative(next))."))
+
+        // Pause and Stop leaves the slot unstamped, so it runs again when
+        // the pause ends: that end is the date.
+        model.pauseBackups(for: .oneHour, now: now)
+        model.pauseStoppedPlanIDs.insert(plan.id)
+        let end = try #require(model.configuration.settings.schedulePause?.until)
+        let stopped = try #require(model.quitScheduleNotice(now: now))
+        #expect(stopped.contains("Documents is next due \(Format.relative(end))."))
+    }
+}
+
 /// A progress hop still in flight when a run unwinds must not write into the
 /// next run's strip — the run-identity rule `restoreRunToken` gives restores,
 /// pinned here at the seam the engines use.

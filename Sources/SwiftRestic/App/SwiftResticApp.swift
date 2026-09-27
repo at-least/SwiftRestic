@@ -29,6 +29,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ⌘Q must not raise a second alert whose Cancel would be a lie, nor run
     /// a second shutdown against tasks already being awaited.
     private var isTerminating = false
+    /// Set when macOS announces a logout, restart or shutdown, and never
+    /// reset. A second guard behind the Apple-event test in
+    /// `applicationShouldTerminate`: it can only keep the schedule question
+    /// away, never hold a logout. After a logout another app cancelled, a
+    /// later ⌘Q skips that question — a missed warning, not a blocked logout.
+    private var sessionIsEnding = false
+    private var powerOffObserver: NSObjectProtocol?
 
     /// Closing the window must not quit: scheduled backups need the app alive.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -36,6 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sessionIsEnding = true }
+        }
         #if DEBUG
         // Capture runs can pin the appearance so the same pane is captured in
         // light and dark without flipping the whole system.
@@ -47,11 +59,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Coming back from System Settings is the only sign that Full Disk
-    /// Access was granted or taken away, so every activation asks again.
-    /// The model arrives with the scene's task; an activation before that
-    /// is covered by bootstrap's own probe.
+    /// Access was granted or taken away, or that the login item was approved
+    /// or removed under Login Items, so every activation asks again — here
+    /// rather than in Settings, so the Overview and the plan editor catch
+    /// up while no Settings window exists. Two tasks, so neither answer
+    /// waits on the other's round trip. The model arrives with the scene's
+    /// task; an activation before that is covered by bootstrap's own reads.
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { await model?.refreshFullDiskAccess() }
+        Task { await model?.refreshLoginItemStatus() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -64,24 +80,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .terminateNow
         }
 
+        // Whether the user chose this quit here — the app menu, ⌘Q, the
+        // tray. Those call terminate: directly and arrive with no Apple
+        // event; the Dock's, AppleScript's and loginwindow's quit arrives as
+        // a quit Apple event, current while this runs (probed: design-probes/
+        // 08-start-at-login, quitprobe and swiftuiquit). The event's reason
+        // is not trusted to tell a logout from the Dock: AppleEvents.h says
+        // only that a quit "may include" kAEQuitReason, and a wrong guess
+        // would put a question in front of a logout. So every quit event
+        // counts as not chosen here.
+        let userChoseQuit = NSAppleEventManager.shared().currentAppleEvent == nil && !sessionIsEnding
+
         // A backup app that silently cancels its own work on quit is breaking
-        // its promise, so restic work in flight gets one confirmation. The
-        // clauses come from the model, where they are testable.
-        let interruptions = model.quitInterruptions
-        if !interruptions.isEmpty {
+        // its promise, so restic work in flight gets one confirmation, on
+        // every path. A quit the user chose also names the scheduled run it
+        // will miss while the app will not start at login. The words come
+        // from the model, where they are testable.
+        if let confirmation = model.quitConfirmation(userChoseQuit: userChoseQuit) {
             isConfirmingQuit = true
+            // The tray's Quit can be chosen while another app is in front;
+            // the question must come forward with it, not sit behind.
+            NSApp.activate(ignoringOtherApps: true)
             let alert = NSAlert()
             alert.messageText = "Quit SwiftRestic?"
-            alert.informativeText = interruptions.joined(separator: "\n")
-                + "\nQuitting stops the work in progress; the run history records the interruption."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Quit Anyway")
-            alert.addButton(withTitle: "Cancel")
-            alert.buttons[0].hasDestructiveAction = true
-            // The safe answer owns Return: quitting must be a deliberate
-            // click, never the key a reflex hits while typing elsewhere.
-            // Escape keeps its built-in route to the "Cancel" button.
-            alert.buttons[1].keyEquivalent = "\r"
+            alert.informativeText = confirmation.message
+            if confirmation.interruptsWork {
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "Quit Anyway")
+                alert.addButton(withTitle: "Cancel")
+                alert.buttons[0].hasDestructiveAction = true
+                // The safe answer owns Return: quitting must be a deliberate
+                // click, never the key a reflex hits while typing elsewhere.
+                // Escape keeps its built-in route to the "Cancel" button.
+                alert.buttons[1].keyEquivalent = "\r"
+            } else {
+                // Nothing is in progress and the user just asked to quit:
+                // the alert informs, so Quit keeps NSAlert's Return and
+                // Cancel its Escape.
+                alert.alertStyle = .informational
+                alert.addButton(withTitle: "Quit")
+                alert.addButton(withTitle: "Cancel")
+            }
             let confirmed = alert.runModal() == .alertFirstButtonReturn
             isConfirmingQuit = false
             guard confirmed else { return .terminateCancel }

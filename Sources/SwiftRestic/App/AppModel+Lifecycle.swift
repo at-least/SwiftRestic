@@ -1,5 +1,12 @@
 import Foundation
 
+/// What the quit alert says, and which kind of alert it is: one that guards
+/// work in flight, or one that only informs about the schedule.
+struct QuitConfirmation: Equatable {
+    var message: String
+    var interruptsWork: Bool
+}
+
 extension AppModel {
     // MARK: - Lifecycle
 
@@ -17,6 +24,79 @@ extension AppModel {
         if isRestoring { reasons.append("A restore is running") }
         if console.isRunning { reasons.append("A restic console command is running") }
         return reasons
+    }
+
+    /// The run a quit would miss, when nothing brings the app back by
+    /// itself: the scheduler lives in this process, and a slot missed while
+    /// it is gone runs only once the user opens it again. `nil` once the app
+    /// starts at login — a missed slot is due at once then, at the next
+    /// login — or when nothing is scheduled.
+    ///
+    /// It passes the hold, like every display of what will actually fire,
+    /// and names it first, as the Overview's card leads with it: a timed
+    /// hold moves the date to its end; an open-ended one sets no date, so a
+    /// slot still ahead keeps its own, and a due run is waiting, not due
+    /// now. The hold is read at `now`, so the date and the hold agree.
+    ///
+    /// A backup in flight is not the run missed: the quit cancels it, and
+    /// the cancel stamps its slot as run (`markPlanRun`, at the run's
+    /// start), so the plan's next slot is. Pause and Stop's runs keep their
+    /// slot due, as that stamp skips them.
+    func quitScheduleNotice(now: Date = .now) -> String? {
+        guard !startsAtLogin else { return nil }
+        let hold = Scheduler.hold(
+            pause: configuration.settings.schedulePause,
+            pauseOnBattery: configuration.settings.pauseOnBattery,
+            isOnBattery: isOnBattery,
+            now: now
+        )
+        let plansAfterQuit = configuration.plans.map { plan in
+            guard let run = activity[plan.id], !pauseStoppedPlanIDs.contains(plan.id) else { return plan }
+            var plan = plan
+            plan.lastRunAt = max(plan.lastRunAt ?? .distantPast, run.startedAt)
+            return plan
+        }
+        guard let next = Scheduler.nextScheduledRun(
+            in: plansAfterQuit,
+            now: now,
+            existingRepositoryIDs: Set(configuration.repositories.map(\.id)),
+            heldUntil: hold?.resumesAt
+        ) else { return nil }
+        // Within 45 s either way `Format.relative` says "Just now", which
+        // cannot follow "is next due"; a run that close is due now, and the
+        // next tick starts it.
+        let when = if next.date.timeIntervalSince(now) >= 45 {
+            "is next due \(Format.relative(next.date))"
+        } else if hold != nil {
+            "is waiting to run"
+        } else {
+            "is due now"
+        }
+        let held = hold.map { "\($0.summary(now: now)). " } ?? ""
+        return "\(held)\(next.plan.name) \(when). Scheduled backups run only while SwiftRestic is open, "
+            + "and it isn't set to start at login — nothing will run until you open it again."
+    }
+
+    /// The quit alert's words, or `nil` when quitting needs no question.
+    /// Work in flight asks on every path, exactly as it always has. The
+    /// schedule is mentioned only when the user chose to quit here — the
+    /// app menu, ⌘Q, the tray: a logout, restart or shutdown must never
+    /// wait on a question about a schedule, and those arrive the way the
+    /// Dock's and AppleScript's quits do, so none of them gets it.
+    func quitConfirmation(userChoseQuit: Bool, now: Date = .now) -> QuitConfirmation? {
+        let interruptions = quitInterruptions
+        var lines = interruptions
+        if !interruptions.isEmpty {
+            lines.append("Quitting stops the work in progress; the run history records the interruption.")
+        }
+        if userChoseQuit, let notice = quitScheduleNotice(now: now) {
+            lines.append(notice)
+        }
+        guard !lines.isEmpty else { return nil }
+        return QuitConfirmation(
+            message: lines.joined(separator: "\n"),
+            interruptsWork: !interruptions.isEmpty
+        )
     }
 
     func bootstrap() async {
@@ -86,7 +166,9 @@ extension AppModel {
                 logs.sweep(keeping: recorded, olderThan: launchDate)
             })
         }
-        startsAtLogin = await Task.detached { LoginItem.isEnabled }.value
+        let loginItem = await Task.detached { LoginItem.state }.value
+        startsAtLogin = loginItem == .enabled
+        loginItemNeedsApproval = loginItem == .needsApproval
         await resolveBinary()
         // The loading state covers configuration plus the binary probe: both
         // decide what the first real screen looks like (panes, or the
@@ -171,6 +253,15 @@ extension AppModel {
 
     var isResticAvailable: Bool { binary != nil }
 
+    /// A click that turns start at login on or off, wherever it comes from —
+    /// the Settings switch, the plan editor, the Overview. Optimistic: the
+    /// mirror moves now, and the daemon's answer in `setStartsAtLogin`
+    /// confirms or corrects it.
+    func requestStartsAtLogin(_ enabled: Bool) {
+        startsAtLogin = enabled
+        Task { await setStartsAtLogin(enabled) }
+    }
+
     /// Registers or removes the login item, reporting whatever macOS says.
     /// The `SMAppService` calls are synchronous XPC round-trips to the
     /// background-task-management daemon, so each runs detached — a wedged
@@ -196,9 +287,10 @@ extension AppModel {
         // newest: a newer click's optimistic value already says what the
         // switch must show, and its own turn will read the daemon after.
         func syncFromDaemon() async {
-            let enabled = await Task.detached { LoginItem.isEnabled }.value
+            let state = await Task.detached { LoginItem.state }.value
             if generation == loginItemGeneration {
-                startsAtLogin = enabled
+                startsAtLogin = state == .enabled
+                loginItemNeedsApproval = state == .needsApproval
             }
         }
         if enabled, !LoginItem.isInInstallableLocation {
@@ -231,12 +323,13 @@ extension AppModel {
     }
 
     func refreshLoginItemStatus() async {
-        let enabled = await Task.detached { LoginItem.isEnabled }.value
+        let state = await Task.detached { LoginItem.state }.value
         // A queued or running change owns the switch until it settles — its
         // optimistic value is what the user last asked for, and a status
         // read landing beside it must not stomp that back to daemon-stale.
         if loginItemChange == nil {
-            startsAtLogin = enabled
+            startsAtLogin = state == .enabled
+            loginItemNeedsApproval = state == .needsApproval
         }
     }
 

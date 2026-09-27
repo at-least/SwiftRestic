@@ -725,10 +725,53 @@ struct AppModelStubTests {
         harness.model.runBackup(planID: harness.plan.id)
         #expect(harness.model.isRunning(planID: harness.plan.id))
         #expect(harness.model.quitInterruptions == ["A backup is running"])
+        // Work in flight asks on every quit path, a logout's too, in the
+        // words the alert has always used.
+        let inFlight = harness.model.quitConfirmation(userChoseQuit: false)
+        #expect(inFlight?.interruptsWork == true)
+        #expect(inFlight?.message
+            == "A backup is running\nQuitting stops the work in progress; the run history records the interruption.")
 
         harness.model.cancelBackup(planID: harness.plan.id)
         await harness.model.waitForRun(planID: harness.plan.id)
         #expect(harness.model.quitInterruptions.isEmpty)
+        // The harness plan is manual: nothing scheduled, nothing to say.
+        #expect(harness.model.quitConfirmation(userChoseQuit: false) == nil)
+        #expect(harness.model.quitConfirmation(userChoseQuit: true) == nil)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("quitting during a scheduled backup names the next slot, not the one the running backup covers")
+    func quitDuringScheduledRunNamesTheNextSlot() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // Scheduled and never run, so its slot is due — the state the
+        // scheduler starts a run in. Twelve hours off the clock, so the
+        // next slot is never seconds away. Set and started in one turn:
+        // the tick cannot start the plan in between.
+        let hour = (Calendar.current.component(.hour, from: .now) + 12) % 24
+        harness.model.configuration.plans[0].schedule.frequency = .daily
+        harness.model.configuration.plans[0].schedule.hour = hour
+        harness.model.configuration.plans[0].lastRunAt = nil
+        harness.model.runBackup(planID: harness.plan.id)
+        #expect(harness.model.isRunning(planID: harness.plan.id))
+
+        let message = try #require(harness.model.quitConfirmation(userChoseQuit: true)?.message)
+        #expect(message.hasPrefix(
+            "A backup is running\nQuitting stops the work in progress; the run history records the interruption.\n"
+        ))
+        #expect(message.contains("Stub Plan is next due "))
+        #expect(!message.contains("is due now"))
+
+        // Why: the quit's cancel stamps the slot as run, so after it the
+        // same sentence names the same next slot.
+        harness.model.cancelBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+        #expect(harness.model.configuration.plans[0].lastRunAt != nil)
+        let after = try #require(harness.model.quitScheduleNotice())
+        #expect(after.hasPrefix("Stub Plan is next due "))
 
         await harness.model.shutdown()
     }

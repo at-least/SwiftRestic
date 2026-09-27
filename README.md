@@ -254,8 +254,13 @@ cannot fire mid-capture. `SWIFTRESTIC_POWER_SOURCE` (`battery`/`ac`, debug
 builds only, honoured only with `SWIFTRESTIC_CONFIG_DIR`) stands in for the
 power adapter at each scheduler tick, so the battery hold can be looked at on
 a Mac that stays plugged in — in a normal launch, since a capture run never
-arms the scheduler and so never reads it. This all needs a logged-in GUI
-session on the Mac — not a headless SSH box.
+arms the scheduler and so never reads it. `SWIFTRESTIC_LOGIN_ITEM_INSTALLABLE=1`
+(debug builds only, honoured only with `SWIFTRESTIC_CONFIG_DIR`) makes the
+start-at-login offers treat a build-folder copy as installed, so their *Start
+at Login* button can be looked at; it changes only what they offer —
+registering still refuses from a build folder, so a click shows that refusal
+and registers nothing. This all needs a logged-in GUI session on the Mac — not
+a headless SSH box.
 
 ## Security and privacy
 
@@ -395,7 +400,12 @@ stretch.
   replaces, and that stale entry outlives the build. Move the app to
   `/Applications` first. On an ad-hoc-signed build macOS may still ask for
   approval in System Settings; the toggle catches up when you come back to the
-  app.
+  app. The plan editor offers *Start at Login* when a save turns a schedule on,
+  and the Overview's *Next runs* card says the same while a run is scheduled
+  and start at login is off. Quitting from SwiftRestic's own Quit — the app
+  menu, ⌘Q or the menu bar item — while a plan is scheduled and start at login
+  is off names the run that will be missed; a quit asked for by the Dock,
+  AppleScript, a logout, restart or shutdown never waits on that question.
 - SFTP repositories do not inherit `SSH_AUTH_SOCK` from a GUI launch, so a
   passphrase-protected key cannot be unlocked. Use a passphrase-less key or an
   `~/.ssh/config` entry with an explicit `IdentityFile`.

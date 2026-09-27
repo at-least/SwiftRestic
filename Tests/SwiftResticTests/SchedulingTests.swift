@@ -972,4 +972,53 @@ struct LoginItemTests {
         #expect(LoginItem.isInstallableLocation("/Applications/Utilities/SwiftRestic.app"))
         #expect(LoginItem.isInstallableLocation("\(NSHomeDirectory())/Applications/SwiftRestic.app"))
     }
+
+    @Test("the offer names what would make scheduled backups survive a restart — approval first, then the install location")
+    func offerPrecedence() {
+        #expect(LoginItemAdvice.offer(startsAtLogin: true, needsApproval: false, isInstallable: true) == nil)
+        // A registration waiting for approval exists already: approving it is
+        // the one step left, wherever the copy lives.
+        #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: true, isInstallable: false) == .awaitingApproval)
+        #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: false, isInstallable: false) == .moveToApplications)
+        #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: false, isInstallable: true) == .startAtLogin)
+    }
+
+    @Test("the plan editor offers start-at-login only when the save turns a schedule on")
+    func editorOfferOnlyWhenScheduleTurnsOn() {
+        func plan(_ frequency: Schedule.Frequency, enabled: Bool = true) -> BackupPlan {
+            var plan = BackupPlan()
+            plan.name = "Documents"
+            plan.repositoryID = UUID()
+            plan.sources = ["/tmp"]
+            plan.schedule.frequency = frequency
+            plan.isEnabled = enabled
+            return plan
+        }
+        func offer(
+            draft: BackupPlan,
+            initial: BackupPlan?,
+            isNew: Bool,
+            startsAtLogin: Bool = false
+        ) -> LoginItemAdvice.Offer? {
+            LoginItemAdvice.editorOffer(
+                draft: draft,
+                initial: initial,
+                isNew: isNew,
+                startsAtLogin: startsAtLogin,
+                needsApproval: false,
+                isInstallable: true
+            )
+        }
+
+        #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: true) == .startAtLogin)
+        #expect(offer(draft: plan(.manual), initial: plan(.manual), isNew: true) == nil)
+        #expect(offer(draft: plan(.daily, enabled: false), initial: plan(.daily), isNew: true) == nil)
+        // An already-scheduled plan: the Next runs card covers the steady
+        // state, so an ordinary edit says nothing.
+        #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: false) == nil)
+        #expect(offer(draft: plan(.daily), initial: plan(.manual), isNew: false) == .startAtLogin)
+        #expect(offer(draft: plan(.daily), initial: plan(.daily, enabled: false), isNew: false) == .startAtLogin)
+        #expect(offer(draft: plan(.manual), initial: plan(.daily), isNew: false) == nil)
+        #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: true, startsAtLogin: true) == nil)
+    }
 }

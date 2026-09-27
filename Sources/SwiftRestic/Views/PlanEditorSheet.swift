@@ -19,6 +19,11 @@ struct PlanEditorSheet: View {
     /// click); now only a change to the inputs project actually reads can
     /// re-run it.
     @State private var projection: RetentionProjection.Outcome?
+    /// Set by the footer's Start at Login, so the line confirms the click
+    /// where the offer stood. It follows the optimistic flip, as the
+    /// Settings switch does: if the daemon answers otherwise, the mirror
+    /// moves back and the offer, or the approval caption, returns.
+    @State private var requestedLoginItem = false
     private let isNew: Bool
 
     private enum Tab: Hashable { case general, files, schedule, retention, hooks }
@@ -70,8 +75,29 @@ struct PlanEditorSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    // Only when this save turns a schedule on — the moment
+                    // the user commits to it. `initial` is nil until
+                    // onAppear, and an existing plan must not flash the
+                    // offer on that first pass, so the draft stands in.
+                    // No key equivalent: Return stays Create, Esc Cancel.
+                    if let offer = LoginItemAdvice.editorOffer(
+                        draft: draft,
+                        initial: initial ?? draft,
+                        isNew: isNew,
+                        startsAtLogin: model.startsAtLogin,
+                        needsApproval: model.loginItemNeedsApproval,
+                        isInstallable: model.loginItemInstallable
+                    ) {
+                        LoginItemOfferLine(offer: offer) { requestedLoginItem = true }
+                    } else if requestedLoginItem, model.startsAtLogin {
+                        Text(LoginItemAdvice.enabledConfirmation)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Spacer()
+                // Wider than the buttons' own spacing: the login line's small
+                // button belongs to its caption, not to Cancel and Create.
+                Spacer(minLength: 20)
                 Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
                 Button(isNew ? "Create Plan" : "Save") {

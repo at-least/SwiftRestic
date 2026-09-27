@@ -1,6 +1,12 @@
 import Foundation
 import ServiceManagement
 
+/// The login item's state as the model mirrors it: one daemon read answers
+/// both "does it start at login" and "is it waiting for approval".
+enum LoginItemState: Sendable, Equatable {
+    case enabled, off, needsApproval, notFound
+}
+
 /// Starting SwiftRestic at login.
 ///
 /// The scheduler only runs while the app is running, so for a plan to fire
@@ -10,6 +16,19 @@ enum LoginItem {
     static var status: SMAppService.Status { SMAppService.mainApp.status }
 
     static var isEnabled: Bool { status == .enabled }
+
+    /// `status` in the model's terms — one XPC round trip, so a caller that
+    /// needs both mirrors reads this once instead of `isEnabled` and
+    /// `needsApproval` back to back.
+    static var state: LoginItemState {
+        switch status {
+        case .enabled: .enabled
+        case .requiresApproval: .needsApproval
+        case .notFound: .notFound
+        case .notRegistered: .off
+        @unknown default: .off
+        }
+    }
 
     /// What to tell the user about the current state.
     static var statusDescription: String {

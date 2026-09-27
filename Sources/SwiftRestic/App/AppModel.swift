@@ -96,6 +96,15 @@ final class AppModel {
     var isBootstrapping = false
     /// Mirrors `LoginItem.status`, which is not observable on its own.
     var startsAtLogin = false
+    /// Whether the login item waits for approval in System Settings — the
+    /// daemon's answer only, written beside `startsAtLogin` from the same
+    /// read and never optimistically.
+    var loginItemNeedsApproval = false
+    /// Whether this copy could be registered as a login item, read once at
+    /// launch so the Overview's body does not resolve symlinks on every
+    /// render. It feeds only what the surfaces offer: registering keeps its
+    /// own live check (`performSetStartsAtLogin`).
+    @ObservationIgnored let loginItemInstallable: Bool
     /// Whether SwiftRestic — and so its restic — may read what Full Disk
     /// Access guards. Probed, not asked: see `refreshFullDiskAccess()`.
     var fullDiskAccess: FullDiskAccessStatus = .unknown
@@ -230,6 +239,23 @@ final class AppModel {
         self.secrets = secrets
         self.viewDefaults = defaults
         self.problemsSeenAt = ProblemDotsStore.load(from: defaults)
+        #if DEBUG
+        // Live checks run from a build folder, where only the move-to-
+        // Applications advice can show. This makes the advice treat the copy
+        // as installed so the Start at Login button renders; a click still
+        // meets the live location check and registers nothing. Gated on the
+        // throwaway-config override, like the password and power seams.
+        let environment = ProcessInfo.processInfo.environment
+        if environment["SWIFTRESTIC_CONFIG_DIR"] != nil,
+           environment["SWIFTRESTIC_LOGIN_ITEM_INSTALLABLE"] == "1"
+        {
+            self.loginItemInstallable = true
+        } else {
+            self.loginItemInstallable = LoginItem.isInInstallableLocation
+        }
+        #else
+        self.loginItemInstallable = LoginItem.isInInstallableLocation
+        #endif
         // The console's whole view of its owner: run a command, persist the
         // history. Two closures instead of the back-reference every method
         // used to take. The fallback matches ResticError.cancelled's words —

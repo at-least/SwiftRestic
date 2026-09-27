@@ -32,7 +32,10 @@ Debug captures are driven by environment variables on a debug build —
 `SWIFTRESTIC_CAPTURE_DELAY`, `SWIFTRESTIC_APPEARANCE`,
 `SWIFTRESTIC_CAPTURE_SHEET`, `SWIFTRESTIC_REPO_PASSWORD`,
 `SWIFTRESTIC_POWER_SOURCE` (`battery`/`ac`; read at scheduler ticks, so only
-in a normal launch — a capture run never arms the scheduler). All are documented
+in a normal launch — a capture run never arms the scheduler),
+`SWIFTRESTIC_LOGIN_ITEM_INSTALLABLE` (`1` shows the start-at-login offers'
+button from a build folder; registering still refuses there, so nothing is
+ever registered). All are documented
 in the README under "Looking at the app"; read that section before the first
 capture. Everything in the next two sections was verified live on 2026-09-14:
 macOS 26 / Xcode 26.6, one display (2940×1912 pixels, 1470×956 points @2x),
