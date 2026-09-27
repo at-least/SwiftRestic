@@ -127,6 +127,86 @@ struct NotificationTests {
         #expect(event(.warned).summary.contains("1 warning"))
         #expect(event(.started).summary.contains("started"))
     }
+
+    @MainActor
+    @Test("a warned run's hint reaches chat summaries and the webhook")
+    func hintReachesChannels() throws {
+        let hint = "macOS blocked 1 item: SwiftRestic needs Full Disk Access."
+        let warned = NotificationEvent(
+            stage: .warned,
+            planName: "Documents",
+            repositoryName: "NAS",
+            warnings: ["/Users/u/Library/Mail: open /Users/u/Library/Mail: operation not permitted"],
+            hint: hint
+        )
+        #expect(warned.summary.contains(hint), "summary was: \(warned.summary)")
+
+        let slack = try #require(NotificationPayload.request(for: channel(.slack, url: "https://hooks.slack.com/x"), event: warned))
+        let slackData = try #require(slack.body)
+        let slackBody = try #require(JSONSerialization.jsonObject(with: slackData) as? [String: Any])
+        #expect((slackBody["text"] as? String)?.contains(hint) == true)
+
+        let webhook = try #require(NotificationPayload.request(for: channel(.webhook, url: "https://example.com/hook"), event: warned))
+        let webhookData = try #require(webhook.body)
+        let webhookBody = try #require(JSONSerialization.jsonObject(with: webhookData) as? [String: Any])
+        #expect(webhookBody["hint"] as? String == hint)
+        // Absent rather than null when there is nothing to say.
+        let plain = try #require(NotificationPayload.request(for: channel(.webhook, url: "https://example.com/hook"), event: event(.warned)))
+        let plainData = try #require(plain.body)
+        let plainBody = try #require(JSONSerialization.jsonObject(with: plainData) as? [String: Any])
+        #expect(plainBody["hint"] == nil)
+
+        var record = RunRecord(kind: .backup, planName: "Documents")
+        record.outcome = .completedWithErrors
+        record.itemErrors = ["/Users/u/Library/Mail: open /Users/u/Library/Mail: operation not permitted"]
+        record.itemErrorCount = 1
+        record.itemErrorTally = ItemErrorDiagnosis.Tally(blockedByMacOS: 1, deniedByFilePermissions: 0)
+        record.fullDiskAccessAtRun = .notGranted
+        let event = AppModel.notificationEvent(for: record, repositoryName: "NAS")
+        #expect(event.hint?.contains("Full Disk Access") == true, "hint was \(event.hint ?? "nil")")
+        record.fullDiskAccessAtRun = .granted
+        #expect(AppModel.notificationEvent(for: record, repositoryName: "NAS").hint
+            == "macOS blocked 1 item even with Full Disk Access on.")
+        // A run with nothing to diagnose sends no hint.
+        #expect(AppModel.notificationEvent(for: RunRecord(kind: .backup, planName: "Documents"), repositoryName: "NAS").hint == nil)
+    }
+
+    @MainActor
+    @Test("the local notification body names the fix")
+    func notificationBodyNamesTheFix() {
+        var record = RunRecord(kind: .backup, planName: "Documents")
+        record.outcome = .completedWithErrors
+        record.itemErrors = [
+            "/Users/u/Library/Mail: open /Users/u/Library/Mail: operation not permitted",
+            "/Users/u/locked.txt: open /Users/u/locked.txt: permission denied",
+        ]
+        record.itemErrorCount = 2
+        record.itemErrorTally = ItemErrorDiagnosis.Tally(blockedByMacOS: 1, deniedByFilePermissions: 1)
+        record.fullDiskAccessAtRun = .notGranted
+        #expect(AppModel.notificationBody(for: record)
+            == "Finished with 2 unreadable item(s). macOS blocked 1 item: SwiftRestic needs Full Disk Access.")
+    }
+
+    @MainActor
+    @Test("the local notification counts restic's unreadable items, never the stored lines")
+    func notificationBodyCountsItemErrorCount() {
+        // One unreadable item, then the retention line stored after it:
+        // restic's count is 1, the stored lines are 2.
+        var record = RunRecord(kind: .backup, planName: "Documents")
+        record.outcome = .completedWithErrors
+        record.itemErrors = ["/a: open /a: permission denied", RunRecord.retentionSkippedPrefix + "locked"]
+        record.itemErrorCount = 1
+        #expect(AppModel.notificationBody(for: record).hasPrefix("Finished with 1 unreadable item(s)."))
+
+        // A retention skip alone is not an unreadable item — not one, not zero.
+        var retentionOnly = RunRecord(kind: .backup, planName: "Documents")
+        retentionOnly.outcome = .completedWithErrors
+        retentionOnly.itemErrors = [RunRecord.retentionSkippedPrefix + "locked"]
+        retentionOnly.itemErrorCount = 0
+        let body = AppModel.notificationBody(for: retentionOnly)
+        #expect(!body.contains("unreadable"), "body was \(body)")
+        #expect(body == "Finished with warnings: Retention skipped.")
+    }
 }
 
 @Suite("Notification safety")

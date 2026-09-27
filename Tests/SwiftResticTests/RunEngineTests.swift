@@ -430,6 +430,26 @@ struct BackupRunEngineTests {
         #expect(abortedRecord.exitCode == nil)
         #expect(aborted.deliveredNotes == ["Hook “gate” exited 1."])
     }
+
+    @Test("the blocked-item tally counts every error, not the 50 kept")
+    func tallyCountsPastTheCap() async throws {
+        // A home-folder backup without Full Disk Access easily passes the
+        // cap; a tally of the stored sample would say "50 blocked, 0 denied".
+        let sink = RecordingSink()
+        var outcome = successOutcome()
+        outcome.itemErrors = (1 ... 60).map { "/Users/u/Library/F\($0): open /Users/u/Library/F\($0): operation not permitted" }
+            + ["/Users/u/locked.txt: open /Users/u/locked.txt: permission denied"]
+        outcome.exitCode = 3
+        let client = MockResticClient().onBackup(.success(outcome))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        let record = try #require(sink.deliveredRecords.first)
+        // The stored lines themselves: `unreadableItems` slices to 50 on its
+        // own, so it could not tell a missing cap from a working one.
+        #expect(record.itemErrors.count == 50, "stored \(record.itemErrors.count) lines")
+        #expect(record.itemErrorCount == 61)
+        #expect(record.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 60, deniedByFilePermissions: 1))
+    }
 }
 
 @MainActor

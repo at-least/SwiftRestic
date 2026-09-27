@@ -268,7 +268,13 @@ not a headless SSH box.
   restic records them as unreadable rather than failing loudly — the run still
   writes a snapshot, but an *incomplete* one (restic's exit code 3), which
   SwiftRestic marks with a warning triangle under Restore and in the Snapshots
-  tables; the Restore pane lists what could not be read.
+  tables; the Restore pane lists what could not be read. SwiftRestic detects
+  the grant — at launch, whenever it becomes active, and after every backup —
+  and shows it first in Settings › General; the build is ad-hoc signed, so a
+  rebuilt or updated copy may need it granted again. A run's unreadable items
+  say which cause is which: "operation not permitted" is macOS withholding the
+  item, which the grant fixes, while "permission denied" is the file's own
+  permissions, which it does not.
 - Keychain calls are made off the main actor. They block, and macOS can put an
   authorisation dialog in front of them; on the main actor that would freeze the
   UI *and* stop the scheduler until the dialog is answered.

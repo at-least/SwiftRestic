@@ -17,13 +17,8 @@ enum RunRecordPresentation {
     /// restic's count, never the stored lines), else what it did.
     static func detail(for run: RunRecord) -> String {
         if let failure = run.failureMessage { return failure }
-        var facts = PlanStatus.facts(for: run)
-        // restic exited 3 and named nothing — a file count would pass for a
-        // clean run, and a skipped retention step or a failing hook beside it
-        // would pass for the whole story. The log keeps restic's own words.
-        if run.kind == .backup, run.exitCode == ResticError.backupPartialSuccessCode, run.itemErrorCount == 0 {
-            facts.insert("Some source data could not be read", at: 0)
-        }
+        // An unnamed exit 3 is among the facts, so the plan row says it too.
+        let facts = PlanStatus.facts(for: run)
         if !facts.isEmpty { return facts.joined(separator: " · ") }
         switch run.kind {
         case .backup:

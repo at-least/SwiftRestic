@@ -98,6 +98,9 @@ extension AppModel {
         // system prompt, and nothing below may wait on that — the scheduler has to
         // start whether or not notifications are ever allowed.
         Task { await self.requestNotificationPermission() }
+        // Not awaited either: the first TCC-checked open is a round trip to
+        // tccd, and nothing on the first screen waits for the answer.
+        Task { await self.refreshFullDiskAccess() }
 
         // Read the repositories before arming the scheduler. `snapshots`/`stats`
         // hold a shared repository lock while `forget` needs an exclusive one, so

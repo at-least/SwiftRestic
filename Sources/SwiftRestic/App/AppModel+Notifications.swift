@@ -53,16 +53,7 @@ extension AppModel {
 
         let content = UNMutableNotificationContent()
         content.title = record.planName.isEmpty ? "SwiftRestic" : record.planName
-        content.body = switch record.outcome {
-        case .succeeded:
-            "Backed up \(Format.bytes(record.dataAdded)) of new data in \(Format.duration(record.duration))."
-        case .completedWithErrors:
-            "Finished with \(max(record.itemErrorCount, record.itemErrors.count)) unreadable item(s)."
-        case .failed:
-            record.failureMessage ?? "The backup failed."
-        case .cancelled:
-            "Cancelled."
-        }
+        content.body = Self.notificationBody(for: record)
         let request = UNNotificationRequest(
             identifier: record.id.uuidString,
             content: content,
@@ -99,6 +90,28 @@ extension AppModel {
                     isError: true
                 ))
             }
+        }
+    }
+
+    /// The local notification's text. A warning counts restic's unreadable
+    /// items and names the fix when the app knows one; a warning with none —
+    /// a skipped retention step, a failing hook, an unnamed exit 3 — says
+    /// what Activity's Detail column says, never "0 unreadable items", and
+    /// never counts the retention line as one.
+    static func notificationBody(for record: RunRecord) -> String {
+        switch record.outcome {
+        case .succeeded:
+            return "Backed up \(Format.bytes(record.dataAdded)) of new data in \(Format.duration(record.duration))."
+        case .completedWithErrors where record.itemErrorCount > 0:
+            let hint = ItemErrorDiagnosis.headline(for: record).map { " " + $0 } ?? ""
+            return "Finished with \(record.itemErrorCount) unreadable item(s).\(hint)"
+        case .completedWithErrors:
+            let detail = RunRecordPresentation.detail(for: record)
+            return "Finished with warnings: \(detail)\(detail.hasSuffix(".") ? "" : ".")"
+        case .failed:
+            return record.failureMessage ?? "The backup failed."
+        case .cancelled:
+            return "Cancelled."
         }
     }
 

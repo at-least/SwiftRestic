@@ -99,6 +99,11 @@ extension AppModel: BackupRunEngine.Sink {
     /// the user notification, and the external channels.
     func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
         var record = record
+        // Probed as the run ends: whether the grant was there decides, for
+        // good, whether the drawer says "grant it", "it has it now, back up
+        // again" or "macOS protects these anyway". The probe's own answer,
+        // not `fullDiskAccess`, which an older probe may still overwrite.
+        record.fullDiskAccessAtRun = await refreshFullDiskAccess()
         await seal(&record, transcript: transcript)
         append(record: record)
         announceInApp(record: record)
@@ -128,11 +133,14 @@ extension AppModel: BackupRunEngine.Sink {
         case .completedWithErrors:
             // restic's partial success: a snapshot exists, so this is not a
             // failure — but the unreadable items are exactly what the banner
-            // queue exists to keep visible.
-            let count = max(record.itemErrorCount, record.itemErrors.count)
-            let message = record.itemErrors.first.map {
-                "\($0) — \(Format.plural(count, "unreadable item")) in total."
-            } ?? record.failureMessage ?? RunRecord.unexplainedWarningMessage
+            // queue exists to keep visible. restic's count, never the stored
+            // lines: a decoding gap or a skipped retention step stored after
+            // the items explains itself and is no item. The fix, when the
+            // app knows one, follows.
+            var message = record.unreadableItems.first.map {
+                "\($0) — \(Format.plural(record.itemErrorCount, "unreadable item")) in total."
+            } ?? record.itemErrors.first ?? record.failureMessage ?? RunRecord.unexplainedWarningMessage
+            if let hint = ItemErrorDiagnosis.headline(for: record) { message += " " + hint }
             post(Banner(title: "“\(record.planName)” finished with warnings", message: message, isError: true))
         case .failed:
             post(Banner(

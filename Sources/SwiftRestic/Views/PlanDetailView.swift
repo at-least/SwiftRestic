@@ -134,6 +134,8 @@ struct PlanDetailView: View {
     /// and a retry is the toolbar's Back Up Now a few points away.
     private struct PlanProblemRow: View {
         let summary: PlanProblemSummary
+        /// The run the summary describes, for the fix its items need.
+        let run: RunRecord
         var onShowInActivity: (() -> Void)?
 
         var body: some View {
@@ -144,35 +146,40 @@ struct PlanDetailView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(ChartPalette.status(summary.outcome))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(summary.headline)
-                            .font(.headline)
-                        Text(Format.relative(summary.finishedAt))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .help(Format.timestamp(summary.finishedAt))
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(summary.headline)
+                                .font(.headline)
+                            Text(Format.relative(summary.finishedAt))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .help(Format.timestamp(summary.finishedAt))
+                        }
+                        if let message = summary.message {
+                            // Middle truncation, as Activity's Detail column
+                            // does for failures: restic's messages lead with
+                            // the subject and end with the verdict.
+                            Text(message)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .lineLimit(3)
+                                .truncationMode(.middle)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .help(message)
+                        }
+                        if !summary.facts.isEmpty {
+                            Text(summary.facts.joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    if let message = summary.message {
-                        // Middle truncation, as Activity's Detail column does
-                        // for failures: restic's messages lead with the
-                        // subject and end with the verdict.
-                        Text(message)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .lineLimit(3)
-                            .truncationMode(.middle)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .help(message)
-                    }
-                    if !summary.facts.isEmpty {
-                        Text(summary.facts.joined(separator: " · "))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    .accessibilityElement(children: .combine)
+                    // The drawer's diagnosis, outside the combined text so
+                    // its button stays a control of its own.
+                    ItemErrorHintsView(run: run)
                 }
-                .accessibilityElement(children: .combine)
                 Spacer(minLength: 12)
                 if let onShowInActivity {
                     // The visible title is the accessible name, as on the
@@ -213,7 +220,7 @@ struct PlanDetailView: View {
             // The plan's standing problem, on the plan's own page: present
             // exactly while the sidebar names it, gone once a run succeeds.
             if let problem = model.currentProblem(for: plan.id) {
-                PlanProblemRow(summary: PlanStatus.summary(of: problem), onShowInActivity: showInActivity(problem))
+                PlanProblemRow(summary: PlanStatus.summary(of: problem), run: problem, onShowInActivity: showInActivity(problem))
             }
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             configurationCard(plan)

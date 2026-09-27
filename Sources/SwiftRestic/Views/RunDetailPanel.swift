@@ -131,10 +131,11 @@ struct RunDetailPanel: View {
     // MARK: - Messages
 
     /// What the run left in words, as before: the failure in red, prune's
-    /// output tail, restic's item lines, and the hooks' own lines — which
-    /// stay here, on this Mac, and never reach Copy Details. The unreadable
-    /// items come under restic's count and end with how many were not
-    /// stored, the way Copy Details and the Restore strip say it.
+    /// output tail, what to do about the unreadable items, restic's item
+    /// lines, and the hooks' own lines — which stay here, on this Mac, and
+    /// never reach Copy Details. The unreadable items come under restic's
+    /// count and end with how many were not stored, the way Copy Details
+    /// and the Restore strip say it.
     @ViewBuilder
     private var messages: some View {
         let hasMessages = run.failureMessage != nil || (run.kind == .prune && run.detailText != nil)
@@ -154,6 +155,9 @@ struct RunDetailPanel: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
+                // Why the items could not be read and what fixes it, ahead
+                // of the list it explains.
+                ItemErrorHintsView(run: run)
                 if run.itemErrorCount > 0 {
                     Text("Unreadable items (\(Format.count(run.itemErrorCount)))")
                         .font(.callout.weight(.semibold))

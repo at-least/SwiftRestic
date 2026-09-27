@@ -161,12 +161,37 @@ struct PlanStatusTests {
         #expect(hookSummary.facts == ["1 hook issue"])
 
         // restic exited 3 and named nothing: the row must not be a bare
-        // headline, and it uses the banner's own words.
+        // headline, and it uses the banner's own words — with Activity's
+        // fact under them, word for word.
         var bare = run(.completedWithErrors)
         bare.exitCode = 3
         let bareSummary = PlanStatus.summary(of: bare)
         #expect(bareSummary.message == RunRecord.unexplainedWarningMessage)
-        #expect(bareSummary.facts.isEmpty)
+        #expect(bareSummary.facts == ["Some source data could not be read"])
+    }
+
+    @Test("an unnamed exit 3 beside a retention skip still says some data was not read")
+    func unnamedExitThreeBesideARetentionSkip() {
+        // The retention line explains the retention skip, not the snapshot
+        // restic left short: the row must say both, in the words of
+        // Activity's Detail column.
+        var partial = run(.completedWithErrors)
+        partial.exitCode = 3
+        partial.itemErrors = [RunRecord.retentionSkippedPrefix + "repository is already locked by PID 4242 on demo-mac"]
+        let summary = PlanStatus.summary(of: partial)
+        #expect(summary.message == partial.itemErrors[0])
+        #expect(summary.facts == ["Some source data could not be read", "Retention skipped"])
+        #expect(RunRecordPresentation.detail(for: partial) == summary.facts.joined(separator: " · "))
+
+        // Only a warning that is the retention skip alone lets its message
+        // stand for the fact.
+        var withHook = run(.completedWithErrors)
+        withHook.exitCode = 0
+        withHook.itemErrors = partial.itemErrors
+        withHook.hookMessages = ["Hook “notify” exited 1"]
+        let hookSummary = PlanStatus.summary(of: withHook)
+        #expect(hookSummary.facts == ["Retention skipped", "1 hook issue"])
+        #expect(RunRecordPresentation.detail(for: withHook) == hookSummary.facts.joined(separator: " · "))
     }
 
     @Test("a decoding gap leads only when nothing unreadable was named, and is never counted")

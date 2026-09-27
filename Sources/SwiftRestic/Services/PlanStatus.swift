@@ -21,19 +21,28 @@ struct TileFace: Equatable, Sendable {
 /// status row for a problem that still stands, and the Next backup tile.
 enum PlanStatus {
     private static let retentionSkippedFact = "Retention skipped"
+    private static let unnamedUnreadFact = "Some source data could not be read"
 
     /// A run's problems as short countable facts, in a fixed order: the
-    /// unreadable items, a skipped retention step, failing hooks. The
-    /// unreadable count is `itemErrorCount` — restic's items, taken before
-    /// the engine stores its decoding and retention lines — never the stored
-    /// line count, which would call a lock-contention retention skip
-    /// (`restic forget` exit 11) "1 unreadable item". Meant as the one
-    /// source of these facts, so any other surface that summarises a run
-    /// (Activity's Detail column) can read the same words.
+    /// unreadable items (or, for a backup restic ended with exit 3 without
+    /// naming any, that some source data went unread), a skipped retention
+    /// step, failing hooks. The unreadable count is `itemErrorCount` —
+    /// restic's items, taken before the engine stores its decoding and
+    /// retention lines — never the stored line count, which would call a
+    /// lock-contention retention skip (`restic forget` exit 11) "1
+    /// unreadable item". Meant as the one source of these facts, so any
+    /// other surface that summarises a run (Activity's Detail column) can
+    /// read the same words.
     static func facts(for run: RunRecord) -> [String] {
         var facts: [String] = []
         if run.itemErrorCount > 0 {
             facts.append(Format.plural(run.itemErrorCount, "unreadable item"))
+        } else if run.kind == .backup, run.exitCode == ResticError.backupPartialSuccessCode {
+            // restic exited 3 and named nothing — a file count would pass
+            // for a clean run, and a skipped retention step or a failing
+            // hook beside it would pass for the whole story. The log keeps
+            // restic's own words.
+            facts.append(unnamedUnreadFact)
         }
         if retentionLine(of: run) != nil {
             facts.append(retentionSkippedFact)
@@ -62,9 +71,11 @@ enum PlanStatus {
         }
 
         var facts = facts(for: run)
-        // A retention-only warning already says so in its message.
-        if let message, message == retentionLine(of: run) {
-            facts.removeAll { $0 == retentionSkippedFact }
+        // A retention-only warning already says so in its message. Beside
+        // any other fact the line stays, so the facts read as Activity's
+        // Detail column does, word for word.
+        if let message, message == retentionLine(of: run), facts == [retentionSkippedFact] {
+            facts = []
         }
         return PlanProblemSummary(
             runID: run.id,

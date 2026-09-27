@@ -336,6 +336,27 @@ struct StubRestic: Sendable {
                 echo "[]"
                 exit 0
                 ;;
+            tccblocked)
+                # A backup macOS's privacy protection partly refused, in the
+                # shapes restic 0.19.1 printed on 2026-09-26: a folder it may
+                # not list arrives twice (scan, then archival) with EPERM's
+                # words, a mode-000 file once with EACCES's. The home folder
+                # is spelled out so the test never depends on $HOME reaching
+                # the child. Everything else answers empty.
+                trace "tccblocked-arm"
+                case " $* " in
+                    *" backup "*)
+                        echo '{"message_type":"error","error":{"message":"openfile for readdirnames failed: open /Users/stub/Library/Mail: operation not permitted"},"during":"scan","item":"/Users/stub/Library/Mail"}' >&2
+                        echo '{"message_type":"error","error":{"message":"openfile for readdirnames failed: open /Users/stub/Library/Mail: operation not permitted"},"during":"archival","item":"/Users/stub/Library/Mail"}' >&2
+                        echo '{"message_type":"error","error":{"message":"open /Users/stub/locked.txt: permission denied"},"during":"archival","item":"/Users/stub/locked.txt"}' >&2
+                        echo '{"message_type":"summary","files_new":1,"files_changed":0,"files_unmodified":0,"total_files_processed":1,"total_bytes_processed":10,"data_added":10,"snapshot_id":"7cc0b10c00000000"}'
+                        echo '{"message_type":"exit_error","code":3,"message":"Warning: at least one source file could not be read"}' >&2
+                        exit 3
+                        ;;
+                esac
+                echo "[]"
+                exit 0
+                ;;
             dumpappears)
                 # A single-file restore whose landing is taken while the dump
                 # runs — a user's copy, an iCloud re-download: `dump` writes

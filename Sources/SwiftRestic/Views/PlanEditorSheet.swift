@@ -175,6 +175,25 @@ struct PlanEditorSheet: View {
                 placeholder: "/Users/you/Documents",
                 expandsTildeInPath: true
             )
+            // Said here, where the source is chosen, rather than after a
+            // backup comes back with warnings. The check is a few string
+            // comparisons per source (ProtectedLocations).
+            if model.fullDiskAccess != .granted,
+               let source = ProtectedLocations.firstProtectedSource(draft.sources, home: NSHomeDirectory())
+            {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        // Orange on the glyph only; the sentence says it all.
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.warning)
+                            .accessibilityHidden(true)
+                        Text("Without Full Disk Access, macOS keeps parts of “\((source as NSString).abbreviatingWithTildeInPath)” from SwiftRestic, and backups of it finish with warnings.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(.callout)
+                    FullDiskAccessButton()
+                }
+            }
             PathListEditor(
                 title: "Exclude patterns",
                 systemImage: "eye.slash",

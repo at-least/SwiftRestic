@@ -829,6 +829,88 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("the warning banner counts restic's unreadable items, never the stored lines")
+    func warningBannerCountsItemErrorCount() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        // One unreadable item, then the retention line stored after it.
+        var record = RunRecord(kind: .backup, planID: harness.plan.id, planName: "Stub Plan", repositoryID: harness.repository.id)
+        record.outcome = .completedWithErrors
+        record.itemErrors = ["/a: open /a: permission denied", RunRecord.retentionSkippedPrefix + "locked"]
+        record.itemErrorCount = 1
+        await harness.model.deliver(record: record, plan: harness.plan, transcript: RunTranscript.Contents())
+        let counted = try #require(harness.model.banners.first { $0.title.contains("finished with warnings") })
+        #expect(counted.message.hasPrefix("/a: open /a: permission denied — 1 unreadable item in total."), "message was \(counted.message)")
+
+        // A retention skip alone is its own explanation, never an item.
+        harness.model.banners.removeAll()
+        var retentionOnly = RunRecord(kind: .backup, planID: harness.plan.id, planName: "Stub Plan", repositoryID: harness.repository.id)
+        retentionOnly.outcome = .completedWithErrors
+        retentionOnly.itemErrors = [RunRecord.retentionSkippedPrefix + "locked"]
+        retentionOnly.itemErrorCount = 0
+        await harness.model.deliver(record: retentionOnly, plan: harness.plan, transcript: RunTranscript.Contents())
+        let retention = try #require(harness.model.banners.first { $0.title.contains("finished with warnings") })
+        #expect(retention.message == RunRecord.retentionSkippedPrefix + "locked", "message was \(retention.message)")
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a run macOS blocked is stamped with the access state and says so in the banner and webhook")
+    func tccBlockedRunNamesTheFix() async throws {
+        let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
+        defer { server.stop() }
+        server.start()
+        let readyDeadline = Date.now.addingTimeInterval(5)
+        while server.port == 0, Date.now < readyDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(server.port != 0, "the capture listener never became ready")
+
+        var capture = NotificationChannel()
+        capture.name = "Capture"
+        capture.kind = .webhook
+        capture.url = "http://127.0.0.1:\(server.port)/hook"
+        var leaky = BackupHook()
+        leaky.name = "leaky"
+        leaky.event = .afterAny
+        leaky.command = "echo 'Authorization: Bearer hook-secret-token' >&2; exit 1"
+
+        let harness = try await makeHarness(mode: "tccblocked", planHooks: [leaky], channels: [capture])
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        // Injected: the real probe answers for whatever launched the tests.
+        harness.model.fullDiskAccessProbe = { .notGranted }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+            .contains("tccblocked-arm"))
+        // restic's scan and archival events for the one folder are one item
+        // (09's dedupe) — a regression check here, red only at compile time.
+        #expect(record.itemErrors.count == 2, "lines were \(record.itemErrors)")
+        #expect(record.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 1, deniedByFilePermissions: 1))
+        #expect(record.fullDiskAccessAtRun == .notGranted)
+
+        let banner = try #require(harness.model.banners.first { $0.title.contains("finished with warnings") })
+        #expect(banner.message.contains("SwiftRestic needs Full Disk Access"), "message was \(banner.message)")
+
+        var bodies: [String] = []
+        let bodyDeadline = Date.now.addingTimeInterval(5)
+        while bodies.isEmpty, Date.now < bodyDeadline {
+            bodies = server.captured
+            if bodies.isEmpty { try await Task.sleep(for: .milliseconds(50)) }
+        }
+        let body = try #require(bodies.first, "no webhook payload ever arrived")
+        let object = try #require(JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
+        #expect((object["hint"] as? String)?.contains("Full Disk Access") == true, "payload was \(body)")
+        #expect(record.hookMessages.contains { $0.contains("hook-secret-token") }, "the afterAny hook never ran")
+        #expect(!body.contains("hook-secret-token"), "hook output reached the webhook: \(body)")
+
+        await harness.model.shutdown()
+    }
+
     @Test("a failed backup names the failure in a banner")
     func failedBackupNamesTheFailure() async throws {
         let harness = try await makeHarness(mode: "plainfail")

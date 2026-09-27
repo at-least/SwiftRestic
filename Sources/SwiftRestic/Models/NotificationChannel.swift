@@ -103,6 +103,10 @@ struct NotificationEvent: Sendable, Equatable {
     /// Every warning the run reported. `nil` when nobody counted (a
     /// hand-built event, or a run with nothing to count).
     var warningCount: Int?
+    /// What to do about the warnings, when the app can tell — "macOS
+    /// blocked 1 item: SwiftRestic needs Full Disk Access." Built from
+    /// restic's item errors only, like `warnings`.
+    var hint: String?
     var filesNew: Int = 0
     var bytesProcessed: Int64 = 0
     var dataAdded: Int64 = 0
@@ -121,6 +125,7 @@ struct NotificationEvent: Sendable, Equatable {
             let count = warningCount ?? warnings.count
             return "\(operation) finished with \(count) warning(s): \(subject)"
                 + (warnings.first.map { " — \($0)" } ?? "")
+                + (hint.map { "\n" + $0 } ?? "")
         case .failed:
             return "\(operation) FAILED: \(subject) — \(errorMessage ?? "no details")"
         case .cancelled:

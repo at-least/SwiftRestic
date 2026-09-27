@@ -46,6 +46,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
+    /// Coming back from System Settings is the only sign that Full Disk
+    /// Access was granted or taken away, so every activation asks again.
+    /// The model arrives with the scene's task; an activation before that
+    /// is covered by bootstrap's own probe.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { await model?.refreshFullDiskAccess() }
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
         if isConfirmingQuit { return .terminateCancel }

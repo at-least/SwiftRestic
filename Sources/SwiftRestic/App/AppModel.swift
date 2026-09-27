@@ -96,6 +96,15 @@ final class AppModel {
     var isBootstrapping = false
     /// Mirrors `LoginItem.status`, which is not observable on its own.
     var startsAtLogin = false
+    /// Whether SwiftRestic — and so its restic — may read what Full Disk
+    /// Access guards. Probed, not asked: see `refreshFullDiskAccess()`.
+    var fullDiskAccess: FullDiskAccessStatus = .unknown
+    /// The probe behind `fullDiskAccess`. Injectable because the real one
+    /// answers for whatever process macOS holds responsible — under
+    /// xcodebuild that is Xcode, not the terminal, and on the Mac this was
+    /// written on Xcode was denied while the terminal was granted — so a
+    /// test that asserted on it would pass or fail by machine.
+    @ObservationIgnored var fullDiskAccessProbe: @Sendable () -> FullDiskAccessStatus = { FullDiskAccess.probe() }
     /// Transient messages shown at the top of the detail panes, newest first.
     /// A queue rather than a single slot: an unread error must not be erased
     /// by the next message — a failing-repository refresh, a finished restore

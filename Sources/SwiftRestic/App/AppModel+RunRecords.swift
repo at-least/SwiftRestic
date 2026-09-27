@@ -140,6 +140,8 @@ extension AppModel {
             // count is what the summary announces.
             warnings: Array(record.itemErrors.prefix(5)),
             warningCount: record.itemErrorCount > 0 ? record.itemErrorCount : nil,
+            // Diagnosed from restic's item errors too, never the hooks.
+            hint: ItemErrorDiagnosis.headline(for: record),
             filesNew: record.filesNew,
             bytesProcessed: record.bytesProcessed,
             dataAdded: record.dataAdded,

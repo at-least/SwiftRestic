@@ -31,7 +31,10 @@ struct SettingsView: View {
         } message: {
             Text("Closing the main window afterwards leaves scheduled backups running with no visible way back into SwiftRestic — reopening means launching the app again. Keep the item on to always have a way in.")
         }
-        .task { await model.refreshLoginItemStatus() }
+        .task {
+            await model.refreshFullDiskAccess()
+            await model.refreshLoginItemStatus()
+        }
         // Approving a login item happens in System Settings, so the only signal
         // that it went through is the user coming back to this app.
         .onReceive(NotificationCenter.default.publisher(
@@ -44,6 +47,35 @@ struct SettingsView: View {
     private func generalTab(model: AppModel) -> some View {
         @Bindable var model = model
         return Form {
+            // First, and on General rather than the restic tab: it is the
+            // app's permission, and restic inherits it. Below the fold at the
+            // bottom of the restic tab, it went unseen.
+            Section("Full Disk Access") {
+                LabeledContent("Status") {
+                    FullDiskAccessStatusLabel(status: model.fullDiskAccess)
+                }
+                if model.fullDiskAccess == .granted {
+                    // Only what the grant controls: a file the account can't
+                    // read stays unreadable, and the run's hint says so.
+                    Text("restic runs as part of SwiftRestic, so macOS's privacy protection doesn't keep your plans' data from it. Files your account can't read are still skipped.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    // Unknown is treated as missing, as the run hints do:
+                    // the probe found nothing to say the grant is there.
+                    Text("Without it, macOS keeps Mail, Messages, Safari and other apps' data away from SwiftRestic and the restic it runs. Backups that include them finish with warnings.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    FullDiskAccessButton()
+                    ExpandableCaption(
+                        summary: "Turn on SwiftRestic in the list. macOS asks for an administrator password.",
+                        detail: "If SwiftRestic is not in the list, click + and choose it from your Applications folder. If it is already on and this still says Not granted, turn it off and on again: a rebuilt or updated copy of SwiftRestic may not inherit the permission. If that doesn't help, quit and reopen SwiftRestic."
+                    )
+                }
+            }
+
             Section("Menu bar") {
                 Toggle(
                     "Show SwiftRestic in the menu bar",
@@ -160,20 +192,6 @@ struct SettingsView: View {
                     format: .number.grouping(.never)
                 )
             }
-
-            Section("Full Disk Access") {
-                Text(
-                    "macOS asks for permission before any app reads ~/Documents, ~/Desktop and similar folders. Granting SwiftRestic Full Disk Access in System Settings › Privacy & Security avoids repeated prompts and silently skipped files."
-                )
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                Button("Open Privacy & Security") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-            }
         }
         .formStyle(.grouped)
     }
@@ -185,6 +203,33 @@ struct SettingsView: View {
             get: { binding.wrappedValue },
             set: { binding.wrappedValue = min(1_000_000, max(0, $0)) }
         )
+    }
+}
+
+/// "Granted", "Not granted" or "Unknown", beside the glyph that says how it
+/// stands. Colour on the glyph only — orange words read 2.16:1 on the light
+/// background — and the glyph hidden, since the word says it.
+private struct FullDiskAccessStatusLabel: View {
+    let status: FullDiskAccessStatus
+
+    var body: some View {
+        HStack(spacing: 4) {
+            switch status {
+            case .granted:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Theme.success)
+                    .accessibilityHidden(true)
+            case .notGranted:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Theme.warning)
+                    .accessibilityHidden(true)
+            case .unknown:
+                Image(systemName: "questionmark.circle")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            Text(status.displayName)
+        }
     }
 }
 

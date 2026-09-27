@@ -129,6 +129,9 @@ enum BackupRunEngine {
             // any retention line — `RunRecord.unreadableItems` slices this
             // order, and only the unreadable items are counted.
             record.itemErrorCount = outcome.itemErrors.count
+            // By cause, over every item before the cap: the stored sample
+            // would under-count a home folder macOS blocked in bulk.
+            record.itemErrorTally = ItemErrorDiagnosis.tally(outcome.itemErrors)
             record.itemErrors.append(contentsOf: outcome.itemErrors.prefix(RunRecord.storedItemErrorLimit))
             if let decodingWarning = outcome.decodingWarning {
                 record.itemErrors.append(decodingWarning)

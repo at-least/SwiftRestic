@@ -833,3 +833,59 @@ struct PathBreadcrumb: View {
         }
     }
 }
+
+// MARK: - Full Disk Access
+
+/// The one way to the grant, wherever the app asks for it: Settings, the
+/// Activity drawer, the plan page's problem row and the plan editor. The
+/// grant cannot be requested by prompt, so the list in System Settings is
+/// where it happens.
+struct FullDiskAccessButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Button("Open Full Disk Access Settings") { model.openFullDiskAccessSettings() }
+            .help("System Settings › Privacy & Security › Full Disk Access")
+    }
+}
+
+/// What to do about a run's unreadable items: macOS's privacy protection,
+/// with the grant's button while it is still missing, then the files' own
+/// permissions, which the grant does not change. Nothing for a run whose
+/// items say neither. The words are `ItemErrorDiagnosis`'s, the same the
+/// banner, the notification and the channels carry; the access state now
+/// is read here, so granting it turns "grant it" into "back up again".
+struct ItemErrorHintsView: View {
+    @Environment(AppModel.self) private var model
+    let run: RunRecord
+
+    var body: some View {
+        let hints = ItemErrorDiagnosis.hints(for: run, accessNow: model.fullDiskAccess)
+        if !hints.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(hints.enumerated()), id: \.offset) { _, hint in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        // Decoration beside a sentence that says it all.
+                        Image(systemName: Self.symbolName(for: hint))
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        Text(ItemErrorDiagnosis.detail(hint))
+                            .textSelection(.enabled)
+                    }
+                    .font(.callout)
+                    if case .grantFullDiskAccess = hint {
+                        FullDiskAccessButton()
+                            .controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    private static func symbolName(for hint: ItemErrorDiagnosis.Hint) -> String {
+        switch hint {
+        case .grantFullDiskAccess, .retryNowGranted, .protectedEvenWithAccess: "lock.shield"
+        case .filePermissions: "person.crop.circle.badge.exclamationmark"
+        }
+    }
+}

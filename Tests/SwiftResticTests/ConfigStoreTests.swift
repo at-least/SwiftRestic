@@ -227,6 +227,32 @@ struct TolerantDecodingTests {
         #expect(roundTripped.filesSkipped == 2)
     }
 
+    @Test("a run record saved before the Full Disk Access diagnosis decodes without one")
+    func runRecordDiagnosisFieldsDefault() throws {
+        // Records from before the tally fall back to their stored lines, and
+        // those from before the stamp to the access state now — so absent
+        // must stay absent, never a zero tally or a made-up state.
+        let legacy = try decode(RunRecord.self, #"{"kind":"backup","itemErrorCount":1,"itemErrors":["open /x/locked.pdf: permission denied"]}"#)
+        #expect(legacy.itemErrorTally == nil)
+        #expect(legacy.fullDiskAccessAtRun == nil)
+
+        var record = RunRecord()
+        record.itemErrorTally = ItemErrorDiagnosis.Tally(blockedByMacOS: 60, deniedByFilePermissions: 1)
+        record.fullDiskAccessAtRun = .notGranted
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let json = String(decoding: try encoder.encode(record), as: UTF8.self)
+        // The spellings config.json carries.
+        #expect(json.contains(#""fullDiskAccessAtRun":"notGranted""#), "json was \(json)")
+        let roundTripped = try decode(RunRecord.self, json)
+        #expect(roundTripped.itemErrorTally == record.itemErrorTally)
+        #expect(roundTripped.fullDiskAccessAtRun == .notGranted)
+
+        // A tally written without one of its counts keeps the other.
+        let partial = try decode(RunRecord.self, #"{"kind":"backup","itemErrorTally":{"blockedByMacOS":2}}"#)
+        #expect(partial.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 2, deniedByFilePermissions: 0))
+    }
+
     @Test("an unknown enum raw value falls back to the default case, and says so")
     func unknownEnumCases() throws {
         let decoder = JSONDecoder()

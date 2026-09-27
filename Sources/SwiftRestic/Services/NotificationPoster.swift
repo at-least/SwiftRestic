@@ -56,6 +56,7 @@ enum NotificationPayload {
             if let snapshotID = event.snapshotID { object["snapshot_id"] = snapshotID }
             if let errorMessage = event.errorMessage { object["error"] = errorMessage }
             if !event.warnings.isEmpty { object["warnings"] = event.warnings }
+            if let hint = event.hint { object["hint"] = hint }
             return json(url: url, object: object)
         }
     }

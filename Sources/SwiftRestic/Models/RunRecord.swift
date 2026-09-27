@@ -72,6 +72,16 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// abort, a launch failure, a stop by cancel or a cap) and on records
     /// from before this field existed.
     var exitCode: Int32?
+    /// The unreadable items by cause — macOS's privacy protection or the
+    /// files' own permissions — counted over every item, past the stored
+    /// cap. Nil on records from before it was kept; those are counted from
+    /// `unreadableItems`.
+    var itemErrorTally: ItemErrorDiagnosis.Tally?
+    /// Whether SwiftRestic had Full Disk Access when the backup finished,
+    /// so the drawer can tell "grant it" from "it has it now, back up
+    /// again" from "macOS protects these anyway". Backups only; nil on
+    /// records from before it was stamped.
+    var fullDiskAccessAtRun: FullDiskAccessStatus?
     /// Results of failing hooks.
     ///
     /// Kept apart from `itemErrors` on purpose: a hook is an arbitrary user
@@ -143,6 +153,8 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         itemErrors = c.value(.itemErrors, default: [])
         itemErrorCount = c.value(.itemErrorCount, default: 0)
         exitCode = c.optional(.exitCode)
+        itemErrorTally = c.optional(.itemErrorTally)
+        fullDiskAccessAtRun = c.optional(.fullDiskAccessAtRun)
         hookMessages = c.value(.hookMessages, default: [])
         failureMessage = c.optional(.failureMessage)
         detailText = c.optional(.detailText)
