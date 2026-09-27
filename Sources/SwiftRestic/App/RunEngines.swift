@@ -157,6 +157,14 @@ enum BackupRunEngine {
                         try await service.forget(context, plan: plan)
                     }
                     transcript.note("Retention removed \(Format.plural(removed, "snapshot"))")
+                } catch where RunRecord.isCancellation(error) {
+                    // Stopped here — "Stop Applying Retention" in the Plan
+                    // menu or the tray, Pause and Stop, or a quit: the
+                    // user's stop, recorded as every stop is, never as the
+                    // lock failure below. The snapshot stands and is
+                    // already stamped, so nothing stamps the run again.
+                    record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
+                    transcript.note("Retention stopped")
                 } catch {
                     // `forget` needs an exclusive repository lock while `backup`
                     // only takes a shared one, so a second plan backing up to the

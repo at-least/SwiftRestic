@@ -260,8 +260,14 @@ extension RunRecord {
     /// `.failed` with the error's message. Callers keep their own side effects:
     /// stamps, banners, bookkeeping.
     mutating func setOutcome(from error: Error, cancellationMessage: String) {
-        let cancelled = error is CancellationError || (error as? ResticError) == .cancelled
+        let cancelled = Self.isCancellation(error)
         outcome = cancelled ? .cancelled : .failed
         failureMessage = cancelled ? cancellationMessage : error.localizedDescription
+    }
+
+    /// Whether an error is a stop — Swift's task cancellation or restic's
+    /// own — rather than a failure.
+    static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? ResticError) == .cancelled
     }
 }

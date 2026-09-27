@@ -198,6 +198,30 @@ struct BackupRunEngineTests {
         #expect(sink.log.contains("mark:true"))
     }
 
+    @Test("stopping a backup during its own retention step reads as cancelled, not a warning")
+    func stopDuringRetentionIsACancellation() async throws {
+        // The Plan menu's and the tray's "Stop Applying Retention", Pause
+        // and Stop, and a quit all reach a backup's forget as a cancelled
+        // restic call — the user's stop, never a lock failure to warn about.
+        let sink = RecordingSink()
+        let client = MockResticClient()
+            .onBackup(.success(successOutcome()))
+            .onForget(.failure(ResticError.cancelled))
+        let plan = makePlan()
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .cancelled, "outcome was \(record.outcome), itemErrors \(record.itemErrors)")
+        #expect(record.failureMessage == "cancelled \(plan.id)")
+        #expect(!record.itemErrors.contains { $0.hasPrefix(RunRecord.retentionSkippedPrefix) }, "itemErrors were \(record.itemErrors)")
+        #expect(sink.deliveredNotes.contains("Retention stopped"), "notes were \(sink.deliveredNotes)")
+        // The snapshot was written before the stop: it keeps its record and
+        // its success stamp, and nothing stamps the run again as failed.
+        #expect(record.snapshotID == "cafe0000")
+        #expect(sink.log.filter { $0.hasPrefix("mark:") } == ["mark:true"], "log was \(sink.log)")
+        #expect(!sink.log.contains("auth-noted"))
+    }
+
     @Test("a retention skip is never summarised as an unreadable item")
     func retentionSkipIsNotAnUnreadableItem() async throws {
         let sink = RecordingSink()
