@@ -194,6 +194,19 @@ enum PlanStatus {
         return nil
     }
 
+    /// The plan page's Configuration row: the sidebar's pause words, with
+    /// the schedule named under either pause — the row is where the
+    /// schedule is stated, so it never drops it. An open-ended pause's
+    /// caption already names it (a manual plan's has none to name); a timed
+    /// one's names only its end, so the schedule it resumes follows.
+    static func scheduleRow(for plan: BackupPlan, now: Date = .now, calendar: Calendar = .current) -> String {
+        guard let pause = pauseCaption(for: plan, now: now, calendar: calendar) else {
+            return plan.schedule.summary
+        }
+        guard plan.isEnabled else { return pause }
+        return "\(pause) — \(plan.schedule.summary)"
+    }
+
     /// A plan's sidebar caption. In rank: the phase of a run in flight; a
     /// standing problem, named for as long as it stands, seen or not; the
     /// pause; the last backup; the schedule. A problem and a pause are both

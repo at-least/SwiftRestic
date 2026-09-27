@@ -223,6 +223,32 @@ struct PlanStatusTests {
         #expect(!PlanStatus.showsPauseMarker(for: plan, now: now))
     }
 
+    @Test("the Configuration row names the schedule under either pause, from the sidebar's words")
+    func scheduleRowUnderPause() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        var plan = completeDailyPlan()
+        #expect(PlanStatus.scheduleRow(for: plan, now: now, calendar: calendar) == plan.schedule.summary)
+
+        // Until I Resume: the sidebar's own caption, which names the schedule.
+        plan.isEnabled = false
+        let openEnded = PlanStatus.scheduleRow(for: plan, now: now, calendar: calendar)
+        #expect(openEnded == "Paused — \(plan.schedule.summary)")
+        #expect(openEnded == PlanStatus.pauseCaption(for: plan, now: now, calendar: calendar))
+
+        // A timed pause: the sidebar's end, then the schedule it resumes.
+        plan.isEnabled = true
+        plan.pausedUntil = now.addingTimeInterval(3600)
+        let end = Format.pauseEnd(now.addingTimeInterval(3600), now: now, calendar: calendar)
+        #expect(PlanStatus.scheduleRow(for: plan, now: now, calendar: calendar) == "Paused until \(end) — \(plan.schedule.summary)")
+
+        // A manual plan switched off has no schedule to name.
+        var manual = completeDailyPlan()
+        manual.schedule.frequency = .manual
+        manual.isEnabled = false
+        #expect(PlanStatus.scheduleRow(for: manual, now: now, calendar: calendar) == "Paused")
+    }
+
     @Test("a timed pause names its end; a lapsed one reads as no pause")
     func timedPauseCaption() {
         var calendar = Calendar(identifier: .gregorian)

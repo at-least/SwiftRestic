@@ -328,16 +328,6 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The Configuration card's schedule: a timed pause names its end and
-    /// the schedule it resumes.
-    private func scheduleSummary(_ plan: BackupPlan) -> String {
-        guard plan.isEnabled else { return "Paused" }
-        if let end = plan.activePauseEnd(at: .now) {
-            return "Paused until \(Format.pauseEnd(end)) — \(plan.schedule.summary)"
-        }
-        return plan.schedule.summary
-    }
-
     /// The rules, and the way to apply them now rather than after the next
     /// backup — a paused or failing plan's history otherwise never thins.
     private func retentionRow(_ plan: BackupPlan) -> some View {
@@ -365,7 +355,7 @@ struct PlanDetailView: View {
                             Text("Not set").foregroundStyle(Theme.warning)
                         }
                     }
-                    DetailRow("Schedule", scheduleSummary(plan))
+                    DetailRow("Schedule", PlanStatus.scheduleRow(for: plan))
                     DetailRow("Retention") {
                         retentionRow(plan)
                     }
