@@ -267,20 +267,17 @@ extension AppModel {
     /// The `SMAppService` calls are synchronous XPC round-trips to the
     /// background-task-management daemon, so each runs detached — a wedged
     /// daemon stalls a background task, not the main actor. Changes
-    /// serialize through a task handle: a second toggle awaits the first,
-    /// so the daemon's final state is the last click's, not whichever XPC
-    /// happened to finish last.
+    /// serialize through a chain: a second toggle runs after the first, so
+    /// the daemon's final state is the last click's, not whichever XPC
+    /// happened to finish last. The generation moves at the click, so a
+    /// change still ahead in the chain already knows a newer one owns the
+    /// switch.
     func setStartsAtLogin(_ enabled: Bool) async {
-        while let inFlight = loginItemChange {
-            await inFlight.value
-        }
         loginItemGeneration += 1
         let generation = loginItemGeneration
-        loginItemChange = Task { [weak self] in
+        await loginItemChanges.run { [weak self] in
             await self?.performSetStartsAtLogin(enabled, generation: generation)
         }
-        await loginItemChange?.value
-        loginItemChange = nil
     }
 
     private func performSetStartsAtLogin(_ enabled: Bool, generation: Int) async {
@@ -328,7 +325,7 @@ extension AppModel {
         // A queued or running change owns the switch until it settles — its
         // optimistic value is what the user last asked for, and a status
         // read landing beside it must not stomp that back to daemon-stale.
-        if loginItemChange == nil {
+        if loginItemChanges.isIdle {
             startsAtLogin = state == .enabled
             loginItemNeedsApproval = state == .needsApproval
         }

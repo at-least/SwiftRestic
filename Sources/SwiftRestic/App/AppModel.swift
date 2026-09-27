@@ -193,7 +193,7 @@ final class AppModel {
     /// Serializes the login-item changes: two quick toggles must apply in
     /// click order, or the daemon ends on whichever XPC finished last
     /// instead of the user's last click.
-    @ObservationIgnored var loginItemChange: Task<Void, Never>?
+    @ObservationIgnored let loginItemChanges = TaskChain()
     /// Bumped by every toggle; a daemon read may only write `startsAtLogin`
     /// while its own generation is still the newest, or it would snap the
     /// switch back past a newer click's optimistic value.
@@ -208,9 +208,9 @@ final class AppModel {
     /// banner: once per failing stretch, so a denial does not nag on every
     /// failed run.
     @ObservationIgnored var notificationsProblemNoted = false
-    /// The save actually writing, when one is. Awaited (never yield-spun)
-    /// by the next flush — see `flushSave`.
-    @ObservationIgnored private var saveInFlight: Task<Void, Never>?
+    /// The configuration writes, one at a time in call order — see
+    /// `flushSave`.
+    @ObservationIgnored private let saves = TaskChain()
     /// Set when bootstrap could not read the configuration from any
     /// generation. Every save from here on is refused: the live file that is
     /// on disk is corrupt in unknown ways, and the rotation behind each save
@@ -286,16 +286,12 @@ final class AppModel {
     func flushSave() async {
         guard isLoaded else { return }
         guard !isConfigurationUnreadable else { return }
-        // Another write is in progress: wait for it and then write the newer
-        // state. Skipping instead would drop the latest edit for good —
-        // nothing else would save it, including the single flush at
-        // shutdown. Awaiting the in-flight task suspends this flush instead
-        // of yield-spinning the main actor's queue, and the loop re-checks,
-        // so a save scheduled behind the awaited one drains too.
-        while let inFlight = saveInFlight {
-            await inFlight.value
-        }
-        saveInFlight = Task { [weak self] in
+        // Another write is in progress: this one runs after it and writes
+        // the newer state. Skipping instead would drop the latest edit for
+        // good — nothing else would save it, including the single flush at
+        // shutdown. Each write reads the configuration when its turn comes,
+        // so the newest state is what lands last.
+        await saves.run { [weak self] in
             guard let self else { return }
             let snapshot = self.configuration
             do {
@@ -308,7 +304,5 @@ final class AppModel {
                 ))
             }
         }
-        await saveInFlight?.value
-        saveInFlight = nil
     }
 }

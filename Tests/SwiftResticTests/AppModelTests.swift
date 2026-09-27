@@ -1194,6 +1194,37 @@ struct KeychainFailureHonestyTests {
 }
 
 
+@Suite("configuration saves")
+@MainActor
+struct ConfigurationSaveTests {
+    @Test("overlapping saves all return, and the last state asked for is what lands")
+    func overlappingSavesSettle() async throws {
+        // A quit's flush landing on the debounced save's, or the repository
+        // editor's flush on either: the calls overlap, and they used to spin
+        // the main actor for good (awaiting a finished task never suspends).
+        let watchdog = HangWatchdog(seconds: 10, "three overlapping flushSave calls never returned — the main actor is spinning")
+        defer { watchdog.disarm() }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticOverlappingSaves-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        model.isLoaded = true
+        // Only the three flushes below write: no debounced save joins in.
+        model.suppressConfigurationSave = true
+
+        let saves = (1 ... 3).map { index in
+            Task { @MainActor in
+                model.configuration.settings.maxRunHistory = 100 + index
+                await model.flushSave()
+            }
+        }
+        for save in saves { await save.value }
+
+        let saved = try await ConfigStore(directory: root).load().configuration
+        #expect(saved.settings.maxRunHistory == 103)
+    }
+}
+
 /// When no generation of the configuration reads, the files on disk are the
 /// only good copy left — and every save's rotation would shuffle the corrupt
 /// live file over them. Refusing saves is the whole protection.
