@@ -201,12 +201,13 @@ struct RunDetailPanel: View {
                 // A retry only where there is something to retry: a clean
                 // record's next step is not a pointless re-run.
                 if run.kind == .backup, run.outcome != .succeeded, plan.isConfigurationComplete {
-                    // Disabled while running or restic-less, like the plan
-                    // page's and sidebar's buttons: a clickable button that
-                    // quietly does nothing is a lie the model's no-op guard
-                    // should never have to tell.
+                    // The Plan menu's predicate, as the plan page's and the
+                    // sidebar's buttons read it: disabled while running or
+                    // restic-less — a clickable button that quietly does
+                    // nothing is a lie the model's no-op guard should never
+                    // have to tell.
                     Button("Back Up Now") { model.runBackup(planID: planID) }
-                        .disabled(model.isRunning(planID: planID) || !model.isResticAvailable)
+                        .disabled(!model.planCommands(for: .plan(planID)).canBackUp)
                         .help(
                             model.isRunning(planID: planID)
                                 ? "This plan's backup is already running"

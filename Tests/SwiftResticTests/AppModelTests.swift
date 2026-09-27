@@ -823,16 +823,6 @@ struct PausingTests {
         #expect(model.configuration.plans[0].isEnabled)
         #expect(model.configuration.plans[0].pausedUntil == nil)
 
-        // The older call style keeps one meaning with the new one.
-        model.pausePlanSchedule(id: nightly.id, for: .oneHour, now: now)
-        model.setPlanEnabled(id: nightly.id, isEnabled: false)
-        #expect(!model.configuration.plans[0].isEnabled)
-        #expect(model.configuration.plans[0].pausedUntil == nil)
-        model.pausePlanSchedule(id: nightly.id, for: .oneHour, now: now)
-        model.setPlanEnabled(id: nightly.id, isEnabled: true)
-        #expect(model.configuration.plans[0].isEnabled)
-        #expect(model.configuration.plans[0].pausedUntil == nil)
-
         #expect(model.scheduleHold == nil)
         model.pauseBackups(for: .untilResumed)
         #expect(model.scheduleHold == .paused(until: nil))

@@ -37,16 +37,6 @@ extension AppModel {
         configuration.plans[index].pausedUntil = nil
     }
 
-    /// The older on/off form of the two calls above, kept so either call
-    /// style means the same thing.
-    func setPlanEnabled(id: UUID, isEnabled: Bool) {
-        if isEnabled {
-            resumePlanSchedule(id: id)
-        } else {
-            pausePlanSchedule(id: id, for: .untilResumed)
-        }
-    }
-
     func deletePlan(id: UUID) {
         tasks.cancel(.plan(id))
         pauseStoppedPlanIDs.remove(id)
