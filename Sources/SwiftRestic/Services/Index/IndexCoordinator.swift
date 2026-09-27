@@ -10,7 +10,8 @@ import Foundation
 /// and the app degrades to what it did before the index existed: restic `ls`
 /// per browse.
 actor IndexCoordinator {
-    private let directory: URL
+    /// Where the `<repository>.sqlite` files live: beside the configuration.
+    let directory: URL
     private var stores: [UUID: SQLiteIndexStore] = [:]
     private var backfillTasks: [UUID: Task<Void, Never>] = [:]
     /// Repositories the app has removed. A snapshot refresh that was in

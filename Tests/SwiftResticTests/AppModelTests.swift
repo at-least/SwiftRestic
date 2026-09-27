@@ -1225,6 +1225,21 @@ struct ConfigurationSaveTests {
     }
 }
 
+@Suite("snapshot index location")
+@MainActor
+struct IndexLocationTests {
+    @Test("a model's snapshot indexes live beside its configuration")
+    func indexFollowsTheStore() {
+        // Every model a test builds points its store at a temporary folder;
+        // an index that ignored it wrote its sqlite files into the real
+        // Application Support folder on every test run.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticIndexHome-\(UUID().uuidString)")
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        #expect(model.indexCoordinator.directory == root)
+    }
+}
+
 /// When no generation of the configuration reads, the files on disk are the
 /// only good copy left — and every save's rotation would shuffle the corrupt
 /// live file over them. Refusing saves is the whole protection.

@@ -178,8 +178,11 @@ final class AppModel {
     let runner = ResticRunner()
     /// The per-repository snapshot indexes and their upkeep. A cache with a
     /// rebuild path: its failures are its own, never the refresh's or the
-    /// backup's. See `IndexCoordinator`.
-    let indexCoordinator = IndexCoordinator()
+    /// backup's. See `IndexCoordinator`. Beside the configuration, as the
+    /// run logs are: for the app the folder it always used
+    /// (`ConfigStore.defaultDirectory()`, `SWIFTRESTIC_CONFIG_DIR` included),
+    /// and a test's own folder when the test points the store elsewhere.
+    let indexCoordinator: IndexCoordinator
     /// State of the restic console pane (see `ConsoleModel`); its two
     /// injected closures are set below, at the end of `init`.
     let console = ConsoleModel()
@@ -237,6 +240,7 @@ final class AppModel {
     ) {
         self.store = store
         self.secrets = secrets
+        self.indexCoordinator = IndexCoordinator(directory: store.directory)
         self.viewDefaults = defaults
         self.problemsSeenAt = ProblemDotsStore.load(from: defaults)
         #if DEBUG
