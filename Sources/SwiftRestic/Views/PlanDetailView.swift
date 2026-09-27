@@ -27,9 +27,12 @@ struct PlanDetailView: View {
         // dot was announcing is seen now — honestly, because the status row
         // under the tiles shows that failure for as long as it stands. The
         // dot for a run that fails while the page is already open stays,
-        // like a message arriving into the mailbox you are reading — leaving
-        // and returning clears it.
-        .onAppear { model.markProblemSeen(planID: planID) }
+        // like a message arriving into the mailbox you are reading — opening
+        // the page again clears it. Keyed on the plan, not on appearing:
+        // going from one plan's page straight to another's keeps this view
+        // (RootDetailView gives it no per-plan identity), so onAppear never
+        // fired for the second plan and its dot outlived the visit.
+        .onChange(of: planID, initial: true) { model.markProblemSeen(planID: planID) }
         .toolbar {
             ToolbarItemGroup {
                 if let plan {
