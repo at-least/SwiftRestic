@@ -9,6 +9,13 @@ extension AppModel {
         isShuttingDown ? "Interrupted by quitting SwiftRestic" : "Cancelled"
     }
 
+    /// A backup's cancellation, which Pause and Stop words for itself: the
+    /// run did not fail and nobody pressed its Stop — the pause ended it,
+    /// and it runs again when the pause does.
+    func cancellationMessage(for planID: UUID) -> String {
+        pauseStoppedPlanIDs.contains(planID) ? "Stopped by Pause Backups" : cancellationMessage
+    }
+
     // MARK: - Run logs
 
     /// `Logs/` beside `config.json` — so `SWIFTRESTIC_CONFIG_DIR` moves it

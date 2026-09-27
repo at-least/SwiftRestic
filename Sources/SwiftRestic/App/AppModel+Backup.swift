@@ -27,6 +27,9 @@ extension AppModel {
             // The unwind retires the token as well as the strip, so a hop
             // from this run drops from here on — restore's own rule.
             self?.backupRunTokens[planID] = nil
+            // Pause and Stop's mark belongs to this run alone: left behind,
+            // a later plain Stop of the plan would skip its stamp too.
+            self?.pauseStoppedPlanIDs.remove(planID)
             self?.activity[planID] = nil
             self?.planProgress[planID] = nil
         }, in: .plan(planID))
@@ -57,6 +60,13 @@ extension AppModel {
     }
 
     func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool) {
+        // A backup Pause and Stop ended leaves its slot unstamped, so the
+        // scheduler runs it again once the pause ends: restic cannot resume
+        // it, and stamping would count the slot as done — the stopped run
+        // would wait a whole period. Safe only because the pause holds the
+        // scheduler meanwhile; a plain Stop has no pause behind it and
+        // stamps, or the next tick would restart the run within a minute.
+        if !succeeded, pauseStoppedPlanIDs.contains(planID) { return }
         guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
         configuration.plans[index].lastRunAt = date
         if succeeded { configuration.plans[index].lastSuccessAt = date }

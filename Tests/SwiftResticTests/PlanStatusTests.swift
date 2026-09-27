@@ -38,8 +38,8 @@ struct PlanStatusTests {
 
     @Test("a paused manual plan's tile promises no schedule to resume")
     func pausedManualPlanTile() {
-        // Pause Schedule is offered on every enabled plan, and removing a
-        // repository pauses all of its plans — manual ones too.
+        // Removing a repository pauses all of its plans — manual ones too —
+        // and the editor's "Run on schedule" switch is on every plan.
         var plan = completeDailyPlan()
         plan.schedule.frequency = .manual
         plan.isEnabled = false
@@ -87,6 +87,208 @@ struct PlanStatusTests {
         var manual = completeDailyPlan()
         manual.schedule.frequency = .manual
         #expect(PlanStatus.nextBackupTile(for: manual, existingRepositoryIDs: [repositoryID], now: now).value == "Manually")
+    }
+
+    @Test("an overdue plan under an open-ended hold reads Waiting, never Due now")
+    func heldOverduePlanWaits() {
+        var plan = completeDailyPlan()
+        // Last ran two days ago: its 02:00 slot is overdue.
+        plan.lastRunAt = now.addingTimeInterval(-2 * 86_400)
+
+        let unheld = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], now: now)
+        #expect(unheld.value == "Due now")
+
+        let paused = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: nil), now: now
+        )
+        #expect(paused.value == "Waiting")
+        #expect(paused.help?.contains("Backups paused until you resume") == true, "help was \(String(describing: paused.help))")
+
+        let battery = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], hold: .onBattery, now: now)
+        #expect(battery.value == "Waiting")
+        #expect(battery.help?.contains("battery") == true, "help was \(String(describing: battery.help))")
+    }
+
+    @Test("a timed app-wide hold moves the tile to the hold's end")
+    func timedHoldClampsTile() {
+        var plan = completeDailyPlan()
+        plan.lastRunAt = now.addingTimeInterval(-2 * 86_400)
+        let end = now.addingTimeInterval(3600)
+
+        let tile = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: end), now: now
+        )
+        #expect(tile.value == Format.tileTimestamp(end, now: now))
+        #expect(tile.help?.hasPrefix(Format.timestamp(end)) == true, "help was \(String(describing: tile.help))")
+    }
+
+    @Test("a plan's own timed pause moves its tile to the pause's end and says so")
+    func ownTimedPauseClampsTile() {
+        var plan = completeDailyPlan()
+        plan.lastRunAt = now.addingTimeInterval(-2 * 86_400)
+        let end = now.addingTimeInterval(5400)
+        plan.pausedUntil = end
+
+        let tile = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], now: now)
+        #expect(tile.value == Format.tileTimestamp(end, now: now))
+        #expect(
+            tile.help == "\(Format.timestamp(end)) — scheduled runs are paused until \(Format.pauseEnd(end, now: now))",
+            "help was \(String(describing: tile.help))"
+        )
+    }
+
+    @Test("a plan paused inside an app-wide pause names the pause that sets its date, once")
+    func overlappingPausesNameOne() {
+        var plan = completeDailyPlan()
+        plan.lastRunAt = now.addingTimeInterval(-2 * 86_400)
+        let sooner = now.addingTimeInterval(3600)
+        let later = now.addingTimeInterval(7200)
+
+        // The plan's own pause outlasts the app-wide one and sets the date;
+        // "Backups paused until …" beside it read as the same pause twice.
+        plan.pausedUntil = later
+        let own = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: sooner), now: now
+        )
+        #expect(own.value == Format.tileTimestamp(later, now: now))
+        #expect(own.help == "\(Format.timestamp(later)) — scheduled runs are paused until \(Format.pauseEnd(later, now: now))")
+
+        // The app-wide pause outlasts the plan's and sets the date.
+        plan.pausedUntil = sooner
+        let appWide = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: later), now: now
+        )
+        #expect(appWide.value == Format.tileTimestamp(later, now: now))
+        #expect(appWide.help == "\(Format.timestamp(later)). \(ScheduleHold.paused(until: later).summary(now: now)).")
+
+        // The battery names no end, and says something else: both stay.
+        let battery = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .onBattery, now: now
+        )
+        #expect(
+            battery.help
+                == "\(Format.timestamp(sooner)) — scheduled runs are paused until \(Format.pauseEnd(sooner, now: now)). \(ScheduleHold.onBattery.summary(now: now))."
+        )
+    }
+
+    // MARK: - Sidebar caption
+
+    private func relative(_ date: Date) -> String { "5 minutes ago" }
+
+    @Test("a paused manual plan's caption names no schedule, as its tile does")
+    func pausedManualPlanCaption() {
+        // Removing a repository switches off every plan of it, manual ones
+        // too, and the editor's "Run on schedule" switch is on every plan:
+        // "Paused — Manually" named a schedule a manual plan does not have.
+        var plan = completeDailyPlan()
+        plan.schedule.frequency = .manual
+        plan.isEnabled = false
+
+        let caption = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(caption.text == "Paused")
+        #expect(caption.text == PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], now: now).value)
+
+        // Beside a standing problem it keeps its own line, in the same word.
+        let withProblem = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: run(.failed),
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(withProblem.pauseNote == "Paused")
+    }
+
+    @Test("a paused plan with a standing problem names both, the problem first")
+    func pausedProblemNamesBoth() {
+        var plan = completeDailyPlan()
+        plan.isEnabled = false
+        let failed = run(.failed)
+
+        let caption = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: failed,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(caption.text == "Failed — 5 minutes ago")
+        #expect(caption.outcome == .failed)
+        #expect(caption.pauseNote == "Paused — Daily at 02:00")
+
+        // Unpaused, the problem stands alone.
+        plan.isEnabled = true
+        let unpaused = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: failed,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(unpaused.pauseNote == nil)
+        #expect(!PlanStatus.showsPauseMarker(for: plan, now: now))
+    }
+
+    @Test("a timed pause names its end; a lapsed one reads as no pause")
+    func timedPauseCaption() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        var plan = completeDailyPlan()
+        plan.lastSuccessAt = now.addingTimeInterval(-3600)
+        plan.pausedUntil = now.addingTimeInterval(3600)
+
+        let paused = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, calendar: calendar, relative: relative
+        )
+        #expect(paused.text == "Paused until \(Format.pauseEnd(now.addingTimeInterval(3600), now: now, calendar: calendar))")
+        #expect(paused.outcome == nil)
+        #expect(paused.pauseNote == nil)
+        #expect(PlanStatus.showsPauseMarker(for: plan, now: now))
+
+        plan.pausedUntil = now.addingTimeInterval(-1)
+        let lapsed = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, calendar: calendar, relative: relative
+        )
+        #expect(lapsed.text == "Last backup 5 minutes ago")
+        #expect(!PlanStatus.showsPauseMarker(for: plan, now: now))
+    }
+
+    @Test("a plan the scheduler skips never promises its schedule; a running one names its phase")
+    func skippedAndRunningCaptions() {
+        // Enabled, never backed up, no repository: the scheduler skips it,
+        // and "Daily at 02:00" would promise a run that never comes.
+        var orphaned = completeDailyPlan()
+        orphaned.repositoryID = nil
+        orphaned.lastSuccessAt = nil
+        #expect(
+            PlanStatus.sidebarCaption(
+                for: orphaned, activity: nil, problem: nil,
+                existingRepositoryIDs: [repositoryID], now: now, relative: relative
+            ).text == "Not scheduled"
+        )
+        var fresh = completeDailyPlan()
+        fresh.lastSuccessAt = nil
+        #expect(
+            PlanStatus.sidebarCaption(
+                for: fresh, activity: nil, problem: nil,
+                existingRepositoryIDs: [repositoryID], now: now, relative: relative
+            ).text == "Daily at 02:00"
+        )
+        var manual = fresh
+        manual.schedule.frequency = .manual
+        manual.repositoryID = nil
+        #expect(
+            PlanStatus.sidebarCaption(
+                for: manual, activity: nil, problem: nil,
+                existingRepositoryIDs: [repositoryID], now: now, relative: relative
+            ).text == "Manually"
+        )
+
+        var activity = PlanActivity()
+        activity.phase = .backingUp
+        var pausedRunning = completeDailyPlan()
+        pausedRunning.isEnabled = false
+        let running = PlanStatus.sidebarCaption(
+            for: pausedRunning, activity: activity, problem: run(.failed),
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(running == PlanCaption(text: "Backing up", outcome: nil, pauseNote: nil))
     }
 
     // MARK: - Status row

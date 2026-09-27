@@ -1,11 +1,57 @@
 import Foundation
 
+/// What is holding every scheduled run back, app-wide: the user's Pause
+/// Backups, or the battery while "Pause scheduled backups on battery power"
+/// is on. One value, so the tray, the Overview, Settings and the plan page
+/// say the same thing the scheduler does.
+enum ScheduleHold: Equatable, Sendable {
+    /// Pause Backups; `until` is `nil` for Until I Resume.
+    case paused(until: Date?)
+    case onBattery
+
+    /// When the hold lifts by itself, if it does — the date every held run
+    /// moves to. The battery's end cannot be known ahead.
+    var resumesAt: Date? {
+        switch self {
+        case let .paused(until): until
+        case .onBattery: nil
+        }
+    }
+
+    func summary(now: Date = .now, calendar: Calendar = .current) -> String {
+        switch self {
+        case let .paused(until?):
+            "Backups paused until \(Format.pauseEnd(until, now: now, calendar: calendar))"
+        case .paused(until: nil):
+            "Backups paused until you resume"
+        case .onBattery:
+            "Backups wait for power — this Mac is on battery"
+        }
+    }
+}
+
 /// Decides which plans are due to run.
 ///
 /// Deliberately pure: the wall-clock timer lives in `AppModel`, so this logic can
 /// be tested by handing it a fixed `now`.
 enum Scheduler {
-    /// Plans that should start now, most overdue first.
+    /// The app-wide hold in force at `now`: a live pause wins, then the
+    /// battery — only while the setting asks for it. A pause whose end has
+    /// passed holds nothing, even before the tick clears it.
+    static func hold(
+        pause: SchedulePause?,
+        pauseOnBattery: Bool,
+        isOnBattery: Bool,
+        now: Date = .now
+    ) -> ScheduleHold? {
+        if let pause, pause.isActive(at: now) { return .paused(until: pause.until) }
+        if pauseOnBattery, isOnBattery { return .onBattery }
+        return nil
+    }
+
+    /// Plans that should start now, most overdue first. A plan inside its
+    /// own timed pause waits, and the slot it missed stays due for when the
+    /// pause ends. (The app-wide hold is the tick's own early return.)
     ///
     /// - Parameters:
     ///   - existingRepositoryIDs: repositories currently in the configuration. A
@@ -26,7 +72,7 @@ enum Scheduler {
     ) -> [BackupPlan] {
         plans
             .filter { plan in
-                guard plan.isEnabled, plan.isConfigurationComplete else { return false }
+                guard plan.isScheduleActive(at: now), plan.isConfigurationComplete else { return false }
                 guard let repositoryID = plan.repositoryID,
                       existingRepositoryIDs.contains(repositoryID)
                 else { return false }
@@ -73,10 +119,17 @@ enum Scheduler {
     /// will never fire (an incomplete plan used to sit on the card as due
     /// forever). Dates are raw: the card labels a past one "Due now"; only
     /// `nextScheduledRun` clamps to `now`.
+    ///
+    /// A pause with an end moves a date to that end, where the scheduler
+    /// will pick the run up: the plan's own timed pause, and `heldUntil`,
+    /// the app-wide hold's end. The later of the two wins. The enumeration
+    /// stays ungated by default — a paused schedule is still a schedule, and
+    /// only the displays of what will actually fire pass the hold.
     static func upcomingRuns(
         in plans: [BackupPlan],
         now: Date = .now,
-        existingRepositoryIDs: Set<UUID>
+        existingRepositoryIDs: Set<UUID>,
+        heldUntil: Date? = nil
     ) -> [(plan: BackupPlan, date: Date)] {
         plans
             .filter { $0.isEnabled && $0.isConfigurationComplete }
@@ -85,7 +138,9 @@ enum Scheduler {
                       existingRepositoryIDs.contains(repositoryID)
                 else { return nil }
                 guard let date = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now) else { return nil }
-                return (plan, date)
+                // The clamp probe (design-probes/06-global-pause/clamp) matched
+                // this to the scheduler's first firing within one 60 s tick.
+                return (plan, max(date, plan.activePauseEnd(at: now) ?? .distantPast, heldUntil ?? .distantPast))
             }
     }
 
@@ -95,9 +150,10 @@ enum Scheduler {
     static func nextScheduledRun(
         in plans: [BackupPlan],
         now: Date = .now,
-        existingRepositoryIDs: Set<UUID>
+        existingRepositoryIDs: Set<UUID>,
+        heldUntil: Date? = nil
     ) -> (plan: BackupPlan, date: Date)? {
-        upcomingRuns(in: plans, now: now, existingRepositoryIDs: existingRepositoryIDs)
+        upcomingRuns(in: plans, now: now, existingRepositoryIDs: existingRepositoryIDs, heldUntil: heldUntil)
             .map { (plan: $0.plan, date: max($0.date, now)) }
             .min { $0.1 < $1.1 }
     }

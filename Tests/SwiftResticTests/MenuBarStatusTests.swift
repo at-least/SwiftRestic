@@ -365,4 +365,109 @@ struct MenuBarStatusTests {
                 == "Nightly failed 2 hours ago"
         )
     }
+
+    // MARK: - Holds, stops and the dimmed face
+
+    /// New York, as FormattingTests' tile timestamps; the formatter's narrow
+    /// no-break space before AM/PM is flattened so a pin reads as it prints.
+    private var newYork: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        return calendar
+    }
+
+    private func flat(_ value: String) -> String {
+        value.replacingOccurrences(of: "\u{202F}", with: " ")
+    }
+
+    @Test("a hold replaces the next-run headline and names itself")
+    func holdLeadsAndHeadlineStepsAside() throws {
+        let future = Date.now.addingTimeInterval(3600)
+        let nightly = plan(name: "Nightly")
+        // On battery with the setting on, "Next: Nightly in 1 hour" was the
+        // lie: the scheduler would not fire it.
+        #expect(MenuBarStatus.headline(activity: [:], hold: .onBattery, nextRun: (nightly, future)) == nil)
+        #expect(MenuBarStatus.headline(activity: [:], hold: .paused(until: nil), nextRun: (nightly, future)) == nil)
+        #expect(
+            MenuBarStatus.headline(activity: [:], hold: nil, nextRun: (nightly, future))
+                == MenuBarStatus.headline(activity: [:], nextRun: (nightly, future))
+        )
+        #expect(MenuBarStatus.headline(activity: [:], hold: nil, nextRun: (nightly, future))?.hasPrefix("Next: Nightly") == true)
+
+        let calendar = newYork
+        func at(_ day: Int, _ hour: Int, _ minute: Int = 0) throws -> Date {
+            try #require(calendar.date(from: DateComponents(year: 2026, month: 9, day: day, hour: hour, minute: minute)))
+        }
+        let now = try at(9, 10)
+        #expect(
+            flat(ScheduleHold.paused(until: try at(9, 15, 40)).summary(now: now, calendar: calendar))
+                == "Backups paused until 3:40 PM"
+        )
+        #expect(
+            flat(ScheduleHold.paused(until: try at(10, 0)).summary(now: now, calendar: calendar))
+                == "Backups paused until tomorrow"
+        )
+        #expect(ScheduleHold.paused(until: nil).summary(now: now, calendar: calendar) == "Backups paused until you resume")
+        #expect(ScheduleHold.onBattery.summary(now: now, calendar: calendar) == "Backups wait for power — this Mac is on battery")
+    }
+
+    @Test("plan rows back up when idle, stop while running, and stand disabled while stopping")
+    func planRowsStopWhileRunning() {
+        let nightly = plan(name: "Nightly")
+        var incomplete = plan(name: "Half")
+        incomplete.sources = []
+        var unnamed = plan(name: "")
+        unnamed.sources = ["/tmp"]
+        let photos = plan(name: "Photos")
+
+        let idle = MenuBarStatus.planRows(plans: [nightly, incomplete, unnamed, photos], activity: [:], isResticAvailable: true)
+        #expect(idle.map(\.planID) == [nightly.id, incomplete.id, unnamed.id, photos.id])
+        #expect(idle[0] == MenuBarStatus.PlanRow(planID: nightly.id, title: "Back Up “Nightly” Now", action: .backUp, isEnabled: true))
+        #expect(idle[1].action == .backUp)
+        #expect(!idle[1].isEnabled)
+        #expect(idle[2].title == "Back Up “Untitled Plan” Now")
+
+        // Back Up Now is enabled only where the plan could run: restic too.
+        let noRestic = MenuBarStatus.planRows(plans: [nightly], activity: [:], isResticAvailable: false)
+        #expect(noRestic.first?.isEnabled == false)
+
+        let running = MenuBarStatus.planRows(
+            plans: [nightly, photos],
+            activity: [nightly.id: activity(phase: .backingUp)],
+            isResticAvailable: true
+        )
+        #expect(running[0] == MenuBarStatus.PlanRow(planID: nightly.id, title: "Stop “Nightly” Backup", action: .stop, isEnabled: true))
+        #expect(running[1].title == "Back Up “Photos” Now")
+        #expect(running[1].isEnabled)
+        // A stop is a stop whatever the run is doing — a hook, retention.
+        let hooks = MenuBarStatus.planRows(plans: [nightly], activity: [nightly.id: activity(phase: .runningHooks)], isResticAvailable: true)
+        #expect(hooks.first?.action == .stop)
+
+        let stopping = MenuBarStatus.planRows(
+            plans: [nightly],
+            activity: [nightly.id: activity(phase: .cancelling)],
+            isResticAvailable: true
+        )
+        #expect(stopping.first == MenuBarStatus.PlanRow(planID: nightly.id, title: "Stopping “Nightly”…", action: .none, isEnabled: false))
+    }
+
+    @Test("the icon dims for a hold only while nothing runs, and says why")
+    func heldIconDimsAndSpeaks() {
+        #expect(MenuBarStatus.appearsHeld(state: .idle, hold: .onBattery))
+        #expect(MenuBarStatus.appearsHeld(state: .problem, hold: .paused(until: nil)))
+        #expect(!MenuBarStatus.appearsHeld(state: .running, hold: .onBattery))
+        #expect(!MenuBarStatus.appearsHeld(state: .running, hold: .paused(until: nil)))
+        #expect(!MenuBarStatus.appearsHeld(state: .idle, hold: nil))
+
+        let paused = MenuBarStatus.accessibilityDescription(for: .idle, hold: .paused(until: nil))
+        #expect(paused.contains("paused"), "was \(paused)")
+        #expect(paused.hasPrefix("SwiftRestic"))
+        let problemOnBattery = MenuBarStatus.accessibilityDescription(for: .problem, hold: .onBattery)
+        #expect(problemOnBattery.contains("problem") && problemOnBattery.contains("power"), "was \(problemOnBattery)")
+        // No hold: today's words, spelled out so a default argument cannot
+        // make the comparison trivially true.
+        #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil) == "SwiftRestic")
+        #expect(MenuBarStatus.accessibilityDescription(for: .problem, hold: nil) == "SwiftRestic, a recent run had a problem")
+        #expect(MenuBarStatus.accessibilityDescription(for: .running, hold: nil) == "SwiftRestic, work in progress")
+    }
 }

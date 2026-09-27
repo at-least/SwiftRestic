@@ -253,6 +253,47 @@ struct TolerantDecodingTests {
         #expect(partial.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 2, deniedByFilePermissions: 0))
     }
 
+    @Test("pause fields round-trip; missing reads as not paused; an unreadable pause date reads as not paused, never as forever")
+    func pauseFieldsDecodeFailSafe() async throws {
+        #expect(try decode(BackupPlan.self, #"{"name":"Docs"}"#).pausedUntil == nil)
+        #expect(try decode(AppSettings.self, "{}").schedulePause == nil)
+        // An empty pause is the stored form of Until I Resume: no end.
+        #expect(try decode(AppSettings.self, #"{"schedulePause":{}}"#).schedulePause == SchedulePause(until: nil))
+
+        // A present date that does not read must not become "no end" — that
+        // would stop every scheduled backup without a word. It reads as not
+        // paused, and says so.
+        let notes = DecodeNoteBox()
+        let corrupt = try DecodeNotes.$current.withValue(notes) {
+            try decode(AppSettings.self, #"{"schedulePause":{"until":"garbage"}}"#)
+        }
+        #expect(corrupt.schedulePause == nil)
+        #expect(notes.notes.count == 1)
+        #expect(notes.notes.first?.contains("schedulePause") == true, "notes were \(notes.notes)")
+
+        // Whole seconds: config.json's ISO 8601 dates drop fractions.
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ConfigStore(directory: directory)
+        let until = Date(timeIntervalSince1970: 1_790_400_000)
+        var plan = BackupPlan()
+        plan.name = "Docs"
+        plan.pausedUntil = until.addingTimeInterval(3600)
+        var configuration = AppConfiguration()
+        configuration.plans = [plan]
+        configuration.settings.schedulePause = SchedulePause(until: until)
+        try await store.save(configuration)
+        let loaded = try await store.load()
+        #expect(loaded.decodeNotes.isEmpty)
+        #expect(loaded.configuration.settings.schedulePause == SchedulePause(until: until))
+        #expect(loaded.configuration.plans.first?.pausedUntil == until.addingTimeInterval(3600))
+
+        // And the open-ended pause survives a round trip as open-ended.
+        configuration.settings.schedulePause = SchedulePause(until: nil)
+        try await store.save(configuration)
+        #expect(try await store.load().configuration.settings.schedulePause == SchedulePause(until: nil))
+    }
+
     @Test("an unknown enum raw value falls back to the default case, and says so")
     func unknownEnumCases() throws {
         let decoder = JSONDecoder()

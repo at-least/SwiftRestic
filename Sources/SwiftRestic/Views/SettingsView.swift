@@ -92,7 +92,7 @@ struct SettingsView: View {
                 )
                 ExpandableCaption(
                     summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing.",
-                    detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), wears a warning mark while a run from the last seven days failed or finished with errors, and asks with a question mark until a repository is set up."
+                    detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), dims while backups are paused or waiting for power on battery, wears a warning mark while a run from the last seven days failed or finished with errors, and asks with a question mark until a repository is set up."
                 )
             }
 
@@ -132,7 +132,11 @@ struct SettingsView: View {
                 }
 
                 Toggle("Pause scheduled backups on battery power", isOn: $model.configuration.settings.pauseOnBattery)
-                if let next = model.nextScheduledRun {
+                // Held, the next run is whenever the hold lifts — say why
+                // instead of a date the scheduler will not keep.
+                if let hold = model.scheduleHold {
+                    LabeledContent("Next run", value: hold.summary())
+                } else if let next = model.nextScheduledRun {
                     LabeledContent("Next run", value: "\(next.plan.name) — \(Format.timestamp(next.date))")
                 } else {
                     LabeledContent("Next run", value: "Nothing scheduled")

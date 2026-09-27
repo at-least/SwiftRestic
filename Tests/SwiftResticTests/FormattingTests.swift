@@ -135,6 +135,46 @@ struct FormattingTests {
         #expect(nextYear.hasSuffix("9:00 PM"))
     }
 
+    @Test("a pause end reads naturally after until")
+    func pauseEndSpelling() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        func flat(_ value: String) -> String {
+            value.replacingOccurrences(of: "\u{202F}", with: " ")
+        }
+        func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+            calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
+        }
+        let now = date(2026, 9, 9, 10) // the tile fixture's Wednesday morning
+
+        #expect(flat(Format.pauseEnd(date(2026, 9, 9, 15, 40), now: now, calendar: calendar)) == "3:40 PM")
+        // Until Tomorrow's own end: the day, not a midnight time.
+        #expect(flat(Format.pauseEnd(date(2026, 9, 10, 0), now: now, calendar: calendar)) == "tomorrow")
+        #expect(flat(Format.pauseEnd(date(2026, 9, 10, 9), now: now, calendar: calendar)) == "tomorrow 9:00 AM")
+        #expect(flat(Format.pauseEnd(date(2026, 9, 14, 21), now: now, calendar: calendar)) == "Mon 9:00 PM")
+    }
+
+    @Test("an hour's pause across midnight reads the same before and after it")
+    func pauseEndAcrossMidnight() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        func flat(_ value: String) -> String {
+            value.replacingOccurrences(of: "\u{202F}", with: " ")
+        }
+        func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+            calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
+        }
+        // For 1 Hour pressed at 11:30 PM. Nothing redraws the menu bar's
+        // VoiceOver label or a plan's sidebar caption at midnight, so the
+        // words written at 11:30 PM are still up at 12:10 AM — where
+        // "tomorrow 12:30 AM" would name a day too late.
+        let end = date(2026, 9, 27, 0, 30)
+        #expect(flat(Format.pauseEnd(end, now: date(2026, 9, 26, 23, 30), calendar: calendar)) == "12:30 AM")
+        #expect(flat(Format.pauseEnd(end, now: date(2026, 9, 27, 0, 10), calendar: calendar)) == "12:30 AM")
+        // Until Tomorrow's own end keeps its word: it lapses at midnight.
+        #expect(flat(Format.pauseEnd(date(2026, 9, 27, 0), now: date(2026, 9, 26, 23, 30), calendar: calendar)) == "tomorrow")
+    }
+
     @Test("repeated and alternating calls keep their own formatting")
     func formatterReuseStaysCorrect() {
         // The formatters behind these helpers are long-lived shared instances

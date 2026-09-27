@@ -30,7 +30,9 @@ Two rules the flaky-run hunt of 2026-09-14 added:
 Debug captures are driven by environment variables on a debug build —
 `SWIFTRESTIC_CAPTURE`, `SWIFTRESTIC_CAPTURE_PANE` (one pane or `all`),
 `SWIFTRESTIC_CAPTURE_DELAY`, `SWIFTRESTIC_APPEARANCE`,
-`SWIFTRESTIC_CAPTURE_SHEET`, `SWIFTRESTIC_REPO_PASSWORD`. All are documented
+`SWIFTRESTIC_CAPTURE_SHEET`, `SWIFTRESTIC_REPO_PASSWORD`,
+`SWIFTRESTIC_POWER_SOURCE` (`battery`/`ac`; read at scheduler ticks, so only
+in a normal launch — a capture run never arms the scheduler). All are documented
 in the README under "Looking at the app"; read that section before the first
 capture. Everything in the next two sections was verified live on 2026-09-14:
 macOS 26 / Xcode 26.6, one display (2940×1912 pixels, 1470×956 points @2x),

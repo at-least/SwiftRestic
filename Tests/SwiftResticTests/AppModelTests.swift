@@ -730,6 +730,34 @@ struct UpsertStampTests {
         #expect(model.configuration.plans[0].schedule.intervalHours == 7)
     }
 
+    @Test("a stale plan draft keeps the plan's timed pause")
+    func planPauseSurvivesStaleUpsert() {
+        let model = makeModel()
+        var plan = BackupPlan()
+        plan.name = "Nightly"
+        plan.repositoryID = UUID()
+        plan.sources = ["/tmp"]
+        model.upsert(plan: plan)
+
+        // Paused while the editor held its copy, as pausePlanSchedule does.
+        let until = Date(timeIntervalSince1970: 1_790_400_000)
+        model.configuration.plans[0].pausedUntil = until
+
+        var staleDraft = plan
+        staleDraft.schedule.intervalHours = 7
+        model.upsert(plan: staleDraft)
+        #expect(model.configuration.plans[0].pausedUntil == until)
+        #expect(model.configuration.plans[0].schedule.intervalHours == 7)
+
+        // The tick cleared the lapsed pause meanwhile; a draft still carrying
+        // it must not bring it back.
+        model.configuration.plans[0].pausedUntil = nil
+        var lapsedDraft = plan
+        lapsedDraft.pausedUntil = until
+        model.upsert(plan: lapsedDraft)
+        #expect(model.configuration.plans[0].pausedUntil == nil)
+    }
+
     @Test("a stale repository draft keeps the check and prune stamps")
     func repositoryStampsSurviveStaleUpsert() async {
         let model = makeModel()
@@ -751,6 +779,90 @@ struct UpsertStampTests {
         #expect(model.configuration.repositories[0].maintenance.lastCheckAt == checkedAt)
         #expect(model.configuration.repositories[0].maintenance.lastPruneAt == checkedAt)
         #expect(model.configuration.repositories[0].name == "NAS (renamed)")
+    }
+}
+
+/// The model's pause surface: what the plan menus, the tray and the tick
+/// write, and the one hold every display reads.
+@Suite("Pausing")
+@MainActor
+struct PausingTests {
+    private func makeModel() -> AppModel {
+        let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+        return AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticPausing-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory(secrets)
+        )
+    }
+
+    private func plan(_ name: String) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.name = name
+        plan.repositoryID = UUID()
+        plan.sources = ["/tmp"]
+        return plan
+    }
+
+    @Test("plan pauses, the app-wide pause and the battery hold reach the model's hold; lapsed pauses clear themselves")
+    func pauseModelSemantics() {
+        let model = makeModel()
+        let nightly = plan("Nightly")
+        model.upsert(plan: nightly)
+        let now = Date(timeIntervalSince1970: 1_790_400_000)
+
+        model.pausePlanSchedule(id: nightly.id, for: .oneHour, now: now)
+        #expect(model.configuration.plans[0].isEnabled)
+        #expect(model.configuration.plans[0].pausedUntil == now.addingTimeInterval(3600))
+        model.pausePlanSchedule(id: nightly.id, for: .untilResumed, now: now)
+        #expect(!model.configuration.plans[0].isEnabled)
+        #expect(model.configuration.plans[0].pausedUntil == nil)
+        model.resumePlanSchedule(id: nightly.id)
+        #expect(model.configuration.plans[0].isEnabled)
+        #expect(model.configuration.plans[0].pausedUntil == nil)
+
+        // The older call style keeps one meaning with the new one.
+        model.pausePlanSchedule(id: nightly.id, for: .oneHour, now: now)
+        model.setPlanEnabled(id: nightly.id, isEnabled: false)
+        #expect(!model.configuration.plans[0].isEnabled)
+        #expect(model.configuration.plans[0].pausedUntil == nil)
+        model.pausePlanSchedule(id: nightly.id, for: .oneHour, now: now)
+        model.setPlanEnabled(id: nightly.id, isEnabled: true)
+        #expect(model.configuration.plans[0].isEnabled)
+        #expect(model.configuration.plans[0].pausedUntil == nil)
+
+        #expect(model.scheduleHold == nil)
+        model.pauseBackups(for: .untilResumed)
+        #expect(model.scheduleHold == .paused(until: nil))
+        model.resumeBackups()
+        #expect(model.scheduleHold == nil)
+        #expect(model.configuration.settings.schedulePause == nil)
+
+        model.configuration.settings.pauseOnBattery = true
+        model.isOnBattery = true
+        #expect(model.scheduleHold == .onBattery)
+        model.isOnBattery = false
+        #expect(model.scheduleHold == nil)
+
+        // The tick's sweep clears exactly what lapsed.
+        let lapsedPlan = plan("Lapsed")
+        let livePlan = plan("Live")
+        model.upsert(plan: lapsedPlan)
+        model.upsert(plan: livePlan)
+        let later = Date.now.addingTimeInterval(7200)
+        model.configuration.settings.schedulePause = SchedulePause(until: later.addingTimeInterval(-60))
+        model.configuration.plans[1].pausedUntil = later.addingTimeInterval(-1)
+        model.configuration.plans[2].pausedUntil = later.addingTimeInterval(3600)
+        model.expireLapsedPauses(now: later)
+        #expect(model.configuration.settings.schedulePause == nil)
+        #expect(model.configuration.plans[1].pausedUntil == nil)
+        #expect(model.configuration.plans[2].pausedUntil == later.addingTimeInterval(3600))
+        // An open-ended pause never lapses.
+        model.configuration.settings.schedulePause = SchedulePause(until: nil)
+        model.expireLapsedPauses(now: later)
+        #expect(model.configuration.settings.schedulePause == SchedulePause(until: nil))
     }
 }
 

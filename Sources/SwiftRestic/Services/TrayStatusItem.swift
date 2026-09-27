@@ -24,7 +24,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     private let router: AppRouter
     private let statusItem: NSStatusItem
     private var pulseTimer: Timer?
-    /// The per-plan rows' tag → plan mapping, rebuilt with the menu.
+    /// The per-plan rows' tag → plan mapping, rebuilt with the menu — the
+    /// Back Up and Stop rows alike.
     private var planIDsByTag: [Int: UUID] = [:]
     private var nextPlanTag = 1
 
@@ -60,8 +61,12 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
 
     // MARK: - Faces
 
-    /// The observed inputs are exactly the ones `iconState` reads — reading
-    /// more would re-fire this loop on every run-record append.
+    /// The observed inputs are exactly the ones `iconState` and the hold
+    /// read — reading more would re-fire this loop on every run-record
+    /// append. The hold's pause and battery setting live in the
+    /// configuration, observed here as a whole; the battery reading is
+    /// written only when it changes; a pause running out is cleared by the
+    /// scheduler's tick, and that write is what brings the face back.
     private func refresh() {
         let state = MenuBarStatus.iconState(
             activity: model.activity,
@@ -72,7 +77,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             runs: model.configuration.runs
         )
         statusItem.isVisible = model.configuration.settings.showMenuBarExtra
-        applyFace(for: state)
+        applyFace(for: state, hold: model.scheduleHold)
         armPulse(for: state)
 
         withObservationTracking {
@@ -83,6 +88,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             _ = model.configuration.repositories.isEmpty
             _ = model.configuration.runs.isEmpty
             _ = model.configuration.settings.showMenuBarExtra
+            _ = model.isOnBattery
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
@@ -98,10 +104,10 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             isConsoleRunning: model.console.isRunning,
             hasNoRepositories: model.configuration.repositories.isEmpty,
             runs: model.configuration.runs
-        ))
+        ), hold: model.scheduleHold)
     }
 
-    private func applyFace(for state: MenuBarStatus.IconState) {
+    private func applyFace(for state: MenuBarStatus.IconState, hold: ScheduleHold?) {
         let button = statusItem.button
         switch MenuBarStatus.glyph(for: state) {
         case .logo:
@@ -118,7 +124,11 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 button?.image = MenuBarLogo.image(phase: MenuBarLogo.phase(at: .now))
             }
         }
-        button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(for: state))
+        // The held face: the same glyph, dimmed — AppKit's own "off but
+        // still functional" look for a status item — so a problem badge
+        // stays readable under it. The words go to VoiceOver.
+        button?.appearsDisabled = MenuBarStatus.appearsHeld(state: state, hold: hold)
+        button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(for: state, hold: hold))
     }
 
     /// The pulse timer lives only while the running face is up, and checks
@@ -154,6 +164,12 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         nextPlanTag = 1
 
         let hasNoRepositories = model.configuration.repositories.isEmpty
+        let hold = model.scheduleHold
+        // While backups are held, that nothing is being backed up is the
+        // news, so the hold leads — above the problem line.
+        if let hold {
+            menu.addItem(disabledItem(hold.summary()))
+        }
         // The failure line leads, unless the `?` face summoned the menu and
         // an old failure from a since-removed repository would talk over the
         // setup question — the same yield MenuBarStatus defines.
@@ -184,6 +200,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             isRestoring: model.isRestoring,
             isConsoleRunning: model.console.isRunning,
             hasNoRepositories: hasNoRepositories,
+            hold: hold,
             nextRun: model.nextScheduledRun
         ) {
             menu.addItem(disabledItem(headline))
@@ -206,19 +223,45 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             add.target = self
             menu.addItem(add)
         } else {
-            for plan in model.configuration.plans {
-                let title = "Back Up “\(plan.name.isEmpty ? "Untitled Plan" : plan.name)” Now"
-                let item = NSMenuItem(title: title, action: #selector(backUpNow(_:)), keyEquivalent: "")
+            for row in MenuBarStatus.planRows(
+                plans: model.configuration.plans,
+                activity: model.activity,
+                isResticAvailable: model.isResticAvailable
+            ) {
+                let action: Selector? = switch row.action {
+                case .backUp: #selector(backUpNow(_:))
+                case .stop: #selector(stopBackup(_:))
+                case .none: nil
+                }
+                let item = NSMenuItem(title: row.title, action: action, keyEquivalent: "")
                 item.target = self
-                item.isEnabled = !model.isRunning(planID: plan.id) && plan.isConfigurationComplete
+                // Explicit, not auto-enabled: see `autoenablesItems` above.
+                item.isEnabled = row.isEnabled
                 item.tag = nextPlanTag
-                planIDsByTag[nextPlanTag] = plan.id
+                planIDsByTag[nextPlanTag] = row.planID
                 nextPlanTag += 1
                 menu.addItem(item)
             }
         }
 
         menu.addItem(.separator())
+
+        if case .paused = hold {
+            let resume = NSMenuItem(title: "Resume Backups", action: #selector(resumeBackups), keyEquivalent: "")
+            resume.target = self
+            menu.addItem(resume)
+            menu.addItem(.separator())
+        } else if !hasNoRepositories {
+            // A battery-only hold still offers the pause: the user may want
+            // one that outlasts plugging in.
+            menu.addItem(pauseMenuItem(title: "Pause Backups", stopsRunningBackups: false))
+            // Only while a backup runs, and never the default: a stopped
+            // backup starts over — restic cannot resume one.
+            if !model.activity.isEmpty {
+                menu.addItem(pauseMenuItem(title: "Pause and Stop Running Backups", stopsRunningBackups: true))
+            }
+            menu.addItem(.separator())
+        }
 
         let open = NSMenuItem(
             title: "Open SwiftRestic",
@@ -242,11 +285,52 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         return item
     }
 
+    /// A pause submenu: one item per length, each carrying its length.
+    private func pauseMenuItem(title: String, stopsRunningBackups: Bool) -> NSMenuItem {
+        let submenu = NSMenu(title: title)
+        submenu.autoenablesItems = false
+        for length in PauseLength.allCases {
+            let item = NSMenuItem(
+                title: length.menuTitle,
+                action: stopsRunningBackups ? #selector(pauseAndStopBackups(_:)) : #selector(pauseBackups(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.isEnabled = true
+            item.representedObject = length.rawValue
+            submenu.addItem(item)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        item.isEnabled = true
+        return item
+    }
+
     // MARK: - Actions
 
     @objc private func backUpNow(_ sender: NSMenuItem) {
         guard let planID = planIDsByTag[sender.tag] else { return }
         model.runBackup(planID: planID)
+    }
+
+    /// A plain Stop: recorded as cancelled and stamped, like the plan page's.
+    @objc private func stopBackup(_ sender: NSMenuItem) {
+        guard let planID = planIDsByTag[sender.tag] else { return }
+        model.cancelBackup(planID: planID)
+    }
+
+    @objc private func pauseBackups(_ sender: NSMenuItem) {
+        guard let length = (sender.representedObject as? String).flatMap(PauseLength.init(rawValue:)) else { return }
+        model.pauseBackups(for: length)
+    }
+
+    @objc private func pauseAndStopBackups(_ sender: NSMenuItem) {
+        guard let length = (sender.representedObject as? String).flatMap(PauseLength.init(rawValue:)) else { return }
+        model.pauseBackups(for: length, stoppingRunningBackups: true)
+    }
+
+    @objc private func resumeBackups() {
+        model.resumeBackups()
     }
 
     /// Brings the window back, or recreates it after it was closed — the

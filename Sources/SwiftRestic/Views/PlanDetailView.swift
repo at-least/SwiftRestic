@@ -46,19 +46,7 @@ struct PlanDetailView: View {
                         .labelStyle(.titleAndIcon)
                         .help("Run this plan's backup now")
                     }
-                    if plan.isEnabled {
-                        Button("Pause Schedule", systemImage: "pause.circle") {
-                            model.setPlanEnabled(id: plan.id, isEnabled: false)
-                        }
-                        .labelStyle(.titleAndIcon)
-                        .help("Stop scheduled runs — Back Up Now still works")
-                    } else {
-                        Button("Resume Schedule", systemImage: "play.circle") {
-                            model.setPlanEnabled(id: plan.id, isEnabled: true)
-                        }
-                        .labelStyle(.titleAndIcon)
-                        .help("Run this plan on its schedule again")
-                    }
+                    scheduleControl(plan)
                     Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                         .labelStyle(.titleAndIcon)
                         .help("Change this plan's folders, schedule and retention")
@@ -103,6 +91,53 @@ struct PlanDetailView: View {
                     : "The plan and its schedule are removed. Snapshots already written to the repository are not deleted."
             )
         }
+    }
+
+    /// Pause Schedule and Resume Schedule. A click on Pause keeps its
+    /// one-click open-ended pause; the arrow offers the timed lengths. A
+    /// manual plan has no schedule to pause, so the control stands disabled
+    /// there and says why — hidden, it would leave the toolbar shifting
+    /// between plans.
+    @ViewBuilder
+    private func scheduleControl(_ plan: BackupPlan) -> some View {
+        let now = Date.now
+        if !plan.isScheduleActive(at: now) {
+            Button("Resume Schedule", systemImage: "play.circle") {
+                model.resumePlanSchedule(id: plan.id)
+            }
+            .labelStyle(.titleAndIcon)
+            .help(resumeHelp(plan, now: now))
+        } else if plan.schedule.frequency == .manual {
+            Button("Pause Schedule", systemImage: "pause.circle") {}
+                .labelStyle(.titleAndIcon)
+                .disabled(true)
+                .help("This plan runs only when you click Back Up Now — it has no schedule to pause")
+        } else {
+            Menu("Pause Schedule", systemImage: "pause.circle") {
+                ForEach(PauseLength.allCases) { length in
+                    Button(length.menuTitle) {
+                        model.pausePlanSchedule(id: plan.id, for: length)
+                    }
+                }
+            } primaryAction: {
+                model.pausePlanSchedule(id: plan.id, for: .untilResumed)
+            }
+            .labelStyle(.titleAndIcon)
+            .help("Stop scheduled runs until you resume — or pick a length from the arrow. Back Up Now still works")
+        }
+    }
+
+    /// A manual plan switched off — removing its repository does that, and
+    /// so does the editor's switch — has no schedule for Resume to bring
+    /// back, as its Next backup tile says; the help must not promise one.
+    private func resumeHelp(_ plan: BackupPlan, now: Date) -> String {
+        if let end = plan.activePauseEnd(at: now) {
+            return "Paused until \(Format.pauseEnd(end)) — run this plan on its schedule again now"
+        }
+        if plan.schedule.frequency == .manual {
+            return "Switch “Run on schedule” back on — this plan has no schedule, so it still runs only when you click Back Up Now"
+        }
+        return "Run this plan on its schedule again"
     }
 
     /// The running-operation strip, as its own view. It reads only this
@@ -239,7 +274,8 @@ struct PlanDetailView: View {
         // when that was the part that said morning or evening.
         let next = PlanStatus.nextBackupTile(
             for: plan,
-            existingRepositoryIDs: Set(model.configuration.repositories.map(\.id))
+            existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
+            hold: model.scheduleHold
         )
         return HStack(spacing: Theme.Space.tile) {
             lastBackupTile(plan)
@@ -299,6 +335,16 @@ struct PlanDetailView: View {
         }
     }
 
+    /// The Configuration card's schedule: a timed pause names its end and
+    /// the schedule it resumes.
+    private func scheduleSummary(_ plan: BackupPlan) -> String {
+        guard plan.isEnabled else { return "Paused" }
+        if let end = plan.activePauseEnd(at: .now) {
+            return "Paused until \(Format.pauseEnd(end)) — \(plan.schedule.summary)"
+        }
+        return plan.schedule.summary
+    }
+
     private func configurationCard(_ plan: BackupPlan) -> some View {
         Card("Configuration") {
             VStack(alignment: .leading, spacing: 10) {
@@ -310,7 +356,7 @@ struct PlanDetailView: View {
                             Text("Not set").foregroundStyle(Theme.warning)
                         }
                     }
-                    DetailRow("Schedule", plan.isEnabled ? plan.schedule.summary : "Paused")
+                    DetailRow("Schedule", scheduleSummary(plan))
                     DetailRow("Retention", plan.retention.summary)
                     DetailRow("Excludes", Format.plural(plan.excludePatterns.count, "pattern"))
                     if !plan.hooks.isEmpty {

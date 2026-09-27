@@ -16,7 +16,9 @@ enum BackupRunEngine {
     /// record the calls instead.
     @MainActor
     protocol Sink: AnyObject {
-        var cancellationMessage: String { get }
+        /// Why this plan's run was cancelled, for its record: the user's
+        /// Stop, Pause and Stop, or the app quitting.
+        func cancellationMessage(for planID: UUID) -> String
         func service() throws -> any ResticClient
         func context(for repository: Repository) async throws -> RepositoryContext
         /// Nil-anchored like the activity entry itself: a phase for a plan
@@ -171,7 +173,7 @@ enum BackupRunEngine {
             // A cache must never delay, and never fail, the run that feeds it.
             await sink.refreshSnapshots(repositoryID: repository.id)
         } catch {
-            record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
+            record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
             sink.noteAuthFailure(error, repositoryID: repository.id)
             sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
         }

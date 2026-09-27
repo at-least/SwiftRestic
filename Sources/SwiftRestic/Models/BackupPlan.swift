@@ -273,7 +273,13 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var tags: [String] = []
     var schedule = Schedule()
     var retention = RetentionPolicy()
+    /// The schedule's switch: off is Pause Schedule's "Until I Resume", the
+    /// editor's "Run on schedule" and what removing the repository leaves.
     var isEnabled: Bool = true
+    /// A timed Pause Schedule's end. The schedule holds while it lies ahead
+    /// and resumes by itself once it passes — `isScheduleActive(at:)` reads
+    /// the date, so nothing has to be written for the pause to end.
+    var pausedUntil: Date?
     /// Shell commands run around each backup.
     var hooks: [BackupHook] = []
     var lastRunAt: Date?
@@ -303,6 +309,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         schedule = c.value(.schedule, default: Schedule())
         retention = c.value(.retention, default: RetentionPolicy())
         isEnabled = c.value(.isEnabled, default: true)
+        pausedUntil = c.optional(.pausedUntil)
         hooks = c.value(.hooks, default: [])
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
@@ -336,19 +343,36 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
             && !sources.isEmpty
     }
 
-    /// The stored plan wins over an editor's draft for the run stamps: they
-    /// are written by the model (`markPlanRun`) while the editor held its
-    /// older copy, so a draft carrying stale or absent stamps must not erase
-    /// the plan's own last success. Everything else comes from the draft.
-    /// A new model-written field joins this list — one left out here reverts
-    /// to the draft on the next save. (`isEnabled` and `repositoryID` are
-    /// also model-written, but only by user-driven paths — pause, deletion —
-    /// that cannot run while the modal editor holds a draft, so no draft can
-    /// grow stale against them.)
+    /// The end of a timed pause that is still in force; `nil` once it has
+    /// passed, or when there is none.
+    func activePauseEnd(at now: Date) -> Date? {
+        guard let pausedUntil, pausedUntil > now else { return nil }
+        return pausedUntil
+    }
+
+    /// Whether the scheduler may start this plan by itself: switched on and
+    /// not inside a timed pause. The one schedule-state predicate — the
+    /// scheduler, the sidebar's pause mark and every Pause/Resume control
+    /// read it, so a timed pause is a pause everywhere.
+    func isScheduleActive(at now: Date) -> Bool {
+        isEnabled && activePauseEnd(at: now) == nil
+    }
+
+    /// The stored plan wins over an editor's draft for what the model writes
+    /// while the editor holds its older copy: the run stamps (`markPlanRun`)
+    /// and a timed pause's end, which the scheduler's tick clears once it
+    /// passes, sheet or no sheet. A draft carrying stale or absent values
+    /// must not erase the plan's own last success or bring back a pause
+    /// that has ended.
+    /// Everything else comes from the draft. A new model-written field joins
+    /// this list — one left out here reverts to the draft on the next save.
+    /// (`isEnabled` stays the draft's: it is the editor's own "Run on
+    /// schedule" switch.)
     func merging(draft: BackupPlan) -> BackupPlan {
         var merged = draft
         merged.lastRunAt = lastRunAt
         merged.lastSuccessAt = lastSuccessAt
+        merged.pausedUntil = pausedUntil
         return merged
     }
 }

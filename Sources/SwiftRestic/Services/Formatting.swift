@@ -153,6 +153,40 @@ enum Format {
         return date.formatted(style().year().month().day().hour().minute())
     }
 
+    /// When a pause ends, spelled to follow "until": the time alone today,
+    /// "tomorrow" for Until Tomorrow's own end (the day, not a midnight
+    /// time), "tomorrow 9:00 AM" for another time tomorrow, and further out
+    /// the tile's weekday or dated form. An end less than 12 hours ahead is
+    /// the time alone even past midnight — "until 12:30 AM" at 11:30 PM is
+    /// plain, and nothing redraws the menu bar's VoiceOver label or a
+    /// sidebar caption at midnight, where "tomorrow 12:30 AM" would go on
+    /// naming a day too late until the pause ends.
+    static func pauseEnd(
+        _ date: Date,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> String {
+        let zone = calendar.timeZone
+        func style() -> Date.FormatStyle {
+            Date.FormatStyle(calendar: calendar, timeZone: zone)
+        }
+        let time = date.formatted(style().hour().minute())
+        if calendar.isDate(date, inSameDayAs: now) { return time }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
+           calendar.isDate(date, inSameDayAs: tomorrow)
+        {
+            if date == calendar.startOfDay(for: tomorrow) { return "tomorrow" }
+            return date.timeIntervalSince(now) < 12 * 3600 ? time : "tomorrow \(time)"
+        }
+        if date.timeIntervalSince(now) < 7 * 86_400 {
+            return "\(date.formatted(style().weekday(.abbreviated))) \(time)"
+        }
+        if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            return date.formatted(style().month(.abbreviated).day().hour().minute())
+        }
+        return date.formatted(style().year().month().day().hour().minute())
+    }
+
     /// What a snapshot's mark says, as its tooltip and its VoiceOver label.
     /// A count when restic named what it could not read — a permanently
     /// unreadable file marks every snapshot, and the number keeps that from

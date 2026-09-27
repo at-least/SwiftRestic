@@ -400,12 +400,31 @@ struct OverviewView: View {
                 // The scheduler's own enumeration: an incomplete plan is
                 // filtered out exactly where the scheduler filters it, so
                 // the card can no longer announce a run that will never fire.
+                // A timed hold moves every date to its end, where the
+                // scheduler will pick the runs up.
+                let hold = model.scheduleHold
                 let upcoming = Scheduler.upcomingRuns(
                     in: model.configuration.plans,
-                    existingRepositoryIDs: Set(model.configuration.repositories.map(\.id))
+                    existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
+                    heldUntil: hold?.resumesAt
                 )
                 .sorted { $0.1 < $1.1 }
                 .prefix(5)
+
+                // First, above the rows: while backups are held, that is
+                // what the rows mean.
+                if let hold {
+                    HStack(spacing: 8) {
+                        Label(hold.summary(), systemImage: hold == .onBattery ? "battery.25" : "pause.circle")
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        if case .paused = hold {
+                            Button("Resume") { model.resumeBackups() }
+                                .buttonStyle(.borderless)
+                                .help("Resume scheduled backups, checks and prunes")
+                        }
+                    }
+                }
 
                 if upcoming.isEmpty {
                     Text("Nothing scheduled.").foregroundStyle(.secondary)
@@ -414,7 +433,14 @@ struct OverviewView: View {
                         HStack {
                             Text(plan.name).lineLimit(1)
                             Spacer()
-                            if date <= .now {
+                            if date <= .now, hold != nil {
+                                // Due, but held: it runs once the hold lifts,
+                                // not now. Icon and word in the secondary
+                                // colour — a wait, not an alarm.
+                                Label("Waiting", systemImage: "pause.circle")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            } else if date <= .now {
                                 // Icon + word, not colour alone: orange
                                 // caption text on light surfaces sat right
                                 // at the contrast floor.

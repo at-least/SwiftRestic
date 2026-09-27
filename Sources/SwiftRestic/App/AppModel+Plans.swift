@@ -16,18 +16,40 @@ extension AppModel {
         }
     }
 
-    /// Enables or disables a plan's schedule by mutating only that field.
+    /// Pause Schedule: Until I Resume switches the schedule off; the timed
+    /// lengths leave it on with an end date, so it resumes by itself.
+    /// Mutates only these two fields.
     ///
     /// A whole-struct `upsert` from a captured copy would silently undo
     /// `markPlanRun`'s stamps when a run finishes between reading the plan and
     /// writing the copy — a paused plan must not erase its own last success.
-    func setPlanEnabled(id: UUID, isEnabled: Bool) {
+    func pausePlanSchedule(id: UUID, for length: PauseLength, now: Date = .now) {
         guard let index = configuration.plans.firstIndex(where: { $0.id == id }) else { return }
-        configuration.plans[index].isEnabled = isEnabled
+        let end = length.end(from: now)
+        configuration.plans[index].isEnabled = end != nil
+        configuration.plans[index].pausedUntil = end
+    }
+
+    /// Resume Schedule, for either kind of pause.
+    func resumePlanSchedule(id: UUID) {
+        guard let index = configuration.plans.firstIndex(where: { $0.id == id }) else { return }
+        configuration.plans[index].isEnabled = true
+        configuration.plans[index].pausedUntil = nil
+    }
+
+    /// The older on/off form of the two calls above, kept so either call
+    /// style means the same thing.
+    func setPlanEnabled(id: UUID, isEnabled: Bool) {
+        if isEnabled {
+            resumePlanSchedule(id: id)
+        } else {
+            pausePlanSchedule(id: id, for: .untilResumed)
+        }
     }
 
     func deletePlan(id: UUID) {
         tasks.cancel(.plan(id))
+        pauseStoppedPlanIDs.remove(id)
         configuration.plans.removeAll { $0.id == id }
         activity[id] = nil
         planProgress[id] = nil

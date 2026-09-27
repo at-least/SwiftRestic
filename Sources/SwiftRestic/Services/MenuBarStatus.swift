@@ -68,13 +68,31 @@ enum MenuBarStatus {
         }
     }
 
-    static func accessibilityDescription(for state: IconState) -> String {
-        switch state {
+    /// The face's words, with the hold when one is in force — the dimmed
+    /// face is otherwise invisible to VoiceOver ("SwiftRestic, backups
+    /// paused until 3:40 PM").
+    static func accessibilityDescription(
+        for state: IconState,
+        hold: ScheduleHold? = nil,
+        now: Date = .now
+    ) -> String {
+        let base = switch state {
         case .unconfigured: "SwiftRestic, no repository configured yet"
         case .idle: "SwiftRestic"
         case .running: "SwiftRestic, work in progress"
         case .problem: "SwiftRestic, a recent run had a problem"
         }
+        guard let hold else { return base }
+        let summary = hold.summary(now: now)
+        let clause = summary.prefix(1).lowercased() + summary.dropFirst()
+        return state == .idle ? "\(base), \(clause)" : "\(base); \(clause)"
+    }
+
+    /// Whether the icon wears its dimmed face: a hold is in force and nothing
+    /// runs. The running face wins — work in flight is the news, and a run
+    /// the user started by hand ignores the hold.
+    static func appearsHeld(state: IconState, hold: ScheduleHold?) -> Bool {
+        hold != nil && state != .running
     }
 
     /// The newest problem in the run history as one sentence, or `nil` while
@@ -124,19 +142,69 @@ enum MenuBarStatus {
     /// `hasNoRepositories` answers the question the `unconfigured` icon face
     /// asks: the plan list below this line is empty either way, but "no
     /// repository set up yet" tells a first-time user what to do next, where
-    /// the plain empty-schedule copy would not.
+    /// the plain empty-schedule copy would not. `nil` under a hold too: the
+    /// hold's own line leads the menu, and "Next: Nightly in 5 minutes" on
+    /// battery announced a run the scheduler would not fire.
     static func headline(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity] = [:],
         isRestoring: Bool = false,
         isConsoleRunning: Bool = false,
         hasNoRepositories: Bool = false,
+        hold: ScheduleHold? = nil,
         nextRun: (plan: BackupPlan, date: Date)?
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring, !isConsoleRunning else { return nil }
+        guard hold == nil else { return nil }
         if hasNoRepositories { return "No repository set up yet" }
         guard let nextRun else { return "No backups scheduled" }
         return "Next: \(nextRun.plan.name) \(Format.relative(nextRun.date))"
+    }
+
+    /// One tray row per plan, in configuration order: Back Up Now while the
+    /// plan is idle, Stop while it runs — the tray is the only surface left
+    /// once the window is closed, and a disabled row there left nothing to
+    /// stop a running backup with.
+    struct PlanRow: Equatable {
+        enum Action: Equatable {
+            case backUp
+            case stop
+            case none
+        }
+
+        var planID: UUID
+        var title: String
+        var action: Action
+        var isEnabled: Bool
+    }
+
+    static func planRows(
+        plans: [BackupPlan],
+        activity: [UUID: PlanActivity],
+        isResticAvailable: Bool
+    ) -> [PlanRow] {
+        plans.map { plan in
+            let name = plan.name.isEmpty ? "Untitled Plan" : plan.name
+            switch activity[plan.id]?.phase {
+            case nil:
+                // Enabled only where the plan could run — complete, idle and
+                // with restic to run it, the rule every Back Up Now follows.
+                return PlanRow(
+                    planID: plan.id,
+                    title: "Back Up “\(name)” Now",
+                    action: .backUp,
+                    isEnabled: plan.isConfigurationComplete && isResticAvailable
+                )
+            case .cancelling?:
+                return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
+            case _?:
+                // No percentage: restic's measures reading, not uploading —
+                // a throttled probe run read 100% at 327 s and uploaded until
+                // 819 s — and "Stop (100%)" would make stopping look free.
+                // The running line above keeps restic's figure.
+                return PlanRow(planID: plan.id, title: "Stop “\(name)” Backup", action: .stop, isEnabled: true)
+            }
+        }
     }
 
     /// One line per job in flight, in the order plans, upkeep, restore — the

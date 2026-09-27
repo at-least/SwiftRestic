@@ -53,6 +53,13 @@ checked in so a normal build does not need it.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day.
+- **Pause** — *Pause Backups* in the menu bar holds every scheduled backup,
+  check and prune for an hour, until tomorrow or until resumed; *Pause and Stop
+  Running Backups* also stops backups in flight, which start over when the
+  pause ends — restic cannot resume a backup. A plan's own *Pause Schedule*
+  takes the same lengths. With *Pause scheduled backups on battery power* on,
+  the menu bar, the Overview and Settings say that backups wait for power
+  instead of announcing runs that will not start.
 - **Browsing and restore** — every *Browse*, *Restore Files…* and *Show in
   Restore* opens the one browser, under the sidebar's Restore section: a
   backup's folders as a tree, with a Change column and search, and three ways
@@ -243,8 +250,12 @@ Three more environment variables shape a capture run: `SWIFTRESTIC_APPEARANCE`
 and `SWIFTRESTIC_REPO_PASSWORD` hands repositories a password directly (only
 honoured together with `SWIFTRESTIC_CONFIG_DIR`), so capture runs never touch
 the login Keychain. Capture runs also do not arm the scheduler, so a due plan
-cannot fire mid-capture. This all needs a logged-in GUI session on the Mac —
-not a headless SSH box.
+cannot fire mid-capture. `SWIFTRESTIC_POWER_SOURCE` (`battery`/`ac`, debug
+builds only, honoured only with `SWIFTRESTIC_CONFIG_DIR`) stands in for the
+power adapter at each scheduler tick, so the battery hold can be looked at on
+a Mac that stays plugged in — in a normal launch, since a capture run never
+arms the scheduler and so never reads it. This all needs a logged-in GUI
+session on the Mac — not a headless SSH box.
 
 ## Security and privacy
 

@@ -248,6 +248,173 @@ struct SchedulingTests {
     }
 }
 
+/// The two pause levels — a plan's own timed pause and the app-wide hold —
+/// and the promise both make: what the displays announce is when the
+/// scheduler will actually fire.
+@Suite("Pausing the schedule")
+struct PauseSchedulingTests {
+    private func date(_ string: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.date(from: string)!
+    }
+
+    private let repositoryID = UUID()
+
+    private func dailyPlan(name: String = "Nightly", lastRunAt: Date?) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.name = name
+        plan.repositoryID = repositoryID
+        plan.sources = ["/tmp"]
+        plan.schedule.frequency = .daily
+        plan.schedule.hour = 2
+        plan.schedule.minute = 0
+        plan.lastRunAt = lastRunAt
+        return plan
+    }
+
+    @Test("a timed plan pause holds the plan until it ends, then the missed slot runs")
+    func timedPlanPauseHoldsThenCatchesUp() throws {
+        // The clamp probe's "daily, slot missed inside pause" scenario. The
+        // scheduler reads the machine's calendar, so the dates are chosen to
+        // hold in any zone: the last run is 25 hours before `now`, so some
+        // 02:00 slot has passed uncovered whatever the offset.
+        var plan = dailyPlan(lastRunAt: date("2026-09-24 02:00:00"))
+        plan.pausedUntil = date("2026-09-25 09:00:00")
+        let existing: Set<UUID> = [repositoryID]
+
+        #expect(Scheduler.duePlans(in: [plan], now: date("2026-09-25 03:00:00"), existingRepositoryIDs: existing).isEmpty)
+        #expect(
+            Scheduler.duePlans(in: [plan], now: date("2026-09-25 09:00:30"), existingRepositoryIDs: existing)
+                .map(\.id) == [plan.id]
+        )
+        let upcoming = try #require(
+            Scheduler.upcomingRuns(in: [plan], now: date("2026-09-25 03:00:00"), existingRepositoryIDs: existing).first
+        )
+        #expect(upcoming.date == date("2026-09-25 09:00:00"))
+    }
+
+    @Test("a lapsed pause is inert, and a switched-off plan stays off whatever its pause date says")
+    func lapsedOrOverruledPause() {
+        let now = date("2026-09-25 12:00:00")
+        let existing: Set<UUID> = [repositoryID]
+        let plain = dailyPlan(lastRunAt: date("2026-09-24 02:00:00"))
+        var lapsed = plain
+        lapsed.pausedUntil = date("2026-09-25 11:00:00")
+
+        #expect(
+            Scheduler.duePlans(in: [lapsed], now: now, existingRepositoryIDs: existing).map(\.id)
+                == Scheduler.duePlans(in: [plain], now: now, existingRepositoryIDs: existing).map(\.id)
+        )
+        #expect(Scheduler.duePlans(in: [lapsed], now: now, existingRepositoryIDs: existing).count == 1)
+        #expect(
+            Scheduler.upcomingRuns(in: [lapsed], now: now, existingRepositoryIDs: existing).first?.date
+                == Scheduler.upcomingRuns(in: [plain], now: now, existingRepositoryIDs: existing).first?.date
+        )
+
+        var off = plain
+        off.isEnabled = false
+        off.pausedUntil = date("2026-09-25 13:00:00")
+        #expect(Scheduler.duePlans(in: [off], now: now, existingRepositoryIDs: existing).isEmpty)
+        #expect(Scheduler.duePlans(in: [off], now: date("2026-09-25 14:00:00"), existingRepositoryIDs: existing).isEmpty)
+        #expect(Scheduler.upcomingRuns(in: [off], now: now, existingRepositoryIDs: existing).isEmpty)
+    }
+
+    @Test("the app-wide hold: a live pause wins, battery holds only when asked, a lapsed pause holds nothing")
+    func scheduleHoldPrecedence() {
+        let now = date("2026-09-25 12:00:00")
+        let inAnHour = now.addingTimeInterval(3600)
+
+        #expect(
+            Scheduler.hold(pause: SchedulePause(until: inAnHour), pauseOnBattery: true, isOnBattery: true, now: now)
+                == .paused(until: inAnHour)
+        )
+        #expect(
+            Scheduler.hold(pause: SchedulePause(until: nil), pauseOnBattery: false, isOnBattery: false, now: now)
+                == .paused(until: nil)
+        )
+        #expect(Scheduler.hold(pause: nil, pauseOnBattery: true, isOnBattery: true, now: now) == .onBattery)
+        #expect(Scheduler.hold(pause: nil, pauseOnBattery: false, isOnBattery: true, now: now) == nil)
+        #expect(Scheduler.hold(pause: nil, pauseOnBattery: true, isOnBattery: false, now: now) == nil)
+        #expect(
+            Scheduler.hold(
+                pause: SchedulePause(until: now.addingTimeInterval(-1)),
+                pauseOnBattery: true,
+                isOnBattery: false,
+                now: now
+            ) == nil
+        )
+
+        #expect(ScheduleHold.paused(until: inAnHour).resumesAt == inAnHour)
+        #expect(ScheduleHold.paused(until: nil).resumesAt == nil)
+        #expect(ScheduleHold.onBattery.resumesAt == nil)
+    }
+
+    @Test("a timed app-wide hold pushes every upcoming run to its end; an open-ended one leaves dates raw")
+    func heldUntilClampsUpcoming() {
+        let now = date("2026-09-25 12:00:00")
+        let heldUntil = now.addingTimeInterval(3600)
+        let existing: Set<UUID> = [repositoryID]
+        var first = dailyPlan(name: "First", lastRunAt: date("2026-09-23 02:00:00"))
+        first.schedule.frequency = .hourly
+        first.schedule.intervalHours = 1
+        let second = dailyPlan(name: "Second", lastRunAt: date("2026-09-23 02:00:00"))
+
+        let held = Scheduler.upcomingRuns(in: [first, second], now: now, existingRepositoryIDs: existing, heldUntil: heldUntil)
+        #expect(held.count == 2)
+        #expect(held.allSatisfy { $0.date == heldUntil })
+        #expect(
+            Scheduler.nextScheduledRun(in: [first, second], now: now, existingRepositoryIDs: existing, heldUntil: heldUntil)?
+                .date == heldUntil
+        )
+
+        // No end to clamp to: the dates stay raw, and a past one stays past —
+        // the card's "Waiting" input.
+        let raw = Scheduler.upcomingRuns(in: [first, second], now: now, existingRepositoryIDs: existing, heldUntil: nil)
+        #expect(raw.count == 2)
+        #expect(raw.allSatisfy { $0.date < now })
+
+        // A plan's own pause that ends later than the app-wide one wins.
+        var later = second
+        later.pausedUntil = now.addingTimeInterval(7200)
+        let clamped = Scheduler.upcomingRuns(in: [later], now: now, existingRepositoryIDs: existing, heldUntil: heldUntil)
+        #expect(clamped.first?.date == now.addingTimeInterval(7200))
+    }
+
+    @Test("pause lengths end where their names say, across DST and a zone with no midnight")
+    func pauseLengthEnds() throws {
+        let now = date("2026-09-25 12:00:00")
+        #expect(PauseLength.oneHour.end(from: now) == now.addingTimeInterval(3600))
+        #expect(PauseLength.untilResumed.end(from: now) == nil)
+        #expect(PauseLength.allCases.map(\.menuTitle) == ["For 1 Hour", "Until Tomorrow", "Until I Resume"])
+
+        // The values design-probes/06-global-pause/tomorrow printed, with
+        // numeric offsets: the POSIX locale spells PDT where the probe's
+        // printed GMT-7.
+        func check(_ zone: String, _ components: DateComponents, _ expected: String) throws {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = try #require(TimeZone(identifier: zone))
+            let start = try #require(calendar.date(from: components))
+            let end = try #require(PauseLength.untilTomorrow.end(from: start, calendar: calendar))
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = calendar.timeZone
+            formatter.dateFormat = "yyyy-MM-dd HH:mm xxx"
+            #expect(formatter.string(from: end) == expected, "\(zone) from \(formatter.string(from: start))")
+            #expect(end > start)
+            let nextDay = try #require(calendar.date(byAdding: .day, value: 1, to: start))
+            #expect(calendar.isDate(end, inSameDayAs: nextDay))
+        }
+        try check("America/Los_Angeles", DateComponents(year: 2026, month: 9, day: 26, hour: 16), "2026-09-27 00:00 -07:00")
+        // Spring forward and fall back.
+        try check("America/Los_Angeles", DateComponents(year: 2026, month: 3, day: 7, hour: 22), "2026-03-08 00:00 -08:00")
+        try check("America/Los_Angeles", DateComponents(year: 2026, month: 10, day: 31, hour: 23, minute: 59), "2026-11-01 00:00 -07:00")
+        // Santiago skips midnight on this date: the day starts at 01:00.
+        try check("America/Santiago", DateComponents(year: 2026, month: 9, day: 5, hour: 20), "2026-09-06 01:00 -03:00")
+    }
+}
+
 @Suite("Schedule across DST transitions")
 struct DSTScheduleTests {
     /// Los Angeles observes DST, which the UTC-pinned suites never exercise.

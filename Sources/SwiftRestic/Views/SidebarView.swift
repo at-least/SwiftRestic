@@ -161,15 +161,29 @@ struct SidebarView: View {
     @ViewBuilder
     private func planContextMenu(_ plan: BackupPlan) -> some View {
         Button("Back Up Now") { model.runBackup(planID: plan.id) }
-            // Same guard the menu bar applies: an incomplete plan has nothing
-            // to run, and an error banner is not a substitute for a disabled
-            // item.
-            .disabled(model.isRunning(planID: plan.id) || !plan.isConfigurationComplete)
+            // The rule every Back Up Now follows, the menu bar's included:
+            // enabled only for a complete, idle plan with restic to run it —
+            // an error banner is not a substitute for a disabled item.
+            .disabled(
+                model.isRunning(planID: plan.id) || !plan.isConfigurationComplete || !model.isResticAvailable
+            )
         Button("Edit…") { onEditPlan(plan) }
-        // The sidebar row already wears a pause icon when disabled; the menu
-        // is where that state is changed. Manual runs stay possible either way.
-        Button(plan.isEnabled ? "Pause Scheduled Runs" : "Resume Scheduled Runs") {
-            model.setPlanEnabled(id: plan.id, isEnabled: !plan.isEnabled)
+        // The plan toolbar's pair, word for word. The row wears the pause
+        // glyph while the schedule is held; manual runs stay possible either
+        // way, and a manual plan has no schedule to pause.
+        if !plan.isScheduleActive(at: .now) {
+            Button("Resume Schedule") { model.resumePlanSchedule(id: plan.id) }
+        } else if plan.schedule.frequency == .manual {
+            Button("Pause Schedule") {}
+                .disabled(true)
+        } else {
+            Menu("Pause Schedule") {
+                ForEach(PauseLength.allCases) { length in
+                    Button(length.menuTitle) {
+                        model.pausePlanSchedule(id: plan.id, for: length)
+                    }
+                }
+            }
         }
         Divider()
         Button("Delete Plan", role: .destructive) { onDeletePlan(plan) }
@@ -361,7 +375,12 @@ private struct PlanSidebarRow: View {
     let plan: BackupPlan
 
     var body: some View {
-        let caption = subtitle
+        let caption = PlanStatus.sidebarCaption(
+            for: plan,
+            activity: model.activity[plan.id],
+            problem: model.currentProblem(for: plan.id),
+            existingRepositoryIDs: Set(model.configuration.repositories.map(\.id))
+        )
         HStack(spacing: 4) {
             // A fixed leading slot on every row, marker or not, so every plan
             // name starts at the same x — 26 + 4 = 30 pt, the title inset of
@@ -379,10 +398,14 @@ private struct PlanSidebarRow: View {
                 Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
                     .lineLimit(1)
                 HStack(spacing: 3) {
-                    // The glyph carries the severity, the words stay in the
-                    // secondary colour: orange caption text measured 2.16:1
-                    // on the light sidebar. Beside words that say it, the
-                    // glyph is decoration to VoiceOver.
+                    // The glyph carries the severity — red for a failed run
+                    // (restic exit 1, no snapshot), orange for one that
+                    // completed with errors (exit 3, an incomplete snapshot)
+                    // — and the words stay in the secondary colour: orange
+                    // caption text measured 2.16:1 on the light sidebar.
+                    // Beside words that say it, the glyph is decoration to
+                    // VoiceOver. The words, and which state wins the line,
+                    // come from `PlanStatus.sidebarCaption`.
                     if let outcome = caption.outcome, let symbol = outcome.symbolName {
                         Image(systemName: symbol)
                             .imageScale(.small)
@@ -399,6 +422,17 @@ private struct PlanSidebarRow: View {
                         .help(caption.text)
                 }
                 .font(.caption)
+                // A paused plan whose problem took the line above: the pause
+                // gets its own, so neither state hides the other — on screen
+                // or to VoiceOver.
+                if let pauseNote = caption.pauseNote {
+                    Text(pauseNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(pauseNote)
+                }
             }
         }
     }
@@ -421,38 +455,12 @@ private struct PlanSidebarRow: View {
                 .frame(width: 9, height: 9)
                 .help(label)
                 .accessibilityLabel(label)
-        } else if !plan.isEnabled {
-            // The subtitle already says "Paused — …".
+        } else if PlanStatus.showsPauseMarker(for: plan) {
+            // Either kind of pause. The caption already says "Paused — …"
+            // or "Paused until …".
             Image(systemName: "pause.circle")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
         }
-    }
-
-    // The words name every state; a problem adds its outcome, whose glyph
-    // leads the words, so on an unpaused plan the dot is never the
-    // problem's only sign. A paused plan's words name the pause instead:
-    // there an unseen problem shows only as the dot, whose tooltip and
-    // VoiceOver label say which outcome it stands for.
-    private var subtitle: (text: String, outcome: RunRecord.Outcome?) {
-        if let activity = model.activity[plan.id] {
-            return (activity.phase.displayName, nil)
-        }
-        // The pause glyph marks the row (unless the dot outranks it); the
-        // subtitle names the state and the schedule it holds.
-        if !plan.isEnabled {
-            return ("Paused — \(plan.schedule.summary)", nil)
-        }
-        // A standing problem is the row's real news, named for as long as it
-        // stands — seen or not. The glyph carries the severity: red for a
-        // failed run (restic exit 1, no snapshot), orange for one that
-        // completed with errors (exit 3, an incomplete snapshot).
-        if let problem = model.currentProblem(for: plan.id) {
-            return ("\(problem.outcome.displayName) — \(Format.relative(problem.finishedAt))", problem.outcome)
-        }
-        if plan.lastSuccessAt != nil {
-            return ("Last backup \(Format.relative(plan.lastSuccessAt))", nil)
-        }
-        return (plan.schedule.summary, nil)
     }
 }

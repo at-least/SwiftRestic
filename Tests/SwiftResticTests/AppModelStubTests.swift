@@ -1181,6 +1181,68 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("Pause and Stop leaves the stopped slot due and says why; a later plain Stop stamps as before")
+    func pauseAndStopKeepsSlotDue() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+        // Whole seconds, two hours back: the slot the stopped run was filling.
+        let earlier = Date(timeIntervalSince1970: (Date.now.timeIntervalSince1970 - 7200).rounded(.down))
+        harness.model.configuration.plans[0].lastRunAt = earlier
+
+        harness.model.runBackup(planID: planID)
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        harness.model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
+        await harness.model.waitForRun(planID: planID)
+
+        // restic cannot resume a backup, so the stopped one must run again
+        // once the pause ends: the slot stays unstamped.
+        #expect(harness.model.plan(id: planID)?.lastRunAt == earlier)
+        let stopped = try #require(harness.model.configuration.runs.first)
+        #expect(stopped.outcome == .cancelled)
+        #expect(stopped.failureMessage == "Stopped by Pause Backups")
+        if case .paused = harness.model.scheduleHold {} else {
+            Issue.record("the hold was \(String(describing: harness.model.scheduleHold))")
+        }
+
+        // The mark belongs to that one run: a later plain Stop stamps.
+        harness.model.resumeBackups()
+        #expect(await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 10))
+        harness.model.runBackup(planID: planID)
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        harness.model.cancelBackup(planID: planID)
+        await harness.model.waitForRun(planID: planID)
+        let stamped = try #require(harness.model.plan(id: planID)?.lastRunAt)
+        #expect(stamped > earlier)
+        #expect(harness.model.configuration.runs.first?.failureMessage == "Cancelled")
+
+        await harness.model.shutdown()
+    }
+
+    @Test("plain Pause Backups lets a running backup finish")
+    func pauseLeavesRunningBackupAlone() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+
+        harness.model.runBackup(planID: planID)
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        harness.model.pauseBackups(for: .oneHour)
+        // Checked at once: a stopped run stays in `activity`, cancelling,
+        // until its task unwinds, so the wait below alone would pass a
+        // pause that stopped it whenever the unwind outlasted the wait.
+        let phase = harness.model.activity[planID]?.phase
+        #expect(phase != nil && phase != .cancelling, "phase was \(String(describing: phase))")
+        #expect(!harness.model.pauseStoppedPlanIDs.contains(planID))
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(harness.model.isRunning(planID: planID))
+        #expect(harness.model.configuration.runs.isEmpty)
+
+        harness.model.cancelBackup(planID: planID)
+        await harness.model.waitForRun(planID: planID)
+        await harness.model.shutdown()
+    }
+
     @Test("deleting a repository cancels the backup running against it")
     func deletingRepositoryCancelsRunningBackup() async throws {
         let harness = try await makeHarness(mode: "hang-backup")

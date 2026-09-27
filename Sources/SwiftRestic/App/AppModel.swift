@@ -105,6 +105,17 @@ final class AppModel {
     /// written on Xcode was denied while the terminal was granted — so a
     /// test that asserted on it would pass or fail by machine.
     @ObservationIgnored var fullDiskAccessProbe: @Sendable () -> FullDiskAccessStatus = { FullDiskAccess.probe() }
+    /// Whether the Mac ran on battery at the last scheduler tick — sampled
+    /// every tick whether or not the battery setting is on, so the hold's
+    /// words are right the moment the setting is switched on, and written
+    /// only when it changes, so the tray's observation does not fire every
+    /// minute.
+    var isOnBattery = false
+    /// Plans whose running backup Pause and Stop ended. Such a run is
+    /// recorded as stopped by the pause and leaves its slot unstamped, so
+    /// it runs again when the pause ends. Each run's unwind removes its
+    /// plan, so a later plain Stop of the same plan stamps as usual.
+    @ObservationIgnored var pauseStoppedPlanIDs: Set<UUID> = []
     /// Transient messages shown at the top of the detail panes, newest first.
     /// A queue rather than a single slot: an unread error must not be erased
     /// by the next message — a failing-repository refresh, a finished restore

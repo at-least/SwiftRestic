@@ -154,6 +154,14 @@ struct PlanEditorSheet: View {
                 }
             }
             Toggle("Run on schedule", isOn: $draft.isEnabled)
+            // A timed Pause Schedule leaves the switch on; without this line
+            // the editor would read as if the plan were running on schedule.
+            if draft.isEnabled, let end = draft.activePauseEnd(at: .now) {
+                Text("Paused until \(Format.pauseEnd(end)) — scheduled runs resume by themselves then.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Section("Snapshot tags") {
                 Text(
                     "SwiftRestic always adds a private tag so retention only ever touches this plan's own snapshots."

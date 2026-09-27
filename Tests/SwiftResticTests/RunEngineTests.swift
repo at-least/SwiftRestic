@@ -15,7 +15,8 @@ struct BackupRunEngineTests {
         var deliveredRecords: [RunRecord] = []
         var deliveredTranscripts: [RunTranscript.Contents] = []
 
-        var cancellationMessage = "cancelled in test"
+        /// Per plan, so a test can tell the engine asked about its own run.
+        func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
 
         func service() throws -> any ResticClient { throw ResticError.repositoryMissing }
         func context(for repository: Repository) async throws -> RepositoryContext {
@@ -171,6 +172,9 @@ struct BackupRunEngineTests {
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .cancelled, "outcome was \(record.outcome)")
+        // The sink says why, for this plan: Pause and Stop words a stopped
+        // run differently from the user's own Stop.
+        #expect(record.failureMessage == "cancelled \(plan.id)")
         #expect(record.hookMessages.isEmpty, "messages were \(record.hookMessages)")
         #expect(
             !FileManager.default.fileExists(atPath: failureRan.path),
@@ -638,7 +642,7 @@ private final class StubServiceSink: BackupRunEngine.Sink {
         self.base = base
     }
 
-    var cancellationMessage: String { base.cancellationMessage }
+    func cancellationMessage(for planID: UUID) -> String { base.cancellationMessage(for: planID) }
     func service() throws -> any ResticClient { client }
     func context(for repository: Repository) async throws -> RepositoryContext {
         try await base.context(for: repository)

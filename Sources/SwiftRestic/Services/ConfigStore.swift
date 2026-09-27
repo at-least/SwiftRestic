@@ -14,6 +14,9 @@ struct AppSettings: Codable, Sendable, Hashable {
     var downloadLimitKiBps: Int = 0
     /// Skip scheduled runs while on battery power.
     var pauseOnBattery: Bool = false
+    /// The tray's Pause Backups, while it holds: every scheduled backup,
+    /// check and prune waits. `nil` when nothing is paused.
+    var schedulePause: SchedulePause?
     /// Webhook, chat and dead-man's-switch destinations.
     var notificationChannels: [NotificationChannel] = []
     /// The console's last commands, newest first. Persisted so a command that
@@ -33,6 +36,9 @@ struct AppSettings: Codable, Sendable, Hashable {
         uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
         downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)
         pauseOnBattery = c.value(.pauseOnBattery, default: false)
+        // A pause whose date does not read throws inside, so this reads as
+        // not paused and says so — never as a pause without end.
+        schedulePause = c.optional(.schedulePause)
         notificationChannels = c.value(.notificationChannels, default: [])
         consoleHistory = c.value(.consoleHistory, default: [])
     }
