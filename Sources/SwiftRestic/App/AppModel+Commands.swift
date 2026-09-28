@@ -189,7 +189,7 @@ extension AppModel {
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Rebuild the search index for “\(repository.name)”?",
-                message: "The local search index is deleted and read back from the repository, snapshot by snapshot. The repository itself is not touched, but folder version lists and Find stay incomplete until the rebuild finishes."
+                message: "The local search index, with its cached folder listings and comparisons, is deleted and read back from the repository, snapshot by snapshot. The repository itself is not touched. Until the rebuild finishes, folder version lists are incomplete, the Restore pane's search may miss matches, and Find Files searches through restic, which is slower."
             )
         }
     }

@@ -10,52 +10,85 @@ extension AppModel {
     /// closing refresh lands here, after retention has released the
     /// repository's exclusive lock, and the backfill loop picks the cheap
     /// diff route or the full read per snapshot.
-    func indexReconcile(repositoryID: UUID, listing: [Snapshot]) {
-        Task {
-            await indexCoordinator.reconcile(repositoryID: repositoryID, snapshots: listing)
+    ///
+    /// `generation` is the listing's number from `nextListingGeneration`;
+    /// the coordinator drops a listing older than one it already applied.
+    /// On the background lane, so a quit waits for the reconcile instead of
+    /// exiting under it.
+    func indexReconcile(repositoryID: UUID, listing: [Snapshot], generation: UInt64) {
+        tasks.addBackground(Task {
+            await indexCoordinator.reconcile(repositoryID: repositoryID, snapshots: listing, generation: generation)
             // Backfill needs the repository and its credentials; if either is
             // gone mid-refresh, the next refresh retries the whole pass.
             guard let repository = repository(id: repositoryID),
                   let service = try? service(),
                   let context = try? await context(for: repository)
             else { return }
+            // The backfill is restic work, and a quit that is draining this
+            // lane must not have it spawn any past `terminateAll` — the rule
+            // the refresh follow-up keeps too. The next launch resumes it.
+            guard !isShuttingDown else { return }
             await indexCoordinator.startBackfill(repositoryID: repositoryID, service: service, context: context)
-        }
+        })
     }
 
-    /// The versions the index knows for one path, newest first. Empty — not
-    /// an error — when the index has not read that path yet; the folder
-    /// browser degrades to the newest snapshot and says so.
-    func indexedVersions(ofPath path: String, repositoryID: UUID) async -> [IndexedSnapshot] {
-        (try? await indexCoordinator.versions(ofPath: path, repositoryID: repositoryID)) ?? []
+    /// Numbers the listing a refresh is about to read. Taken before restic
+    /// is asked: refreshes of one repository run one at a time, so these
+    /// numbers order the listings by when they were read — the order the
+    /// index must apply them in, which their reconcile hops do not promise.
+    func nextListingGeneration(_ repositoryID: UUID) -> UInt64 {
+        let next = (listingGeneration[repositoryID] ?? 0) + 1
+        listingGeneration[repositoryID] = next
+        return next
     }
 
-    /// The batched form of `indexedVersions(ofPath:)` for a whole search
-    /// result: one store round trip per chunk of paths. Throws when the
-    /// index itself fails — a search that cannot read its index must say so,
-    /// not read as "nothing covered"; a path the index holds nothing on is
-    /// simply absent from the dictionary.
-    func indexedVersions(ofPaths paths: [String], repositoryID: UUID) async throws -> [String: [IndexedSnapshot]] {
-        try await indexCoordinator.versions(ofPaths: paths, repositoryID: repositoryID)
+    /// The versions the index knows for one path within one chain — a
+    /// plan's tag — newest first. Empty — not an error — when the index has
+    /// not read that path yet; the folder browser degrades to the newest
+    /// snapshot and says so.
+    func indexedVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async -> [IndexVersion] {
+        (try? await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)) ?? []
     }
 
-    /// Whether the index has read every alive snapshot of the repository —
+    /// For a whole search result, each path's version count and newest
+    /// version — what a Find Files row shows — without the full lists, which
+    /// can run to thousands per path. Throws when the index itself fails: a
+    /// search that cannot read its index must say so, not read as "nothing
+    /// covered"; a path the index holds nothing on is simply absent from the
+    /// dictionary, which is keyed by the path's bytes (`PathKey`).
+    func indexedSummaries(ofPaths paths: [String], repositoryID: UUID) async throws -> [PathKey: VersionSummary] {
+        try await indexCoordinator.versionSummaries(ofPaths: paths, repositoryID: repositoryID)
+    }
+
+    /// Which of `paths` one snapshot holds, each with its kind in that
+    /// snapshot (true for a directory) — the Restore pane's split of a
+    /// search by the open backup. Throws, like the summaries, when the index
+    /// fails. A snapshot the index has not read answers `[:]`: nothing about
+    /// it is known, which the caller's completeness check owns.
+    func indexMembership(ofPaths paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
+        try await indexCoordinator.contains(paths: paths, inSnapshot: snapshotID, repositoryID: repositoryID)
+    }
+
+    /// Whether the index has read every listed snapshot of the repository —
     /// the folder browser's completeness signal. An index that cannot answer
     /// reads as "not complete", never as a failure.
     func indexIsComplete(repositoryID: UUID) async -> Bool {
-        (try? await indexCoordinator.isFullyIndexed(repositoryID: repositoryID)) ?? false
+        (try? await indexCoordinator.isComplete(repositoryID: repositoryID)) ?? false
     }
 
     /// Throws the index away and rebuilds it from the listing the model
     /// already holds. The recovery hatch for an index the user no longer
     /// trusts — same path a corrupt file takes, just user-invoked. A reset,
     /// not a drop: the repository still exists, so the reconcile below must
-    /// land even though it runs through the same coordinator.
+    /// land even though it runs through the same coordinator. The listing
+    /// goes in under the generation it was read with; the reset forgot that
+    /// it had been applied, and a refresh newer than it still wins.
     func rebuildIndex(repositoryID: UUID) {
         let listing = snapshots[repositoryID] ?? []
+        let generation = snapshotsGeneration[repositoryID] ?? 0
         Task {
             await indexCoordinator.resetRepository(repositoryID: repositoryID)
-            indexReconcile(repositoryID: repositoryID, listing: listing)
+            indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
         }
     }
 
@@ -87,8 +120,9 @@ extension AppModel {
     /// A diff between two content-addressed snapshots is an immutable fact,
     /// so completed walks are cached and a repeat record switch skips the
     /// walk entirely. Only a completed walk is cached: a stream that died
-    /// partway keeps its partial map on screen, flagged as a failure, and
-    /// never presents itself as the whole answer on the next switch.
+    /// partway, or one with lines that did not decode, keeps its partial map
+    /// on screen, flagged as a failure, and never presents itself as the
+    /// whole answer on the next switch.
     func snapshotChanges(
         repositoryID: UUID,
         olderID: String,
@@ -111,8 +145,17 @@ extension AppModel {
         let collector = ChangeMap()
         do {
             let (service, context) = try await resticContext(for: repository)
-            try await service.walkDiff(context, olderID: olderID, newerID: newerID) { change in
+            let malformed = try await service.walkDiff(context, olderID: olderID, newerID: newerID) { change in
                 collector.insert(change)
+            }
+            // A line restic wrote that did not decode is a change the map
+            // never saw, whose row would read as unchanged: as incomplete as
+            // a walk that died, though restic exited cleanly.
+            guard malformed == 0 else {
+                throw ResticError.malformedOutput(
+                    command: "diff",
+                    detail: "\(malformed) change \(malformed == 1 ? "line" : "lines") did not decode"
+                )
             }
             await indexCoordinator.cacheDiff(
                 olderID: olderID,

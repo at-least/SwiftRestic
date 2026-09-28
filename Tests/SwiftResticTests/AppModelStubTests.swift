@@ -1710,6 +1710,15 @@ struct AppModelStubTests {
             let notes = try #require(first.first)
             #expect(notes.size == 42)
 
+            // The write-through runs beside the browse, not before it
+            // answers; the repeat this test is about comes after it lands.
+            let deadline = Date().addingTimeInterval(10)
+            while await harness.model.indexCoordinator.cachedListing(
+                snapshotID: "feedface00000000", directory: "/src", repositoryID: harness.repository.id
+            ) == nil, Date() < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+
             let second = try await harness.model.children(
                 repositoryID: harness.repository.id,
                 snapshotID: "feedface00000000",
@@ -1717,6 +1726,51 @@ struct AppModelStubTests {
             )
             #expect(second == first)
             #expect(try stubRuns("ls", in: harness) == 1)
+
+            await harness.model.shutdown()
+        }
+    }
+
+    @Test("a folder browse hands back restic's listing without waiting for the index's writer")
+    func browseDoesNotWaitForTheIndexWriter() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "browserows")
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+            let repositoryID = harness.repository.id
+            let coordinator = harness.model.indexCoordinator
+
+            // The index's one writer, held from outside as a backfill's
+            // chunk or full compare holds it — seconds, at scale.
+            let store = try await coordinator.read(repositoryID) { $0 }
+            let hold = WriterHold(store)
+            let deadline = Date().addingTimeInterval(10)
+            while !hold.isHeld, Date() < deadline { try await Task.sleep(for: .milliseconds(5)) }
+            #expect(hold.isHeld)
+
+            let answered = BrowseAnswered()
+            let browse = Task {
+                let nodes = try await harness.model.children(
+                    repositoryID: repositoryID, snapshotID: "feedface00000000", path: "/src"
+                )
+                answered.set()
+                return nodes
+            }
+            // restic has answered; the cache write-through is what may wait.
+            let answerDeadline = Date().addingTimeInterval(5)
+            while !answered.isSet, Date() < answerDeadline { try await Task.sleep(for: .milliseconds(10)) }
+            let answeredWhileHeld = answered.isSet
+            hold.release()
+            #expect(answeredWhileHeld, "the browse waited for the index's writer")
+            #expect(try await browse.value.map(\.path) == ["/src/notes.txt"])
+
+            // The write-through still lands once the writer is free.
+            let cacheDeadline = Date().addingTimeInterval(10)
+            var cached = await coordinator.cachedListing(snapshotID: "feedface00000000", directory: "/src", repositoryID: repositoryID)
+            while cached == nil, Date() < cacheDeadline {
+                try await Task.sleep(for: .milliseconds(10))
+                cached = await coordinator.cachedListing(snapshotID: "feedface00000000", directory: "/src", repositoryID: repositoryID)
+            }
+            #expect(cached?.map(\.path) == ["/src/notes.txt"])
 
             await harness.model.shutdown()
         }
@@ -1774,6 +1828,36 @@ struct AppModelStubTests {
             )
             #expect(again.failure != nil)
             #expect(try stubRuns("diff", in: harness) == 2)
+
+            await harness.model.shutdown()
+        }
+    }
+
+    @Test("a diff with lines that did not decode says so, keeps what decoded, and caches nothing")
+    func malformedDiffIsReported() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "diffmalformed")
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+
+            let marks = await harness.model.snapshotChanges(
+                repositoryID: harness.repository.id,
+                olderID: "0000000000000000",
+                newerID: "feedface00000000"
+            )
+            // The change that decoded is still true; the one that did not is
+            // why a blank row can no longer mean unchanged.
+            #expect(marks.changes["/src/new.txt"]?.category == .added)
+            #expect(marks.failure != nil, "a diff that lost a line read as complete")
+
+            // Nothing was cached: the same switch asks restic again.
+            let again = await harness.model.snapshotChanges(
+                repositoryID: harness.repository.id,
+                olderID: "0000000000000000",
+                newerID: "feedface00000000"
+            )
+            #expect(again.failure != nil)
+            let diffRuns = try stubRuns("diff", in: harness)
+            #expect(diffRuns == 2)
 
             await harness.model.shutdown()
         }
@@ -2138,6 +2222,24 @@ struct AppModelStubTests {
 ///
 /// Built for one small POST per test: it answers `200` with an empty body and
 /// closes the connection, collecting whatever arrived.
+/// Set once a browse has answered; read by the test polling for it.
+private final class BrowseAnswered: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func set() {
+        lock.lock()
+        value = true
+        lock.unlock()
+    }
+
+    var isSet: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 private final class HTTPCaptureServer: @unchecked Sendable {
     private let lock = NSLock()
     private var bodies: [String] = []

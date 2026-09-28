@@ -73,6 +73,73 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         locked { log.append(name) }
     }
 
+    // MARK: - Index streams
+
+    /// The index backfill's two streams, scripted per snapshot ID: what
+    /// `ls` lists, which snapshots restic cannot read (both streams fail
+    /// for them), which walks hang until cancelled, and how often each
+    /// snapshot was walked.
+    private var listings: [String: [SnapshotNode]] = [:]
+    private var unreadableIDs: Set<String> = []
+    private var hangingIDs: Set<String> = []
+    private var walks: [String: Int] = [:]
+    private var diffWalks: [String: Int] = [:]
+    private var malformedLines: [String: Int] = [:]
+    private var walkStartHook: (@Sendable (String) async -> Void)?
+
+    /// Each snapshot's `ls`: path → isDirectory. Ancestors are not added;
+    /// list them explicitly, as restic does.
+    func onListings(_ contents: [String: [String: Bool]]) -> Self {
+        locked {
+            for (id, content) in contents {
+                listings[id] = content.keys.sorted().map { path in
+                    let isDirectory = content[path] ?? false
+                    return SnapshotNode(
+                        name: IndexPathText.basename(of: path),
+                        type: isDirectory ? .dir : .file,
+                        path: path,
+                        size: isDirectory ? nil : 1,
+                        mtime: nil
+                    )
+                }
+            }
+        }
+        return self
+    }
+
+    /// Snapshots whose `ls` and `diff` fail as restic would on a pack it
+    /// cannot read.
+    func onUnreadable(_ ids: Set<String>) -> Self {
+        locked { unreadableIDs = ids }
+        return self
+    }
+
+    /// Snapshots whose `ls` streams nothing and never ends until the task
+    /// is cancelled — then fails as the runner does, with `cancelled`.
+    func onHangingWalks(_ ids: Set<String>) -> Self {
+        locked { hangingIDs = ids }
+        return self
+    }
+
+    /// Lines that did not decode, reported by the `ls` of that snapshot and
+    /// by every `diff` that targets it.
+    func onMalformed(_ counts: [String: Int]) -> Self {
+        locked { malformedLines = counts }
+        return self
+    }
+
+    /// Runs at the start of every `ls`, after the index has begun that
+    /// snapshot's stream — where a test lands a reconcile mid-stream.
+    func onWalkStart(_ hook: @escaping @Sendable (String) async -> Void) -> Self {
+        locked { walkStartHook = hook }
+        return self
+    }
+
+    /// `ls` runs per snapshot ID.
+    var walkCounts: [String: Int] { locked { walks } }
+    /// `diff` runs per target snapshot ID.
+    var diffCounts: [String: Int] { locked { diffWalks } }
+
     /// For the methods a run engine transcribes: notes whether a transcript
     /// was bound, and writes the scripted exit into it the way the runner
     /// would.
@@ -160,8 +227,23 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         _ context: RepositoryContext,
         snapshotID: String,
         onNode: @Sendable @escaping (SnapshotNode) -> Void
-    ) async throws {
+    ) async throws -> Int {
         record("walk")
+        let (nodes, unreadable, hangs, malformed, hook) = locked {
+            walks[snapshotID, default: 0] += 1
+            return (
+                listings[snapshotID] ?? [], unreadableIDs.contains(snapshotID), hangingIDs.contains(snapshotID),
+                malformedLines[snapshotID] ?? 0, walkStartHook
+            )
+        }
+        await hook?(snapshotID)
+        if hangs {
+            while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
+            throw ResticError.cancelled
+        }
+        if unreadable { throw Self.unreadableError(snapshotID) }
+        for node in nodes { onNode(node) }
+        return malformed
     }
 
     func find(
@@ -184,13 +266,46 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return SnapshotDiff(olderID: olderID, newerID: newerID)
     }
 
+    /// A complete set-difference in restic's spelling (a trailing `/` on
+    /// directories), `+` for paths only in `newerID`; a path whose kind
+    /// differs is one `T` line, as restic 0.19.1 writes it.
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,
         newerID: String,
         onChange: @Sendable @escaping (ResticDiffChange) -> Void
-    ) async throws {
+    ) async throws -> Int {
         record("walkDiff")
+        let (base, target, unreadable, malformed) = locked {
+            diffWalks[newerID, default: 0] += 1
+            return (
+                listings[olderID] ?? [],
+                listings[newerID] ?? [],
+                unreadableIDs.intersection([olderID, newerID]).first,
+                malformedLines[newerID] ?? 0
+            )
+        }
+        if let unreadable { throw Self.unreadableError(unreadable) }
+        func spelled(_ node: SnapshotNode) -> String { node.isDirectory ? node.path + "/" : node.path }
+        let before = Dictionary(base.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        let after = Dictionary(target.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        for node in base where after[node.path] == nil {
+            onChange(ResticDiffChange(path: spelled(node), modifier: "-"))
+        }
+        for node in target {
+            if let old = before[node.path] {
+                if old.isDirectory != node.isDirectory {
+                    onChange(ResticDiffChange(path: spelled(node), modifier: "T"))
+                }
+            } else {
+                onChange(ResticDiffChange(path: spelled(node), modifier: "+"))
+            }
+        }
+        return malformed
+    }
+
+    private static func unreadableError(_ snapshotID: String) -> ResticError {
+        .commandFailed(exitCode: 1, message: "scripted: cannot read \(snapshotID)", command: "restic")
     }
 
     func backup(

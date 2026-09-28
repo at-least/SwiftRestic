@@ -31,9 +31,9 @@ struct FolderBrowserView: View {
     /// `nil` = the pseudo-root that lists the plan's backed-up folder roots.
     @State private var currentPath: String?
     /// The versions the index knows for `currentPath`, newest first.
-    @State private var versions: [IndexedSnapshot] = []
+    @State private var versions: [IndexVersion] = []
     /// The snapshot the list below is read from.
-    @State private var chosen: IndexedSnapshot?
+    @State private var chosen: IndexVersion?
     @State private var nodes: [SnapshotNode] = []
     @State private var selection: SnapshotNode.ID?
     @State private var isLoading = false
@@ -313,8 +313,9 @@ struct FolderBrowserView: View {
         }
 
         isLoading = true
-        let loadedVersions = await model.indexedVersions(ofPath: currentPath, repositoryID: target.repositoryID)
-            .filter { $0.chain == chain }
+        let loadedVersions = await model.indexedVersions(
+            ofPath: currentPath, inChain: chain, repositoryID: target.repositoryID
+        )
         // Keeping the user's version across a walk down matters — flip
         // through time, then step inside, and you are still in the same
         // era. When it does not cover the deeper path, the newest wins.
@@ -383,19 +384,12 @@ struct FolderBrowserView: View {
 
     /// A stand-in version built from the model's own listing, for when the
     /// index has nothing on this path yet.
-    private var fallbackVersion: IndexedSnapshot? {
+    private var fallbackVersion: IndexVersion? {
         planSnapshots.first.map(self.snapshotVersion)
     }
 
-    private func snapshotVersion(from snapshot: Snapshot) -> IndexedSnapshot {
-        IndexedSnapshot(
-            id: snapshot.id,
-            chain: chain,
-            seq: 0,
-            time: snapshot.time,
-            alive: true,
-            coverage: .none
-        )
+    private func snapshotVersion(from snapshot: Snapshot) -> IndexVersion {
+        IndexVersion(id: snapshot.id, time: snapshot.time)
     }
 
     private func restoreSelection() {

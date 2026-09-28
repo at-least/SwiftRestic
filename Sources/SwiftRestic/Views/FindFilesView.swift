@@ -60,14 +60,16 @@ struct FindFilesView: View {
     }
 
     private struct Row: Identifiable {
-        var id: String { "\(snapshotID)/\(match.path)" }
+        /// Byte-exact in the path (`PathKey.hex`): two paths whose names
+        /// differ only in Unicode normalization are two rows, never one.
+        var id: String { "\(snapshotID)/\(PathKey(match.path).hex)" }
         var match: FindMatch
         var snapshotID: String
         var snapshotTime: Date?
         /// Index rows know how many versions the path has; restic rows do not.
         var versionsCount: Int?
-        /// Index rows carry the search hit, whose kind may be unknown and in
-        /// need of resolution before a restore.
+        /// Index rows carry the search hit, whose kind the index read apart
+        /// from the row's snapshot and a restore therefore resolves first.
         var hit: SearchHit?
     }
 
@@ -368,29 +370,35 @@ struct FindFilesView: View {
         }
     }
 
-    /// The index engine: FTS over basenames, then one batched versions
-    /// lookup so every row names a restorable snapshot. Sorted newest-first
+    /// The index engine: FTS over basenames, then one batched summary
+    /// lookup — each path's newest version and version count, not its whole
+    /// list — so every row names a restorable snapshot. Sorted newest-first
     /// by that snapshot, matching the restic engine's row order.
     private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> [Row] {
         let hits = try await model.searchIndex(pattern: pattern, repositoryID: repositoryID)
         // A thrown index failure propagates to the sheet's own error message;
-        // only pruned paths (absent here) degrade into the dropped count.
-        let versionsByPath = try await model.indexedVersions(
+        // only paths that lost their versions (absent here) degrade into the
+        // dropped count.
+        let summaries = try await model.indexedSummaries(
             ofPaths: hits.map(\.path), repositoryID: repositoryID
         )
         var rows: [Row] = []
         var dropped = 0
         for hit in hits {
-            guard let versions = versionsByPath[hit.path], let newest = versions.first else {
-                // Every version of this path has since been pruned; there is
-                // nothing restorable to list. Counted, so the footer can own
-                // the gap instead of letting the row vanish silently.
+            guard let summary = summaries[PathKey(hit.path)] else {
+                // The search lists only paths an indexed backup holds, so
+                // this path lost its last version between the two reads — a
+                // refresh applied a forget, or the index was rebuilt, in
+                // between; there is nothing restorable to list. Counted, so
+                // the footer can own the gap instead of letting the row
+                // vanish silently.
                 dropped += 1
                 continue
             }
+            let newest = summary.newest
             let match = FindMatch(
                 path: hit.path,
-                type: hit.isDirectory == true ? "dir" : "file",
+                type: hit.isDirectory ? "dir" : "file",
                 size: nil,
                 permissions: nil,
                 mtime: nil
@@ -399,12 +407,20 @@ struct FindFilesView: View {
                 match: match,
                 snapshotID: newest.id,
                 snapshotTime: newest.time,
-                versionsCount: versions.count,
+                versionsCount: summary.count,
                 hit: hit
             ))
         }
         resultsTruncated = dropped > 0 || hits.count >= AppModel.indexSearchLimit
-        return rows
+        // Rows of one snapshot keep the search's order: name, then path,
+        // bytewise — so equal times never shuffle between searches.
+        return rows.enumerated()
+            .sorted { a, b in
+                let timeA = a.element.snapshotTime ?? .distantPast
+                let timeB = b.element.snapshotTime ?? .distantPast
+                return timeA != timeB ? timeA > timeB : a.offset < b.offset
+            }
+            .map(\.element)
     }
 
     /// Abandons the running search, if any. The view state is reset here rather
@@ -437,10 +453,12 @@ struct FindFilesView: View {
     }
 
     /// Index rows resolve their node from the snapshot itself, no matter what
-    /// kind the index recorded: the search table's kind is first-writer-wins,
-    /// and a path that changed from file to directory would otherwise take
-    /// `dump` — which happily writes a folder's tar into one file, no error.
-    /// A listing that cannot answer fails the restore loudly instead.
+    /// kind the index gave. The hit's kind is the path's kind in the newest
+    /// indexed snapshot at search time, while the row's snapshot comes from a
+    /// second read, so a backup indexed in between can make the two differ;
+    /// a path that changed from file to directory would then take `dump` —
+    /// which happily writes a folder's tar into one file, no error. A listing
+    /// that cannot answer fails the restore loudly instead.
     private func restore(_ row: Row, repositoryID: UUID, to destination: URL, overwrite: RestoreOverwritePolicy) {
         if row.hit == nil {
             // A restic-engine row: the node came from restic itself.
@@ -461,7 +479,10 @@ struct FindFilesView: View {
                     snapshotID: row.snapshotID,
                     path: parent
                 )
-                guard let node = children.first(where: { $0.path == row.match.path }) else {
+                // By bytes: a sibling whose name only canonically equals
+                // this one is another file, and restoring it would restore
+                // the wrong item under this row's name and kind.
+                guard let node = children.first(where: { PathKey($0.path) == PathKey(row.match.path) }) else {
                     throw ResticError.commandFailed(
                         exitCode: 0,
                         message: "“\(row.match.name)” is no longer listed in the chosen snapshot — refresh and try again.",

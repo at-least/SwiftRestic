@@ -1227,6 +1227,129 @@ struct IndexLocationTests {
             .appendingPathComponent("SwiftResticIndexHome-\(UUID().uuidString)")
         let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
         #expect(model.indexCoordinator.directory == root)
+        // The files themselves live in a folder of their own inside it, the
+        // only folder the orphan sweep may touch.
+        #expect(model.indexCoordinator.indexDirectory.path == root.appendingPathComponent("index").path)
+        let repositoryID = UUID()
+        #expect(
+            model.indexCoordinator.fileURL(for: repositoryID).path
+                == root.appendingPathComponent("index/\(repositoryID.uuidString).sqlite").path
+        )
+    }
+}
+
+/// Launch's orphan-index sweep, through `bootstrap`: it runs only from a
+/// repository list that read whole. Every other load can miss a live
+/// repository — and then that repository's index reads as an orphan.
+@Suite("index orphan sweep at launch")
+@MainActor
+struct IndexOrphanSweepLaunchTests {
+    /// How the configuration folder is left before launch.
+    enum Load: String, CaseIterable, CustomTestStringConvertible {
+        /// No generation reads: the configuration reads as no repositories.
+        case unreadable
+        /// The live file is corrupt; `config.json.1` is read instead.
+        case recovered
+        /// The live file reads, but the repository's `id` does not — tolerant
+        /// decoding gives it a fresh one, so its real index looks orphaned.
+        case substitutedID
+
+        var testDescription: String { rawValue }
+    }
+
+    /// A configuration folder, and the three files the sweep must judge.
+    private struct Folder {
+        var root: URL
+        var config: URL
+        /// The configured repository's index file.
+        var repositoryFile: URL
+        /// An index file whose repository no configuration names.
+        var orphanFile: URL
+        /// The orphan's file at the index's earlier home, `<configDir>/<uuid>.sqlite`.
+        var earlierHome: URL
+    }
+
+    /// A configuration folder naming one repository (no password stored, so
+    /// the launch refresh never runs restic), left the way `load` says, with
+    /// the three files already on disk.
+    private func makeFolder(_ load: Load?) throws -> Folder {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticLaunchSweep-\(UUID().uuidString)")
+        let config = root.appendingPathComponent("config")
+        try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+
+        var repository = Repository()
+        repository.name = "Kept"
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+        var configuration = AppConfiguration()
+        configuration.repositories = [repository]
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let whole = try encoder.encode(configuration)
+        let live = config.appendingPathComponent("config.json")
+        switch load {
+        case nil:
+            try whole.write(to: live)
+        case .unreadable:
+            for name in ["config.json", "config.json.1", "config.json.2"] {
+                try Data("{ not json".utf8).write(to: config.appendingPathComponent(name))
+            }
+        case .recovered:
+            try Data("{ not json".utf8).write(to: live)
+            try whole.write(to: config.appendingPathComponent("config.json.1"))
+        case .substitutedID:
+            let text = String(decoding: whole, as: UTF8.self)
+            try #require(text.contains(repository.id.uuidString))
+            try Data(text.replacingOccurrences(of: repository.id.uuidString, with: "not-a-uuid").utf8).write(to: live)
+        }
+
+        // The paths the model's own coordinator will use for this folder.
+        let paths = IndexCoordinator(directory: config)
+        try FileManager.default.createDirectory(at: paths.indexDirectory, withIntermediateDirectories: true)
+        let orphan = UUID()
+        let folder = Folder(
+            root: root,
+            config: config,
+            repositoryFile: paths.fileURL(for: repository.id),
+            orphanFile: paths.fileURL(for: orphan),
+            earlierHome: config.appendingPathComponent(orphan.uuidString + ".sqlite")
+        )
+        for file in [folder.repositoryFile, folder.orphanFile, folder.earlierHome] {
+            try Data("x".utf8).write(to: file)
+        }
+        return folder
+    }
+
+    private func launch(in folder: Folder) async {
+        let model = AppModel(store: ConfigStore(directory: folder.config), secrets: .inMemory())
+        await model.bootstrap()
+        // The sweep rides the background lane, which shutdown drains.
+        await model.shutdown()
+    }
+
+    @Test("a whole configuration sweeps the orphan and keeps its repository's index and the earlier home")
+    func wholeConfigurationSweeps() async throws {
+        let folder = try makeFolder(nil)
+        defer { try? FileManager.default.removeItem(at: folder.root) }
+
+        await launch(in: folder)
+
+        #expect(!FileManager.default.fileExists(atPath: folder.orphanFile.path), "the orphan's index survived a whole configuration")
+        #expect(FileManager.default.fileExists(atPath: folder.repositoryFile.path), "a configured repository's index was swept")
+        #expect(FileManager.default.fileExists(atPath: folder.earlierHome.path), "a file outside index/ was swept")
+    }
+
+    @Test("a configuration that did not read whole sweeps nothing", arguments: Load.allCases)
+    func partialConfigurationSweepsNothing(_ load: Load) async throws {
+        let folder = try makeFolder(load)
+        defer { try? FileManager.default.removeItem(at: folder.root) }
+
+        await launch(in: folder)
+
+        for file in [folder.repositoryFile, folder.orphanFile, folder.earlierHome] {
+            #expect(FileManager.default.fileExists(atPath: file.path), "\(file.lastPathComponent) was swept after a \(load) load")
+        }
     }
 }
 

@@ -48,6 +48,9 @@ extension AppModel {
         do {
             let service = try service()
             let context = try await context(for: repository)
+            // Numbered before restic is asked, so the number says when the
+            // listing was read, not when its reconcile reaches the index.
+            let generation = nextListingGeneration(repositoryID)
             let listing = try await service.snapshots(context, planID: nil, timeout: Self.refreshTimeout)
             // A stats failure must not fail the listing (the rows are the
             // news; the size is decoration), but it must not be invisible
@@ -77,11 +80,12 @@ extension AppModel {
             // removed entry gets no state, no rows and no banner.
             guard configuration.repository(id: repositoryID) != nil else { return }
             snapshots[repositoryID] = listing
+            snapshotsGeneration[repositoryID] = generation
             repositoryStats[repositoryID] = stats
             snapshotListingOutcomes[repositoryID] = .loaded
             snapshotsLoadedAt[repositoryID] = .now
             repositoriesMissingPassword.remove(repositoryID)
-            indexReconcile(repositoryID: repositoryID, listing: listing)
+            indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
         } catch ResticError.cancelled {
             // A cancelled refresh is the user (or shutdown) stopping the app's
             // own work, not a repository that could not be read: no banner,
@@ -201,13 +205,19 @@ extension AppModel {
         let nodes = try await service.listDirectory(context, snapshotID: snapshotID, path: path)
         // Write-through, so the next visit to this directory — the record
         // switch that re-walks this spine, the collapse and re-expand — is
-        // instant. Best-effort by the coordinator's contract.
-        await indexCoordinator.cacheListing(
-            snapshotID: snapshotID,
-            directory: path,
-            nodes: nodes,
-            repositoryID: repositoryID
-        )
+        // instant. Best-effort by the coordinator's contract. Not awaited:
+        // the write queues on the index's one writer, which a backfill's
+        // chunk or full compare holds for seconds, and the listing is
+        // already in hand — the folder must not wait on a cache. On the
+        // background lane, so a quit drains it rather than exiting under it.
+        tasks.addBackground(Task { [indexCoordinator] in
+            await indexCoordinator.cacheListing(
+                snapshotID: snapshotID,
+                directory: path,
+                nodes: nodes,
+                repositoryID: repositoryID
+            )
+        })
         return nodes
     }
 

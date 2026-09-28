@@ -25,6 +25,29 @@ Two rules the flaky-run hunt of 2026-09-14 added:
   the restart banner — which also fires for a plain test crash or timeout,
   so read the xcresult before blaming a collision.
 
+## The snapshot index
+
+What it is and where it lives: the README's Architecture section. Rules for
+changing it:
+
+- `Sources/SwiftRestic/Services/Index` imports no AppKit, SwiftUI or Cocoa
+  (build.sh's lint fails closed), and only the `SnapshotIndex*.swift` files
+  import GRDB — nothing above the store touches SQL.
+- Every statement the index prepares is registered in
+  `SnapshotIndex.registeredStatements` and pinned by a rule in
+  `SnapshotIndexPlanTests` (no `@testable import`); the test fails on a
+  statement without one.
+- Tests open their index in a temporary folder or an injected configuration
+  folder, never the real `~/Library/Application Support/com.newlix.SwiftRestic`.
+  No code path may open, sweep or delete the `<configDir>/<uuid>.sqlite` files
+  earlier builds left there.
+- Heavier runs, each one xcodebuild session like `./build.sh test`:
+  `Tools/sqlite-floor.sh` (plan pins and the property test on SQLite 3.43.2),
+  and `TEST_RUNNER_SWIFTRESTIC_INDEX_BENCH=1` or
+  `TEST_RUNNER_SWIFTRESTIC_INDEX_PROPERTY=40,30` on an `xcodebuild test
+  -only-testing:SwiftResticTests/<Suite>` run — after `xcodegen generate`
+  (see Build), output redirected to a file.
+
 ## Photographing the app
 
 Debug captures are driven by environment variables on a debug build —

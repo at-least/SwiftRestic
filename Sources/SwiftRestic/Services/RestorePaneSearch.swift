@@ -6,11 +6,20 @@ import Foundation
 /// thrown away — leaving "No matches in this backup" a dead end when the
 /// file was one backup away.
 struct RestorePaneSearch: Equatable, Sendable {
-    /// Hits the open backup contains: the rows the pane lists, in index order.
+    /// Hits the open backup contains: the rows the pane lists, in index
+    /// order, each carrying its kind in the open backup. The search's own
+    /// kind is the path's kind in the newest backup holding it, and a path
+    /// that is a file there may be a folder here. The pane restores from the
+    /// open backup, and the restore picks `restic dump` for a file and
+    /// `restic restore` for a folder by this kind.
     let inThisBackup: [SearchHit]
     /// Matching paths the index holds only in other backups of the
-    /// repository. A path whose every version was pruned counts nowhere:
-    /// the index keeps only live snapshots' versions, so it has none.
+    /// repository: the hits the open backup lacks. The search returns only
+    /// paths some indexed backup holds, so no second read is needed to
+    /// place them — a path whose every version was pruned is never a hit.
+    /// (One that loses its last version between the search and the
+    /// membership read still counts here: off by one in a note, never a
+    /// row.)
     let elsewhereCount: Int
     /// The index stopped at its hit ceiling, so both parts may be short.
     let isTruncated: Bool
@@ -20,19 +29,19 @@ struct RestorePaneSearch: Equatable, Sendable {
     /// files then look as if only other backups held them.
     let indexIsComplete: Bool
 
-    init(hits: [SearchHit], versionsByPath: [String: [IndexedSnapshot]], recordID: String, limit: Int, indexIsComplete: Bool) {
+    /// `inRecord` is the index's membership answer for the hits in the open
+    /// backup — path to its kind there, true for a folder — keyed by the
+    /// path's bytes: a hit whose name only canonically equals one the open
+    /// backup holds is another path, and elsewhere.
+    init(hits: [SearchHit], inRecord: [PathKey: Bool], limit: Int, indexIsComplete: Bool) {
         var inside: [SearchHit] = []
-        var elsewhere = 0
         for hit in hits {
-            guard let versions = versionsByPath[hit.path], !versions.isEmpty else { continue }
-            if versions.contains(where: { $0.id == recordID }) {
-                inside.append(hit)
-            } else {
-                elsewhere += 1
+            if let isDirectory = inRecord[PathKey(hit.path)] {
+                inside.append(SearchHit(path: hit.path, isDirectory: isDirectory))
             }
         }
         inThisBackup = inside
-        elsewhereCount = elsewhere
+        elsewhereCount = hits.count - inside.count
         isTruncated = hits.count >= limit
         self.limit = limit
         self.indexIsComplete = indexIsComplete

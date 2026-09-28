@@ -84,6 +84,12 @@ final class AppModel {
     /// When the listing last succeeded. A freshness stamp the surfaces show
     /// so a number can always be traced to the moment it was read.
     var snapshotsLoadedAt: [UUID: Date] = [:]
+    /// The last listing generation handed out per repository — see
+    /// `nextListingGeneration`. Only the index reads these numbers.
+    @ObservationIgnored var listingGeneration: [UUID: UInt64] = [:]
+    /// The generation `snapshots` was read under, per repository, so a
+    /// rebuild of the index re-sends the held listing under its own number.
+    @ObservationIgnored var snapshotsGeneration: [UUID: UInt64] = [:]
     /// Repositories with no password in the Keychain yet. Upkeep is not scheduled
     /// for these: there is nothing to run, and stamping a "last checked" time for
     /// a check that never happened would be a lie on the repository screen.
@@ -178,10 +184,11 @@ final class AppModel {
     let runner = ResticRunner()
     /// The per-repository snapshot indexes and their upkeep. A cache with a
     /// rebuild path: its failures are its own, never the refresh's or the
-    /// backup's. See `IndexCoordinator`. Beside the configuration, as the
-    /// run logs are: for the app the folder it always used
-    /// (`ConfigStore.defaultDirectory()`, `SWIFTRESTIC_CONFIG_DIR` included),
-    /// and a test's own folder when the test points the store elsewhere.
+    /// backup's. See `IndexCoordinator`. In the configuration's folder, under
+    /// `index/`, as the run logs are under `Logs/`: for the app the folder it
+    /// always used (`ConfigStore.defaultDirectory()`,
+    /// `SWIFTRESTIC_CONFIG_DIR` included), and a test's own folder when the
+    /// test points the store elsewhere.
     let indexCoordinator: IndexCoordinator
     /// State of the restic console pane (see `ConsoleModel`); its two
     /// injected closures are set below, at the end of `init`.

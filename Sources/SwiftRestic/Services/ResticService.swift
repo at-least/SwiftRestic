@@ -360,12 +360,13 @@ struct ResticService: ResticClient {
     /// throughout would collide with retention's exclusive `forget`, and a
     /// read that trips over a concurrently pruned pack fails and stays
     /// pending for a later pass instead.
+    @discardableResult
     func walkSnapshot(
         _ context: RepositoryContext,
         snapshotID: String,
         onNode: @Sendable @escaping (SnapshotNode) -> Void
-    ) async throws {
-        _ = try await runner.run(
+    ) async throws -> Int {
+        try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
                 arguments: context.globalArguments + ["ls", "--json", "--no-lock", snapshotID],
@@ -376,7 +377,7 @@ struct ResticService: ResticClient {
             onMessage: { message in
                 if case let .node(node) = message { onNode(node) }
             }
-        )
+        ).malformedCount
     }
 
     /// The directory containing `path`, in pure String arithmetic rather
@@ -459,13 +460,14 @@ struct ResticService: ResticClient {
     /// Everything the capped `diff` says about its change limit applies
     /// doubly here: the stream is unbounded, so the callback must consume
     /// incrementally. `--no-lock` for the same reason `walkSnapshot` wears it.
+    @discardableResult
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,
         newerID: String,
         onChange: @Sendable @escaping (ResticDiffChange) -> Void
-    ) async throws {
-        _ = try await runner.run(
+    ) async throws -> Int {
+        try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
                 arguments: context.globalArguments + ["diff", "--json", "--no-lock", olderID, newerID],
@@ -476,7 +478,7 @@ struct ResticService: ResticClient {
             onMessage: { message in
                 if case let .change(change) = message { onChange(change) }
             }
-        )
+        ).malformedCount
     }
 
     // MARK: - Backup

@@ -141,6 +141,8 @@ extension AppModel {
         repositoryStats[id] = nil
         snapshotListingOutcomes[id] = nil
         snapshotsLoadedAt[id] = nil
+        listingGeneration[id] = nil
+        snapshotsGeneration[id] = nil
         pendingSnapshotRefreshes.remove(id)
         repositoriesMissingPassword.remove(id)
         statsFailureNoted.remove(id)

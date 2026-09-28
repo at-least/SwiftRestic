@@ -282,8 +282,10 @@ struct RestorePaneView: View {
                     if rowContentWidth.value != width { rowContentWidth.value = width }
                 }
                 // Arq's signature restore gesture: drag straight out of the tree
-                // into Finder. Tree rows only — a search hit's kind is the
-                // index's guess, and a folder dumped as a file lands as a tar.
+                // into Finder. Tree rows only: the search list's rows offer
+                // Restore… but no drag. Not for safety any more — a hit now
+                // carries its kind in the open backup, read from that backup,
+                // so it would not dump a folder as a file — only unwired.
                 //
                 // The list's own drag, not `.onDrag`, and no gesture on the
                 // row at all: a SwiftUI gesture claims every click inside
@@ -352,10 +354,10 @@ struct RestorePaneView: View {
     private func searchResults(_ hits: [SearchHit]) -> some View {
         List(hits, selection: $selection) { hit in
             HStack(spacing: 6) {
-                Image(systemName: hit.isDirectory == true ? "folder.fill" : "doc")
-                    .foregroundStyle(hit.isDirectory == true ? Color.accentColor : .secondary)
+                Image(systemName: hit.isDirectory ? "folder.fill" : "doc")
+                    .foregroundStyle(hit.isDirectory ? Color.accentColor : .secondary)
                     .frame(width: 16)
-                    .accessibilityLabel(hit.isDirectory == true ? "Folder" : "File")
+                    .accessibilityLabel(hit.isDirectory ? "Folder" : "File")
                 Text((hit.path as NSString).lastPathComponent)
                     .lineLimit(1)
                 Spacer()
@@ -366,7 +368,10 @@ struct RestorePaneView: View {
                     .truncationMode(.head)
             }
             .contentShape(Rectangle())
-            .tag(hit.path)
+            // The hit's byte-exact id, not its path: a path's `==` is
+            // canonical equivalence, so two hits whose names differ only
+            // in Unicode normalization would share one selection.
+            .tag(hit.id)
         }
         .listStyle(.inset)
     }
@@ -435,15 +440,17 @@ struct RestorePaneView: View {
 
     /// The node behind the current selection: a tree row while browsing, a
     /// synthesized hit while searching. Search hits were already filtered to
-    /// paths the selected backup contains.
+    /// paths the selected backup contains, and each carries its kind in that
+    /// backup — which is what lets the synthesized node go straight to the
+    /// restore, whose file and folder routes differ.
     private var selectedRow: SnapshotNode? {
         guard let selection else { return nil }
         if let hits = searchResult?.inThisBackup,
-           let hit = hits.first(where: { $0.path == selection }) {
+           let hit = hits.first(where: { $0.id == selection }) {
             let name = (hit.path as NSString).lastPathComponent
             return SnapshotNode(
                 name: name.isEmpty ? hit.path : name,
-                type: hit.isDirectory == true ? .dir : .file,
+                type: hit.isDirectory ? .dir : .file,
                 path: hit.path
             )
         }
@@ -730,9 +737,9 @@ struct RestorePaneView: View {
         searchTask?.cancel()
         searchTask = Task {
             // An index failure is its own answer — a confident "no matches"
-            // would be the one lie a search tool cannot tell. The coverage
-            // walk reads through the same index, so its failure says the
-            // same thing and lands in the same catch.
+            // would be the one lie a search tool cannot tell. The membership
+            // read goes through the same index, so its failure says the same
+            // thing and lands in the same catch.
             //
             // Whether the index has read every backup is asked before the
             // search, not after: a backup once read stays read, so an index
@@ -742,11 +749,14 @@ struct RestorePaneView: View {
             // held them — FindFilesView and FolderBrowserView ask the same.
             let indexIsComplete = await model.indexIsComplete(repositoryID: repositoryID)
             let hits: [SearchHit]
-            let versionsByPath: [String: [IndexedSnapshot]]
+            let inRecord: [PathKey: Bool]
             do {
                 hits = try await model.searchIndex(pattern: query, repositoryID: repositoryID)
-                versionsByPath = try await model.indexedVersions(
-                    ofPaths: hits.map(\.path), repositoryID: repositoryID
+                // Which hits the open backup holds, with their kind there.
+                // Every hit is held by some backup — the search returns no
+                // other path — so the rest are the matches elsewhere.
+                inRecord = try await model.indexMembership(
+                    ofPaths: hits.map(\.path), inSnapshot: searchedRecordID, repositoryID: repositoryID
                 )
             } catch {
                 guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
@@ -758,8 +768,7 @@ struct RestorePaneView: View {
             // not dropped — it is where "Search All Backups…" leads.
             searchResult = RestorePaneSearch(
                 hits: hits,
-                versionsByPath: versionsByPath,
-                recordID: searchedRecordID,
+                inRecord: inRecord,
                 limit: AppModel.indexSearchLimit,
                 indexIsComplete: indexIsComplete
             )

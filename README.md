@@ -137,6 +137,11 @@ Services/   ResticService     typed restic commands (idle caps on the streaming 
             OverviewMetrics   dashboard series, kept pure and testable
             SecretStore       Keychain, injectable so tests never touch yours
             ConfigStore, Scheduler, KeychainStore
+  Index/    SnapshotIndex     per repository, one SQLite file: which snapshots
+                              hold a path, basename search, browse caches
+            IndexCoordinator  actor: reconcile each listing, backfill by
+                              restic diff or ls, housekeeping, orphan sweep
+            FileTree          the restore browser's lazily loaded tree
 App/        AppModel       @MainActor @Observable — configuration, run state,
                             banners; the facade the views and scheduler call
             AppRouter      view state and window intents (selection, sheets
@@ -176,6 +181,23 @@ A few seams worth knowing by name:
 - **Menu commands and the tray ask the router** (`router.request(...)`) for
   typed intents; the root view consumes them on appear-or-change, and every
   window-targeting command also opens the window so no ask is parked unheard.
+- **The snapshot index is a cache of what restic cannot answer quickly**: which
+  snapshots hold a path, and a name search across all of them — for Browse
+  Folders' version list, Find Files and the Restore pane's search — plus cached
+  folder listings and diffs. One SQLite file per repository,
+  `index/<repository UUID>.sqlite` in the configuration folder, stores every
+  path once as a tree of names and, per plan (or per restic `host,paths` group
+  for backups no plan made), the ranges of snapshots each path exists in, so a
+  backup writes only what changed. It reads a group's newest snapshot with
+  `restic ls` and, as a rule, each other one with a `restic diff` against a
+  neighbour already read. Its failure never fails a refresh or a backup: a file
+  it cannot use is deleted and read again, *Rebuild Search Index…* does the same
+  on request, and until it has read every snapshot Find Files searches through
+  restic instead. Only the `SnapshotIndex*.swift` files touch GRDB. At launch,
+  after a clean configuration load, index files of repositories no longer
+  configured are deleted — only inside `index/`; the `<uuid>.sqlite` files
+  earlier builds left directly in the configuration folder are never opened,
+  swept or deleted.
 
 ### Notes on restic's JSON
 
@@ -204,7 +226,7 @@ what was found rather than that the command failed.
 ./build.sh test
 ```
 
-Four layers:
+Five layers:
 
 - **Decoding** — restic's JSON pinned against output captured verbatim from
   restic 0.19.1, plus scheduling, retention and repository-string logic.
@@ -220,6 +242,15 @@ Four layers:
   run history, retention after a backup, hooks firing around a real backup and a
   real check, and that a failed run is recorded rather than dropped. Secrets are injected
   (`SecretStore.inMemory`) so tests never touch the login Keychain.
+- **The snapshot index** — file-backed, in temporary folders: scripted
+  scenarios, a seeded differential test against a model of the listings, the
+  query plan of every statement, and scale gates that bound rows changed and WAL
+  bytes written per backup at a thousand snapshots. Two environment variables
+  scale them up — `SWIFTRESTIC_INDEX_PROPERTY=40,30` (seeds, rounds) and
+  `SWIFTRESTIC_INDEX_BENCH=1` (2M paths and 10k snapshots, with timings) — and
+  reach the tests through xcodebuild with a `TEST_RUNNER_` prefix.
+  `Tools/sqlite-floor.sh` runs the plan and differential tests on SQLite 3.43.2,
+  what macOS 15 ships, built from the official amalgamation.
 
 Plus the pure layers that are easy to get quietly wrong: notification payloads
 per provider, dashboard series reduction, console argument tokenising, and that
@@ -308,6 +339,11 @@ a headless SSH box.
   UI *and* stop the scheduler until the dialog is answered.
 - Hook output is treated as potentially sensitive: kept to a first line, stored
   apart from restic's warnings, and never sent to an external channel.
+- The snapshot index, `index/<repository UUID>.sqlite` beside `config.json`,
+  holds the path of every file in every backup it has read, unencrypted — names
+  restic itself keeps encrypted in the repository. It is deleted with its
+  repository, and *Rebuild Search Index…* deletes and re-reads it; the
+  repository never depends on it.
 - Each run's log is kept beside `config.json` in `Logs/<run-id>.log` and deleted
   with its run record. It holds the restic command lines (which name your source
   folders) and restic's own messages (which can name the repository's location,

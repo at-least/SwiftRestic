@@ -289,6 +289,26 @@ struct StubRestic: Sendable {
                 esac
                 exit 0
                 ;;
+            diffmalformed)
+                # A diff that exits cleanly but whose second change line does
+                # not decode (a path that is not a string, as a restic newer
+                # than the pinned schema might write): a change the decoder
+                # dropped is one the Change column would show as unchanged.
+                trace "diffmalformed-arm"
+                case " $* " in
+                    *" snapshots "*)
+                        echo "[]"
+                        ;;
+                    *" diff "*)
+                        echo '{"message_type":"change","path":"/src/new.txt","modifier":"+"}'
+                        echo '{"message_type":"change","path":1,"modifier":"-"}'
+                        ;;
+                    *)
+                        echo "{}"
+                        ;;
+                esac
+                exit 0
+                ;;
             difffail)
                 # A diff that dies partway: one change streams, then restic's
                 # fatal error on stderr (where real restic writes it) and exit

@@ -110,10 +110,16 @@ extension AppModel {
         // anything — one damaged run drops the whole `runs` array to its
         // default.
         var historyIsWhole = false
+        // Whether the repository list in memory is exactly the live file's:
+        // not from a backup copy, which can predate a repository added
+        // since, and with nothing substituted — a repository whose `id` did
+        // not read decodes with a fresh one.
+        var repositoriesAreWhole = false
 
         do {
             let loaded = try await store.load()
             historyIsWhole = loaded.decodeNotes.isEmpty
+            repositoriesAreWhole = loaded.decodeNotes.isEmpty && loaded.recoveredFrom == nil
             // Writing back what was just loaded is not a user edit, and it must
             // not become one: with `isLoaded` already true, the didSet would
             // schedule a save that committed every tolerant-decode substitution
@@ -175,6 +181,18 @@ extension AppModel {
                 logs.sweep(keeping: recorded, olderThan: launchDate)
             })
         }
+        // Index files whose repository is gone — a removal whose drop never
+        // ran, a repository deleted from config.json by hand. Only from a
+        // repository list that read whole: an unreadable configuration reads
+        // as no repositories at all, and a recovered or substituted one can
+        // miss a live repository, whose index would then read as an orphan.
+        // On the background lane, so quitting waits for it.
+        if repositoriesAreWhole {
+            let configured = Set(configuration.repositories.map(\.id))
+            tasks.addBackground(Task { [indexCoordinator] in
+                await indexCoordinator.sweepOrphanFiles(configured: configured)
+            })
+        }
         let loginItem = await Task.detached { LoginItem.state }.value
         startsAtLogin = loginItem == .enabled
         loginItemNeedsApproval = loginItem == .needsApproval
@@ -226,6 +244,11 @@ extension AppModel {
         // during the final flushSave below would race the process exit.
         console.cancelRunningCommand()
         await console.waitForCommand()
+        // The index backfill before the sweep below: cancelled, its walk
+        // stops as cancelled and its task ends. Killed first by
+        // `terminateAll` instead, the walk would read as a failed snapshot
+        // — counted against it, and followed by the next snapshot's walk.
+        await indexCoordinator.shutdown()
         await runner.terminateAll()
 
         // Wait for the cancelled runs to finish unwinding. Their `catch` blocks
