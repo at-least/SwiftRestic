@@ -12,14 +12,6 @@ import GRDB
 /// sentinel-ended runs. That compare needs only the runs, never the window
 /// end's row, so it is exact even when that snapshot has died.
 extension SnapshotIndex {
-    /// DFS ancestry of the last resolved path: key bytes, node id, and
-    /// whether this stream created the directory. A child of a directory
-    /// created moments ago almost never exists yet, so its insert is tried
-    /// before any lookup — but the flag is a hint, not a promise: a repeated
-    /// entry, a child listed before its parent, or a delta between chunks
-    /// may have created that child already, and the insert then yields to it.
-    typealias Walk = [(key: [UInt8], id: Int64, created: Bool)]
-
     /// The one open full-listing stream.
     ///
     /// `snapID` is the target's `snap.id` when the stream began: AUTOINCREMENT
@@ -28,9 +20,14 @@ extension SnapshotIndex {
     /// finalised over a partial stage. Any throw poisons the stream: later
     /// chunks are dropped and the final is refused until `beginFull` starts
     /// over. The walk caches node ids across transactions, so it is replaced
-    /// only after its chunk commits and dropped by anything that may change
-    /// node rows — a delta, housekeeping, a throw, the next `beginFull` — and
-    /// the whole session ends when its target is set aside as unreadable.
+    /// only after its chunk commits, and dropped where node ids go stale:
+    /// `collectNodes`, the one path that deletes nodes, drops it whichever
+    /// write collects; a throw poisons the stream and its walk with it (that
+    /// chunk's new ids rolled back); the next `beginFull` replaces the
+    /// session. A delta between chunks may give a directory the walk
+    /// believes new a child, which the walk's `created` hint tolerates (see
+    /// `Walk`), so a delta keeps it. The whole session ends when its target
+    /// is set aside as unreadable.
     struct Session {
         let hash: String
         let snapID: Int64
@@ -46,8 +43,9 @@ extension SnapshotIndex {
     /// Starts the full-listing stream for `snapshotID`, ending any other: one
     /// stream at a time, and the stage belongs to it. The old stage's nodes
     /// that no run holds — a cancelled stream's, or one whose target died —
-    /// are collected before the stage is cleared, since after that nothing
-    /// would ever know to.
+    /// are queued for collection before the stage is cleared, since after
+    /// that nothing would ever know to, and collected in the same
+    /// transaction.
     ///
     /// A retry of the same snapshot keeps its stage instead. A snapshot is
     /// immutable and the retry streams it from the top, so what the failed
@@ -65,7 +63,7 @@ extension SnapshotIndex {
                     throw IndexError.unknownSnapshot(snapshotID)
                 }
                 guard target.state != State.unreadable else { throw IndexError.unreadable(snapshotID) }
-                if try Self.stageOwner(db) != target.id { try Self.discardStage(db) }
+                if try Self.stageOwner(db) != target.id { try discardStage(db) }
                 begun = Session(
                     hash: snapshotID, snapID: target.id, poisoned: false,
                     done: target.state == State.indexed, walk: nil
@@ -118,7 +116,7 @@ extension SnapshotIndex {
                     let nodes = try NodeWriter(db)
                     let stage = try db.cachedStatement(sql: SQL.stageInsert)
                     for entry in entries {
-                        let key = [UInt8](Self.canonical(entry.path).utf8)
+                        let key = ResticPath.normalizedBytes(entry.path)
                         let (node, created) = try Self.resolveStreaming(nodes, key, &walk)
                         try stage.execute(arguments: [node, target.id, entry.isDirectory])
                         if entry.isDirectory { walk.append((key, node, created)) }
@@ -153,29 +151,28 @@ extension SnapshotIndex {
     /// queued for housekeeping. Inside the window is `notAdjacent`: the
     /// planner never asks for it, because pending snapshots lie outside.
     private static func applyFull(_ db: Database, _ target: Target) throws {
-        guard let window = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByID), arguments: [target.chainID]) else {
+        guard let window = try chainWindow(db, target.chainID) else {
             throw IndexError.unknownSnapshot(target.hash)
         }
-        let lo: Int64? = window["lo"]
-        let hi: Int64? = window["hi"]
-        if let lo, let hi {
+        if let lo = window.lo, let hi = window.hi {
+            // One step past either end of the window, as a delta extends it;
+            // inside it is `notAdjacent`.
+            let forward: Bool
             if target.seq > hi {
-                try requireNoPending(db, target, between: hi, and: target.seq)
-                try enqueueIfDead(db, target.chainID, hi)
-                try db.cachedStatement(sql: SQL.fullForwardClose).execute(arguments: [hi, target.chainID, target.id])
-                try db.cachedStatement(sql: SQL.fullForwardInsert)
-                    .execute(arguments: [target.chainID, target.seq, target.id, target.chainID])
-                try setWindow(db, target.chainID, lo: lo, hi: target.seq)
+                forward = true
             } else if target.seq < lo {
-                try requireNoPending(db, target, between: target.seq, and: lo)
-                try enqueueIfDead(db, target.chainID, lo)
-                try db.cachedStatement(sql: SQL.fullReverseFreeze).execute(arguments: [lo, target.chainID, target.id])
-                try db.cachedStatement(sql: SQL.fullReverseInsert)
-                    .execute(arguments: [target.chainID, target.seq, target.id, target.chainID])
-                try setWindow(db, target.chainID, lo: target.seq, hi: hi)
+                forward = false
             } else {
                 throw IndexError.notAdjacent(target.hash)
             }
+            let end = forward ? hi : lo
+            try requireNoPending(db, target, between: forward ? hi : target.seq, and: forward ? target.seq : lo)
+            try enqueueIfDead(db, target.chainID, end)
+            try db.cachedStatement(sql: forward ? SQL.fullForwardClose : SQL.fullReverseFreeze)
+                .execute(arguments: [end, target.chainID, target.id])
+            try db.cachedStatement(sql: forward ? SQL.fullForwardInsert : SQL.fullReverseInsert)
+                .execute(arguments: [target.chainID, target.seq, target.id, target.chainID])
+            try setWindow(db, target.chainID, lo: forward ? lo : target.seq, hi: forward ? target.seq : hi)
         } else {
             // The chain's first snapshot: every path spans the whole window.
             try db.cachedStatement(sql: SQL.fullFirstInsert).execute(arguments: [target.chainID, target.id])
@@ -193,9 +190,12 @@ extension SnapshotIndex {
     // MARK: - Delta route
 
     /// Builds `snapshotID` from a diff against `base`, in one transaction.
-    /// `added` holds paths in the target absent from the base and `removed`
-    /// the reverse, both in restic diff spelling (a trailing `/` marks a
-    /// directory); the base may be older or newer.
+    /// `added` holds the target's paths absent from the base and `removed`
+    /// the reverse, as entries — the form a full read hands over too, which
+    /// `IndexedEntry(diffSpelling:)` makes of restic's diff spelling (a
+    /// directory's trailing `/` becomes the kind). A removed entry's kind is
+    /// not consulted: the run at the window end closes whatever kind it
+    /// holds. The base may be older or newer.
     ///
     /// Accepted only when `base` is the alive snapshot at the window end the
     /// target extends (`wrongBase` otherwise) with no pending snapshot
@@ -205,30 +205,26 @@ extension SnapshotIndex {
     /// under the other kind — restic's `T`, which omits both subtrees — is
     /// refused (`kindChanged`) and the snapshot must take the full route.
     /// Idempotent for an already indexed target.
-    func ingestDelta(snapshotID: String, from base: String, added: [String], removed: [String]) throws {
+    func ingestDelta(snapshotID: String, from base: String, added: [IndexedEntry], removed: [IndexedEntry]) throws {
         try pool.write { db in
-            session?.walk = nil
             guard let target = try Target.fetch(db, snapshotID) else { throw IndexError.unknownSnapshot(snapshotID) }
             guard target.state != State.indexed else { return }
             guard target.state == State.pending else { throw IndexError.unreadable(snapshotID) }
             guard let from = try Target.fetch(db, base) else { throw IndexError.unknownSnapshot(base) }
-            guard let window = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByID), arguments: [target.chainID])
-            else { throw IndexError.wrongBase(snapshot: snapshotID, from: base) }
-            let lo: Int64? = window["lo"]
-            let hi: Int64? = window["hi"]
-            guard from.state == State.indexed, from.chainID == target.chainID, let lo, let hi
+            guard let window = try Self.chainWindow(db, target.chainID),
+                  from.state == State.indexed, from.chainID == target.chainID,
+                  let lo = window.lo, let hi = window.hi
             else { throw IndexError.wrongBase(snapshot: snapshotID, from: base) }
 
             let forward: Bool
             if target.seq > hi, from.seq == hi {
                 forward = true
-                try Self.requireNoPending(db, target, between: hi, and: target.seq)
             } else if target.seq < lo, from.seq == lo {
                 forward = false
-                try Self.requireNoPending(db, target, between: target.seq, and: lo)
             } else {
                 throw IndexError.wrongBase(snapshot: snapshotID, from: base)
             }
+            try Self.requireNoPending(db, target, between: forward ? hi : target.seq, and: forward ? target.seq : lo)
 
             let nodes = try NodeWriter(db)
             let close = try db.cachedStatement(sql: forward ? SQL.forwardClose : SQL.reverseFreeze)
@@ -236,28 +232,23 @@ extension SnapshotIndex {
             let open = try db.cachedStatement(sql: forward ? SQL.forwardInsert : SQL.reverseInsert)
             let end = forward ? hi : lo
             var memo: [[UInt8]: Int64] = [:]
-            for path in removed {
-                guard let node = try Self.resolve(nodes, Self.canonical(path), create: false, memo: &memo) else { continue }
+            for entry in removed {
+                guard let node = try Self.resolve(nodes, entry.path, create: false, memo: &memo) else { continue }
                 try close.execute(arguments: [end, node, target.chainID])
             }
-            for path in added {
-                let isDirectory = path.utf8.count > 1 && path.utf8.last == UInt8(ascii: "/")
-                guard let node = try Self.resolve(nodes, Self.canonical(path), create: true, memo: &memo) else { continue }
+            for entry in added {
+                guard let node = try Self.resolve(nodes, entry.path, create: true, memo: &memo) else { continue }
                 if let kind = try Bool.fetchOne(endRun, arguments: [node, target.chainID]) {
                     // Present at the base already: the same kind is a
                     // file<->symlink `T` and changes nothing; another kind is
                     // a file<->dir change the diff did not spell as removed.
-                    if kind == isDirectory { continue }
-                    throw IndexError.kindChanged(snapshot: snapshotID, path: path)
+                    if kind == entry.isDirectory { continue }
+                    throw IndexError.kindChanged(snapshot: snapshotID, path: entry.path)
                 }
-                try open.execute(arguments: [node, target.chainID, target.seq, isDirectory])
+                try open.execute(arguments: [node, target.chainID, target.seq, entry.isDirectory])
             }
             try nodes.indexNewNames()
-            if forward {
-                try Self.setWindow(db, target.chainID, lo: lo, hi: target.seq)
-            } else {
-                try Self.setWindow(db, target.chainID, lo: target.seq, hi: hi)
-            }
+            try Self.setWindow(db, target.chainID, lo: forward ? lo : target.seq, hi: forward ? target.seq : hi)
             try Self.markIndexed(db, target)
         }
     }
@@ -272,17 +263,17 @@ extension SnapshotIndex {
     /// pending row that is tried again. A no-op for any other state.
     ///
     /// Its stream, if one got that far, ends here: the session goes, and
-    /// the stage's nodes that no run holds are collected before the stage
-    /// is cleared. Nothing would resume that stream, and the planner reports
-    /// done, so no `beginFull` may come to collect them before the app quits
-    /// and takes the TEMP stage along — stranding them for good. Another
-    /// snapshot's stream is left alone.
+    /// the stage's nodes that no run holds are queued for collection before
+    /// the stage is cleared, then collected. Nothing would resume that
+    /// stream, and the planner reports done, so no `beginFull` may come to
+    /// collect them before the app quits and takes the TEMP stage along —
+    /// stranding them for good. Another snapshot's stream is left alone.
     func markUnreadable(snapshotID: String) throws {
         try pool.write { db in
             guard let target = try Target.fetch(db, snapshotID), target.state == State.pending else { return }
             try db.cachedStatement(sql: SQL.snapMarkUnreadable).execute(arguments: [target.id])
             if session?.snapID == target.id { session = nil }
-            if try Self.stageOwner(db) == target.id { try Self.discardStage(db) }
+            if try Self.stageOwner(db) == target.id { try discardStage(db) }
         }
     }
 
@@ -298,13 +289,15 @@ extension SnapshotIndex {
 
     /// Ends whatever the stage holds: its nodes that no run holds — a
     /// cancelled stream's, one whose target died or was set aside — are
-    /// collected with their FTS rows, then every row goes. Collected before
-    /// the clear, since after it nothing would know to. The caller has
-    /// dropped the session's walk: collected ids may be reused.
-    static func discardStage(_ db: Database) throws {
-        let runless = try Int64.fetchAll(db.cachedStatement(sql: SQL.stageRunless))
+    /// queued for collection before the stage is cleared, since after it
+    /// nothing would know to, and collected once the clear has let go of
+    /// them. The collection drops the session's walk itself.
+    func discardStage(_ db: Database) throws {
+        try db.cachedStatement(sql: SQL.stageRunlessNodes).execute()
+        // Read right after the fill: `changesCount` is the last statement's.
+        let queued = db.changesCount > 0
         try db.cachedStatement(sql: SQL.stageClear).execute()
-        try collectNodes(db, runless)
+        if queued { try collectNodes(db) }
     }
 
     // MARK: - Shared write helpers
@@ -334,8 +327,6 @@ extension SnapshotIndex {
 
     // MARK: - Node writes
 
-    private static var rootWalk: Walk { [([UInt8(ascii: "/")], rootID, false)] }
-
     /// Node-dictionary writes for one transaction. The FTS rows of every node
     /// it creates are written by one statement at the end (`indexNewNames`),
     /// keyed on the largest id before the first insert.
@@ -350,16 +341,21 @@ extension SnapshotIndex {
             lookup = try db.cachedStatement(sql: SQL.nodeLookup)
         }
 
-        /// The child node `name` of `parent`, created when missing and
-        /// `create` allows. `parentIsNew` skips the lookup and tries the
-        /// insert first; when the child exists after all, the insert does
-        /// nothing and the lookup finds it — reported as not created, since
-        /// children of its own may exist too.
-        func child(parent: Int64, name: String, create: Bool, parentIsNew: Bool = false) throws -> (id: Int64, created: Bool)? {
-            if !parentIsNew, let id = try Int64.fetchOne(lookup, arguments: [parent, name]) {
+        /// The existing child `name` of `parent`, or nil: a lookup, never
+        /// a write.
+        func existing(parent: Int64, name: String) throws -> Int64? {
+            try Int64.fetchOne(lookup, arguments: [parent, name])
+        }
+
+        /// The child node `name` of `parent`, created when missing.
+        /// `parentIsNew` skips the lookup and tries the insert first; when
+        /// the child exists after all, the insert does nothing and the
+        /// lookup finds it — reported as not created, since children of its
+        /// own may exist too.
+        func child(parent: Int64, name: String, parentIsNew: Bool) throws -> (id: Int64, created: Bool) {
+            if !parentIsNew, let id = try existing(parent: parent, name: name) {
                 return (id, false)
             }
-            guard create else { return nil }
             let insert = try self.insert ?? db.cachedStatement(sql: SQL.nodeInsert)
             if self.insert == nil {
                 self.insert = insert
@@ -368,7 +364,7 @@ extension SnapshotIndex {
             if let id = try Int64.fetchOne(insert, arguments: [parent, name]) {
                 return (id, true)
             }
-            guard let id = try Int64.fetchOne(lookup, arguments: [parent, name]) else {
+            guard let id = try existing(parent: parent, name: name) else {
                 throw DatabaseError(message: "node insert for \(name) yielded to a row the lookup cannot find")
             }
             return (id, false)
@@ -387,7 +383,9 @@ extension SnapshotIndex {
     /// stack; a parent that is not — a resumed or unordered stream — reseeds
     /// the walk from the root, creating whatever is missing. Order and
     /// repetition cost lookups, never correctness: `NodeWriter.child`
-    /// yields to a node the stream created itself.
+    /// yields to a node the stream created itself. `bytes` is the path as
+    /// `ResticPath.normalizedBytes` keys it; the parent's key is a view into
+    /// it, compared in place rather than copied for every path.
     private static func resolveStreaming(
         _ nodes: NodeWriter,
         _ bytes: [UInt8],
@@ -398,55 +396,40 @@ extension SnapshotIndex {
         guard bytes.first == slash, let cut = bytes.lastIndex(of: slash) else {
             throw DatabaseError(message: "not an absolute path: \(String(decoding: bytes, as: UTF8.self))")
         }
-        let parentKey: [UInt8] = cut == 0 ? [slash] : Array(bytes[..<cut])
+        // A child of the root keeps the leading "/" as its parent's key.
+        let parentKey = bytes[..<max(cut, 1)]
         let name = String(decoding: bytes[(cut + 1)...], as: UTF8.self)
-        while let top = walk.last, top.key != parentKey { walk.removeLast() }
+        while let top = walk.last, !top.key.elementsEqual(parentKey) { walk.removeLast() }
         if let top = walk.last {
-            return try created(nodes.child(parent: top.id, name: name, create: true, parentIsNew: top.created))
+            return try nodes.child(parent: top.id, name: name, parentIsNew: top.created)
         }
-        var fresh: Walk = rootWalk
-        var id = rootID
-        var isNew = false
-        var key: [UInt8] = []
-        for component in components(String(decoding: parentKey, as: UTF8.self)) {
-            (id, isNew) = try created(nodes.child(parent: id, name: component, create: true, parentIsNew: isNew))
-            key += [slash] + Array(component.utf8)
-            fresh.append((key, id, isNew))
+        // The parent is not on the stack: the walk starts over from the
+        // root, creating whatever is missing. A fresh memo, so each
+        // component's `created` comes from this very resolution.
+        var scratch: [[UInt8]: Int64] = [:]
+        guard let fresh = try descend(String(decoding: parentKey, as: UTF8.self), memo: &scratch, step: {
+            try nodes.child(parent: $0, name: $1, parentIsNew: $2)
+        }), let parent = fresh.last else {
+            throw DatabaseError(message: "a creating walk found no node")
         }
         walk = fresh
-        return try created(nodes.child(parent: id, name: name, create: true, parentIsNew: isNew))
+        return try nodes.child(parent: parent.id, name: name, parentIsNew: parent.created)
     }
 
-    /// A creating lookup always yields a node; this unwraps it without `!`.
-    private static func created(_ result: (id: Int64, created: Bool)?) throws -> (id: Int64, created: Bool) {
-        guard let result else { throw DatabaseError(message: "a creating node lookup returned nothing") }
-        return result
-    }
-
-    /// Resolves a delta path component by component, creating missing nodes
-    /// only when asked (added paths); a removed path the index never held
-    /// resolves to nil and is skipped.
+    /// Resolves a delta path through `descend`, creating missing nodes only
+    /// when asked (added paths); a removed path the index never held
+    /// resolves to nil and is skipped. `components` drops empty components,
+    /// so a trailing `/` could not change which node a path names.
     private static func resolve(
         _ nodes: NodeWriter,
         _ path: String,
         create: Bool,
         memo: inout [[UInt8]: Int64]
     ) throws -> Int64? {
-        var id = rootID
-        var key: [UInt8] = []
-        var isNew = false
-        for component in components(path) {
-            key += [UInt8(ascii: "/")] + Array(component.utf8)
-            if let known = memo[key] {
-                id = known
-                continue
-            }
-            guard let next = try nodes.child(parent: id, name: component, create: create, parentIsNew: isNew) else {
-                return nil
-            }
-            memo[key] = next.id
-            (id, isNew) = next
-        }
-        return id
+        try descend(path, memo: &memo) { parent, name, parentIsNew in
+            create
+                ? try nodes.child(parent: parent, name: name, parentIsNew: parentIsNew)
+                : try nodes.existing(parent: parent, name: name).map { (id: $0, created: false) }
+        }?.last?.id
     }
 }

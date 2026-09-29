@@ -33,10 +33,14 @@ changing it:
 - `Sources/SwiftRestic/Services/Index` imports no AppKit, SwiftUI or Cocoa
   (build.sh's lint fails closed), and only the `SnapshotIndex*.swift` files
   import GRDB — nothing above the store touches SQL.
-- Every statement the index prepares is registered in
-  `SnapshotIndex.registeredStatements` and pinned by a rule in
-  `SnapshotIndexPlanTests` (no `@testable import`); the test fails on a
-  statement without one.
+- Every statement the index prepares — the open-time schema probe, the
+  connection pragmas and the test-support invariant checks aside — is a
+  stored `let` of `SnapshotIndexSchema.Statements` (an `InList` when its
+  text depends on an IN list's length), which
+  `SnapshotIndex.registeredStatements` reads by reflection, so declaring a
+  statement registers it. `SnapshotIndexPlanTests` (no `@testable import`)
+  pins each by its property name and fails on a statement without a rule, a
+  rule without a statement, or a stored property that is not a statement.
 - Tests open their index in a temporary folder or an injected configuration
   folder, never the real `~/Library/Application Support/com.newlix.SwiftRestic`.
   No code path may open, sweep or delete the `<configDir>/<uuid>.sqlite` files

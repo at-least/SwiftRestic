@@ -9,36 +9,29 @@ import Testing
 /// part: per-repository stores, canonical lookups and browser row order.
 @Suite("browse caches")
 struct BrowseCacheTests {
-    private func node(_ path: String, kind: SnapshotNode.Kind = .file, size: Int64? = 1, mtime: Date? = nil) -> CachedListingNode {
-        let name = path.split(separator: "/").last.map(String.init) ?? path
-        return CachedListingNode(
-            SnapshotNode(name: name, type: kind, path: path, size: size, mtime: mtime)
-        )
-    }
-
     @Test("the coordinator serves a cache hit already in browser order")
     func coordinatorSortsCachedListing() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticBrowseCache-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let coordinator = IndexCoordinator(directory: directory)
-        let repository = UUID()
+        let scene = try CoordinatorScene("SwiftResticBrowseCache")
+        defer { scene.remove() }
+        let coordinator = scene.coordinator
+        let repository = scene.repositoryID
 
         // Captured in no particular order: Finder order is the browser's row
         // order, and a hit must arrive in it. Sorting on the main actor is
         // the cache-hit path paying localizedStandardCompare over a whole
         // directory exactly when it exists to be instant — the live listing
         // already sorts off-main inside the service.
-        await coordinator.cacheListing(
+        coordinator.cacheListing(
             snapshotID: "s1", directory: "/src",
             nodes: [
-                node("/src/b.txt").snapshotNode,
-                node("/src/Zeta", kind: .dir, size: nil).snapshotNode,
-                node("/src/a.txt").snapshotNode,
-                node("/src/alpha", kind: .dir, size: nil).snapshotNode,
+                IndexTestData.cachedNode("/src/b.txt").snapshotNode,
+                IndexTestData.cachedNode("/src/Zeta", kind: .dir, size: nil).snapshotNode,
+                IndexTestData.cachedNode("/src/a.txt").snapshotNode,
+                IndexTestData.cachedNode("/src/alpha", kind: .dir, size: nil).snapshotNode,
             ],
             repositoryID: repository
         )
+        await coordinator.cacheWritesSettled()
 
         let read = await coordinator.cachedBrowserListing(
             snapshotID: "s1", directory: "/src", repositoryID: repository
@@ -55,14 +48,14 @@ struct BrowseCacheTests {
 
     @Test("the coordinator serves the caches per repository and canonicalizes lookups")
     func coordinatorPassThrough() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticBrowseCache-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let coordinator = IndexCoordinator(directory: directory)
+        let scene = try CoordinatorScene("SwiftResticBrowseCache")
+        defer { scene.remove() }
+        let coordinator = scene.coordinator
 
-        let captured = [node("/src/a.txt")]
-        let repository = UUID()
-        await coordinator.cacheListing(snapshotID: "s1", directory: "/src", nodes: captured.map(\.snapshotNode), repositoryID: repository)
+        let captured = [IndexTestData.cachedNode("/src/a.txt")]
+        let repository = scene.repositoryID
+        coordinator.cacheListing(snapshotID: "s1", directory: "/src", nodes: captured.map(\.snapshotNode), repositoryID: repository)
+        await coordinator.cacheWritesSettled()
         // Stores are per repository: another repository's cache never sees
         // this row, even though the lazy store creation means both have a file.
         #expect(await coordinator.cachedListing(snapshotID: "s1", directory: "/src", repositoryID: UUID()) == nil)
@@ -71,7 +64,8 @@ struct BrowseCacheTests {
         #expect(read == captured)
 
         let changes = [CachedDiffChange(ResticDiffChange(path: "/src/new.txt", modifier: "+"))]
-        await coordinator.cacheDiff(olderID: "s1", newerID: "s2", changes: changes.map(\.resticDiffChange), repositoryID: repository)
+        coordinator.cacheDiff(olderID: "s1", newerID: "s2", changes: changes.map(\.resticDiffChange), repositoryID: repository)
+        await coordinator.cacheWritesSettled()
         #expect(
             await coordinator.cachedDiff(olderID: "s1", newerID: "s2", repositoryID: repository)?.map(\.resticDiffChange)
                 == changes.map(\.resticDiffChange)

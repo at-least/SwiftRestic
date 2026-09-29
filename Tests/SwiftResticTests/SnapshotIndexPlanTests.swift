@@ -16,10 +16,11 @@ import Testing
 ///
 /// Rules: each statement's plan must contain its fragments, and any `SCAN`
 /// must name a table its rule allows. The allowed scans are the documented
-/// ones: the full compare's population read (`full.fwdClose`,
-/// `full.revFreeze`) and a whole chain's death (`hk.orphanChainRuns`) over
-/// `run`; the listing-sized reads of `snap` (`snap.all` per reconcile,
-/// `unreadable.list` once per launch); the chain list; and the small or
+/// ones: the full compare's population read (`fullForwardClose`,
+/// `fullReverseFreeze`) and a whole chain's death (`hkOrphanChainNodes`,
+/// the fill that queues its nodes) over `run`; the listing-sized reads of
+/// `snap` (`snapAll` per reconcile, `unreadableList` once per launch); the
+/// chain list; and the small or
 /// temporary tables (the one-row listing marker, the one stream's stage,
 /// the GC scratch list, the housekeeping queue, the cache owners, the FTS
 /// cursor). The floor — the
@@ -38,88 +39,95 @@ struct SnapshotIndexPlanTests {
         "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
     ]
 
-    /// FINAL.md 5.3's table, one entry per registered statement. A
+    /// FINAL.md 5.3's table, one entry per registered statement, keyed by
+    /// the statement's property name in `SnapshotIndexSchema.Statements`. A
     /// statement with no fragments is a plain insert or a whole-table
     /// delete: its plan must simply scan nothing.
     static let rules: [String: Rule] = [
-        "node.lookup": Rule(contains: ["SEARCH node USING COVERING INDEX sqlite_autoindex_node_1 (parent=? AND name=?)"]),
-        "node.insert": Rule(contains: []),
-        "node.maxID": Rule(contains: ["SEARCH node"]),
-        "node.byID": Rule(contains: ["SEARCH node USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "node.ftsIndexNew": Rule(contains: ["SEARCH node USING INTEGER PRIMARY KEY (rowid>?)"]),
-        "snap.all": Rule(contains: ["SCAN snap"], scans: ["snap"]),
-        "snap.byHash": Rule(contains: ["SEARCH snap USING INDEX sqlite_autoindex_snap_1 (hash=?)"]),
-        "snap.delete": Rule(contains: ["SEARCH snap USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "snap.insert": Rule(contains: []),
-        "snap.markIndexed": Rule(contains: ["SEARCH snap USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "snap.markUnreadable": Rule(contains: ["SEARCH snap USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "snap.repend": Rule(contains: ["SEARCH snap USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "chain.insert": Rule(contains: []),
-        "chain.byKey": Rule(contains: ["SEARCH chain USING INDEX sqlite_autoindex_chain_1 (key=?)"]),
-        "chain.nextSeq": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "chain.takeSeq": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "chain.byID": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "chain.setWindow": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "gone.insert": Rule(contains: []),
-        "gone.delete": Rule(contains: ["SEARCH temp.gone USING PRIMARY KEY (hash=?)"]),
-        "hk.enqueue": Rule(contains: []),
-        "listing.markApplied": Rule(contains: []),
-        "unreadable.list": Rule(contains: ["SCAN snap USING COVERING INDEX snap_cover"], scans: ["snap"]),
-        "fwd.close": Rule(
+        "nodeLookup": Rule(contains: ["SEARCH node USING COVERING INDEX sqlite_autoindex_node_1 (parent=? AND name=?)"]),
+        "nodeInsert": Rule(contains: []),
+        "nodeMaxID": Rule(contains: ["SEARCH node"]),
+        "nodeByID": Rule(contains: ["SEARCH node USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "nodeFTSIndexNew": Rule(contains: ["SEARCH node USING INTEGER PRIMARY KEY (rowid>?)"]),
+        "snapAll": Rule(contains: ["SCAN snap"], scans: ["snap"]),
+        "snapByHash": Rule(contains: ["SEARCH snap USING INDEX sqlite_autoindex_snap_1 (hash=?)"]),
+        "snapDelete": Rule(contains: ["SEARCH snap USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "snapInsert": Rule(contains: []),
+        "snapMarkIndexed": Rule(contains: ["SEARCH snap USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "snapMarkUnreadable": Rule(contains: ["SEARCH snap USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "snapRepend": Rule(contains: ["SEARCH snap USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "chainInsert": Rule(contains: []),
+        "chainByKey": Rule(contains: ["SEARCH chain USING INDEX sqlite_autoindex_chain_1 (key=?)"]),
+        "chainNextSeq": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "chainTakeSeq": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "chainByID": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "chainSetWindow": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "hkEnqueue": Rule(contains: []),
+        "listingMarkApplied": Rule(contains: []),
+        "unreadableList": Rule(contains: ["SCAN snap USING COVERING INDEX snap_cover"], scans: ["snap"]),
+        "forwardClose": Rule(
             contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=?)"], excludes: ["run_closed"]),
-        "fwd.openRun": Rule(
+        "forwardOpenRun": Rule(
             contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=?)"], excludes: ["run_closed"]),
-        "fwd.insert": Rule(contains: []),
-        "rev.freeze": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq=?)"]),
-        "rev.bottomRun": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq=?)"]),
-        "rev.insert": Rule(contains: []),
-        "stage.insert": Rule(contains: []),
-        "stage.clear": Rule(contains: []),
+        "forwardInsert": Rule(contains: []),
+        "reverseFreeze": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq=?)"]),
+        "reverseBottomRun": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq=?)"]),
+        "reverseInsert": Rule(contains: []),
+        "stageInsert": Rule(contains: []),
+        "stageClear": Rule(contains: []),
         // One row: the scan stops at the first (the SQL's LIMIT 1).
-        "stage.owner": Rule(contains: ["SCAN temp.stage"], scans: ["temp.stage"]),
-        "stage.runless": Rule(contains: ["SCAN st", "SEARCH r USING PRIMARY KEY (node_id=?)"], scans: ["st"]),
-        "full.firstInsert": Rule(contains: ["SCAN temp.stage"], scans: ["temp.stage"]),
-        "full.fwdClose": Rule(
+        "stageOwner": Rule(contains: ["SCAN temp.stage"], scans: ["temp.stage"]),
+        "stageRunlessNodes": Rule(contains: ["SCAN st", "SEARCH r USING PRIMARY KEY (node_id=?)"], scans: ["st"]),
+        "fullFirstInsert": Rule(contains: ["SCAN temp.stage"], scans: ["temp.stage"]),
+        "fullForwardClose": Rule(
             contains: ["SCAN run", "SEARCH g USING PRIMARY KEY (node_id=? AND snap_id=?)"], scans: ["run"]),
-        "full.fwdInsert": Rule(
+        "fullForwardInsert": Rule(
             contains: ["SCAN g", "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=?)"], scans: ["g"]),
-        "full.revFreeze": Rule(
+        "fullReverseFreeze": Rule(
             contains: ["SCAN run", "SEARCH g USING PRIMARY KEY (node_id=? AND snap_id=?)"], scans: ["run"]),
-        "full.revInsert": Rule(
+        "fullReverseInsert": Rule(
             contains: ["SCAN g", "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq=?)"], scans: ["g"]),
-        "plan.pendingChains": Rule(
+        "pendingChains": Rule(
             contains: [
                 "SCAN chain USING COVERING INDEX sqlite_autoindex_chain_1",
                 "SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=?)",
             ],
             scans: ["chain"]),
-        "plan.pendingDesc": Rule(
+        "pendingDesc": Rule(
             contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=?)"], excludes: ["TEMP B-TREE"]),
-        "plan.lowestAbove": Rule(
+        "lowestPendingAbove": Rule(
             contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=? AND seq>?)"], excludes: ["TEMP B-TREE"]),
-        "plan.highestBelow": Rule(
+        "highestPendingBelow": Rule(
             contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=? AND seq<?)"], excludes: ["TEMP B-TREE"]),
-        "plan.windowEnd": Rule(contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=? AND seq=?)"]),
-        "plan.pendingBetween": Rule(
+        "windowEnd": Rule(contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=? AND seq=?)"]),
+        "pendingBetween": Rule(
             contains: ["SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)"],
             scans: ["CONSTANT"]),
-        "hk.chains": Rule(contains: ["SCAN hk_pending"], scans: ["hk_pending"]),
-        "hk.seqs": Rule(contains: ["SEARCH hk_pending USING PRIMARY KEY (chain_id=?)"]),
-        "hk.done": Rule(contains: ["SEARCH hk_pending USING PRIMARY KEY (chain_id=?)"]),
-        "hk.chainHasSnap": Rule(
+        "hkChains": Rule(contains: ["SCAN hk_pending"], scans: ["hk_pending"]),
+        "hkSeqs": Rule(contains: ["SEARCH hk_pending USING PRIMARY KEY (chain_id=?)"]),
+        "hkDone": Rule(contains: ["SEARCH hk_pending USING PRIMARY KEY (chain_id=?)"]),
+        "hkChainHasSnap": Rule(
             contains: ["SEARCH snap USING COVERING INDEX snap_cover (chain_id=?)"], scans: ["CONSTANT"]),
-        "hk.chainDelete": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "hk.aliveBelow": Rule(contains: ["SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq<?)"]),
-        "hk.aliveAbove": Rule(contains: ["SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq>?)"]),
+        "hkChainDelete": Rule(contains: ["SEARCH chain USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "hkAliveBelow": Rule(contains: ["SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq<?)"]),
+        "hkAliveAbove": Rule(contains: ["SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq>?)"]),
         // 3.43.2 reads run_closed as COVERING here, 3.51.0 not: the
         // fragment omits the word so both versions match.
-        "hk.bottom": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq<?)"]),
-        "hk.gap": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq>? AND last_seq<?)"]),
-        "hk.top": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq>? AND last_seq<?)"]),
-        "hk.orphanChainRuns": Rule(contains: ["SCAN run"], scans: ["run"]),
-        "gc.clear": Rule(contains: []),
-        "gc.insert": Rule(contains: []),
-        "gc.keepCollectable": Rule(
+        "hkBottom": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq<?)"]),
+        "hkGap": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq>? AND last_seq<?)"]),
+        "hkTop": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq>? AND last_seq<?)"]),
+        // Each housekeeping delete's fill reads exactly its runs: the same
+        // partial index (both libraries plan it COVERING), and for a whole
+        // chain's death the one scan of `run` — after which the delete finds
+        // the chain's runs by the ids the fill queued, scanning nothing.
+        "hkBottomNodes": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq<?)"]),
+        "hkGapNodes": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq>? AND last_seq<?)"]),
+        "hkTopNodes": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq>? AND last_seq<?)"]),
+        "hkOrphanChainNodes": Rule(contains: ["SCAN run"], scans: ["run"]),
+        "hkOrphanChainRuns": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=?)"]),
+        "gcClear": Rule(contains: []),
+        "gcInsert": Rule(contains: []),
+        "gcKeepCollectable": Rule(
             contains: [
                 "SCAN temp.gc",
                 "SEARCH run USING PRIMARY KEY (node_id=?)",
@@ -127,51 +135,51 @@ struct SnapshotIndexPlanTests {
                 "SEARCH temp.stage USING PRIMARY KEY (node_id=?)",
             ],
             scans: ["temp.gc"]),
-        "gc.parents": Rule(contains: ["SCAN g", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["g"]),
-        "gc.deleteFTS": Rule(contains: ["SCAN g", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["g"]),
-        "gc.deleteNodes": Rule(contains: ["SEARCH node USING INTEGER PRIMARY KEY (rowid=?)"]),
-        "q.versionsTimed": Rule(contains: byPrimaryKeyVersions + ["USE TEMP B-TREE FOR ORDER BY"]),
-        "q.versionsInChain": Rule(contains: [
+        "gcParents": Rule(contains: ["SCAN g", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["g"]),
+        "gcDeleteFTS": Rule(contains: ["SCAN g", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["g"]),
+        "gcDeleteNodes": Rule(contains: ["SEARCH node USING INTEGER PRIMARY KEY (rowid=?)"]),
+        "versionsTimed": Rule(contains: byPrimaryKeyVersions + ["USE TEMP B-TREE FOR ORDER BY"]),
+        "versionsInChain": Rule(contains: [
             "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=?)",
             "SCALAR SUBQUERY",
             "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",
             "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
         ]),
-        "q.summaryCounts": Rule(contains: byPrimaryKeyVersions, excludes: ["TEMP B-TREE"]),
-        "q.summaryNewest": Rule(contains: byPrimaryKeyVersions + ["USE TEMP B-TREE FOR ORDER BY"]),
-        "q.containsKind": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq<?)"]),
-        "q.aliveRuns": Rule(contains: [
+        "summaryCounts": Rule(contains: byPrimaryKeyVersions, excludes: ["TEMP B-TREE"]),
+        "summaryNewest": Rule(contains: byPrimaryKeyVersions + ["USE TEMP B-TREE FOR ORDER BY"]),
+        "containsKind": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq<?)"]),
+        "aliveRuns": Rule(contains: [
             "SEARCH r USING PRIMARY KEY (node_id=?)",
             "CORRELATED SCALAR SUBQUERY",
             "SEARCH s USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
         ]),
-        "q.newestCover": Rule(contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)"]),
-        "q.searchFTS": Rule(
+        "newestCover": Rule(contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)"]),
+        "searchFTS": Rule(
             contains: ["SCAN f VIRTUAL TABLE INDEX 0:M1", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["f"]),
         // `listing_applied` holds one row at most (its CHECK), so its scan
         // is one row.
-        "q.notComplete": Rule(
+        "notComplete": Rule(
             contains: [
                 "SCAN listing_applied",
                 "SCAN chain USING COVERING INDEX sqlite_autoindex_chain_1",
                 "SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=?)",
             ],
             scans: ["listing_applied", "chain", "CONSTANT"]),
-        "cache.ownerPut": Rule(contains: []),
-        "cache.listingPut": Rule(contains: []),
-        "cache.diffPut": Rule(contains: []),
-        "cache.listingGet": Rule(contains: [
+        "cacheOwnerPut": Rule(contains: []),
+        "cacheListingPut": Rule(contains: []),
+        "cacheDiffPut": Rule(contains: []),
+        "cacheListingGet": Rule(contains: [
             "SEARCH dir_listing USING INDEX sqlite_autoindex_dir_listing_1 (snapshot_id=? AND dir_path=?)",
         ]),
-        "cache.diffGet": Rule(contains: [
+        "cacheDiffGet": Rule(contains: [
             "SEARCH diff_result USING INDEX sqlite_autoindex_diff_result_1 (older_id=? AND newer_id=?)",
         ]),
-        "cache.sweepIDs": Rule(
+        "cacheSweepIDs": Rule(
             contains: ["SCAN o", "SEARCH s USING COVERING INDEX sqlite_autoindex_snap_1 (hash=?)"], scans: ["o"]),
-        "cache.sweepListing": Rule(contains: ["INDEX sqlite_autoindex_dir_listing_1 (snapshot_id=?)"]),
-        "cache.sweepDiffOlder": Rule(contains: ["INDEX sqlite_autoindex_diff_result_1 (older_id=?)"]),
-        "cache.sweepDiffNewer": Rule(contains: ["INDEX diff_result_newer (newer_id=?)"]),
-        "cache.sweepOwner": Rule(contains: ["SEARCH cache_owner USING PRIMARY KEY (snapshot_id=?)"]),
+        "cacheSweepListing": Rule(contains: ["INDEX sqlite_autoindex_dir_listing_1 (snapshot_id=?)"]),
+        "cacheSweepDiffOlder": Rule(contains: ["INDEX sqlite_autoindex_diff_result_1 (older_id=?)"]),
+        "cacheSweepDiffNewer": Rule(contains: ["INDEX diff_result_newer (newer_id=?)"]),
+        "cacheSweepOwner": Rule(contains: ["SEARCH cache_owner USING PRIMARY KEY (snapshot_id=?)"]),
     ]
 
     /// What `rule` finds wrong with `plan`, or nothing.
@@ -203,7 +211,7 @@ struct SnapshotIndexPlanTests {
     /// production configuration and the writer's TEMP tables. Plan choice
     /// without statistics does not depend on the rows; the seed is for
     /// realism, and the stat1 assertion keeps the premise honest.
-    static func seededDatabase(_ fixture: IndexFixture) throws -> DatabaseQueue {
+    static func seededDatabase(_ fixture: IndexFixture) async throws -> DatabaseQueue {
         let index = fixture.index
         var arrivals: [(n: Int, snapshot: Snapshot)] = []
         var contents: [String: IndexContent] = [:]
@@ -239,15 +247,15 @@ struct SnapshotIndexPlanTests {
         let survivors = arrivals.filter { ![3, 5, 6, 9].contains($0.n) }.map(\.snapshot)
         _ = try index.reconcile(listing: survivors)
         try index.housekeeping()
-        try index.recordListing(snapshotID: survivors[0].id, directory: "/a", nodes: [])
-        try index.recordDiff(olderID: survivors[0].id, newerID: survivors[1].id, changes: [])
+        try await index.recordListing(snapshotID: survivors[0].id, directory: "/a", nodes: [])
+        try await index.recordDiff(olderID: survivors[0].id, newerID: survivors[1].id, changes: [])
         _ = try index.reconcile(listing: survivors + [try IndexTestData.snapshot(
             IndexTestData.hexID(999), micros: 999_000_000, tags: [IndexTestData.planA], paths: ["/a"])])
         try index.markUnreadable(snapshotID: IndexTestData.hexID(999))
         try index.close()
 
         let queue = try DatabaseQueue(path: fixture.path, configuration: SnapshotIndex.configuration())
-        try queue.writeWithoutTransaction { try $0.execute(sql: SnapshotIndexSchema.temporary) }
+        try await queue.writeWithoutTransaction { try $0.execute(sql: SnapshotIndexSchema.temporary) }
         return queue
     }
 
@@ -268,17 +276,51 @@ struct SnapshotIndexPlanTests {
     @Test("every registered statement has a rule and every rule a statement; parameters are plain")
     func registryMatchesRules() {
         let names = SnapshotIndex.registeredStatements.map(\.name)
-        #expect(Set(names).count == names.count, "duplicate names")
+        let unread = SnapshotIndex.reflectStatements(
+            SnapshotIndexSchema.SQL.statements, inList: SnapshotIndexSchema.SQL.placeholders(1)).others
+        #expect(unread.isEmpty, "stored properties that are not statements: \(unread)")
         #expect(Set(names) == Set(Self.rules.keys), "unruled: \(Set(names).subtracting(Self.rules.keys).sorted()) stale: \(Set(Self.rules.keys).subtracting(names).sorted())")
         for (name, sql) in SnapshotIndex.registeredStatements {
             #expect(sql.range(of: #"\?\d"#, options: .regularExpression) == nil, "\(name) numbers its parameters")
         }
     }
 
+    /// The registry is read by reflection, so what it holds must be the
+    /// statements the store runs, text for text — a plain one and an IN
+    /// list at `lookupChunk` placeholders.
+    @Test("the registry holds the statements' own text")
+    func registryReadsTheStatements() throws {
+        typealias SQL = SnapshotIndexSchema.SQL
+        let registered = Dictionary(uniqueKeysWithValues: SnapshotIndex.registeredStatements.map { ($0.name, $0.sql) })
+        #expect(registered["nodeLookup"] == SQL.nodeLookup)
+        let summaryCounts = try #require(registered["summaryCounts"])
+        #expect(summaryCounts == SQL.summaryCounts(placeholders: SQL.placeholders(SnapshotIndex.lookupChunk)))
+        #expect(summaryCounts.filter { $0 == "?" }.count == SnapshotIndex.lookupChunk)
+        let containsKind = try #require(registered["containsKind"])
+        #expect(containsKind.filter { $0 == "?" }.count == SnapshotIndex.lookupChunk + 3)
+    }
+
+    /// The reader on a stand-in: a new stored statement is registered by
+    /// being declared, with no list to edit, and a stored property it
+    /// cannot take for a statement is reported rather than dropped — a
+    /// dropped one would be a statement nobody pins.
+    @Test("the registry's reader takes every stored statement and reports anything else")
+    func registryReaderTakesStoredStatements() {
+        struct StandIn {
+            let plain = "SELECT 1"
+            let inList = SnapshotIndexSchema.InList { placeholders in "SELECT 2 WHERE x IN (\(placeholders))" }
+            let stray = 7
+        }
+        let read = SnapshotIndex.reflectStatements(StandIn(), inList: "?, ?")
+        #expect(read.statements.map(\.name) == ["plain", "inList"])
+        #expect(read.statements.map(\.sql) == ["SELECT 1", "SELECT 2 WHERE x IN (?, ?)"])
+        #expect(read.others == ["stray"])
+    }
+
     @Test("every statement plans as pinned, and nothing scans a table its rule does not allow")
-    func plansArePinned() throws {
+    func plansArePinned() async throws {
         let fixture = try IndexFixture()
-        let queue = try Self.seededDatabase(fixture)
+        let queue = try await Self.seededDatabase(fixture)
         defer { try? queue.close() }
         try queue.inDatabase { db in
             let statTables = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_schema WHERE name LIKE 'sqlite_stat%'")
@@ -295,11 +337,11 @@ struct SnapshotIndexPlanTests {
     }
 
     @Test("the checker fails a statement whose partial-index literal became a parameter")
-    func checkerCatchesAScan() throws {
+    func checkerCatchesAScan() async throws {
         let fixture = try IndexFixture()
-        let queue = try Self.seededDatabase(fixture)
+        let queue = try await Self.seededDatabase(fixture)
         defer { try? queue.close() }
-        // hk.gap with the literal `last_seq < 2147483647` bound instead: the
+        // hkGap with the literal `last_seq < 2147483647` bound instead: the
         // planner can no longer prove the partial index applies.
         let bare = """
             DELETE FROM run WHERE chain_id = ? AND last_seq > ? AND last_seq < ? AND last_seq < ?
@@ -307,7 +349,7 @@ struct SnapshotIndexPlanTests {
             RETURNING node_id
             """
         let plan = try queue.inDatabase { try Self.plan($0, bare) }
-        let rule = try #require(Self.rules["hk.gap"])
+        let rule = try #require(Self.rules["hkGap"])
         #expect(plan.contains("SCAN run"), "\(plan)")
         #expect(!Self.problems(plan, rule).isEmpty)
     }

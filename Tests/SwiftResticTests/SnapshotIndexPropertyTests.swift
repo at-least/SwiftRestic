@@ -31,8 +31,9 @@ struct SnapshotIndexPropertyTests {
         var name: String
         /// The streamed snapshot dies and returns between two of its chunks.
         var flaps: Bool
-        /// Stale listings are dropped, as the coordinator's generation guard
-        /// drops them, instead of being applied first.
+        /// Stale listings are dropped, as the store's numbered reconcile
+        /// (`reconcile(listing:generation:)`) drops them, instead of being
+        /// applied first.
         var guarded: Bool
         /// A cancelled stream is sometimes a crash: the store is reopened.
         var crashes: Bool
@@ -397,7 +398,7 @@ private final class PropertyRun {
                     let (added, removed) = tOnly(complete, flipped: flipped)
                     do {
                         try write("T-only delta") {
-                            try index.ingestDelta(snapshotID: id, from: base, added: added, removed: removed)
+                            try index.ingestDiff(snapshotID: id, from: base, added: added, removed: removed)
                         }
                         fail("tOnlyAccepted", "a T-only delta for \(id.suffix(6)) was accepted")
                     } catch IndexError.kindChanged {
@@ -410,7 +411,7 @@ private final class PropertyRun {
                 }
                 do {
                     try write("delta") {
-                        try index.ingestDelta(snapshotID: id, from: base, added: complete.added, removed: complete.removed)
+                        try index.ingestDiff(snapshotID: id, from: base, added: complete.added, removed: complete.removed)
                     }
                     bump("delta")
                 } catch {
@@ -426,7 +427,7 @@ private final class PropertyRun {
     /// only the new spelling of the flipped path itself.
     private func tOnly(_ diff: (added: [String], removed: [String]), flipped: [String]) -> (added: [String], removed: [String]) {
         func under(_ path: String, _ root: String) -> Bool { path.hasPrefix(root + "/") }
-        func bare(_ path: String) -> String { SnapshotIndex.canonical(path) }
+        func bare(_ path: String) -> String { ResticPath.normalized(path) }
         let added = diff.added.filter { path in !flipped.contains { under(bare(path), $0) } }
         let removed = diff.removed.filter { path in !flipped.contains { bare(path) == $0 || under(bare(path), $0) } }
         return (added, removed)
@@ -439,7 +440,7 @@ private final class PropertyRun {
         bump("full")
         let entries = IndexTestData.ls(view.all[id]?.content ?? [:])
         let size = dice.int(1 ... 4)
-        var chunks = stride(from: 0, to: entries.count, by: size).map { Array(entries[$0 ..< min($0 + size, entries.count)]) }
+        var chunks = entries.chunked(into: size)
         if dice.chance(0.5) { chunks.append([]) }
         let cancelAt = dice.chance(0.12) && chunks.count > 1 ? dice.int(1 ..< chunks.count) : nil
         let crash = variant.crashes && cancelAt != nil && dice.chance(0.5)
@@ -548,6 +549,43 @@ private final class PropertyRun {
             let wantSet = Set(want.map { "\($0.key)|\($0.value.isDirectory)" })
             if gotSet != wantSet {
                 fail("mismatch", "\(label): search(\(query)) extra \(gotSet.subtracting(wantSet).sorted()) missing \(wantSet.subtracting(gotSet).sorted())")
+            }
+        }
+        // The searches' own reads: the hits exactly as `searchPaths` gives
+        // them, each summary the model's, and each listed snapshot's
+        // membership its content restricted to the hits — nothing for an
+        // unlisted one. The unlisted snapshots only ever grow in number, so
+        // they are asked one query's membership, not every query's: the
+        // path-keyed `contains` loop above already asks each of them about
+        // every path.
+        for dead in world.all.keys where !world.alive.contains(dead) {
+            if try await !index.searchWithMembership(matching: "inv", limit: 200, inSnapshot: dead).inSnapshot.isEmpty {
+                fail("mismatch", "\(label): searchWithMembership answered for unlisted \(dead.suffix(4))")
+            }
+        }
+        for query in ["inv", "k", "c"] {
+            let hits = try await index.searchPaths(matching: query, limit: 200)
+            let summarized = try await index.searchWithSummaries(matching: query, limit: 200)
+            if summarized.hits != hits || summarized.hits.map(\.path) != hits.map(\.path) {
+                fail("mismatch", "\(label): searchWithSummaries(\(query)) hits differ from searchPaths")
+            }
+            for hit in hits {
+                let want = truth(hit.path)
+                let summary = summarized.summaries[PathKey(hit.path)]
+                if summary?.count != want.count || summary?.newest.id != want.first {
+                    fail("mismatch", "\(label): searchWithSummaries(\(query)) summary of \(hit.path) got \(String(describing: summary?.count)) want \(want.count)")
+                }
+            }
+            for snapshot in alive {
+                let found = try await index.searchWithMembership(matching: query, limit: 200, inSnapshot: snapshot.id)
+                let content = snapshot.content.byPathKey
+                var want: [PathKey: Bool] = [:]
+                for hit in hits {
+                    if let isDirectory = content[PathKey(hit.path)] { want[PathKey(hit.path)] = isDirectory }
+                }
+                if found.hits != hits || found.inSnapshot != want {
+                    fail("mismatch", "\(label): searchWithMembership(\(query), \(snapshot.id.suffix(4))) differs")
+                }
             }
         }
     }

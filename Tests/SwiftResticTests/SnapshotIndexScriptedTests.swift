@@ -22,7 +22,7 @@ import Testing
 ///   (b), in X7, `deadWindowEndTakesFull` and the property test — every
 ///   answer stays exact;
 /// - node GC ignoring staged nodes: `stagedNodeSurvivesGC`, and the plan pin
-///   of `gc.keepCollectable`;
+///   of `gcKeepCollectable`;
 /// - node GC collecting nothing: S1, S4, S5, both N14s, X7,
 ///   `stagedNodeSurvivesInterleavedStream`, `quarantinedStreamNodesCollected`,
 ///   `housekeepingSemantics`, `deadWindowEndTakesFull` and every property
@@ -47,15 +47,17 @@ import Testing
 ///   `repeatedEntryUnderNewDirectory` and `childBeforeParent`;
 /// - the batched reads deduplicating with `Set(paths)`:
 ///   `batchedReadsKeepByteDistinctSpellings`;
-/// - not a mutant any test catches any more: `ingestDelta` keeping the
-///   walk. The yielding node insert made a stale walk harmless there, and
-///   `deltaBetweenChunks` pins the behaviour, not that line;
+/// - `collectNodes` leaving the stream's walk in place:
+///   `collectionDropsTheWalk` (a delta keeps it, by design: the yielding
+///   node insert makes its stale `created` hint harmless, which
+///   `deltaBetweenChunks` exercises);
+/// - `gcKeepCollectable` without its root term: `rootSurvivesCollection`;
 /// - a file<->dir `T` accepted as an extension: `kindChangeRefused`, S3 and
 ///   the property test;
 /// - search ties ordered by `String <` instead of bytes: `searchTiesByBytes`;
 /// - the lineage key NUL-separated: `reconcileChainAssignment` and the
 ///   property test;
-/// - `q.containsKind` reading `first_seq < ?`: `containsKindInSnapshot`,
+/// - `containsKind` reading `first_seq < ?`: `containsKindInSnapshot`,
 ///   `applyDeltaSemantics`, S2 and the property test.
 @Suite("snapshot index scripted")
 struct SnapshotIndexScriptedTests {
@@ -125,7 +127,7 @@ struct SnapshotIndexScriptedTests {
         try checked.reconcile([a1])
         try checked.full("a1", [entry("/r", true), entry("/r/k")])
         try checked.reconcile([a1, a2])
-        #expect(throws: IndexError.kindChanged(snapshot: "a2", path: "/r/k/")) {
+        #expect(throws: IndexError.kindChanged(snapshot: "a2", path: "/r/k")) {
             try checked.delta("a2", from: "a1", added: ["/r/k/"], removed: [])
         }
         #expect(try await checked.index.contains(paths: ["/r/k", "/r/k/g"], inSnapshot: "a2").isEmpty)
@@ -183,7 +185,7 @@ struct SnapshotIndexScriptedTests {
         try checked.full("s1", [entry("/d", true), entry("/d/x"), entry("/d/y", true), entry("/d/y/f")])
         try checked.reconcile([s1, s2])
         #expect(try checked.index.nextStep() == .delta(snapshotID: "s2", from: "s1"))
-        for (added, path) in [(["/d/x/", "/d/new"], "/d/x/"), (["/d/y"], "/d/y")] {
+        for (added, path) in [(["/d/x/", "/d/new"], "/d/x"), (["/d/y"], "/d/y")] {
             #expect(throws: IndexError.kindChanged(snapshot: "s2", path: path)) {
                 try checked.delta("s2", from: "s1", added: added, removed: [])
             }
@@ -271,11 +273,12 @@ struct SnapshotIndexScriptedTests {
 
     /// A delta may create a child under a directory an open stream created,
     /// between two of that stream's chunks, so the stream's cached walk
-    /// believes that directory childless when it is not. Two guards meet
-    /// here: ingestDelta drops the walk (FINAL.md 2.2 #14), and a skipped
-    /// lookup's insert yields to an existing child. Either alone keeps this
-    /// exact — before the insert yielded, dropping the walk was the only
-    /// guard, and a delta that kept it failed here with a UNIQUE error.
+    /// believes that directory childless when it is not. A delta deletes no
+    /// node, so the walk's ids stay good and the delta keeps it (FINAL.md
+    /// 2.2 #14 dropped it there): a delta no longer drops the walk; a
+    /// collection does. What keeps this exact is the skipped lookup's insert
+    /// yielding to the existing child — without it, this failed with a
+    /// UNIQUE error.
     @Test("a delta of another plan between two chunks adds a child under a directory the stream created; the stream continues exactly")
     func deltaBetweenChunks() async throws {
         let checked = try CheckedIndex()
@@ -288,12 +291,60 @@ struct SnapshotIndexScriptedTests {
         try checked.beginFull("p2")
         try checked.chunk("p2", [entry("/r", true), entry("/r/new", true)], final: false)
         try checked.delta("q2", from: "q1", added: ["/r/new/", "/r/new/x"], removed: [])
+        // The walk survived the delta, so the next chunk really meets the
+        // stale hint.
+        #expect(checked.index.streamHoldsWalk())
         try checked.chunk("p2", [entry("/r/new/x")], final: true)
         #expect(try await checked.index.versionIDs("/r/new/x") == ["q2", "p2"])
         // The delta indexed q2, not p2: p2's stage is not its to clear.
         #expect(try await checked.index.contains(paths: ["/r", "/r/new", "/r/new/x"], inSnapshot: "p2")
             == ["/r": true, "/r/new": true, "/r/new/x": false])
         #expect(try await checked.index.isComplete())
+    }
+
+    /// Node ids go stale in one place: `collectNodes`, the only path that
+    /// deletes nodes, drops the open stream's cached walk itself — here under
+    /// housekeeping between two chunks — so no caller has to remember to.
+    /// The stream then reseeds from the root and lands exactly.
+    @Test("a node collection between two chunks drops the stream's cached walk, and the stream still lands exactly")
+    func collectionDropsTheWalk() async throws {
+        let checked = try CheckedIndex()
+        let s1 = try snap("s1", 10), s2 = try snap("s2", 20), b1 = try snap("b1", 30, tags: [otherPlan])
+        try checked.reconcile([s1, s2, b1])
+        try checked.full("s2", [entry("/d", true), entry("/d/keep")])
+        try checked.delta("s1", from: "s2", added: ["/d/gone"], removed: [])
+        // s1 leaves: /d/gone's only run claims nothing, and its node is
+        // housekeeping's to collect.
+        try checked.reconcile([s2, b1])
+        try checked.beginFull("b1")
+        try checked.chunk("b1", [entry("/e", true), entry("/e/f", true)], final: false)
+        #expect(checked.index.streamHoldsWalk())
+        let nodes = try Self.nodeCount(checked.index)
+        try checked.housekeeping()
+        #expect(try Self.nodeCount(checked.index) == nodes - 1, "housekeeping collected nothing")
+        #expect(!checked.index.streamHoldsWalk(), "a collection kept the walk")
+        try checked.chunk("b1", [entry("/e/f/g")], final: true)
+        #expect(try await checked.index.versionIDs("/e/f/g") == ["b1"])
+        #expect(try await checked.index.versionIDs("/d/keep") == ["s2"])
+        #expect(try await checked.index.versionIDs("/d/gone").isEmpty)
+        #expect(try await checked.index.isComplete())
+    }
+
+    /// The root is the tree's anchor, created with the schema and never
+    /// again. A listing may name "/" itself, which gives the root a run; when
+    /// that chain dies, the collection climbs to the root, which
+    /// `gcKeepCollectable` refuses to collect.
+    @Test("a chain whose listing named the root dies, and the root survives the collection")
+    func rootSurvivesCollection() async throws {
+        let checked = try CheckedIndex()
+        try checked.reconcile([try snap("s1", 1_000_000)])
+        try checked.full("s1", [entry("/", true), entry("/r", true), entry("/r/a")])
+        try checked.reconcile([])
+        try checked.housekeeping()
+        #expect(try Self.nodeCount(checked.index) == 1, "the root, and nothing else, remains")
+        try checked.reconcile([try snap("s2", 2_000_000, tags: [otherPlan])])
+        try checked.full("s2", [entry("/x", true), entry("/x/y")])
+        #expect(try await checked.index.versionIDs("/x/y") == ["s2"])
     }
 
     /// A first build that fails partway is retried from the top. The listing
@@ -335,12 +386,12 @@ struct SnapshotIndexScriptedTests {
         // Zero-change backups of plan A: the first prepares every statement,
         // the second is the baseline.
         try checked.delta("a2", from: "a1", added: [], removed: [])
-        let empty = try index.writerWork { try index.ingestDelta(snapshotID: "a3", from: "a2", added: [], removed: []) }
+        let empty = try index.writerWork { try index.ingestDiff(snapshotID: "a3", from: "a2", added: [], removed: []) }
         let staged = 2_000
         try checked.beginFull("b1")
         try checked.chunk("b1", [entry("/b", true)] + (1 ..< staged).map { entry("/b/f\($0)") }, final: false)
         // The stream fails here. The next backup of plan A:
-        let foreign = try index.writerWork { try index.ingestDelta(snapshotID: "a4", from: "a3", added: [], removed: []) }
+        let foreign = try index.writerWork { try index.ingestDiff(snapshotID: "a4", from: "a3", added: [], removed: []) }
         #expect(foreign <= empty + 200, "zero-change delta: \(empty) with an empty stage, \(foreign) with \(staged) foreign rows")
         #expect(try index.violations(afterHousekeeping: false).isEmpty)
         #expect(try await index.versionIDs("/r/f") == ["a4", "a3", "a2", "a1"])
@@ -461,24 +512,68 @@ struct SnapshotIndexScriptedTests {
 
     // MARK: - N13: closedfinal's X1–X8 (N9 is X2–X4 plus the release)
 
-    @Test("X1: ReconcileOutcome reports added, died and revived, and is empty on a repeat")
-    func x1ReconcileOutcome() async throws {
+    @Test("X1: reconcile adds one pending row per listed ID, deletes a dead one's, re-adds a return as a new row, and writes nothing on a repeat")
+    func x1ReconcileRows() async throws {
         let checked = try CheckedIndex()
         let a = try snap("a", 1_000_000), b = try snap("b", 2_000_000)
-        let o1 = try checked.reconcile([a, b, a])
-        let o2 = try checked.reconcile([b, a])
-        let o3 = try checked.reconcile([b])
+        let pending = SnapshotIndex.State.pending
+        try checked.reconcile([a, b, a])
+        #expect(try checked.index.snapStates() == ["a": pending, "b": pending])
+        // Arrival is time order: b is the chain's newest, so its first build.
+        #expect(try checked.index.nextStep() == .full(snapshotID: "b"))
+        #expect(try checked.reconcile([b, a]).rows == 0)
+        try checked.reconcile([b])
         try checked.housekeeping()
-        let o4 = try checked.reconcile([a, b])
-        #expect(o1 == ReconcileOutcome(added: ["a", "b"], died: [], revived: []))
-        #expect(o2 == ReconcileOutcome())
-        #expect(o3 == ReconcileOutcome(added: [], died: ["a"], revived: []))
-        #expect(o4 == ReconcileOutcome(added: [], died: [], revived: ["a"]))
+        #expect(try checked.index.snapStates() == ["b": pending])
+        // The return is a new row with a fresh seq above b's: now a is the
+        // newest, and the first build reads it.
+        try checked.reconcile([a, b])
+        #expect(try checked.index.snapStates() == ["a": pending, "b": pending])
+        #expect(try checked.index.nextStep() == .full(snapshotID: "a"))
         let trace = try checked.runToDone(["a": ["/r": true, "/r/x": false], "b": ["/r": true, "/r/y": false]])
         #expect(trace == ["full(a)", "delta(b<-a)"])
         #expect(try await checked.index.versionIDs("/r/x") == ["a"])
         #expect(try await checked.index.versionIDs("/r/y") == ["b"])
         #expect(try await checked.index.isComplete())
+    }
+
+    /// N6's guard, in the store: the compare and the write share one writer
+    /// turn, and the number is taken before the statements run. It writes
+    /// through `fixture.index` rather than `CheckedIndex`: the wrapper has no
+    /// numbered reconcile, and the write this test fails on purpose is the
+    /// point, not a state to check.
+    @Test("a numbered reconcile drops a listing not newer than the last one taken, keeps the number when its write fails, and a fresh object takes any")
+    func numberedReconcileKeepsItsNumber() async throws {
+        let fixture = try IndexFixture()
+        let older = try snap("older", 1_000_000), newer = try snap("newer", 2_000_000), third = try snap("third", 3_000_000)
+        func listed() async throws -> [String] {
+            try await fixture.index.pool.read { try String.fetchAll($0, sql: "SELECT hash FROM snap ORDER BY hash") }
+        }
+        #expect(try fixture.index.reconcile(listing: [older, newer], generation: 5))
+        #expect(try !fixture.index.reconcile(listing: [older], generation: 4))
+        #expect(try !fixture.index.reconcile(listing: [older], generation: 5))
+        #expect(try await listed() == ["newer", "older"])
+
+        // A write that fails after the compare keeps the number: the same
+        // listing again is dropped, and nothing of the failed one stayed.
+        try await fixture.index.pool.writeWithoutTransaction {
+            try $0.execute(sql: "CREATE TEMP TRIGGER scripted_failure BEFORE INSERT ON snap BEGIN SELECT RAISE(ABORT, 'scripted'); END")
+        }
+        #expect(throws: DatabaseError.self) { try fixture.index.reconcile(listing: [older, newer, third], generation: 6) }
+        try await fixture.index.pool.writeWithoutTransaction { try $0.execute(sql: "DROP TRIGGER temp.scripted_failure") }
+        #expect(try !fixture.index.reconcile(listing: [older, newer, third], generation: 6))
+        #expect(try await listed() == ["newer", "older"])
+        #expect(try fixture.index.reconcile(listing: [older, newer, third], generation: 7))
+        #expect(try await listed() == ["newer", "older", "third"])
+
+        // The unnumbered reconcile the tests drive leaves the number alone.
+        try fixture.index.reconcile(listing: [older])
+        #expect(try !fixture.index.reconcile(listing: [older], generation: 7))
+
+        // A fresh object — the next launch, or the new file a reset leaves —
+        // has taken nothing.
+        try fixture.reopen()
+        #expect(try fixture.index.reconcile(listing: [older], generation: 1))
     }
 
     @Test("X2: an unreadable snapshot above hi does not pin the window, is claimed by nothing, and is retried on return")
@@ -559,8 +654,9 @@ struct SnapshotIndexScriptedTests {
         // The next launch: released before the first reconcile — pending
         // again, in place, above hi — so the listing finds it known.
         try checked.releaseUnreadable()
-        let outcome = try checked.reconcile(listing)
-        #expect(outcome == ReconcileOutcome())
+        #expect(try checked.index.snapStates()["s2"] == SnapshotIndex.State.pending)
+        // The listing finds it known: nothing is deleted or added.
+        #expect(try checked.reconcile(listing).rows == 0)
         #expect(try await !checked.index.isComplete())
         #expect(try checked.runToDone(contents) == ["delta(s2<-s3)"])
         #expect(try await checked.index.versionIDs("/r/mid") == ["s2"])
@@ -790,7 +886,7 @@ struct SnapshotIndexScriptedTests {
         #expect(throws: IndexError.schemaMismatch(found: 99)) { _ = try SnapshotIndex(path: fixture.path) }
         // The coordinator's recovery: delete the file with its sidecars and
         // open again.
-        for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: fixture.path + suffix) }
+        IndexCoordinator.removeIndexFiles(at: URL(fileURLWithPath: fixture.path))
         let rebuilt = try SnapshotIndex(path: fixture.path)
         // Empty, and not complete: it has read nothing of the repository.
         #expect(try await !rebuilt.isComplete())
@@ -805,7 +901,7 @@ struct SnapshotIndexScriptedTests {
     func n10OldFormatRefused() throws {
         let fixture = try IndexFixture()
         try fixture.index.close()
-        for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: fixture.path + suffix) }
+        IndexCoordinator.removeIndexFiles(at: URL(fileURLWithPath: fixture.path))
         // The earlier index's shape: GRDB's migrator kept its history in a
         // table and never set user_version.
         let old = try DatabaseQueue(path: fixture.path)

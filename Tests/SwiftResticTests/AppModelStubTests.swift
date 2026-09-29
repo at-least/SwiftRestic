@@ -1712,12 +1712,7 @@ struct AppModelStubTests {
 
             // The write-through runs beside the browse, not before it
             // answers; the repeat this test is about comes after it lands.
-            let deadline = Date().addingTimeInterval(10)
-            while await harness.model.indexCoordinator.cachedListing(
-                snapshotID: "feedface00000000", directory: "/src", repositoryID: harness.repository.id
-            ) == nil, Date() < deadline {
-                try await Task.sleep(for: .milliseconds(10))
-            }
+            await harness.model.indexCoordinator.cacheWritesSettled()
 
             let second = try await harness.model.children(
                 repositoryID: harness.repository.id,
@@ -1743,11 +1738,9 @@ struct AppModelStubTests {
             // chunk or full compare holds it — seconds, at scale.
             let store = try await coordinator.read(repositoryID) { $0 }
             let hold = WriterHold(store)
-            let deadline = Date().addingTimeInterval(10)
-            while !hold.isHeld, Date() < deadline { try await Task.sleep(for: .milliseconds(5)) }
-            #expect(hold.isHeld)
+            #expect(await eventually(within: 10) { hold.isHeld })
 
-            let answered = BrowseAnswered()
+            let answered = Flag()
             let browse = Task {
                 let nodes = try await harness.model.children(
                     repositoryID: repositoryID, snapshotID: "feedface00000000", path: "/src"
@@ -1756,20 +1749,14 @@ struct AppModelStubTests {
                 return nodes
             }
             // restic has answered; the cache write-through is what may wait.
-            let answerDeadline = Date().addingTimeInterval(5)
-            while !answered.isSet, Date() < answerDeadline { try await Task.sleep(for: .milliseconds(10)) }
-            let answeredWhileHeld = answered.isSet
+            let answeredWhileHeld = await eventually(within: 5) { answered.isSet }
             hold.release()
             #expect(answeredWhileHeld, "the browse waited for the index's writer")
             #expect(try await browse.value.map(\.path) == ["/src/notes.txt"])
 
             // The write-through still lands once the writer is free.
-            let cacheDeadline = Date().addingTimeInterval(10)
-            var cached = await coordinator.cachedListing(snapshotID: "feedface00000000", directory: "/src", repositoryID: repositoryID)
-            while cached == nil, Date() < cacheDeadline {
-                try await Task.sleep(for: .milliseconds(10))
-                cached = await coordinator.cachedListing(snapshotID: "feedface00000000", directory: "/src", repositoryID: repositoryID)
-            }
+            await coordinator.cacheWritesSettled()
+            let cached = await coordinator.cachedListing(snapshotID: "feedface00000000", directory: "/src", repositoryID: repositoryID)
             #expect(cached?.map(\.path) == ["/src/notes.txt"])
 
             await harness.model.shutdown()
@@ -1789,7 +1776,14 @@ struct AppModelStubTests {
             )
             #expect(changes.changes["/src/new.txt"]?.category == .added)
             #expect(changes.changes["/src/gone.txt"]?.category == .removed)
+            // A directory whose name ends in a Prepend character: restic's
+            // slash sits inside its last Character, and the tree row it
+            // marks is keyed without it.
+            #expect(changes.changes["/src/new\u{0600}"]?.category == .added)
             #expect(changes.failure == nil)
+
+            // The capture runs beside the answer, as the listing's does.
+            await harness.model.indexCoordinator.cacheWritesSettled()
 
             let again = await harness.model.snapshotChanges(
                 repositoryID: harness.repository.id,
@@ -1820,7 +1814,11 @@ struct AppModelStubTests {
             #expect(marks.changes["/src/new.txt"]?.category == .added)
             #expect(marks.failure?.contains("no matching ID found") == true, "failure was \(String(describing: marks.failure))")
 
-            // Nothing was cached: the same switch asks restic again.
+            // Nothing was cached: the same switch asks restic again. Checked
+            // once the hand-overs have settled — a capture is its own task,
+            // so a wrongly cached walk could otherwise land after the repeat
+            // read the cache, and this check would pass by timing.
+            await harness.model.indexCoordinator.cacheWritesSettled()
             let again = await harness.model.snapshotChanges(
                 repositoryID: harness.repository.id,
                 olderID: "0000000000000000",
@@ -1849,7 +1847,11 @@ struct AppModelStubTests {
             #expect(marks.changes["/src/new.txt"]?.category == .added)
             #expect(marks.failure != nil, "a diff that lost a line read as complete")
 
-            // Nothing was cached: the same switch asks restic again.
+            // Nothing was cached: the same switch asks restic again. Checked
+            // once the hand-overs have settled — a capture is its own task,
+            // so a wrongly cached walk could otherwise land after the repeat
+            // read the cache, and this check would pass by timing.
+            await harness.model.indexCoordinator.cacheWritesSettled()
             let again = await harness.model.snapshotChanges(
                 repositoryID: harness.repository.id,
                 olderID: "0000000000000000",
@@ -2222,24 +2224,6 @@ struct AppModelStubTests {
 ///
 /// Built for one small POST per test: it answers `200` with an empty body and
 /// closes the connection, collecting whatever arrived.
-/// Set once a browse has answered; read by the test polling for it.
-private final class BrowseAnswered: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = false
-
-    func set() {
-        lock.lock()
-        value = true
-        lock.unlock()
-    }
-
-    var isSet: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
-    }
-}
-
 private final class HTTPCaptureServer: @unchecked Sendable {
     private let lock = NSLock()
     private var bodies: [String] = []

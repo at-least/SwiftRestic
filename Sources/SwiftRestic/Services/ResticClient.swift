@@ -55,14 +55,14 @@ protocol ResticClient: Sendable {
     /// Streams every node of one snapshot — the unbounded full-tree
     /// `restic ls <id>`. One callback per node as it arrives, off the main
     /// actor; callers must consume incrementally, never retain wholesale.
-    /// Returns how many lines restic wrote that did not decode: a stream
-    /// with any is not the whole snapshot, whatever the exit code said.
-    @discardableResult
+    /// Throws `ResticError.malformedOutput` after the stream when any line
+    /// restic wrote did not decode: such a stream is not the whole
+    /// snapshot, whatever the exit code said.
     func walkSnapshot(
         _ context: RepositoryContext,
         snapshotID: String,
         onNode: @Sendable @escaping (SnapshotNode) -> Void
-    ) async throws -> Int
+    ) async throws
 
     func find(
         _ context: RepositoryContext,
@@ -80,16 +80,15 @@ protocol ResticClient: Sendable {
 
     /// Streams every `message_type: change` line of a `restic diff` — the
     /// uncapped variant of `diff`: the index needs all changed paths, so
-    /// there is no change limit and nothing is retained. Returns how many
-    /// lines did not decode, as `walkSnapshot` does: a change the decoder
+    /// there is no change limit and nothing is retained. Throws on lines
+    /// that did not decode, as `walkSnapshot` does: a change the decoder
     /// dropped is a change the caller never saw.
-    @discardableResult
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,
         newerID: String,
         onChange: @Sendable @escaping (ResticDiffChange) -> Void
-    ) async throws -> Int
+    ) async throws
 
     // MARK: - Backup
 

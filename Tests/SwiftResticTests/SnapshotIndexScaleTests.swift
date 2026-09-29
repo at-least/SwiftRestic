@@ -64,7 +64,7 @@ struct SnapshotIndexScaleTests {
         #expect(truncated?[0] as Int? == 0, "the checkpoint was blocked: \(String(describing: truncated))")
         let (added, removed) = IndexTestData.diff(from: content, to: grown)
         let big = try index.cost {
-            try index.ingestDelta(snapshotID: second.id, from: first.id, added: added, removed: removed)
+            try index.ingestDiff(snapshotID: second.id, from: first.id, added: added, removed: removed)
         }
         let walFile = try FileManager.default.attributesOfItem(atPath: fixture.path + "-wal")[.size] as? Int ?? -1
         print("SCALE counters: 500 new paths changed \(big.rows) rows and appended \(big.walBytes) WAL bytes; -wal is \(walFile) bytes")
@@ -82,7 +82,7 @@ struct SnapshotIndexScaleTests {
         // snapshot's state: the counter must see those two rows.
         let third = try IndexTestData.snapshot(IndexTestData.hexID(3), micros: 3_000_000, tags: [IndexTestData.planA])
         _ = try index.reconcile(listing: [first, second, third])
-        let nothing = try index.cost { try index.ingestDelta(snapshotID: third.id, from: second.id, added: [], removed: []) }
+        let nothing = try index.cost { try index.ingestDiff(snapshotID: third.id, from: second.id, added: [], removed: []) }
         #expect(nothing.rows > 0 && nothing.rows <= ScaleBounds.zeroChangeRows)
     }
 
@@ -347,9 +347,9 @@ private final class ChainModel {
         return ([root] + names.reversed()).joined(separator: "/")
     }
 
-    /// restic's spelling in a diff: a directory ends in `/`.
+    /// restic's spelling in a diff (`IndexTestData.diffSpelling`).
     func spelled(_ node: Int32) -> String {
-        isDir[Int(node)] ? path(of: node) + "/" : path(of: node)
+        IndexTestData.diffSpelling(path(of: node), isDirectory: isDir[Int(node)])
     }
 
     /// What `restic diff` from `base` to `target` would list, either
@@ -486,8 +486,7 @@ private final class ScaleRun {
         }
     }
 
-    @discardableResult
-    func reconcile() throws -> ReconcileOutcome {
+    func reconcile() throws {
         try index.reconcile(listing: listing())
     }
 
@@ -520,7 +519,7 @@ private final class ScaleRun {
     /// Streams one full read the way the backfill does and measures it.
     func full(_ hash: String, chain: Int, tick: Int, churnFrom base: Int?) throws -> StepRecord {
         let churn: (added: [String], removed: [String]) = base.map { chains[chain].delta(from: $0, to: tick) } ?? ([], [])
-        let addedPaths = Set(churn.added.map(SnapshotIndex.canonical))
+        let addedPaths = Set(churn.added.map(ResticPath.normalized))
         var streamed = 0
         var chunksWithAdds = 0
         var finalSeconds = 0.0
@@ -547,7 +546,7 @@ private final class ScaleRun {
         let (added, removed) = chains[chain].delta(from: baseTick, to: tick)
         var cost = WriteCounters(rows: 0, walBytes: 0)
         let s = try seconds {
-            cost = try index.cost { try index.ingestDelta(snapshotID: hash, from: base, added: added, removed: removed) }
+            cost = try index.cost { try index.ingestDiff(snapshotID: hash, from: base, added: added, removed: removed) }
         }
         return StepRecord(chain: chain, added: added.count, removed: removed.count, cost: cost, streamed: 0, seconds: s)
     }
@@ -568,14 +567,16 @@ private final class ScaleRun {
         var phase = Phase()
         let cap = snapshots.count * 2 + 100
         for _ in 0 ..< cap {
-            let step = try index.nextStep()
-            switch step {
+            let planned = try index.plannedStep()
+            switch planned.step {
             case .done:
                 return phase
             case .full(let hash):
                 guard let target = snapshots[hash] else { throw DatabaseError(message: "unknown \(hash)") }
                 let (chain, tick) = target
-                let windowed = try index.chainHasWindow(of: hash)
+                // The planner's own reason: a full read past a dead window
+                // end compares against the runs that describe that end.
+                let windowed = planned.deadWindowEnd
                 let record = try full(hash, chain: chain, tick: tick, churnFrom: windowed ? hiTick[chain] : nil)
                 phase.fulls.append(record)
                 phase.fullIDs.append(hash)
@@ -762,6 +763,7 @@ private final class ScaleRun {
         try singleDeaths()
         try await fullRoute()
         try await massOmission()
+        try await runlessChainDeath()
         try await wholeChainDeath()
 
         try violations(afterHousekeeping: true, "at the end")
@@ -809,11 +811,24 @@ private final class ScaleRun {
             + "for \(total) versions")
     }
 
-    /// A one-letter search, the Restore pane's worst keystroke.
+    /// A one-letter search, the Restore pane's worst keystroke — and its
+    /// second question, answered in the same read, against the two reads
+    /// it replaced.
     func search() async throws {
         let limit = await MainActor.run { AppModel.indexSearchLimit }
         let hits = try await index.searchPaths(matching: "i", limit: limit)
         #expect(hits.count == limit)
+        let openID = id(chain: 0, tick: listed[0].max() ?? -1)
+        let membership = try await index.searchWithMembership(matching: "i", limit: limit, inSnapshot: openID)
+        let separate = try await index.contains(paths: hits.map(\.path), inSnapshot: openID)
+        #expect(membership.hits == hits)
+        #expect(membership.inSnapshot == separate)
+        #expect(!membership.inSnapshot.isEmpty, "the open backup holds none of the hits: the comparison above compared nothing")
+        let summarized = try await index.searchWithSummaries(matching: "i", limit: limit)
+        let separateSummaries = try await index.versionSummaries(ofPaths: hits.map(\.path))
+        #expect(summarized.hits == hits)
+        #expect(summarized.summaries == separateSummaries)
+        #expect(summarized.summaries.count == hits.count)
         guard shape.bench else { return }
         let start = Date()
         for _ in 0 ..< 5 { _ = try await index.searchPaths(matching: "i", limit: limit) }
@@ -822,6 +837,40 @@ private final class ScaleRun {
         for _ in 0 ..< 5 { _ = try await index.searchPaths(matching: "inv", limit: limit) }
         let common3 = Date().timeIntervalSince(start3) / 5
         bench("search: one letter 'i' \(ms(common)), 'inv' \(ms(common3)) (means of 5, limit \(limit))")
+        // Each form in its own slot of every round, the order alternating
+        // per round, so neither rides the other's warm cache alone.
+        var membershipTwo = 0.0, membershipOne = 0.0, summariesTwo = 0.0, summariesOne = 0.0
+        var membershipSecond = 0.0, summariesSecond = 0.0
+        let rounds = 10
+        for round in 0 ..< rounds {
+            for oneRead in round % 2 == 0 ? [false, true] : [true, false] {
+                let start = Date()
+                if oneRead {
+                    _ = try await index.searchWithMembership(matching: "i", limit: limit, inSnapshot: openID)
+                    membershipOne += Date().timeIntervalSince(start)
+                    let startSummaries = Date()
+                    _ = try await index.searchWithSummaries(matching: "i", limit: limit)
+                    summariesOne += Date().timeIntervalSince(startSummaries)
+                } else {
+                    let found = try await index.searchPaths(matching: "i", limit: limit)
+                    let startContains = Date()
+                    _ = try await index.contains(paths: found.map(\.path), inSnapshot: openID)
+                    membershipSecond += Date().timeIntervalSince(startContains)
+                    membershipTwo += Date().timeIntervalSince(start)
+                    let startSummaries = Date()
+                    let again = try await index.searchPaths(matching: "i", limit: limit)
+                    let startVersionSummaries = Date()
+                    _ = try await index.versionSummaries(ofPaths: again.map(\.path))
+                    summariesSecond += Date().timeIntervalSince(startVersionSummaries)
+                    summariesTwo += Date().timeIntervalSince(startSummaries)
+                }
+            }
+        }
+        let n = Double(rounds)
+        bench("search 'i' with membership: two reads \(ms(membershipTwo / n)) (the second \(ms(membershipSecond / n))), "
+            + "one read \(ms(membershipOne / n)); with summaries: two reads \(ms(summariesTwo / n)) "
+            + "(the second \(ms(summariesSecond / n))), one read \(ms(summariesOne / n)) "
+            + "(means of \(rounds), interleaved, limit \(limit))")
     }
 
     /// S-4: housekeeping after one middle death costs that death's gap, at
@@ -928,7 +977,7 @@ private final class ScaleRun {
         }
         if shape.bench {
             // The compare's population read scans every chain's runs
-            // (`full.fwdClose`, FINAL.md option P6): its size here.
+            // (`fullForwardClose`, FINAL.md option P6): its size here.
             let runs = try await index.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM run") ?? 0 }
             bench("S-6 the compare read \(runs) runs across \(shape.chains) chains")
         }
@@ -949,20 +998,24 @@ private final class ScaleRun {
             listed[c].subtract(dropped)
         }
         let count = omitted.map(\.count).reduce(0, +)
-        var outcome = ReconcileOutcome()
+        let listedBefore = try index.snapStates().count
         var sweep = WriteCounters(rows: 0, walBytes: 0)
         let omissionSeconds = try seconds {
-            outcome = try reconcile()
+            try reconcile()
             sweep = try index.cost { try index.housekeeping() }
         }
-        #expect(outcome.died.count == count)
+        // A death deletes the row: every omitted snapshot's is gone.
+        #expect(try index.snapStates().count == listedBefore - count)
         print("SCALE S-4 bulk: \(count) snapshots forgotten at once; one housekeeping pass changed \(sweep.rows) rows")
         try violations(afterHousekeeping: true, "after one pass over a bulk forget")
         try await expectExact("after the omission")
 
         for c in 0 ..< shape.chains { listed[c].formUnion(omitted[c]) }
-        let back = try reconcile()
-        #expect(back.revived.count == count)
+        try reconcile()
+        // Each return is a new pending row; every other snapshot is indexed.
+        let back = try index.snapStates()
+        #expect(back.count == listedBefore)
+        #expect(back.values.filter { $0 == SnapshotIndex.State.pending }.count == count)
         #expect(try await index.isComplete() == false)
         let start = Date()
         let recovery = try await drive()
@@ -975,20 +1028,50 @@ private final class ScaleRun {
         try await expectExact("after the recovery")
     }
 
+    /// A chain that dies holding no run — a plan deleted before the backfill
+    /// reached its one backup — still takes housekeeping's whole-chain path,
+    /// whose fill finds the chain's runs by scanning `run`, so its cost
+    /// follows the file's run count, not the chain. Timed here, at the full
+    /// population and before the large chain's death, five times over (the
+    /// median is printed); each death writes its queue row and its chain
+    /// row, and nothing else.
+    func runlessChainDeath() async throws {
+        let ghost = try IndexTestData.snapshot(
+            IndexTestData.hexID(99_999_999), micros: micros(chain: 0, tick: 0),
+            tags: [ResticService.planTagPrefix + "ffffffff-0000-4000-8000-ffffffffffff"], paths: ["/Users/alice/Ghost"])
+        // Drains whatever the recovery above queued, so each timed pass
+        // meets the ghost's chain alone.
+        try index.housekeeping()
+        var times: [Double] = []
+        for _ in 0 ..< 5 {
+            try index.reconcile(listing: try listing() + [ghost])
+            try reconcile()
+            var sweep = WriteCounters(rows: 0, walBytes: 0)
+            times.append(try seconds { sweep = try index.cost { try index.housekeeping() } })
+            #expect(sweep.rows == 2, "a runless chain's death changed \(sweep.rows) rows")
+        }
+        try violations(afterHousekeeping: true, "after a runless chain died")
+        let runs = try await index.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM run") ?? 0 }
+        bench("runless chain death (\(runs) runs in the file): housekeeping median \(ms(times.sorted()[times.count / 2])), "
+            + "all \(times.map(ms).joined(separator: ", "))")
+    }
+
     /// A plan deleted with its backups: its chain loses every snapshot, and
     /// housekeeping drops its runs, its row and its nodes (the one scan of
-    /// every chain's runs housekeeping has, `hk.orphanChainRuns`).
+    /// every chain's runs housekeeping has is the fill that queues them,
+    /// `hkOrphanChainNodes`).
     func wholeChainDeath() async throws {
         let c = shape.chains - 1
         let sample = chains[c].permanentFiles().prefix(50).map { chains[c].path(of: $0) }
         listed[c] = []
         var sweep = WriteCounters(rows: 0, walBytes: 0)
+        var sweepSeconds = 0.0
         let s = try seconds {
             try reconcile()
-            sweep = try index.cost { try index.housekeeping() }
+            sweepSeconds = try seconds { sweep = try index.cost { try index.housekeeping() } }
         }
         print("SCALE whole-chain death: housekeeping changed \(sweep.rows) rows")
-        bench("whole-chain death: reconcile and housekeeping \(ms(s))")
+        bench("whole-chain death: reconcile and housekeeping \(ms(s)); housekeeping alone \(ms(sweepSeconds))")
         try violations(afterHousekeeping: true, "after a whole chain died")
         let left = try await index.versionSummaries(ofPaths: Array(sample))
         #expect(left.isEmpty, "the dead chain's paths still answer: \(left.count)")

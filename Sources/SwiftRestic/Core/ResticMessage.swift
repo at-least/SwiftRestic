@@ -236,13 +236,17 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
 
     var id: String { path }
 
-    /// restic marks directories with a trailing slash.
-    var isDirectory: Bool { path.hasSuffix("/") }
+    /// restic marks directories with a trailing slash — read bytewise
+    /// (`ResticPath`): after a Prepend character such as U+0600 the slash is
+    /// inside the path's last Character, where `hasSuffix("/")` misses it.
+    var isDirectory: Bool { ResticPath.isDirectorySpelling(path) }
 
+    /// The last component, without the directory marker; the root reads as
+    /// "/".
     var name: String {
-        let trimmed = isDirectory ? String(path.dropLast()) : path
-        let last = (trimmed as NSString).lastPathComponent
-        return last.isEmpty ? path : last
+        let normalized = ResticPath.normalized(path)
+        let last = ResticPath.basename(of: normalized)
+        return last.isEmpty ? normalized : last
     }
 
     var category: Category {

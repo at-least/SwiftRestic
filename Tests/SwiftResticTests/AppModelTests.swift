@@ -688,6 +688,24 @@ struct SnapshotRunLookupTests {
     }
 }
 
+/// The numbers the index orders a repository's listings by. One counter
+/// serves every repository — the index compares numbers only within one
+/// (IndexCoordinatorGenerationTests) — so each number must be newer than
+/// every one handed out before it, and none may be 0, which `rebuildIndex`
+/// sends for a listing never read.
+@Suite("Listing generations")
+@MainActor
+struct ListingGenerationTests {
+    @Test("each listing number is newer than every one handed out before it")
+    func numbersOnlyRise() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticListingGenerations-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = AppModel(store: ConfigStore(directory: directory), secrets: .inMemory())
+        #expect((0 ..< 5).map { _ in model.nextListingGeneration() } == [1, 2, 3, 4, 5])
+    }
+}
+
 /// Saving an editor draft must never erase what the model wrote while the
 /// sheet was open: the run and maintenance stamps are the scheduler's and the
 /// dashboard's ground truth.

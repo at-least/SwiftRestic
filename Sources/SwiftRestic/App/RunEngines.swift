@@ -157,7 +157,7 @@ enum BackupRunEngine {
                         try await service.forget(context, plan: plan)
                     }
                     transcript.note("Retention removed \(Format.plural(removed, "snapshot"))")
-                } catch where RunRecord.isCancellation(error) {
+                } catch where ResticError.isCancellation(error) {
                     // Stopped here — "Stop Applying Retention" in the Plan
                     // menu or the tray, Pause and Stop, or a quit: the
                     // user's stop, recorded as every stop is, never as the

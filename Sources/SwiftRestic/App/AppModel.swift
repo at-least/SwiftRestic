@@ -84,9 +84,10 @@ final class AppModel {
     /// When the listing last succeeded. A freshness stamp the surfaces show
     /// so a number can always be traced to the moment it was read.
     var snapshotsLoadedAt: [UUID: Date] = [:]
-    /// The last listing generation handed out per repository — see
-    /// `nextListingGeneration`. Only the index reads these numbers.
-    @ObservationIgnored var listingGeneration: [UUID: UInt64] = [:]
+    /// The last listing generation handed out, one counter for every
+    /// repository — see `nextListingGeneration`. Only the index reads these
+    /// numbers, and it compares them only within one repository.
+    @ObservationIgnored var listingGeneration: UInt64 = 0
     /// The generation `snapshots` was read under, per repository, so a
     /// rebuild of the index re-sends the held listing under its own number.
     @ObservationIgnored var snapshotsGeneration: [UUID: UInt64] = [:]

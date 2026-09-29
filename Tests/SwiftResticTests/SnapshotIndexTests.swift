@@ -40,8 +40,9 @@ struct SnapshotIndexTests {
             try snap("otherPaths", t2, tags: [], paths: ["/data"]),
             try snap("other", t2, tags: [planB]),
         ]
-        let outcome = try index.reconcile(listing: listing)
-        #expect(outcome.added == listing.map(\.id).sorted(by: SnapshotIndex.bytesLess))
+        try index.reconcile(listing: listing)
+        // One pending row per listed snapshot.
+        #expect(try index.snapStates() == Dictionary(uniqueKeysWithValues: listing.map { ($0.id, SnapshotIndex.State.pending) }))
 
         let lineage = SnapshotIndex.chainKey(for: listing[2])
         #expect(SnapshotIndex.chainKey(for: listing[0]) == planA)
@@ -73,14 +74,16 @@ struct SnapshotIndexTests {
         let fixture = try IndexFixture()
         let index = fixture.index
         let listing = [try snap("old", t0), try snap("new", t1)]
-        _ = try index.reconcile(listing: listing)
-        let second = try index.reconcile(listing: listing)
-        #expect(second == ReconcileOutcome())
+        try index.reconcile(listing: listing)
+        let states = try index.snapStates()
+        let second = try index.cost { try index.reconcile(listing: listing) }
+        #expect(second.rows == 0, "the repeat wrote \(second)")
+        #expect(try index.snapStates() == states)
         #expect(try await !index.isComplete())
         #expect(try index.nextStep() == .full(snapshotID: "new"))
     }
 
-    @Test("a vanished snapshot dies; its return is reported revived, is pending, and is exact after one step")
+    @Test("a vanished snapshot loses its row; its return is a new pending row, read again, and exact after one step")
     func dieAndRevive() async throws {
         let fixture = try IndexFixture()
         let index = fixture.index
@@ -90,14 +93,14 @@ struct SnapshotIndexTests {
         try index.runToDone(["old": content, "new": content])
         #expect(try await index.versionIDs("/data/a") == ["new", "old"])
 
-        let died = try index.reconcile(listing: [listing[1]])
-        #expect(died.died == ["old"])
+        try index.reconcile(listing: [listing[1]])
+        #expect(try index.snapStates()["old"] == nil)
         #expect(try await index.versionIDs("/data/a") == ["new"])
 
-        let revived = try index.reconcile(listing: listing)
-        #expect(revived.revived == ["old"])
-        #expect(revived.added.isEmpty)
-        // A return is a new row: pending, claimed by nothing, read again.
+        try index.reconcile(listing: listing)
+        // A return is a new row: pending, claimed by nothing, read again —
+        // forward from `new`, because its fresh seq lies above the window.
+        #expect(try index.snapStates()["old"] == SnapshotIndex.State.pending)
         #expect(try await !index.isComplete())
         #expect(try await index.versionIDs("/data/a") == ["new"])
         #expect(try index.nextStep() == .delta(snapshotID: "old", from: "new"))
@@ -136,6 +139,30 @@ struct SnapshotIndexTests {
         #expect(try await index.versionIDs("/data/a.txt") == ["s2", "s1"])
         try index.ingestWhole("s3", listing)
         #expect(try await index.versionIDs("/data/a.txt") == ["s3", "s2", "s1"])
+        #expect(try await index.isComplete())
+    }
+
+    @Test("a full read extends the window one step on either side; across a pending snapshot, on either side, it is notAdjacent")
+    func fullAdjacencyBothSides() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let t4: Int64 = 5_000_000_000
+        let ids = ["s1", "s2", "s3", "s4", "s5"]
+        _ = try index.reconcile(listing: try zip(ids, [t0, t1, t2, t3, t4]).map { try snap($0, $1) })
+        // A file every snapshot holds, and one only this snapshot holds: a
+        // full read that closed or opened runs at the wrong window end would
+        // hand one snapshot's own file to another, or lose it.
+        func entries(of id: String) -> [IndexedEntry] {
+            IndexTestData.ls(["/data": true, "/data/a.txt": false, "/data/only-\(id)": false])
+        }
+        try index.ingestWhole("s3", entries(of: "s3"))
+        // Two steps up and two down cross the pending s4 and s2.
+        #expect(throws: IndexError.notAdjacent("s5")) { try index.ingestWhole("s5", entries(of: "s5")) }
+        #expect(throws: IndexError.notAdjacent("s1")) { try index.ingestWhole("s1", entries(of: "s1")) }
+        // One step each way lands, and then the outer ones do.
+        for id in ["s2", "s4", "s1", "s5"] { try index.ingestWhole(id, entries(of: id)) }
+        #expect(try await index.versionIDs("/data/a.txt") == ["s5", "s4", "s3", "s2", "s1"])
+        for id in ids { #expect(try await index.versionIDs("/data/only-\(id)") == [id]) }
         #expect(try await index.isComplete())
     }
 
@@ -206,12 +233,12 @@ struct SnapshotIndexTests {
             try index.ingestFull(snapshotID: "ghost", entries: [], final: true)
         }
         #expect(throws: IndexError.unknownSnapshot("ghost")) {
-            try index.ingestDelta(snapshotID: "ghost", from: "s1", added: [], removed: [])
+            try index.ingestDiff(snapshotID: "ghost", from: "s1", added: [], removed: [])
         }
         try index.ingestWhole("s1", IndexTestData.ls(["/data": true]))
         _ = try index.reconcile(listing: [try snap("s1", t0), try snap("s2", t1)])
         #expect(throws: IndexError.unknownSnapshot("ghost")) {
-            try index.ingestDelta(snapshotID: "s2", from: "ghost", added: [], removed: [])
+            try index.ingestDiff(snapshotID: "s2", from: "ghost", added: [], removed: [])
         }
     }
 
@@ -405,6 +432,13 @@ struct SnapshotIndexTests {
         #expect(hits.filter { inS2[PathKey($0.path)] != nil }.map { Array($0.path.utf8) } == [Array(nfd.utf8)])
         #expect(summaries[PathKey(nfc)]?.newest.id == "s1")
         #expect(summaries[PathKey(nfd)]?.newest.id == "s2")
+        // The searches' own reads keep them apart the same way.
+        let viaSearch = try await index.searchWithMembership(matching: "caf", limit: 10, inSnapshot: "s1")
+        #expect(viaSearch.inSnapshot == inS1)
+        #expect(viaSearch.inSnapshot.count == 1)
+        let summarized = try await index.searchWithSummaries(matching: "caf", limit: 10)
+        #expect(summarized.summaries == summaries)
+        #expect(summarized.summaries.count == 2)
     }
 
     // MARK: - Version picking (the folder browser's selection rule)
@@ -444,6 +478,10 @@ struct SnapshotIndexTests {
         #expect(try await index.searchPaths(matching: "   ", limit: 10).isEmpty)
         #expect(try await index.searchPaths(matching: "invoice*\" OR", limit: 10).isEmpty)
         #expect(try await index.searchPaths(matching: "\"", limit: 10).isEmpty)
+        // A query with no term reads nothing, in the searches' reads too.
+        #expect(try await index.searchWithSummaries(matching: "   ", limit: 10) == SearchWithSummaries(hits: [], summaries: [:]))
+        #expect(try await index.searchWithMembership(matching: "\"", limit: 10, inSnapshot: "s1")
+            == SearchWithMembership(hits: [], inSnapshot: [:]))
     }
 
     @Test("search orders by name then path, stops at exactly the limit, and never spends it on unheld paths")
@@ -496,7 +534,7 @@ struct SnapshotIndexTests {
         let index = fixture.index
         _ = try index.reconcile(listing: [try snap("s1", t0), try snap("s2", t1)])
         try index.ingestWhole("s1", IndexTestData.ls(["/data": true, "/data/old.txt": false]))
-        try index.ingestDelta(snapshotID: "s2", from: "s1", added: ["/data/report.pdf", "/data/reports/"], removed: [])
+        try index.ingestDiff(snapshotID: "s2", from: "s1", added: ["/data/report.pdf", "/data/reports/"], removed: [])
 
         let hits = try await index.searchPaths(matching: "report", limit: 10)
         #expect(Set(hits.map(\.path)) == ["/data/report.pdf", "/data/reports"])
@@ -536,6 +574,139 @@ struct SnapshotIndexTests {
         #expect(Set(hits.map(\.path)) == ["/data/inv-1", "/data/inv-2", "/data/inv-3"])
         let summaries = try await index.versionSummaries(ofPaths: hits.map(\.path))
         #expect(Set(summaries.keys) == hits.map(\.path).pathKeys)
+        // Find Files' own read gives every one of those hits its summary.
+        let found = try await index.searchWithSummaries(matching: "inv", limit: 50)
+        #expect(found.hits == hits)
+        #expect(Set(found.summaries.keys) == hits.map(\.path).pathKeys)
+    }
+
+    // MARK: - The searches' one read
+
+    /// The Restore pane's read: the search and the open backup's membership
+    /// in one transaction, keyed by node ids. It must answer exactly what the
+    /// two path-keyed reads answer apart.
+    @Test("searchWithMembership answers what searchPaths and contains answer apart; a pending, unknown or unlisted snapshot holds nothing")
+    func searchWithMembershipMatchesTwoReads() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let listing = [try snap("s1", t0), try snap("s2", t1)]
+        try index.reconcile(listing: listing)
+        try index.runToDone([
+            "s1": ["/data": true, "/data/k": false, "/data/k-old": false],
+            "s2": ["/data": true, "/data/k": true, "/data/k/k-inner": false],
+        ])
+        let hits = try await index.searchPaths(matching: "k", limit: 10)
+        #expect(hits.map(\.path) == ["/data/k", "/data/k/k-inner", "/data/k-old"])
+        for snapshotID in ["s1", "s2", "ghost"] {
+            let found = try await index.searchWithMembership(matching: "k", limit: 10, inSnapshot: snapshotID)
+            let separate = try await index.contains(paths: hits.map(\.path), inSnapshot: snapshotID)
+            #expect(found.hits == hits && found.hits.map(\.path) == hits.map(\.path), "\(snapshotID)")
+            #expect(found.inSnapshot == separate, "\(snapshotID)")
+        }
+        // Each hit's kind in the open backup, not the search's: /data/k is a
+        // folder in s2, the newest, and a file in s1.
+        #expect(try await index.searchWithMembership(matching: "k", limit: 10, inSnapshot: "s1").inSnapshot
+            == ["/data/k": false, "/data/k-old": false])
+        #expect(try await index.searchWithMembership(matching: "k", limit: 10, inSnapshot: "s2").inSnapshot
+            == ["/data/k": true, "/data/k/k-inner": false])
+
+        // Listed but not read yet: the hits, and no membership.
+        try index.reconcile(listing: listing + [try snap("s3", t2)])
+        let pending = try await index.searchWithMembership(matching: "k", limit: 10, inSnapshot: "s3")
+        #expect(pending.hits.map(\.path) == hits.map(\.path))
+        #expect(pending.inSnapshot.isEmpty)
+        // No longer listed: nothing either.
+        try index.reconcile(listing: [listing[1]])
+        #expect(try await index.searchWithMembership(matching: "k", limit: 10, inSnapshot: "s1").inSnapshot.isEmpty)
+    }
+
+    /// Find Files' read: the search and each hit's summary in one
+    /// transaction. The hits keep `searchPaths`' order, limit and tie rule,
+    /// and every hit has its summary — before housekeeping too.
+    @Test("searchWithSummaries answers what searchPaths and versionSummaries answer apart, every hit summarized")
+    func searchWithSummariesMatchesTwoReads() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let listing = [try snap("s1", t0), try snap("s2", t1)]
+        try index.reconcile(listing: listing)
+        let full: IndexContent = [
+            "/a": true, "/b": true, "/c": true,
+            "/a/report": false, "/b/report": false, "/c/report": false, "/a/report-2": false,
+        ]
+        var later = full
+        later["/a/report"] = nil
+        try index.runToDone(["s1": full, "s2": later])
+
+        func expectAgrees(
+            _ limit: Int, _ label: String, sourceLocation: SourceLocation = #_sourceLocation
+        ) async throws {
+            let hits = try await index.searchPaths(matching: "report", limit: limit)
+            let found = try await index.searchWithSummaries(matching: "report", limit: limit)
+            let separate = try await index.versionSummaries(ofPaths: hits.map(\.path))
+            #expect(found.hits == hits && found.hits.map(\.path) == hits.map(\.path), "\(label)", sourceLocation: sourceLocation)
+            #expect(found.summaries == separate, "\(label)", sourceLocation: sourceLocation)
+            #expect(Set(found.summaries.keys) == hits.map(\.path).pathKeys, "\(label): a hit without its summary",
+                    sourceLocation: sourceLocation)
+        }
+        try await expectAgrees(10, "whole")
+        try await expectAgrees(2, "cut at the limit")
+        #expect(try await index.searchWithSummaries(matching: "report", limit: 2).hits.map(\.path) == ["/a/report", "/b/report"])
+        #expect(try await index.searchWithSummaries(matching: "report", limit: 10).summaries["/a/report"]?.count == 1)
+        let b = try await index.versions(ofPath: "/b/report")
+        let newestB = try #require(b.first)
+        #expect(b.count == 2)
+        #expect(try await index.searchWithSummaries(matching: "report", limit: 10).summaries["/b/report"]
+            == VersionSummary(count: 2, newest: newestB))
+
+        // s1 leaves, no housekeeping: /a/report is held by no listed
+        // snapshot, so it is neither a hit nor a summary.
+        try index.reconcile(listing: [listing[1]])
+        try await expectAgrees(2, "after a death")
+        #expect(try await index.searchWithSummaries(matching: "report", limit: 10).hits.map(\.path)
+            == ["/b/report", "/c/report", "/a/report-2"])
+    }
+
+    /// Find Files lists a hit under its summary's newest snapshot and
+    /// restores it with the hit's kind; read together, the two describe that
+    /// same snapshot — even when equal times make "newest" a tiebreak.
+    @Test("searchWithSummaries' kind is the kind in its summary's newest snapshot, through a time tie")
+    func searchWithSummariesKindMatchesNewest() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        try index.reconcile(listing: [try snap("b-first", t0)])
+        try index.reconcile(listing: [try snap("b-first", t0), try snap("a-second", t0, tags: [planB])])
+        try index.runToDone([
+            "b-first": ["/data": true, "/data/k": false],
+            "a-second": ["/data": true, "/data/k": true],
+        ])
+        let found = try await index.searchWithSummaries(matching: "k", limit: 10)
+        let hit = try #require(found.hits.first { $0.path == "/data/k" })
+        let summary = try #require(found.summaries["/data/k"])
+        #expect(summary.newest.id == "a-second")
+        #expect(summary.count == 2)
+        let inNewest = try await index.contains(paths: ["/data/k"], inSnapshot: summary.newest.id)
+        #expect(inNewest["/data/k"] == hit.isDirectory)
+        #expect(hit.isDirectory)
+    }
+
+    /// The Restore pane asks for membership of every hit, up to the search's
+    /// ceiling, and Find Files for every summary — far past one chunk.
+    @Test("the searches' second question crosses the lookup chunk without losing hits")
+    func searchesCrossChunkBoundary() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        try index.reconcile(listing: [try snap("s1", t0)])
+        let all = (0 ..< SnapshotIndex.lookupChunk + 50).map { "/many/entry-\($0)" }
+        try index.ingestWhole("s1", [IndexedEntry(path: "/many", isDirectory: true)] + all.map {
+            IndexedEntry(path: $0, isDirectory: false)
+        })
+        let held = try await index.searchWithMembership(matching: "entry", limit: all.count + 10, inSnapshot: "s1")
+        #expect(held.hits.map(\.path).pathKeys == all.pathKeys)
+        #expect(Set(held.inSnapshot.keys) == all.pathKeys)
+        #expect(held.inSnapshot.values.allSatisfy { $0 == false })
+        let summarized = try await index.searchWithSummaries(matching: "entry", limit: all.count + 10)
+        #expect(Set(summarized.summaries.keys) == all.pathKeys)
+        #expect(summarized.summaries.values.allSatisfy { $0.count == 1 && $0.newest.id == "s1" })
     }
 
     // MARK: - Housekeeping
@@ -608,6 +779,41 @@ struct SnapshotIndexTests {
         #expect(try index.violations(afterHousekeeping: true).isEmpty)
     }
 
+    @Test("the planner names the full reads that extend a window past a dead end, on either side, and only those")
+    func plannerNamesDeadWindowEnds() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let s1 = try snap("s1", t0), s2 = try snap("s2", t1), s3 = try snap("s3", t2)
+        let content: IndexContent = ["/d": true, "/d/a": false]
+        try index.reconcile(listing: [s1, s2])
+        // A chain's first build: there is no window to extend.
+        #expect(try index.plannedStep() == PlannedStep(step: .full(snapshotID: "s2")))
+        try index.ingestWhole("s2", IndexTestData.ls(content))
+        // Below the window, its end alive: a delta, with no reason to give.
+        #expect(try index.plannedStep() == PlannedStep(step: .delta(snapshotID: "s1", from: "s2")))
+        try index.ingestWhole("s1", IndexTestData.ls(content))
+        #expect(try index.plannedStep() == PlannedStep(step: .done))
+        // hi dies and a backup follows: the forward full compare past a
+        // dead end.
+        try index.reconcile(listing: [s1])
+        try index.housekeeping()
+        try index.reconcile(listing: [s1, s3])
+        #expect(try index.plannedStep() == PlannedStep(step: .full(snapshotID: "s3"), deadWindowEnd: true))
+        #expect(try index.nextStep() == .full(snapshotID: "s3"))
+
+        // lo dies with history still pending below it: the reverse full
+        // compare past a dead end.
+        let reverse = try IndexFixture()
+        try reverse.index.reconcile(listing: [s1, s2, s3])
+        #expect(try reverse.index.plannedStep() == PlannedStep(step: .full(snapshotID: "s3")))
+        try reverse.index.ingestWhole("s3", IndexTestData.ls(content))
+        #expect(try reverse.index.plannedStep() == PlannedStep(step: .delta(snapshotID: "s2", from: "s3")))
+        try reverse.index.ingestDiff(snapshotID: "s2", from: "s3", added: [], removed: [])
+        try reverse.index.reconcile(listing: [s1, s3])
+        try reverse.index.housekeeping()
+        #expect(try reverse.index.plannedStep() == PlannedStep(step: .full(snapshotID: "s1"), deadWindowEnd: true))
+    }
+
     // MARK: - Deltas
 
     @Test("a delta closes the removed, opens the added, and a kind change spelled both ways splits the run")
@@ -618,7 +824,7 @@ struct SnapshotIndexTests {
         try index.ingestWhole("s1", IndexTestData.ls([
             "/data": true, "/data/kept.txt": false, "/data/modified.txt": false, "/data/gone.txt": false, "/data/x": false,
         ]))
-        try index.ingestDelta(
+        try index.ingestDiff(
             snapshotID: "s2", from: "s1",
             added: ["/data/new.txt", "/data/newdir/", "/data/x/"],
             removed: ["/data/gone.txt", "/data/x"]
@@ -637,6 +843,25 @@ struct SnapshotIndexTests {
         #expect(try await index.isComplete())
     }
 
+    /// A preservation pin: the store read a diff path's kind bytewise before
+    /// the path owner moved to Core, so through the old string API this
+    /// would have passed too. A Character test would read this directory as
+    /// a file.
+    @Test("a directory whose name ends in a Prepend character keeps its kind through a delta")
+    func deltaKeepsPrependDirectoryKind() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        _ = try index.reconcile(listing: [try snap("s1", t0), try snap("s2", t1)])
+        try index.ingestWhole("s1", IndexTestData.ls(["/data": true]))
+        try index.ingestDiff(
+            snapshotID: "s2", from: "s1",
+            added: ["/data/new\u{0600}/", "/data/new\u{0600}/h.txt"], removed: []
+        )
+        #expect(try await index.contains(paths: ["/data/new\u{0600}", "/data/new\u{0600}/h.txt"], inSnapshot: "s2")
+            == ["/data/new\u{0600}": true, "/data/new\u{0600}/h.txt": false])
+        #expect(try await index.versionIDs("/data/new\u{0600}") == ["s2"])
+    }
+
     @Test("a delta across a pending snapshot is notAdjacent; one from a base that is not the window end is wrongBase")
     func deltaRefusedAcrossGap() async throws {
         let fixture = try IndexFixture()
@@ -648,17 +873,17 @@ struct SnapshotIndexTests {
         // s2 is unread: a diff s1 -> s3 would assert every unchanged path in
         // it, which a deletion there would contradict.
         #expect(throws: IndexError.notAdjacent("s3")) {
-            try index.ingestDelta(snapshotID: "s3", from: "s1", added: [], removed: [])
+            try index.ingestDiff(snapshotID: "s3", from: "s1", added: [], removed: [])
         }
         // Once s2 has left the listing its seq holds nothing, and the same
         // diff is the adjacent step.
         _ = try index.reconcile(listing: [s1, s3])
-        try index.ingestDelta(snapshotID: "s3", from: "s1", added: [], removed: [])
+        try index.ingestDiff(snapshotID: "s3", from: "s1", added: [], removed: [])
         #expect(try await index.versionIDs("/data/a.txt") == ["s3", "s1"])
 
         _ = try index.reconcile(listing: [s1, s3, s4])
         #expect(throws: IndexError.wrongBase(snapshot: "s4", from: "s1")) {
-            try index.ingestDelta(snapshotID: "s4", from: "s1", added: [], removed: [])
+            try index.ingestDiff(snapshotID: "s4", from: "s1", added: [], removed: [])
         }
     }
 
@@ -681,7 +906,7 @@ struct SnapshotIndexTests {
         try index.ingestWhole("b1", IndexTestData.ls(content))
         // Class 2, history, newest to oldest, from the window bottom.
         #expect(try index.nextStep() == .delta(snapshotID: "a2", from: "a3"))
-        try index.ingestDelta(snapshotID: "a2", from: "a3", added: [], removed: [])
+        try index.ingestDiff(snapshotID: "a2", from: "a3", added: [], removed: [])
         // Class 1, a new backup, before the rest of the history.
         _ = try index.reconcile(listing: a + [b, try snap("a4", t3)])
         #expect(try index.nextStep() == .delta(snapshotID: "a4", from: "a3"))
@@ -719,22 +944,17 @@ struct SnapshotIndexBrowseCacheTests {
         try IndexTestData.snapshot(id, micros: micros)
     }
 
-    private func node(_ path: String, kind: SnapshotNode.Kind = .file, size: Int64? = 1, mtime: Date? = nil) -> CachedListingNode {
-        let name = path.split(separator: "/").last.map(String.init) ?? path
-        return CachedListingNode(SnapshotNode(name: name, type: kind, path: path, size: size, mtime: mtime))
-    }
-
     @Test("a captured listing round-trips with kind, size and mtime intact")
     func listingRoundTrip() async throws {
         let fixture = try IndexFixture()
         let index = fixture.index
         let mtime = Date(timeIntervalSince1970: 5_000)
         let captured: [CachedListingNode] = [
-            node("/src/notes.txt", size: 42, mtime: mtime),
-            node("/src/loop", kind: .symlink, size: nil),
-            node("/src/sub", kind: .dir, size: nil),
+            IndexTestData.cachedNode("/src/notes.txt", size: 42, mtime: mtime),
+            IndexTestData.cachedNode("/src/loop", kind: .symlink, size: nil),
+            IndexTestData.cachedNode("/src/sub", kind: .dir, size: nil),
         ]
-        try index.recordListing(snapshotID: "s1", directory: "/src", nodes: captured)
+        try await index.recordListing(snapshotID: "s1", directory: "/src", nodes: captured)
         let read = try await index.listing(snapshotID: "s1", directory: "/src")
         #expect(read == captured)
         let restored = read?.map(\.snapshotNode) ?? []
@@ -747,22 +967,31 @@ struct SnapshotIndexBrowseCacheTests {
     func emptyListingAndCanonicalKey() async throws {
         let fixture = try IndexFixture()
         let index = fixture.index
-        try index.recordListing(snapshotID: "s1", directory: "/src/empty/", nodes: [])
+        try await index.recordListing(snapshotID: "s1", directory: "/src/empty/", nodes: [])
         #expect(try await index.listing(snapshotID: "s1", directory: "/src/empty") == [])
         #expect(try await index.listing(snapshotID: "s1", directory: "/src/empty/") == [])
-        try index.recordListing(snapshotID: "s1", directory: "/", nodes: [node("/bin")])
+        try await index.recordListing(snapshotID: "s1", directory: "/", nodes: [IndexTestData.cachedNode("/bin")])
         #expect(try await index.listing(snapshotID: "s1", directory: "/")?.count == 1)
         #expect(try await index.listing(snapshotID: "s1", directory: "/src") == nil)
         #expect(try await index.listing(snapshotID: "other", directory: "/src/empty") == nil)
+    }
+
+    @Test("the directory key strips a slash that a Prepend character hides from Character tests")
+    func prependDirectoryKey() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        try await index.recordListing(snapshotID: "s1", directory: "/src/new\u{0600}/", nodes: [IndexTestData.cachedNode("/src/new\u{0600}/h.txt")])
+        #expect(try await index.listing(snapshotID: "s1", directory: "/src/new\u{0600}")?.count == 1)
+        #expect(try await index.listing(snapshotID: "s1", directory: "/src/new\u{0600}/")?.count == 1)
     }
 
     @Test("a repeated capture never overwrites: the first verbatim answer stands")
     func firstCaptureWins() async throws {
         let fixture = try IndexFixture()
         let index = fixture.index
-        try index.recordListing(snapshotID: "s1", directory: "/src", nodes: [node("/src/a.txt")])
-        try index.recordListing(snapshotID: "s1", directory: "/src", nodes: [node("/src/b.txt")])
-        #expect(try await index.listing(snapshotID: "s1", directory: "/src") == [node("/src/a.txt")])
+        try await index.recordListing(snapshotID: "s1", directory: "/src", nodes: [IndexTestData.cachedNode("/src/a.txt")])
+        try await index.recordListing(snapshotID: "s1", directory: "/src", nodes: [IndexTestData.cachedNode("/src/b.txt")])
+        #expect(try await index.listing(snapshotID: "s1", directory: "/src") == [IndexTestData.cachedNode("/src/a.txt")])
     }
 
     @Test("a captured diff round-trips; unknown pairs miss")
@@ -774,7 +1003,7 @@ struct SnapshotIndexBrowseCacheTests {
             CachedDiffChange(ResticDiffChange(path: "/src/gone.txt", modifier: "-")),
             CachedDiffChange(ResticDiffChange(path: "/src/moved/", modifier: "TU")),
         ]
-        try index.recordDiff(olderID: "s1", newerID: "s2", changes: changes)
+        try await index.recordDiff(olderID: "s1", newerID: "s2", changes: changes)
         let read = try await index.diff(olderID: "s1", newerID: "s2")
         #expect(read?.map(\.resticDiffChange) == changes.map(\.resticDiffChange))
         #expect(read?.last?.resticDiffChange.category == .modified)
@@ -787,19 +1016,19 @@ struct SnapshotIndexBrowseCacheTests {
         let fixture = try IndexFixture()
         let index = fixture.index
         _ = try index.reconcile(listing: [try snapshot("s1", 1_000_000), try snapshot("s2", 2_000_000)])
-        try index.recordListing(snapshotID: "s1", directory: "/src", nodes: [node("/src/a.txt")])
-        try index.recordListing(snapshotID: "s2", directory: "/src", nodes: [node("/src/b.txt")])
-        try index.recordDiff(olderID: "s1", newerID: "s2", changes: [])
+        try await index.recordListing(snapshotID: "s1", directory: "/src", nodes: [IndexTestData.cachedNode("/src/a.txt")])
+        try await index.recordListing(snapshotID: "s2", directory: "/src", nodes: [IndexTestData.cachedNode("/src/b.txt")])
+        try await index.recordDiff(olderID: "s1", newerID: "s2", changes: [])
 
-        let died = try index.reconcile(listing: [try snapshot("s2", 2_000_000)])
-        #expect(died.died == ["s1"])
+        try index.reconcile(listing: [try snapshot("s2", 2_000_000)])
+        #expect(try index.snapStates()["s1"] == nil)
         #expect(try await index.listing(snapshotID: "s1", directory: "/src") == nil)
         #expect(try await index.diff(olderID: "s1", newerID: "s2") == nil)
         #expect(try await index.listing(snapshotID: "s2", directory: "/src") != nil)
 
         // The return starts from an empty cache: the rows were reclaimed.
-        let revived = try index.reconcile(listing: [try snapshot("s1", 1_000_000), try snapshot("s2", 2_000_000)])
-        #expect(revived.revived == ["s1"])
+        try index.reconcile(listing: [try snapshot("s1", 1_000_000), try snapshot("s2", 2_000_000)])
+        #expect(try index.snapStates()["s1"] == SnapshotIndex.State.pending)
         #expect(try await index.listing(snapshotID: "s1", directory: "/src") == nil)
     }
 
@@ -808,9 +1037,9 @@ struct SnapshotIndexBrowseCacheTests {
         let fixture = try IndexFixture()
         let index = fixture.index
         _ = try index.reconcile(listing: [try snapshot("s2", 2_000_000)])
-        try index.recordListing(snapshotID: "s2", directory: "/src", nodes: [node("/src/b.txt")])
-        try index.recordListing(snapshotID: "ghost", directory: "/src", nodes: [node("/src/a.txt")])
-        try index.recordDiff(olderID: "ghost", newerID: "s2", changes: [])
+        try await index.recordListing(snapshotID: "s2", directory: "/src", nodes: [IndexTestData.cachedNode("/src/b.txt")])
+        try await index.recordListing(snapshotID: "ghost", directory: "/src", nodes: [IndexTestData.cachedNode("/src/a.txt")])
+        try await index.recordDiff(olderID: "ghost", newerID: "s2", changes: [])
 
         _ = try index.reconcile(listing: [try snapshot("s2", 2_000_000)])
         #expect(try await index.listing(snapshotID: "ghost", directory: "/src") == nil)

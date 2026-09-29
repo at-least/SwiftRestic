@@ -67,33 +67,20 @@ struct IndexBackfillTests {
     /// is involved in building it.
     private func lsContent(_ scene: Scene, _ snapshotID: String) async throws -> [String: Bool] {
         let collector = NodeCollector()
-        let malformed = try await scene.service.walkSnapshot(scene.context, snapshotID: snapshotID) { node in
+        try await scene.service.walkSnapshot(scene.context, snapshotID: snapshotID) { node in
             collector.append(node)
         }
-        #expect(malformed == 0)
         return collector.content
     }
 
-    private final class NodeCollector: @unchecked Sendable {
-        private let lock = NSLock()
-        private var storage: [String: Bool] = [:]
-
-        func append(_ node: SnapshotNode) {
-            lock.lock()
-            storage[node.path] = node.isDirectory
-            lock.unlock()
-        }
-
-        var content: [String: Bool] {
-            lock.lock()
-            defer { lock.unlock() }
-            return storage
-        }
-    }
-
-    /// Every read the consumers make, over every path either snapshot holds,
-    /// against `restic ls` itself: `versions` (newest first), `contains`
-    /// with the kind in each snapshot, and search's kind.
+    /// The two searches the app runs, each answering its second question in
+    /// the same read — Find Files' hit with its summary (count and newest),
+    /// the Restore pane's membership with the kind in each snapshot — over
+    /// every path either snapshot holds, against `restic ls` itself; plus
+    /// the path-keyed oracles the tests hold them to: `versions` across every
+    /// chain (newest first), `contains` with the kind in each snapshot, and
+    /// search's kind. The app's per-chain `versions` read is checked where
+    /// a plan's chain is (`versions(ofPath:inChain:)`, further down).
     private func expectAnswersMatch(
         _ coordinator: IndexCoordinator,
         _ repositoryID: UUID,
@@ -110,14 +97,34 @@ struct IndexBackfillTests {
 
             let kind = newest.content[path] ?? older.content[path]
             let hits = try await coordinator.searchPaths(
-                matching: IndexPathText.basename(of: path), repositoryID: repositoryID, limit: 200
+                matching: ResticPath.basename(of: path), repositoryID: repositoryID, limit: 200
             )
             let hit = hits.first(where: { $0.path == path })
             #expect(hit?.isDirectory == kind, "search kind of \(path)", sourceLocation: sourceLocation)
+
+            // Find Files' read: the same hit, with its summary beside it.
+            let summarized = try await coordinator.searchWithSummaries(
+                matching: ResticPath.basename(of: path), repositoryID: repositoryID, limit: 200
+            )
+            let summary = summarized.summaries[PathKey(path)]
+            #expect(summarized.hits.first(where: { $0.path == path })?.isDirectory == kind,
+                    "summarized search kind of \(path)", sourceLocation: sourceLocation)
+            #expect(summary?.count == expected.count && summary?.newest.id == expected.first,
+                    "summary of \(path)", sourceLocation: sourceLocation)
         }
         for snapshot in [newest, older] {
             let held = try await coordinator.contains(paths: paths, inSnapshot: snapshot.id, repositoryID: repositoryID)
             #expect(held == snapshot.content.byPathKey, "contains in \(snapshot.id)", sourceLocation: sourceLocation)
+            // The Restore pane's read: each path's kind in this snapshot,
+            // from its own search.
+            for path in paths {
+                let found = try await coordinator.searchWithMembership(
+                    matching: ResticPath.basename(of: path), inSnapshot: snapshot.id,
+                    repositoryID: repositoryID, limit: 200
+                )
+                #expect(found.inSnapshot[PathKey(path)] == snapshot.content[path],
+                        "membership of \(path) in \(snapshot.id)", sourceLocation: sourceLocation)
+            }
         }
         let violations = try await coordinator.read(repositoryID) { try $0.invariantViolations() }
         #expect(violations.isEmpty, sourceLocation: sourceLocation)
@@ -252,11 +259,10 @@ struct IndexBackfillTests {
 
         // The collector refuses exactly that diff.
         let collector = DeltaCollector()
-        let malformed = try await scene.service.walkDiff(scene.context, olderID: firstID, newerID: secondID) { change in
+        try await scene.service.walkDiff(scene.context, olderID: firstID, newerID: secondID) { change in
             collector.consume(change)
         }
-        #expect(malformed == 0)
-        let refusal = #expect(throws: IncompleteStream.self) { try collector.delta(malformedLines: malformed) }
+        let refusal = #expect(throws: IncompleteStream.self) { try collector.delta() }
         if case .typeChange = refusal {} else {
             Issue.record("expected a typeChange refusal, got \(String(describing: refusal))")
         }
@@ -330,13 +336,11 @@ struct IndexBackfillTests {
 
     @Test("a deleted repository's index file goes with it")
     func dropRemovesTheFile() async throws {
-        let configDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticIndexDrop-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: configDirectory) }
+        let scene = try CoordinatorScene("SwiftResticIndexDrop")
+        defer { scene.remove() }
 
-        let repositoryID = UUID()
-        let coordinator = IndexCoordinator(directory: configDirectory)
+        let repositoryID = scene.repositoryID
+        let coordinator = scene.coordinator
         let file = coordinator.fileURL(for: repositoryID)
         await coordinator.reconcile(repositoryID: repositoryID, snapshots: [], generation: 1)
         #expect(FileManager.default.fileExists(atPath: file.path))
@@ -354,21 +358,19 @@ struct IndexBackfillTests {
 
     @Test("a reset repository reconciles again — only removal is tombstoned")
     func resetAllowsReconcile() async throws {
-        let configDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticIndexReset-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: configDirectory) }
+        let scene = try CoordinatorScene("SwiftResticIndexReset")
+        defer { scene.remove() }
 
-        let repositoryID = UUID()
-        let coordinator = IndexCoordinator(directory: configDirectory)
+        let repositoryID = scene.repositoryID
+        let coordinator = scene.coordinator
         let file = coordinator.fileURL(for: repositoryID)
         await coordinator.reconcile(repositoryID: repositoryID, snapshots: [], generation: 1)
 
         // The rebuild hatch throws the index away without tombstoning: the
         // repository still exists, so the reconcile that follows must land
         // and recreate the store. Under the SAME generation: a rebuild
-        // re-sends the listing the model holds, whose number was already
-        // applied — the reset must forget that, or the rebuild never lands.
+        // re-sends the listing the model holds, under the number the old
+        // store already took. The fresh store has taken none, so it lands.
         await coordinator.resetRepository(repositoryID: repositoryID)
         #expect(!FileManager.default.fileExists(atPath: file.path))
         await coordinator.reconcile(repositoryID: repositoryID, snapshots: [], generation: 1)
@@ -376,60 +378,9 @@ struct IndexBackfillTests {
     }
 }
 
-/// Scaffolding for the coordinator suites that run without restic: a
-/// temporary configuration folder, snapshots of two plans, and the scripted
-/// `MockResticClient` standing in for `ls` and `diff`.
-private struct CoordinatorScene {
-    let root: URL
-    let coordinator: IndexCoordinator
-    let repositoryID = UUID()
-    let context = RepositoryContext(repository: Repository(), password: "x")
-
-    init(_ label: String) throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(label)-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        coordinator = IndexCoordinator(directory: root)
-    }
-
-    func remove() {
-        try? FileManager.default.removeItem(at: root)
-    }
-
-    /// A snapshot of plan A (or B) at `seconds` past the epoch.
-    static func snapshot(_ id: String, _ seconds: Int64, plan: String = IndexTestData.planA) throws -> Snapshot {
-        try IndexTestData.snapshot(id, micros: seconds * 1_000_000, tags: [plan])
-    }
-
-    /// `/data`, one file named after the snapshot, and one file every
-    /// snapshot holds.
-    static func content(_ id: String) -> [String: Bool] {
-        ["/data": true, "/data/\(id).txt": false, "/data/common.txt": false]
-    }
-
-    func reconcile(_ listing: [Snapshot], _ generation: UInt64) async {
-        await coordinator.reconcile(repositoryID: repositoryID, snapshots: listing, generation: generation)
-    }
-
-    func backfill(_ client: MockResticClient) async {
-        await coordinator.runBackfill(repositoryID: repositoryID, service: client, context: context)
-    }
-
-    func versions(_ path: String) async throws -> [String] {
-        try await coordinator.versions(ofPath: path, repositoryID: repositoryID).map(\.id)
-    }
-
-    var report: BackfillReport? {
-        get async { await coordinator.lastBackfillReport(repositoryID: repositoryID) }
-    }
-
-    var violations: [String] {
-        get async throws { try await coordinator.read(repositoryID) { try $0.invariantViolations() } }
-    }
-}
-
 /// A lock-guarded flag for the concurrency tests: set on one side, polled on
 /// the other.
-private final class Flag: @unchecked Sendable {
+final class Flag: @unchecked Sendable {
     private let lock = NSLock()
     private var value = false
 
@@ -463,14 +414,52 @@ private final class Counter: @unchecked Sendable {
     }
 }
 
-/// Polls `condition` every 5 ms for up to `seconds`; true once it held.
-private func eventually(within seconds: Double, _ condition: () async -> Bool) async -> Bool {
+/// Polls `condition` every 5 ms for up to `seconds`; true once it held. Runs
+/// on the caller's actor, so a main-actor test may read main-actor state.
+func eventually(
+    within seconds: Double,
+    isolation: isolated (any Actor)? = #isolation,
+    _ condition: () async -> Bool
+) async -> Bool {
     let deadline = Date().addingTimeInterval(seconds)
     while Date() < deadline {
         if await condition() { return true }
         try? await Task.sleep(for: .milliseconds(5))
     }
     return await condition()
+}
+
+extension IndexCoordinator {
+    /// The indexed snapshots holding one path across every chain, newest
+    /// first: the store's oracle read, through the coordinator's lease.
+    /// Test-only — the app always asks within a plan's chain
+    /// (`versions(ofPath:inChain:repositoryID:)`).
+    nonisolated func versions(ofPath path: String, repositoryID: UUID) async throws -> [IndexVersion] {
+        try await read(repositoryID) { try await $0.versions(ofPath: path) }
+    }
+
+    /// Per path: how many indexed snapshots hold it, and the newest — the
+    /// store's path-keyed oracle, through the coordinator's lease.
+    /// Test-only — Find Files reads each hit's summary inside its search
+    /// (`searchWithSummaries(matching:repositoryID:limit:)`).
+    nonisolated func versionSummaries(ofPaths paths: [String], repositoryID: UUID) async throws -> [PathKey: VersionSummary] {
+        try await read(repositoryID) { try await $0.versionSummaries(ofPaths: paths) }
+    }
+
+    /// Which of `paths` one snapshot holds, each with its kind there — the
+    /// store's path-keyed oracle, through the coordinator's lease.
+    /// Test-only — the Restore pane reads the open backup's membership
+    /// inside its search (`searchWithMembership(matching:inSnapshot:repositoryID:limit:)`).
+    nonisolated func contains(paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
+        try await read(repositoryID) { try await $0.contains(paths: paths, inSnapshot: snapshotID) }
+    }
+
+    /// Basename search across every indexed path, the hits alone.
+    /// Test-only — both searches the app runs answer their second question
+    /// in the same read (`searchWithMembership`, `searchWithSummaries`).
+    nonisolated func searchPaths(matching query: String, repositoryID: UUID, limit: Int) async throws -> [SearchHit] {
+        try await read(repositoryID) { try await $0.searchPaths(matching: query, limit: limit) }
+    }
 }
 
 /// The coordinator's tombstone contract, without restic: once a repository
@@ -480,34 +469,41 @@ private func eventually(within seconds: Double, _ condition: () async -> Bool) a
 struct IndexCoordinatorTombstoneTests {
     @Test("versions for a dropped repository throw repositoryRemoved")
     func droppedRepositoryThrows() async throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticTombstone-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: base) }
-        let coordinator = IndexCoordinator(directory: base)
+        let scene = try CoordinatorScene("SwiftResticTombstone")
+        defer { scene.remove() }
+        let coordinator = scene.coordinator
+        let repositoryID = scene.repositoryID
+        await scene.reconcile([], 1)
 
-        var repository = Repository()
-        repository.name = "Doomed"
-        repository.kind = .local
-        repository.localPath = base.path
-        await coordinator.reconcile(repositoryID: repository.id, snapshots: [], generation: 1)
-
-        await coordinator.dropRepository(repositoryID: repository.id)
-        // The two reads the searches make after their search: Find Files'
-        // summaries, and the Restore pane's membership in the open backup.
+        await coordinator.dropRepository(repositoryID: repositoryID)
+        // The path-keyed reads the tests hold the searches to: the
+        // summaries, and the membership in one backup.
         do {
-            _ = try await coordinator.versionSummaries(ofPaths: ["/data/a"], repositoryID: repository.id)
+            _ = try await coordinator.versionSummaries(ofPaths: ["/data/a"], repositoryID: repositoryID)
             Issue.record("expected repositoryRemoved, got a result")
         } catch IndexError.repositoryRemoved {
             // The answer a search must surface, never read as "no versions".
         }
         do {
-            _ = try await coordinator.contains(paths: ["/data/a"], inSnapshot: "s1", repositoryID: repository.id)
+            _ = try await coordinator.contains(paths: ["/data/a"], inSnapshot: "s1", repositoryID: repositoryID)
+            Issue.record("expected repositoryRemoved, got a result")
+        } catch IndexError.repositoryRemoved {}
+        // The two searches the app runs, each reading that answer inside the
+        // search: Find Files' with its summaries, and the Restore pane's
+        // with the open backup's membership.
+        do {
+            _ = try await coordinator.searchWithSummaries(matching: "a", repositoryID: repositoryID, limit: 10)
+            Issue.record("expected repositoryRemoved, got a result")
+        } catch IndexError.repositoryRemoved {}
+        do {
+            _ = try await coordinator.searchWithMembership(
+                matching: "a", inSnapshot: "s1", repositoryID: repositoryID, limit: 10
+            )
             Issue.record("expected repositoryRemoved, got a result")
         } catch IndexError.repositoryRemoved {}
         // The caches read a removed repository as a miss, and recreate nothing.
-        #expect(await coordinator.cachedListing(snapshotID: "s1", directory: "/", repositoryID: repository.id) == nil)
-        #expect(!FileManager.default.fileExists(atPath: coordinator.fileURL(for: repository.id).path))
+        #expect(await coordinator.cachedListing(snapshotID: "s1", directory: "/", repositoryID: repositoryID) == nil)
+        #expect(!FileManager.default.fileExists(atPath: coordinator.fileURL(for: repositoryID).path))
     }
 
     @Test("N10: a file with another schema is deleted and rebuilt on open: empty, not complete until a listing lands, and it indexes again")
@@ -537,12 +533,13 @@ struct IndexCoordinatorTombstoneTests {
     }
 }
 
-/// The coordinator's listing-generation guard, without restic. Two
-/// refreshes of one repository hand their listings to the index through
+/// The listing-generation guard, through the coordinator, without restic.
+/// Two refreshes of one repository hand their listings to the index through
 /// separate unstructured hops, so an older listing can land after a newer
 /// one; applied, it would record as dead every snapshot the newer listing
 /// brought in. The model numbers each listing before it is read, and the
-/// coordinator drops any listing not newer than the last it applied.
+/// store drops, under its writer, any listing not newer than the last it
+/// took.
 @Suite("index coordinator listing generations")
 struct IndexCoordinatorGenerationTests {
     @Test("N6: a listing older than the last one applied is dropped, and a newer one still lands")
@@ -575,6 +572,55 @@ struct IndexCoordinatorGenerationTests {
         await scene.reconcile([older], 6)
         #expect(try await scene.versions(path) == ["older"])
     }
+
+    /// The model hands out one counter's numbers to every repository, so a
+    /// repository's listing can carry a lower number than one another
+    /// repository's index already took. Numbers compare within one
+    /// repository only.
+    @Test("a listing numbered below another repository's last applied listing still lands, and each repository keeps its own order")
+    func generationsCompareWithinOneRepository() async throws {
+        let scene = try CoordinatorScene("SwiftResticGenerationsPerRepository")
+        defer { scene.remove() }
+        let other = UUID()
+        await scene.coordinator.reconcile(repositoryID: other, snapshots: [], generation: 7)
+        #expect(try await scene.coordinator.isComplete(repositoryID: other))
+
+        // Lower than 7, and this repository's first: it lands. A file no
+        // listing has reached is not complete, so dropping it would show.
+        await scene.reconcile([], 3)
+        #expect(try await scene.coordinator.isComplete(repositoryID: scene.repositoryID))
+
+        // The other repository still orders its own listings: an older
+        // number of its own is dropped, so the snapshot it names never
+        // becomes pending.
+        await scene.coordinator.reconcile(repositoryID: other, snapshots: [try CoordinatorScene.snapshot("late", 1)], generation: 5)
+        #expect(try await scene.coordinator.isComplete(repositoryID: other))
+    }
+
+    @Test("N6 with no queue: reconciles in flight at once leave the newest listing, whatever order they reach the writer in")
+    func concurrentListingsLeaveTheNewest() async throws {
+        let scene = try CoordinatorScene("SwiftResticGenerationsConcurrent")
+        defer { scene.remove() }
+        var generation: UInt64 = 0
+        for round in 0 ..< 20 {
+            // Listing k holds one snapshot more than listing k - 1, so each
+            // number names a different set, and the newest names them all.
+            let listings = try (0 ..< 6).map { k in
+                try (0 ... k).map { try CoordinatorScene.snapshot("r\(round)-s\($0)", Int64($0 + 1)) }
+            }
+            let base = generation
+            await withTaskGroup(of: Void.self) { group in
+                for k in listings.indices.shuffled() {
+                    group.addTask { await scene.reconcile(listings[k], base + UInt64(k) + 1) }
+                }
+            }
+            generation = base + UInt64(listings.count)
+            // An older listing applied last would have dropped the newer
+            // snapshots it never saw.
+            let listed = try await scene.coordinator.read(scene.repositoryID) { try $0.snapStates() }
+            #expect(Set(listed.keys) == Set(listings[5].map(\.id)), "round \(round)")
+        }
+    }
 }
 
 /// The launch sweep of orphaned index files, without restic: which files it
@@ -583,16 +629,15 @@ struct IndexCoordinatorGenerationTests {
 struct IndexOrphanSweepTests {
     @Test("only unconfigured UUID-named files in index/ go; the configuration folder's own .sqlite files stay")
     func sweepTouchesOnlyOrphansInIndexDirectory() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticOrphanSweep-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let coordinator = IndexCoordinator(directory: root)
+        let scene = try CoordinatorScene("SwiftResticOrphanSweep")
+        defer { scene.remove() }
+        let root = scene.root
+        let coordinator = scene.coordinator
         let fileManager = FileManager.default
 
         // A configured repository and an unconfigured one, both with an open
         // store — an open store is never swept, whatever the list says.
-        let configured = UUID()
+        let configured = scene.repositoryID
         let openButUnlisted = UUID()
         await coordinator.reconcile(repositoryID: configured, snapshots: [], generation: 1)
         await coordinator.reconcile(repositoryID: openButUnlisted, snapshots: [], generation: 1)
@@ -600,6 +645,9 @@ struct IndexOrphanSweepTests {
         // An orphan with both sidecars, and names that are not index files.
         let orphan = UUID()
         let index = coordinator.indexDirectory
+        // SQLite's own names for a database's files, spelled here rather than
+        // read from `IndexCoordinator`: the sweep must match what SQLite
+        // writes, and a misspelling shared with the test would pass unseen.
         let orphanFiles = ["", "-wal", "-shm"].map { index.appendingPathComponent(orphan.uuidString + ".sqlite" + $0) }
         let strangers = ["notes.sqlite", "readme.txt", orphan.uuidString + ".sqlite.bak"].map { index.appendingPathComponent($0) }
         // The index's earlier home: `<configDir>/<uuid>.sqlite`, for the
@@ -779,6 +827,56 @@ struct IndexCoordinatorBackfillTests {
         #expect(client.walkCounts["a3"] == 3)
     }
 
+    @Test("a release that fails takes no number and leaves the launch's release to the next reconcile, which makes it")
+    func failedReleaseIsRetried() async throws {
+        let scene = try CoordinatorScene("SwiftResticFailedRelease")
+        defer { scene.remove() }
+        let client = MockResticClient()
+            .onListings(["a1": CoordinatorScene.content("a1"), "a2": CoordinatorScene.content("a2")])
+            .onUnreadable(["a2"])
+        // Launch 1: a2 fails `unreadableAfter` passes and is set aside.
+        let listing = [try CoordinatorScene.snapshot("a1", 10), try CoordinatorScene.snapshot("a2", 20)]
+        await scene.reconcile(listing, 1)
+        for _ in 0 ..< IndexCoordinator.unreadableAfter { await scene.backfill(client) }
+        #expect(try await scene.coordinator.read(scene.repositoryID) { try $0.snapStates() } == ["a1": 1, "a2": 2])
+
+        // Launch 2's first reconcile: its release fails on the writer.
+        let relaunched = IndexCoordinator(directory: scene.root)
+        let store = try await relaunched.read(scene.repositoryID) { $0 }
+        try await store.pool.writeWithoutTransaction {
+            try $0.execute(sql: "CREATE TEMP TRIGGER scripted_failure BEFORE UPDATE ON snap BEGIN SELECT RAISE(ABORT, 'scripted'); END")
+        }
+        await relaunched.reconcile(repositoryID: scene.repositoryID, snapshots: listing, generation: 1)
+        #expect(try store.snapStates() == ["a1": 1, "a2": 2])
+        try await store.pool.writeWithoutTransaction { try $0.execute(sql: "DROP TRIGGER temp.scripted_failure") }
+
+        // The next reconcile releases a2, and its listing — numbered like the
+        // failed one, which took no number — lands with a new backup in it.
+        let withBackup = listing + [try CoordinatorScene.snapshot("a3", 30)]
+        await relaunched.reconcile(repositoryID: scene.repositoryID, snapshots: withBackup, generation: 1)
+        #expect(try store.snapStates() == ["a1": 1, "a2": 0, "a3": 0])
+    }
+
+    @Test("a pass cancelled while its planner read waits for a reader starts no restic step")
+    func cancelDuringPlanningStartsNoStep() async throws {
+        let scene = try CoordinatorScene("SwiftResticCancelPlanning")
+        defer { scene.remove() }
+        let client = MockResticClient().onListings(["a1": CoordinatorScene.content("a1")])
+        await scene.reconcile([try CoordinatorScene.snapshot("a1", 10)], 1)
+        // Every reader taken, so the pass's planner read waits for one.
+        let hold = ReaderHold(try await scene.coordinator.read(scene.repositoryID) { $0 })
+        #expect(await eventually(within: 10) { hold.isHeld })
+        let pass = Task { await scene.backfill(client) }
+        // Long enough for the pass to reach its planner read and park there.
+        try await Task.sleep(for: .milliseconds(300))
+        pass.cancel()
+        hold.release()
+        await pass.value
+        // The read answered `.full(a1)` after the cancel; nothing ran it.
+        #expect(client.walkCounts.isEmpty)
+        #expect(client.diffCounts.isEmpty)
+    }
+
     @Test("a dead window end is counted: the next backup is read in full, and the answers stay exact")
     func deadWindowEndCounted() async throws {
         let scene = try CoordinatorScene("SwiftResticDeadEnd")
@@ -845,6 +943,40 @@ struct IndexCoordinatorBackfillTests {
         await scene.backfill(client)
         #expect(await scene.report?.deltas == 1)
         #expect(try await scene.versions("/data/common.txt") == ["s2", "s1"])
+    }
+
+    @Test("a kind change a diff spells as a bare add is refused by the index, counted, and read in full")
+    func kindChangeSpelledAsAddFallsBack() async throws {
+        let scene = try CoordinatorScene("SwiftResticKindChanged")
+        defer { scene.remove() }
+        // k is a file in s1 and a folder in s2. The scripted diff says only
+        // "+ k/" and "+ k/f" — no `T`, no removal of the file — which the
+        // collector cannot catch and the index refuses (`kindChanged`).
+        let client = MockResticClient()
+            .onListings([
+                "s1": ["/data": true, "/data/k": false],
+                "s2": ["/data": true, "/data/k": true, "/data/k/f": false],
+            ])
+            .onDiffLines(["s2": [
+                ResticDiffChange(path: "/data/k/", modifier: "+"),
+                ResticDiffChange(path: "/data/k/f", modifier: "+"),
+            ]])
+        let s1 = try CoordinatorScene.snapshot("s1", 1)
+        await scene.reconcile([s1], 1)
+        await scene.backfill(client)
+        await scene.reconcile([s1, try CoordinatorScene.snapshot("s2", 2)], 2)
+        await scene.backfill(client)
+
+        let report = await scene.report
+        #expect(report?.kindChanged == 1)
+        #expect(report?.typeChange == 0 && report?.diffFailed == 0)
+        #expect(report?.deltas == 0 && report?.fulls == 1)
+        #expect(client.diffCounts["s2"] == 1 && client.walkCounts["s2"] == 1)
+        let held = try await scene.coordinator.contains(
+            paths: ["/data/k", "/data/k/f"], inSnapshot: "s2", repositoryID: scene.repositoryID
+        )
+        #expect(held == ["/data/k": true, "/data/k/f": false].byPathKey)
+        #expect(try await scene.violations.isEmpty)
     }
 
     @Test("a snapshot that dies and returns mid-stream is refused as stale, planned again, and read from the top")
@@ -981,6 +1113,18 @@ struct IndexCoordinatorBackfillTests {
         try await Task.sleep(for: .milliseconds(100))
         #expect(client.walkCounts == ["s2": 1])
     }
+
+    @Test("the scripted ls streams restic's order: depth-first, siblings by their bytes")
+    func scriptedListingIsResticOrder() async throws {
+        let client = MockResticClient().onListings(["s1": ["/data": true, "/data/x": false, "/data.bak": false]])
+        let collector = NodeCollector()
+        try await client.walkSnapshot(RepositoryContext(repository: Repository(), password: "x"), snapshotID: "s1") { node in
+            collector.append(node)
+        }
+        // Components ["data"] < ["data", "x"] < ["data.bak"]; String order,
+        // the mock's old `keys.sorted()`, puts "/data.bak" second.
+        #expect(collector.paths == ["/data", "/data/x", "/data.bak"])
+    }
 }
 
 /// What a reset and the reads do to each other, and that the reads never
@@ -997,7 +1141,8 @@ struct IndexCoordinatorConcurrencyTests {
         let listing = [try CoordinatorScene.snapshot("s1", 1)]
         await scene.reconcile(listing, 1)
         await scene.backfill(client)
-        await coordinator.cacheListing(snapshotID: "s1", directory: "/data", nodes: [], repositoryID: repositoryID)
+        coordinator.cacheListing(snapshotID: "s1", directory: "/data", nodes: [], repositoryID: repositoryID)
+        await coordinator.cacheWritesSettled()
         #expect(await coordinator.cachedListing(snapshotID: "s1", directory: "/data", repositoryID: repositoryID) == [])
 
         // A read that is running when the reset starts, held open.
@@ -1100,18 +1245,8 @@ struct IndexCoordinatorConcurrencyTests {
 
         // Hold the index's one writer from outside, as a long full compare
         // would.
-        let store = try await coordinator.read(repositoryID) { $0 }
-        let holding = Flag()
-        let releaseWriter = Flag()
-        let writerFreed = Flag()
-        DispatchQueue.global().async {
-            store.pool.writeWithoutTransaction { _ in
-                holding.set()
-                while !releaseWriter.isSet { usleep(2_000) }
-            }
-            writerFreed.set()
-        }
-        #expect(await eventually(within: 10) { holding.isSet })
+        let hold = WriterHold(try await coordinator.read(repositoryID) { $0 })
+        #expect(await eventually(within: 10) { hold.isHeld })
 
         // A reconcile now waits on the writer, off the actor.
         let reconciled = Flag()
@@ -1129,24 +1264,34 @@ struct IndexCoordinatorConcurrencyTests {
             let hits = try await coordinator.searchPaths(matching: "f1", repositoryID: repositoryID, limit: 5)
             let summaries = try await coordinator.versionSummaries(ofPaths: ["/data/f7.txt"], repositoryID: repositoryID)
             let held = try await coordinator.contains(paths: ["/data/f7.txt"], inSnapshot: "s1", repositoryID: repositoryID)
+            // The two searches the app runs: the Restore pane's and Find Files'.
+            let membership = try await coordinator.searchWithMembership(
+                matching: "f1", inSnapshot: "s1", repositoryID: repositoryID, limit: 5
+            )
+            let summarized = try await coordinator.searchWithSummaries(matching: "f7", repositoryID: repositoryID, limit: 1)
             let complete = try await coordinator.isComplete(repositoryID: repositoryID)
             answered.set()
-            return (versions, hits.count, summaries["/data/f7.txt"]?.count, held, complete)
+            return (versions, hits.count, summaries["/data/f7.txt"]?.count, held, membership, summarized, complete)
         }
         let answeredWhileHeld = await eventually(within: 10) { answered.isSet }
         let reconcileWaited = !reconciled.isSet
-        releaseWriter.set()
+        hold.release()
         #expect(answeredWhileHeld, "reads waited for the writer or the actor")
         #expect(reconcileWaited, "the writer was not actually held")
 
-        let (versions, hitCount, summaryCount, held, complete) = try await reads.value
+        let (versions, hitCount, summaryCount, held, membership, summarized, complete) = try await reads.value
         #expect(versions == ["s1"])
         #expect(hitCount == 5)
         #expect(summaryCount == 1)
         #expect(held == ["/data/f7.txt": false])
+        #expect(membership.hits.count == 5)
+        #expect(membership.inSnapshot.count == 5)
+        #expect(membership.inSnapshot.values.allSatisfy { $0 == false })
+        #expect(summarized.hits.map(\.path) == ["/data/f7.txt"])
+        #expect(summarized.summaries["/data/f7.txt"]?.count == 1)
         #expect(complete)
         await reconcile.value
-        #expect(await eventually(within: 10) { writerFreed.isSet })
+        #expect(await eventually(within: 10) { hold.isFreed })
         // The reconcile landed once the writer was free: s2 is pending now.
         #expect(try await !coordinator.isComplete(repositoryID: repositoryID))
     }
@@ -1164,14 +1309,20 @@ struct IndexCoordinatorConcurrencyTests {
         await scene.backfill(client)
 
         // Every one of the 30k names matches, and the limit lets the walk
-        // visit them all: long enough to be cancelled mid-run.
+        // visit them all: long enough to be cancelled mid-run. The Restore
+        // pane's read — the one each keystroke cancels.
         let start = Date()
-        let all = try await coordinator.searchPaths(matching: "f", repositoryID: repositoryID, limit: 100_000)
+        let all = try await coordinator.searchWithMembership(
+            matching: "f", inSnapshot: "s1", repositoryID: repositoryID, limit: 100_000
+        )
         let whole = Date().timeIntervalSince(start)
-        #expect(all.count == 30_000)
+        #expect(all.hits.count == 30_000)
+        #expect(all.inSnapshot.count == 30_000)
 
         let search = Task {
-            try await coordinator.searchPaths(matching: "f", repositoryID: repositoryID, limit: 100_000)
+            try await coordinator.searchWithMembership(
+                matching: "f", inSnapshot: "s1", repositoryID: repositoryID, limit: 100_000
+            )
         }
         try await Task.sleep(for: .seconds(whole / 4))
         let cancelledAt = Date()
@@ -1184,5 +1335,142 @@ struct IndexCoordinatorConcurrencyTests {
             print("cancelled search: whole run \(String(format: "%.3f", whole))s, stopped \(String(format: "%.3f", latency))s after cancel")
             #expect(latency < max(whole / 2, 0.05))
         }
+    }
+
+    @Test(
+        "a read that meets a reset's gate parks until it reopens: cancelled, it throws CancellationError at once while the reset still runs; uncancelled, it answers from the fresh file",
+        .timeLimit(.minutes(1))
+    )
+    func readsParkAtTheGate() async throws {
+        let scene = try CoordinatorScene("SwiftResticGateWaiters")
+        defer { scene.remove() }
+        let repositoryID = scene.repositoryID
+        let coordinator = scene.coordinator
+        let client = MockResticClient().onListings(["s1": CoordinatorScene.content("s1")])
+        await scene.reconcile([try CoordinatorScene.snapshot("s1", 1)], 1)
+        await scene.backfill(client)
+        coordinator.cacheListing(snapshotID: "s1", directory: "/data", nodes: [], repositoryID: repositoryID)
+        await coordinator.cacheWritesSettled()
+
+        // A read held open keeps the reset at its drain, the gate closed.
+        let entered = Flag()
+        let release = Flag()
+        let holding = Task {
+            try await coordinator.read(repositoryID) { _ in
+                entered.set()
+                while !release.isSet { try await Task.sleep(for: .milliseconds(5)) }
+            }
+        }
+        #expect(await eventually(within: 10) { entered.isSet })
+        let resetDone = Flag()
+        let reset = Task {
+            await coordinator.resetRepository(repositoryID: repositoryID)
+            resetDone.set()
+        }
+        // The gate is closed once the caches read as a miss.
+        #expect(await eventually(within: 10) {
+            await coordinator.cachedListing(snapshotID: "s1", directory: "/data", repositoryID: repositoryID) == nil
+        })
+
+        let cancelledDone = Flag()
+        let cancelled = Task {
+            defer { cancelledDone.set() }
+            return try await coordinator.isComplete(repositoryID: repositoryID)
+        }
+        let waitingDone = Flag()
+        let waiting = Task {
+            defer { waitingDone.set() }
+            return try await coordinator.versions(ofPath: "/data/s1.txt", repositoryID: repositoryID)
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(!cancelledDone.isSet && !waitingDone.isSet, "a read passed the reset's gate")
+
+        // Cancelled before it can park, a read stops at once too: it asks
+        // only once it is cancelled, so its cancellation lands before its
+        // waiter could be queued, whatever the scheduler does.
+        let earlyDone = Flag()
+        let early = Task {
+            defer { earlyDone.set() }
+            while !Task.isCancelled { await Task.yield() }
+            return try await coordinator.isComplete(repositoryID: repositoryID)
+        }
+        early.cancel()
+        let earlyStopped = await eventually(within: 2) { earlyDone.isSet }
+
+        cancelled.cancel()
+        let stoppedPromptly = await eventually(within: 2) { cancelledDone.isSet }
+        let resetStillHeld = !resetDone.isSet
+        let otherStillWaiting = !waitingDone.isSet
+        release.set()
+        #expect(earlyStopped, "a read cancelled before it parked waited for the reset")
+        #expect(stoppedPromptly, "a read cancelled at the gate waited for the reset")
+        #expect(resetStillHeld, "the reset was not actually held")
+        #expect(otherStillWaiting, "the uncancelled read passed the gate early")
+        // Awaited only once they ended: a lost wake-up fails the checks
+        // above rather than hanging here.
+        if earlyStopped { await #expect(throws: CancellationError.self) { try await early.value } }
+        if stoppedPromptly { await #expect(throws: CancellationError.self) { try await cancelled.value } }
+
+        try await holding.value
+        await reset.value
+        let answered = await eventually(within: 10) { waitingDone.isSet }
+        #expect(answered, "the read parked at the gate was not woken when the reset ended")
+        // It answered from the fresh, empty file.
+        if answered { #expect(try await waiting.value.isEmpty) }
+    }
+
+    @Test(
+        "a browse-cache capture is handed over, not awaited: settled waits for the writer; shutdown waits for captures handed over before it and drops later ones",
+        .timeLimit(.minutes(1))
+    )
+    func cacheCapturesAreHandedOver() async throws {
+        let scene = try CoordinatorScene("SwiftResticCacheHandOver")
+        defer { scene.remove() }
+        let repositoryID = scene.repositoryID
+        let coordinator = scene.coordinator
+        await scene.reconcile([], 1)
+        let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt", size: 1, mtime: nil)
+
+        // The writer held, as a backfill's chunk holds it: the captures
+        // return at once (they are synchronous), and only settling waits.
+        let hold = WriterHold(try await coordinator.read(repositoryID) { $0 })
+        #expect(await eventually(within: 10) { hold.isHeld })
+        coordinator.cacheListing(snapshotID: "s1", directory: "/src", nodes: [node], repositoryID: repositoryID)
+        coordinator.cacheDiff(
+            olderID: "s0", newerID: "s1",
+            changes: [ResticDiffChange(path: "/src/a.txt", modifier: "+")], repositoryID: repositoryID
+        )
+        let settled = Flag()
+        let settling = Task {
+            await coordinator.cacheWritesSettled()
+            settled.set()
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        let settleWaited = !settled.isSet
+        hold.release()
+        #expect(settleWaited, "settling did not wait for the queued writes")
+        await settling.value
+        #expect(await coordinator.cachedListing(snapshotID: "s1", directory: "/src", repositoryID: repositoryID)?.map(\.path) == ["/src/a.txt"])
+        #expect(await coordinator.cachedDiff(olderID: "s0", newerID: "s1", repositoryID: repositoryID)?.count == 1)
+
+        // Quit: a capture handed over before shutdown lands before it
+        // returns; one offered after is dropped, never started.
+        let hold2 = WriterHold(try await coordinator.read(repositoryID) { $0 })
+        #expect(await eventually(within: 10) { hold2.isHeld })
+        coordinator.cacheListing(snapshotID: "s2", directory: "/src", nodes: [node], repositoryID: repositoryID)
+        let shutDown = Flag()
+        let shutdown = Task {
+            await coordinator.shutdown()
+            shutDown.set()
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        let shutdownWaited = !shutDown.isSet
+        coordinator.cacheListing(snapshotID: "s3", directory: "/src", nodes: [node], repositoryID: repositoryID)
+        hold2.release()
+        await shutdown.value
+        #expect(shutdownWaited, "shutdown returned with a capture still queued")
+        #expect(await coordinator.cachedListing(snapshotID: "s2", directory: "/src", repositoryID: repositoryID) != nil)
+        await coordinator.cacheWritesSettled()
+        #expect(await coordinator.cachedListing(snapshotID: "s3", directory: "/src", repositoryID: repositoryID) == nil)
     }
 }

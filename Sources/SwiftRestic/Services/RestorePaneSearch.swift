@@ -17,9 +17,8 @@ struct RestorePaneSearch: Equatable, Sendable {
     /// repository: the hits the open backup lacks. The search returns only
     /// paths some indexed backup holds, so no second read is needed to
     /// place them — a path whose every version was pruned is never a hit.
-    /// (One that loses its last version between the search and the
-    /// membership read still counts here: off by one in a note, never a
-    /// row.)
+    /// The search and the membership are one read of the index, so the
+    /// count is exact for the index as that read saw it.
     let elsewhereCount: Int
     /// The index stopped at its hit ceiling, so both parts may be short.
     let isTruncated: Bool

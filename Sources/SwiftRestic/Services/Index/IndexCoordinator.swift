@@ -13,12 +13,16 @@ import Foundation
 /// - Reads are `nonisolated`. They take the store from `StoreRegistry` and
 ///   run on the pool's readers, so a search never queues behind a backfill
 ///   or another repository's reconcile.
-/// - Writes are synchronous store calls made through `offActor`. GRDB's one
-///   writer connection serialises them; a multi-second full compare holds
-///   that writer, never this actor.
-/// - The actor keeps the bookkeeping: listing generations, the backfill
-///   tasks, the per-pass skip sets and failure counts, and the order of the
-///   steps that close a file.
+/// - Writes, and the backfill's planner read, are synchronous store calls
+///   made through `offActor`. GRDB's one writer connection serialises the
+///   writes; a multi-second full compare holds that writer, never this
+///   actor. The browse-cache captures run in tasks of their own
+///   (`CacheWrites`), so the folder or record that produced one never waits
+///   on that writer.
+/// - The actor keeps the bookkeeping: the backfill tasks, the per-pass skip
+///   sets and failure counts, the launch's release of unreadable snapshots,
+///   and the order of the steps that close a file. The listing generations
+///   live in the store, under its writer (`reconcile(listing:generation:)`).
 actor IndexCoordinator {
     /// The configuration's folder, which the index lives inside (see
     /// `indexDirectory`).
@@ -53,29 +57,20 @@ actor IndexCoordinator {
     /// The open stores, with the tombstones and in-flight counts that let
     /// the reads skip this actor.
     private let registry = StoreRegistry()
+    /// The browse-cache captures handed over and not yet written.
+    private let cacheWrites = CacheWrites()
     private var backfillTasks: [UUID: Task<Void, Never>] = [:]
-    /// The generation of the newest listing applied per repository. The
-    /// model numbers a listing before it asks restic for it, so the numbers
-    /// follow the order the repository was read in — which the reconciles
-    /// themselves need not: each reaches this actor through its own
-    /// unstructured hop, and two hops promise no order.
-    private var appliedGenerations: [UUID: UInt64] = [:]
-    /// The latest reconcile per repository; the next one waits for it. The
-    /// store write runs off the actor, so without this queue two reconciles
-    /// could pass the generation check in order and reach the writer in the
-    /// other — an older listing applied last.
-    private var reconcileTails: [UUID: Task<Void, Never>] = [:]
-    /// Repositories whose unreadable snapshots this process has already
-    /// released — once per launch, before the first reconcile.
+    /// The latest reset or drop per repository; the next one waits for it,
+    /// so two never delete files under each other's pool.
+    private var closings: [UUID: Task<Void, Never>] = [:]
+    /// Repositories whose unreadable snapshots this process has released, or
+    /// is releasing — once per launch, by the first reconcile.
     private var released: Set<UUID> = []
     /// Per repository and snapshot: the passes in which its full read
     /// failed. In memory only, like the release: a fresh launch starts every
     /// snapshot's count over.
     private var readFailures: [UUID: [String: Int]] = [:]
     private var reports: [UUID: BackfillReport] = [:]
-    /// The latest reset or drop per repository; the next one waits for it,
-    /// so two never delete files under each other's pool.
-    private var closings: [UUID: Task<Void, Never>] = [:]
     private var isShutDown = false
 
     /// - Parameter directory: injectable so tests never touch the real
@@ -94,46 +89,52 @@ actor IndexCoordinator {
     /// listing. The first reconcile of a repository in this process first
     /// releases the snapshots an earlier launch set aside as unreadable.
     ///
-    /// A listing whose `generation` is not newer than the last one applied
-    /// is dropped unread: it was fetched before a listing that already
-    /// landed, and applying it would record as dead every snapshot that
-    /// newer listing brought in — a backup's own snapshot, taken between the
-    /// two reads, among them. The number is taken even when the store then
-    /// fails: an older listing is no better a retry than the next refresh.
-    func reconcile(repositoryID: UUID, snapshots: [Snapshot], generation: UInt64) async {
-        let previous = reconcileTails[repositoryID]
-        let turn = Task {
-            await previous?.value
-            await self.apply(snapshots, generation: generation, repositoryID: repositoryID)
-        }
-        reconcileTails[repositoryID] = turn
-        await turn.value
-        if reconcileTails[repositoryID] == turn { reconcileTails[repositoryID] = nil }
-    }
-
-    private func apply(_ listing: [Snapshot], generation: UInt64, repositoryID: UUID) async {
-        // The store first: a reset in progress holds the gate, and the
-        // number below must be checked against what the fresh file applied,
-        // not against what the reset is about to forget.
+    /// A listing whose `generation` is not newer than the last one the store
+    /// took is dropped unread, and housekeeping with it: it was fetched
+    /// before a listing that already landed, and applying it would record as
+    /// dead every snapshot that newer listing brought in — a backup's own
+    /// snapshot, taken between the two reads, among them. The store compares
+    /// under its writer (`reconcile(listing:generation:)`), where the writes
+    /// are ordered, so concurrent reconciles need no queue here: whichever
+    /// reaches the writer second is compared with the first. FINAL.md 3.12
+    /// put the check on this actor, which took a queue of reconciles to keep
+    /// the check and the write in one order.
+    func reconcile(repositoryID: UUID, snapshots listing: [Snapshot], generation: UInt64) async {
         guard let store = try? await lease(repositoryID) else { return }
         defer { registry.release(repositoryID) }
-        if let applied = appliedGenerations[repositoryID], generation <= applied { return }
-        appliedGenerations[repositoryID] = generation
         do {
-            if !released.contains(repositoryID) {
-                let retried = try await Self.offActor { try store.releaseUnreadable() }
-                released.insert(repositoryID)
-                // Each of these failed `unreadableAfter` passes in an earlier
-                // launch, and the release puts it above its chain's window —
-                // the forward candidate, ahead of every new backup. Still
-                // unreadable, it must not block them for another count from
-                // zero: one more failure sets it aside again.
-                for snapshotID in retried {
-                    readFailures[repositoryID, default: [:]][snapshotID] = Self.unreadableAfter - 1
+            // Marked before the release is awaited, so a reconcile arriving
+            // meanwhile does not release again — a second release would also
+            // hand back anything a backfill had set aside in between. That
+            // reconcile goes on to its own listing, which may land before the
+            // release does; either order leaves a whole index, since the
+            // release puts each snapshot above whatever its chain has used so
+            // far. A backfill that reconcile starts may take the failure
+            // counts before the release presets them below, which costs a
+            // released snapshot that is still unreadable one more failed
+            // pass. A failed release unmarks, and the next reconcile retries;
+            // its listing is dropped before the store sees its number, so an
+            // older listing arriving later can still land — harmless, since
+            // nothing newer has.
+            if released.insert(repositoryID).inserted {
+                do {
+                    let retried = try await Self.offActor { try store.releaseUnreadable() }
+                    // Each of these failed `unreadableAfter` passes in an
+                    // earlier launch, and the release puts it above its
+                    // chain's window — the forward candidate, ahead of every
+                    // new backup. Still unreadable, it must not block them for
+                    // another count from zero: one more failure sets it aside
+                    // again.
+                    for snapshotID in retried {
+                        readFailures[repositoryID, default: [:]][snapshotID] = Self.unreadableAfter - 1
+                    }
+                } catch {
+                    released.remove(repositoryID)
+                    throw error
                 }
             }
             try await Self.offActor {
-                try store.reconcile(listing: listing)
+                guard try store.reconcile(listing: listing, generation: generation) else { return }
                 try store.housekeeping()
             }
         } catch {
@@ -154,11 +155,13 @@ actor IndexCoordinator {
         }
     }
 
-    /// One backfill pass: the index plans each step (`nextStep`), and this
-    /// loop runs it — a delta through `restic diff` when the window-end
-    /// snapshot is alive, else a full `restic ls` streamed in chunks — until
-    /// nothing is left or the pass is cancelled. Tests await this directly;
-    /// production goes through `startBackfill`.
+    /// One backfill pass: the index plans each step (`plannedStep`, a pool
+    /// read made through `offActor`, so the actor stays free meanwhile for
+    /// reconciles, resets and shutdown), and this loop runs it — a delta
+    /// through `restic diff` when the window-end snapshot is alive, else a
+    /// full `restic ls` streamed in chunks — until nothing is left or the
+    /// pass is cancelled. Tests await this directly; production goes
+    /// through `startBackfill`.
     ///
     /// A delta that cannot build its target — restic failed, a `T` line, a
     /// line that did not decode, a kind change the index refused — falls
@@ -175,23 +178,28 @@ actor IndexCoordinator {
         defer { registry.release(repositoryID) }
         var pass = BackfillPass(failures: readFailures[repositoryID] ?? [:])
         steps: while !Task.isCancelled {
-            guard let step = try? store.nextStep(skipping: pass.skip) else { break }
+            let skip = pass.skip
+            guard let planned = try? await Self.offActor({ try store.plannedStep(skipping: skip) }) else { break }
+            // Cancelled during the read: nothing was learned, and a step
+            // begun now would only start restic for it to be killed.
+            guard !Task.isCancelled else { break }
+            let step = planned.step
             let end: StepEnd
             switch step {
             case .done:
                 break steps
             case let .delta(target, base):
-                let delta = await readDelta(target, from: base, into: store, service: service, context: context)
-                guard case let .fallBack(reason) = delta else {
+                switch await readDelta(target, from: base, into: store, service: service, context: context) {
+                case let .ended(delta):
                     if case .landed = delta { pass.report.deltas += 1 }
                     end = delta
-                    break
+                case let .fallBack(reason):
+                    pass.report.count(reason)
+                    end = await readFull(target, into: store, service: service, context: context)
+                    if case .landed = end { pass.report.fulls += 1 }
                 }
-                pass.report.count(reason)
-                end = await readFull(target, into: store, service: service, context: context)
-                if case .landed = end { pass.report.fulls += 1 }
             case let .full(target):
-                if (try? store.chainHasWindow(of: target)) == true { pass.report.deadWindowEnd += 1 }
+                if planned.deadWindowEnd { pass.report.deadWindowEnd += 1 }
                 end = await readFull(target, into: store, service: service, context: context)
                 if case .landed = end { pass.report.fulls += 1 }
             }
@@ -205,7 +213,7 @@ actor IndexCoordinator {
                 guard pass.failed(target) else { break }
                 try? await Self.offActor { try store.markUnreadable(snapshotID: target) }
                 pass.report.markedUnreadable += 1
-            case .stopped, .fallBack:
+            case .stopped:
                 break steps
             }
         }
@@ -229,8 +237,12 @@ actor IndexCoordinator {
         case failed
         /// The pass was cancelled mid-step; nothing was learned.
         case stopped
-        /// Delta route only: the diff cannot build the target, the full
-        /// route must.
+    }
+
+    /// How the delta route ended: the step's end, or why the diff cannot
+    /// build the target and the full route must.
+    private enum DeltaEnd {
+        case ended(StepEnd)
         case fallBack(DeltaFallback)
     }
 
@@ -247,23 +259,23 @@ actor IndexCoordinator {
         into store: SnapshotIndex,
         service: any ResticClient,
         context: RepositoryContext
-    ) async -> StepEnd {
+    ) async -> DeltaEnd {
         let collector = DeltaCollector()
         do {
-            let malformed = try await service.walkDiff(context, olderID: base, newerID: target) { change in
+            try await service.walkDiff(context, olderID: base, newerID: target) { change in
                 collector.consume(change)
             }
-            let delta = try collector.delta(malformedLines: malformed)
+            let delta = try collector.delta()
             try await Self.offActor {
                 try store.ingestDelta(snapshotID: target, from: base, added: delta.added, removed: delta.removed)
             }
-            return .landed
+            return .ended(.landed)
         } catch {
-            if Self.isCancellation(error) { return .stopped }
+            if Self.isCancellation(error) { return .ended(.stopped) }
             switch error {
             case IncompleteStream.typeChange: return .fallBack(.typeChange)
             case IndexError.kindChanged: return .fallBack(.kindChanged)
-            default: return Self.isRefusal(error) ? .refused : .fallBack(.diffFailed)
+            default: return Self.isRefusal(error) ? .ended(.refused) : .fallBack(.diffFailed)
             }
         }
     }
@@ -271,8 +283,9 @@ actor IndexCoordinator {
     /// The full route: `beginFull`, the `restic ls` stream flushed in chunks
     /// as it arrives (on the runner's reader thread, never this actor), then
     /// the final chunk and the compare. A stream with lines that did not
-    /// decode, or with no node at all, never reaches the final: applied, it
-    /// would close the runs of every path it failed to mention.
+    /// decode (the walk throws) or with no node at all never reaches the
+    /// final: applied, it would close the runs of every path it failed to
+    /// mention.
     private nonisolated func readFull(
         _ target: String,
         into store: SnapshotIndex,
@@ -284,10 +297,9 @@ actor IndexCoordinator {
         }
         do {
             try await Self.offActor { try store.beginFull(snapshotID: target) }
-            let malformed = try await service.walkSnapshot(context, snapshotID: target) { node in
+            try await service.walkSnapshot(context, snapshotID: target) { node in
                 buffer.append(IndexedEntry(path: node.path, isDirectory: node.isDirectory))
             }
-            guard malformed == 0 else { throw IncompleteStream.malformedLines(malformed) }
             try await Self.offActor { try buffer.finish() }
             return .landed
         } catch {
@@ -299,59 +311,60 @@ actor IndexCoordinator {
 
     /// A cancelled pass stops where it is: a walk killed by cancellation
     /// fails like a broken one, and must neither fall through to the full
-    /// route nor count against the snapshot.
+    /// route nor count against the snapshot. A stop is what the run records
+    /// call one (`ResticError.isCancellation`), or this task's own
+    /// cancellation, whatever error the walk unwound with.
     private static func isCancellation(_ error: Error) -> Bool {
-        if Task.isCancelled || error is CancellationError { return true }
-        if case ResticError.cancelled = error { return true }
-        return false
+        Task.isCancelled || ResticError.isCancellation(error)
     }
 
     /// The index's refusals of a stale plan: the snapshot died or returned,
     /// was set aside, or the window moved between planning and writing. The
     /// next plan knows better, so the step is planned again.
     private static func isRefusal(_ error: Error) -> Bool {
-        switch error as? IndexError {
+        guard let error = error as? IndexError else { return false }
+        switch error {
         case .unknownSnapshot, .notAdjacent, .wrongBase, .unreadable,
              .streamIdentityChanged, .poisonedStream, .noSession:
-            true
-        default:
-            false
+            return true
+        case .kindChanged, .schemaMismatch, .repositoryRemoved:
+            return false
         }
     }
 
-    /// Runs a synchronous store write on the global executor, so the actor
-    /// stays free for the steps of other repositories and for reset, drop
-    /// and shutdown while GRDB's writer works.
+    /// Runs a synchronous store call — a write, or the planner's read — on
+    /// the global executor, so the actor stays free for the steps of other
+    /// repositories and for reset, drop and shutdown while GRDB works.
     private static func offActor<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
         try await Task.detached(priority: .utility) { try body() }.value
     }
 
     // MARK: - Reads
 
-    /// The indexed snapshots holding one path, newest first. The folder
-    /// browser's core question.
-    nonisolated func versions(ofPath path: String, repositoryID: UUID) async throws -> [IndexVersion] {
-        try await read(repositoryID) { try await $0.versions(ofPath: path) }
-    }
-
-    /// `versions(ofPath:)` within one chain — a plan's tag — in SQL.
+    /// The indexed snapshots holding one path within one chain — a plan's
+    /// tag — newest first, in SQL. The folder browser's core question.
     nonisolated func versions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
         try await read(repositoryID) { try await $0.versions(ofPath: path, inChain: chainKey) }
     }
 
-    /// Per path: how many indexed snapshots hold it, and the newest.
-    nonisolated func versionSummaries(ofPaths paths: [String], repositoryID: UUID) async throws -> [PathKey: VersionSummary] {
-        try await read(repositoryID) { try await $0.versionSummaries(ofPaths: paths) }
+    /// The Restore pane's search: basename hits across every indexed path —
+    /// instant, no restic walk — and which of them the open backup holds,
+    /// with their kind there, from one read of the index.
+    nonisolated func searchWithMembership(
+        matching query: String,
+        inSnapshot snapshotID: String,
+        repositoryID: UUID,
+        limit: Int
+    ) async throws -> SearchWithMembership {
+        try await read(repositoryID) {
+            try await $0.searchWithMembership(matching: query, limit: limit, inSnapshot: snapshotID)
+        }
     }
 
-    /// Which of `paths` one snapshot holds, each with its kind there.
-    nonisolated func contains(paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
-        try await read(repositoryID) { try await $0.contains(paths: paths, inSnapshot: snapshotID) }
-    }
-
-    /// Basename search across every indexed path — instant, no restic walk.
-    nonisolated func searchPaths(matching query: String, repositoryID: UUID, limit: Int) async throws -> [SearchHit] {
-        try await read(repositoryID) { try await $0.searchPaths(matching: query, limit: limit) }
+    /// Find Files' search: the hits and each one's version summary, from
+    /// one read of the index.
+    nonisolated func searchWithSummaries(matching query: String, repositoryID: UUID, limit: Int) async throws -> SearchWithSummaries {
+        try await read(repositoryID) { try await $0.searchWithSummaries(matching: query, limit: limit) }
     }
 
     /// Whether every listed snapshot has been read — the consumers' "the
@@ -364,7 +377,9 @@ actor IndexCoordinator {
     /// counted in flight until `body` returns, so a reset or drop waits for
     /// it before closing the pool. A reset in progress is sat out; a dropped
     /// repository throws `repositoryRemoved`, however late the caller came.
-    /// Internal, not private: the tests hold a read open across a reset.
+    /// Internal, not private: the tests hold a read open across a reset, and
+    /// read through it what the app never asks — a path's versions across
+    /// every chain, and the path-keyed reads they hold the searches to.
     nonisolated func read<T: Sendable>(
         _ repositoryID: UUID,
         _ body: @Sendable (SnapshotIndex) async throws -> T
@@ -396,12 +411,19 @@ actor IndexCoordinator {
         return ResticService.sortedForBrowser(cached.map(\.snapshotNode))
     }
 
-    /// Captures one directory's listing for next time. Best-effort: a failed
-    /// write costs only the next visit's restic round trip.
-    nonisolated func cacheListing(snapshotID: String, directory: String, nodes: [SnapshotNode], repositoryID: UUID) async {
-        let captured = nodes.map(CachedListingNode.init)
-        _ = await cacheAccess(repositoryID) {
-            try $0.recordListing(snapshotID: snapshotID, directory: directory, nodes: captured)
+    /// Captures one directory's listing for next time, and returns at once:
+    /// the write runs in a task of its own (`CacheWrites`). The caller has
+    /// the listing in hand, and the write queues on the index's one writer,
+    /// which a backfill's chunk or full compare holds for seconds at scale —
+    /// a folder must not wait on a cache. Best-effort: a failed write costs
+    /// only the next visit's restic round trip. `shutdown` waits for the
+    /// captures handed over before it and drops any after.
+    nonisolated func cacheListing(snapshotID: String, directory: String, nodes: [SnapshotNode], repositoryID: UUID) {
+        cacheWrites.start { [self] in
+            let captured = nodes.map(CachedListingNode.init)
+            _ = await cacheAccess(repositoryID) {
+                try await $0.recordListing(snapshotID: snapshotID, directory: directory, nodes: captured)
+            }
         }
     }
 
@@ -410,13 +432,24 @@ actor IndexCoordinator {
         await cacheAccess(repositoryID) { try await $0.diff(olderID: olderID, newerID: newerID) } ?? nil
     }
 
-    /// Captures one diff for next time. Callers pass only complete walks —
-    /// a partial stream must never present itself as the whole answer.
-    nonisolated func cacheDiff(olderID: String, newerID: String, changes: [ResticDiffChange], repositoryID: UUID) async {
-        let captured = changes.map(CachedDiffChange.init)
-        _ = await cacheAccess(repositoryID) {
-            try $0.recordDiff(olderID: olderID, newerID: newerID, changes: captured)
+    /// Captures one diff for next time, and returns at once, as
+    /// `cacheListing` does: the Change column's marks are in hand. Callers
+    /// pass only complete walks — a partial stream must never present itself
+    /// as the whole answer.
+    nonisolated func cacheDiff(olderID: String, newerID: String, changes: [ResticDiffChange], repositoryID: UUID) {
+        cacheWrites.start { [self] in
+            let captured = changes.map(CachedDiffChange.init)
+            _ = await cacheAccess(repositoryID) {
+                try await $0.recordDiff(olderID: olderID, newerID: newerID, changes: captured)
+            }
         }
+    }
+
+    /// Returns once every capture handed over so far has been written or
+    /// has failed — including any handed over while it waits. `shutdown`
+    /// waits here; so do tests that read back what they just captured.
+    nonisolated func cacheWritesSettled() async {
+        await cacheWrites.settled()
     }
 
     /// `read` for the caches: best-effort, so a failure is nil, and a reset
@@ -473,10 +506,9 @@ actor IndexCoordinator {
         await registry.drained(repositoryID)
         try? store?.close()
         Self.removeIndexFiles(at: fileURL(for: repositoryID))
-        // The rebuild re-sends the listing the model holds, under the
-        // generation it was read with — the one already applied here. The
-        // fresh file has applied nothing, so it must take that listing.
-        appliedGenerations[repositoryID] = nil
+        // No listing generation to forget: it lived on the store just
+        // closed, and the fresh one takes the rebuild's re-sent listing
+        // under the number it was read with.
         released.remove(repositoryID)
         readFailures[repositoryID] = nil
         reports[repositoryID] = nil
@@ -485,15 +517,20 @@ actor IndexCoordinator {
 
     /// Cancels every backfill and waits for each to unwind — its restic
     /// child is terminated through the task's cancellation, and a write in
-    /// progress commits or rolls back before the wait ends. Later backfills
-    /// are refused. Quit calls this before it terminates the remaining
-    /// restic processes, so a backfill sees its walk cancelled rather than
-    /// failed and does not go on to spawn the next.
+    /// progress commits or rolls back before the wait ends — then waits for
+    /// the browse-cache captures already handed over. Later backfills are
+    /// refused and later captures dropped: one offered while the app quits
+    /// costs the next launch a restic round trip, never a write the exit
+    /// cuts off. Quit calls this before it terminates the remaining restic
+    /// processes, so a backfill sees its walk cancelled rather than failed
+    /// and does not go on to spawn the next.
     func shutdown() async {
         isShutDown = true
+        cacheWrites.close()
         let running = Array(backfillTasks.values)
         for task in running { task.cancel() }
         for task in running { await task.value }
+        await cacheWritesSettled()
     }
 
     // MARK: - Orphan files
@@ -533,8 +570,8 @@ actor IndexCoordinator {
     /// `<UUID>.sqlite`, `<UUID>.sqlite-wal` or `<UUID>.sqlite-shm`. Anything
     /// else is not a file this coordinator wrote, so it has no owner here.
     private static func repositoryID(ofIndexFile name: String) -> UUID? {
-        for suffix in [".sqlite", ".sqlite-wal", ".sqlite-shm"] where name.hasSuffix(suffix) {
-            return UUID(uuidString: String(name.dropLast(suffix.count)))
+        for suffix in fileSuffixes where name.hasSuffix(".sqlite" + suffix) {
+            return UUID(uuidString: String(name.dropLast(".sqlite".count + suffix.count)))
         }
         return nil
     }
@@ -542,12 +579,15 @@ actor IndexCoordinator {
     // MARK: - Store access
 
     /// The repository's store, counted in flight until the caller hands it
-    /// back with `registry.release`. A reset in progress is waited out, a
-    /// short poll at a time; a cancelled caller stops waiting.
+    /// back with `registry.release`. A reset in progress is waited out: the
+    /// caller parks until the gate reopens (`StoreRegistry.gateOpened`), then
+    /// tries again — another reset may have closed the gate meanwhile, or a
+    /// drop tombstoned the repository, which throws `repositoryRemoved`. A
+    /// cancelled caller stops waiting at once and throws `CancellationError`.
     private nonisolated func lease(_ repositoryID: UUID) async throws -> SnapshotIndex {
         while true {
             if let store = try leaseUnlessClosing(repositoryID) { return store }
-            try await Task.sleep(for: .milliseconds(10))
+            try await registry.gateOpened(repositoryID)
         }
     }
 
@@ -574,8 +614,20 @@ actor IndexCoordinator {
         }
     }
 
-    private static func removeIndexFiles(at path: URL) {
-        for suffix in ["", "-wal", "-shm"] {
+    /// What SQLite appends to a database's path for each of its files:
+    /// nothing for the database itself, then its WAL and shared-memory
+    /// sidecars.
+    private static let fileSuffixes = ["", "-wal", "-shm"]
+
+    /// Deletes a database's file with its `-wal` and `-shm` sidecars: the
+    /// recovery `openStore` runs on a file that will not open, and what a
+    /// reset or drop does once the pool is closed. Only ever on a path no
+    /// pool has open — deleting under an open connection is one of SQLite's
+    /// documented corruption routes. The store tests call it too — for the
+    /// same recovery, and to clear a closed fixture's file — so the three
+    /// names are spelled once.
+    static func removeIndexFiles(at path: URL) {
+        for suffix in fileSuffixes {
             try? FileManager.default.removeItem(atPath: path.path + suffix)
         }
     }
@@ -665,7 +717,9 @@ extension IndexStep {
 
 /// The coordinator's open stores, readable without the actor: the map, the
 /// tombstones of removed repositories, the gate a reset or drop closes, and
-/// how many callers are using each repository's store right now.
+/// how many callers are using each repository's store right now. Both waits
+/// it serves park a continuation, never poll: a reset waiting for the
+/// callers to drain, and a lease waiting for the gate to reopen.
 ///
 /// Every store is opened here, under the lock, and only when none of the
 /// repository is open or closing — so one file never has two pools, and a
@@ -679,6 +733,9 @@ private final class StoreRegistry: @unchecked Sendable {
     private var closing: Set<UUID> = []
     private var inFlight: [UUID: Int] = [:]
     private var drainWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
+    /// Leases parked at a closed gate, by ticket, so a cancelled one can be
+    /// found and resumed alone.
+    private var gateWaiters: [UUID: [UUID: CheckedContinuation<Void, Never>]] = [:]
 
     /// The store, opened with `open` if need be, counted in flight; nil
     /// while a reset or drop holds the gate. Throws `repositoryRemoved` for
@@ -718,10 +775,14 @@ private final class StoreRegistry: @unchecked Sendable {
         return stores.removeValue(forKey: repositoryID)
     }
 
+    /// Reopens the gate and wakes the leases parked at it — outside the
+    /// lock, as `release` wakes its waiters. Each tries its lease again.
     func endClosing(_ repositoryID: UUID) {
         lock.lock()
         closing.remove(repositoryID)
+        let waiters = gateWaiters.removeValue(forKey: repositoryID)?.values.map { $0 } ?? []
         lock.unlock()
+        for waiter in waiters { waiter.resume() }
     }
 
     /// Returns once no caller is using the repository's store.
@@ -737,6 +798,48 @@ private final class StoreRegistry: @unchecked Sendable {
         guard inFlight[repositoryID] != nil else { return false }
         drainWaiters[repositoryID, default: []].append(waiter)
         return true
+    }
+
+    /// Returns once the repository's gate is open — at once if it already
+    /// is — for the caller to try its lease again; `endClosing` wakes it. A
+    /// cancelled caller is woken at once and throws `CancellationError`,
+    /// however long the reset still runs.
+    func gateOpened(_ repositoryID: UUID) async throws {
+        let ticket = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (waiter: CheckedContinuation<Void, Never>) in
+                if !enqueueGateWaiter(waiter, ticket, for: repositoryID) { waiter.resume() }
+            }
+        } onCancel: {
+            cancelGateWaiter(ticket, for: repositoryID)
+        }
+        try Task.checkCancellation()
+    }
+
+    /// Parks `waiter` while the gate is closed and its task not cancelled;
+    /// false when it must not wait. Cancellation is read under the lock,
+    /// which closes the race with `cancelGateWaiter`: a cancellation that
+    /// lands before this runs is seen here, and one after finds the waiter
+    /// parked.
+    private func enqueueGateWaiter(
+        _ waiter: CheckedContinuation<Void, Never>,
+        _ ticket: UUID,
+        for repositoryID: UUID
+    ) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard closing.contains(repositoryID), !Task.isCancelled else { return false }
+        gateWaiters[repositoryID, default: [:]][ticket] = waiter
+        return true
+    }
+
+    /// Wakes one cancelled lease, if it is still parked; `endClosing` may
+    /// have woken it already.
+    private func cancelGateWaiter(_ ticket: UUID, for repositoryID: UUID) {
+        lock.lock()
+        let waiter = gateWaiters[repositoryID]?.removeValue(forKey: ticket)
+        lock.unlock()
+        waiter?.resume()
     }
 
     func isRemoved(_ repositoryID: UUID) -> Bool {
@@ -755,6 +858,55 @@ private final class StoreRegistry: @unchecked Sendable {
     }
 }
 
+/// The browse-cache captures in flight: `cacheListing` and `cacheDiff` hand
+/// a write over and return, and a quit still waits for it. Off the actor,
+/// like `StoreRegistry`, so handing one over never waits on the actor
+/// either. Each task removes its own entry when it ends; after `close`,
+/// nothing new starts.
+private final class CacheWrites: @unchecked Sendable {
+    private let lock = NSLock()
+    private var running: [UUID: Task<Void, Never>] = [:]
+    private var isClosed = false
+
+    /// Runs `body` in a task of its own, unless `close` came first.
+    func start(_ body: @escaping @Sendable () async -> Void) {
+        let ticket = UUID()
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isClosed else { return }
+        // Created under the lock, so the task's own removal, which takes the
+        // lock, cannot run before its entry exists.
+        running[ticket] = Task {
+            await body()
+            self.finished(ticket)
+        }
+    }
+
+    func close() {
+        lock.lock()
+        isClosed = true
+        lock.unlock()
+    }
+
+    /// Returns once nothing is running — a loop, so a capture started while
+    /// it waits is waited for too.
+    func settled() async {
+        while let task = anyRunning() { await task.value }
+    }
+
+    private func anyRunning() -> Task<Void, Never>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return running.values.first
+    }
+
+    private func finished(_ ticket: UUID) {
+        lock.lock()
+        running[ticket] = nil
+        lock.unlock()
+    }
+}
+
 /// Why a restic stream was not taken as the whole answer, although restic
 /// exited cleanly.
 enum IncompleteStream: Error, Equatable {
@@ -762,9 +914,6 @@ enum IncompleteStream: Error, Equatable {
     /// that one line and omits both subtrees, so the diff cannot say what
     /// the target holds below the path.
     case typeChange(path: String)
-    /// Lines restic wrote that did not decode: the listing or diff received
-    /// is not the one restic meant.
-    case malformedLines(Int)
     /// A listing with no node at all. No real snapshot is empty — restic
     /// lists at least the folders it backed up — and applied, an empty
     /// listing would close every run of the chain.
@@ -775,8 +924,9 @@ enum IncompleteStream: Error, Equatable {
 /// the delta route — the stream's callbacks run on the runner's reader
 /// thread, not on the actor.
 ///
-/// `+` is added and `-` removed, both in restic's spelling (a trailing `/`
-/// marks a directory). `M` and `U` change content or metadata, not
+/// `+` is added and `-` removed, each kept as the entry the store takes
+/// (`IndexedEntry(diffSpelling:)`: the path without restic's trailing `/`,
+/// the kind that `/` marks). `M` and `U` change content or metadata, not
 /// existence, and are ignored. A `T` line ends the delta (`IncompleteStream
 /// .typeChange`): the snapshot must take the full route, and the index's own
 /// `kindChanged` refusal backs that up for a kind change that slips through
@@ -784,8 +934,8 @@ enum IncompleteStream: Error, Equatable {
 /// stream is read to its end and dropped.
 final class DeltaCollector: @unchecked Sendable {
     private let lock = NSLock()
-    private var added: [String] = []
-    private var removed: [String] = []
+    private var added: [IndexedEntry] = []
+    private var removed: [IndexedEntry] = []
     private var typeChange: String?
 
     func consume(_ change: ResticDiffChange) {
@@ -796,21 +946,21 @@ final class DeltaCollector: @unchecked Sendable {
             typeChange = change.path
             added = []
             removed = []
-        } else if change.modifier.contains("+") {
-            added.append(change.path)
-        } else if change.modifier.contains("-") {
-            removed.append(change.path)
+            return
+        }
+        switch change.category {
+        case .added: added.append(IndexedEntry(diffSpelling: change.path))
+        case .removed: removed.append(IndexedEntry(diffSpelling: change.path))
+        case .modified, .metadataOnly: break
         }
     }
 
-    /// The delta to apply, or why there is none: a `T` line, or
-    /// `malformedLines` restic wrote that did not decode — a change the
-    /// decoder dropped is one the delta would silently miss.
-    func delta(malformedLines: Int) throws -> (added: [String], removed: [String]) {
+    /// The delta to apply, or `IncompleteStream.typeChange` when a `T` line
+    /// means there is none.
+    func delta() throws -> (added: [IndexedEntry], removed: [IndexedEntry]) {
         lock.lock()
         defer { lock.unlock() }
         if let typeChange { throw IncompleteStream.typeChange(path: typeChange) }
-        guard malformedLines == 0 else { throw IncompleteStream.malformedLines(malformedLines) }
         return (added, removed)
     }
 }
@@ -836,12 +986,14 @@ final class BackfillBuffer: @unchecked Sendable {
     private let chunkSize = SnapshotIndex.chunkSize
     private let lock = NSLock()
     private var pending: [IndexedEntry] = []
-    private var received = 0
+    private var receivedAny = false
     private var captured: Error?
     private var isCancelled = false
 
-    /// - Parameter flush: records one chunk; `final: true` applies the whole
-    ///   stream and must only ever run after every chunk landed.
+    /// - Parameter flush: records one chunk; with `final: true` the chunk is
+    ///   the stream's last — possibly empty — and the call also applies the
+    ///   whole stream, in that chunk's transaction, so it must only ever run
+    ///   after every earlier chunk landed.
     init(flush: @escaping @Sendable ([IndexedEntry], Bool) throws -> Void) {
         self.flush = flush
     }
@@ -849,7 +1001,7 @@ final class BackfillBuffer: @unchecked Sendable {
     func append(_ entry: IndexedEntry) {
         var chunk: [IndexedEntry]?
         lock.lock()
-        received += 1
+        receivedAny = true
         // After a failed chunk nothing more will be flushed, so nothing more
         // is kept: the rest of a million-path stream must not pile up here.
         if !isCancelled, captured == nil {
@@ -860,27 +1012,27 @@ final class BackfillBuffer: @unchecked Sendable {
             }
         }
         lock.unlock()
-        if let chunk { flushChunk(chunk, false) }
+        if let chunk { flushChunk(chunk) }
     }
 
-    /// Flushes the remainder with the final marker — what applies the
-    /// stream and marks the snapshot read; without it the snapshot stays
-    /// pending. Any error captured mid-stream — and any error from the final
-    /// itself — throws, leaving the snapshot pending for the next pass, and
-    /// after a captured error nothing more reaches the store. A stream that
-    /// delivered no entry at all throws `IncompleteStream.emptyListing`
-    /// without sending the final: applied, an empty listing would read as a
-    /// snapshot that holds nothing.
+    /// Sends the remainder as the final chunk — what applies the stream and
+    /// marks the snapshot read, in the remainder's own transaction (the
+    /// store stages it and compares in one); without it the snapshot stays
+    /// pending. A stream that ended on a chunk boundary sends an empty
+    /// final. Any error captured mid-stream throws instead, and then
+    /// nothing more reaches the store, the remainder included; an error
+    /// from the final itself throws too — either way the snapshot stays
+    /// pending for the next pass. A stream that delivered no entry at all
+    /// throws `IncompleteStream.emptyListing` without sending the final:
+    /// applied, an empty listing would read as a snapshot that holds
+    /// nothing.
     func finish() throws {
         lock.lock()
         let remainder = pending
         pending = []
-        lock.unlock()
-        flushChunk(remainder, false)
-        lock.lock()
         let failed = captured
         let cancelled = isCancelled
-        let empty = received == 0
+        let empty = !receivedAny
         lock.unlock()
         if let failed { throw failed }
         // A buffer told to stop never declares coverage — the snapshot stays
@@ -889,7 +1041,7 @@ final class BackfillBuffer: @unchecked Sendable {
         guard !empty else { throw IncompleteStream.emptyListing }
         // The decisive call propagates directly rather than being captured:
         // a failure here is exactly what must surface.
-        try flush([], true)
+        try flush(remainder, true)
     }
 
     /// Stops accepting paths — the walk above us is unwinding with an error
@@ -903,13 +1055,14 @@ final class BackfillBuffer: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func flushChunk(_ chunk: [IndexedEntry], _ final: Bool) {
+    /// Records one non-final chunk; a failure is captured for `finish`.
+    private func flushChunk(_ chunk: [IndexedEntry]) {
         lock.lock()
         let stopped = isCancelled || captured != nil
         lock.unlock()
-        guard !stopped, final || !chunk.isEmpty else { return }
+        guard !stopped, !chunk.isEmpty else { return }
         do {
-            try flush(chunk, final)
+            try flush(chunk, false)
         } catch {
             lock.lock()
             if captured == nil { captured = error }

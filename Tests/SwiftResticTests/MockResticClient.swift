@@ -85,20 +85,22 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     private var walks: [String: Int] = [:]
     private var diffWalks: [String: Int] = [:]
     private var malformedLines: [String: Int] = [:]
+    private var scriptedDiffs: [String: [ResticDiffChange]] = [:]
     private var walkStartHook: (@Sendable (String) async -> Void)?
 
-    /// Each snapshot's `ls`: path → isDirectory. Ancestors are not added;
-    /// list them explicitly, as restic does.
+    /// Each snapshot's `ls`: path → isDirectory, streamed in restic's order
+    /// (`IndexTestData.ls`: depth-first, siblings by their bytes), which is
+    /// the order the index's streaming ingest meets for real. Ancestors are
+    /// not added; list them explicitly, as restic does.
     func onListings(_ contents: [String: [String: Bool]]) -> Self {
         locked {
             for (id, content) in contents {
-                listings[id] = content.keys.sorted().map { path in
-                    let isDirectory = content[path] ?? false
-                    return SnapshotNode(
-                        name: IndexPathText.basename(of: path),
-                        type: isDirectory ? .dir : .file,
-                        path: path,
-                        size: isDirectory ? nil : 1,
+                listings[id] = IndexTestData.ls(content).map { entry in
+                    SnapshotNode(
+                        name: ResticPath.basename(of: entry.path),
+                        type: entry.isDirectory ? .dir : .file,
+                        path: entry.path,
+                        size: entry.isDirectory ? nil : 1,
                         mtime: nil
                     )
                 }
@@ -121,10 +123,19 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return self
     }
 
-    /// Lines that did not decode, reported by the `ls` of that snapshot and
-    /// by every `diff` that targets it.
+    /// Lines that did not decode in the `ls` of that snapshot and in every
+    /// `diff` that targets it: the walk streams what it has, then throws as
+    /// `ResticService` does.
     func onMalformed(_ counts: [String: Int]) -> Self {
         locked { malformedLines = counts }
+        return self
+    }
+
+    /// Verbatim change lines for the `diff` that targets a snapshot, in
+    /// place of the computed set-difference — for spellings the computed
+    /// diff never produces, such as a kind change written as a bare add.
+    func onDiffLines(_ lines: [String: [ResticDiffChange]]) -> Self {
+        locked { scriptedDiffs = lines }
         return self
     }
 
@@ -227,7 +238,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         _ context: RepositoryContext,
         snapshotID: String,
         onNode: @Sendable @escaping (SnapshotNode) -> Void
-    ) async throws -> Int {
+    ) async throws {
         record("walk")
         let (nodes, unreadable, hangs, malformed, hook) = locked {
             walks[snapshotID, default: 0] += 1
@@ -243,7 +254,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         }
         if unreadable { throw Self.unreadableError(snapshotID) }
         for node in nodes { onNode(node) }
-        return malformed
+        try Self.requireWhole(malformed, command: "ls")
     }
 
     func find(
@@ -274,19 +285,25 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         olderID: String,
         newerID: String,
         onChange: @Sendable @escaping (ResticDiffChange) -> Void
-    ) async throws -> Int {
+    ) async throws {
         record("walkDiff")
-        let (base, target, unreadable, malformed) = locked {
+        let (base, target, unreadable, malformed, scripted) = locked {
             diffWalks[newerID, default: 0] += 1
             return (
                 listings[olderID] ?? [],
                 listings[newerID] ?? [],
                 unreadableIDs.intersection([olderID, newerID]).first,
-                malformedLines[newerID] ?? 0
+                malformedLines[newerID] ?? 0,
+                scriptedDiffs[newerID]
             )
         }
         if let unreadable { throw Self.unreadableError(unreadable) }
-        func spelled(_ node: SnapshotNode) -> String { node.isDirectory ? node.path + "/" : node.path }
+        if let scripted {
+            for change in scripted { onChange(change) }
+            try Self.requireWhole(malformed, command: "diff")
+            return
+        }
+        func spelled(_ node: SnapshotNode) -> String { IndexTestData.diffSpelling(node.path, isDirectory: node.isDirectory) }
         let before = Dictionary(base.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         let after = Dictionary(target.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         for node in base where after[node.path] == nil {
@@ -301,7 +318,12 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
                 onChange(ResticDiffChange(path: spelled(node), modifier: "+"))
             }
         }
-        return malformed
+        try Self.requireWhole(malformed, command: "diff")
+    }
+
+    private static func requireWhole(_ malformed: Int, command: String) throws {
+        guard malformed > 0 else { return }
+        throw ResticError.malformedOutput(command: command, detail: "scripted: \(malformed) line(s) did not decode")
     }
 
     private static func unreadableError(_ snapshotID: String) -> ResticError {

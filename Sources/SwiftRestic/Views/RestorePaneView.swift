@@ -738,8 +738,8 @@ struct RestorePaneView: View {
         searchTask = Task {
             // An index failure is its own answer — a confident "no matches"
             // would be the one lie a search tool cannot tell. The membership
-            // read goes through the same index, so its failure says the same
-            // thing and lands in the same catch.
+            // in the open backup comes from the same read of the index, so it
+            // cannot fail apart from the search.
             //
             // Whether the index has read every backup is asked before the
             // search, not after: a backup once read stays read, so an index
@@ -748,15 +748,14 @@ struct RestorePaneView: View {
             // unread, and its own files would look as if only other backups
             // held them — FindFilesView and FolderBrowserView ask the same.
             let indexIsComplete = await model.indexIsComplete(repositoryID: repositoryID)
-            let hits: [SearchHit]
-            let inRecord: [PathKey: Bool]
+            let found: SearchWithMembership
             do {
-                hits = try await model.searchIndex(pattern: query, repositoryID: repositoryID)
-                // Which hits the open backup holds, with their kind there.
-                // Every hit is held by some backup — the search returns no
-                // other path — so the rest are the matches elsewhere.
-                inRecord = try await model.indexMembership(
-                    ofPaths: hits.map(\.path), inSnapshot: searchedRecordID, repositoryID: repositoryID
+                // The hits, and which of them the open backup holds with
+                // their kind there. Every hit is held by some backup — the
+                // search returns no other path, in the same read — so the
+                // rest are the matches elsewhere.
+                found = try await model.searchIndexWithMembership(
+                    pattern: query, inSnapshot: searchedRecordID, repositoryID: repositoryID
                 )
             } catch {
                 guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
@@ -767,8 +766,8 @@ struct RestorePaneView: View {
             // The pane lists what the open backup holds; the rest is counted,
             // not dropped — it is where "Search All Backups…" leads.
             searchResult = RestorePaneSearch(
-                hits: hits,
-                inRecord: inRecord,
+                hits: found.hits,
+                inRecord: found.inSnapshot,
                 limit: AppModel.indexSearchLimit,
                 indexIsComplete: indexIsComplete
             )

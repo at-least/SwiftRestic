@@ -43,9 +43,10 @@ struct FindFilesView: View {
     @State private var errorMessage: String?
     @State private var hasSearched = false
     @State private var searchTask: Task<Void, Never>?
-    /// True when the index search stopped early — the hit cap, or paths
-    /// whose every version has since been pruned. The footer says so; a
-    /// truncated list must not pass for the whole answer.
+    /// True when the index search stopped early — at the hit cap, or (not
+    /// expected, see `searchViaIndex`) a hit that came without its summary.
+    /// The footer says so; a truncated list must not pass for the whole
+    /// answer.
     @State private var resultsTruncated = false
     /// The sheet exists to answer one question, so the field that receives it
     /// takes focus on arrival — typing starts immediately.
@@ -62,15 +63,25 @@ struct FindFilesView: View {
     private struct Row: Identifiable {
         /// Byte-exact in the path (`PathKey.hex`): two paths whose names
         /// differ only in Unicode normalization are two rows, never one.
-        var id: String { "\(snapshotID)/\(PathKey(match.path).hex)" }
-        var match: FindMatch
-        var snapshotID: String
-        var snapshotTime: Date?
+        /// Stored: SwiftUI reads it on every diff of the table.
+        let id: String
+        let match: FindMatch
+        let snapshotID: String
+        let snapshotTime: Date?
         /// Index rows know how many versions the path has; restic rows do not.
-        var versionsCount: Int?
-        /// Index rows carry the search hit, whose kind the index read apart
-        /// from the row's snapshot and a restore therefore resolves first.
-        var hit: SearchHit?
+        let versionsCount: Int?
+        /// Index rows carry the search hit; a restore resolves the node from
+        /// the row's snapshot first, whatever kind the hit says (`restore`).
+        let hit: SearchHit?
+
+        init(match: FindMatch, snapshotID: String, snapshotTime: Date?, versionsCount: Int? = nil, hit: SearchHit? = nil) {
+            id = "\(snapshotID)/\(PathKey(match.path).hex)"
+            self.match = match
+            self.snapshotID = snapshotID
+            self.snapshotTime = snapshotTime
+            self.versionsCount = versionsCount
+            self.hit = hit
+        }
     }
 
     var body: some View {
@@ -370,28 +381,23 @@ struct FindFilesView: View {
         }
     }
 
-    /// The index engine: FTS over basenames, then one batched summary
-    /// lookup — each path's newest version and version count, not its whole
-    /// list — so every row names a restorable snapshot. Sorted newest-first
-    /// by that snapshot, matching the restic engine's row order.
+    /// The index engine: FTS over basenames, each hit read with its summary
+    /// — the path's newest version and version count, not its whole list —
+    /// in one read of the index, so every row names a restorable snapshot.
+    /// Sorted newest-first by that snapshot, matching the restic engine's
+    /// row order.
     private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> [Row] {
-        let hits = try await model.searchIndex(pattern: pattern, repositoryID: repositoryID)
-        // A thrown index failure propagates to the sheet's own error message;
-        // only paths that lost their versions (absent here) degrade into the
-        // dropped count.
-        let summaries = try await model.indexedSummaries(
-            ofPaths: hits.map(\.path), repositoryID: repositoryID
-        )
+        // A thrown index failure propagates to the sheet's own error message.
+        let found = try await model.searchIndexWithSummaries(pattern: pattern, repositoryID: repositoryID)
         var rows: [Row] = []
         var dropped = 0
-        for hit in hits {
-            guard let summary = summaries[PathKey(hit.path)] else {
-                // The search lists only paths an indexed backup holds, so
-                // this path lost its last version between the two reads — a
-                // refresh applied a forget, or the index was rebuilt, in
-                // between; there is nothing restorable to list. Counted, so
-                // the footer can own the gap instead of letting the row
-                // vanish silently.
+        for hit in found.hits {
+            guard let summary = found.summaries[PathKey(hit.path)] else {
+                // Not expected: the search keeps only paths an indexed
+                // backup holds, and the summary comes from the same read, so
+                // every hit has one. Counted all the same, so a row that
+                // went missing reads as a truncated list rather than
+                // vanishing silently.
                 dropped += 1
                 continue
             }
@@ -411,7 +417,7 @@ struct FindFilesView: View {
                 hit: hit
             ))
         }
-        resultsTruncated = dropped > 0 || hits.count >= AppModel.indexSearchLimit
+        resultsTruncated = dropped > 0 || found.hits.count >= AppModel.indexSearchLimit
         // Rows of one snapshot keep the search's order: name, then path,
         // bytewise — so equal times never shuffle between searches.
         return rows.enumerated()
@@ -453,12 +459,12 @@ struct FindFilesView: View {
     }
 
     /// Index rows resolve their node from the snapshot itself, no matter what
-    /// kind the index gave. The hit's kind is the path's kind in the newest
-    /// indexed snapshot at search time, while the row's snapshot comes from a
-    /// second read, so a backup indexed in between can make the two differ;
-    /// a path that changed from file to directory would then take `dump` —
-    /// which happily writes a folder's tar into one file, no error. A listing
-    /// that cannot answer fails the restore loudly instead.
+    /// kind the index gave. The hit's kind and the row's snapshot come from
+    /// one read of the index, so they describe the same snapshot — but the
+    /// index is a cache and restic the truth, and a kind it got wrong would
+    /// send a folder to `dump`, which happily writes its tar into one file,
+    /// no error. A listing that cannot answer fails the restore loudly
+    /// instead.
     private func restore(_ row: Row, repositoryID: UUID, to destination: URL, overwrite: RestoreOverwritePolicy) {
         if row.hit == nil {
             // A restic-engine row: the node came from restic itself.

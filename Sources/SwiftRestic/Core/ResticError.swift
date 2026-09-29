@@ -97,4 +97,13 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// issues (an unreadable source file, say). That is a warning, not a failure,
     /// and must not abort a scheduled run.
     static let backupPartialSuccessCode: Int32 = 3
+
+    /// Whether an error is a stop — Swift's task cancellation or restic's
+    /// own `cancelled` — rather than a failure. The reading the run records
+    /// and the index backfill share (the backfill adds only its own task's
+    /// cancellation). Call sites that stop on one of the two by name — a
+    /// hook, a refresh, the diff view — still catch it themselves.
+    static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? ResticError) == .cancelled
+    }
 }

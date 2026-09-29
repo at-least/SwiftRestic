@@ -321,11 +321,11 @@ struct ResticService: ResticClient {
                 environment: context.environment
             )
         )
-        let normalized = Self.normalize(path)
+        let normalized = ResticPath.normalized(path)
         var nodes: [SnapshotNode] = []
         for message in result.messages {
             guard case let .node(node) = message else { continue }
-            let nodePath = Self.normalize(node.path)
+            let nodePath = ResticPath.normalized(node.path)
             guard nodePath != normalized else { continue }
             guard Self.parent(of: nodePath) == normalized else { continue }
             nodes.append(node)
@@ -343,16 +343,6 @@ struct ResticService: ResticClient {
         }
     }
 
-    /// The engine's one path spelling: trailing slashes stripped, except the
-    /// root, which stays "/". Internal so the index's directory-cache key
-    /// delegates here rather than carrying a twin that could drift.
-    static func normalize(_ path: String) -> String {
-        guard path != "/" else { return "/" }
-        var value = path
-        while value.count > 1, value.hasSuffix("/") { value.removeLast() }
-        return value
-    }
-
     /// The full-tree `ls` behind the index backfill. `retainMessages: false`
     /// keeps the runner from accumulating a snapshot's worth of nodes in
     /// memory — the callback is the only delivery. `--no-lock` because a
@@ -360,13 +350,12 @@ struct ResticService: ResticClient {
     /// throughout would collide with retention's exclusive `forget`, and a
     /// read that trips over a concurrently pruned pack fails and stays
     /// pending for a later pass instead.
-    @discardableResult
     func walkSnapshot(
         _ context: RepositoryContext,
         snapshotID: String,
         onNode: @Sendable @escaping (SnapshotNode) -> Void
-    ) async throws -> Int {
-        try await runner.run(
+    ) async throws {
+        let outcome = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
                 arguments: context.globalArguments + ["ls", "--json", "--no-lock", snapshotID],
@@ -377,7 +366,8 @@ struct ResticService: ResticClient {
             onMessage: { message in
                 if case let .node(node) = message { onNode(node) }
             }
-        ).malformedCount
+        )
+        try Self.requireWhole(outcome, command: "ls", item: "node")
     }
 
     /// The directory containing `path`, in pure String arithmetic rather
@@ -390,10 +380,10 @@ struct ResticService: ResticClient {
     /// to grapheme boundaries, and a Prepend character (U+0600 and
     /// friends) puts the slash mid-cluster, so slicing through the
     /// Character view would round down and shed the character. Paths are
-    /// absolute and already trailing-slash-stripped by `normalize`, so
-    /// slicing at the last separator is the whole rule. (`expandTilde`
-    /// below remains the one NSString use: `~user` semantics have no
-    /// pure-Swift spelling.)
+    /// absolute and already trailing-slash-stripped by
+    /// `ResticPath.normalized`, so slicing at the last separator is the
+    /// whole rule. (`expandTilde` below remains the one NSString use:
+    /// `~user` semantics have no pure-Swift spelling.)
     private static func parent(of path: String) -> String {
         guard let separator = path.unicodeScalars.lastIndex(of: "/") else { return path }
         return separator == path.unicodeScalars.startIndex ? "/" : String(path.unicodeScalars[..<separator])
@@ -460,14 +450,13 @@ struct ResticService: ResticClient {
     /// Everything the capped `diff` says about its change limit applies
     /// doubly here: the stream is unbounded, so the callback must consume
     /// incrementally. `--no-lock` for the same reason `walkSnapshot` wears it.
-    @discardableResult
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,
         newerID: String,
         onChange: @Sendable @escaping (ResticDiffChange) -> Void
-    ) async throws -> Int {
-        try await runner.run(
+    ) async throws {
+        let outcome = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
                 arguments: context.globalArguments + ["diff", "--json", "--no-lock", olderID, newerID],
@@ -478,7 +467,21 @@ struct ResticService: ResticClient {
             onMessage: { message in
                 if case let .change(change) = message { onChange(change) }
             }
-        ).malformedCount
+        )
+        try Self.requireWhole(outcome, command: "diff", item: "change")
+    }
+
+    /// A streamed walk is the whole answer only when every line restic
+    /// wrote decoded: a dropped line is an item the callback never saw,
+    /// whatever the exit code said. Thrown after the stream, so what did
+    /// decode has already been delivered.
+    private static func requireWhole(_ outcome: ResticRunResult, command: String, item: String) throws {
+        let malformed = outcome.malformedCount
+        guard malformed > 0 else { return }
+        throw ResticError.malformedOutput(
+            command: command,
+            detail: "\(malformed) \(item) \(malformed == 1 ? "line" : "lines") did not decode"
+        )
     }
 
     // MARK: - Backup

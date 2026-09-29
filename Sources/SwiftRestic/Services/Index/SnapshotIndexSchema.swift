@@ -2,11 +2,14 @@ import Foundation
 
 /// The snapshot index's schema and every statement it runs, as SQL text.
 ///
-/// One place to review the whole contract: `SnapshotIndex` never spells SQL
-/// inline, so `SnapshotIndex.registeredStatements` can name every statement
-/// the plan tests must pin. (Swift constants rather than resource files:
-/// these sources compile into both the app and the test target, whose bundle
-/// roots differ, and constants need no bundle plumbing.)
+/// One place to review the whole contract: `SnapshotIndex` spells no
+/// statement inline (the open-time schema probe, the connection pragmas and
+/// the test-support invariant checks aside), and every statement here is a
+/// stored property of `Statements`, so `SnapshotIndex.registeredStatements`
+/// finds each one the plan tests must pin by reflection. (Swift values
+/// rather than resource files: these sources compile into both the app and
+/// the test target, whose bundle roots differ, and values need no bundle
+/// plumbing.)
 ///
 /// The model the SQL encodes, in one paragraph — the invariants behind it are
 /// on `SnapshotIndex`. A chain is one lineage of snapshots with a per-chain
@@ -94,7 +97,7 @@ enum SnapshotIndexSchema {
     -- rows for IDs never reconciled must be accepted; they are swept at the next reconcile.
     CREATE TABLE dir_listing (
         snapshot_id  TEXT NOT NULL,
-        dir_path     TEXT NOT NULL,              -- canonical: ResticService.normalize
+        dir_path     TEXT NOT NULL,              -- canonical: ResticPath.normalized
         nodes        TEXT NOT NULL,              -- JSON [CachedListingNode]; '[]' is a hit
         PRIMARY KEY (snapshot_id, dir_path)
     ) STRICT;
@@ -115,8 +118,8 @@ enum SnapshotIndexSchema {
 
     /// Created on the pool's writer connection when the store opens. TEMP
     /// tables never enter the WAL and vanish with the connection — which is
-    /// the point for all three: a reopen ends any stream (`stage`), forgets
-    /// the process's tombstones (`gone`), and `gc` is scratch.
+    /// the point for both: a reopen ends any stream (`stage`), and `gc` is
+    /// scratch.
     static let temporary = """
     -- The one open full-listing stream: one snapshot's rows at a time (beginFull clears it
     -- before its session stages anything). Keyed node-first so GC can ask "is it staged?".
@@ -126,103 +129,120 @@ enum SnapshotIndexSchema {
         is_dir   INTEGER NOT NULL,
         PRIMARY KEY (node_id, snap_id)
     ) WITHOUT ROWID;
-    -- Tombstones: hashes of rows deleted during this process, read only for ReconcileOutcome.revived.
-    CREATE TEMP TABLE IF NOT EXISTS gone (hash TEXT PRIMARY KEY) WITHOUT ROWID;
-    -- Scratch list of node ids for one GC level.
+    -- Node ids queued for collection: housekeeping's and a discarded stage's fills queue the
+    -- first level, collectNodes each next one, and it leaves the table empty.
     CREATE TEMP TABLE IF NOT EXISTS gc (id INTEGER PRIMARY KEY);
     """
 
-    /// Every statement the store runs. Names are the ones FINAL.md's plan
-    /// table uses. Parameters are plain `?` throughout, so a statement's
-    /// argument count is its number of question marks — the plan tests bind
-    /// that many NULLs.
+    /// Every statement the store runs, one stored `let` each, named by its
+    /// property: `SnapshotIndex.registeredStatements` lists them by
+    /// reflecting over `SQL.statements`, and `SnapshotIndexPlanTests` pins
+    /// each under the same name, so declaring a statement is registering it
+    /// — there is no second list to forget. Reflection sees stored
+    /// properties only: a statement written as a computed property, a
+    /// method or a `static` member would escape the pins, so write none. A
+    /// statement whose text depends on an IN list's length is an `InList`.
+    /// The `private static` fragments below (the housekeeping pairs' shared
+    /// FROM and WHERE, and the fill built from one) are pieces of
+    /// statements, not statements: nothing runs them alone, and each
+    /// statement built from them is a stored `let` the pins see whole.
+    /// (FINAL.md's plan table predates this and spells the names dotted, and
+    /// a name here is not always its dotted one without the dot: its
+    /// `chain.byID` is `chainByID` here, but its `plan.lowestAbove` is
+    /// `lowestPendingAbove`, its `fwd.close` `forwardClose` and its
+    /// `q.summaryCounts` `summaryCounts`.)
+    ///
+    /// Parameters are plain `?` throughout, so a statement's argument count
+    /// is its number of question marks — the plan tests bind that many
+    /// NULLs.
     ///
     /// Two literals are load-bearing and must never become parameters:
     /// `2147483647` in every `last_seq` predicate that wants `run_closed`
     /// (the planner uses a partial index only when the query restates its
     /// WHERE term verbatim), and the state values in the planner statements
     /// that `snap_cover` covers.
-    enum SQL {
+    struct Statements: Sendable {
         // MARK: Nodes
-        static let nodeLookup = "SELECT id FROM node WHERE parent = ? AND name = ?"
+        let nodeLookup = "SELECT id FROM node WHERE parent = ? AND name = ?"
         /// Yields to an existing row: a caller that skipped the lookup (a
         /// child of a directory it just created) then looks the node up.
-        static let nodeInsert =
+        let nodeInsert =
             "INSERT INTO node (parent, name) VALUES (?, ?) ON CONFLICT (parent, name) DO NOTHING RETURNING id"
-        static let nodeMaxID = "SELECT COALESCE(MAX(id), 0) FROM node"
-        static let nodeByID = "SELECT parent, name FROM node WHERE id = ?"
+        let nodeMaxID = "SELECT COALESCE(MAX(id), 0) FROM node"
+        let nodeByID = "SELECT parent, name FROM node WHERE id = ?"
         /// One statement indexes every node the transaction created: `?` is
         /// the largest node id before its first insert.
-        static let nodeFTSIndexNew = "INSERT INTO node_fts (rowid, name) SELECT id, name FROM node WHERE id > ?"
+        let nodeFTSIndexNew = "INSERT INTO node_fts (rowid, name) SELECT id, name FROM node WHERE id > ?"
 
         // MARK: Snapshots and chains
-        static let snapAll = "SELECT id, hash, chain_id, seq FROM snap"
-        static let snapByHash = "SELECT id, chain_id, seq, state FROM snap WHERE hash = ?"
-        static let snapDelete = "DELETE FROM snap WHERE id = ?"
-        static let snapInsert = "INSERT INTO snap (hash, chain_id, seq, time, state) VALUES (?, ?, ?, ?, 0)"
-        static let snapMarkIndexed = "UPDATE snap SET state = 1 WHERE id = ?"
-        static let snapMarkUnreadable = "UPDATE snap SET state = 2 WHERE id = ?"
-        static let snapRepend = "UPDATE snap SET state = 0, seq = ? WHERE id = ? RETURNING hash"
-        static let chainInsert = "INSERT INTO chain (key) VALUES (?) ON CONFLICT (key) DO NOTHING"
-        static let chainByKey = "SELECT id, next_seq FROM chain WHERE key = ?"
-        static let chainNextSeq = "UPDATE chain SET next_seq = ? WHERE id = ?"
+        let snapAll = "SELECT id, hash, chain_id, seq FROM snap"
+        let snapByHash = "SELECT id, chain_id, seq, state FROM snap WHERE hash = ?"
+        let snapDelete = "DELETE FROM snap WHERE id = ?"
+        let snapInsert = "INSERT INTO snap (hash, chain_id, seq, time, state) VALUES (?, ?, ?, ?, 0)"
+        let snapMarkIndexed = "UPDATE snap SET state = 1 WHERE id = ?"
+        let snapMarkUnreadable = "UPDATE snap SET state = 2 WHERE id = ?"
+        let snapRepend = "UPDATE snap SET state = 0, seq = ? WHERE id = ? RETURNING hash"
+        let chainInsert = "INSERT INTO chain (key) VALUES (?) ON CONFLICT (key) DO NOTHING"
+        let chainByKey = "SELECT id, next_seq FROM chain WHERE key = ?"
+        let chainNextSeq = "UPDATE chain SET next_seq = ? WHERE id = ?"
         /// One fresh seq for the chain: `next_seq` before the increment.
-        static let chainTakeSeq = "UPDATE chain SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1"
-        static let chainByID = "SELECT lo, hi FROM chain WHERE id = ?"
-        static let chainSetWindow = "UPDATE chain SET lo = ?, hi = ? WHERE id = ?"
-        static let goneInsert = "INSERT OR IGNORE INTO temp.gone (hash) VALUES (?)"
-        static let goneDelete = "DELETE FROM temp.gone WHERE hash = ?"
-        static let hkEnqueue = "INSERT OR IGNORE INTO hk_pending (chain_id, seq) VALUES (?, ?)"
-        static let listingMarkApplied = "INSERT INTO listing_applied (id) VALUES (1) ON CONFLICT DO NOTHING"
-        static let unreadableList = "SELECT id, chain_id, seq FROM snap WHERE state = 2"
+        let chainTakeSeq = "UPDATE chain SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1"
+        let chainByID = "SELECT lo, hi FROM chain WHERE id = ?"
+        let chainSetWindow = "UPDATE chain SET lo = ?, hi = ? WHERE id = ?"
+        let hkEnqueue = "INSERT OR IGNORE INTO hk_pending (chain_id, seq) VALUES (?, ?)"
+        let listingMarkApplied = "INSERT INTO listing_applied (id) VALUES (1) ON CONFLICT DO NOTHING"
+        let unreadableList = "SELECT id, chain_id FROM snap WHERE state = 2"
 
         // MARK: Forward delta (target above hi, base = the alive hi snapshot)
-        static let forwardClose =
+        let forwardClose =
             "UPDATE run SET last_seq = ? WHERE node_id = ? AND chain_id = ? AND last_seq = 2147483647"
-        static let forwardOpenRun =
+        let forwardOpenRun =
             "SELECT is_dir FROM run WHERE node_id = ? AND chain_id = ? AND last_seq = 2147483647"
-        static let forwardInsert =
+        let forwardInsert =
             "INSERT INTO run (node_id, chain_id, first_seq, last_seq, is_dir) VALUES (?, ?, ?, 2147483647, ?)"
 
         // MARK: Reverse delta (target below lo, base = the alive lo snapshot)
-        static let reverseFreeze =
+        let reverseFreeze =
             "UPDATE run SET first_seq = ? WHERE node_id = ? AND chain_id = ? AND first_seq = 0"
-        static let reverseBottomRun =
+        let reverseBottomRun =
             "SELECT is_dir FROM run WHERE node_id = ? AND chain_id = ? AND first_seq = 0"
-        static let reverseInsert =
+        let reverseInsert =
             "INSERT INTO run (node_id, chain_id, first_seq, last_seq, is_dir) VALUES (?, ?, 0, ?, ?)"
 
         // MARK: Full ingest: a staged `restic ls` compared with the sentinel-ended runs
-        static let stageInsert = "INSERT OR IGNORE INTO temp.stage (node_id, snap_id, is_dir) VALUES (?, ?, ?)"
-        static let stageClear = "DELETE FROM temp.stage"
+        let stageInsert = "INSERT OR IGNORE INTO temp.stage (node_id, snap_id, is_dir) VALUES (?, ?, ?)"
+        let stageClear = "DELETE FROM temp.stage"
         /// Whose stream the stage holds: one snapshot's rows at most, so the
         /// first row answers. `LIMIT 1` is what keeps the scan to one row.
-        static let stageOwner = "SELECT snap_id FROM temp.stage LIMIT 1"
-        static let stageRunless = """
-            SELECT DISTINCT st.node_id FROM temp.stage st
+        let stageOwner = "SELECT snap_id FROM temp.stage LIMIT 1"
+        /// The stage's nodes no run holds, queued in `temp.gc` for
+        /// `discardStage` to collect once the stage is cleared. No
+        /// `DISTINCT`: the queue's key and `OR IGNORE` deduplicate.
+        let stageRunlessNodes = """
+            INSERT OR IGNORE INTO temp.gc (id) SELECT st.node_id FROM temp.stage st
             WHERE NOT EXISTS (SELECT 1 FROM run r WHERE r.node_id = st.node_id)
             """
-        static let fullFirstInsert = """
+        let fullFirstInsert = """
             INSERT INTO run (node_id, chain_id, first_seq, last_seq, is_dir)
             SELECT node_id, ?, 0, 2147483647, is_dir FROM temp.stage WHERE snap_id = ?
             """
-        static let fullForwardClose = """
+        let fullForwardClose = """
             UPDATE run SET last_seq = ? WHERE chain_id = ? AND last_seq = 2147483647
                 AND NOT EXISTS (SELECT 1 FROM temp.stage g
                     WHERE g.node_id = run.node_id AND g.snap_id = ? AND g.is_dir = run.is_dir)
             """
-        static let fullForwardInsert = """
+        let fullForwardInsert = """
             INSERT INTO run (node_id, chain_id, first_seq, last_seq, is_dir)
             SELECT g.node_id, ?, ?, 2147483647, g.is_dir FROM temp.stage g
             WHERE g.snap_id = ? AND NOT EXISTS (SELECT 1 FROM run r
                 WHERE r.node_id = g.node_id AND r.chain_id = ? AND r.last_seq = 2147483647 AND r.is_dir = g.is_dir)
             """
-        static let fullReverseFreeze = """
+        let fullReverseFreeze = """
             UPDATE run SET first_seq = ? WHERE chain_id = ? AND first_seq = 0
                 AND NOT EXISTS (SELECT 1 FROM temp.stage g
                     WHERE g.node_id = run.node_id AND g.snap_id = ? AND g.is_dir = run.is_dir)
             """
-        static let fullReverseInsert = """
+        let fullReverseInsert = """
             INSERT INTO run (node_id, chain_id, first_seq, last_seq, is_dir)
             SELECT g.node_id, ?, 0, ?, g.is_dir FROM temp.stage g
             WHERE g.snap_id = ? AND NOT EXISTS (SELECT 1 FROM run r
@@ -230,81 +250,124 @@ enum SnapshotIndexSchema {
             """
 
         // MARK: Planner (state 0 only: unreadable snapshots are passed over)
-        static let pendingChains = """
+        let pendingChains = """
             SELECT id FROM chain
             WHERE EXISTS (SELECT 1 FROM snap WHERE snap.chain_id = chain.id AND snap.state = 0)
             """
-        static let pendingDesc = "SELECT hash, time FROM snap WHERE chain_id = ? AND state = 0 ORDER BY seq DESC"
-        static let lowestPendingAbove = """
+        let pendingDesc = "SELECT hash, time FROM snap WHERE chain_id = ? AND state = 0 ORDER BY seq DESC"
+        let lowestPendingAbove = """
             SELECT hash, time FROM snap WHERE chain_id = ? AND state = 0 AND seq > ? ORDER BY seq LIMIT 1
             """
-        static let highestPendingBelow = """
+        let highestPendingBelow = """
             SELECT hash, time FROM snap WHERE chain_id = ? AND state = 0 AND seq < ? ORDER BY seq DESC LIMIT 1
             """
-        static let windowEnd = "SELECT hash FROM snap WHERE chain_id = ? AND state = 1 AND seq = ?"
-        static let pendingBetween = """
+        let windowEnd = "SELECT hash FROM snap WHERE chain_id = ? AND state = 1 AND seq = ?"
+        let pendingBetween = """
             SELECT EXISTS (SELECT 1 FROM snap WHERE chain_id = ? AND state = 0 AND seq > ? AND seq < ?)
             """
 
         // MARK: Housekeeping: only queued chains, only the gaps around queued seqs
-        static let hkChains = "SELECT DISTINCT chain_id FROM hk_pending"
-        static let hkSeqs = "SELECT seq FROM hk_pending WHERE chain_id = ? ORDER BY seq"
-        static let hkDone = "DELETE FROM hk_pending WHERE chain_id = ?"
-        static let hkChainHasSnap = "SELECT EXISTS (SELECT 1 FROM snap WHERE chain_id = ?)"
-        static let hkChainDelete = "DELETE FROM chain WHERE id = ?"
-        static let hkAliveBelow = """
+        let hkChains = "SELECT DISTINCT chain_id FROM hk_pending"
+        let hkSeqs = "SELECT seq FROM hk_pending WHERE chain_id = ? ORDER BY seq"
+        let hkDone = "DELETE FROM hk_pending WHERE chain_id = ?"
+        let hkChainHasSnap = "SELECT EXISTS (SELECT 1 FROM snap WHERE chain_id = ?)"
+        let hkChainDelete = "DELETE FROM chain WHERE id = ?"
+        let hkAliveBelow = """
             SELECT seq FROM snap WHERE chain_id = ? AND state = 1 AND seq < ? ORDER BY seq DESC LIMIT 1
             """
-        static let hkAliveAbove = """
+        let hkAliveAbove = """
             SELECT seq FROM snap WHERE chain_id = ? AND state = 1 AND seq > ? ORDER BY seq LIMIT 1
             """
-        static let hkBottom = """
-            DELETE FROM run WHERE chain_id = ? AND last_seq < ? AND last_seq < 2147483647
-            RETURNING node_id
-            """
-        static let hkGap = """
-            DELETE FROM run WHERE chain_id = ? AND last_seq > ? AND last_seq < ? AND last_seq < 2147483647
+
+        /// The runs each housekeeping delete removes, as the FROM clause and
+        /// WHERE both of its statements share: the delete, and before it the
+        /// fill that queues those runs' nodes in `temp.gc` for collection —
+        /// in SQL, so a whole chain's death never carries its path population
+        /// through Swift. One text per pair: the two can never disagree on
+        /// which runs they mean.
+        private static let bottomRuns = "run WHERE chain_id = ? AND last_seq < ? AND last_seq < 2147483647"
+        private static let gapRuns = """
+            run WHERE chain_id = ? AND last_seq > ? AND last_seq < ? AND last_seq < 2147483647
                 AND first_seq > ?
-            RETURNING node_id
             """
-        static let hkTop = """
-            DELETE FROM run WHERE chain_id = ? AND last_seq > ? AND last_seq < 2147483647 AND first_seq > ?
-            RETURNING node_id
-            """
-        static let hkOrphanChainRuns = "DELETE FROM run WHERE chain_id = ? RETURNING node_id"
+        private static let topRuns =
+            "run WHERE chain_id = ? AND last_seq > ? AND last_seq < 2147483647 AND first_seq > ?"
+        private static let orphanChainRuns = "run WHERE chain_id = ?"
+
+        /// A pair's fill: the nodes of `runs`, queued for `collectNodes`.
+        private static func queueNodes(of runs: String) -> String {
+            "INSERT OR IGNORE INTO temp.gc (id) SELECT node_id FROM " + runs
+        }
+
+        let hkBottomNodes = Self.queueNodes(of: Self.bottomRuns)
+        let hkGapNodes = Self.queueNodes(of: Self.gapRuns)
+        let hkTopNodes = Self.queueNodes(of: Self.topRuns)
+        let hkOrphanChainNodes = Self.queueNodes(of: Self.orphanChainRuns)
+
+        /// `RETURNING` stays on the three range deletes though nothing reads
+        /// its rows: it makes SQLite collect the keys before deleting (two
+        /// passes — an `OpenEphemeral` in EXPLAIN) instead of deleting under
+        /// its `run_closed` cursor, and SQLite 3.43.2, the floor, runs that
+        /// about twice as fast: 86 against 175 ms for one 77.6k-run gap
+        /// (3.51.0 is the other way round, 107 against 47, but with the fill
+        /// in front neither library is slower than when Swift carried the
+        /// ids: 105 against 114 ms on 3.43.2, 131 against 147 on 3.51.0).
+        let hkBottom = "DELETE FROM " + Self.bottomRuns + "\nRETURNING node_id"
+        let hkGap = "DELETE FROM " + Self.gapRuns + "\nRETURNING node_id"
+        let hkTop = "DELETE FROM " + Self.topRuns + "\nRETURNING node_id"
+        /// A whole chain's runs, found by the ids its fill just queued —
+        /// every run of the chain has its node there, and ids another fill
+        /// of the same pass queued fail `chain_id` — so the delete searches
+        /// `run` by key and only the fill scans it. Deleting by `chain_id`
+        /// alone would scan `run` a second time: the same cost as the fill
+        /// again when the chain holds few runs (80 against 40 ms at 2.4M
+        /// runs, 0 or 50 of them the chain's), where by key a runless
+        /// chain's death costs what it did when the delete returned the ids
+        /// to Swift (40 ms, the fill's scan). A large chain's pays per id
+        /// queued: 348 against the old 480 ms for 400k runs on 3.51.0 (324
+        /// against 512 on 3.43.2); one plain second scan would have been
+        /// 198 (188).
+        let hkOrphanChainRuns =
+            "DELETE FROM " + Self.orphanChainRuns + " AND node_id IN (SELECT id FROM temp.gc)"
 
         // MARK: Node GC, one level at a time over temp.gc
-        static let gcClear = "DELETE FROM temp.gc"
-        static let gcInsert = "INSERT OR IGNORE INTO temp.gc (id) VALUES (?)"
-        static let gcKeepCollectable = """
-            DELETE FROM temp.gc WHERE id NOT IN (SELECT id FROM node)
+        let gcClear = "DELETE FROM temp.gc"
+        let gcInsert = "INSERT OR IGNORE INTO temp.gc (id) VALUES (?)"
+        /// Keeps, of the queued ids, only nodes nothing needs: gone from the
+        /// queue are the root (id 1, created with the schema and never again:
+        /// every collection that deletes a child of the root queues it as
+        /// that child's parent, and a listing may name "/" and give it runs
+        /// and a stage row), ids with no node, and nodes a run, a child or a
+        /// stage row holds. The root gone, its parent 0 is never queued.
+        let gcKeepCollectable = """
+            DELETE FROM temp.gc WHERE id = 1 OR id NOT IN (SELECT id FROM node)
                 OR EXISTS (SELECT 1 FROM run WHERE run.node_id = gc.id)
                 OR EXISTS (SELECT 1 FROM node WHERE node.parent = gc.id)
                 OR EXISTS (SELECT 1 FROM temp.stage WHERE stage.node_id = gc.id)
             """
-        static let gcParents = "SELECT n.parent FROM temp.gc g JOIN node n ON n.id = g.id"
-        static let gcDeleteFTS = """
+        let gcParents = "SELECT n.parent FROM temp.gc g JOIN node n ON n.id = g.id"
+        let gcDeleteFTS = """
             INSERT INTO node_fts (node_fts, rowid, name)
             SELECT 'delete', n.id, n.name FROM temp.gc g JOIN node n ON n.id = g.id
             """
-        static let gcDeleteNodes = "DELETE FROM node WHERE id IN (SELECT id FROM temp.gc)"
+        let gcDeleteNodes = "DELETE FROM node WHERE id IN (SELECT id FROM temp.gc)"
 
         // MARK: Reads
-        static let versionsTimed = """
+        let versionsTimed = """
             SELECT s.hash, s.time FROM run r
             JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
                 AND s.seq BETWEEN r.first_seq AND r.last_seq
             WHERE r.node_id = ?
             ORDER BY s.time DESC, s.id DESC
             """
-        static let versionsInChain = """
+        let versionsInChain = """
             SELECT s.hash, s.time FROM run r
             JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
                 AND s.seq BETWEEN r.first_seq AND r.last_seq
             WHERE r.node_id = ? AND r.chain_id = (SELECT id FROM chain WHERE key = ?)
             ORDER BY s.time DESC, s.id DESC
             """
-        static func summaryCounts(placeholders: String) -> String {
+        let summaryCounts = InList { placeholders in
             """
             SELECT r.node_id, count(*), max(s.time) FROM run r
             JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
@@ -313,30 +376,30 @@ enum SnapshotIndexSchema {
             GROUP BY r.node_id
             """
         }
-        static let summaryNewest = """
+        let summaryNewest = """
             SELECT s.hash FROM run r
             JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
                 AND s.seq BETWEEN r.first_seq AND r.last_seq
             WHERE r.node_id = ? AND s.time = ?
             ORDER BY s.id DESC LIMIT 1
             """
-        static func containsKind(placeholders: String) -> String {
+        let containsKind = InList { placeholders in
             """
             SELECT node_id, is_dir FROM run
             WHERE node_id IN (\(placeholders)) AND chain_id = ? AND first_seq <= ? AND last_seq >= ?
             """
         }
-        static let aliveRuns = """
+        let aliveRuns = """
             SELECT r.chain_id, r.first_seq, r.last_seq, r.is_dir FROM run r
             WHERE r.node_id = ? AND EXISTS (SELECT 1 FROM snap s
                 WHERE s.chain_id = r.chain_id AND s.state = 1 AND s.seq BETWEEN r.first_seq AND r.last_seq)
             """
-        static let newestCover = """
+        let newestCover = """
             SELECT time, id FROM snap
             WHERE chain_id = ? AND state = 1 AND seq BETWEEN ? AND ?
             ORDER BY time DESC, id DESC LIMIT 1
             """
-        static let searchFTS = """
+        let searchFTS = """
             SELECT n.id, n.name FROM node_fts f JOIN node n ON n.id = f.rowid
             WHERE node_fts MATCH ? ORDER BY n.name
             """
@@ -344,30 +407,84 @@ enum SnapshotIndexSchema {
         /// whatever its (empty) tables say. Past that, chain-driven, one
         /// `snap_cover` probe per chain and state: a snapshot still to read,
         /// or one set aside as unreadable, keeps the index incomplete.
-        static let notComplete = """
+        let notComplete = """
             SELECT NOT EXISTS (SELECT 1 FROM listing_applied)
                 OR EXISTS (SELECT 1 FROM chain
                     WHERE EXISTS (SELECT 1 FROM snap WHERE snap.chain_id = chain.id AND snap.state IN (0, 2)))
             """
 
         // MARK: Browse caches
-        static let cacheOwnerPut = "INSERT INTO cache_owner (snapshot_id) VALUES (?) ON CONFLICT DO NOTHING"
-        static let cacheListingPut =
+        let cacheOwnerPut = "INSERT INTO cache_owner (snapshot_id) VALUES (?) ON CONFLICT DO NOTHING"
+        let cacheListingPut =
             "INSERT INTO dir_listing (snapshot_id, dir_path, nodes) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
-        static let cacheDiffPut =
+        let cacheDiffPut =
             "INSERT INTO diff_result (older_id, newer_id, changes) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
-        static let cacheListingGet = "SELECT nodes FROM dir_listing WHERE snapshot_id = ? AND dir_path = ?"
-        static let cacheDiffGet = "SELECT changes FROM diff_result WHERE older_id = ? AND newer_id = ?"
+        let cacheListingGet = "SELECT nodes FROM dir_listing WHERE snapshot_id = ? AND dir_path = ?"
+        let cacheDiffGet = "SELECT changes FROM diff_result WHERE older_id = ? AND newer_id = ?"
         /// Every snap row is a listed snapshot, so "no snap row" is "not
         /// listed" — forgotten, or never reconciled at all.
-        static let cacheSweepIDs = """
+        let cacheSweepIDs = """
             SELECT o.snapshot_id FROM cache_owner o
             WHERE NOT EXISTS (SELECT 1 FROM snap s WHERE s.hash = o.snapshot_id)
             """
-        static let cacheSweepListing = "DELETE FROM dir_listing WHERE snapshot_id = ?"
-        static let cacheSweepDiffOlder = "DELETE FROM diff_result WHERE older_id = ?"
-        static let cacheSweepDiffNewer = "DELETE FROM diff_result WHERE newer_id = ?"
-        static let cacheSweepOwner = "DELETE FROM cache_owner WHERE snapshot_id = ?"
+        let cacheSweepListing = "DELETE FROM dir_listing WHERE snapshot_id = ?"
+        let cacheSweepDiffOlder = "DELETE FROM diff_result WHERE older_id = ?"
+        let cacheSweepDiffNewer = "DELETE FROM diff_result WHERE newer_id = ?"
+        let cacheSweepOwner = "DELETE FROM cache_owner WHERE snapshot_id = ?"
+    }
+
+    /// A statement over an IN list, whose text depends on how many ids the
+    /// list holds: stored as the function from the list's placeholders
+    /// (`SQL.placeholders(n)`) to the statement, and called as
+    /// `SQL.summaryCounts(placeholders:)`. A struct rather than a bare
+    /// closure property because the registry reads it through `Mirror`, and
+    /// a function value taken out of a `Mirror` child and called crashes the
+    /// process (Swift 6.4, both optimisation levels), while a struct that
+    /// holds the function casts and calls cleanly.
+    ///
+    /// Its callers prepare it per call (`Row.fetchAll(db, sql:)`), never
+    /// through `cachedStatement`: GRDB's statement cache is per connection
+    /// and never evicts, and each list length is its own text, so caching
+    /// would keep a statement per length on every reader — measured at
+    /// about 30 MB of SQLite heap on one connection for both IN-list
+    /// statements at every length up to 200 — to save 25–80 µs a call.
+    /// Caching only the length a capped search repeats (its 200 ids) would
+    /// keep one statement per shape, but it would save 60–80 µs a capped call
+    /// and tie the store to the app's result cap. Padding every list to one
+    /// length with NULLs would keep one text, but it made a one-id call four
+    /// times slower, and a NULL pad in a `NOT IN` list would make that list
+    /// match nothing.
+    struct InList: Sendable {
+        private let build: @Sendable (_ placeholders: String) -> String
+
+        init(_ build: @escaping @Sendable (_ placeholders: String) -> String) {
+            self.build = build
+        }
+
+        func callAsFunction(placeholders: String) -> String {
+            build(placeholders)
+        }
+    }
+
+    /// How the store spells a statement: `SQL.nodeLookup` is the
+    /// `nodeLookup` property of the one `Statements` value, reached through
+    /// a key path. Call sites read as they did when the statements were
+    /// static constants, while the statements stay stored properties that
+    /// reflection can list (a `static let` is invisible to `Mirror`).
+    ///
+    /// Declare no statement here. A `static let` on this enum compiles at
+    /// every `SQL.x` call site, because ordinary lookup finds it before the
+    /// dynamic member, and never reaches the registry, so no plan test would
+    /// pin it — and nothing at run time can notice. Add it to `Statements`.
+    @dynamicMemberLookup
+    enum SQL {
+        /// The one instance: what `SQL.x` reads and what the registry
+        /// reflects over.
+        static let statements = Statements()
+
+        static subscript<T>(dynamicMember keyPath: KeyPath<Statements, T>) -> T {
+            statements[keyPath: keyPath]
+        }
 
         /// `count` comma-separated `?`s for an IN list.
         static func placeholders(_ count: Int) -> String {

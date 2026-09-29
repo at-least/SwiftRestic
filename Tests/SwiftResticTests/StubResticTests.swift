@@ -266,10 +266,13 @@ struct StubRestic: Sendable {
                 exit 0
                 ;;
             browserows)
-                # The browse surface: real node rows for `ls`, one change row
-                # for `diff`. The trace's per-invocation start lines are what
-                # lets a test prove a repeat browse reads the cache instead of
-                # spawning restic again.
+                # The browse surface: real node rows for `ls`, change rows
+                # for `diff` — one of them a directory whose name ends in
+                # U+0600 (raw UTF-8, as restic writes it), whose trailing
+                # slash a Character test cannot see. The trace's
+                # per-invocation start lines are what lets a test prove a
+                # repeat browse reads the cache instead of spawning restic
+                # again.
                 trace "browserows-arm"
                 case " $* " in
                     *" snapshots "*)
@@ -282,6 +285,7 @@ struct StubRestic: Sendable {
                     *" diff "*)
                         echo '{"message_type":"change","path":"/src/new.txt","modifier":"+"}'
                         echo '{"message_type":"change","path":"/src/gone.txt","modifier":"-"}'
+                        printf '{"message_type":"change","path":"/src/new\\330\\200/","modifier":"+"}\\n'
                         ;;
                     *)
                         echo "{}"
@@ -302,6 +306,31 @@ struct StubRestic: Sendable {
                     *" diff "*)
                         echo '{"message_type":"change","path":"/src/new.txt","modifier":"+"}'
                         echo '{"message_type":"change","path":1,"modifier":"-"}'
+                        ;;
+                    *)
+                        echo "{}"
+                        ;;
+                esac
+                exit 0
+                ;;
+            lsmalformed)
+                # A full `ls` that exits cleanly but whose third node line does
+                # not decode (a path that is not a string, as a restic newer
+                # than the pinned schema might write), with a good node after
+                # it: a node the decoder dropped is one the index would read
+                # as absent from the snapshot. restic's snapshot header line
+                # comes first, as `ls --json` writes it, and must not count.
+                trace "lsmalformed-arm"
+                case " $* " in
+                    *" snapshots "*)
+                        echo "[]"
+                        ;;
+                    *" ls "*)
+                        echo '{"time":"2026-01-02T03:04:05Z","tree":"0000","paths":["/src"],"hostname":"stub","id":"feedface00000000","short_id":"feedface","struct_type":"snapshot","message_type":"snapshot"}'
+                        echo '{"name":"src","type":"dir","path":"/src","mtime":"2026-01-02T03:04:05Z","struct_type":"node","message_type":"node"}'
+                        echo '{"name":"notes.txt","type":"file","path":"/src/notes.txt","size":42,"mtime":"2026-01-02T03:04:05Z","struct_type":"node","message_type":"node"}'
+                        echo '{"name":"lost.txt","type":"file","path":1,"size":7,"struct_type":"node","message_type":"node"}'
+                        echo '{"name":"after.txt","type":"file","path":"/src/after.txt","size":3,"mtime":"2026-01-02T03:04:05Z","struct_type":"node","message_type":"node"}'
                         ;;
                     *)
                         echo "{}"
@@ -872,6 +901,72 @@ struct StubResticTests {
                 return
             }
         }
+    }
+
+    // MARK: - Index streams
+
+    @Test("a full ls with a node line that did not decode delivers every node that did, then throws malformedOutput")
+    func walkSnapshotThrowsAfterAShortStream() async throws {
+        let fixture = try makeFixture(mode: "lsmalformed")
+        defer { cleanUp(fixture.root) }
+
+        let collector = NodeCollector()
+        await #expect(throws: ResticError.malformedOutput(command: "ls", detail: "1 node line did not decode")) {
+            try await fixture.service.walkSnapshot(fixture.context, snapshotID: "feedface00000000") { node in
+                collector.append(node)
+            }
+        }
+        // Delivered before the verdict, after.txt included: a lost line does
+        // not end the stream, and the verdict comes once it has — the caller
+        // decides what a short stream is worth. restic's header line is its
+        // snapshot, not a node, and does not count as lost.
+        #expect(collector.content == ["/src": true, "/src/notes.txt": false, "/src/after.txt": false])
+    }
+
+    /// Time-limited like the coordinator suites: a full read that failed
+    /// and stopped landing in the pass's skip set would make the pass spawn
+    /// the stub's `ls` forever.
+    @Test(
+        "a full read whose ls lost a node line indexes nothing of it: the snapshot stays pending, and read whole it lands",
+        .timeLimit(.minutes(1))
+    )
+    func backfillLeavesAShortListingPending() async throws {
+        let fixture = try makeFixture(mode: "lsmalformed")
+        defer { cleanUp(fixture.root) }
+        let coordinator = IndexCoordinator(directory: fixture.root.appendingPathComponent("config"))
+        let repositoryID = fixture.context.repository.id
+        let snapshotID = "feedface00000000"
+        let listing = [try IndexTestData.snapshot(snapshotID, micros: 1_000_000, tags: [IndexTestData.planA], paths: ["/src"])]
+        await coordinator.reconcile(repositoryID: repositoryID, snapshots: listing, generation: 1)
+
+        await coordinator.runBackfill(repositoryID: repositoryID, service: fixture.service, context: fixture.context)
+        // The full route ran once and was turned down. /src and notes.txt
+        // streamed before the lost line and after.txt after it, and none of
+        // them is claimed: a stream known to be short never reaches its
+        // final, which would close the runs of every path it failed to name.
+        let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+        #expect(trace.components(separatedBy: "\n").filter { $0.contains("args=[ls ") }.count == 1)
+        let report = await coordinator.lastBackfillReport(repositoryID: repositoryID)
+        #expect(report?.fullFailed == 1)
+        #expect(report?.fulls == 0)
+        #expect(report?.markedUnreadable == 0)
+        #expect(try await coordinator.versions(ofPath: "/src/notes.txt", repositoryID: repositoryID).isEmpty)
+        #expect(try await !coordinator.isComplete(repositoryID: repositoryID))
+        // Pending, not set aside: the next pass reads it again, in full.
+        let next = try await coordinator.read(repositoryID) { try $0.nextStep() }
+        #expect(next == .full(snapshotID: snapshotID))
+
+        // The same snapshot, its listing whole, lands on the next pass: what
+        // turned the first read down was the lost line — not the stub, the
+        // paths or the store.
+        var whole = fixture.context
+        whole.repository.extraEnvironment["SWIFTRESTIC_STUB"] = "browserows"
+        await coordinator.runBackfill(repositoryID: repositoryID, service: fixture.service, context: whole)
+        #expect(await coordinator.lastBackfillReport(repositoryID: repositoryID)?.fulls == 1)
+        #expect(try await coordinator.versions(ofPath: "/src/notes.txt", repositoryID: repositoryID).map(\.id) == [snapshotID])
+        #expect(try await coordinator.isComplete(repositoryID: repositoryID))
+        let violations = try await coordinator.read(repositoryID) { try $0.invariantViolations() }
+        #expect(violations.isEmpty)
     }
 }
 

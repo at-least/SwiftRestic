@@ -66,17 +66,44 @@ struct IndexBackfillBufferTests {
         #expect(recorder.recorded.map(\.count) == [4000])
     }
 
-    @Test("a clean finish flushes the remainder once and marks coverage exactly once")
-    func cleanFinishMarksOnce() {
+    @Test("a clean finish sends the remainder as the final chunk: one transaction, coverage marked once")
+    func cleanFinishMarksOnce() throws {
         let recorder = FlushRecorder()
         let buffer = BackfillBuffer { paths, final in
             try recorder.record(paths, final)
         }
         for index in 0..<10 { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
-        try? buffer.finish()
-        #expect(recorder.recorded.count == 2)
-        #expect(recorder.recorded.first?.final == false)
-        #expect(recorder.recorded.last?.final == true)
+        try buffer.finish()
+        #expect(recorder.recorded.map(\.count) == [10])
+        #expect(recorder.recorded.map(\.final) == [true])
+    }
+
+    @Test("a stream that ends on a chunk boundary still finalises, with an empty final")
+    func boundaryFinishSendsEmptyFinal() throws {
+        let recorder = FlushRecorder()
+        let buffer = BackfillBuffer { paths, final in
+            try recorder.record(paths, final)
+        }
+        for index in 0..<SnapshotIndex.chunkSize {
+            buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false))
+        }
+        try buffer.finish()
+        #expect(recorder.recorded.map(\.count) == [SnapshotIndex.chunkSize, 0])
+        #expect(recorder.recorded.map(\.final) == [false, true])
+    }
+
+    @Test("a final that fails surfaces its own error, once, and leaves nothing recorded")
+    func failingFinalThrows() {
+        let recorder = FlushRecorder()
+        let buffer = BackfillBuffer { paths, final in
+            try recorder.record(paths, final)
+        }
+        for index in 0..<10 { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
+        recorder.failFromNowOn()
+        #expect(throws: IndexError.unknownSnapshot("injected")) { try buffer.finish() }
+        #expect(recorder.attempted.map(\.count) == [10])
+        #expect(recorder.attempted.map(\.final) == [true])
+        #expect(recorder.recorded.isEmpty)
     }
 
     @Test("a stream that delivered nothing is refused without the final: applied, it would read as an empty snapshot")
@@ -103,18 +130,35 @@ struct IndexBackfillBufferTests {
     }
 }
 
-/// The delta route's reading of a `restic diff`: existence changes only, and
-/// any `T` line or undecodable line means the diff cannot build the target.
+/// The delta route's reading of a `restic diff`: existence changes only, as
+/// the entries the store takes (the path without restic's trailing `/`, the
+/// kind that `/` marks), and any `T` line means the diff cannot build the
+/// target.
 struct DeltaCollectorTests {
-    @Test("added and removed are kept in restic's spelling; content and metadata changes are not existence")
+    @Test("added and removed arrive as entries, the kind read off restic's trailing slash; content and metadata changes are not existence")
     func keepsExistenceChanges() throws {
         let collector = DeltaCollector()
-        for (path, modifier) in [("/d/new.txt", "+"), ("/d/sub/", "+"), ("/d/gone.txt", "-"), ("/d/edit.txt", "M"), ("/d/meta", "U"), ("/d/both", "MU")] {
+        for (path, modifier) in [
+            ("/d/new.txt", "+"), ("/d/sub/", "+"), ("/d/new\u{0600}/", "+"),
+            ("/d/gone.txt", "-"), ("/d/old/", "-"),
+            ("/d/edit.txt", "M"), ("/d/meta", "U"), ("/d/both", "MU"),
+        ] {
             collector.consume(ResticDiffChange(path: path, modifier: modifier))
         }
-        let delta = try collector.delta(malformedLines: 0)
-        #expect(delta.added == ["/d/new.txt", "/d/sub/"])
-        #expect(delta.removed == ["/d/gone.txt"])
+        let delta = try collector.delta()
+        #expect(delta.added == [
+            IndexedEntry(path: "/d/new.txt", isDirectory: false),
+            IndexedEntry(path: "/d/sub", isDirectory: true),
+            IndexedEntry(path: "/d/new\u{0600}", isDirectory: true),
+        ])
+        #expect(delta.removed == [
+            IndexedEntry(path: "/d/gone.txt", isDirectory: false),
+            IndexedEntry(path: "/d/old", isDirectory: true),
+        ])
+        // Byte-exact: the Prepend directory's slash is gone, not kept inside
+        // its last Character (`IndexedEntry`'s `==` is String's, which is
+        // canonical equivalence).
+        #expect(delta.added.map { Array($0.path.utf8) }.last == Array("/d/new\u{0600}".utf8))
     }
 
     @Test("a T line ends the delta whatever follows it: restic omits both subtrees of a kind change")
@@ -123,13 +167,21 @@ struct DeltaCollectorTests {
         collector.consume(ResticDiffChange(path: "/d/a", modifier: "+"))
         collector.consume(ResticDiffChange(path: "/d/x/", modifier: "T"))
         collector.consume(ResticDiffChange(path: "/d/b", modifier: "-"))
-        #expect(throws: IncompleteStream.typeChange(path: "/d/x/")) { try collector.delta(malformedLines: 0) }
+        #expect(throws: IncompleteStream.typeChange(path: "/d/x/")) { try collector.delta() }
     }
 
-    @Test("a line that did not decode ends the delta: the change it carried would be silently missing")
-    func malformedAborts() {
-        let collector = DeltaCollector()
-        collector.consume(ResticDiffChange(path: "/d/a", modifier: "+"))
-        #expect(throws: IncompleteStream.malformedLines(2)) { try collector.delta(malformedLines: 2) }
+    @Test("the tests' diff spelling is the one restic writes and the index reads back")
+    func diffSpellingRoundTrips() {
+        for (path, isDirectory) in [("/d/sub", true), ("/d/file.txt", false), ("/d/cafe\u{0301}", true)] {
+            let spelled = IndexTestData.diffSpelling(path, isDirectory: isDirectory)
+            #expect(ResticDiffChange(path: spelled, modifier: "+").isDirectory == isDirectory, "\(spelled)")
+            // What `DeltaCollector` hands the store for that line: the kind
+            // back, and the path byte-exact — the NFD name as its own bytes,
+            // not only as a canonically equal String (`IndexedEntry`'s `==`
+            // is String's).
+            let entry = IndexedEntry(diffSpelling: spelled)
+            #expect(entry.isDirectory == isDirectory, "\(spelled)")
+            #expect(Array(entry.path.utf8) == Array(path.utf8), "\(spelled)")
+        }
     }
 }
