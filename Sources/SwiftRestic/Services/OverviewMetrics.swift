@@ -119,7 +119,8 @@ enum OverviewMetrics {
                 // sidebar's "Failed — Just now". An unreadable listing still
                 // outranks the problem: its row owns the Retry. The pause
                 // rank stays off the card; Next runs and the sidebar say it.
-                // Whether the plan counts as protected stays the listing's.
+                // Whether the plan counts as protected is the listing's,
+                // except that a standing failure takes it away below.
                 if let activity = activity(plan.id) {
                     return ProtectionRow(
                         plan: plan,

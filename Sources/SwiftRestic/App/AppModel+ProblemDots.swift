@@ -6,8 +6,8 @@ extension AppModel {
     /// The plan's newest problem run (failed or completed-with-errors) that
     /// still stands — no successful run has landed after it. Seeing the
     /// failure does not heal it, so this, not the dot, is the persistent
-    /// surface: the plan page's status row and the sidebar row's subtitle
-    /// read from it.
+    /// surface: the plan page's status row, the sidebar row's subtitle and
+    /// the Overview's Protection rows read from it.
     func currentProblem(for planID: UUID) -> RunRecord? {
         guard let problem = newestRun(for: planID, outcomeIn: [.failed, .completedWithErrors])
         else { return nil }

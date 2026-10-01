@@ -140,46 +140,31 @@ struct BannerView: View {
 
 // MARK: - Stat tile
 
-/// One KPI: an icon chip beside a caption and a large rounded numeral, on its
-/// own card plate. Used in overview, detail headers and diff statistics.
-/// Icons are opt-in per tile and reserved for trouble — a healthy number
-/// needs no glyph (the quiet rule the overview's tiles follow).
+/// One figure: a caption above a large rounded numeral, on its own card
+/// plate. The compare sheet's statistics are its one use since the Overview
+/// and the repository page moved to label/value cards.
 struct StatTile: View {
     let title: String
     let value: String
     var help: String?
-    /// Resting-state cue for tiles wrapped in a Button: the same trailing
-    /// chevron the overview problem rows wear, so clickability does not
-    /// exist only under the cursor. Decorative — the button's own
-    /// accessibility label says where it goes.
-    var trailingSymbol: String?
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(value)
-                    .font(Theme.statValue)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    // 75%, not less: these are the app's most prominent
-                    // numerals, and shrinking further trades legibility for a
-                    // fit a truncation ellipsis would serve better.
-                    .minimumScaleFactor(0.75)
-            }
-            if let trailingSymbol {
-                Spacer(minLength: 8)
-                Image(systemName: trailingSymbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-            }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(value)
+                .font(Theme.statValue)
+                .monospacedDigit()
+                .lineLimit(1)
+                // 75%, not less: these are the app's most prominent
+                // numerals, and shrinking further trades legibility for a
+                // fit a truncation ellipsis would serve better.
+                .minimumScaleFactor(0.75)
         }
-        // Caption and value read as one utterance — as separate stops every
-        // pane's tile row would cost VoiceOver twice the trips.
+        // Caption and value read as one utterance — as separate stops a row
+        // of tiles would cost VoiceOver twice the trips.
         .accessibilityElement(children: .combine)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Space.cardPadding)
@@ -447,18 +432,13 @@ struct SnapshotListingCaveat: View {
 
 /// A snapshot count traces to the moment it was read: an "Updated 7:27 AM"
 /// caption, or a spinner while a refresh is in flight.
-/// `showsSpinner: false` renders nothing while a read is in flight —
-/// surfaces without room for a spinner stay quiet instead.
 struct SnapshotFreshnessLabel: View {
     let loadedAt: Date?
     let isLoading: Bool
-    var showsSpinner = true
 
     var body: some View {
         if isLoading {
-            if showsSpinner {
-                ProgressView().controlSize(.small)
-            }
+            ProgressView().controlSize(.small)
         } else if let loadedAt {
             Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")
                 .font(.caption)

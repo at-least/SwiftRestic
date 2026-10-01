@@ -225,9 +225,9 @@ struct ActivityView: View {
 
     #if DEBUG
     /// Debug-only: `SWIFTRESTIC_CAPTURE_SHEET=diff` opens the drawer's
-    /// Compare with Previous… on the newest backup run whose snapshot the
-    /// listing holds, once the listing has loaded — this pane is the
-    /// compare sheet's home.
+    /// Compare with Previous… on the newest backup run that wrote a
+    /// snapshot, once the listing holds that snapshot — this pane is the
+    /// compare sheet's home. When the listing never does, nothing opens.
     private func applyCaptureSheetOverride() {
         guard ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "diff",
               comparing == nil,

@@ -277,11 +277,14 @@ struct SidebarView: View {
     }
 
     /// The repository row's second line: how many backups it holds — but
-    /// only once that is known. A repository that has not been read, or
-    /// could not be (an unplugged disk, an unreachable server), never says
+    /// only once that is known. A repository still being read, or whose
+    /// read failed (a wrong password, an unreachable server), never says
     /// "0 backups", which reads as "your data is gone"; it says what the
     /// expanded group says. A count from an earlier listing stands under a
-    /// failed re-read, as the expanded records do.
+    /// failed re-read, as the expanded records do. One case still reads
+    /// "0 backups": a repository missing from its location at launch
+    /// (restic exit 10, an unplugged disk) with nothing read before, which
+    /// AppModel's listing settles as loaded and empty.
     @ViewBuilder
     private func restoreCaption(_ repository: Repository, listing: [Snapshot]) -> some View {
         Group {
