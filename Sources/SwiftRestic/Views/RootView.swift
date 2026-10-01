@@ -21,8 +21,9 @@ struct RootView: View {
     @State private var editingRepository: Repository?
     @State private var isShowingFind = false
     /// What the Restore pane's "Search All Backups…" hands Find Files. Only
-    /// that button sets it; the sheet's dismissal clears it, so ⇧⌘F and
-    /// every other way in still open an empty search.
+    /// that button sets it; the sheet's dismissal clears it, so ⇧⌘F, the
+    /// toolbar's magnifier and every other way in still open an empty
+    /// search.
     @State private var findPrefill: FindFilesView.Prefill?
     @State private var isShowingConcepts = false
     /// The one confirmation up, from whichever surface asked — the menu
@@ -123,11 +124,23 @@ struct RootView: View {
         }
     }
 
-    /// The toolbar's look and the banner announcements. No app-wide toolbar
-    /// buttons: each pane carries only its own verbs, and Find Files and the
-    /// console live in the Repository menu (⇧⌘F, restic Console…).
+    /// The toolbar's look, its one app-wide button, and the banner
+    /// announcements. Each pane carries its own verbs; Find Files is the
+    /// exception, because looking for a lost file starts from wherever the
+    /// user is — Arq keeps its search across backups on screen too. The
+    /// console stays in the Repository menu (restic Console…).
     private func chrome<V: View>(over content: V) -> some View {
         content
+        .toolbar {
+            ToolbarItem {
+                // The menu item's route and guard, so the two never disagree.
+                Button("Find Files", systemImage: "magnifyingglass") {
+                    router.request(.showFind)
+                }
+                .disabled(!model.repositoryCommands(for: router.selection).canFind)
+                .help("Find files in every backup (⇧⌘F)")
+            }
+        }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onChange(of: model.banners) { announceBanner(from: $0, to: $1) }
     }

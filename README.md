@@ -88,7 +88,8 @@ checked in so a normal build does not need it.
   says how many matches only other backups hold; *Search All Backups…* carries
   the search on in Find Files.
 - **Find files across snapshots** — search every snapshot for a name or glob when
-  you do not know which backup still has the file, then restore the match. ⇧⌘F.
+  you do not know which backup still has the file, then restore the match. The
+  toolbar's magnifier, or ⇧⌘F.
 - **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
   runs `restic diff` against the previous snapshot of the same folders from the
   same Mac (any earlier one can be chosen) and lists what was added, removed or
