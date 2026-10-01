@@ -58,7 +58,8 @@ struct RunDetailPanel: View {
                     .foregroundStyle(StatusPalette.status(run.outcome))
                     .accessibilityHidden(true)
             }
-            Text("\(run.outcome.displayName) · finished \(Format.timestamp(run.finishedAt))")
+            // How long it took lives here, not in a table column of its own.
+            Text("\(run.outcome.displayName) · finished \(Format.timestamp(run.finishedAt)) · \(Format.duration(run.duration))")
                 .font(.headline)
         }
     }

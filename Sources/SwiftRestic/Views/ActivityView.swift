@@ -78,28 +78,24 @@ struct ActivityView: View {
                     }
                     .width(24)
 
-                    // Widths: the caps on the fixed-length columns send the
-                    // spare width to Detail, the one column whose text runs
-                    // long — without them Kind, Duration and Added took it
-                    // and Detail stayed at 110 pt in the default window.
-                    // Measured on macOS 26, a table created in a window, or
-                    // narrowed to it, puts every capped column at its
-                    // minimum and the rest into Detail, while widening
-                    // shares the growth out evenly up to the caps. So each
-                    // minimum is what its column shows on arrival —
-                    // Started's is the widest timestamp, "May 31, 2026 at
-                    // 10:00 AM" (161.6 pt), Subject's holds a plan name like
-                    // "Photos Library" (88.1 pt) — and the caps decide what
-                    // widening leaves Detail: 202 pt when the default window
-                    // is regrown from the minimum one (185 beside a legacy
-                    // scroller). A row is 16 + the column widths + 6 × 17 +
-                    // 16 pt wide, and the 940-pt window with the sidebar at
-                    // its default 260 plus the split's 8 pt leaves the table
-                    // 672, so the minimums may add up to 538 (they are 536).
-                    // A legacy scroller takes 17 of those points: with one
-                    // showing, as with the sidebar dragged wider, the
-                    // minimum-size window scrolls the table 15 pt sideways —
-                    // fitting it would leave Subject or Detail too narrow.
+                    // Four columns after the glyph, Arq's one-line row with
+                    // the kind and the verdict beside it: how long a run
+                    // took and what it added are in the drawer below and in
+                    // Copy Details. Widths: the caps on the fixed-length
+                    // columns send the spare width to Detail, the one column
+                    // whose text runs long. Measured on macOS 26, a table
+                    // created in a window, or narrowed to it, puts every
+                    // capped column at its minimum and the rest into Detail,
+                    // while widening shares the growth out evenly up to the
+                    // caps. So each minimum is what its column shows on
+                    // arrival — Started's is the widest timestamp, "May 31,
+                    // 2026 at 10:00 AM" (161.6 pt), Subject's holds a plan
+                    // name like "Photos Library" (88.1 pt). A row is 16 + the
+                    // column widths + 4 × 17 + 16 pt wide, and the 940-pt
+                    // window with the sidebar at its default 260 plus the
+                    // split's 8 pt leaves the table 672, so the minimums may
+                    // add up to 572 (they are 414) — room for a legacy
+                    // scroller's 17 without a sideways scroll.
                     TableColumn("Started", value: \.startedAt) { run in
                         Text(Format.timestamp(run.startedAt))
                             .monospacedDigit()
@@ -119,17 +115,6 @@ struct ActivityView: View {
                         Text(run.kind.rawValue.capitalized)
                     }
                     .width(min: 52, ideal: 56, max: 56)
-
-                    TableColumn("Duration", value: \.duration) { run in
-                        Text(Format.duration(run.duration)).monospacedDigit()
-                    }
-                    .width(min: 58, ideal: 64, max: 64)
-
-                    TableColumn("Added", value: \.dataAdded) { run in
-                        Text(run.dataAdded > 0 ? Format.bytes(run.dataAdded) : "—")
-                            .monospacedDigit()
-                    }
-                    .width(min: 64, ideal: 68, max: 68)
 
                     TableColumn("Detail") { run in
                         let detail = RunRecordPresentation.detail(for: run)
@@ -159,6 +144,13 @@ struct ActivityView: View {
                 // it is the alternating behavior that gets disabled; the
                 // outcome glyphs and the Detail column keep rows scannable.
                 .alternatingRowBackgrounds(.disabled)
+                // Wiping the history is rare and final, so it is not chrome:
+                // a right-click on the list, behind the same confirmation.
+                .contextMenu(forSelectionType: RunRecord.ID.self) { _ in
+                    Button("Clear History…", role: .destructive) {
+                        isConfirmingClear = true
+                    }
+                }
 
                 // Every selected run opens the drawer, a clean one too: the
                 // plan page's Last backup tile lands on exactly such a run.
@@ -187,13 +179,6 @@ struct ActivityView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 160)
-
-                Button("Clear History", systemImage: "trash") {
-                    isConfirmingClear = true
-                }
-                .labelStyle(.titleAndIcon)
-                .disabled(model.configuration.runs.isEmpty)
-                .help("Permanently remove all run records")
             }
         }
         .confirmationDialog(

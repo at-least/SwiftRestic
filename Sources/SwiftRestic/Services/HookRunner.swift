@@ -79,8 +79,8 @@ struct HookRunner: Sendable {
         }
 
         /// The hook's verdict for the run's log — never any of its output.
-        /// The log is what Copy Log puts on the clipboard for a forum post,
-        /// and a script's output is where a verbose HTTP client prints its
+        /// The log is what a user copies whole into a forum post, and a
+        /// script's output is where a verbose HTTP client prints its
         /// `Authorization` header.
         var logLine: String {
             if cancelled { return "Hook “\(hookName)” was cancelled before it finished." }
@@ -99,7 +99,7 @@ struct HookRunner: Sendable {
     ///
     /// Shielded from the run's transcript: the runner would otherwise record
     /// the hook's command line and every line it printed into the run's log,
-    /// which Copy Log puts on the clipboard. The engines note the verdict
+    /// which a user copies whole to ask for help. The engines note the verdict
     /// (`Outcome.logLine`) instead.
     func run(_ hook: BackupHook, context: Context) async -> Outcome {
         await RunTranscript.$current.withValue(nil) {
