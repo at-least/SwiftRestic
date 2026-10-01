@@ -109,6 +109,31 @@ struct OverviewMetricsTests {
         #expect(rows.map(\.stateText) == ["Last backup \(Format.relative(time))"])
     }
 
+    @Test("a protected row counts from the moment the sidebar counts from")
+    func protectedRowCountsFromTheRun() {
+        // Photos waits 45 s in a before-backup hook, and restic stamps its
+        // snapshot after it: the sidebar read "Last backup 3 minutes ago"
+        // (the run's start, lastSuccessAt) beside the card's "2 minutes ago"
+        // (the snapshot's time), same backup, same tick (captured 2026-10-02).
+        let repository = UUID()
+        var photos = plan("Photos", repository: repository)
+        photos.lastSuccessAt = Date.now.addingTimeInterval(-207)
+        let rows = OverviewMetrics.protectionRows(
+            plans: [photos],
+            latestSnapshot: { _, _ in snapshot("snapPhotos", at: Date.now.addingTimeInterval(-162)) },
+            repositoryHasSnapshots: { _ in true },
+            listingOutcome: { _ in .loaded },
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in nil }
+        )
+        let sidebar = PlanStatus.sidebarCaption(
+            for: photos, activity: nil, problem: nil, existingRepositoryIDs: [repository]
+        )
+        #expect(rows.map(\.stateText) == [sidebar.text])
+        #expect(rows.first?.isProtected == true)
+    }
+
     @Test("an idle repository that is not refreshing says so, not Checking…")
     func idleNotChecking() {
         let idle = UUID()

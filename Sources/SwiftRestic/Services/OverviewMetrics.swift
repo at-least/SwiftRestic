@@ -170,11 +170,15 @@ enum OverviewMetrics {
         case .loaded:
             let line: String
             if let latest {
-                // The sidebar's words and formatter, so the two never
-                // disagree side by side: Date.RelativeFormatStyle
+                // The sidebar's words, formatter and moment, so the two
+                // never disagree side by side: Date.RelativeFormatStyle
                 // rounds 1 h 43 min up to "2 hours ago", where
-                // Format.relative says "1 hour ago".
-                line = "Last backup \(relative(latest.time))"
+                // Format.relative says "1 hour ago"; and the snapshot's
+                // own time comes after the plan's before-backup hooks,
+                // where the sidebar, the plan page and Activity count from
+                // the run's start. The snapshot's time only for a plan
+                // with no run of its own on record.
+                line = "Last backup \(relative(plan.lastSuccessAt ?? latest.time))"
             } else if !repositoryHasSnapshots(repositoryID) {
                 line = "No snapshots yet"
             } else {
