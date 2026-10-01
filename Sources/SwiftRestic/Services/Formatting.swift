@@ -40,18 +40,22 @@ enum Format {
 
     /// The first sentence of a longer message — the part a scan surface can
     /// afford to show, with the rest one selection or tooltip away. Splits on
-    /// a period followed by whitespace and then a capital (so "0.5 GB" and
-    /// "U.S. region" survive whole), a newline, or a CJK full stop.
+    /// a period followed by whitespace and then a capital or "restic" (so
+    /// "0.5 GB" and "U.S. region" survive whole), a newline, or a CJK full
+    /// stop.
     static func firstSentence(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var cuts = ["\n", "。"].compactMap { trimmed.range(of: $0)?.lowerBound }
         // ". " ends a sentence only when something sentence-shaped follows:
-        // a capital starting the next one. Anything else — "U.S. region" —
-        // is an abbreviation the cut would have truncated mid-thought.
+        // a capital starting the next one, or restic — a name that is always
+        // spelled lowercase, and opens the wrong-password message's second
+        // sentence. Anything else — "U.S. region" — is an abbreviation the
+        // cut would have truncated mid-thought.
         var searchEnd = trimmed.startIndex
         while let range = trimmed.range(of: ". ", range: searchEnd..<trimmed.endIndex) {
             let after = range.upperBound
-            if after < trimmed.endIndex, trimmed[after].isUppercase {
+            if after < trimmed.endIndex,
+               trimmed[after].isUppercase || trimmed[after...].hasPrefix("restic ") {
                 cuts.append(range.lowerBound)
                 break
             }

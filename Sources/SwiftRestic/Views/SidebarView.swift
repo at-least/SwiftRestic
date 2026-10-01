@@ -262,9 +262,7 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(repository.name)
                         .lineLimit(1)
-                    Text("\(Format.plural(listing.count, "backup"))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    restoreCaption(repository, listing: listing)
                 }
             } icon: {
                 // The sidebar's own icon tint, as on Overview and Activity:
@@ -275,6 +273,32 @@ struct SidebarView: View {
             .tag(SidebarItem.repository(repository.id))
             .contextMenu { repositoryContextMenu(repository) }
         }
+    }
+
+    /// The repository row's second line: how many backups it holds — but
+    /// only once that is known. A repository that has not been read, or
+    /// could not be (an unplugged disk, an unreachable server), never says
+    /// "0 backups", which reads as "your data is gone"; it says what the
+    /// expanded group says. A count from an earlier listing stands under a
+    /// failed re-read, as the expanded records do.
+    @ViewBuilder
+    private func restoreCaption(_ repository: Repository, listing: [Snapshot]) -> some View {
+        Group {
+            if !listing.isEmpty {
+                Text(Format.plural(listing.count, "backup"))
+            } else if model.loadingSnapshots.contains(repository.id) {
+                Text("Reading backups…")
+            } else if case let .failed(message) = model.snapshotListingOutcome(for: repository.id) {
+                Text(Format.firstSentence(message))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(message)
+            } else if model.snapshotListingOutcome(for: repository.id) == .loaded {
+                Text(Format.plural(0, "backup"))
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     /// One lineage's records — Arq's backed-up-folder level, so a

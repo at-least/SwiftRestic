@@ -234,6 +234,18 @@ struct FormattingTests {
                 == "The run failed in U.S. region 2 and was stopped.",
             "a capital-less continuation after '. ' is an abbreviation, not a boundary"
         )
+        // restic is a name spelled lowercase, and it starts the second
+        // sentence of the wrong-password message: uncut, the sidebar's
+        // one-line caption ended "…ord or no key found" (captured
+        // 2026-10-02).
+        let wrongPassword = ResticError.commandFailed(
+            exitCode: 12, message: "Fatal: wrong password or no key found", command: "snapshots"
+        )
+        #expect(
+            Format.firstSentence(wrongPassword.localizedDescription)
+                == "The password doesn't open this repository — check it in the repository settings",
+            "a sentence that starts with restic is still a sentence"
+        )
         #expect(Format.firstSentence("first\nsecond") == "first", "a newline is a boundary")
         #expect(Format.firstSentence("  padded  ") == "padded", "whitespace is trimmed")
         #expect(Format.firstSentence("") == "", "empty in, empty out")
