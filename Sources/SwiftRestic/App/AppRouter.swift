@@ -57,8 +57,8 @@ final class AppRouter {
     var activityFocusRunID: RunRecord.ID?
 
     /// Transient, never persisted: whether Activity shows every run or only
-    /// problems. Overview's problem rows and failures tile turn it on when
-    /// they send the user over.
+    /// problems — Activity's own picker. A landing that may arrive on a clean
+    /// run (the plan page's Last backup) turns it off.
     var activityShowsProblemsOnly = false
 
     /// A folder the Restore pane should open and select when it next loads

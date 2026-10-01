@@ -40,8 +40,7 @@ checked in so a normal build does not need it.
 
 ## What it does
 
-- **Overview dashboard** — what is protected, data written per day for the last
-  30 days (stacked by plan), repository sizes, what runs next, and what has gone
+- **Overview dashboard** — what is protected, what runs next, and what has gone
   wrong lately.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob
   Storage, Google Cloud Storage, an rclone remote, or a restic REST server.
@@ -153,7 +152,7 @@ App/        AppModel       @MainActor @Observable — configuration, run state,
                             lifecycles over sink protocols, unit-testable
             TaskRegistry   the in-flight task census shutdown drains
             ConsoleModel   the console pane's state (dependencies injected)
-Views/      NavigationSplitView UI, Swift Charts dashboard, restic console;
+Views/      NavigationSplitView UI, the dashboard, restic console;
             the root composes SidebarView + RootDetailView child views
 ```
 
@@ -256,8 +255,8 @@ Five layers:
   what macOS 15 ships, built from the official amalgamation.
 
 Plus the pure layers that are easy to get quietly wrong: notification payloads
-per provider, dashboard series reduction, console argument tokenising, and that
-configuration written by an older build still decodes.
+per provider, the dashboard's protection rows, console argument tokenising, and
+that configuration written by an older build still decodes.
 
 ### Looking at the app
 

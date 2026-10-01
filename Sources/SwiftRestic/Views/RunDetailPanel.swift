@@ -55,7 +55,7 @@ struct RunDetailPanel: View {
             // table cell keeps the glyph's own label.
             if let symbolName = run.outcome.symbolName {
                 Image(systemName: symbolName)
-                    .foregroundStyle(ChartPalette.status(run.outcome))
+                    .foregroundStyle(StatusPalette.status(run.outcome))
                     .accessibilityHidden(true)
             }
             Text("\(run.outcome.displayName) · finished \(Format.timestamp(run.finishedAt))")

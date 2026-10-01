@@ -1,28 +1,19 @@
-import Charts
 import SwiftUI
 
-/// Dashboard: what is protected, what has been written lately, and what is next.
+/// Dashboard: what is protected, what runs next, and what has gone wrong —
+/// three cards in the order the questions are asked. No charts or tiles:
+/// sizes live on each repository's page, history in Activity.
 struct OverviewView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    /// Opens Activity, after the Problems tile has set the router's
-    /// problems filter or a problem row the run to land on. The problems
-    /// card must not be a dead end: a failure the user cannot reach is a
-    /// failure they cannot fix.
+    /// Opens Activity, after a problem row has set the run to land on. The
+    /// problems card must not be a dead end: a failure the user cannot reach
+    /// is a failure they cannot fix.
     var onShowProblems: () -> Void = {}
 
-    /// Series are reduced once when the history changes, not on every redraw —
-    /// a few hundred runs reduced per frame is visible.
-    @State private var daily: [DailyBackupVolume] = []
-    @State private var domain: [String] = []
-    @State private var selectedDay: Date?
-    @State private var showsTable = false
-
-    private static let windowDays = 30
-
     /// The problems window: the shared `OverviewMetrics` week, so the
-    /// Problems tile and the failures card cannot disagree with the sidebar
-    /// and menu bar on what "recent" covers. The predicate itself is
+    /// failures card cannot disagree with the sidebar's badge and the menu
+    /// bar on what "recent" covers. The predicate itself is
     /// `OverviewMetrics.problems`.
     private var problemWindowStart: Date {
         OverviewMetrics.problemWindowStart(from: .now)
@@ -34,49 +25,14 @@ struct OverviewView: View {
                 BannerView(banner: banner)
             }
             protectionCard
-            statTiles
-            // Space and history read as one unit: what accumulates daily,
-            // where it lives. Pairing cards two-up (the grammar the
-            // upcoming/problems row already sets) is what keeps the common
-            // one-plan, one-repository overview inside the default window
-            // instead of a scroll; genuinely long content still grows down.
-            HStack(alignment: .top, spacing: Theme.Space.section) {
-                volumeCard
-                repositorySizeCard
-            }
-            HStack(alignment: .top, spacing: Theme.Space.section) {
-                upcomingCard
-                recentFailuresCard
-            }
+            upcomingCard
+            recentFailuresCard
         }
         .detailPane()
         .navigationTitle("Overview")
-        .task(id: chartSignature) { rebuild() }
     }
 
-    /// What `rebuild()` reads, as one comparable value — the pure reduction
-    /// in `OverviewMetrics`, which the test bundle pins. Counts alone went
-    /// stale: the history trims to its cap, so the count stops changing and
-    /// the chart would stop moving for a busy user; the newest record's
-    /// identity moves with every append, cap or no cap.
-    private var chartSignature: String {
-        OverviewMetrics.chartSignature(
-            plans: model.configuration.plans,
-            runs: model.configuration.runs
-        )
-    }
-
-    private func rebuild() {
-        let planOrder = model.configuration.plans.map(\.name)
-        daily = OverviewMetrics.dailyVolume(
-            runs: model.configuration.runs,
-            planOrder: planOrder,
-            days: Self.windowDays
-        )
-        domain = OverviewMetrics.domain(for: daily, planOrder: planOrder)
-    }
-
-    // MARK: - Tiles
+    // MARK: - Protection
 
     /// The row type and its derivation live in `OverviewMetrics`, testable
     /// and shared with nothing — the view keeps only the hue each state
@@ -168,238 +124,12 @@ struct OverviewView: View {
         }
     }
 
-    private var statTiles: some View {
-        // Coverage lives in the Protection card above; these are the app's
-        // inventory counts.
-        let problems = OverviewMetrics.problemCount(
-            runs: model.configuration.runs,
-            since: problemWindowStart
-        )
-        return HStack(spacing: Theme.Space.tile) {
-            StatTile(
-                title: "Repositories",
-                value: Format.count(model.configuration.repositories.count)
-            )
-            StatTile(
-                title: "Plans",
-                value: Format.count(model.configuration.plans.count)
-            )
-            // A button in both states: a tile that only became clickable when
-            // problems existed was a disappearing affordance, and arriving in
-            // Activity pre-filtered is a fine answer to "zero problems" too.
-            // The tile wears no glyph in any state — the count is the whole
-            // message, and the failure itself is named in words in Recent
-            // problems below.
-            Button(action: showProblems) {
-                StatTile(
-                    title: "Problems (7 days)",
-                    value: problems > 0 ? Format.count(problems) : "0",
-                    trailingSymbol: "chevron.forward"
-                )
-            }
-            .buttonStyle(HoverableButtonStyle())
-            .accessibilityLabel(
-                problems > 0
-                    ? "Problems in the last 7 days: \(problems). Show them in Activity"
-                    : "No problems in the last 7 days. Show Activity"
-            )
-        }
-    }
-
-    private func showProblems() {
-        router.activityShowsProblemsOnly = true
-        onShowProblems()
-    }
-
     /// A problem row's landing: Activity with that run selected. A problem
     /// run shows under both of Activity's filters, so the user's filter
     /// stays as it was — the plan row's and the incomplete strip's rule.
-    /// The Problems tile keeps the filter landing.
     private func showInActivity(_ run: RunRecord) {
         router.activityFocusRunID = run.id
         onShowProblems()
-    }
-
-    // MARK: - Daily volume
-
-    private var volumeCard: some View {
-        Card("Data added per day") {
-            VStack(alignment: .leading, spacing: 8) {
-                if daily.isEmpty {
-                    Text("No backups in the last \(Self.windowDays) days.")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 20)
-                } else if showsTable {
-                    volumeTable
-                } else {
-                    volumeChart
-                }
-            }
-        } accessory: {
-            // Several of the light-mode series colours sit below 3:1 against
-            // the surface, so a non-colour reading of the same data is not
-            // optional. Words, not icons: an icon-pair segment was findable
-            // by mouse and invisible to everyone else.
-            Picker("Data view", selection: $showsTable) {
-                Text("Chart").tag(false)
-                Text("Table").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 140)
-        }
-    }
-
-    private var volumeChart: some View {
-        Chart(daily) { point in
-            BarMark(
-                x: .value("Day", point.day, unit: .day),
-                y: .value("Added", point.dataAdded)
-            )
-            .foregroundStyle(by: .value("Plan", point.series))
-            // No corner radius here: it rounds every stack segment on all
-            // sides, so mid-stack pieces turn into lens shapes against their
-            // neighbours. The 2px surface gap keeps segments legible; the
-            // single-series repository chart below can afford rounding.
-        }
-        .chartForegroundStyleScale(
-            domain: domain,
-            range: colorRange(for: domain)
-        )
-        .chartLegend(position: .bottom, alignment: .leading, spacing: 10)
-        .chartXSelection(value: $selectedDay)
-        .chartYAxis {
-            AxisMarks(position: .leading) { value in
-                AxisGridLine()
-                AxisValueLabel {
-                    if let bytes = value.as(Int64.self) {
-                        Text(Format.bytes(bytes))
-                    }
-                }
-            }
-        }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: 5)) { _ in
-                AxisGridLine()
-                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-            }
-        }
-        .chartOverlay { proxy in
-            if let selectedDay, let anchor = proxy.position(forX: selectedDay) {
-                selectionCallout(day: selectedDay, x: anchor)
-            }
-        }
-        .frame(height: 220)
-    }
-
-    @ViewBuilder
-    private func selectionCallout(day: Date, x: CGFloat) -> some View {
-        let sameDay = daily.filter { Calendar.current.isDate($0.day, inSameDayAs: day) }
-        if !sameDay.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(day.formatted(date: .abbreviated, time: .omitted))
-                    .font(.caption.weight(.semibold))
-                ForEach(sameDay) { point in
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(colorFor(point.series))
-                            .frame(width: 7, height: 7)
-                        Text(point.series).font(.caption)
-                        Spacer(minLength: 8)
-                        Text(Format.bytes(point.dataAdded))
-                            .font(.caption.monospacedDigit())
-                    }
-                }
-            }
-            .padding(8)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
-            .fixedSize()
-            .offset(x: max(0, x - 60), y: 4)
-        }
-    }
-
-    /// Series colours follow each plan's assigned palette slot instead of
-    /// domain position, so a plan keeps its colour when plans are added,
-    /// removed or reordered — on the chart, the sidebar and the run lists
-    /// alike.
-    private func colorRange(for domain: [String]) -> [Color] {
-        domain.map { name in
-            if name == OverviewMetrics.otherSeriesName { return ChartPalette.other }
-            if let plan = model.configuration.plans.first(where: { $0.name == name }) {
-                return ChartPalette.color(for: plan)
-            }
-            // Historical series recorded under a name no current plan bears —
-            // a renamed plan's older runs, say. Keep a stable colour of their
-            // own instead of collapsing into "Other" grey.
-            return ChartPalette.color(forSeriesNamed: name)
-        }
-    }
-
-    private func colorFor(_ series: String) -> Color {
-        guard let index = domain.firstIndex(of: series) else { return ChartPalette.other }
-        return colorRange(for: domain)[index]
-    }
-
-    private var volumeTable: some View {
-        let rows = daily.sorted { $0.day > $1.day }
-        return Table(rows) {
-            TableColumn("Day") { Text($0.day.formatted(date: .abbreviated, time: .omitted)) }
-            TableColumn("Plan") { Text($0.series) }
-            TableColumn("Added") { Text(Format.bytes($0.dataAdded)).monospacedDigit() }
-        }
-        .frame(height: 220)
-    }
-
-    // MARK: - Repository sizes
-
-    private var repositorySizeCard: some View {
-        let volumes = model.configuration.repositories.compactMap { repository -> RepositoryVolume? in
-            guard let stats = model.repositoryStats[repository.id] else { return nil }
-            return RepositoryVolume(id: repository.id, name: repository.name, bytes: stats.totalSize)
-        }
-        return Card("Repository size") {
-            // Stats that exist but total zero mean the repositories are empty,
-            // not that measurement failed: drawing zero-width bars with
-            // floating "0 bytes" labels reads as breakage.
-            if volumes.isEmpty {
-                Text("No repository statistics yet.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 16)
-            } else if volumes.allSatisfy({ $0.bytes == 0 }) {
-                Text("The repositories are empty — sizes appear once data is written to them.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 16)
-            } else {
-                // One series, so the title names it and no legend is needed; the
-                // value sits beside each bar as a direct label.
-                Chart(volumes) { volume in
-                    BarMark(
-                        x: .value("Size", volume.bytes),
-                        y: .value("Repository", volume.name)
-                    )
-                    .foregroundStyle(ChartPalette.sequential)
-                    .cornerRadius(3)
-                    .annotation(position: .trailing, alignment: .leading) {
-                        Text(Format.bytes(volume.bytes))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .chartXAxis {
-                    AxisMarks { value in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let bytes = value.as(Int64.self) { Text(Format.bytes(bytes)) }
-                        }
-                    }
-                }
-                .frame(height: CGFloat(volumes.count) * 34 + 40)
-                .padding(.trailing, 60)
-            }
-        }
     }
 
     // MARK: - Lists
@@ -484,9 +214,9 @@ struct OverviewView: View {
     private var recentFailuresCard: some View {
         Card("Recent problems") {
             VStack(alignment: .leading, spacing: 7) {
-                // The same window the Problems tile counts. The card's
+                // The same window the sidebar's badge counts. The card's
                 // "recent" used to mean "all of history, latest five", which
-                // let the tile read a green zero above a nine-day-old failure.
+                // let a count read zero above a nine-day-old failure.
                 let failures = OverviewMetrics.problems(
                     in: model.configuration.runs,
                     since: problemWindowStart

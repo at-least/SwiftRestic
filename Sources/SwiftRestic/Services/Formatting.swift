@@ -12,7 +12,7 @@ enum Format {
     nonisolated(unsafe) private static let byteCounter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         // ByteCountFormatter spells zero as "Zero KB" by default, which reads
-        // as a glitch on an axis label or a stat tile.
+        // as a glitch beside other byte counts.
         formatter.countStyle = .file
         formatter.allowsNonnumericFormatting = false
         return formatter

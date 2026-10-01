@@ -78,12 +78,13 @@ struct SidebarView: View {
             Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
                     // The window's unread badge, wired to the same 7-day
-                    // window the tray dot, the Problems tile and the menu's
-                    // problem line share: one count, so no surface can claim
-                    // trouble another denies. It also yields to the
-                    // unconfigured state like the tray's problem face does —
-                    // a removed repository's old failures must not summon
-                    // setup-bound attention — and stays silent when clean.
+                    // window the tray dot, the Overview's Recent problems
+                    // and the menu's problem line share: one count, so no
+                    // surface can claim trouble another denies. It also
+                    // yields to the unconfigured state like the tray's
+                    // problem face does — a removed repository's old
+                    // failures must not summon setup-bound attention — and
+                    // stays silent when clean.
                     .badge(
                         problemCount > 0 && !model.configuration.repositories.isEmpty
                             ? Text(verbatim: "\(problemCount)")
@@ -400,7 +401,7 @@ private struct PlanSidebarRow: View {
                     if let outcome = caption.outcome, let symbol = outcome.symbolName {
                         Image(systemName: symbol)
                             .imageScale(.small)
-                            .foregroundStyle(ChartPalette.status(outcome))
+                            .foregroundStyle(StatusPalette.status(outcome))
                             .accessibilityHidden(true)
                     }
                     // Middle truncation: the slot narrows the column, and a

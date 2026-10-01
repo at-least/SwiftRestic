@@ -3,12 +3,6 @@ import Testing
 
 @Suite("Overview metrics")
 struct OverviewMetricsTests {
-    private var calendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        return calendar
-    }
-
     private func date(_ string: String) -> Date {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
@@ -16,56 +10,10 @@ struct OverviewMetricsTests {
         return formatter.date(from: string)!
     }
 
-    private func run(
-        plan: String,
-        at day: String,
-        added: Int64,
-        kind: RunRecord.Kind = .backup,
-        outcome: RunRecord.Outcome = .succeeded
-    ) -> RunRecord {
-        var record = RunRecord(kind: kind, planName: plan, startedAt: date(day))
+    private func run(plan: String, at day: String, added: Int64) -> RunRecord {
+        var record = RunRecord(kind: .backup, planName: plan, startedAt: date(day))
         record.dataAdded = added
-        record.outcome = outcome
         return record
-    }
-
-    @Test("runs are summed per plan per day")
-    func dailyTotals() {
-        let runs = [
-            run(plan: "Docs", at: "2026-09-05 01:00:00", added: 100),
-            run(plan: "Docs", at: "2026-09-05 13:00:00", added: 50),
-            run(plan: "Photos", at: "2026-09-05 02:00:00", added: 400),
-            run(plan: "Docs", at: "2026-09-04 01:00:00", added: 7),
-        ]
-        let points = OverviewMetrics.dailyVolume(
-            runs: runs,
-            planOrder: ["Docs", "Photos"],
-            days: 30,
-            now: date("2026-09-05 23:00:00"),
-            calendar: calendar
-        )
-        let docsOn5 = points.first { $0.series == "Docs" && calendar.isDate($0.day, inSameDayAs: date("2026-09-05 00:00:00")) }
-        #expect(docsOn5?.dataAdded == 150)
-        #expect(points.first { $0.series == "Photos" }?.dataAdded == 400)
-        #expect(points.count == 3)
-    }
-
-    @Test("only backups that wrote something are plotted")
-    func filtersNonBackups() {
-        let runs = [
-            run(plan: "Docs", at: "2026-09-05 01:00:00", added: 100),
-            run(plan: "Docs", at: "2026-09-05 02:00:00", added: 0),
-            run(plan: "Repo", at: "2026-09-05 03:00:00", added: 900, kind: .prune),
-            run(plan: "Docs", at: "2026-09-05 04:00:00", added: 500, outcome: .cancelled),
-        ]
-        let points = OverviewMetrics.dailyVolume(
-            runs: runs,
-            planOrder: ["Docs"],
-            now: date("2026-09-05 23:00:00"),
-            calendar: calendar
-        )
-        #expect(points.count == 1)
-        #expect(points.first?.dataAdded == 100)
     }
 
     // MARK: - Protection rows
@@ -153,62 +101,6 @@ struct OverviewMetricsTests {
         #expect(rows.first?.isKnown == false)
     }
 
-    @Test("runs older than the window are dropped")
-    func windowing() {
-        let runs = [
-            run(plan: "Docs", at: "2026-09-05 01:00:00", added: 100),
-            run(plan: "Docs", at: "2026-07-01 01:00:00", added: 999),
-        ]
-        let points = OverviewMetrics.dailyVolume(
-            runs: runs,
-            planOrder: ["Docs"],
-            days: 30,
-            now: date("2026-09-05 23:00:00"),
-            calendar: calendar
-        )
-        #expect(points.count == 1)
-    }
-
-    @Test("series keep configuration order, so a plan's colour does not move")
-    func stableSeriesOrder() {
-        // "Photos" writes far more, but ordering follows the plan list — ranking
-        // by volume would repaint the chart whenever the data shifted.
-        let runs = [
-            run(plan: "Docs", at: "2026-09-05 01:00:00", added: 1),
-            run(plan: "Photos", at: "2026-09-05 01:00:00", added: 10_000),
-        ]
-        let points = OverviewMetrics.dailyVolume(
-            runs: runs,
-            planOrder: ["Docs", "Photos"],
-            now: date("2026-09-05 23:00:00"),
-            calendar: calendar
-        )
-        #expect(OverviewMetrics.domain(for: points, planOrder: ["Docs", "Photos"]) == ["Docs", "Photos"])
-    }
-
-    @Test("past the colour cap the smallest plans fold into Other")
-    func foldsPastTheCap() {
-        // A ninth series is never a generated hue.
-        var runs: [RunRecord] = []
-        for index in 0 ..< 10 {
-            runs.append(run(plan: "Plan\(index)", at: "2026-09-05 01:00:00", added: Int64(10 - index)))
-        }
-        let order = (0 ..< 10).map { "Plan\($0)" }
-        let points = OverviewMetrics.dailyVolume(
-            runs: runs,
-            planOrder: order,
-            now: date("2026-09-05 23:00:00"),
-            calendar: calendar
-        )
-        let domain = OverviewMetrics.domain(for: points, planOrder: order)
-        #expect(domain.count == OverviewMetrics.seriesCap + 1)
-        #expect(domain.last == OverviewMetrics.otherSeriesName)
-        #expect(!domain.contains("Plan9"))
-        // The folded plans are summed, not dropped.
-        let other = points.first { $0.series == OverviewMetrics.otherSeriesName }
-        #expect(other?.dataAdded == 6) // Plan7 (3) + Plan8 (2) + Plan9 (1)
-    }
-
     @Test("problem figures")
     func headlineFigures() {
         var failed = run(plan: "Docs", at: "2026-09-05 01:00:00", added: 0)
@@ -235,24 +127,6 @@ struct OverviewMetricsTests {
         // old tile disagreed with the tray's line exactly here, on an
         // overnight run that failed at dawn.
         #expect(OverviewMetrics.problemCount(runs: [overnight], since: since) == 1)
-    }
-
-    @Test("a run with no plan name folds into Other rather than disappearing")
-    func unnamedRunsFoldIntoOther() {
-        // Console and restore runs record no plan; their bytes still count.
-        let runs = [
-            run(plan: "", at: "2026-09-05 01:00:00", added: 300),
-            run(plan: "Docs", at: "2026-09-05 02:00:00", added: 100),
-        ]
-        let points = OverviewMetrics.dailyVolume(
-            runs: runs,
-            planOrder: ["Docs"],
-            now: date("2026-09-05 23:00:00"),
-            calendar: calendar
-        )
-        let other = points.first { $0.series == OverviewMetrics.otherSeriesName }
-        #expect(other?.dataAdded == 300, "the unnamed run's 300 bytes must survive the fold")
-        #expect(OverviewMetrics.domain(for: points, planOrder: ["Docs"]).last == OverviewMetrics.otherSeriesName)
     }
 }
 
@@ -334,47 +208,6 @@ struct CommandLineTokenizerTests {
     }
 }
 
-@Suite("Plan colour slots")
-struct PlanColourSlotTests {
-    private func plan(id: UUID, chartIndex: Int? = nil) -> BackupPlan {
-        var plan = BackupPlan()
-        plan.id = id
-        plan.chartIndex = chartIndex
-        return plan
-    }
-
-    @Test("the fallback slot is deterministic across processes")
-    func deterministicFallback() {
-        // Pinned to this literal on purpose: Swift's Hasher is seeded per
-        // process, so if this derivation ever regresses to Hasher-based
-        // hashing, legacy plans' colours would change on every launch — and
-        // only this assertion would notice.
-        let legacy = plan(id: UUID(uuidString: "340CA842-C653-4E2D-B61F-D7653D70A521")!)
-        #expect(ChartPalette.slot(for: legacy) == 6)
-    }
-
-    @Test("a negative stored slot cannot become a negative subscript")
-    func negativeIndexClamps() {
-        let hostile = plan(id: UUID(), chartIndex: -3)
-        #expect((0..<ChartPalette.categorical.count).contains(ChartPalette.slot(for: hostile)))
-    }
-
-    @Test("new plans avoid the slots legacy plans already render with")
-    func nextSlotAvoidsEffectiveSlots() {
-        // A legacy plan whose fallback slot is 0: a naive taken-set built
-        // from stored chartIndexes alone would hand slot 0 to the new plan.
-        let legacy = plan(id: UUID(uuidString: "340CA842-C653-4E2D-B61F-D7653D70A521")!)
-        let taken = Set([legacy].map { ChartPalette.slot(for: $0) })
-        #expect(ChartPalette.nextSlot(taken: taken) != ChartPalette.slot(for: legacy))
-    }
-
-    @Test("explicit slots survive the modulo only within range")
-    func explicitSlotStable() {
-        let assigned = plan(id: UUID(), chartIndex: 2)
-        #expect(ChartPalette.slot(for: assigned) == 2)
-    }
-}
-
 @Suite("Run outcome markers")
 struct RunOutcomeMarkerTests {
     @Test("success wears nothing, cancelled stays quiet, trouble keeps its alarms")
@@ -387,65 +220,5 @@ struct RunOutcomeMarkerTests {
         #expect(RunRecord.Outcome.cancelled.symbolName == "slash.circle")
         #expect(RunRecord.Outcome.completedWithErrors.symbolName?.contains("exclamationmark") == true)
         #expect(RunRecord.Outcome.failed.symbolName?.contains("xmark") == true)
-    }
-}
-
-@Suite("Chart signature")
-struct ChartSignatureTests {
-    private func plan(id: UUID, name: String) -> BackupPlan {
-        var plan = BackupPlan()
-        plan.id = id
-        plan.name = name
-        return plan
-    }
-
-    private func date(_ string: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.date(from: string)!
-    }
-
-    private func run(finishedAt: String) -> RunRecord {
-        var record = RunRecord(planName: "Docs", startedAt: date("2026-09-05 01:00:00"))
-        record.finishedAt = date(finishedAt)
-        return record
-    }
-
-    @Test("the signature moves with the newest record even when the history count cannot change")
-    func signatureTracksNewestRunAtConstantCount() {
-        let planID = UUID()
-        let plan = plan(id: planID, name: "Docs")
-        let older = run(finishedAt: "2026-09-04 01:00:00")
-        let newer = run(finishedAt: "2026-09-05 01:00:00")
-        let newest = run(finishedAt: "2026-09-06 01:00:00")
-
-        // At the history cap, appending inserts and then trims: the count
-        // stays fixed while the head record changes. The signature the
-        // Overview chart keys on must still move, or the chart stops
-        // updating for a busy user.
-        let before = OverviewMetrics.chartSignature(plans: [plan], runs: [newer, older])
-        let after = OverviewMetrics.chartSignature(plans: [plan], runs: [newest, newer])
-        #expect(before != after)
-    }
-
-    @Test("a plan rename moves the signature; an untouched setup does not")
-    func signatureTracksPlanNames() {
-        let planID = UUID()
-        let docsPlan = plan(id: planID, name: "Docs")
-        let renamed = plan(id: planID, name: "Documents")
-        let runs = [run(finishedAt: "2026-09-05 01:00:00")]
-
-        #expect(OverviewMetrics.chartSignature(plans: [docsPlan], runs: runs)
-            != OverviewMetrics.chartSignature(plans: [renamed], runs: runs))
-        #expect(OverviewMetrics.chartSignature(plans: [docsPlan], runs: runs)
-            == OverviewMetrics.chartSignature(plans: [docsPlan], runs: runs))
-    }
-
-    @Test("an empty history has one stable signature")
-    func emptyHistoryIsStable() {
-        let plan = plan(id: UUID(), name: "Docs")
-        #expect(OverviewMetrics.chartSignature(plans: [plan], runs: [])
-            == OverviewMetrics.chartSignature(plans: [plan], runs: []))
     }
 }

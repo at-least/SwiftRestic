@@ -173,7 +173,7 @@ struct PlanDetailView: View {
                 // that names it: decoration to VoiceOver.
                 Image(systemName: summary.outcome.symbolName ?? "exclamationmark.triangle.fill")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(ChartPalette.status(summary.outcome))
+                    .foregroundStyle(StatusPalette.status(summary.outcome))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {

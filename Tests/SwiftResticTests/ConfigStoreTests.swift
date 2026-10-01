@@ -90,8 +90,8 @@ struct ConfigStoreTests {
         #expect(loaded.repositories.count == 1)
         #expect(loaded.plans.count == 1)
         #expect(loaded.plans.first?.schedule.frequency == .hourly)
-        // A plan's palette slot is stored, so its colour survives relaunch.
-        #expect(loaded.plans.first?.chartIndex == 2)
+        // "chartIndex" above is a key earlier builds wrote for the dashboard's
+        // charts, since removed; a config carrying it must still load.
 
         // A plan that has never run and is on an interval schedule must be due
         // straight away, which is what makes the app back up shortly after launch.

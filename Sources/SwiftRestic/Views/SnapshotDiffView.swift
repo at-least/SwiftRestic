@@ -224,7 +224,7 @@ struct SnapshotDiffView: View {
                     Text("+")
                         .font(.system(.callout, design: .monospaced).weight(.semibold))
                 }
-                .foregroundStyle(ChartPalette.status(.succeeded))
+                .foregroundStyle(StatusPalette.status(.succeeded))
                 .accessibilityLabel("\(Format.bytes(stats?.added.bytes)) added")
                 Label {
                     Text(Format.bytes(stats?.removed.bytes))
@@ -233,7 +233,7 @@ struct SnapshotDiffView: View {
                     Text("−")
                         .font(.system(.callout, design: .monospaced).weight(.semibold))
                 }
-                .foregroundStyle(ChartPalette.status(.failed))
+                .foregroundStyle(StatusPalette.status(.failed))
                 .accessibilityLabel("\(Format.bytes(stats?.removed.bytes)) removed")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -397,9 +397,9 @@ struct SnapshotDiffView: View {
     /// The glyph carries the meaning; colour only reinforces it.
     private func color(for category: ResticDiffChange.Category) -> Color {
         switch category {
-        case .added: ChartPalette.status(.succeeded)
-        case .removed: ChartPalette.status(.failed)
-        case .modified: ChartPalette.status(.completedWithErrors)
+        case .added: StatusPalette.status(.succeeded)
+        case .removed: StatusPalette.status(.failed)
+        case .modified: StatusPalette.status(.completedWithErrors)
         case .metadataOnly: .secondary
         }
     }

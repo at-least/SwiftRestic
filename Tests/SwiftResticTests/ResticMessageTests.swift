@@ -192,7 +192,7 @@ struct ResticMessageTests {
     func timestampParsing() throws {
         // restic prints however many digits Go's time package produced: 5 here,
         // 6 and 9 elsewhere in the same stream. Parsing must land on the right
-        // instant — run records and chart bins derive from these — but
+        // instant — run records derive from these — but
         // ISO8601DateFormatter keeps only the first three fraction digits
         // (verified: .22662 parses back out as .226), so the pin is to the
         // millisecond the formatter actually preserves.

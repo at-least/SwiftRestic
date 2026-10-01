@@ -98,7 +98,7 @@ enum MenuBarStatus {
     /// The newest problem in the run history as one sentence, or `nil` while
     /// the window is clean. One definition of recent trouble, shared with the
     /// dashboard: `OverviewMetrics.problems` supplies the set, so the
-    /// Problems tile, the Recent problems card and this line can never
+    /// Activity badge, the Recent problems card and this line can never
     /// disagree on what counts. Leading with a failure forever would read as
     /// permanent breakage, hence the window.
     ///

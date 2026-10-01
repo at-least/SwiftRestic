@@ -921,7 +921,7 @@ private struct IncompleteSnapshotStrip: View {
         return HStack(alignment: .top, spacing: 8) {
             // Beside words that say the same thing: decoration to VoiceOver.
             Image(systemName: RunRecord.Outcome.completedWithErrors.symbolName ?? "exclamationmark.triangle.fill")
-                .foregroundStyle(ChartPalette.status(.completedWithErrors))
+                .foregroundStyle(StatusPalette.status(.completedWithErrors))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(unreadable > 0

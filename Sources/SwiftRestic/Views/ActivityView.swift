@@ -176,8 +176,8 @@ struct ActivityView: View {
         .navigationTitle("Activity")
         .toolbar {
             ToolbarItemGroup {
-                // The two-state filter the dashboard's problem rows send you to;
-                // full per-outcome filtering would serve nobody who reaches for it.
+                // Two states: what went wrong, or everything. Full
+                // per-outcome filtering would serve nobody who reaches for it.
                 Picker("Show", selection: Binding(
                     get: { router.activityShowsProblemsOnly },
                     set: { router.activityShowsProblemsOnly = $0 }
@@ -216,9 +216,9 @@ struct ActivityView: View {
                 .environment(model)
         }
         .task(id: router.activityShowsProblemsOnly) {
-            // Arriving from the dashboard's problem rows should land with the
-            // newest problem already selected — otherwise the detail panel
-            // below sits empty at the exact moment the user wants answers.
+            // Switching to Problems lands with the newest problem already
+            // selected — otherwise the detail panel below sits empty at the
+            // exact moment the user wants answers.
             guard router.activityShowsProblemsOnly,
                   !visibleRuns.contains(where: { $0.id == selection })
             else { return }
@@ -236,6 +236,6 @@ struct ActivityView: View {
     }
 
     private func color(for outcome: RunRecord.Outcome) -> Color {
-        ChartPalette.status(outcome)
+        StatusPalette.status(outcome)
     }
 }

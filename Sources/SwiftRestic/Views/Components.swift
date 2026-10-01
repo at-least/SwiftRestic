@@ -509,7 +509,7 @@ struct SnapshotCompletenessMark: View {
         case .incomplete?:
             let label = Format.snapshotCompleteness(run) ?? ""
             Image(systemName: Self.symbolName)
-                .foregroundStyle(ChartPalette.status(Self.outcome))
+                .foregroundStyle(StatusPalette.status(Self.outcome))
                 .help(label)
                 .accessibilityLabel(label)
         case .complete?:
