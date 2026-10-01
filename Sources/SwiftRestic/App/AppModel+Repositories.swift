@@ -52,11 +52,15 @@ extension AppModel {
     /// clause, so the dialog's word of what will be interrupted can never
     /// trail what removal actually does.
     func removalConsequences(for repositoryID: UUID) -> String {
-        Self.removalConsequences(
+        let names = { (plan: BackupPlan) in plan.name.isEmpty ? "Untitled Plan" : plan.name }
+        return Self.removalConsequences(
+            pausedPlanNames: configuration.plans
+                .filter { $0.repositoryID == repositoryID }
+                .map(names),
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: configuration.plans
                 .filter { $0.repositoryID == repositoryID && activity[$0.id] != nil }
-                .map { $0.name.isEmpty ? "Untitled Plan" : $0.name },
+                .map(names),
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID
         )
@@ -65,13 +69,20 @@ extension AppModel {
     /// Pure so the dialog's wording can be tested without a live model — the
     /// console's running state is `private(set)`, and the sentence, not the
     /// bookkeeping, is what needs testing.
+    /// The plans are named: the repository page lists none of them, and
+    /// this is the moment their names matter — `deleteRepository` pauses
+    /// each one.
     nonisolated static func removalConsequences(
+        pausedPlanNames: [String],
         isRestoring: Bool,
         runningBackupNames: [String],
         isMaintaining: Bool,
         isConsoleRunning: Bool
     ) -> String {
-        var consequences = "The backup data itself is not deleted. Plans pointing at it will be paused."
+        var consequences = "The backup data itself is not deleted."
+        if !pausedPlanNames.isEmpty {
+            consequences += " Plans pointing at it will be paused (\(pausedPlanNames.joined(separator: ", ")))."
+        }
         if isRestoring {
             consequences += " A restore from this repository is running and will be cancelled."
         }
