@@ -409,10 +409,10 @@ struct RestoreProgressStrip: View {
 
 // MARK: - Snapshot listing outcome
 
-/// Why a Snapshots tile may read "—", in visible text. The tooltips carry
-/// the same lines, but a reason only a hovering mouse user can reach is no
-/// reason at all for a keyboard or VoiceOver user — the same lesson the
-/// Overview tile row learned.
+/// Why a Snapshots value may read "—", in visible text, under the card that
+/// shows it (the plan and repository pages). The tooltips carry the same
+/// lines, but a reason only a hovering mouse user can reach is no reason at
+/// all for a keyboard or VoiceOver user.
 struct SnapshotListingCaveat: View {
     let outcome: SnapshotListingOutcome
 
@@ -439,29 +439,8 @@ struct SnapshotListingCaveat: View {
     }
 }
 
-extension StatTile {
-    /// The Snapshots tile's honest faces: a count only once the listing it
-    /// derives from has succeeded; before that (or after a failure) the face
-    /// is "—" with the tooltip saying which. `loadedCount` is what `.loaded`
-    /// displays — each pane counts its own scope.
-    static func snapshots(outcome: SnapshotListingOutcome, loadedCount: Int) -> StatTile {
-        switch outcome {
-        case .loaded:
-            StatTile(title: "Snapshots", value: Format.count(loadedCount))
-        case let .failed(message):
-            StatTile(title: "Snapshots", value: "—", help: message)
-        case .idle:
-            StatTile(
-                title: "Snapshots",
-                value: "—",
-                help: "The snapshot list has not finished loading."
-            )
-        }
-    }
-}
-
-/// Every number on the snapshots card traces to the moment it was read: an
-/// "Updated 7:27 AM" caption, or a spinner while a refresh is in flight.
+/// A snapshot count traces to the moment it was read: an "Updated 7:27 AM"
+/// caption, or a spinner while a refresh is in flight.
 /// `showsSpinner: false` renders nothing while a read is in flight —
 /// surfaces without room for a spinner stay quiet instead.
 struct SnapshotFreshnessLabel: View {
@@ -485,8 +464,8 @@ struct SnapshotFreshnessLabel: View {
 
 // MARK: - Snapshot completeness
 
-/// A snapshot's completeness, where snapshots are listed (the Restore
-/// sidebar, the Snapshots tables). Only trouble wears a glyph — the rule
+/// A snapshot's completeness, where snapshots are named (the Restore
+/// sidebar, Activity's run drawer). Only trouble wears a glyph — the rule
 /// Activity's outcome column follows — and it is the completed-with-errors
 /// triangle, because that is what the run behind it was. A known-complete
 /// snapshot keeps an invisible "Complete" for VoiceOver; one with no run

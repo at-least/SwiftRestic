@@ -89,11 +89,11 @@ checked in so a normal build does not need it.
   the search on in Find Files.
 - **Find files across snapshots** — search every snapshot for a name or glob when
   you do not know which backup still has the file, then restore the match. ⇧⌘F.
-- **Compare snapshots** — *Compare* on any snapshot runs `restic diff` against
-  the previous snapshot of the same folders from the same Mac (any earlier one
-  can be chosen) and lists what was added, removed or modified, filterable by
-  kind and path, with restic's byte totals. Answers "what did last night's
-  backup actually pick up?" without restoring anything.
+- **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
+  runs `restic diff` against the previous snapshot of the same folders from the
+  same Mac (any earlier one can be chosen) and lists what was added, removed or
+  modified, filterable by kind and path, with restic's byte totals. Answers
+  "what did last night's backup actually pick up?" without restoring anything.
 - **Start at login** — the scheduler only runs while the app runs, so SwiftRestic
   can register itself as a login item and sit in the menu bar.
 - **Maintenance** — scheduled `check` and `prune` per repository, on a day
@@ -291,7 +291,8 @@ directly both work:
 
 Three more environment variables shape a capture run: `SWIFTRESTIC_APPEARANCE`
 (`light`/`dark`) pins the appearance instead of following the system,
-`SWIFTRESTIC_CAPTURE_SHEET=diff` opens the compare sheet on the repository pane,
+`SWIFTRESTIC_CAPTURE_SHEET=diff` opens Activity's compare sheet on the newest
+backup run (with `SWIFTRESTIC_CAPTURE_PANE=activity`),
 and `SWIFTRESTIC_REPO_PASSWORD` hands repositories a password directly (only
 honoured together with `SWIFTRESTIC_CONFIG_DIR`), so capture runs never touch
 the login Keychain. Capture runs also do not arm the scheduler, so a due plan

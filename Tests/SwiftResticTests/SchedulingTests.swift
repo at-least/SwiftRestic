@@ -619,7 +619,6 @@ struct MaintenanceSchedulingTests {
             $0.maintenance.pruneEnabled = false
         }
         #expect(Scheduler.dueMaintenance(in: [repository], now: date("2027-01-01 00:00:00")).isEmpty)
-        #expect(repository.maintenance.summary == "Off")
     }
 
     @Test("a busy repository is skipped entirely")
@@ -669,19 +668,6 @@ struct MaintenanceSchedulingTests {
 
         let off = self.repository { $0.maintenance.checkEnabled = false }
         #expect(Scheduler.nextMaintenanceText(.check, of: off, hold: .paused(until: nil), now: now) == "Off")
-    }
-
-    @Test("the policy summary names both tasks and a deep check's read percentage")
-    func policySummary() {
-        #expect(MaintenancePolicy().summary == "Check every 7d")
-
-        var deep = MaintenancePolicy()
-        deep.checkReadDataPercent = 25
-        #expect(deep.summary == "Check every 7d (reads 25% of data)")
-
-        var both = MaintenancePolicy()
-        both.pruneEnabled = true
-        #expect(both.summary == "Check every 7d, Prune every 30d")
     }
 
     @Test("the schedule summarises itself for the plan list")

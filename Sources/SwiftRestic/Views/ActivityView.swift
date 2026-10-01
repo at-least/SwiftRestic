@@ -218,7 +218,27 @@ struct ActivityView: View {
                 selection = id
             }
         }
+        #if DEBUG
+        .onChange(of: model.snapshots, initial: true) { applyCaptureSheetOverride() }
+        #endif
     }
+
+    #if DEBUG
+    /// Debug-only: `SWIFTRESTIC_CAPTURE_SHEET=diff` opens the drawer's
+    /// Compare with Previous… on the newest backup run whose snapshot the
+    /// listing holds, once the listing has loaded — this pane is the
+    /// compare sheet's home.
+    private func applyCaptureSheetOverride() {
+        guard ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "diff",
+              comparing == nil,
+              let run = model.configuration.runs.first(where: { $0.kind == .backup && $0.snapshotID != nil }),
+              let repositoryID = run.repositoryID,
+              case let .available(snapshot)? = model.snapshotLink(for: run)
+        else { return }
+        selection = run.id
+        comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
+    }
+    #endif
 
     private func color(for outcome: RunRecord.Outcome) -> Color {
         StatusPalette.status(outcome)

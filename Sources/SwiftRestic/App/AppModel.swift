@@ -28,7 +28,7 @@ final class AppModel {
     }
     /// The backup run that wrote each snapshot, derived once per history
     /// write rather than by every row that shows a snapshot (the Restore
-    /// sidebar, the Snapshots tables): 0.3 ms to build over 2,000 records
+    /// sidebar, Activity's run drawer): 0.3 ms to build over 2,000 records
     /// (swiftc probe, 2026-09-26). A snapshot whose run was trimmed from the
     /// history, or never recorded here, is simply absent — unknown, never
     /// complete.

@@ -94,7 +94,7 @@ final class AppRouter {
     }
 
     /// The one route into a backup's contents from outside the sidebar —
-    /// the Snapshots tables' Browse, Restore Files…, Show in Restore: select
+    /// the run drawer's Browse, Restore Files…, Show in Restore: select
     /// the record under Restore, where the Change column, search, drag and
     /// whole-backup restore all live, whichever button was pressed. A plain
     /// route clears an older focus request rather than inheriting it.

@@ -241,8 +241,8 @@ struct RunDetailPanel: View {
 
 /// The drawer's Snapshot row, in its own view so the listing lookup behind
 /// it reruns only when the run or the repository's listing changes — not on
-/// every write the drawer's other rows observe. Browse and Compare go where
-/// the Snapshots tables' own buttons go.
+/// every write the drawer's other rows observe. Browse opens the record
+/// under Restore; Compare with Previous… is the diff's one way in.
 private struct RunSnapshotRow: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router

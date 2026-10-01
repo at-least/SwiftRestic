@@ -50,16 +50,6 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
                 .addingTimeInterval(TimeInterval(pruneIntervalDays) * 86_400)
         }
     }
-
-    var summary: String {
-        var parts: [String] = []
-        if checkEnabled {
-            let depth = checkReadDataPercent > 0 ? " (reads \(checkReadDataPercent)% of data)" : ""
-            parts.append("Check every \(checkIntervalDays)d\(depth)")
-        }
-        if pruneEnabled { parts.append("Prune every \(pruneIntervalDays)d") }
-        return parts.isEmpty ? "Off" : parts.joined(separator: ", ")
-    }
 }
 
 /// The upkeep operations the scheduler can start.

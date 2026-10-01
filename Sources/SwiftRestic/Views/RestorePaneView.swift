@@ -4,7 +4,7 @@ import SwiftUI
 /// the sidebar's Restore section — Arq's arrangement, where picking a
 /// dated record in the source list shows its files in the main pane.
 ///
-/// The app's one snapshot-first browser: the Snapshots tables' Browse, both
+/// The app's one snapshot-first browser: the run drawer's Browse, both
 /// Restore Files… buttons and Browse Folders' Show in Restore all land here
 /// (`AppRouter.showRestore`), so the Change column, search, drag-to-Finder
 /// and whole-backup restore never depend on which button you came through.
