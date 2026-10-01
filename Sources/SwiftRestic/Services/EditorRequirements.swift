@@ -8,7 +8,8 @@ import Foundation
 /// while an earlier one exists is a regression.
 enum EditorRequirements {
     /// The first requirement `BackupPlan.isConfigurationComplete` checks but
-    /// does not name, in the order the plan sheet's tabs present them.
+    /// does not name, in the order the plan sheet presents them: the
+    /// header's Name and Repository, then the Files tab's folders.
     static func plan(_ draft: BackupPlan) -> String? {
         if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Name the plan to save it."

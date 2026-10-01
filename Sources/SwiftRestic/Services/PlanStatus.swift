@@ -101,6 +101,22 @@ enum PlanStatus {
         )
     }
 
+    /// The run the plan page's Last backup value lands on: the newest
+    /// backup that stamped `lastSuccessAt`, the time the value says —
+    /// `markPlanRun`'s predicate. The stamp lands as soon as the snapshot is
+    /// written, so a run whose after-hooks then failed counts
+    /// (`.completedWithErrors`), and so does one whose retention was stopped
+    /// afterwards (`.cancelled`, its snapshot written); a failed run, or one
+    /// stopped before its snapshot, never stamped.
+    static func lastBackupRun(planID: UUID, in runs: [RunRecord]) -> RunRecord? {
+        runs
+            .filter {
+                $0.planID == planID && $0.kind == .backup
+                    && ($0.outcome == .succeeded || $0.outcome == .completedWithErrors || $0.snapshotID != nil)
+            }
+            .max { $0.startedAt < $1.startedAt }
+    }
+
     /// The plan page's Next backup value (named for the tile it once was),
     /// from the same enumeration the scheduler, the Overview's Next runs
     /// card and the tray read, so the page cannot show a date nothing will

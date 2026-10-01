@@ -7,7 +7,7 @@ import Testing
 /// name a later gap while an earlier one exists is a regression.
 @Suite("Editor requirement chains")
 struct EditorRequirementTests {
-    @Test("the plan editor names the first unmet requirement in tab order")
+    @Test("the plan editor names the first unmet requirement in the order the sheet shows its fields")
     func planRequirementOrdering() {
         var plan = BackupPlan()
         #expect(EditorRequirements.plan(plan) == "Name the plan to save it.")

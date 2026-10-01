@@ -311,17 +311,8 @@ struct PlanDetailView: View {
     private func lastBackupValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
         let value = Format.ago(plan.lastSuccessAt, now: now)
         // The destination must be the run the value claims — the newest
-        // backup that stamped `lastSuccessAt`. That is the same predicate
-        // `markPlanRun` uses: a snapshot-writing run whose after-hooks then
-        // failed still counts (`.completedWithErrors`), because the stamp
-        // happens before the downgrade. A `.failed` run never stamped, so
-        // landing on it would break the promise the value makes.
-        let lastSuccessfulRun = model.configuration.runs
-            .filter {
-                $0.planID == plan.id && $0.kind == .backup
-                    && ($0.outcome == .succeeded || $0.outcome == .completedWithErrors)
-            }
-            .max { $0.startedAt < $1.startedAt }
+        // backup that stamped `lastSuccessAt` (PlanStatus.lastBackupRun).
+        let lastSuccessfulRun = PlanStatus.lastBackupRun(planID: plan.id, in: model.configuration.runs)
         // The run record is the primary source. When the global history cap
         // has evicted this plan's newest record — a busy plan can do that to
         // a quiet neighbour — the newest snapshot's own summary answers the

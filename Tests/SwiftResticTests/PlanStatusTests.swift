@@ -140,6 +140,31 @@ struct PlanStatusTests {
         #expect(ahead.value != "Running now")
     }
 
+    @Test("Last backup lands on the run that stamped it — one whose retention was stopped too")
+    func lastBackupRunIsTheStampedOne() {
+        let planID = UUID()
+        func backup(_ minutesAgo: Double, _ outcome: RunRecord.Outcome, snapshot: String?) -> RunRecord {
+            var run = RunRecord(kind: .backup, planName: "Docs", startedAt: now.addingTimeInterval(-minutesAgo * 60))
+            run.planID = planID
+            run.outcome = outcome
+            run.snapshotID = snapshot
+            return run
+        }
+        let older = backup(120, .succeeded, snapshot: "aaaa")
+        // Its snapshot was written and stamped lastSuccessAt; then the user
+        // stopped the retention that followed, and the record reads
+        // cancelled. The value says this run's time, so the landing must be
+        // this run, not the one before it.
+        let retentionStopped = backup(60, .cancelled, snapshot: "bbbb")
+        #expect(PlanStatus.lastBackupRun(planID: planID, in: [older, retentionStopped])?.id == retentionStopped.id)
+
+        // Neither of these ever stamped: a run stopped before its snapshot,
+        // and a failed one.
+        let stoppedEarly = backup(30, .cancelled, snapshot: nil)
+        let failed = backup(10, .failed, snapshot: nil)
+        #expect(PlanStatus.lastBackupRun(planID: planID, in: [older, stoppedEarly, failed])?.id == older.id)
+    }
+
     @Test("a timed app-wide hold moves the tile to the hold's end")
     func timedHoldClampsTile() {
         var plan = completeDailyPlan()

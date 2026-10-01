@@ -179,9 +179,9 @@ struct FormattingTests {
             calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
         }
         // For 1 Hour pressed at 11:30 PM. Nothing redraws the menu bar's
-        // VoiceOver label or a plan's sidebar caption at midnight, so the
-        // words written at 11:30 PM are still up at 12:10 AM — where
-        // "tomorrow 12:30 AM" would name a day too late.
+        // VoiceOver label at midnight, so the words written at 11:30 PM are
+        // still up at 12:10 AM — where "tomorrow 12:30 AM" would name a day
+        // too late. (The window's captions are respelled each minute.)
         let end = date(2026, 9, 27, 0, 30)
         #expect(flat(Format.pauseEnd(end, now: date(2026, 9, 26, 23, 30), calendar: calendar)) == "12:30 AM")
         #expect(flat(Format.pauseEnd(end, now: date(2026, 9, 27, 0, 10), calendar: calendar)) == "12:30 AM")
