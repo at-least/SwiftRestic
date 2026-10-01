@@ -338,7 +338,7 @@ struct PlanDetailView: View {
                         .accessibilityHidden(true)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HoverableButtonStyle())
             .help("Show this backup's run in Activity")
             .accessibilityLabel("Last backup \(text). Show its run in Activity")
         } else {
@@ -389,30 +389,11 @@ struct PlanDetailView: View {
         }
     }
 
+    /// What, then where and when: the plan's defining fact — the folders it
+    /// backs up — leads, as the repository page leads with its location.
     private func configurationCard(_ plan: BackupPlan) -> some View {
         Card("Configuration") {
             VStack(alignment: .leading, spacing: 10) {
-                DetailGrid {
-                    DetailRow("Repository") {
-                        if let repository = model.repository(id: plan.repositoryID) {
-                            Text(repository.name)
-                        } else {
-                            Text("Not set").foregroundStyle(Theme.warning)
-                        }
-                    }
-                    DetailRow("Schedule", PlanStatus.scheduleRow(for: plan))
-                    // Applying it now is Plan ▸ Apply Retention Now… (and the
-                    // sidebar row's menu); what it will keep is the editor's
-                    // Retention tab.
-                    DetailRow("Retention", plan.retention.summary)
-                    DetailRow("Excludes", Format.plural(plan.excludePatterns.count, "pattern"))
-                    if !plan.hooks.isEmpty {
-                        DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")
-                    }
-                }
-
-                Divider()
-
                 Text("Backing up")
                     .font(.subheadline.weight(.medium))
                 ForEach(plan.sources, id: \.self) { source in
@@ -433,6 +414,40 @@ struct PlanDetailView: View {
                     Text("No folders chosen yet.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                DetailGrid {
+                    DetailRow("Repository") {
+                        if let repository = model.repository(id: plan.repositoryID) {
+                            // The sidebar row's destination, and the Last
+                            // backup value's look one card up.
+                            Button { router.selection = .repository(repository.id) } label: {
+                                HStack(spacing: 4) {
+                                    Text(repository.name)
+                                    Image(systemName: "chevron.forward")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                            .buttonStyle(HoverableButtonStyle())
+                            .help("Open the repository's page")
+                            .accessibilityLabel("Repository \(repository.name). Show its page")
+                        } else {
+                            Text("Not set").foregroundStyle(Theme.warning)
+                        }
+                    }
+                    DetailRow("Schedule", PlanStatus.scheduleRow(for: plan))
+                    // Applying it now is Plan ▸ Apply Retention Now… (and the
+                    // sidebar row's menu); what it will keep is the editor's
+                    // Retention tab.
+                    DetailRow("Retention", plan.retention.summary)
+                    DetailRow("Excludes", Format.plural(plan.excludePatterns.count, "pattern"))
+                    if !plan.hooks.isEmpty {
+                        DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")
+                    }
                 }
             }
         }
