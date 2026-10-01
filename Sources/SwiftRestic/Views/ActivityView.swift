@@ -153,7 +153,7 @@ struct ActivityView: View {
                 }
 
                 // Every selected run opens the drawer, a clean one too: the
-                // plan page's Last backup tile lands on exactly such a run.
+                // plan page's Last backup value lands on exactly such a run.
                 if let selected = runs.first(where: { $0.id == selection }) {
                     Divider()
                     RunDetailPanel(
@@ -209,8 +209,8 @@ struct ActivityView: View {
             else { return }
             selection = visibleRuns.first?.id
         }
-        // The "Last backup" tile's landing: the plan page hands over a run to
-        // land selected, the way the problems filter hands over a filter.
+        // The "Last backup" value's landing: the plan page hands over a run
+        // to land selected.
         .task(id: router.activityFocusRunID) {
             guard let id = router.activityFocusRunID else { return }
             router.activityFocusRunID = nil

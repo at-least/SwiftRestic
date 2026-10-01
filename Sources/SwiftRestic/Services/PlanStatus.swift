@@ -30,7 +30,7 @@ struct PlanCaption: Equatable, Sendable {
 }
 
 /// The plan page's words, kept out of the view so they can be tested: the
-/// status row for a problem that still stands, and the Next backup tile.
+/// status row for a problem that still stands, and the Next backup value.
 enum PlanStatus {
     private static let retentionSkippedFact = "Retention skipped"
     static let unnamedUnreadFact = "Some source data could not be read"
@@ -101,9 +101,10 @@ enum PlanStatus {
         )
     }
 
-    /// The Next backup tile, from the same enumeration the scheduler, the
-    /// Overview's Next runs card and the tray read, so the tile cannot show
-    /// a date nothing will fire at. A paused plan says so instead of
+    /// The plan page's Next backup value (named for the tile it once was),
+    /// from the same enumeration the scheduler, the Overview's Next runs
+    /// card and the tray read, so the page cannot show a date nothing will
+    /// fire at. A paused plan says so instead of
     /// "Manually" — a paused manual one without promising a schedule to
     /// resume; an enabled plan the scheduler skips — no repository, a
     /// repository since removed, no folders — says it is not scheduled.
@@ -183,7 +184,7 @@ enum PlanStatus {
     /// The pause as the sidebar words it, `nil` while the schedule runs: a
     /// timed pause names its end, an open-ended one the schedule it holds —
     /// a manual plan's none, since it has no schedule to hold ("Paused",
-    /// as its Next backup tile says, never "Paused — Manually").
+    /// as its Next backup value says, never "Paused — Manually").
     static func pauseCaption(for plan: BackupPlan, now: Date = .now, calendar: Calendar = .current) -> String? {
         if !plan.isEnabled {
             return plan.schedule.frequency == .manual ? "Paused" : "Paused — \(plan.schedule.summary)"
@@ -215,7 +216,7 @@ enum PlanStatus {
     /// (before, the pause took the line and an unseen problem showed only
     /// as the dot). A never-run plan the scheduler skips — no repository, a
     /// repository since removed, no folders — reads "Not scheduled", as its
-    /// Next backup tile does, rather than a schedule it will not keep.
+    /// Next backup value does, rather than a schedule it will not keep.
     static func sidebarCaption(
         for plan: BackupPlan,
         activity: PlanActivity?,

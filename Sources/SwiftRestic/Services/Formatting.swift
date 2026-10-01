@@ -120,11 +120,11 @@ enum Format {
         return date.formatted(timestampStyle)
     }
 
-    /// A next-run moment, spelled to fit a stat tile. `timestamp`'s full
-    /// "Sep 9, 2026 at 3:00 AM" is exactly what a tile truncates its AM/PM
-    /// off — the one part that says morning or evening — so near days lead
-    /// with the day name and the tile's tooltip carries `timestamp` for the
-    /// full form. A moment at or before now reads "Due now", matching the
+    /// A next-run moment, spelled short for the plan page's Next backup
+    /// value (once a stat tile, which truncated `timestamp`'s full "Sep 9,
+    /// 2026 at 3:00 AM" right through its AM/PM — the one part that says
+    /// morning or evening): near days lead with the day name, and the
+    /// value's tooltip carries `timestamp` for the full form. A moment at or before now reads "Due now", matching the
     /// Next runs card.
     static func tileTimestamp(
         _ date: Date,

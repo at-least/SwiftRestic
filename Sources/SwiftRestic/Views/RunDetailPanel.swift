@@ -4,7 +4,7 @@ import SwiftUI
 /// the snapshot it wrote or read (Browse, Compare with Previous…), its
 /// numbers, restic's exit code, the messages it left, and the log. Shown
 /// for every selected run, clean ones included: the plan page's Last backup
-/// tile lands on exactly such a run, and an empty pane under the selection
+/// value lands on exactly such a run, and an empty pane under the selection
 /// read as "nothing to see".
 ///
 /// A fixed 220 pt, scrolling inside, with the buttons pinned under the

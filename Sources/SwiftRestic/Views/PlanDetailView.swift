@@ -9,7 +9,6 @@ struct PlanDetailView: View {
     /// wired by RootView so this view owns no navigation of its own.
     var onShowRun: (() -> Void)? = nil
 
-    @State private var comparing: SnapshotDiffTarget?
     @State private var browsingFolders: FolderBrowserTarget?
 
     private var plan: BackupPlan? { model.plan(id: planID) }
@@ -24,8 +23,8 @@ struct PlanDetailView: View {
         }
         .navigationTitle(plan?.name ?? "Plan")
         // Opening the page is the Mail "read": whatever failure the sidebar's
-        // dot was announcing is seen now — honestly, because the status row
-        // under the tiles shows that failure for as long as it stands. The
+        // dot was announcing is seen now — honestly, because the problem row
+        // under the Backups card shows that failure for as long as it stands. The
         // dot for a run that fails while the page is already open stays,
         // like a message arriving into the mailbox you are reading — opening
         // the page again clears it. Keyed on the plan, not on appearing:
@@ -56,20 +55,12 @@ struct PlanDetailView: View {
                         .help("Run this plan's backup now")
                     }
                     scheduleControl(plan)
+                    // The page's verbs only. Deleting is rare and final, so
+                    // it is not chrome: Plan ▸ Delete Plan… and the sidebar
+                    // row's menu, through the one shared confirmation.
                     Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                         .labelStyle(.titleAndIcon)
                         .help("Change this plan's folders, schedule and retention")
-                    // Deletion was sidebar-context-menu-only, while the less
-                    // destructive repository removal sat in its pane's own
-                    // toolbar — the more destructive act had the worse
-                    // affordance.
-                    Button("Delete Plan", systemImage: "trash", role: .destructive) {
-                        // The one delete confirmation, shared with the
-                        // sidebar and the Plan menu (CommandPresentations).
-                        router.request(.confirm(.deletePlan(plan.id)))
-                    }
-                    .labelStyle(.titleAndIcon)
-                    .help("Remove this plan and its schedule; snapshots are not deleted")
                 }
             }
         }
@@ -80,10 +71,6 @@ struct PlanDetailView: View {
                 router.showRestore(repositoryID: target.repositoryID, snapshotID: snapshotID, focusPath: folder)
             })
             .environment(model)
-        }
-        .sheet(item: $comparing) { target in
-            SnapshotDiffView(target: target)
-                .environment(model)
         }
     }
 
@@ -245,7 +232,7 @@ struct PlanDetailView: View {
 
             OperationStrip(planID: plan.id)
 
-            summaryTiles(plan)
+            backupsCard(plan)
             // The plan's standing problem, on the plan's own page: present
             // exactly while the sidebar names it, gone once a run succeeds.
             if let problem = model.currentProblem(for: plan.id) {
@@ -253,97 +240,148 @@ struct PlanDetailView: View {
             }
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             configurationCard(plan)
-            snapshotsCard(plan)
         }
         .detailPane()
     }
 
-    private func summaryTiles(_ plan: BackupPlan) -> some View {
+    /// The page's answer, in Arq's label/value idiom: did this plan back
+    /// up, when does it run next, and the way into its files. Restore
+    /// Files… opens the one browser at this plan's newest backup — its
+    /// records are the sidebar's, under Restore, so the page does not list
+    /// them a second time.
+    private func backupsCard(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
-        // A backup's, never Apply Retention Now…'s forget, which carries the
-        // plan's ID and added nothing.
-        let lastRun = model.configuration.runs.first { $0.planID == plan.id && $0.kind == .backup }
-        let outcome = model.snapshotListingOutcome(for: plan.repositoryID)
         // The scheduler's own answer, so a paused plan reads "Paused" and one
-        // it skips never shows a date. Tile-sized on the face, full form in
-        // the tooltip: the plain timestamp truncated away its AM/PM exactly
-        // when that was the part that said morning or evening.
+        // it skips never shows a date. The full form is the tooltip: the
+        // short one leaves out the date when it is today or tomorrow.
         let next = PlanStatus.nextBackupTile(
             for: plan,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
             hold: model.scheduleHold
         )
-        return HStack(spacing: Theme.Space.tile) {
-            lastBackupTile(plan)
-            StatTile(title: "Next backup", value: next.value, help: next.help)
-            // A count is only a fact once the listing it derives from has
-            // succeeded; before that (or after a failure) the honest face is
-            // "—", with the tooltip saying which.
-            StatTile.snapshots(outcome: outcome, loadedCount: snapshots.count)
-            StatTile(
-                title: "Last run added",
-                // The run record is the primary source. When the global
-                // history cap has evicted this plan's newest record — a busy
-                // plan can do that to a quiet neighbour — the newest
-                // snapshot's own summary answers the same question, because a
-                // snapshot carries what the backup that wrote it added.
-                value: Format.bytes(lastRun?.dataAdded ?? snapshots.first?.dataAdded)
-            )
+        return Card("Backups") {
+            DetailGrid {
+                DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
+                DetailRow("Next backup") {
+                    Text(next.value)
+                        .help(next.help ?? "")
+                }
+                DetailRow("Snapshots") { snapshotsValue(plan, snapshots: snapshots) }
+            }
+        } accessory: {
+            if let repositoryID = plan.repositoryID {
+                HStack(spacing: 8) {
+                    // Arq's "Restoring from an Active Backup Plan": expand
+                    // the sidebar's Restore section and select this plan's
+                    // newest backup — the plan's own, not whichever plan
+                    // sharing the repository ran last.
+                    Button("Restore Files…") {
+                        if let latest = model.newestRecord(repositoryID: repositoryID, planID: plan.id) {
+                            router.showRestore(repositoryID: repositoryID, snapshotID: latest.id)
+                        }
+                    }
+                    .disabled(snapshots.isEmpty)
+                    .help("Browse this plan's backups and restore files — expands Restore on the left and selects this plan's newest backup")
+                    // The folder-first entry: pick a folder, then flip
+                    // through the snapshots that contain it. Needs at least
+                    // one snapshot to stand in as the newest version.
+                    Button("Browse Folders…") {
+                        browsingFolders = FolderBrowserTarget(repositoryID: repositoryID, planID: plan.id)
+                    }
+                    .disabled(snapshots.isEmpty)
+                    .help("Walk this plan's folders and flip through the snapshots that contain them")
+                }
+                .controlSize(.small)
+            }
         }
     }
 
-    /// Arq's "View Latest Backup Record…" as a tile: the timestamp is a
-    /// handle to its run's record. Only when a record exists to land on —
-    /// "Never" has nowhere to go and stays a plain tile.
+    /// Arq's "View Latest Backup Record…" as the value itself: the time is a
+    /// handle to its run's record in Activity, with what that backup added.
+    /// Only when a record exists to land on — "Never" has nowhere to go.
     @ViewBuilder
-    private func lastBackupTile(_ plan: BackupPlan) -> some View {
+    private func lastBackupValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
         let value = plan.lastSuccessAt.map { Format.relative($0) } ?? "Never"
-        // The destination must be the run the tile's value claims — the
-        // newest backup that stamped `lastSuccessAt`. That is the same
-        // predicate `markPlanRun` uses: a snapshot-writing run whose
-        // after-hooks then failed still counts (`.completedWithErrors`),
-        // because the stamp happens before the downgrade. A `.failed` run
-        // never stamped, so landing on it would break the promise the
-        // tile's value makes.
+        // The destination must be the run the value claims — the newest
+        // backup that stamped `lastSuccessAt`. That is the same predicate
+        // `markPlanRun` uses: a snapshot-writing run whose after-hooks then
+        // failed still counts (`.completedWithErrors`), because the stamp
+        // happens before the downgrade. A `.failed` run never stamped, so
+        // landing on it would break the promise the value makes.
         let lastSuccessfulRun = model.configuration.runs
             .filter {
                 $0.planID == plan.id && $0.kind == .backup
                     && ($0.outcome == .succeeded || $0.outcome == .completedWithErrors)
             }
             .max { $0.startedAt < $1.startedAt }
+        // The run record is the primary source. When the global history cap
+        // has evicted this plan's newest record — a busy plan can do that to
+        // a quiet neighbour — the newest snapshot's own summary answers the
+        // same question, because a snapshot carries what its backup added.
+        let added = (lastSuccessfulRun?.dataAdded ?? snapshots.first?.dataAdded).flatMap { $0 > 0 ? $0 : nil }
+        let text = added.map { "\(value) · added \(Format.bytes($0))" } ?? value
         if let lastSuccessfulRun, let onShowRun {
             Button {
                 router.activityShowsProblemsOnly = false
                 router.activityFocusRunID = lastSuccessfulRun.id
                 onShowRun()
             } label: {
-                StatTile(
-                    title: "Last backup",
-                    value: value,
-                    trailingSymbol: "chevron.forward"
-                )
+                HStack(spacing: 4) {
+                    Text(text)
+                    Image(systemName: "chevron.forward")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
             }
-            .buttonStyle(HoverableButtonStyle())
+            .buttonStyle(.plain)
             .help("Show this backup's run in Activity")
-            .accessibilityLabel("Last backup \(value). Show its run in Activity")
+            .accessibilityLabel("Last backup \(text). Show its run in Activity")
         } else {
-            StatTile(title: "Last backup", value: value)
+            Text(text)
         }
     }
 
-    /// The rules, and the way to apply them now rather than after the next
-    /// backup — a paused or failing plan's history otherwise never thins.
-    private func retentionRow(_ plan: BackupPlan) -> some View {
-        let commands = model.planCommands(for: .plan(plan.id))
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(plan.retention.summary)
-            Spacer(minLength: 8)
-            Button("Apply Now…") {
-                router.request(.applyRetention(plan.id))
+    /// The count only once the listing it derives from has succeeded; before
+    /// that, or after a failure, "—" — the caveat under the card says why.
+    /// An empty plan says which kind of empty: a repository holding other
+    /// snapshots must not read as "nothing there".
+    @ViewBuilder
+    private func snapshotsValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
+        if let repositoryID = plan.repositoryID {
+            HStack(spacing: 8) {
+                switch model.snapshotListingOutcome(for: repositoryID) {
+                case .loaded where !snapshots.isEmpty:
+                    Text(Format.count(snapshots.count))
+                        .monospacedDigit()
+                case .loaded:
+                    Text(
+                        model.snapshots(for: repositoryID).isEmpty
+                            ? "None yet — they appear after the first backup"
+                            : "None from this plan yet — the repository holds others"
+                    )
+                    .foregroundStyle(.secondary)
+                case let .failed(message):
+                    Text("—")
+                        .help(message)
+                    Button("Try Again") {
+                        Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                    }
+                    .controlSize(.small)
+                    .disabled(model.loadingSnapshots.contains(repositoryID))
+                case .idle:
+                    Text("—")
+                }
+                // Every count traces to the moment it was read, or a spinner
+                // while a read is in flight.
+                SnapshotFreshnessLabel(
+                    loadedAt: model.snapshotsLoadedAt(for: repositoryID),
+                    isLoading: model.loadingSnapshots.contains(repositoryID)
+                )
             }
-            .controlSize(.small)
-            .disabled(!commands.canApplyRetention)
-            .help(commands.retentionBlocker ?? "Preview what this plan's retention rules would remove now, then confirm")
+        } else {
+            Text("No repository set")
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -359,26 +397,14 @@ struct PlanDetailView: View {
                         }
                     }
                     DetailRow("Schedule", PlanStatus.scheduleRow(for: plan))
-                    DetailRow("Retention") {
-                        retentionRow(plan)
-                    }
+                    // Applying it now is Plan ▸ Apply Retention Now… (and the
+                    // sidebar row's menu); what it will keep is the editor's
+                    // Retention tab.
+                    DetailRow("Retention", plan.retention.summary)
                     DetailRow("Excludes", Format.plural(plan.excludePatterns.count, "pattern"))
                     if !plan.hooks.isEmpty {
                         DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")
                     }
-                }
-
-                // The same projection the editor shows: the shorthand above is
-                // buckets, this sentence is what the buckets mean.
-                if plan.retention.isEnabled,
-                   let projection = RetentionProjection.project(policy: plan.retention, schedule: plan.schedule)
-                {
-                    Text(
-                        "≈ \(projection.keptSnapshots) snapshots would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Divider()
@@ -407,94 +433,13 @@ struct PlanDetailView: View {
             }
         }
     }
-
-    @ViewBuilder
-    private func snapshotsCard(_ plan: BackupPlan) -> some View {
-        if let repositoryID = plan.repositoryID {
-            snapshotsCard(repositoryID: repositoryID, plan: plan)
-        } else {
-            // A retry could never succeed, so the card says what is actually
-            // missing instead of offering buttons that lie.
-            Card("Snapshots") {
-                Text("No repository set — snapshots appear once the plan points at one.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-            }
-        }
-    }
-
-    private func snapshotsCard(repositoryID: UUID, plan: BackupPlan) -> some View {
-        let snapshots = model.snapshots(for: repositoryID, planID: plan.id)
-        let repositoryTotal = model.snapshots(for: repositoryID).count
-        let outcome = model.snapshotListingOutcome(for: repositoryID)
-        let loadedAt = model.snapshotsLoadedAt(for: repositoryID)
-        return Card("Snapshots") {
-            SnapshotTable(
-                snapshots: snapshots,
-                isLoading: model.loadingSnapshots.contains(repositoryID),
-                loadOutcome: outcome,
-                // Both are true statements, but only one is the user's: a
-                // repository with snapshots from before this plan existed (or
-                // from other restic clients) must not read as "nothing there".
-                emptyMessage: repositoryTotal == 0
-                    ? "No snapshots yet — they appear here after the first backup."
-                    : "This repository has snapshots, but none from this plan yet.",
-                onBrowse: { snapshot in
-                    router.showRestore(repositoryID: repositoryID, snapshotID: snapshot.id)
-                },
-                onCompare: { snapshot in
-                    comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
-                },
-                onRetry: {
-                    Task { await model.refreshSnapshots(repositoryID: repositoryID) }
-                }
-            )
-        } accessory: {
-            HStack(spacing: 8) {
-                // Every number on this card traces to the moment it was read:
-                // an "Updated 7:27 AM" caption, or a spinner while a refresh
-                // is in flight.
-                SnapshotFreshnessLabel(
-                    loadedAt: loadedAt,
-                    isLoading: model.loadingSnapshots.contains(repositoryID)
-                )
-                // Arq's "Restoring from an Active Backup Plan": expand the
-                // sidebar's Restore section and select this plan's newest
-                // backup — the plan's own, not whichever plan sharing the
-                // repository ran last.
-                Button("Restore Files…") {
-                    if let latest = model.newestRecord(repositoryID: repositoryID, planID: plan.id) {
-                        router.showRestore(repositoryID: repositoryID, snapshotID: latest.id)
-                    }
-                }
-                .controlSize(.small)
-                .disabled(snapshots.isEmpty)
-                .help("Browse this plan's backups and restore files — expands Restore on the left and selects this plan's newest backup")
-                // The folder-first entry: pick a folder, then flip through the
-                // snapshots that contain it. Needs at least one snapshot to
-                // stand in as the newest version.
-                Button("Browse Folders…") {
-                    browsingFolders = FolderBrowserTarget(repositoryID: repositoryID, planID: plan.id)
-                }
-                .controlSize(.small)
-                .disabled(snapshots.isEmpty)
-                .help("Walk this plan's folders and flip through the snapshots that contain them")
-                Button("Refresh") {
-                    Task { await model.refreshSnapshots(repositoryID: repositoryID) }
-                }
-                .controlSize(.small)
-            }
-        }
-    }
 }
 
 /// Sortable, filterable list of snapshots with "Browse" and "Compare"
 /// affordances per row — as buttons, in a context menu, and on double-click.
 struct SnapshotTable: View {
-    /// For the completeness column's run lookup. Both hosts (the plan pane
-    /// and the repository pane's All Snapshots) sit in the main window's
-    /// environment.
+    /// For the completeness column's run lookup. Its host, the repository
+    /// pane's All Snapshots, sits in the main window's environment.
     @Environment(AppModel.self) private var model
     let snapshots: [Snapshot]
     var isLoading = false

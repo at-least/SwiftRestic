@@ -51,7 +51,7 @@ final class AppRouter {
     private(set) var pendingIntent: Intent?
 
     /// The run a detail surface asked Activity to land selected — the plan
-    /// page's "Last backup" tile, Arq's "View Latest Backup Record…" pattern:
+    /// page's "Last backup" value, Arq's "View Latest Backup Record…" pattern:
     /// the timestamp is the handle to its own record. Transient, never
     /// persisted; Activity consumes and clears it.
     var activityFocusRunID: RunRecord.ID?
