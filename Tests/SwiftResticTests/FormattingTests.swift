@@ -103,6 +103,20 @@ struct FormattingTests {
         #expect(!value.contains("0 seconds"))
     }
 
+    @Test("a past event, as of the window's minute tick, is never in the future")
+    func agoAsOfTick() {
+        let tick = Date.now.addingTimeInterval(-600)
+        // Spelled from the tick, not from whenever the view happened to
+        // draw: the same event reads the same everywhere in the window.
+        #expect(Format.ago(tick.addingTimeInterval(-3_600), now: tick)
+            == Format.relative(tick.addingTimeInterval(-3_600), now: tick))
+        // The tick can be up to a minute old. A run that finished since it
+        // happened "Just now" — Format.relative would say "in 50 seconds".
+        #expect(Format.ago(tick.addingTimeInterval(50), now: tick) == "Just now")
+        #expect(Format.relative(tick.addingTimeInterval(50), now: tick).hasPrefix("in "))
+        #expect(Format.ago(nil, now: tick) == "Never")
+    }
+
     @Test("tile timestamps keep the part a tile would truncate — morning or evening")
     func tileTimestamps() {
         var calendar = Calendar(identifier: .gregorian)

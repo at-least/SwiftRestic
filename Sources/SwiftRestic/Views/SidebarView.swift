@@ -12,6 +12,7 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    @Environment(\.now) private var now
 
     /// Which Restore-section repositories are expanded — the backup records
     /// underneath are the restore pane's entry points. Shared with the detail
@@ -41,7 +42,7 @@ struct SidebarView: View {
             // per body so the badge and the surfaces it points at agree.
             let problemCount = OverviewMetrics.problemCount(
                 runs: model.configuration.runs,
-                since: OverviewMetrics.problemWindowStart(from: .now)
+                since: OverviewMetrics.problemWindowStart(from: now)
             )
             Section {
                 Label("Overview", systemImage: "square.grid.2x2")
@@ -388,14 +389,19 @@ private struct RestoreRecordRow: View {
 
 private struct PlanSidebarRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.now) private var now
     let plan: BackupPlan
 
     var body: some View {
+        // As of the window's minute clock, the Overview's Protection card
+        // spells the same run from the same tick.
         let caption = PlanStatus.sidebarCaption(
             for: plan,
             activity: model.activity[plan.id],
             problem: model.currentProblem(for: plan.id),
-            existingRepositoryIDs: Set(model.configuration.repositories.map(\.id))
+            existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
+            now: now,
+            relative: { Format.ago($0, now: now) }
         )
         HStack(spacing: 4) {
             // A fixed leading slot on every row, marker or not, so every plan

@@ -3,6 +3,8 @@ import SwiftUI
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    /// The window's minute clock: the maintenance dates are as of it.
+    @Environment(\.now) private var now
     let repositoryID: UUID
     let onEdit: () -> Void
 
@@ -187,14 +189,14 @@ struct RepositoryDetailView: View {
                 // behind the dates is the editor's, and each run is a
                 // record in Activity.
                 DetailGrid {
-                    DetailRow("Last check", Format.relative(repository.maintenance.lastCheckAt))
+                    DetailRow("Last check", Format.ago(repository.maintenance.lastCheckAt, now: now))
                     // As the scheduler will start them: the hold holds upkeep
                     // too, so a due task reads "Waiting", never "Due now".
                     let hold = model.scheduleHold
-                    DetailRow("Next check", Scheduler.nextMaintenanceText(.check, of: repository, hold: hold))
+                    DetailRow("Next check", Scheduler.nextMaintenanceText(.check, of: repository, hold: hold, now: now))
                     if repository.maintenance.pruneEnabled {
-                        DetailRow("Last prune", Format.relative(repository.maintenance.lastPruneAt))
-                        DetailRow("Next prune", Scheduler.nextMaintenanceText(.prune, of: repository, hold: hold))
+                        DetailRow("Last prune", Format.ago(repository.maintenance.lastPruneAt, now: now))
+                        DetailRow("Next prune", Scheduler.nextMaintenanceText(.prune, of: repository, hold: hold, now: now))
                     }
                 }
 

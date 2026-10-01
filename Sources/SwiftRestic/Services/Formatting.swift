@@ -100,9 +100,8 @@ enum Format {
     }()
     private static let relativeLock = NSLock()
 
-    static func relative(_ date: Date?) -> String {
+    static func relative(_ date: Date?, now: Date = .now) -> String {
         guard let date else { return "Never" }
-        let now = Date.now
         // Something that just happened must not be described in the future
         // tense, which is what a timestamp a fraction of a second old
         // produces. Beyond that window the formatter gets the real date in
@@ -113,6 +112,15 @@ enum Format {
         relativeLock.lock()
         defer { relativeLock.unlock() }
         return relativeStamp.localizedString(for: date, relativeTo: now)
+    }
+
+    /// When a past event happened, as of `now` — the window's minute clock
+    /// (`EnvironmentValues.now`), so the same event reads the same on every
+    /// surface and moves on with the minute. The tick can be up to a minute
+    /// old: an event since then happened "Just now", never "in 50 seconds".
+    static func ago(_ date: Date?, now: Date) -> String {
+        guard let date else { return "Never" }
+        return relative(date, now: max(now, date))
     }
 
     // A value type the cached style is safe to share unlocked, unlike the

@@ -3,6 +3,8 @@ import SwiftUI
 struct PlanDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    /// The window's minute clock: Last backup and Next backup are as of it.
+    @Environment(\.now) private var now
     let planID: UUID
     let onEdit: () -> Void
     /// Sends the pane to Activity — the "Last backup" value's destination,
@@ -148,6 +150,7 @@ struct PlanDetailView: View {
     /// record. No dismiss button — it lasts exactly as long as the problem,
     /// and a retry is the toolbar's Back Up Now a few points away.
     private struct PlanProblemRow: View {
+        @Environment(\.now) private var now
         let summary: PlanProblemSummary
         /// The run the summary describes, for the fix its items need.
         let run: RunRecord
@@ -166,7 +169,7 @@ struct PlanDetailView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(summary.headline)
                                 .font(.headline)
-                            Text(Format.relative(summary.finishedAt))
+                            Text(Format.ago(summary.finishedAt, now: now))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                                 .help(Format.timestamp(summary.finishedAt))
@@ -256,7 +259,8 @@ struct PlanDetailView: View {
         let next = PlanStatus.nextBackupTile(
             for: plan,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
-            hold: model.scheduleHold
+            hold: model.scheduleHold,
+            now: now
         )
         return Card("Backups") {
             DetailGrid {
@@ -300,7 +304,7 @@ struct PlanDetailView: View {
     /// Only when a record exists to land on — "Never" has nowhere to go.
     @ViewBuilder
     private func lastBackupValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
-        let value = plan.lastSuccessAt.map { Format.relative($0) } ?? "Never"
+        let value = Format.ago(plan.lastSuccessAt, now: now)
         // The destination must be the run the value claims — the newest
         // backup that stamped `lastSuccessAt`. That is the same predicate
         // `markPlanRun` uses: a snapshot-writing run whose after-hooks then

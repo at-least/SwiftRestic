@@ -87,7 +87,9 @@ enum OverviewMetrics {
 
     /// The Protection card's rows, one per plan. The lookups arrive as
     /// closures so the derivation stays pure — and testable — while the view
-    /// keeps its observation on the model state behind them.
+    /// keeps its observation on the model state behind them. `relative`
+    /// spells a past moment; the view passes the window's minute clock, as
+    /// the sidebar's captions do.
     static func protectionRows(
         plans: [BackupPlan],
         latestSnapshot: (_ repositoryID: UUID, _ planID: UUID) -> Snapshot?,
@@ -95,7 +97,8 @@ enum OverviewMetrics {
         listingOutcome: (UUID) -> SnapshotListingOutcome,
         isChecking: (UUID) -> Bool,
         activity: (_ planID: UUID) -> PlanActivity?,
-        standingProblem: (_ planID: UUID) -> RunRecord?
+        standingProblem: (_ planID: UUID) -> RunRecord?,
+        relative: (Date) -> String = { Format.relative($0) }
     ) -> [ProtectionRow] {
         // Stable severity sort: Swift's sort is not documented stable, so the
         // plan order breaks ties inside each rank.
@@ -106,7 +109,8 @@ enum OverviewMetrics {
                     latestSnapshot: latestSnapshot,
                     repositoryHasSnapshots: repositoryHasSnapshots,
                     listingOutcome: listingOutcome,
-                    isChecking: isChecking
+                    isChecking: isChecking,
+                    relative: relative
                 )
                 // The sidebar caption's top ranks, in its words
                 // (PlanStatus.sidebarCaption): a run in flight says its
@@ -127,7 +131,7 @@ enum OverviewMetrics {
                 if !listed.didFail, let problem = standingProblem(plan.id) {
                     return ProtectionRow(
                         plan: plan,
-                        stateText: "\(problem.outcome.displayName) — \(Format.relative(problem.finishedAt))",
+                        stateText: "\(problem.outcome.displayName) — \(relative(problem.finishedAt))",
                         isKnown: listed.isKnown,
                         // A failed run wrote no snapshot, so the newest one
                         // is older than the trouble; a run that completed
@@ -151,7 +155,8 @@ enum OverviewMetrics {
         latestSnapshot: (_ repositoryID: UUID, _ planID: UUID) -> Snapshot?,
         repositoryHasSnapshots: (UUID) -> Bool,
         listingOutcome: (UUID) -> SnapshotListingOutcome,
-        isChecking: (UUID) -> Bool
+        isChecking: (UUID) -> Bool,
+        relative: (Date) -> String
     ) -> ProtectionRow {
         guard let repositoryID = plan.repositoryID else {
             return ProtectionRow(
@@ -169,7 +174,7 @@ enum OverviewMetrics {
                 // disagree side by side: Date.RelativeFormatStyle
                 // rounds 1 h 43 min up to "2 hours ago", where
                 // Format.relative says "1 hour ago".
-                line = "Last backup \(Format.relative(latest.time))"
+                line = "Last backup \(relative(latest.time))"
             } else if !repositoryHasSnapshots(repositoryID) {
                 line = "No snapshots yet"
             } else {

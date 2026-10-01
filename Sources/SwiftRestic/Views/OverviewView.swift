@@ -6,6 +6,9 @@ import SwiftUI
 struct OverviewView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    /// The window's minute clock: every time on the dashboard — how long
+    /// ago, whether a run is due, the problems' week — is as of it.
+    @Environment(\.now) private var now
     /// Opens Activity, after a problem row has set the run to land on. The
     /// problems card must not be a dead end: a failure the user cannot reach
     /// is a failure they cannot fix.
@@ -16,7 +19,7 @@ struct OverviewView: View {
     /// bar on what "recent" covers. The predicate itself is
     /// `OverviewMetrics.problems`.
     private var problemWindowStart: Date {
-        OverviewMetrics.problemWindowStart(from: .now)
+        OverviewMetrics.problemWindowStart(from: now)
     }
 
     var body: some View {
@@ -65,6 +68,9 @@ struct OverviewView: View {
             },
             standingProblem: { planID in
                 model.currentProblem(for: planID)
+            },
+            relative: { date in
+                Format.ago(date, now: now)
             }
         )
     }
@@ -157,6 +163,7 @@ struct OverviewView: View {
                 let hold = model.scheduleHold
                 let upcoming = Scheduler.upcomingRuns(
                     in: model.configuration.plans,
+                    now: now,
                     existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
                     heldUntil: hold?.resumesAt
                 )
@@ -185,14 +192,14 @@ struct OverviewView: View {
                         HStack {
                             Text(plan.name).lineLimit(1)
                             Spacer()
-                            if date <= .now, hold != nil {
+                            if date <= now, hold != nil {
                                 // Due, but held: it runs once the hold lifts,
                                 // not now. Icon and word in the secondary
                                 // colour — a wait, not an alarm.
                                 Label("Waiting", systemImage: "pause.circle")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
-                            } else if date <= .now {
+                            } else if date <= now {
                                 // Icon + word, not colour alone, and only
                                 // the glyph wears the warning hue: the word
                                 // in orange measured 2.33:1 on the card.
@@ -256,7 +263,7 @@ struct OverviewView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text(Format.relative(run.finishedAt))
+                                Text(Format.ago(run.finishedAt, now: now))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 Image(systemName: "chevron.forward")

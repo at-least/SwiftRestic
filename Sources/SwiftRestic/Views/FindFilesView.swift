@@ -19,6 +19,7 @@ struct FindFilesView: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.now) private var now
 
     private let prefill: Prefill?
 
@@ -274,7 +275,7 @@ struct FindFilesView: View {
                         // refresh in flight says so instead of passing as
                         // current.
                         if let loadedAt = repositoryID.flatMap({ model.snapshotsLoadedAt(for: $0) }) {
-                            Text("Snapshot list read \(Format.relative(loadedAt))")
+                            Text("Snapshot list read \(Format.ago(loadedAt, now: now))")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                                 .monospacedDigit()

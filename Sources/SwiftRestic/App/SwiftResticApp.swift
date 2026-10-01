@@ -160,14 +160,19 @@ struct SwiftResticApp: App {
         // bar's "Open SwiftRestic" would add a second identical window every time
         // instead of bringing the existing one forward.
         Window("SwiftRestic", id: Self.mainWindowID) {
-            RootView()
-                .environment(model)
-                .environment(router)
-                .frame(minWidth: 940, minHeight: 600)
-                .task {
-                    appDelegate.wireAppSurface(model: model, router: router)
-                    await model.bootstrap()
-                }
+            // One minute clock for the whole window (MinuteClock.swift), so
+            // every relative time in it moves on, and moves on together.
+            TimelineView(.everyMinute) { context in
+                RootView()
+                    .environment(\.now, context.date)
+            }
+            .environment(model)
+            .environment(router)
+            .frame(minWidth: 940, minHeight: 600)
+            .task {
+                appDelegate.wireAppSurface(model: model, router: router)
+                await model.bootstrap()
+            }
         }
         .defaultSize(width: 1100, height: 720)
         .commands {
