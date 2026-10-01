@@ -43,9 +43,12 @@ struct PlanDetailView: View {
                     if model.isRunning(planID: plan.id) {
                         // "Stop", as every command that ends a run says;
                         // the progress strip keeps its Cancel.
+                        // Worded like the Back Up Now it replaces: a bare
+                        // square in its place read as a glyph, not a verb.
                         Button("Stop", systemImage: "stop.fill") {
                             model.cancelBackup(planID: plan.id)
                         }
+                        .labelStyle(.titleAndIcon)
                         .disabled(!commands.canStop)
                         .help("\(commands.stopTitle) (⌘.) — recorded as cancelled")
                     } else {

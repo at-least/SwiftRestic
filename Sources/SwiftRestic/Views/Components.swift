@@ -341,26 +341,32 @@ struct OperationProgressView: View {
             ProgressView(value: progress.fraction)
                 .progressViewStyle(.linear)
 
-            HStack(spacing: 14) {
-                Text("\(Format.count(progress.filesDone)) / \(Format.count(progress.totalFiles)) files")
-                Text("\(Format.bytes(progress.bytesDone)) / \(Format.bytes(progress.totalBytes))")
-                if let startedAt {
-                    Text(Format.rate(
-                        bytes: progress.bytesDone,
-                        over: Date.now.timeIntervalSince(startedAt)
-                    ))
+            // The numbers once restic has reported any: before that — a
+            // plan's before-backup hooks, restic starting up — they read
+            // "0 / 0 files, 0 bytes / 0 bytes, 0%", and the title already
+            // says what is happening.
+            if progress != OperationProgress() {
+                HStack(spacing: 14) {
+                    Text("\(Format.count(progress.filesDone)) / \(Format.count(progress.totalFiles)) files")
+                    Text("\(Format.bytes(progress.bytesDone)) / \(Format.bytes(progress.totalBytes))")
+                    if let startedAt {
+                        Text(Format.rate(
+                            bytes: progress.bytesDone,
+                            over: Date.now.timeIntervalSince(startedAt)
+                        ))
+                    }
+                    if let remaining = progress.secondsRemaining, remaining > 0 {
+                        Text("\(Format.duration(TimeInterval(remaining))) left")
+                    }
+                    Spacer()
+                    Text(progress.fraction.formatted(.percent.precision(.fractionLength(0))))
+                        .font(.callout.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.tint)
                 }
-                if let remaining = progress.secondsRemaining, remaining > 0 {
-                    Text("\(Format.duration(TimeInterval(remaining))) left")
-                }
-                Spacer()
-                Text(progress.fraction.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.callout.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.tint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
 
             if let current = progress.currentFile {
                 Text(current)
