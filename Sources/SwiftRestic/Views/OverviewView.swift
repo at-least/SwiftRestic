@@ -106,32 +106,21 @@ struct OverviewView: View {
         }
     }
 
+    /// The row opens its plan. The three cards list the same shape, so
+    /// they share one grammar: a row that goes somewhere wears the hover
+    /// tint and a trailing chevron, as Recent problems' rows do. Retry stays
+    /// its own control beside the row, not a button inside a button.
     private func protectionRow(_ row: ProtectionRow) -> some View {
         HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row.planName)
-                    .lineLimit(1)
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    // Beside words that say it: decoration to VoiceOver.
-                    if row.didFail {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .imageScale(.small)
-                            .foregroundStyle(Theme.warning)
-                            .accessibilityHidden(true)
-                    } else if let outcome = row.problemOutcome, let symbol = outcome.symbolName {
-                        Image(systemName: symbol)
-                            .imageScale(.small)
-                            .foregroundStyle(StatusPalette.status(outcome))
-                            .accessibilityHidden(true)
-                    }
-                    Text(row.stateText)
-                        .foregroundStyle(row.stateHue)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+            Button { router.selection = .plan(row.planID) } label: {
+                HStack(spacing: 8) {
+                    protectionRowText(row)
+                    Spacer(minLength: 12)
+                    rowChevron
                 }
-                .font(.caption)
             }
-            Spacer(minLength: 12)
+            .buttonStyle(HoverableButtonStyle())
+            .accessibilityLabel("\(row.planName): \(row.stateText). Show plan")
             if row.didFail, let repositoryID = row.repositoryID {
                 Button("Retry") {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
@@ -140,6 +129,40 @@ struct OverviewView: View {
                 .accessibilityLabel("Retry reading snapshots for \(row.planName)")
             }
         }
+    }
+
+    private func protectionRowText(_ row: ProtectionRow) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(row.planName)
+                .lineLimit(1)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                // Beside words that say it: decoration to VoiceOver.
+                if row.didFail {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
+                } else if let outcome = row.problemOutcome, let symbol = outcome.symbolName {
+                    Image(systemName: symbol)
+                        .imageScale(.small)
+                        .foregroundStyle(StatusPalette.status(outcome))
+                        .accessibilityHidden(true)
+                }
+                Text(row.stateText)
+                    .foregroundStyle(row.stateHue)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.caption)
+        }
+    }
+
+    /// The trailing mark of a row that goes somewhere.
+    private var rowChevron: some View {
+        Image(systemName: "chevron.forward")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
 
     /// A problem row's landing: Activity with that run selected. A problem
@@ -189,42 +212,50 @@ struct OverviewView: View {
                     Text("Nothing scheduled.").foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(upcoming), id: \.0.id) { plan, date in
-                        HStack {
-                            Text(plan.name).lineLimit(1)
-                            Spacer()
-                            if date <= now, model.activity[plan.id]?.isBackup == true {
-                                // The due run is the one in flight, and
-                                // nothing stamps its slot until it ends:
-                                // "Due now" stood over every scheduled
-                                // backup beside the sidebar's spinner. The
-                                // plan page's Next backup says the same.
-                                Text("Running now")
+                        let status = UpcomingStatus(date: date, now: now, isBackingUp: model.activity[plan.id]?.isBackup == true, hold: hold)
+                        // Opens the plan, as the Protection rows do.
+                        Button { router.selection = .plan(plan.id) } label: {
+                            HStack {
+                                Text(plan.name).lineLimit(1)
+                                Spacer()
+                                switch status {
+                                case .runningNow:
+                                    // The due run is the one in flight, and
+                                    // nothing stamps its slot until it ends:
+                                    // "Due now" stood over every scheduled
+                                    // backup beside the sidebar's spinner. The
+                                    // plan page's Next backup says the same.
+                                    Text(status.text)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                case .waiting:
+                                    // Due, but held: it runs once the hold lifts,
+                                    // not now. Icon and word in the secondary
+                                    // colour — a wait, not an alarm.
+                                    Label(status.text, systemImage: "pause.circle")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                case .dueNow:
+                                    // Icon + word, not colour alone, and only
+                                    // the glyph wears the warning hue: the word
+                                    // in orange measured 2.33:1 on the card.
+                                    Label {
+                                        Text(status.text)
+                                    } icon: {
+                                        Image(systemName: "clock.badge.exclamationmark")
+                                            .foregroundStyle(Theme.warning)
+                                    }
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            } else if date <= now, hold != nil {
-                                // Due, but held: it runs once the hold lifts,
-                                // not now. Icon and word in the secondary
-                                // colour — a wait, not an alarm.
-                                Label("Waiting", systemImage: "pause.circle")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            } else if date <= now {
-                                // Icon + word, not colour alone, and only
-                                // the glyph wears the warning hue: the word
-                                // in orange measured 2.33:1 on the card.
-                                Label {
-                                    Text("Due now")
-                                } icon: {
-                                    Image(systemName: "clock.badge.exclamationmark")
-                                        .foregroundStyle(Theme.warning)
+                                case .at:
+                                    Text(status.text)
+                                        .font(.callout.monospacedDigit())
+                                        .foregroundStyle(.secondary)
                                 }
-                                .font(.caption.weight(.semibold))
-                            } else {
-                                Text(Format.timestamp(date))
-                                    .font(.callout.monospacedDigit())
-                                    .foregroundStyle(.secondary)
+                                rowChevron
                             }
                         }
+                        .buttonStyle(HoverableButtonStyle())
+                        .accessibilityLabel("\(plan.name): \(status.text). Show plan")
                     }
                     // Last, under the rows it qualifies: they promise runs,
                     // and this is the condition on that promise. "Nothing
@@ -236,6 +267,32 @@ struct OverviewView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// A Next runs row's status. Its words are the row's text and its
+    /// VoiceOver label both.
+    private enum UpcomingStatus {
+        case runningNow, waiting, dueNow
+        case at(Date)
+
+        init(date: Date, now: Date, isBackingUp: Bool, hold: ScheduleHold?) {
+            if date > now {
+                self = .at(date)
+            } else if isBackingUp {
+                self = .runningNow
+            } else {
+                self = hold != nil ? .waiting : .dueNow
+            }
+        }
+
+        var text: String {
+            switch self {
+            case .runningNow: "Running now"
+            case .waiting: "Waiting"
+            case .dueNow: "Due now"
+            case let .at(date): Format.timestamp(date)
+            }
         }
     }
 
