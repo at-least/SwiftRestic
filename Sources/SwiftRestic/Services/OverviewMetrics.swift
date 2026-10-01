@@ -99,7 +99,11 @@ enum OverviewMetrics {
                 case .loaded:
                     let line: String
                     if let latest {
-                        line = "Latest backup \(latest.time.formatted(.relative(presentation: .named)))"
+                        // The sidebar's words and formatter, so the two never
+                        // disagree side by side: Date.RelativeFormatStyle
+                        // rounds 1 h 43 min up to "2 hours ago", where
+                        // Format.relative says "1 hour ago".
+                        line = "Last backup \(Format.relative(latest.time))"
                     } else if !repositoryHasSnapshots(repositoryID) {
                         line = "No snapshots yet"
                     } else {

@@ -81,10 +81,28 @@ struct OverviewMetricsTests {
             "The repository has snapshots, but none from this plan yet.",
             "Checking…",
         ])
-        #expect(rows.last?.stateText.hasPrefix("Latest backup ") == true)
+        #expect(rows.last?.stateText.hasPrefix("Last backup ") == true)
         #expect(rows.last?.isProtected == true)
         // The failure row is the only unknown-and-failing one.
         #expect(rows.filter(\.didFail).map(\.planName) == ["Failed"])
+    }
+
+    @Test("a protected row says when in the sidebar's words, from the same formatter")
+    func protectedRowMatchesTheSidebar() {
+        // 1 h 43 min ago: Date.RelativeFormatStyle rounds this to "2 hours
+        // ago" while the sidebar's Format.relative (RelativeDateTimeFormatter)
+        // says "1 hour ago" — the Overview and the sidebar disagreed about
+        // the same backup, side by side (captured 2026-10-02).
+        let repository = UUID()
+        let time = Date.now.addingTimeInterval(-103 * 60)
+        let rows = OverviewMetrics.protectionRows(
+            plans: [plan("Docs", repository: repository)],
+            latestSnapshot: { _, _ in snapshot("snapDocs", at: time) },
+            repositoryHasSnapshots: { _ in true },
+            listingOutcome: { _ in .loaded },
+            isChecking: { _ in false }
+        )
+        #expect(rows.map(\.stateText) == ["Last backup \(Format.relative(time))"])
     }
 
     @Test("an idle repository that is not refreshing says so, not Checking…")
