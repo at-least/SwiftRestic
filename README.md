@@ -329,8 +329,8 @@ a headless SSH box.
   macOS silently withholds `~/Documents`, `~/Desktop` and similar folders, and
   restic records them as unreadable rather than failing loudly — the run still
   writes a snapshot, but an *incomplete* one (restic's exit code 3), which
-  SwiftRestic marks with a warning triangle under Restore and in the Snapshots
-  tables; the Restore pane lists what could not be read. SwiftRestic detects
+  SwiftRestic marks with a warning triangle under Restore and in Activity's run
+  drawer; the Restore pane lists what could not be read. SwiftRestic detects
   the grant — at launch, whenever it becomes active, and after every backup —
   and shows it first in Settings › General; the build is ad-hoc signed, so a
   rebuilt or updated copy may need it granted again. A run's unreadable items

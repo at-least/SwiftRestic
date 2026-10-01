@@ -5,7 +5,7 @@ struct PlanDetailView: View {
     @Environment(AppRouter.self) private var router
     let planID: UUID
     let onEdit: () -> Void
-    /// Sends the pane to Activity — the "Last backup" tile's destination,
+    /// Sends the pane to Activity — the "Last backup" value's destination,
     /// wired by RootView so this view owns no navigation of its own.
     var onShowRun: (() -> Void)? = nil
 
@@ -110,7 +110,7 @@ struct PlanDetailView: View {
 
     /// A manual plan switched off — removing its repository does that, and
     /// so does the editor's switch — has no schedule for Resume to bring
-    /// back, as its Next backup tile says; the help must not promise one.
+    /// back, as its Next backup value says; the help must not promise one.
     private func resumeHelp(_ plan: BackupPlan, now: Date) -> String {
         if let end = plan.activePauseEnd(at: now) {
             return "Paused until \(Format.pauseEnd(end)) — run this plan on its schedule again now"
@@ -126,8 +126,7 @@ struct PlanDetailView: View {
     /// progress tick (~1/sec) re-renders the strip instead of the whole
     /// pane (progress lives in its own observable storage precisely so
     /// phase-reading views — the strip's title, the sidebar's rows — stay
-    /// untouched by it), and `content`'s snapshot table never reruns per
-    /// tick.
+    /// untouched by it), and `content`'s cards never rerun per tick.
     private struct OperationStrip: View {
         @Environment(AppModel.self) private var model
         let planID: UUID
@@ -213,7 +212,7 @@ struct PlanDetailView: View {
 
     /// The row's landing: Activity with the problem run selected. A problem
     /// run shows under both of Activity's filters, so the user's filter
-    /// stays as it was — only the "Last backup" tile, which can land on a
+    /// stays as it was — only the "Last backup" value, which can land on a
     /// clean run, has to clear it.
     private func showInActivity(_ run: RunRecord) -> (() -> Void)? {
         guard let onShowRun else { return nil }
