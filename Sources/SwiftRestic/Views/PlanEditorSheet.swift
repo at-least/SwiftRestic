@@ -10,7 +10,11 @@ struct PlanEditorSheet: View {
     /// a reflex must not silently throw away ten pasted exclude patterns.
     @State private var initial: BackupPlan?
     @State private var isConfirmingDiscard = false
-    @State private var tab: Tab = .general
+    /// Files first: what to back up is the first question a plan answers,
+    /// and the header above the tabs already holds the name and the
+    /// repository the old General tab was spent on.
+    @State private var tab: Tab = .files
+    @FocusState private var isNameFocused: Bool
     /// The retention tab's projection, computed off the render path under
     /// `RetentionProjection.key` — the simulation walks up to 30,000
     /// synthetic runs with Calendar decomposition, which is tens of
@@ -26,7 +30,7 @@ struct PlanEditorSheet: View {
     @State private var requestedLoginItem = false
     private let isNew: Bool
 
-    private enum Tab: Hashable { case general, files, schedule, retention, hooks }
+    private enum Tab: Hashable { case files, schedule, retention, hooks }
 
     init(plan: BackupPlan) {
         _draft = State(initialValue: plan)
@@ -41,9 +45,8 @@ struct PlanEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            identityHeader
             TabView(selection: $tab) {
-                generalTab.tabItem { Label("General", systemImage: "gearshape") }
-                    .tag(Tab.general)
                 sourcesTab.tabItem { Label("Files", systemImage: "folder") }
                     .tag(Tab.files)
                 scheduleTab.tabItem { Label("Schedule", systemImage: "calendar") }
@@ -59,7 +62,7 @@ struct PlanEditorSheet: View {
             Divider()
 
             HStack {
-                // A greyed Save that spans five tabs of validation owes the
+                // A greyed Save that spans four tabs of validation owes the
                 // user the reason at the button, not a hunt across tabs. The
                 // first-run consequence rides in the same slot: it changes
                 // what Create does, and the Schedule tab that explains the
@@ -120,6 +123,8 @@ struct PlanEditorSheet: View {
             if draft.repositoryID == nil {
                 draft.repositoryID = model.configuration.repositories.first?.id
             }
+            // A new plan starts with its name; the Files tab below waits.
+            if isNew { isNameFocused = true }
             // Snapshot after the defaulting above, so an untouched sheet is
             // not born dirty.
             if initial == nil { initial = draft }
@@ -157,26 +162,33 @@ struct PlanEditorSheet: View {
         isNew && draft.isEnabled && draft.schedule.frequency != .manual
     }
 
-    private var generalTab: some View {
-        Form {
-            TextField("Name", text: $draft.name, prompt: Text("Documents to NAS"))
-            Picker("Repository", selection: $draft.repositoryID) {
-                Text("Choose…").tag(UUID?.none)
-                ForEach(model.configuration.repositories) { repository in
-                    Text(repository.name).tag(UUID?.some(repository.id))
-                }
+    /// The plan's identity, above the tabs and so on screen from every one
+    /// of them — Arq's place for it, with our live controls: the sheet often
+    /// opens over the Overview or Activity, where nothing else names the
+    /// plan being edited, and the repository stays changeable here.
+    private var identityHeader: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
+            GridRow {
+                Text("Name")
+                    .gridColumnAlignment(.trailing)
+                TextField("Name", text: $draft.name, prompt: Text("Documents to NAS"))
+                    .labelsHidden()
+                    .focused($isNameFocused)
             }
-            Toggle("Run on schedule", isOn: $draft.isEnabled)
-            // A timed Pause Schedule leaves the switch on; without this line
-            // the editor would read as if the plan were running on schedule.
-            if draft.isEnabled, let end = draft.activePauseEnd(at: .now) {
-                Text("Paused until \(Format.pauseEnd(end)) — scheduled runs resume by themselves then.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            GridRow {
+                Text("Repository")
+                Picker("Repository", selection: $draft.repositoryID) {
+                    Text("Choose…").tag(UUID?.none)
+                    ForEach(model.configuration.repositories) { repository in
+                        Text(repository.name).tag(UUID?.some(repository.id))
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
             }
         }
-        .formStyle(.grouped)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
     }
 
     private var sourcesTab: some View {
@@ -222,6 +234,19 @@ struct PlanEditorSheet: View {
 
     private var scheduleTab: some View {
         Form {
+            // The schedule's on/off lives with the schedule. Off, the
+            // pickers below stay editable: a paused plan's times can still
+            // be changed, and saving keeps the pause.
+            Toggle("Run on schedule", isOn: $draft.isEnabled)
+            // A timed Pause Schedule leaves the switch on; without this line
+            // the editor would read as if the plan were running on schedule.
+            if draft.isEnabled, let end = draft.activePauseEnd(at: .now) {
+                Text("Paused until \(Format.pauseEnd(end)) — scheduled runs resume by themselves then.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Picker("Run", selection: $draft.schedule.frequency) {
                 ForEach(Schedule.Frequency.allCases) { frequency in
                     Text(frequency.displayName).tag(frequency)
