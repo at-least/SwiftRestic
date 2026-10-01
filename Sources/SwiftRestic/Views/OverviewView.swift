@@ -192,7 +192,16 @@ struct OverviewView: View {
                         HStack {
                             Text(plan.name).lineLimit(1)
                             Spacer()
-                            if date <= now, hold != nil {
+                            if date <= now, model.activity[plan.id]?.isBackup == true {
+                                // The due run is the one in flight, and
+                                // nothing stamps its slot until it ends:
+                                // "Due now" stood over every scheduled
+                                // backup beside the sidebar's spinner. The
+                                // plan page's Next backup says the same.
+                                Text("Running now")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            } else if date <= now, hold != nil {
                                 // Due, but held: it runs once the hold lifts,
                                 // not now. Icon and word in the secondary
                                 // colour — a wait, not an alarm.

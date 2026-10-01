@@ -110,11 +110,13 @@ enum PlanStatus {
     /// repository since removed, no folders — says it is not scheduled.
     /// A timed pause, the plan's own or the app-wide `hold`, moves the date
     /// to its end; under an open-ended hold a run already due reads
-    /// "Waiting", as on the Overview's card, never "Due now".
+    /// "Waiting", as on the Overview's card, never "Due now". A due slot
+    /// whose backup is in flight (`isBackingUp`) reads "Running now".
     static func nextBackupTile(
         for plan: BackupPlan,
         existingRepositoryIDs: Set<UUID>,
         hold: ScheduleHold? = nil,
+        isBackingUp: Bool = false,
         now: Date = .now
     ) -> TileFace {
         guard plan.isEnabled else {
@@ -145,6 +147,13 @@ enum PlanStatus {
                 value: "Not scheduled",
                 help: "The scheduler skips this plan until its setup is complete — see Configuration below."
             )
+        }
+        // A due slot with a backup in flight is being run: nothing stamps
+        // the slot until the run ends, and "Due now" stood over every
+        // scheduled backup for as long as it ran. A Back Up Now under a
+        // hold runs and stamps it too, so this comes before Waiting.
+        if isBackingUp, next <= now {
+            return TileFace(value: "Running now", help: "This plan is backing up now.")
         }
         if let hold, next <= now {
             let when = switch hold {

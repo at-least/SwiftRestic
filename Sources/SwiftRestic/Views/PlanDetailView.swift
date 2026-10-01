@@ -260,6 +260,7 @@ struct PlanDetailView: View {
             for: plan,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
             hold: model.scheduleHold,
+            isBackingUp: model.activity[plan.id]?.isBackup == true,
             now: now
         )
         return Card("Backups") {

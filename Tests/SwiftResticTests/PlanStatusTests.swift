@@ -109,6 +109,37 @@ struct PlanStatusTests {
         #expect(battery.help?.contains("battery") == true, "help was \(String(describing: battery.help))")
     }
 
+    @Test("a due plan whose backup is running reads Running now, never Due now")
+    func runningDuePlan() {
+        var plan = completeDailyPlan()
+        plan.lastRunAt = now.addingTimeInterval(-2 * 86_400)
+
+        // The scheduler started the due run, and until it ends nothing
+        // stamps the slot: "Due now" stood over every scheduled backup for
+        // as long as it ran, beside the sidebar's spinner (captured
+        // 2026-10-02).
+        let running = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], isBackingUp: true, now: now
+        )
+        #expect(running.value == "Running now")
+        // A Back Up Now while backups are held runs too, and stamps the slot.
+        let held = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: nil), isBackingUp: true, now: now
+        )
+        #expect(held.value == "Running now")
+
+        // A run in flight says nothing about a slot that is not due yet.
+        var notDue = completeDailyPlan()
+        notDue.lastRunAt = now
+        let ahead = PlanStatus.nextBackupTile(
+            for: notDue, existingRepositoryIDs: [repositoryID], isBackingUp: true, now: now
+        )
+        #expect(ahead.value == PlanStatus.nextBackupTile(
+            for: notDue, existingRepositoryIDs: [repositoryID], now: now
+        ).value)
+        #expect(ahead.value != "Running now")
+    }
+
     @Test("a timed app-wide hold moves the tile to the hold's end")
     func timedHoldClampsTile() {
         var plan = completeDailyPlan()
