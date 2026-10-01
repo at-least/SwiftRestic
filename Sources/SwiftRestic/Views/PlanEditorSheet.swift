@@ -175,14 +175,6 @@ struct PlanEditorSheet: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Section("Snapshot tags") {
-                Text(
-                    "SwiftRestic always adds a private tag so retention only ever touches this plan's own snapshots."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .formStyle(.grouped)
     }
@@ -268,8 +260,9 @@ struct PlanEditorSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // No summary row: it would only restate the pickers above. The
+            // daemon's honesty line stays — scheduled runs need the app.
             Section {
-                LabeledContent("Summary", value: draft.schedule.summary)
                 Text(
                     "Scheduled runs need SwiftRestic to be running. It checks every minute and catches up on a run it missed while the Mac was asleep."
                 )

@@ -95,11 +95,12 @@ struct SettingsView: View {
                 // The relationship between the two toggle layers, stated where
                 // both are visible: these gate this Mac's notification centre,
                 // the Alerts tab's channels carry their own per-event switches
-                // — and neither gates the other.
-                Text("These switches control this Mac's notifications. Webhook and chat channels on the Alerts tab have their own per-event switches and don't follow them.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // — and neither gates the other. One line, the rest on demand,
+                // like the two captions above.
+                ExpandableCaption(
+                    summary: "These switches control this Mac's notifications.",
+                    detail: "Webhook and chat channels on the Alerts tab have their own per-event switches and don't follow them."
+                )
             }
 
             Section("Scheduling") {
