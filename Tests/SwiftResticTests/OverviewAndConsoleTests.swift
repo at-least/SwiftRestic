@@ -66,7 +66,9 @@ struct OverviewMetricsTests {
                 default: .loaded
                 }
             },
-            isChecking: { $0 == checking }
+            isChecking: { $0 == checking },
+            activity: { _ in nil },
+            standingProblem: { _ in nil }
         )
 
         // Unreadable first, then exposed, then pending, protected last; ties
@@ -100,7 +102,9 @@ struct OverviewMetricsTests {
             latestSnapshot: { _, _ in snapshot("snapDocs", at: time) },
             repositoryHasSnapshots: { _ in true },
             listingOutcome: { _ in .loaded },
-            isChecking: { _ in false }
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in nil }
         )
         #expect(rows.map(\.stateText) == ["Last backup \(Format.relative(time))"])
     }
@@ -113,10 +117,112 @@ struct OverviewMetricsTests {
             latestSnapshot: { _, _ in nil },
             repositoryHasSnapshots: { _ in false },
             listingOutcome: { _ in .idle },
-            isChecking: { _ in false }
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in nil }
         )
         #expect(rows.map(\.stateText) == ["Snapshot list not loaded yet"])
         #expect(rows.first?.isKnown == false)
+    }
+
+    @Test("a run in flight says its phase and sorts calm, between pending and protected")
+    func runInFlight() {
+        let empty = UUID() // loaded, nothing in it yet: the first backup is running
+        let idle = UUID()
+        let healthy = UUID()
+        let first = plan("First", repository: empty)
+        let rows = OverviewMetrics.protectionRows(
+            plans: [plan("Fine", repository: healthy), first, plan("Waiting", repository: idle)],
+            latestSnapshot: { repository, _ in
+                repository == healthy ? snapshot("snapFine", at: date("2026-09-05 10:00:00")) : nil
+            },
+            repositoryHasSnapshots: { $0 == healthy },
+            listingOutcome: { $0 == idle ? .idle : .loaded },
+            isChecking: { _ in false },
+            activity: { $0 == first.id ? PlanActivity(phase: .backingUp) : nil },
+            standingProblem: { _ in nil }
+        )
+        #expect(rows.map(\.planName) == ["Waiting", "First", "Fine"])
+        let running = rows.first { $0.planName == "First" }
+        // The sidebar caption's words for the same activity.
+        #expect(running?.stateText == "Backing up")
+        #expect(running?.isRunning == true)
+        // The listing still decides the count: no snapshot yet is not
+        // protected, and a run in flight is no alarm either.
+        #expect(running?.isProtected == false)
+        #expect(running?.didFail == false)
+    }
+
+    @Test("a standing failure says the sidebar's words and leaves the plan unprotected")
+    func standingFailure() {
+        let repository = UUID()
+        let docs = plan("Docs", repository: repository)
+        var failed = RunRecord(kind: .backup, planName: "Docs", startedAt: .now.addingTimeInterval(-300))
+        failed.planID = docs.id
+        failed.outcome = .failed
+        failed.finishedAt = .now.addingTimeInterval(-240)
+        let rows = OverviewMetrics.protectionRows(
+            plans: [docs],
+            latestSnapshot: { _, _ in snapshot("snapDocs", at: .now.addingTimeInterval(-4 * 3600)) },
+            repositoryHasSnapshots: { _ in true },
+            listingOutcome: { _ in .loaded },
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { $0 == docs.id ? failed : nil }
+        )
+        // One derivation of the words: the Overview printed "Last backup 4
+        // hours ago" beside the sidebar's "Failed — Just now" (captured
+        // 2026-10-02), and "2 of 2 protected" above it.
+        let sidebar = PlanStatus.sidebarCaption(
+            for: docs, activity: nil, problem: failed, existingRepositoryIDs: [repository]
+        )
+        #expect(rows.map(\.stateText) == [sidebar.text])
+        #expect(rows.first?.problemOutcome == .failed)
+        #expect(rows.first?.isKnown == true)
+        #expect(rows.first?.isProtected == false)
+    }
+
+    @Test("a run that completed with errors still wrote a snapshot, so the plan stays protected")
+    func standingWarning() {
+        let repository = UUID()
+        let docs = plan("Docs", repository: repository)
+        var warned = RunRecord(kind: .backup, planName: "Docs", startedAt: .now.addingTimeInterval(-600))
+        warned.planID = docs.id
+        warned.outcome = .completedWithErrors
+        warned.finishedAt = .now.addingTimeInterval(-540)
+        let rows = OverviewMetrics.protectionRows(
+            plans: [docs],
+            latestSnapshot: { _, _ in snapshot("snapDocs", at: .now.addingTimeInterval(-540)) },
+            repositoryHasSnapshots: { _ in true },
+            listingOutcome: { _ in .loaded },
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in warned }
+        )
+        #expect(rows.first?.stateText.hasPrefix("\(RunRecord.Outcome.completedWithErrors.displayName) — ") == true)
+        #expect(rows.first?.problemOutcome == .completedWithErrors)
+        #expect(rows.first?.isProtected == true)
+    }
+
+    @Test("an unreadable listing outranks a standing problem: its row owns the Retry")
+    func listingFailureWins() {
+        let repository = UUID()
+        let docs = plan("Docs", repository: repository)
+        var failed = RunRecord(kind: .backup, planName: "Docs")
+        failed.planID = docs.id
+        failed.outcome = .failed
+        let rows = OverviewMetrics.protectionRows(
+            plans: [docs],
+            latestSnapshot: { _, _ in nil },
+            repositoryHasSnapshots: { _ in false },
+            listingOutcome: { _ in .failed("Repository /nas is not reachable. Check the host.") },
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in failed }
+        )
+        #expect(rows.map(\.stateText) == ["Can't read snapshots — Repository /nas is not reachable"])
+        #expect(rows.first?.didFail == true)
+        #expect(rows.first?.problemOutcome == nil)
     }
 
     @Test("problem figures")

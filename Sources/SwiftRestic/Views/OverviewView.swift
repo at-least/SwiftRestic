@@ -39,9 +39,10 @@ struct OverviewView: View {
     /// wears.
     ///
     /// The state line's words carry every state, and scannability comes
-    /// from severity ordering. Only an unreadable listing adds a glyph: the
-    /// warning triangle carries the alarm, since the words stay secondary —
-    /// orange caption text measured 2.05:1 on the card.
+    /// from severity ordering. Only trouble adds a glyph, since orange
+    /// caption text measured 2.05:1 on the card: the warning triangle for
+    /// an unreadable listing, and for a standing problem the sidebar row's
+    /// own outcome glyph beside the sidebar row's own words.
     private var protectionRows: [ProtectionRow] {
         // One pass over the plans, with the model lookups behind closures so
         // this view keeps its observation on the state the rows read.
@@ -58,6 +59,12 @@ struct OverviewView: View {
             },
             isChecking: { repositoryID in
                 model.loadingSnapshots.contains(repositoryID)
+            },
+            activity: { planID in
+                model.activity[planID]
+            },
+            standingProblem: { planID in
+                model.currentProblem(for: planID)
             }
         )
     }
@@ -104,6 +111,11 @@ struct OverviewView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .imageScale(.small)
                             .foregroundStyle(Theme.warning)
+                            .accessibilityHidden(true)
+                    } else if let outcome = row.problemOutcome, let symbol = outcome.symbolName {
+                        Image(systemName: symbol)
+                            .imageScale(.small)
+                            .foregroundStyle(StatusPalette.status(outcome))
                             .accessibilityHidden(true)
                     }
                     Text(row.stateText)
@@ -264,9 +276,11 @@ struct OverviewView: View {
 
 private extension ProtectionRow {
     /// "Not protected" is the row's real news and reads at full weight; a
-    /// pending or protected line stays quiet, and so do a failure's words —
-    /// its glyph wears the warning hue.
+    /// pending, running or protected line stays quiet, and so do an
+    /// unreadable listing's words — its glyph wears the warning hue. A
+    /// first backup in flight is not protected yet, and not news either.
     var stateHue: Color {
+        if isRunning { return .secondary }
         if isKnown, !isProtected { return .primary }
         return .secondary
     }
