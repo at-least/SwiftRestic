@@ -3,8 +3,8 @@ import SwiftUI
 
 /// A native search field inside a pane: the magnifier, the clear button,
 /// Esc, and VoiceOver's "search text field" come with it. Not `.searchable`,
-/// which would put a second search field in the window toolbar beside Find
-/// Files — two fields with two scopes, side by side.
+/// which would put the search field up in the window toolbar, away from the
+/// pane whose contents it searches.
 ///
 /// The binding moves when the field sends its action — typing, Esc and the
 /// clear button all reach it (probed on macOS 26), with AppKit's brief

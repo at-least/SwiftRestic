@@ -61,9 +61,11 @@ struct Banner: Identifiable, Equatable {
     var revealPath: String?
 }
 
-/// Which pane the sidebar is showing. Lives beside the model because menu-bar
-/// commands must read it: a Plan menu "Back Up Now" that stays enabled over
-/// a non-plan selection is a menu that lies.
+/// Which pane the detail column is showing — the sidebar's selection, or the
+/// console, which has no row and arrives from Repository ▸ restic Console….
+/// Lives beside the model because menu-bar commands must read it: a Plan
+/// menu "Back Up Now" that stays enabled over a non-plan selection is a menu
+/// that lies.
 enum SidebarItem: Hashable {
     case overview
     case plan(UUID)

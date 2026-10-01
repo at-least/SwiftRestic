@@ -115,10 +115,11 @@ struct RootDetailView: View {
                 }
             }
         }
-        // The console row disables on restic availability as well as on an
-        // empty repository list, and only count changes revalidate the
-        // selection — a binary lost while the console pane is open would
-        // otherwise park the selection on a row the sidebar now refuses.
+        // Repository ▸ restic Console… disables on restic availability as
+        // well as on an empty repository list, and only count changes
+        // revalidate the selection — a binary lost while the console pane is
+        // open would otherwise park the selection on a pane the menu now
+        // refuses.
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }

@@ -136,7 +136,7 @@ Models/     Repository, MaintenancePolicy, BackupPlan, Schedule, RetentionPolicy
 Services/   ResticService     typed restic commands (idle caps on the streaming ones)
             HookRunner        shell hooks, on the same process machinery
             NotificationPoster + payload builders per provider
-            OverviewMetrics   dashboard series, kept pure and testable
+            OverviewMetrics   protection rows and recent problems, kept pure
             SecretStore       Keychain, injectable so tests never touch yours
             ConfigStore, Scheduler, KeychainStore
   Index/    SnapshotIndex     per repository, one SQLite file: which snapshots

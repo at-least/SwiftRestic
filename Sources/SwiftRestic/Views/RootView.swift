@@ -21,8 +21,8 @@ struct RootView: View {
     @State private var editingRepository: Repository?
     @State private var isShowingFind = false
     /// What the Restore pane's "Search All Backups…" hands Find Files. Only
-    /// that button sets it; the sheet's dismissal clears it, so the toolbar,
-    /// ⇧⌘F and every other way in still open an empty search.
+    /// that button sets it; the sheet's dismissal clears it, so ⇧⌘F and
+    /// every other way in still open an empty search.
     @State private var findPrefill: FindFilesView.Prefill?
     @State private var isShowingConcepts = false
     /// The one confirmation up, from whichever surface asked — the menu
@@ -314,8 +314,8 @@ struct RootView: View {
                 .map { .restoreSnapshot(repositoryID, $0.id) }
                 ?? .repository(repositoryID)
         case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable:
-            // The row is now disabled; a selection parked on it would be a
-            // pane the sidebar no longer offers.
+            // Repository ▸ restic Console… is now disabled; a selection
+            // parked on the pane would be one the menu no longer offers.
             router.selection = nil
         default:
             break

@@ -158,14 +158,14 @@ struct RestorePaneView: View {
     // MARK: - Toolbar (top)
 
     /// The open backup's name and what its Change column is compared with,
-    /// then the search field, which searches the open backup — the window
-    /// toolbar's Find Files searches every backup. fd691ee dropped this
-    /// header on the grounds that the sidebar's selection names the record
-    /// and the column speaks for itself; neither holds. With the sidebar
-    /// hidden nothing else names the open backup — the window title is
-    /// always "Restore" — and a blank Change column can mean a first backup,
-    /// no changes, a comparison still running, or a failed one. Only this
-    /// line tells them apart.
+    /// then the search field, which searches the open backup — Repository ▸
+    /// Find Files in Snapshots… (⇧⌘F) searches every backup. fd691ee
+    /// dropped this header on the grounds that the sidebar's selection
+    /// names the record and the column speaks for itself; neither holds.
+    /// With the sidebar hidden nothing else names the open backup — the
+    /// window title is always "Restore" — and a blank Change column can mean
+    /// a first backup, no changes, a comparison still running, or a failed
+    /// one. Only this line tells them apart.
     private func toolbar(record: Snapshot?) -> some View {
         HStack(alignment: .center, spacing: 12) {
             if let record {
@@ -427,7 +427,7 @@ struct RestorePaneView: View {
     }
 
     /// One title, help and guard wherever the pane offers it: Find Files
-    /// needs restic, as the toolbar's own button does.
+    /// needs restic, as the Repository menu's item does.
     private var searchAllButton: some View {
         Button("Search All Backups…") {
             onSearchAllBackups(repositoryID, searchText.trimmingCharacters(in: .whitespaces))

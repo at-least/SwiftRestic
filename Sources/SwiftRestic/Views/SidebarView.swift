@@ -376,9 +376,9 @@ private struct PlanSidebarRow: View {
         HStack(spacing: 4) {
             // A fixed leading slot on every row, marker or not, so every plan
             // name starts at the same x — 26 + 4 = 30 pt, the title inset of
-            // the Label rows under Restore and Repositories at the default
-            // sidebar icon size (measured equal). The marker sat inline
-            // before, and a dotted Photos stood 17 pt right of an idle name.
+            // the Label rows under Restore at the default sidebar icon size
+            // (measured equal). The marker sat inline before, and a dotted
+            // Photos stood 17 pt right of an idle name.
             // Color.clear holds the slot's width: an empty marker is an
             // EmptyView, and EmptyView drops `.frame`.
             ZStack {

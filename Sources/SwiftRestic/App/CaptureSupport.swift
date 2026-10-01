@@ -60,7 +60,7 @@ extension AppDelegate {
         }
     }
 
-    /// `SWIFTRESTIC_CAPTURE_PANE=all`: photographs every sidebar pane into the
+    /// `SWIFTRESTIC_CAPTURE_PANE=all`: photographs every pane into the
     /// `SWIFTRESTIC_CAPTURE` directory as `pane-<name>.png`, quitting when the
     /// sweep is done. `SWIFTRESTIC_CAPTURE_DELAY` is the settle time per pane
     /// (and the initial wait for launch/bootstrap).
