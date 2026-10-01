@@ -15,6 +15,7 @@ struct SnapshotDiffTarget: Identifiable {
 struct SnapshotDiffView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.now) private var now
 
     let target: SnapshotDiffTarget
 
@@ -381,7 +382,7 @@ struct SnapshotDiffView: View {
         // relative stamp says which one came first.
         let sharesDisplayedMinute = sharedMinutes.contains(when)
         return sharesDisplayedMinute
-            ? "\(when) · \(Format.relative(snapshot.time)) · \(snapshot.shortID)"
+            ? "\(when) · \(Format.ago(snapshot.time, now: now)) · \(snapshot.shortID)"
             : "\(when) · \(snapshot.shortID)"
     }
 

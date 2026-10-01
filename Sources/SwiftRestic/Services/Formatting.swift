@@ -170,9 +170,10 @@ enum Format {
     /// time), "tomorrow 9:00 AM" for another time tomorrow, and further out
     /// the tile's weekday or dated form. An end less than 12 hours ahead is
     /// the time alone even past midnight — "until 12:30 AM" at 11:30 PM is
-    /// plain, and nothing redraws the menu bar's VoiceOver label or a
-    /// sidebar caption at midnight, where "tomorrow 12:30 AM" would go on
-    /// naming a day too late until the pause ends.
+    /// plain, and nothing redraws the menu bar's VoiceOver label at
+    /// midnight, where "tomorrow 12:30 AM" would go on naming a day too
+    /// late until the pause ends. (The window's captions are respelled each
+    /// minute by its clock, MinuteClock.swift.)
     static func pauseEnd(
         _ date: Date,
         now: Date = .now,
