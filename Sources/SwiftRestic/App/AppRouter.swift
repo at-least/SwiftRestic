@@ -26,6 +26,9 @@ final class AppRouter {
         case newRepository
         case showFind
         case showConcepts
+        /// Repository ▸ restic Console…: a pane switch, not a sheet, but it
+        /// waits out an open sheet like every other menu ask.
+        case showConsole
         case runSelectedPlan
         // The Plan and Repository menus. They carry their target rather
         // than read the selection when consumed: the ask may wait for a

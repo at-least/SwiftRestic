@@ -167,16 +167,11 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     }
 
     /// The local path with `~` expanded — the form every file-system
-    /// consumer (restic, the volume read) needs. `displayLocation` keeps the
-    /// abbreviated form the user typed; this is what actually gets used.
+    /// consumer (restic, the volume read) needs; `localPath` keeps the form
+    /// the user typed.
     var resolvedLocalPath: String {
         guard localPath.hasPrefix("~") else { return localPath }
         return (localPath as NSString).expandingTildeInPath
-    }
-
-    /// Human-readable location shown in the sidebar and detail header.
-    var displayLocation: String {
-        kind == .local ? (localPath as NSString).abbreviatingWithTildeInPath : resticRepositoryString
     }
 
     /// Whether the required non-secret fields are filled in.

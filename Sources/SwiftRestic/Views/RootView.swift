@@ -123,11 +123,12 @@ struct RootView: View {
         }
     }
 
-    /// The toolbar and the banner announcements.
+    /// The toolbar's look and the banner announcements. No app-wide toolbar
+    /// buttons: each pane carries only its own verbs, and Find Files and the
+    /// console live in the Repository menu (⇧⌘F, restic Console…).
     private func chrome<V: View>(over content: V) -> some View {
         content
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .toolbar { toolbarButtons }
         .onChange(of: model.banners) { announceBanner(from: $0, to: $1) }
     }
 
@@ -187,19 +188,6 @@ struct RootView: View {
         let state = model.planCommands(for: router.selection)
         guard state.canBackUp, let id = state.planID else { return }
         model.runBackup(planID: id)
-    }
-
-    private var toolbarButtons: some ToolbarContent {
-        ToolbarItemGroup {
-            Button("Find Files", systemImage: "magnifyingglass") { isShowingFind = true }
-                .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
-                .help("Search snapshots for files, across every snapshot (⇧⌘F)")
-            Button("restic Console", systemImage: "apple.terminal") {
-                router.selection = .console
-            }
-            .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
-            .help("Run restic commands directly against a repository")
-        }
     }
 
     #if DEBUG
@@ -277,6 +265,8 @@ struct RootView: View {
             isShowingFind = true
         case .showConcepts:
             isShowingConcepts = true
+        case .showConsole:
+            router.selection = .console
         case .runSelectedPlan:
             runSelectedPlan()
         case let .stopPlan(id):

@@ -76,11 +76,13 @@ checked in so a normal build does not need it.
   confirming first when something is actually there to replace. restic before
   0.17 has no `--overwrite`; with such a restic, keeping restores a folder or a
   whole backup only where nothing is there yet, and refuses otherwise. The
-  sidebar's Restore section groups a repository's backups by the folders and Mac
-  they came from (restic's own `host,paths` grouping), and the file list's
-  Change column compares each backup with the previous one in its group; the
-  pane's header names the open backup and says what its Change column is
-  compared with, or that it is the first of its group. On a plan's page, *Browse
+  sidebar's Restore section lists each repository once, as Arq lists a storage
+  location: clicking its row opens the repository's page, and its disclosure
+  triangle shows its backups, grouped by the folders and Mac they came from
+  (restic's own `host,paths` grouping). The file list's Change column compares
+  each backup with the previous one in its group; the pane's header names the
+  open backup and says what its Change column is compared with, or that it is
+  the first of its group. On a plan's page, *Browse
   Folders…* walks one folder through every snapshot that contains it. The file
   list answers Finder's outline keys: → opens a folder, ← closes it or steps to
   the folder that holds the selection. Its search covers the open backup and
@@ -105,7 +107,8 @@ checked in so a normal build does not need it.
   run off.
 - **Alerts** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
 - **restic console** — run any restic command against a repository and read its
-  own output, for the things the UI does not cover.
+  own output, for the things the UI does not cover (*Repository › restic
+  Console…*).
 - **Activity** — every run recorded with its outcome, duration, bytes added, the
   files restic could not read, and a plain-text log of what restic printed
   (Show Log…, Copy Details); restores record which backup, which item and where
@@ -115,11 +118,11 @@ checked in so a normal build does not need it.
   record uses. Items with nothing to act on are greyed out. ⌘B backs up the
   selected plan, ⌘. stops it, ⇧⌘B backs up every plan, ⇧⌘F finds files and ⌘R
   refreshes every repository's snapshots; *Pause Backups* is there as well as in
-  the menu bar. While a sheet is up, a command that opens a sheet or acts on the
-  selected plan or repository beeps and does nothing; *Back Up All Plans Now*,
-  *Pause Backups*, *Resume Backups*, *Pause and Stop Running Backups* and
-  *Refresh All Snapshots* still act, since no sheet holds a draft of what they
-  change.
+  the menu bar. While a sheet is up, a command that opens a sheet or the
+  console, or acts on the selected plan or repository, beeps and does nothing;
+  *Back Up All Plans Now*, *Pause Backups*, *Resume Backups*, *Pause and Stop
+  Running Backups* and *Refresh All Snapshots* still act, since no sheet holds a
+  draft of what they change.
 
 ## Architecture
 
@@ -271,8 +274,8 @@ open --env SWIFTRESTIC_CONFIG_DIR=/tmp/demo \
 `SWIFTRESTIC_CONFIG_DIR` points the app at a throwaway configuration instead of
 your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 `SWIFTRESTIC_CAPTURE_PANE` picks which screen (`overview`, `plan`, `repository`,
-`activity`, `find`, `console`). `all` instead photographs every sidebar pane in
-one run — `SWIFTRESTIC_CAPTURE` names a directory, each pane lands as
+`activity`, `find`, `console`). `all` instead photographs every pane in one
+run — `SWIFTRESTIC_CAPTURE` names a directory, each pane lands as
 `pane-<name>.png`, and `SWIFTRESTIC_CAPTURE_DELAY` becomes the settle time per
 pane. The sweep is the whole-window regression check: a defect like macOS 26's
 floating title-bar material shows up on every pane, including the ones nobody

@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The split view's sidebar: the five sections (Overview, Backup Plans,
-/// Restore, Repositories, Tools), the restore disclosure groups, the context
-/// menus and the Add footer.
+/// The split view's sidebar: Arq's sections plus the dashboard (Overview,
+/// Backup Plans, Restore, Activity), the restore disclosure groups, the
+/// context menus and the Add footer. Every repository is listed once: its
+/// Restore row opens the repository's page and expands to its backups.
 ///
 /// Split out of `RootView` as a real child view so the sidebar's list
 /// type-checks on its own: the root's modifier chain sat at the compiler's
@@ -71,40 +72,10 @@ struct SidebarView: View {
                 }
             }
 
-            Section("Repositories") {
-                ForEach(model.configuration.repositories) { repository in
-                    Label {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(repository.name)
-                                .lineLimit(1)
-                            Text(repository.displayLocation)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    } icon: {
-                        Image(systemName: repository.kind.symbolName)
-                            .foregroundStyle(Theme.tint)
-                    }
-                    .tag(SidebarItem.repository(repository.id))
-                    .contextMenu { repositoryContextMenu(repository) }
-                }
-                if model.configuration.repositories.isEmpty, !model.isBootstrapping {
-                    Text("No repositories yet")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            // Console and Activity are peers, not a lone tool plus a footnote.
-            // Console carries the toolbar's guards: with no repository it
-            // opened a pane whose only content was "Choose…", and a tool that
-            // can never work reads as breakage, not emptiness.
-            Section("Tools") {
-                Label("restic Console", systemImage: "apple.terminal")
-                    .tag(SidebarItem.console)
-                    .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
+            // Header-less, like Overview: one row needs no title above it.
+            // The restic console has no row — it is a power tool, reached
+            // from Repository ▸ restic Console….
+            Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
                     // The window's unread badge, wired to the same 7-day
                     // window the tray dot, the Problems tile and the menu's
@@ -136,6 +107,10 @@ struct SidebarView: View {
         }
     }
 
+    /// Arq's bare + in the corner. A missing restic is not repeated here: the
+    /// banner above every pane (RootDetailView) already says it, with the
+    /// install instruction a cursor-only triangle could not show. The bar
+    /// background stays — an expanded Restore section scrolls under it.
     private var sidebarFooter: some View {
         HStack(spacing: 8) {
             Menu {
@@ -144,18 +119,14 @@ struct SidebarView: View {
                 Button("Add Repository…") { onNewRepository() }
             } label: {
                 Label("Add", systemImage: "plus")
+                    .labelStyle(.iconOnly)
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
+            .help("Add a backup plan or a repository")
 
             Spacer()
-
-            if !model.isResticAvailable {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Theme.warning)
-                    .help(model.binaryProblem ?? "restic not found")
-                    .accessibilityLabel(model.binaryProblem ?? "restic not found")
-            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -216,6 +187,9 @@ struct SidebarView: View {
 
     /// Arq's RESTORE section: each repository expands to its backup
     /// records, and picking a record shows its files in the detail pane.
+    /// The repository's own row is Arq's storage-location row, both group
+    /// header and target: clicking it opens the repository's page, the
+    /// disclosure triangle lists its backups.
     @ViewBuilder
     private func restoreGroup(_ repository: Repository) -> some View {
         let listing = model.snapshots(for: repository.id)
@@ -292,9 +266,13 @@ struct SidebarView: View {
                         .foregroundStyle(.secondary)
                 }
             } icon: {
+                // The sidebar's own icon tint, as on Overview and Activity:
+                // it turns white under the selection, where an explicit
+                // accent vanished into the selection's blue.
                 Image(systemName: repository.kind.symbolName)
-                    .foregroundStyle(Theme.tint)
             }
+            .tag(SidebarItem.repository(repository.id))
+            .contextMenu { repositoryContextMenu(repository) }
         }
     }
 
