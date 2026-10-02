@@ -163,8 +163,8 @@ struct SidebarView: View {
             // an error banner is not a substitute for a disabled item.
             .disabled(!commands.canBackUp)
         Button("Edit…") { onEditPlan(plan) }
-        // The plan toolbar's pair, word for word. The row wears the pause
-        // glyph while the schedule is held; manual runs stay possible either
+        // The plan toolbar's pair, word for word. The row's caption says the
+        // pause while the schedule is held; manual runs stay possible either
         // way, and a manual plan has no schedule to pause.
         if !plan.isScheduleActive(at: .now) {
             Button("Resume Schedule") { model.resumePlanSchedule(id: plan.id) }
@@ -304,14 +304,16 @@ struct SidebarView: View {
     }
 
     /// The way to a repository's first plan, where its plans would be. An
-    /// action, not a place: no tag, no chevron. It leaves once a plan exists;
-    /// the page's Plans card and the row's menu keep offering the next one.
+    /// action, not a place: no tag, no chevron — its plus fills the fold
+    /// column, so its title starts where plan names do. It leaves once a
+    /// plan exists; the page's Plans card and the row's menu keep offering
+    /// the next one.
     private func addPlanRow(_ repository: Repository) -> some View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
                 Image(systemName: "plus.circle")
                     .foregroundStyle(Theme.tint)
-                    .frame(width: Indent.slot)
+                    .frame(width: Indent.fold)
                     .accessibilityHidden(true)
                 Text("New Backup Plan…")
                 Spacer(minLength: 0)
@@ -329,14 +331,15 @@ struct SidebarView: View {
 
     /// A plan: the row opens its page, and the chevron ahead of it folds
     /// the plan's backups open beneath it — Arq's RESTORE tree, where a
-    /// backup plan's records sit under the plan. The chevron takes the
-    /// indentation's place (`Indent.fold`), so the name starts where it
-    /// would without one.
+    /// backup plan's records sit under the plan. The row pads by `child`
+    /// and the chevron fills the shared fold column, so the plan's title
+    /// starts where every repository child's does.
     private func planRow(_ plan: BackupPlan) -> some View {
         HStack(spacing: 4) {
             planFold(plan)
             PlanSidebarRow(plan: plan)
         }
+        .padding(.leading, Indent.child)
         .tag(SidebarItem.plan(plan.id))
         .contextMenu { planContextMenu(plan) }
     }
@@ -461,10 +464,6 @@ struct SidebarView: View {
             HStack(spacing: 4) {
                 FoldChevron(isExpanded: isExpanded)
                     .frame(width: Indent.fold)
-                Image(systemName: "archivebox")
-                    .foregroundStyle(.secondary)
-                    .frame(width: Indent.slot)
-                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .lineLimit(1)
@@ -478,6 +477,7 @@ struct SidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.leading, Indent.child)
         .help("Backups in “\(repository.name)” that none of its plans made — from another Mac or the restic console, a deleted plan, or a plan that now backs up elsewhere")
         // Named for its repository, as a plan's fold is for its plan.
         .accessibilityLabel("\(title) in “\(repository.name)”, \(count)")
@@ -546,9 +546,6 @@ struct SidebarView: View {
             HStack(spacing: 4) {
                 FoldChevron(isExpanded: isExpanded)
                     .frame(width: Indent.lineageSlot)
-                Image(systemName: "folder")
-                    .foregroundStyle(Theme.tint)
-                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .lineLimit(1)
@@ -563,7 +560,7 @@ struct SidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.leading, Indent.grandchild)
+        .padding(.leading, Indent.groupPad)
         .help(help)
         // The same folders from the same Mac can sit in two repositories.
         .accessibilityLabel("\(title), \(caption), in “\(repository.name)”")
@@ -579,24 +576,34 @@ struct SidebarView: View {
 }
 
 /// The tree's levels, as the leading indentation of top-level List rows.
-/// A repository's child keeps a fixed slot ahead of its title — a plan's
-/// state mark, the plus of "New Backup Plan…", Other backups' box — so every
-/// child's title starts at one x.
+/// A repository's children keep one shared column ahead of their titles —
+/// a plan's or Other backups' fold chevron, the plus of "New Backup
+/// Plan…" — so every child's title starts at one x, level with the
+/// repository's own title.
 private enum Indent {
-    static let slot: CGFloat = 26
-    /// A repository's children. "New Backup Plan…" is indented by it; a plan
-    /// and Other backups fill it with their fold's chevron (`fold`).
-    static let child: CGFloat = 16
-    /// The chevron column of a plan or Other backups, under the
-    /// repository's icon: `child` less the row's spacing, so a title starts
-    /// where it would without one.
-    static let fold: CGFloat = child - 4
-    /// Under a plan or Other backups: past the child's slot and its spacing,
-    /// so a record or a lineage group starts where the titles above it do.
-    static let grandchild: CGFloat = child + slot + 4
-    /// A lineage group's chevron, narrower than a child's slot.
+    /// A repository's children: plan rows, "New Backup Plan…" and the
+    /// Other backups node. With `fold` and the row's spacing it puts the
+    /// fold column under the repository's icon and the titles at the
+    /// repository title's x.
+    static let child: CGFloat = 12
+    /// The chevron / plus column those children share. plus.circle's
+    /// canvas is a point wider; only its empty margin overhangs — the
+    /// drawn circle (13 pt of ink, measured) fits.
+    static let fold: CGFloat = 14
+    /// A lineage group under Other backups: its chevron column starts
+    /// where the plan family's titles do, putting its title one fold
+    /// deeper than theirs.
+    static let groupPad: CGFloat = child + fold + 4
+    /// Records under a plan, and the status rows an open plan's fold
+    /// shows. A bare number since the marker slot went — it keeps the
+    /// records at the x they have always started rather than deriving
+    /// from the plan row above.
+    static let grandchild: CGFloat = 46
+    /// A lineage group's chevron column, from which its records derive
+    /// their pad (`lineageRecord`).
     static let lineageSlot: CGFloat = 14
-    /// A record under a lineage group, starting where the group's folder does.
+    /// A record under a lineage group, starting past the group's chevron
+    /// column.
     static let lineageRecord: CGFloat = grandchild + lineageSlot + 4
 }
 
@@ -670,18 +677,6 @@ private struct PlanSidebarRow: View {
             relative: { Format.ago($0, now: now) }
         )
         HStack(spacing: 4) {
-            // A fixed leading slot on every row, marker or not, so every plan
-            // name starts at the same x — and at the x of the words "New
-            // Backup Plan…" and "Other backups", whose plus and box sit in
-            // the same slot (`Indent.slot`). The marker sat inline before, and a
-            // dotted Photos stood 17 pt right of an idle name.
-            // Color.clear holds the slot's width: an empty marker is an
-            // EmptyView, and EmptyView drops `.frame`.
-            ZStack {
-                Color.clear
-                marker
-            }
-            .frame(width: Indent.slot)
             VStack(alignment: .leading, spacing: 1) {
                 Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
                     .lineLimit(1)
@@ -700,9 +695,9 @@ private struct PlanSidebarRow: View {
                             .foregroundStyle(StatusPalette.status(outcome))
                             .accessibilityHidden(true)
                     }
-                    // Middle truncation: the slot narrows the column, and a
-                    // tail cut would take "ago" — when it happened. The
-                    // tooltip and VoiceOver keep the whole line.
+                    // Middle truncation: the trailing marker narrows the
+                    // column, and a tail cut would take "ago" — when it
+                    // happened. The tooltip and VoiceOver keep the whole line.
                     Text(caption.text)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -722,12 +717,20 @@ private struct PlanSidebarRow: View {
                         .help(pauseNote)
                 }
             }
+            // State trails identity, the sidebar's one reading rule —
+            // Activity's badge already follows it. A trailing marker takes
+            // only leftover space, so it can never push the title: the
+            // failure the leading slot it replaces was reserved to prevent.
+            Spacer(minLength: 0)
+            marker
         }
     }
 
-    /// A row wears state, never identity. In rank: the in-flight spinner,
-    /// the Mail dot for a problem the user has not seen, the pause mark. An
-    /// otherwise idle plan wears nothing.
+    /// A row wears state, never identity, and at its trailing edge,
+    /// vertically centred on the row. In rank: the in-flight spinner,
+    /// the Mail dot for a problem the user has not seen. A paused plan
+    /// wears nothing — its caption already says "Paused — …" or
+    /// "Paused until …".
     @ViewBuilder
     private var marker: some View {
         if model.isRunning(planID: plan.id) {
@@ -743,12 +746,6 @@ private struct PlanSidebarRow: View {
                 .frame(width: 9, height: 9)
                 .help(label)
                 .accessibilityLabel(label)
-        } else if PlanStatus.showsPauseMarker(for: plan) {
-            // Either kind of pause. The caption already says "Paused — …"
-            // or "Paused until …".
-            Image(systemName: "pause.circle")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
         }
     }
 }

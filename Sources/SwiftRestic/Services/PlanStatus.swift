@@ -200,12 +200,6 @@ enum PlanStatus {
         return TileFace(value: Format.tileTimestamp(next, now: now), help: help)
     }
 
-    /// Whether a plan's sidebar row wears the pause glyph: its schedule is
-    /// held, by Pause Schedule's either kind or by the editor's switch.
-    static func showsPauseMarker(for plan: BackupPlan, now: Date = .now) -> Bool {
-        !plan.isScheduleActive(at: now)
-    }
-
     /// The pause as the sidebar words it, `nil` while the schedule runs: a
     /// timed pause names its end, an open-ended one the schedule it holds —
     /// a manual plan's none, since it has no schedule to hold ("Paused",

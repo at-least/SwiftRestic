@@ -346,8 +346,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     /// Whether the scheduler may start this plan by itself: switched on and
     /// not inside a timed pause. The one schedule-state predicate — the
-    /// scheduler, the sidebar's pause mark and every Pause/Resume control
-    /// read it, so a timed pause is a pause everywhere.
+    /// scheduler and every Pause/Resume control read it, so a timed pause
+    /// is a pause everywhere.
     func isScheduleActive(at now: Date) -> Bool {
         isEnabled && activePauseEnd(at: now) == nil
     }

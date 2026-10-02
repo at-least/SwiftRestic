@@ -276,7 +276,6 @@ struct PlanStatusTests {
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
         #expect(unpaused.pauseNote == nil)
-        #expect(!PlanStatus.showsPauseMarker(for: plan, now: now))
     }
 
     @Test("the Configuration row names the schedule under either pause, from the sidebar's words")
@@ -320,7 +319,6 @@ struct PlanStatusTests {
         #expect(paused.text == "Paused until \(Format.pauseEnd(now.addingTimeInterval(3600), now: now, calendar: calendar))")
         #expect(paused.outcome == nil)
         #expect(paused.pauseNote == nil)
-        #expect(PlanStatus.showsPauseMarker(for: plan, now: now))
 
         plan.pausedUntil = now.addingTimeInterval(-1)
         let lapsed = PlanStatus.sidebarCaption(
@@ -328,7 +326,6 @@ struct PlanStatusTests {
             existingRepositoryIDs: [repositoryID], now: now, calendar: calendar, relative: relative
         )
         #expect(lapsed.text == "Last backup 5 minutes ago")
-        #expect(!PlanStatus.showsPauseMarker(for: plan, now: now))
     }
 
     @Test("a plan the scheduler skips never promises its schedule; a running one names its phase")
