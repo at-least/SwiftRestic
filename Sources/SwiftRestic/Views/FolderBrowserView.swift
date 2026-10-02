@@ -399,12 +399,12 @@ struct FolderBrowserView: View {
             subject: .item(name: node.name, path: node.path, isDirectory: node.isDirectory),
             backupTime: chosen.time,
             snapshotShortID: String(chosen.id.prefix(8))
-        ) { destination, overwrite in
+        ) { directories, overwrite in
             model.restore(
                 repositoryID: repositoryID,
                 snapshotID: chosen.id,
                 node: node,
-                to: destination,
+                to: directories[0],
                 overwrite: overwrite
             )
         }

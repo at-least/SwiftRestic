@@ -23,15 +23,15 @@ struct RestoreDestinationTests {
     @Test("original location resolves only to exactly the recorded path on this Mac")
     func originalLocationGate() {
         let project = RestoreSubject.item(name: "Project", path: "/Users/x/Documents/Project", isDirectory: true)
-        guard case let .available(directory, landing) = original(project) else {
+        guard case let .available(directories, landings) = original(project) else {
             Issue.record("expected available, got \(original(project))")
             return
         }
-        #expect(directory.path == "/Users/x/Documents")
-        #expect(landing.path == "/Users/x/Documents/Project")
+        #expect(directories.map(\.path) == ["/Users/x/Documents"])
+        #expect(landings.map(\.path) == ["/Users/x/Documents/Project"])
         // The item lands exactly where it was: the one landing rule, applied
         // to the parent, gives back the recorded path.
-        #expect(RestoreDestinationRules.landings(for: project, in: directory).map(\.path) == [landing.path])
+        #expect(RestoreDestinationRules.landings(for: project, into: directories) == landings)
 
         #expect(original(project, existing: []) == .unavailable(reason: "“/Users/x/Documents” isn't on this Mac."))
         #expect(original(project, writable: []) == .unavailable(reason: "SwiftRestic can't write to “/Users/x/Documents”."))
@@ -57,12 +57,12 @@ struct RestoreDestinationTests {
             existing: ["/private/tmp/p"],
             writable: ["/private/tmp/p"]
         )
-        guard case let .available(tmpDirectory, tmpLanding) = privateTmp else {
+        guard case let .available(tmpDirectories, tmpLandings) = privateTmp else {
             Issue.record("expected available, got \(privateTmp)")
             return
         }
-        #expect(tmpDirectory.path == "/private/tmp/p")
-        #expect(tmpLanding.path == "/private/tmp/p/Project")
+        #expect(tmpDirectories.map(\.path) == ["/private/tmp/p"])
+        #expect(tmpLandings.map(\.path) == ["/private/tmp/p/Project"])
 
         #expect(original(.wholeSnapshot(paths: ["/Users/x/Documents"]))
             == .unavailable(reason: "A whole backup can't be put back in one step. Select a folder in it and restore that to its original location."))
@@ -70,26 +70,55 @@ struct RestoreDestinationTests {
         // A combining mark right after the separator: a Character-level split
         // would merge it into the "/" and lose the name.
         let combining = RestoreSubject.item(name: "\u{0301}leading.txt", path: "/Users/x/Documents/\u{0301}leading.txt", isDirectory: false)
-        guard case let .available(_, combiningLanding) = original(combining) else {
+        guard case let .available(_, combiningLandings) = original(combining) else {
             Issue.record("expected available, got \(original(combining))")
             return
         }
-        #expect(combiningLanding.lastPathComponent == "\u{0301}leading.txt")
+        #expect(combiningLandings.map(\.lastPathComponent) == ["\u{0301}leading.txt"])
+    }
+
+    @Test("several items go back each into its own folder, or not at all")
+    func originalLocationOfSeveral() {
+        let items = RestoreSubject.items([
+            RestoreItem(name: "a.txt", path: "/Users/x/Documents/a.txt", isDirectory: false),
+            RestoreItem(name: "Trip", path: "/Users/x/Pictures/Trip", isDirectory: true),
+        ])
+        let both: Set<String> = ["/Users/x/Documents", "/Users/x/Pictures"]
+        #expect(original(items, existing: both, writable: both) == .available(
+            directories: [URL(fileURLWithPath: "/Users/x/Documents", isDirectory: true),
+                          URL(fileURLWithPath: "/Users/x/Pictures", isDirectory: true)],
+            landings: [URL(fileURLWithPath: "/Users/x/Documents/a.txt"),
+                       URL(fileURLWithPath: "/Users/x/Pictures/Trip")]
+        ))
+        // One that cannot go back stops them all, and is named.
+        #expect(original(items, existing: both, writable: ["/Users/x/Documents"])
+            == .unavailable(reason: "“Trip”: SwiftRestic can't write to “/Users/x/Pictures”."))
+        #expect(items.directoryCount == 2)
+        #expect(RestoreSubject.item(name: "a", path: "/a", isDirectory: false).directoryCount == 1)
+        #expect(RestoreSubject.wholeSnapshot(paths: ["/a", "/b"]).directoryCount == 1)
     }
 
     @Test("landings and replace-confirmation targets")
     func landingsAndConfirmation() {
         let destination = URL(fileURLWithPath: "/dest", isDirectory: true)
         #expect(RestoreDestinationRules.landings(
-            for: .item(name: "Photos", path: "/Users/x/Photos", isDirectory: true), in: destination
+            for: .item(name: "Photos", path: "/Users/x/Photos", isDirectory: true), into: [destination]
         ).map(\.path) == ["/dest/Photos"])
         // A hostile name from a shared repository stays inside the destination.
         #expect(RestoreDestinationRules.landings(
-            for: .item(name: "a/../../x", path: "/p/x", isDirectory: false), in: destination
+            for: .item(name: "a/../../x", path: "/p/x", isDirectory: false), into: [destination]
         ).map(\.path) == ["/dest/x"])
         #expect(RestoreDestinationRules.landings(
-            for: .wholeSnapshot(paths: ["/p/A", "/p/B"]), in: destination
+            for: .wholeSnapshot(paths: ["/p/A", "/p/B"]), into: [destination]
         ).map(\.path) == ["/dest/p/A", "/dest/p/B"])
+        // Several items: each in its own directory, by the same rule.
+        #expect(RestoreDestinationRules.landings(
+            for: .items([
+                RestoreItem(name: "a.txt", path: "/p/a.txt", isDirectory: false),
+                RestoreItem(name: "Trip", path: "/q/Trip", isDirectory: true),
+            ]),
+            into: [destination, URL(fileURLWithPath: "/q", isDirectory: true)]
+        ).map(\.path) == ["/dest/a.txt", "/q/Trip"])
 
         let landings = [URL(fileURLWithPath: "/dest/p/A"), URL(fileURLWithPath: "/dest/p/B")]
         // Keep never asks: nothing is replaced, whatever is there.

@@ -35,7 +35,10 @@ struct RestorePaneView: View {
     @State private var searchText = ""
     /// The search's answer for the open backup; nil while not searching.
     @State private var searchResult: RestorePaneSearch?
-    @State private var selection: String?
+    /// The selected rows' ids — paths in the tree, `SearchHit.id` among
+    /// search results. Several at once, as in Finder (⌘- or ⇧-click):
+    /// Restore… restores them together.
+    @State private var selection: Set<String> = []
     @State private var isLoadingTree = false
     @State private var loadError: String?
     /// Set when the focused folder does not exist in the selected record.
@@ -316,7 +319,7 @@ struct RestorePaneView: View {
                 // does not follow a selection it did not make itself.
                 handleKeyPress(press) { proxy.scrollTo($0) }
             }
-            .help("→ or Return expands a folder; ← collapses it or selects the folder above; ⌘↑ or ⌫ goes up; double-click also expands; drag an item to Finder to restore it there")
+            .help("→ or Return expands a folder; ← collapses it or selects the folder above; ⌘↑ or ⌫ goes up; double-click also expands; ⌘- or ⇧-click selects several items; drag an item to Finder to restore it there")
             // Initial as well: the routed focus is set while the spinner stands
             // in for this list, so the list meets it on its first appearance.
             .onChange(of: revealPath, initial: true) { _, target in
@@ -415,8 +418,8 @@ struct RestorePaneView: View {
             Button("Restore…") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(selectedRow == nil || model.isRestoring || record == nil)
-                .help("Restore the selected item from this backup (Return)")
+                .disabled(selectedNodes.isEmpty || model.isRestoring || record == nil)
+                .help("Restore the selected items from this backup (Return)")
         }
         .padding(12)
     }
@@ -439,23 +442,32 @@ struct RestorePaneView: View {
 
     // MARK: - Rows
 
-    /// The node behind the current selection: a tree row while browsing, a
-    /// synthesized hit while searching. Search hits were already filtered to
-    /// paths the selected backup contains, and each carries its kind in that
-    /// backup — which is what lets the synthesized node go straight to the
-    /// restore, whose file and folder routes differ.
-    private var selectedRow: SnapshotNode? {
-        guard let selection else { return nil }
-        if let hits = searchResult?.inThisBackup,
-           let hit = hits.first(where: { $0.id == selection }) {
-            let name = (hit.path as NSString).lastPathComponent
-            return SnapshotNode(
-                name: name.isEmpty ? hit.path : name,
-                type: hit.isDirectory ? .dir : .file,
-                path: hit.path
-            )
+    /// The nodes behind the current selection, in the list's order: tree
+    /// rows while browsing, synthesized hits while searching. Only rows on
+    /// screen count — a row its folder folded away is not restored unseen.
+    /// Search hits were already filtered to paths the selected backup
+    /// contains, and each carries its kind in that backup — which is what
+    /// lets the synthesized node go straight to the restore, whose file and
+    /// folder routes differ.
+    private var selectedNodes: [SnapshotNode] {
+        guard !selection.isEmpty else { return [] }
+        if let hits = searchResult?.inThisBackup {
+            return hits.filter { selection.contains($0.id) }.map { hit in
+                let name = (hit.path as NSString).lastPathComponent
+                return SnapshotNode(
+                    name: name.isEmpty ? hit.path : name,
+                    type: hit.isDirectory ? .dir : .file,
+                    path: hit.path
+                )
+            }
         }
-        return tree.node(at: selection)
+        return tree.rows.filter { selection.contains($0.id) }.map(\.node)
+    }
+
+    /// The one selected node, when exactly one row is selected.
+    private var selectedRow: SnapshotNode? {
+        let nodes = selectedNodes
+        return nodes.count == 1 ? nodes[0] : nil
     }
 
     /// Arq's Change column: the word, in the text colour. restic's "+" and
@@ -511,8 +523,21 @@ struct RestorePaneView: View {
         case .rightArrow: .right
         default: nil
         }
-        if let arrow, let selected = selection,
-           press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]) {
+        let isPlain = press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
+        if let arrow, isPlain, selection.count > 1, searchResult == nil {
+            // Finder's outline with several rows selected: → opens every
+            // selected folder and ← closes every open one; the selection
+            // stays where it is. Not over search results, whose paths can
+            // name tree rows hidden behind them.
+            for node in selectedNodes where node.isDirectory {
+                switch tree.arrowStep(arrow, from: node.path) {
+                case .expand(let path), .collapse(let path): expand(path: path)
+                case .selectParent, .stay: break
+                }
+            }
+            return .handled
+        }
+        if let arrow, isPlain, selection.count == 1, let selected = selection.first {
             switch tree.arrowStep(arrow, from: selected) {
             case .expand(let path), .collapse(let path):
                 // The step already knows the direction; expand toggles.
@@ -528,9 +553,9 @@ struct RestorePaneView: View {
                 // one selected row whether the parent was on screen or not,
                 // and with the child scrolled away before the key).
                 reveal(selected)
-                selection = nil
+                selection = []
                 Task {
-                    selection = path
+                    selection = [path]
                     reveal(path)
                 }
             case .stay:
@@ -539,13 +564,12 @@ struct RestorePaneView: View {
             // Spent either way, as the native outline spends it.
             return .handled
         }
-        // Return on a file is the footer's Restore…, as before the list had
-        // a primary action: left unhandled, the list now hands Return to
-        // its double-click action and the default button never sees it
-        // (measured on a probe). The same gate as the button.
-        if press.key == .return,
-           press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]),
-           let node = selectedRow, !node.isDirectory {
+        // Return on a file, or on several rows, is the footer's Restore…, as
+        // before the list had a primary action: left unhandled, the list now
+        // hands Return to its double-click action and the default button
+        // never sees it (measured on a probe). The same gate as the button.
+        if press.key == .return, isPlain,
+           selectedNodes.count > 1 || selectedRow.map({ !$0.isDirectory }) == true {
             guard !model.isRestoring, record != nil else { return .ignored }
             restoreSelection()
             return .handled
@@ -570,7 +594,7 @@ struct RestorePaneView: View {
     private func navigate(to path: String?) {
         guard path != currentPath else { return }
         currentPath = path
-        selection = nil
+        selection = []
     }
 
     // MARK: - Loading
@@ -657,7 +681,7 @@ struct RestorePaneView: View {
         guard !Task.isCancelled else { return }
         // The routed folder is open: select it and bring it on screen.
         if let focus, deepest == focus {
-            selection = focus
+            selection = [focus]
             revealPath = focus
         }
         isLoadingTree = false
@@ -772,26 +796,44 @@ struct RestorePaneView: View {
                 limit: AppModel.indexSearchLimit,
                 indexIsComplete: indexIsComplete
             )
-            selection = nil
+            selection = []
             // The index answered: a load error from an earlier failed read
             // must not sit in front of these results or behind them.
             loadError = nil
         }
     }
 
+    /// One item goes the way a single item always has; several go together,
+    /// less any inside another selected folder, which brings them anyway.
     private func restoreSelection() {
-        guard let record, let node = selectedRow else { return }
+        let nodes = RestoreBatch.covering(selectedNodes)
+        guard let record, let first = nodes.first else { return }
         let repositoryID = repositoryID
+        guard nodes.count > 1 else {
+            destinationRequest = RestoreDestinationRequest(
+                subject: .item(name: first.name, path: first.path, isDirectory: first.isDirectory),
+                backupTime: record.time,
+                snapshotShortID: record.shortID
+            ) { directories, overwrite in
+                model.restore(
+                    repositoryID: repositoryID,
+                    snapshotID: record.id,
+                    node: first,
+                    to: directories[0],
+                    overwrite: overwrite
+                )
+            }
+            return
+        }
         destinationRequest = RestoreDestinationRequest(
-            subject: .item(name: node.name, path: node.path, isDirectory: node.isDirectory),
+            subject: .items(nodes.map { RestoreItem(name: $0.name, path: $0.path, isDirectory: $0.isDirectory) }),
             backupTime: record.time,
             snapshotShortID: record.shortID
-        ) { destination, overwrite in
+        ) { directories, overwrite in
             model.restore(
                 repositoryID: repositoryID,
                 snapshotID: record.id,
-                node: node,
-                to: destination,
+                items: zip(nodes, directories).map { (node: $0, directory: $1) },
                 overwrite: overwrite
             )
         }
@@ -811,11 +853,11 @@ struct RestorePaneView: View {
             ),
             backupTime: record.time,
             snapshotShortID: record.shortID
-        ) { destination, overwrite in
+        ) { directories, overwrite in
             model.restoreWholeSnapshot(
                 repositoryID: repositoryID,
                 snapshotID: record.id,
-                to: destination,
+                to: directories[0],
                 overwrite: overwrite
             )
         }

@@ -38,12 +38,9 @@ struct RestoreBatchTests {
 
     @Test("names that would land twice in one folder are named, without case, each once")
     func collidingNames() {
-        let nodes = [
-            file("/Data/a/Notes.txt"), file("/Data/b/notes.txt"), file("/Data/c/notes.txt"),
-            folder("/Data/a/Photos"), file("/Data/b/unique.txt"), folder("/Data/c/Photos"),
-        ]
-        #expect(RestoreBatch.collidingNames(nodes) == ["Notes.txt", "Photos"])
-        #expect(RestoreBatch.collidingNames([file("/Data/a.txt"), file("/Data/b.txt")]).isEmpty)
+        let names = ["Notes.txt", "notes.txt", "notes.txt", "Photos", "unique.txt", "Photos"]
+        #expect(RestoreBatch.collidingNames(names) == ["Notes.txt", "Photos"])
+        #expect(RestoreBatch.collidingNames(["a.txt", "b.txt"]).isEmpty)
     }
 
     @Test("one restic call per folder of the backup and directory, in the order each first appears")

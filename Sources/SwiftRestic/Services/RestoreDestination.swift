@@ -32,17 +32,35 @@ enum RestoreDestinationKind: String, Sendable, CaseIterable {
     case originalLocation
 }
 
-/// What is being restored: one item of a backup, or the whole of it.
+/// What is being restored: one item of a backup, several, or the whole of
+/// it.
 enum RestoreSubject: Sendable, Equatable {
     case item(name: String, path: String, isDirectory: Bool)
+    /// Two or more items — the Restore pane's multiple selection, with any
+    /// item inside a selected folder already dropped
+    /// (`RestoreBatch.covering`).
+    case items([RestoreItem])
     case wholeSnapshot(paths: [String])
+
+    /// One directory per item, in order — the shape the destination sheet
+    /// hands its restore: one for an item or a whole backup.
+    var directoryCount: Int {
+        if case let .items(items) = self { items.count } else { 1 }
+    }
 }
 
-/// Whether an item can go back exactly where it was backed up from.
+/// One of several items restored together.
+struct RestoreItem: Sendable, Equatable {
+    var name: String
+    var path: String
+    var isDirectory: Bool
+}
+
+/// Whether the items can go back exactly where they were backed up from.
 enum OriginalLocation: Sendable, Equatable {
-    /// Restore into `directory` (the item's parent) and it lands at
-    /// `landing`, the item's own recorded path.
-    case available(directory: URL, landing: URL)
+    /// Restore each item into its parent, `directories` (one per item, in
+    /// order), and it lands at its own recorded path, `landings`.
+    case available(directories: [URL], landings: [URL])
     case unavailable(reason: String)
 }
 
@@ -71,40 +89,67 @@ enum RestoreDestinationRules {
         case .wholeSnapshot:
             return .unavailable(reason: "A whole backup can't be put back in one step. Select a folder in it and restore that to its original location.")
         case let .item(name, path, _):
-            let badPath = OriginalLocation.unavailable(
-                reason: "This item's recorded path can't be used as a location on this Mac."
-            )
-            let components = path.unicodeScalars
-                .split(separator: "/", omittingEmptySubsequences: false)
-                .map { String(String.UnicodeScalarView($0)) }
-            // "/a/b" splits as ["", "a", "b"]: the leading empty piece is the
-            // root, every later one must be a real name.
-            guard components.count >= 2, components[0].isEmpty,
-                  components.dropFirst().allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
-            else { return badPath }
-            let last = components[components.count - 1]
-            guard ResticService.sanitizedRestoreName(name) == last else { return badPath }
-            let parent = components.count == 2 ? "/" : components.dropLast().joined(separator: "/")
-            guard directoryExists(parent) else {
-                return .unavailable(reason: "“\(parent)” isn't on this Mac.")
+            return originalLocation(name: name, path: path, directoryExists: directoryExists, isWritable: isWritable)
+        case let .items(items):
+            var directories: [URL] = []
+            var landings: [URL] = []
+            for item in items {
+                switch originalLocation(name: item.name, path: item.path, directoryExists: directoryExists, isWritable: isWritable) {
+                case let .available(parents, landed):
+                    directories += parents
+                    landings += landed
+                case let .unavailable(reason):
+                    // The first that cannot, named: the reasons speak of
+                    // "this item" or of its folder.
+                    return .unavailable(reason: "“\(item.name)”: \(reason)")
+                }
             }
-            guard isWritable(parent) else {
-                return .unavailable(reason: "SwiftRestic can't write to “\(parent)”.")
-            }
-            let directory = URL(fileURLWithPath: parent, isDirectory: true)
-            return .available(directory: directory, landing: ResticService.restoredItemURL(named: name, in: directory))
+            return .available(directories: directories, landings: landings)
         }
     }
 
-    /// Where a restore into `destination` writes: the item under 05's one
-    /// landing rule, or each backed-up folder under its full original path
-    /// (`restic restore <id> --target` recreates them).
-    static func landings(for subject: RestoreSubject, in destination: URL) -> [URL] {
+    private static func originalLocation(
+        name: String,
+        path: String,
+        directoryExists: (String) -> Bool,
+        isWritable: (String) -> Bool
+    ) -> OriginalLocation {
+        let badPath = OriginalLocation.unavailable(
+            reason: "This item's recorded path can't be used as a location on this Mac."
+        )
+        let components = path.unicodeScalars
+            .split(separator: "/", omittingEmptySubsequences: false)
+            .map { String(String.UnicodeScalarView($0)) }
+        // "/a/b" splits as ["", "a", "b"]: the leading empty piece is the
+        // root, every later one must be a real name.
+        guard components.count >= 2, components[0].isEmpty,
+              components.dropFirst().allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+        else { return badPath }
+        let last = components[components.count - 1]
+        guard ResticService.sanitizedRestoreName(name) == last else { return badPath }
+        let parent = components.count == 2 ? "/" : components.dropLast().joined(separator: "/")
+        guard directoryExists(parent) else {
+            return .unavailable(reason: "“\(parent)” isn't on this Mac.")
+        }
+        guard isWritable(parent) else {
+            return .unavailable(reason: "SwiftRestic can't write to “\(parent)”.")
+        }
+        let directory = URL(fileURLWithPath: parent, isDirectory: true)
+        return .available(directories: [directory], landings: [ResticService.restoredItemURL(named: name, in: directory)])
+    }
+
+    /// Where a restore into `directories` (one per item, as
+    /// `RestoreSubject.directoryCount` counts them) writes: each item under
+    /// 05's one landing rule, or each backed-up folder under its full
+    /// original path (`restic restore <id> --target` recreates them).
+    static func landings(for subject: RestoreSubject, into directories: [URL]) -> [URL] {
         switch subject {
         case let .item(name, _, _):
-            [ResticService.restoredItemURL(named: name, in: destination)]
+            [ResticService.restoredItemURL(named: name, in: directories[0])]
+        case let .items(items):
+            zip(items, directories).map { ResticService.restoredItemURL(named: $0.name, in: $1) }
         case let .wholeSnapshot(paths):
-            paths.map { destination.appendingPathComponent($0) }
+            paths.map { directories[0].appendingPathComponent($0) }
         }
     }
 

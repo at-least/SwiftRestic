@@ -13,8 +13,11 @@ struct RestoreDestinationRequest: Identifiable {
     var backupName: String?
     let backupTime: Date?
     let snapshotShortID: String
-    /// Starts the restore: into this directory, with this policy.
-    let perform: @MainActor (URL, RestoreOverwritePolicy) -> Void
+    /// Starts the restore with this policy, into these directories: one per
+    /// item, in order (`RestoreSubject.directoryCount`) — the same folder for
+    /// all, or for Original location each item's own parent — and one for
+    /// an item or a whole backup.
+    let perform: @MainActor ([URL], RestoreOverwritePolicy) -> Void
 }
 
 /// Arq's "Restore to:" window, with our item-and-backup wording kept:
@@ -127,7 +130,7 @@ struct RestoreDestinationSheet: View {
                 Button("Restore") { restore() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(destination == nil || model.isRestoring || isConfirming)
+                    .disabled(directories == nil || model.isRestoring || isConfirming)
             }
         }
         .padding(20)
@@ -147,8 +150,15 @@ struct RestoreDestinationSheet: View {
         return nil
     }
 
+    /// The several items, when there are several.
+    private var items: [RestoreItem]? {
+        if case let .items(items) = request.subject { return items }
+        return nil
+    }
+
     private var headline: String {
         if let itemName { return "Restore “\(itemName)”" }
+        if let items { return "Restore \(Format.plural(items.count, "item"))" }
         return request.backupName.map { "Restore the whole “\($0)” backup" } ?? "Restore the whole backup"
     }
 
@@ -158,19 +168,39 @@ struct RestoreDestinationSheet: View {
 
     /// The name the folder panel and the alerts use for what is restored.
     private var subjectName: String {
-        itemName ?? request.backupName.map { "the whole “\($0)” backup" } ?? "the whole backup"
+        if let itemName { return "“\(itemName)”" }
+        if let items { return "the \(Format.plural(items.count, "item"))" }
+        return request.backupName.map { "the whole “\($0)” backup" } ?? "the whole backup"
     }
 
-    /// Where a restore would go right now, or nil when the choice cannot be
-    /// used yet (no folder, not checked, not available).
-    private var destination: URL? {
+    /// Selected items that would land on each other in one folder — the
+    /// same name from two folders of the backup (`RestoreBatch`). Original
+    /// location puts each back in its own folder, where no two can meet.
+    private var collidingNames: [String] {
+        items.map { RestoreBatch.collidingNames($0.map(\.name)) } ?? []
+    }
+
+    /// The folder Desktop or Other folder names right now, nil until there is
+    /// one (none chosen, the remembered one not yet checked).
+    private var chosenFolder: URL? {
         switch kind {
-        case .desktop:
-            Self.desktop
-        case .otherFolder:
-            otherFolderChecked ? otherFolder : nil
+        case .desktop: Self.desktop
+        case .otherFolder: otherFolderChecked ? otherFolder : nil
+        case .originalLocation: nil
+        }
+    }
+
+    /// Where a restore would go right now — one directory per item
+    /// (`RestoreDestinationRequest.perform`) — or nil when the choice cannot
+    /// be used yet: no folder, not checked, not available, or two items that
+    /// would land on each other in it.
+    private var directories: [URL]? {
+        switch kind {
+        case .desktop, .otherFolder:
+            guard let chosenFolder, collidingNames.isEmpty else { return nil }
+            return Array(repeating: chosenFolder, count: request.subject.directoryCount)
         case .originalLocation:
-            if case let .available(directory, _) = original { directory } else { nil }
+            if case let .available(directories, _) = original { return directories } else { return nil }
         }
     }
 
@@ -180,10 +210,16 @@ struct RestoreDestinationSheet: View {
         case .desktop, .otherFolder:
             if kind == .otherFolder, !otherFolderChecked {
                 caption("Checking…")
-            } else if let folder = kind == .desktop ? Self.desktop : otherFolder {
-                let landing = RestoreDestinationRules.landings(for: request.subject, in: folder).first ?? folder
+            } else if !collidingNames.isEmpty {
+                // A sentence, not a path: what is in the way, and the two
+                // ways around it.
+                caption("More than one selected item is named \(collidingNames.map { "“\($0)”" }.joined(separator: ", ")) — in one folder they would land on each other. Restore them one at a time, or to their original locations.")
+            } else if let folder = chosenFolder {
+                let landing = RestoreDestinationRules.landings(for: request.subject, into: [folder]).first ?? folder
                 if itemName != nil {
                     pathCaption("Will restore to \(Self.abbreviated(landing))", fullPath: landing.path)
+                } else if let items {
+                    pathCaption("Will restore the \(Format.plural(items.count, "item")) into \(Self.abbreviated(folder))", fullPath: folder.path)
                 } else {
                     // The path truncates and the layout sentence wraps: on
                     // one line at this width, both were cut to fragments.
@@ -199,8 +235,18 @@ struct RestoreDestinationSheet: View {
             switch original {
             case nil:
                 caption("Checking…")
-            case let .available(_, landing)?:
-                pathCaption("Will put “\(itemName ?? "")” back at \(Self.abbreviated(landing))", fullPath: landing.path)
+            case let .available(directories, landings)?:
+                if let items {
+                    // One folder for all when they share it; otherwise each
+                    // goes back to its own, which no single path can say.
+                    if Set(directories).count == 1 {
+                        pathCaption("Will put the \(Format.plural(items.count, "item")) back in \(Self.abbreviated(directories[0]))", fullPath: directories[0].path)
+                    } else {
+                        caption("Will put each of the \(Format.plural(items.count, "item")) back in the folder it was backed up from.")
+                    }
+                } else {
+                    pathCaption("Will put “\(itemName ?? "")” back at \(Self.abbreviated(landings[0]))", fullPath: landings[0].path)
+                }
             case let .unavailable(reason)?:
                 // A sentence, not a path: it wraps rather than truncating.
                 caption(reason)
@@ -269,7 +315,7 @@ struct RestoreDestinationSheet: View {
 
     private func chooseFolder() {
         guard let url = FilePicker.chooseDirectory(
-            message: "Choose where to restore \(itemName.map { "“\($0)”" } ?? subjectName)",
+            message: "Choose where to restore \(subjectName)",
             prompt: "Choose",
             directoryURL: otherFolder ?? Self.desktop
         ) else { return }
@@ -281,15 +327,15 @@ struct RestoreDestinationSheet: View {
     /// Keep starts at once. Replace first looks at what is actually at the
     /// landings (off the main actor) and asks only when something is there.
     private func restore() {
-        guard let destination else { return }
+        guard let directories else { return }
         // The choice as pressed: the radios stay live while Replace looks.
         let chosen = policy
         let chosenKind = kind
         guard chosen == .replaceExisting else {
-            commit(destination, chosen, kind: chosenKind)
+            commit(directories, chosen, kind: chosenKind)
             return
         }
-        let landings = RestoreDestinationRules.landings(for: request.subject, in: destination)
+        let landings = RestoreDestinationRules.landings(for: request.subject, into: directories)
         isConfirming = true
         confirmation = Task {
             let existing = await Task.detached(priority: .userInitiated) {
@@ -303,9 +349,9 @@ struct RestoreDestinationSheet: View {
             // Cancel pressed while the look ran: nothing starts, and
             // nothing is remembered.
             guard !Task.isCancelled else { return }
-            guard existing.isEmpty || confirmReplace(existing, in: destination) else { return }
+            guard existing.isEmpty || confirmReplace(existing, in: directories[0]) else { return }
             guard !Task.isCancelled else { return }
-            commit(destination, chosen, kind: chosenKind)
+            commit(directories, chosen, kind: chosenKind)
         }
     }
 
@@ -327,6 +373,12 @@ struct RestoreDestinationSheet: View {
                 let version = request.backupTime.map { "the version from \(Format.timestamp($0))" } ?? "the backed-up version"
                 alert.informativeText = "“\(landing)” already exists and will be replaced with \(version)."
             }
+        case .items:
+            // What is already there, by name — a count alone would not say
+            // which of the selected items Replace is about to touch.
+            let names = existing.map { "“\($0.lastPathComponent)”" }
+            alert.messageText = existing.count == 1 ? "Replace \(names[0])?" : "Replace \(Format.count(existing.count)) existing items?"
+            alert.informativeText = "\(names.joined(separator: ", ")) \(existing.count == 1 ? "is" : "are") already where \(existing.count == 1 ? "it" : "they") would be restored. Files that differ from the backup\(backupOf) will be replaced with the backed-up versions; files that aren't in the backup stay as they are."
         case .wholeSnapshot:
             alert.messageText = "Replace existing files?"
             let folders = existing.count == 1
@@ -341,10 +393,10 @@ struct RestoreDestinationSheet: View {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    private func commit(_ destination: URL, _ policy: RestoreOverwritePolicy, kind: RestoreDestinationKind) {
-        remember(kind, folder: destination)
+    private func commit(_ directories: [URL], _ policy: RestoreOverwritePolicy, kind: RestoreDestinationKind) {
+        remember(kind, folder: directories[0])
         dismiss()
-        request.perform(destination, policy)
+        request.perform(directories, policy)
     }
 
     /// Desktop or Other folder, written only when it differs from what the

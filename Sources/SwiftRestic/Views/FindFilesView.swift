@@ -454,8 +454,8 @@ struct FindFilesView: View {
             subject: .item(name: row.match.name, path: row.match.path, isDirectory: row.match.isDirectory),
             backupTime: row.snapshotTime,
             snapshotShortID: String(row.snapshotID.prefix(8))
-        ) { destination, overwrite in
-            restore(row, repositoryID: repositoryID, to: destination, overwrite: overwrite)
+        ) { directories, overwrite in
+            restore(row, repositoryID: repositoryID, to: directories[0], overwrite: overwrite)
         }
     }
 

@@ -4,7 +4,7 @@ import Foundation
 /// Restore… over a multiple selection. The rules that turn the selection into
 /// restic calls, apart from restic so they can be tested.
 ///
-/// Paths are compared on their Unicode scalars, never as Swift strings:
+/// Paths are compared by their bytes (`PathKey`), never as Swift strings:
 /// `String`'s `==` and `hasPrefix` are canonical equivalence, under which two
 /// backed-up names that differ only in normalization would be one item.
 enum RestoreBatch {
@@ -22,14 +22,11 @@ enum RestoreBatch {
     /// everything in it, so an item selected inside a selected folder would
     /// be restored twice — it is dropped, as Finder drops it from a copy.
     static func covering(_ nodes: [SnapshotNode]) -> [SnapshotNode] {
-        let folders = nodes.filter(\.isDirectory).map { Array($0.path.unicodeScalars) }
-        var seen: Set<[Unicode.Scalar]> = []
+        let folders = nodes.filter(\.isDirectory).map { $0.path.hasSuffix("/") ? $0.path : $0.path + "/" }
+        var seen: Set<PathKey> = []
         return nodes.filter { node in
-            let path = Array(node.path.unicodeScalars)
-            guard seen.insert(path).inserted else { return false }
-            return !folders.contains { folder in
-                folder != path && path.starts(with: folder + (folder.last == "/" ? [] : ["/"]))
-            }
+            guard seen.insert(PathKey(node.path)).inserted else { return false }
+            return !folders.contains { node.path.utf8.starts(with: $0.utf8) }
         }
     }
 
@@ -38,11 +35,11 @@ enum RestoreBatch {
     /// The second would merge into or replace the first, so such a restore
     /// is refused. Compared without case: the Mac's default volume format
     /// treats "Notes" and "notes" as one name.
-    static func collidingNames(_ nodes: [SnapshotNode]) -> [String] {
+    static func collidingNames(_ names: [String]) -> [String] {
         var seen: [String: String] = [:]
         var colliding: [String] = []
-        for node in nodes {
-            let name = ResticService.sanitizedRestoreName(node.name)
+        for original in names {
+            let name = ResticService.sanitizedRestoreName(original)
             let key = name.lowercased()
             if let first = seen[key] {
                 if !colliding.contains(first) { colliding.append(first) }
@@ -57,14 +54,14 @@ enum RestoreBatch {
     /// directory, in the order each first appears.
     static func groups(_ items: [(node: SnapshotNode, directory: URL)]) -> [Group] {
         struct Key: Hashable {
-            let parent: [Unicode.Scalar]
+            let parent: PathKey
             let directory: String
         }
         var order: [Key] = []
         var members: [Key: (parent: String, directory: URL, nodes: [SnapshotNode])] = [:]
         for (node, directory) in items {
             let parent = parentPath(of: node.path)
-            let key = Key(parent: Array(parent.unicodeScalars), directory: directory.path)
+            let key = Key(parent: PathKey(parent), directory: directory.path)
             if members[key] == nil {
                 order.append(key)
                 members[key] = (parent, directory, [])
