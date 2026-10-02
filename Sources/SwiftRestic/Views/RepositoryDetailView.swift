@@ -1,5 +1,9 @@
 import SwiftUI
 
+/// A repository's page, and its overview: its plans' protection, their next
+/// runs and the week's problems against it first — the questions asked of a
+/// backup destination, in the order they are asked — then the facts about
+/// the destination itself, Details and Maintenance.
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -7,6 +11,8 @@ struct RepositoryDetailView: View {
     @Environment(\.now) private var now
     let repositoryID: UUID
     let onEdit: () -> Void
+    /// Opens the plan editor with this repository preset.
+    let onAddPlan: () -> Void
 
     /// Read off the body: `resourceValues` is synchronous filesystem IO, and
     /// a spun-down external disk can take seconds to answer — re-run on every
@@ -61,6 +67,16 @@ struct RepositoryDetailView: View {
             ForEach(model.banners) { banner in
                 BannerView(banner: banner)
             }
+
+            let plans = model.plans(in: repositoryID)
+            ProtectionCard(
+                title: "Plans",
+                plans: plans,
+                emptyText: "No plans back up to this repository yet.",
+                onAddPlan: onAddPlan
+            )
+            NextRunsCard(plans: plans)
+            RecentProblemsCard(repositoryID: repositoryID)
 
             // Arq's storage-location page, plus the two numbers a backup
             // user asks of a destination: how big, and how full is its disk.

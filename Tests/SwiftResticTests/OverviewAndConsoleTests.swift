@@ -264,6 +264,32 @@ struct OverviewMetricsTests {
         ) == 2)
     }
 
+    @Test("a repository's problems are the week's problems that ran against it, of every kind")
+    func problemsOfOneRepository() {
+        let nas = UUID()
+        let since = date("2026-09-01 00:00:00")
+        func problem(_ kind: RunRecord.Kind, in repository: UUID?, at day: String) -> RunRecord {
+            var record = RunRecord(kind: kind, planName: "Docs", repositoryID: repository, startedAt: date(day))
+            record.outcome = .failed
+            return record
+        }
+        // A check or prune has no plan, so the repository's page is the only
+        // place near the repository its failure can be read.
+        let backup = problem(.backup, in: nas, at: "2026-09-05 01:00:00")
+        let check = problem(.check, in: nas, at: "2026-09-05 02:00:00")
+        let prune = problem(.prune, in: nas, at: "2026-09-05 03:00:00")
+        let elsewhere = problem(.backup, in: UUID(), at: "2026-09-05 04:00:00")
+        let old = problem(.backup, in: nas, at: "2026-08-01 01:00:00")
+        var fine = problem(.backup, in: nas, at: "2026-09-06 01:00:00")
+        fine.outcome = .succeeded
+
+        let runs = [backup, check, prune, elsewhere, old, fine]
+        #expect(OverviewMetrics.problems(in: runs, since: since, repositoryID: nas).map(\.id)
+            == [backup.id, check.id, prune.id])
+        // The same week as the app-wide set, which still counts every one.
+        #expect(OverviewMetrics.problems(in: runs, since: since).count == 4)
+    }
+
     @Test("recency counts from when the run finished, matching the tray's line")
     func problemsCountFromFinishedAt() {
         var overnight = run(plan: "Docs", at: "2026-09-04 23:00:00", added: 0)

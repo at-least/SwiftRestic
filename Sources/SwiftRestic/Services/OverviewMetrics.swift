@@ -85,6 +85,13 @@ enum OverviewMetrics {
         }
     }
 
+    /// One repository's share of that set: every kind of run against it. A
+    /// check or a prune has no plan, so the repository's page is the only
+    /// place near the repository its failure can be read.
+    static func problems(in runs: [RunRecord], since: Date, repositoryID: UUID) -> [RunRecord] {
+        problems(in: runs, since: since).filter { $0.repositoryID == repositoryID }
+    }
+
     /// The Protection card's rows, one per plan. The lookups arrive as
     /// closures so the derivation stays pure — and testable — while the view
     /// keeps its observation on the model state behind them. `relative`

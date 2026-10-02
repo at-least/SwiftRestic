@@ -28,7 +28,8 @@ struct RootDetailView: View {
     let onEditPlan: (BackupPlan) -> Void
     let onEditRepository: (Repository) -> Void
     let onAddRepository: () -> Void
-    let onAddPlan: () -> Void
+    /// Opens the plan editor, with the repository preset when one is given.
+    let onAddPlan: (_ repositoryID: UUID?) -> Void
     let onRevalidateSelection: () -> Void
     /// The Restore pane's "Search All Backups…": Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
@@ -69,9 +70,7 @@ struct RootDetailView: View {
             } else {
                 switch router.selection {
                 case .overview:
-                    OverviewView(onShowProblems: {
-                        router.selection = .activity
-                    })
+                    OverviewView()
                 case let .plan(id):
                     if let plan = model.plan(id: id) {
                         PlanDetailView(
@@ -86,7 +85,8 @@ struct RootDetailView: View {
                     if let repository = model.repository(id: id) {
                         RepositoryDetailView(
                             repositoryID: repository.id,
-                            onEdit: { onEditRepository(repository) }
+                            onEdit: { onEditRepository(repository) },
+                            onAddPlan: { onAddPlan(repository.id) }
                         )
                     } else {
                         ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
@@ -110,7 +110,7 @@ struct RootDetailView: View {
                 case .none:
                     WelcomeView(
                         onAddRepository: onAddRepository,
-                        onAddPlan: onAddPlan
+                        onAddPlan: { onAddPlan(nil) }
                     )
                 }
             }

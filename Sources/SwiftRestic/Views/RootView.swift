@@ -69,7 +69,7 @@ struct RootView: View {
             onEditPlan: { editingPlan = $0 },
             onEditRepository: { editingRepository = $0 },
             onAddRepository: { editingRepository = Repository() },
-            onAddPlan: { editingPlan = BackupPlan() },
+            onAddPlan: { editingPlan = newPlan(in: $0) },
             onRevalidateSelection: revalidateSelection,
             onSearchAllBackups: { repositoryID, query in
                 findPrefill = FindFilesView.Prefill(repositoryID: repositoryID, pattern: query)
@@ -193,6 +193,15 @@ struct RootView: View {
     private func announceBanner(from old: [Banner], to new: [Banner]) {
         guard new.count > old.count, let banner = new.first else { return }
         AccessibilityNotification.Announcement("\(banner.title). \(banner.message)").post()
+    }
+
+    /// A fresh plan for the editor, its repository preset when the ask came
+    /// from one: the editor fills in the first repository only when none is
+    /// set (`PlanEditorSheet`'s appear), so the preset survives.
+    private func newPlan(in repositoryID: UUID?) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.repositoryID = repositoryID
+        return plan
     }
 
     /// ⌘B: run whichever plan the sidebar is on — when the Plan menu's

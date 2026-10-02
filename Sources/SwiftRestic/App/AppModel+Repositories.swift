@@ -54,9 +54,7 @@ extension AppModel {
     func removalConsequences(for repositoryID: UUID) -> String {
         let names = { (plan: BackupPlan) in plan.name.isEmpty ? "Untitled Plan" : plan.name }
         return Self.removalConsequences(
-            removedPlanNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID }
-                .map(names),
+            removedPlanNames: plans(in: repositoryID).map(names),
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: configuration.plans
                 .filter { $0.repositoryID == repositoryID && activity[$0.id] != nil }
@@ -131,7 +129,7 @@ extension AppModel {
         configuration.repositories.removeAll { $0.id == id }
         // Plan deletion's own bookkeeping, so the two ways a plan goes cannot
         // drift apart; its cancel repeats the one above, which is harmless.
-        for plan in configuration.plans where plan.repositoryID == id {
+        for plan in plans(in: id) {
             deletePlan(id: plan.id)
         }
         // Both sends quitting should drain: an untracked index drop could

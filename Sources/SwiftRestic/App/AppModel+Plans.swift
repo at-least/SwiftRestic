@@ -8,6 +8,12 @@ extension AppModel {
         return configuration.plans.first { $0.id == id }
     }
 
+    /// A repository's plans, in the configuration's order — what its page
+    /// lists and what its removal takes with it.
+    func plans(in repositoryID: UUID) -> [BackupPlan] {
+        configuration.plans.filter { $0.repositoryID == repositoryID }
+    }
+
     func upsert(plan: BackupPlan) {
         if let index = configuration.plans.firstIndex(where: { $0.id == plan.id }) {
             configuration.plans[index] = configuration.plans[index].merging(draft: plan)
