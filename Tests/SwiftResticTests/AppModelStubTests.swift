@@ -464,15 +464,20 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("an uninitialised repository reads as empty, without an error banner")
-    func uninitialisedRepositoryIsQuiet() async throws {
+    @Test("a repository missing at launch surfaces a banner naming it")
+    func missingAtLaunchSurfacesBanner() async throws {
         let harness = try await makeHarness(mode: "missing")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        // Exit code 10 is restic saying "nothing here yet" — a normal state
-        // between adding a repository and its first init, not a failure.
-        #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
-        #expect(harness.model.banners.isEmpty)
+        // Exit code 10 with nothing listed this session: the launch after
+        // the backup disk was unplugged. Saving a new repository creates it
+        // before it is kept, so the app never holds an uninitialised one —
+        // the quiet "nothing here yet" this used to assert was the sidebar
+        // calling an unplugged disk's backups gone.
+        let banner = try #require(harness.model.banners.first, "a missing repository must surface a banner")
+        #expect(banner.isError)
+        #expect(banner.title.contains("Stub Repo"))
+        #expect(banner.message.contains("missing"))
         #expect(harness.model.repositoriesMissingPassword.isEmpty)
 
         await harness.model.shutdown()
@@ -599,14 +604,25 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("an uninitialised repository settles as loaded and empty")
-    func uninitialisedSettlesLoadedEmpty() async throws {
+    @Test("a repository missing at launch fails instead of reading as empty")
+    func missingAtLaunchSettlesFailed() async throws {
         let harness = try await makeHarness(mode: "missing")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .loaded)
+        // The vanished case below, minus the earlier listing: a launch has
+        // read nothing yet, and that must not turn "not there" into "empty".
+        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+            Issue.record("expected a failed outcome for a missing repository, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
+            return
+        }
+        #expect(message.contains("missing"))
+        // The sidebar shows the first sentence on one line, middle-truncated:
+        // a one-sentence message read "The repository is m…repository
+        // settings." there (captured 2026-10-02).
+        #expect(Format.firstSentence(message) == "Repository missing")
+        #expect(message.contains("disk"), "a local repository's likeliest cause is an unplugged disk")
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
-        #expect(harness.model.banners.isEmpty)
+        #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) == nil, "nothing was read, so nothing is fresh")
 
         await harness.model.shutdown()
     }
@@ -671,13 +687,16 @@ struct AppModelStubTests {
         // must come back with no rows, no outcome and no banner.
         let harness = try await makeHarness(mode: "missing")
         defer { try? FileManager.default.removeItem(at: harness.root) }
+        // The launch refresh already announced the missing repository; only
+        // what the refresh after the deletion posts is under test.
+        let bannersBeforeDeletion = harness.model.banners
 
         harness.model.deleteRepository(id: harness.repository.id)
         await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
 
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
         #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .idle)
-        #expect(harness.model.banners.isEmpty)
+        #expect(harness.model.banners == bannersBeforeDeletion)
 
         await harness.model.shutdown()
     }

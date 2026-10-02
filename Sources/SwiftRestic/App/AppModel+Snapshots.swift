@@ -103,26 +103,24 @@ extension AppModel {
                 "Waiting for a repository password — add it in the repository settings to read this repository."
             )
         } catch let ResticError.commandFailed(code, _, _) where code == 10 {
-            // restic's "nothing here yet" — the expected state between adding a
-            // repository and its first init, so it reads as loaded-and-empty.
-            // But when an earlier listing had rows, "does not exist" means the
-            // repository vanished (an unmounted volume, a moved folder), and
-            // emptying the list would trade the user's history for a lie.
+            // restic's "does not exist": the repository is not where it was
+            // saved — an unplugged volume, a moved folder. Never "empty": the
+            // app creates a new repository before keeping it (the editor's
+            // save), so it holds no uninitialised one, and at launch nothing
+            // has been listed yet to tell the two apart — "0 backups" there
+            // read as the history being gone. Earlier rows stay, as for any
+            // failed read. Two sentences, because the sidebar shows only the
+            // first on one line.
             guard configuration.repository(id: repositoryID) != nil else { return }
-            if (snapshots[repositoryID] ?? []).isEmpty {
-                snapshots[repositoryID] = []
-                snapshotListingOutcomes[repositoryID] = .loaded
-                snapshotsLoadedAt[repositoryID] = .now
-            } else {
-                snapshotListingOutcomes[repositoryID] = .failed(
-                    "The repository is missing at its saved location — reconnect the volume or update its path in the repository settings."
-                )
-                post(Banner(
-                    title: "Could not read “\(repository.name)”",
-                    message: "The repository is missing at \(repository.resticRepositoryString).",
-                    isError: true
-                ))
-            }
+            let advice = repository.kind == .local
+                ? "Is its disk connected? If it moved, update its path in the repository settings."
+                : "Check its location in the repository settings."
+            snapshotListingOutcomes[repositoryID] = .failed("Repository missing. \(advice)")
+            post(Banner(
+                title: "Could not read “\(repository.name)”",
+                message: "The repository is missing at \(repository.resticRepositoryString).",
+                isError: true
+            ))
         } catch {
             // Keep whatever an earlier successful listing produced — stale rows
             // beside an error are worth more to a backup user than a blank card
