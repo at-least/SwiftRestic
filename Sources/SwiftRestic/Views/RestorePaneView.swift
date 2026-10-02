@@ -39,6 +39,9 @@ struct RestorePaneView: View {
     /// search results. Several at once, as in Finder (⌘- or ⇧-click):
     /// Restore… restores them together.
     @State private var selection: Set<String> = []
+    /// The tree's or the search results' keyboard focus, whichever is on
+    /// screen — taken by a click in it (`focusOnClick`).
+    @FocusState private var listIsFocused: Bool
     @State private var isLoadingTree = false
     @State private var loadError: String?
     /// Set when the focused folder does not exist in the selected record.
@@ -303,6 +306,7 @@ struct RestorePaneView: View {
                 .tag(row.id)
             }
             .listStyle(.inset)
+            .focusOnClick($listIsFocused)
             // Double-click, the list's way: it expands a folder, as the
             // chevron does, and leaves a file alone. The list also sends
             // Return here — Return is spent in `handleKeyPress` first.
@@ -378,6 +382,7 @@ struct RestorePaneView: View {
             .tag(hit.id)
         }
         .listStyle(.inset)
+        .focusOnClick($listIsFocused)
     }
 
     /// Arq's three ways out of a record, in one row: the primary Restore…

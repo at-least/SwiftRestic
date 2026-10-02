@@ -35,6 +35,9 @@ struct SidebarView: View {
     /// start open, as Arq's tree does, and a record selected from anywhere
     /// reopens its group — the promise `folds` keeps one level up.
     @State private var collapsedLineages: Set<LineageFoldID> = []
+    /// Taken back by a click in the sidebar (`focusOnClick`), once a click
+    /// in the restore tree has taken it away.
+    @FocusState private var isFocused: Bool
 
     let onEditPlan: (BackupPlan) -> Void
     /// Opens the plan editor, with the repository preset when one is given.
@@ -100,6 +103,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .focusOnClick($isFocused)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         .safeAreaInset(edge: .bottom) { sidebarFooter }
         // The keyboard an outline gives its disclosure rows: with a plan
