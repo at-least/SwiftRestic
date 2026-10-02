@@ -6,6 +6,9 @@ struct ActivityView: View {
     /// Route from a failure to the plan that owns it.
     var onOpenPlan: ((UUID) -> Void)?
     @State private var selection: RunRecord.ID?
+    /// Taken by a click in the table (`focusOnClick`), so ↑ and ↓ walk the
+    /// runs rather than the sidebar out of Activity.
+    @FocusState private var tableIsFocused: Bool
     @State private var isConfirmingClear = false
     /// The drawer's Compare with Previous… and Show Log… sheets.
     @State private var comparing: SnapshotDiffTarget?
@@ -144,6 +147,7 @@ struct ActivityView: View {
                 // it is the alternating behavior that gets disabled; the
                 // outcome glyphs and the Detail column keep rows scannable.
                 .alternatingRowBackgrounds(.disabled)
+                .focusOnClick($tableIsFocused)
                 // Wiping the history is rare and final, so it is not chrome:
                 // a right-click on the list, behind the same confirmation.
                 .contextMenu(forSelectionType: RunRecord.ID.self) { _ in

@@ -36,6 +36,13 @@ struct FolderBrowserView: View {
     @State private var chosen: IndexVersion?
     @State private var nodes: [SnapshotNode] = []
     @State private var selection: SnapshotNode.ID?
+    /// Taken by a click in the list (`focusOnClick`), so Return opens the
+    /// folder clicked rather than reaching Restore Selected….
+    @FocusState private var listIsFocused: Bool
+    /// Whether the list had the keyboard when a load took it off screen:
+    /// the spinner stands in for the List while a folder loads, and the
+    /// List comes back as a new view, without focus.
+    @State private var listHadFocus = false
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var indexComplete = false
@@ -174,6 +181,9 @@ struct FolderBrowserView: View {
                     .tag(node.id)
             }
             .listStyle(.inset)
+            .focusOnClick($listIsFocused)
+            .onDisappear { listHadFocus = listIsFocused }
+            .onAppear { if listHadFocus { listIsFocused = true } }
             .contextMenu(forSelectionType: SnapshotNode.ID.self) { _ in
                 EmptyView()
             } primaryAction: { ids in

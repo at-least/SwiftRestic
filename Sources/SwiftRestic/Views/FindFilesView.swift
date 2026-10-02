@@ -52,6 +52,10 @@ struct FindFilesView: View {
     /// The sheet exists to answer one question, so the field that receives it
     /// takes focus on arrival — typing starts immediately.
     @FocusState private var patternFieldIsFocused: Bool
+    /// Taken by a click in the results (`focusOnClick`): left in the
+    /// pattern field, Return searched again — clearing the selection —
+    /// instead of reaching Restore Selected….
+    @FocusState private var resultsAreFocused: Bool
     /// The restore waiting in the destination sheet, over this one.
     @State private var destinationRequest: RestoreDestinationRequest?
 
@@ -243,6 +247,7 @@ struct FindFilesView: View {
                 }
                 .width(min: 70, ideal: 84)
             }
+            .focusOnClick($resultsAreFocused)
             // An explicit right-click route to the restore the footer button
             // offers. Double-click deliberately does nothing: an accidental
             // double-tap must not start moving bytes.
