@@ -94,8 +94,13 @@ struct RootView: View {
                 .environment(model)
         }
         .sheet(item: $editingRepository) { repository in
-            RepositoryEditorSheet(repository: repository)
-                .environment(model)
+            // A new repository lands on its own page, where "New Backup
+            // Plan…" is the first thing it offers — the next step after
+            // adding one, which the user once could not find.
+            RepositoryEditorSheet(repository: repository, onCreated: { id in
+                router.selection = .repository(id)
+            })
+            .environment(model)
         }
         .sheet(isPresented: $isShowingFind, onDismiss: { findPrefill = nil }) {
             FindFilesView(prefill: prefill).environment(model)
@@ -279,7 +284,9 @@ struct RootView: View {
         }
         switch intent {
         case .newPlan:
-            editingPlan = BackupPlan()
+            // Into the repository on screen — the one the Repository menu
+            // acts on — or the editor's own default when there is none.
+            editingPlan = newPlan(in: model.commandRepositoryID(for: router.selection))
         case .newRepository:
             editingRepository = Repository()
         case .showFind:

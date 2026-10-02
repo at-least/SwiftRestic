@@ -24,11 +24,16 @@ struct RepositoryEditorSheet: View {
     @State private var rcloneRemotes: [RcloneRemote]?
 
     private let isNew: Bool
+    /// Told the new repository's id once it is created and saved — never on
+    /// an edit, a cancel or a failed probe — so the window can open the
+    /// page that offers its first plan.
+    private let onCreated: (UUID) -> Void
 
     private enum Tab: Hashable { case repository, hooks }
 
-    init(repository: Repository) {
+    init(repository: Repository, onCreated: @escaping (UUID) -> Void = { _ in }) {
         _draft = State(initialValue: repository)
+        self.onCreated = onCreated
         isNew = repository.name.isEmpty && repository.localPath.isEmpty
         #if DEBUG
         // Debug-only: lets a capture run land on the Hooks tab.
@@ -483,6 +488,7 @@ struct RepositoryEditorSheet: View {
         )
         await model.flushSave()
         await model.refreshSnapshots(repositoryID: draft.id)
+        if isNew { onCreated(draft.id) }
         dismiss()
     }
 }
