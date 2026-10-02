@@ -522,6 +522,12 @@ extension SnapshotNode {
 /// The keyboard grammar the browsers' lists speak, and the parent step their
 /// go-up buttons take.
 enum BrowserListGrammar {
+    /// The ⌫ key as `onKeyPress` delivers it: U+007F, what AppKit's Delete
+    /// key types. SwiftUI's `KeyEquivalent.delete` is U+0008, which ⌫ never
+    /// matched — a probe list's handler received 127 for it on macOS 26 —
+    /// so ⌫ went up nowhere.
+    static let deleteKey = KeyEquivalent("\u{7F}")
+
     /// The lists' keyboard grammar. Everything unrecognised returns
     /// `.ignored` so the List keeps its own arrow-key selection movement.
     /// Return opens the selected directory through `open`; ⌫ and ⌘↑ ascend
@@ -541,7 +547,7 @@ enum BrowserListGrammar {
                 return .handled
             }
             return .ignored
-        case .delete:
+        case deleteKey:
             guard hasParent else { return .ignored }
             goUp()
             return .handled
