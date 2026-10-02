@@ -122,8 +122,8 @@ enum PlanStatus {
     /// card and the tray read, so the page cannot show a date nothing will
     /// fire at. A paused plan says so instead of
     /// "Manually" — a paused manual one without promising a schedule to
-    /// resume; an enabled plan the scheduler skips — no repository, a
-    /// repository since removed, no folders — says it is not scheduled.
+    /// resume; an enabled plan the scheduler skips — no folders, or a
+    /// repository it cannot find — says it is not scheduled.
     /// A timed pause, the plan's own or the app-wide `hold`, moves the date
     /// to its end; under an open-ended hold a run already due reads
     /// "Waiting", as on the Overview's card, never "Due now". A due slot
@@ -239,8 +239,8 @@ enum PlanStatus {
     /// news, so a paused plan with a standing problem gets both — the
     /// problem first, beside its glyph, and the pause on a line of its own
     /// (before, the pause took the line and an unseen problem showed only
-    /// as the dot). A never-run plan the scheduler skips — no repository, a
-    /// repository since removed, no folders — reads "Not scheduled", as its
+    /// as the dot). A never-run plan the scheduler skips — no folders, or a
+    /// repository it cannot find — reads "Not scheduled", as its
     /// Next backup value does, rather than a schedule it will not keep.
     static func sidebarCaption(
         for plan: BackupPlan,

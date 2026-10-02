@@ -1371,6 +1371,126 @@ struct IndexOrphanSweepLaunchTests {
     }
 }
 
+/// Launch's orphan-plan purge, through `bootstrap`: a plan whose repository
+/// is gone — left by a removal from before plans followed their repository
+/// out — is deleted, and the deletion is saved. Only from a repository list
+/// that read whole, for the index sweep's reason: every other load can miss
+/// a live repository, and its plans would read as orphans.
+@Suite("orphan plan purge at launch")
+@MainActor
+struct OrphanPlanPurgeLaunchTests {
+    private struct Folder {
+        var root: URL
+        var config: URL
+        var attached: BackupPlan
+        /// No repository at all: what `deleteRepository` used to leave.
+        var detached: BackupPlan
+        /// A repository id no configured repository has.
+        var dangling: BackupPlan
+    }
+
+    /// A configuration folder naming one repository (no password stored, so
+    /// the launch refresh never runs restic) and three plans, left the way
+    /// `load` says.
+    private func makeFolder(_ load: IndexOrphanSweepLaunchTests.Load?) throws -> Folder {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticOrphanPlans-\(UUID().uuidString)")
+        let config = root.appendingPathComponent("config")
+        try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+
+        var repository = Repository()
+        repository.name = "Kept"
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+        func plan(_ name: String, repositoryID: UUID?) -> BackupPlan {
+            var plan = BackupPlan()
+            plan.name = name
+            plan.repositoryID = repositoryID
+            plan.sources = [root.path]
+            plan.schedule.frequency = .manual
+            plan.isEnabled = repositoryID == repository.id
+            return plan
+        }
+        let folder = Folder(
+            root: root,
+            config: config,
+            attached: plan("Attached", repositoryID: repository.id),
+            detached: plan("Detached", repositoryID: nil),
+            dangling: plan("Dangling", repositoryID: UUID())
+        )
+        var configuration = AppConfiguration()
+        configuration.repositories = [repository]
+        configuration.plans = [folder.detached, folder.attached, folder.dangling]
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let whole = try encoder.encode(configuration)
+        let live = config.appendingPathComponent("config.json")
+        switch load {
+        case nil:
+            try whole.write(to: live)
+        case .unreadable:
+            for name in ["config.json", "config.json.1", "config.json.2"] {
+                try Data("{ not json".utf8).write(to: config.appendingPathComponent(name))
+            }
+        case .recovered:
+            try Data("{ not json".utf8).write(to: live)
+            try whole.write(to: config.appendingPathComponent("config.json.1"))
+        case .substitutedID:
+            // The repository's own `id` does not read, so it decodes with a
+            // fresh one and the attached plan's id names nothing — the plan
+            // the gate exists to keep.
+            let text = String(decoding: whole, as: UTF8.self)
+            let marker = "\"id\":\"\(repository.id.uuidString)\""
+            try #require(text.contains(marker))
+            try Data(text.replacingOccurrences(of: marker, with: "\"id\":\"not-a-uuid\"").utf8).write(to: live)
+        }
+        return folder
+    }
+
+    /// The plans after launch, and the plans a fresh read of the folder finds.
+    private func launch(in folder: Folder) async throws -> (memory: [UUID], disk: [UUID]?) {
+        let store = ConfigStore(directory: folder.config)
+        let model = AppModel(store: store, secrets: .inMemory())
+        await model.bootstrap()
+        let memory = model.configuration.plans.map(\.id)
+        await model.flushSave()
+        await model.shutdown()
+        let disk = try? await ConfigStore(directory: folder.config).load().configuration.plans.map(\.id)
+        return (memory, disk)
+    }
+
+    @Test("a whole configuration deletes the plans whose repository is gone, and saves it")
+    func wholeConfigurationPurges() async throws {
+        let folder = try makeFolder(nil)
+        defer { try? FileManager.default.removeItem(at: folder.root) }
+
+        let plans = try await launch(in: folder)
+
+        #expect(plans.memory == [folder.attached.id])
+        #expect(plans.disk == [folder.attached.id], "the purge was not saved")
+    }
+
+    @Test("a configuration that did not read whole deletes no plan", arguments: IndexOrphanSweepLaunchTests.Load.allCases)
+    func partialConfigurationKeepsPlans(_ load: IndexOrphanSweepLaunchTests.Load) async throws {
+        let folder = try makeFolder(load)
+        defer { try? FileManager.default.removeItem(at: folder.root) }
+
+        let plans = try await launch(in: folder)
+
+        let all = [folder.detached.id, folder.attached.id, folder.dangling.id]
+        switch load {
+        case .unreadable:
+            // Nothing read, so nothing is in memory — and nothing may reach
+            // the files, which still hold every plan in their backup copies.
+            #expect(plans.memory.isEmpty)
+            #expect(plans.disk == nil)
+        case .recovered, .substitutedID:
+            #expect(plans.memory == all, "a plan was purged after a \(load) load")
+            #expect(plans.disk == all, "a purge reached the file after a \(load) load")
+        }
+    }
+}
+
 /// When no generation of the configuration reads, the files on disk are the
 /// only good copy left — and every save's rotation would shuffle the corrupt
 /// live file over them. Refusing saves is the whole protection.

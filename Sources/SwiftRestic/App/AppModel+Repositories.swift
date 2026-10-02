@@ -54,7 +54,7 @@ extension AppModel {
     func removalConsequences(for repositoryID: UUID) -> String {
         let names = { (plan: BackupPlan) in plan.name.isEmpty ? "Untitled Plan" : plan.name }
         return Self.removalConsequences(
-            pausedPlanNames: configuration.plans
+            removedPlanNames: configuration.plans
                 .filter { $0.repositoryID == repositoryID }
                 .map(names),
             isRestoring: restoreRepositoryID == repositoryID,
@@ -69,19 +69,19 @@ extension AppModel {
     /// Pure so the dialog's wording can be tested without a live model — the
     /// console's running state is `private(set)`, and the sentence, not the
     /// bookkeeping, is what needs testing.
-    /// The plans are named: the repository page lists none of them, and
-    /// this is the moment their names matter — `deleteRepository` pauses
-    /// each one.
+    /// The plans are named: a plan follows its repository out, so this is
+    /// the last moment their names can be read — `deleteRepository`
+    /// removes each one.
     nonisolated static func removalConsequences(
-        pausedPlanNames: [String],
+        removedPlanNames: [String],
         isRestoring: Bool,
         runningBackupNames: [String],
         isMaintaining: Bool,
         isConsoleRunning: Bool
     ) -> String {
         var consequences = "The backup data itself is not deleted."
-        if !pausedPlanNames.isEmpty {
-            consequences += " Plans pointing at it will be paused (\(pausedPlanNames.joined(separator: ", ")))."
+        if !removedPlanNames.isEmpty {
+            consequences += " Its plans will be removed too (\(removedPlanNames.joined(separator: ", ")))."
         }
         if isRestoring {
             consequences += " A restore from this repository is running and will be cancelled."
@@ -98,7 +98,10 @@ extension AppModel {
         return consequences
     }
 
-    /// Removes a repository from the app. The data in the repository is untouched.
+    /// Removes a repository from the app, and its plans with it: a plan
+    /// belongs to its repository, and one pointing nowhere could never run
+    /// again. The data in the repository is untouched, and so is the run
+    /// history.
     ///
     /// Work in flight against it is cancelled first, and the tasks' unwind
     /// writes the run records itself — a cancelled run beats one that finishes
@@ -126,9 +129,10 @@ extension AppModel {
         // nor a line until the unwind lands.
         clearRuntimeState(repositoryID: id)
         configuration.repositories.removeAll { $0.id == id }
-        for index in configuration.plans.indices where configuration.plans[index].repositoryID == id {
-            configuration.plans[index].repositoryID = nil
-            configuration.plans[index].isEnabled = false
+        // Plan deletion's own bookkeeping, so the two ways a plan goes cannot
+        // drift apart; its cancel repeats the one above, which is harmless.
+        for plan in configuration.plans where plan.repositoryID == id {
+            deletePlan(id: plan.id)
         }
         // Both sends quitting should drain: an untracked index drop could
         // recreate the file it was deleting, and an untracked keychain

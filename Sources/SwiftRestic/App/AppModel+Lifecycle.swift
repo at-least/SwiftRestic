@@ -192,6 +192,16 @@ extension AppModel {
             tasks.addBackground(Task { [indexCoordinator] in
                 await indexCoordinator.sweepOrphanFiles(configured: configured)
             })
+            // Plans whose repository is gone — left by removals from before a
+            // plan followed its repository out, or by a repository deleted
+            // from config.json by hand — are deleted, under the same gate and
+            // for the same reason: a recovered or substituted list can miss a
+            // live repository, whose plans would then read as orphans. Before
+            // the refresh and the scheduler, which would otherwise see them;
+            // the configuration's own save writes the deletion back once.
+            for plan in configuration.plans where plan.repositoryID.map(configured.contains) != true {
+                deletePlan(id: plan.id)
+            }
         }
         let loginItem = await Task.detached { LoginItem.state }.value
         startsAtLogin = loginItem == .enabled

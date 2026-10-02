@@ -6,24 +6,23 @@ import Testing
 /// the dialog understates the interruption it asks to approve.
 @Suite("Repository removal consequences")
 struct RemovalConsequencesTests {
-    @Test("a quiet repository's removal names the plans it pauses and touches nothing in flight")
+    @Test("a quiet repository's removal names the plans it removes and touches nothing in flight")
     func quiet() {
-        // The repository page no longer lists the plans that use it
-        // (b5248e6), so the one moment that needs the names — before they
-        // are paused — says them.
+        // A plan follows its repository out, so the dialog that approves the
+        // removal names every plan that goes with it.
         #expect(
             AppModel.removalConsequences(
-                pausedPlanNames: ["Documents", "Photos"],
+                removedPlanNames: ["Documents", "Photos"],
                 isRestoring: false,
                 runningBackupNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
-            ) == "The backup data itself is not deleted. Plans pointing at it will be paused (Documents, Photos)."
+            ) == "The backup data itself is not deleted. Its plans will be removed too (Documents, Photos)."
         )
-        // No plan uses it: nothing is paused, so nothing says so.
+        // No plan uses it: nothing is removed with it, so nothing says so.
         #expect(
             AppModel.removalConsequences(
-                pausedPlanNames: [],
+                removedPlanNames: [],
                 isRestoring: false,
                 runningBackupNames: [],
                 isMaintaining: false,
@@ -35,7 +34,7 @@ struct RemovalConsequencesTests {
     @Test("every kind of work in flight gets its own clause")
     func clauses() {
         let sentence = AppModel.removalConsequences(
-            pausedPlanNames: ["Nightly"],
+            removedPlanNames: ["Nightly"],
             isRestoring: true,
             runningBackupNames: ["Nightly", "Untitled Plan"],
             isMaintaining: true,

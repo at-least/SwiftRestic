@@ -1199,19 +1199,31 @@ struct AppModelStubTests {
 
     // MARK: - Deletion
 
-    @Test("deleting a repository detaches and disables its plans")
-    func deletingRepositoryDisablesPlans() async throws {
+    @Test("deleting a repository removes its plans and keeps every other repository's")
+    func deletingRepositoryRemovesItsPlans() async throws {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
+        var other = Repository()
+        other.name = "Other Repo"
+        other.kind = .local
+        other.localPath = harness.root.appendingPathComponent("other").path
+        var kept = BackupPlan()
+        kept.name = "Kept Plan"
+        kept.repositoryID = other.id
+        kept.sources = [harness.root.path]
+        kept.schedule.frequency = .manual
+        harness.model.configuration.repositories.append(other)
+        harness.model.configuration.plans.append(kept)
+        let runsBefore = harness.model.configuration.runs
 
         harness.model.deleteRepository(id: harness.repository.id)
 
-        #expect(harness.model.configuration.repositories.isEmpty)
-        // The plan survives but must never run against a repository the app no
-        // longer knows.
-        let plan = try #require(harness.model.plan(id: harness.plan.id))
-        #expect(plan.repositoryID == nil)
-        #expect(!plan.isEnabled)
+        #expect(harness.model.configuration.repositories.map(\.id) == [other.id])
+        // A plan follows its repository out: no plan is left pointing nowhere.
+        #expect(harness.model.plan(id: harness.plan.id) == nil)
+        #expect(harness.model.configuration.plans == [kept])
+        // The history is the record of what ran; removal does not rewrite it.
+        #expect(harness.model.configuration.runs == runsBefore)
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
 
         await harness.model.shutdown()
