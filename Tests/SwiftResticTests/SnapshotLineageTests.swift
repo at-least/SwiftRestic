@@ -113,23 +113,33 @@ struct SnapshotLineageTests {
         #expect(mixed[h1.lineageKey]?.detail == "/Data/Docs — from mac\nBacked up by Hourly Docs and outside SwiftRestic")
     }
 
-    @Test("the model regroups a repository's listing when it is written, not when a view asks")
+    @Test("the model re-sorts a repository's backups when its listing or its plans are written, not when a view asks")
     @MainActor
-    func modelKeepsLineagesInStep() throws {
+    func modelKeepsShelvesInStep() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticLineages-\(UUID().uuidString)")
         let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
         let repositoryID = UUID()
-        let docs = try snapshot("d1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Docs"])
+        var plan = BackupPlan()
+        plan.repositoryID = repositoryID
+        let docs = try snapshot("d1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Docs"],
+                                tags: [ResticService.planTag(plan.id)])
         let photos = try snapshot("p1", time: "2026-09-25T03:00:00Z", paths: ["/Data/Photos"])
 
-        #expect(model.lineages(for: repositoryID).isEmpty)
+        #expect(model.backupShelves[repositoryID] == nil)
         model.snapshots[repositoryID] = [docs, photos]
-        #expect(model.lineages(for: repositoryID).map { $0.snapshots.map(\.id) } == [["d1"], ["p1"]])
+        #expect(model.shelves(for: repositoryID).others.map { $0.snapshots.map(\.id) } == [["d1"], ["p1"]])
+        // The plan arrives: its backup moves under it.
+        model.configuration.plans = [plan]
+        #expect(model.shelves(for: repositoryID).byPlan[plan.id]?.map(\.id) == ["d1"])
+        #expect(model.shelves(for: repositoryID).others.map { $0.snapshots.map(\.id) } == [["p1"]])
+        // It moves to another repository: what it left here is other again.
+        model.configuration.plans[0].repositoryID = UUID()
+        #expect(model.shelves(for: repositoryID).byPlan.isEmpty)
         model.snapshots[repositoryID] = [photos]
-        #expect(model.lineages(for: repositoryID).map { $0.snapshots.map(\.id) } == [["p1"]])
+        #expect(model.shelves(for: repositoryID).others.map { $0.snapshots.map(\.id) } == [["p1"]])
         model.snapshots[repositoryID] = nil
-        #expect(model.lineages(for: repositoryID).isEmpty)
+        #expect(model.backupShelves[repositoryID] == nil)
     }
 
     @Test("a plan whose folders changed, or a second host, is told apart in the qualifier")
@@ -191,7 +201,8 @@ struct SnapshotLineageTests {
         #expect(RestoreRecordHeading(record: after, label: nil, comparison: nil).name == "Clients, Work")
         #expect(SnapshotLineage.displayName(of: after, label: nil) == "Clients, Work")
 
-        // The model's lookup reads the same lineages and plans the sidebar does.
+        // The model's lookup reads the same shelves and plans the sidebar
+        // does. Work backs up elsewhere: here its backups are Other backups.
         let model = AppModel(
             store: ConfigStore(directory: FileManager.default.temporaryDirectory
                 .appendingPathComponent("SwiftResticHeading-\(UUID().uuidString)")),
@@ -200,8 +211,40 @@ struct SnapshotLineageTests {
         let repositoryID = UUID()
         model.configuration.plans = [work]
         model.snapshots[repositoryID] = [after, before]
-        #expect(model.lineageLabel(of: before, repositoryID: repositoryID) == workLabels[before.lineageKey])
-        #expect(model.lineageLabel(of: docs, repositoryID: repositoryID) == nil)
+        #expect(model.recordLabel(of: before, repositoryID: repositoryID) == workLabels[before.lineageKey])
+        #expect(model.recordLabel(of: docs, repositoryID: repositoryID) == nil)
+        // Work backs up here: its backups sit under it, named for it, with
+        // the folders that tell its two sets apart.
+        model.configuration.plans[0].repositoryID = repositoryID
+        #expect(model.recordLabel(of: before, repositoryID: repositoryID) == workLabels[before.lineageKey])
+    }
+
+    @Test("a backup under its plan is named for that plan, even in a lineage another writer shares")
+    @MainActor
+    func restoreHeaderNamesThePlan() throws {
+        let repositoryID = UUID()
+        var hourly = BackupPlan()
+        hourly.name = "Hourly Docs"
+        hourly.repositoryID = repositoryID
+        let h1 = try snapshot("h1", time: "2026-09-25T03:00:00Z", paths: ["/Data/Docs"],
+                              tags: [ResticService.planTag(hourly.id)])
+        // The console backed up the same folders: one lineage, which the
+        // lineage rule names after its folders, "Docs".
+        let console = try snapshot("c1", time: "2026-09-26T05:00:00Z", paths: ["/Data/Docs"])
+        let model = AppModel(
+            store: ConfigStore(directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("SwiftResticHeading-\(UUID().uuidString)")),
+            secrets: .inMemory()
+        )
+        model.configuration.plans = [hourly]
+        model.snapshots[repositoryID] = [console, h1]
+
+        // The sidebar shows h1 under Hourly Docs, so the header says so.
+        #expect(SnapshotLineage.displayName(of: h1, label: model.recordLabel(of: h1, repositoryID: repositoryID))
+            == "Hourly Docs")
+        // The console's backup sits under Other backups, named for its folders.
+        #expect(SnapshotLineage.displayName(of: console, label: model.recordLabel(of: console, repositoryID: repositoryID))
+            == "Docs")
     }
 
     @Test("a plan's Restore Files… lands on the plan's own newest backup, not the repository's")

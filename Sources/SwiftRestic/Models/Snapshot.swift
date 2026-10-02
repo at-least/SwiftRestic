@@ -238,7 +238,7 @@ extension Snapshot {
     /// unrelated trees side by side. Diffing against "the row above" in that list
     /// shows every file as added and every other file as removed, which is noise;
     /// this mirrors restic's own `--group-by host,paths` grouping instead —
-    /// the same `SnapshotLineage` a Restore node groups records by.
+    /// the same `SnapshotLineage` Other backups groups records by.
     func previousComparable(in snapshots: [Snapshot]) -> Snapshot? {
         let key = lineageKey
         return snapshots

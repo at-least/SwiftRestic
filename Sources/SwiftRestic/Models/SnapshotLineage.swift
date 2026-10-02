@@ -5,7 +5,7 @@ import Foundation
 /// `--group-by host,paths`.
 ///
 /// The app's single answer to "the same backup, over time". A repository's
-/// Restore node groups its records by it, and both the restore pane's
+/// Other backups node groups its records by it, and both the restore pane's
 /// Change column and the Compare sheet default to the previous snapshot in
 /// it. Retention is narrower on purpose: `forget` runs per plan
 /// (`--tag <plan>`), and restic groups that plan's snapshots by host+paths —
@@ -76,7 +76,7 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
 }
 
 extension SnapshotLineage {
-    /// How a Restore node names one lineage among its repository's others.
+    /// How a group of backups is named among the others shown beside it.
     struct Label: Equatable, Sendable {
         var title: String
         /// What tells two lineages apart when the title alone cannot: the
@@ -88,7 +88,8 @@ extension SnapshotLineage {
         var detail: String
     }
 
-    /// Names for `lineages`, all of one repository: the plan's name when one
+    /// Names for `lineages`, all of one repository and shown together: the
+    /// plan's name when one
     /// existing plan wrote every snapshot in the lineage, otherwise the
     /// folders' names, with who wrote them in the tooltip. A group two plans
     /// share (or one plan and the Console) must not wear one plan's name —
@@ -152,7 +153,7 @@ extension SnapshotLineage {
 
     /// The one existing plan every snapshot in the lineage carries the tag
     /// of, or nil when the lineage mixes writers or its plan is gone.
-    private static func soleWriter(of lineage: SnapshotLineage, plans: [BackupPlan]) -> BackupPlan? {
+    static func soleWriter(of lineage: SnapshotLineage, plans: [BackupPlan]) -> BackupPlan? {
         guard lineage.planTags.count == 1, !lineage.hasSnapshotsWithoutPlan,
               let tag = lineage.planTags.first
         else { return nil }

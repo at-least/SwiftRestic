@@ -42,9 +42,10 @@ struct RepositoryDetailView: View {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
                 .help("Re-read snapshots and statistics")
-                // Arq's restore entry: open this repository's Restore node
-                // in the sidebar and select its newest backup record —
-                // the Restore pane does the rest. Disabled while no records
+                // Arq's restore entry: select this repository's newest
+                // backup record, which opens its fold in the sidebar — its
+                // plan's or Other backups — and the Restore pane does the
+                // rest. Disabled while no records
                 // exist; loading them is Refresh's job, not a side effect.
                 Button("Restore Files…", systemImage: "arrow.down.doc") {
                     if let latest = model.newestRecord(repositoryID: repositoryID) {
@@ -53,7 +54,7 @@ struct RepositoryDetailView: View {
                 }
                 .labelStyle(.titleAndIcon)
                 .disabled(model.snapshots(for: repositoryID).isEmpty)
-                .help("Browse backups and restore files — expands Restore on the left and selects the newest backup")
+                .help("Browse backups and restore files — selects the newest backup in the sidebar")
                 Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                     .labelStyle(.titleAndIcon)
                     .help("Change this repository's location, credentials and maintenance")
@@ -80,8 +81,8 @@ struct RepositoryDetailView: View {
 
             // Arq's storage-location page, plus the two numbers a backup
             // user asks of a destination: how big, and how full is its disk.
-            // The backups themselves are the sidebar's, under this
-            // repository's Restore node.
+            // The backups themselves are the sidebar's, under the plans
+            // that made them.
             Card("Details") {
                 VStack(alignment: .leading, spacing: 10) {
                     DetailGrid {

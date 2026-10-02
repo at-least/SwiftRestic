@@ -13,10 +13,10 @@ struct RootDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
 
-    /// Which repositories' Restore nodes are open — selecting a record
-    /// from anywhere (the repository page's Restore Files button included)
-    /// must find its group open in the sidebar.
-    @Binding var expandedRestoreRepos: Set<UUID>
+    /// Which plans and Other backups are open in the sidebar — selecting a
+    /// record from anywhere (the repository page's Restore Files button
+    /// included) must find its fold open.
+    @Binding var folds: SidebarFolds
 
     /// Debug-capture state: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record
     /// rows the pane needs land with the first listing, so the selection
@@ -122,11 +122,13 @@ struct RootDetailView: View {
             onRevalidateSelection()
         }
         // A restore record picked from anywhere (the repository page's
-        // Restore Files button included) must find its group open.
+        // Restore Files button included) must find its fold open: its
+        // plan's, or its repository's Other backups.
         .onChange(of: router.selection) {
-            if case let .restoreSnapshot(repositoryID, _) = router.selection {
-                expandedRestoreRepos.insert(repositoryID)
-            }
+            guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
+                  let record = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
+            else { return }
+            folds.reveal(record, in: repositoryID, plans: model.plans(in: repositoryID))
         }
         // A refresh can drop the selected record (retention ran, the
         // repository was re-initialised); the pane must not dead-end.
@@ -142,7 +144,6 @@ struct RootDetailView: View {
                   let latest = model.snapshots(for: repository.id).first
             else { return }
             pendingCaptureRestore = false
-            expandedRestoreRepos.insert(repository.id)
             router.selection = .restoreSnapshot(repository.id, latest.id)
         }
         #endif

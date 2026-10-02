@@ -450,8 +450,8 @@ struct SnapshotFreshnessLabel: View {
 
 // MARK: - Snapshot completeness
 
-/// A snapshot's completeness, where snapshots are named (the Restore
-/// sidebar, Activity's run drawer). Only trouble wears a glyph — the rule
+/// A snapshot's completeness, where snapshots are named (the sidebar's
+/// backups, Activity's run drawer). Only trouble wears a glyph — the rule
 /// Activity's outcome column follows — and it is the completed-with-errors
 /// triangle, because that is what the run behind it was. A known-complete
 /// snapshot keeps an invisible "Complete" for VoiceOver; one with no run

@@ -73,7 +73,7 @@ extension AppModel {
         // backup as the sheet that started it did (SnapshotLineage's one
         // naming rule); the record keeps the ID, the drawer's vocabulary.
         let backup = snapshots(for: repositoryID).first { $0.id == snapshotID || $0.shortID == snapshotID }
-        let name = backup.map { SnapshotLineage.displayName(of: $0, label: lineageLabel(of: $0, repositoryID: repositoryID)) }
+        let name = backup.map { SnapshotLineage.displayName(of: $0, label: recordLabel(of: $0, repositoryID: repositoryID)) }
         beginRestore(
             repositoryID: repositoryID,
             label: "snapshot \(snapshotID.prefix(8))",
@@ -270,7 +270,7 @@ extension AppModel {
         // saying *why* right here, at drag start, beats a drop that Finder
         // refuses with no explanation of its own.
         guard let repository = repository(id: repositoryID) else {
-            postDragImpossibleBanner("The repository no longer exists — pick a backup from a current repository under Restore.")
+            postDragImpossibleBanner("The repository no longer exists — pick a backup from a current repository in the sidebar.")
             return provider
         }
         guard let service = try? service() else {

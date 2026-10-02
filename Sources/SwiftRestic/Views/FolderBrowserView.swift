@@ -204,7 +204,7 @@ struct FolderBrowserView: View {
                     onShowInRestore(record.id, folder)
                 }
                 .disabled(restoreRecord == nil)
-                .help("Open this version under Restore at this folder — drag to Finder, see what changed, or restore the whole backup")
+                .help("Open this version in the Restore pane at this folder — drag to Finder, see what changed, or restore the whole backup")
                 Spacer()
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)

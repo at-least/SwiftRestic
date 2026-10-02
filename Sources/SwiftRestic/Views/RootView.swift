@@ -31,9 +31,9 @@ struct RootView: View {
     @State private var pendingConfirmation: CommandConfirmation?
     /// Apply Retention Now…'s sheet, for the plan it previews.
     @State private var retentionTarget: RetentionTarget?
-    /// Which repositories' Restore nodes are open in the sidebar — the
-    /// backup records underneath are the restore pane's entry points.
-    @State private var expandedRestoreRepos: Set<UUID> = []
+    /// Which plans and Other backups are open in the sidebar — the backup
+    /// records underneath are the restore pane's entry points.
+    @State private var sidebarFolds = SidebarFolds()
     #if DEBUG
     @State private var didApplyCaptureOverride = false
     #endif
@@ -52,7 +52,7 @@ struct RootView: View {
 
     private var sidebar: some View {
         SidebarView(
-            expandedRestoreRepos: $expandedRestoreRepos,
+            folds: $sidebarFolds,
             onEditPlan: { editingPlan = $0 },
             onNewPlan: { editingPlan = newPlan(in: $0) },
             onEditRepository: { editingRepository = $0 },
@@ -64,7 +64,7 @@ struct RootView: View {
 
     private var detail: some View {
         RootDetailView(
-            expandedRestoreRepos: $expandedRestoreRepos,
+            folds: $sidebarFolds,
             pendingCaptureRestore: $pendingCaptureRestore,
             onEditPlan: { editingPlan = $0 },
             onEditRepository: { editingRepository = $0 },

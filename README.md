@@ -41,8 +41,12 @@ checked in so a normal build does not need it.
 ## What it does
 
 - **Repositories in the sidebar** — each repository is a row with its backup
-  plans and its *Restore* node always in view beneath it; a repository with
-  no plan yet shows *New Backup Plan…* where its plans would be. A
+  plans always in view beneath it, and each plan folds open to the backups it
+  made there; a repository with no plan yet shows *New Backup Plan…* where
+  its plans would be. Backups no plan of the repository made — from another
+  Mac or the restic console, a deleted plan, or a plan that now backs up to
+  another repository — sit under *Other backups*, grouped by the folders and
+  Mac they came from (restic's own `host,paths` grouping). A
   repository wears a warning while one of its plans is not protected — its
   backups cannot be read, a plan has no backup, or a plan's last backup
   failed; the warning's tooltip names the plan.
@@ -67,7 +71,7 @@ checked in so a normal build does not need it.
   the menu bar, the repository pages and Settings say that backups wait for power
   instead of announcing runs that will not start.
 - **Browsing and restore** — every *Browse*, *Restore Files…* and *Show in
-  Restore* opens the one browser, under the repository's Restore node: a
+  Restore* opens the one browser, at that backup in the sidebar: a
   backup's folders as a tree, with a Change column and search, and three ways
   to restore — drag an item to Finder, select one and choose *Restore…*, or
   *Restore Entire Backup…*, which recreates its folders under their full
@@ -82,12 +86,11 @@ checked in so a normal build does not need it.
   confirming first when something is actually there to replace. restic before
   0.17 has no `--overwrite`; with such a restic, keeping restores a folder or a
   whole backup only where nothing is there yet, and refuses otherwise. The
-  sidebar's Restore node under each repository folds open to its backups,
-  grouped by the folders and Mac they came from (restic's own `host,paths`
-  grouping) once there is more than one such group. The file list's Change column compares
-  each backup with the previous one in its group; the pane's header names the
-  open backup and says what its Change column is compared with, or that it is
-  the first of its group. On a plan's page, *Browse
+  file list's Change column compares each backup with the previous one of the
+  same folders from the same Mac — not merely the row below it, which for a
+  plan whose folders changed is a backup of other folders; the pane's header
+  names the open backup and says what its Change column is compared with, or
+  that it is the first of its folders. On a plan's page, *Browse
   Folders…* walks one folder through every snapshot that contains it. The file
   list answers Finder's outline keys: → opens a folder, ← closes it or steps to
   the folder that holds the selection. Its search covers the open backup and
@@ -120,7 +123,7 @@ checked in so a normal build does not need it.
   (Show Log…, Copy Details); restores record which backup, which item and where
   it went.
 - **Menus** — the *Plan* and *Repository* menus act on what the sidebar has
-  selected: a plan, a repository, or the repository a selected plan or Restore
+  selected: a plan, a repository, or the repository a selected plan or backup
   record uses. Items with nothing to act on are greyed out. ⌘B backs up the
   selected plan, ⌘. stops it, ⇧⌘B backs up every plan, ⇧⌘F finds files and ⌘R
   refreshes every repository's snapshots; *Pause Backups* is there as well as in
@@ -336,7 +339,7 @@ a headless SSH box.
   macOS silently withholds `~/Documents`, `~/Desktop` and similar folders, and
   restic records them as unreadable rather than failing loudly — the run still
   writes a snapshot, but an *incomplete* one (restic's exit code 3), which
-  SwiftRestic marks with a warning triangle under Restore and in Activity's run
+  SwiftRestic marks with a warning triangle in the sidebar and in Activity's run
   drawer; the Restore pane lists what could not be read. SwiftRestic detects
   the grant — at launch, whenever it becomes active, and after every backup —
   and shows it first in Settings › General; the build is ad-hoc signed, so a

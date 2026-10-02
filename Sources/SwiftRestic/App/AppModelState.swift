@@ -70,8 +70,9 @@ enum SidebarItem: Hashable {
     case plan(UUID)
     /// The repository's page, which is also its overview.
     case repository(UUID)
-    /// A backup record picked under a repository's Restore node — the pane
-    /// browses that record's file tree directly, Arq-style.
+    /// A backup record picked under its plan, or under a repository's Other
+    /// backups — the pane browses that record's file tree directly,
+    /// Arq-style.
     case restoreSnapshot(UUID, String)
     case console
     case activity

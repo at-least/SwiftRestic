@@ -23,12 +23,17 @@ final class AppModel {
             if oldValue.runs != configuration.runs {
                 backupRunsBySnapshot = RunRecord.backupRunsBySnapshot(configuration.runs)
             }
+            // A plan added, removed, renamed or moved to another repository
+            // moves backups between shelves, or renames one.
+            if oldValue.plans != configuration.plans {
+                for id in snapshots.keys { reshelve(id) }
+            }
             scheduleSave()
         }
     }
     /// The backup run that wrote each snapshot, derived once per history
-    /// write rather than by every row that shows a snapshot (the Restore
-    /// sidebar, Activity's run drawer): 0.3 ms to build over 2,000 records
+    /// write rather than by every row that shows a snapshot (the sidebar's
+    /// backups, Activity's run drawer): 0.3 ms to build over 2,000 records
     /// (swiftc probe, 2026-09-26). A snapshot whose run was trimmed from the
     /// history, or never recorded here, is simply absent — unknown, never
     /// complete.
@@ -59,17 +64,18 @@ final class AppModel {
             // Array `!=` short-circuits on shared storage, so only the
             // repository whose listing was written regroups.
             for id in Set(oldValue.keys).union(snapshots.keys) where oldValue[id] != snapshots[id] {
-                snapshotLineages[id] = snapshots[id].map(SnapshotLineage.grouping)
+                reshelve(id)
             }
         }
     }
-    /// `snapshots` grouped by lineage, derived once per listing write. The
-    /// sidebar's body re-runs on every selection and configuration change for
-    /// every repository, collapsed ones included, and grouping there cost
-    /// 12–18 ms per sidebar update at two repositories of ~8.7k snapshots
-    /// against ~3 ms without it (measured in a SwiftUI harness mirroring the
-    /// sidebar, 2026-09-26 — not in the running app).
-    private(set) var snapshotLineages: [UUID: [SnapshotLineage]] = [:]
+    /// `snapshots` sorted to where the sidebar shows them, derived once per
+    /// listing or plan write. The sidebar's body re-runs on every selection
+    /// and configuration change for every repository, folded ones included,
+    /// and grouping by lineage there cost 12–18 ms per sidebar update at two
+    /// repositories of ~8.7k snapshots against ~3 ms without it (measured in
+    /// a SwiftUI harness mirroring the sidebar, 2026-09-26 — not in the
+    /// running app).
+    private(set) var backupShelves: [UUID: BackupShelves] = [:]
     var repositoryStats: [UUID: RepositoryStats] = [:]
     var loadingSnapshots: Set<UUID> = []
     /// Refreshes that arrived while one was already in flight. Each is run
@@ -279,6 +285,14 @@ final class AppModel {
         }
         console.persistHistory = { [weak self] history in
             self?.configuration.settings.consoleHistory = history
+        }
+    }
+
+    /// Re-derives one repository's `backupShelves` from its listing and its
+    /// plans; a repository without a listing has none.
+    private func reshelve(_ repositoryID: UUID) {
+        backupShelves[repositoryID] = snapshots[repositoryID].map {
+            BackupShelves(listing: $0, plans: plans(in: repositoryID))
         }
     }
 

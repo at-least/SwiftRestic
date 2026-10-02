@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// The restore pane: one backup record's file tree, browsed straight from
-/// a repository's Restore node in the sidebar — Arq's arrangement, where picking a
-/// dated record in the source list shows its files in the main pane.
+/// the sidebar, where a plan's backups fold open beneath it — Arq's
+/// arrangement, where picking a dated record in the source list shows its
+/// files in the main pane.
 ///
 /// The app's one snapshot-first browser: the run drawer's Browse, both
 /// Restore Files… buttons and Browse Folders' Show in Restore all land here
@@ -95,7 +96,7 @@ struct RestorePaneView: View {
                 ContentUnavailableView {
                     Label("Backup not found", systemImage: "questionmark.folder")
                 } description: {
-                    Text("This backup is no longer in the repository. Pick another one under Restore on the left.")
+                    Text("This backup is no longer in the repository. Pick another one in the sidebar.")
                 }
             }
         }
@@ -221,7 +222,7 @@ struct RestorePaneView: View {
             ContentUnavailableView {
                 Label("Not in this backup", systemImage: "folder.badge.questionmark")
             } description: {
-                Text("This folder does not exist in the selected backup. Pick another backup under Restore on the left, or go up a level.")
+                Text("This folder does not exist in the selected backup. Pick another backup in the sidebar, or go up a level.")
             }
         } else if tree.rows.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
@@ -806,7 +807,7 @@ struct RestorePaneView: View {
             subject: .wholeSnapshot(paths: record.paths),
             backupName: SnapshotLineage.displayName(
                 of: record,
-                label: model.lineageLabel(of: record, repositoryID: repositoryID)
+                label: model.recordLabel(of: record, repositoryID: repositoryID)
             ),
             backupTime: record.time,
             snapshotShortID: record.shortID
@@ -856,7 +857,7 @@ private struct RestoreRecordHeader: View {
     var body: some View {
         let heading = RestoreRecordHeading(
             record: record,
-            label: model.lineageLabel(of: record, repositoryID: repositoryID),
+            label: model.recordLabel(of: record, repositoryID: repositoryID),
             comparison: comparison
         )
         VStack(alignment: .leading, spacing: 1) {

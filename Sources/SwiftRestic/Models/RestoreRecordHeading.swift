@@ -24,8 +24,9 @@ enum ChangeComparison: Equatable, Sendable {
 /// naming the backup at all. Pure, so the wording is pinned by tests; the
 /// pane only lays it out.
 struct RestoreRecordHeading: Equatable, Sendable {
-    /// The lineage's name exactly as the Restore sidebar gives it, qualified
-    /// the same way when the name alone is ambiguous.
+    /// The name of the place the sidebar shows the backup — its plan, or
+    /// its group under Other backups — qualified when the name alone is
+    /// ambiguous (`BackupShelves.label(of:allPlans:)`).
     var name: String
     /// The record's moment. Kept apart from `name` so the view can truncate a
     /// long qualifier and never the day.

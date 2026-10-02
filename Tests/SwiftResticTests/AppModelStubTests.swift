@@ -2087,7 +2087,7 @@ struct AppModelStubTests {
         // The name the destination sheet and the Restore pane's header use.
         let name = SnapshotLineage.displayName(
             of: snapshot,
-            label: harness.model.lineageLabel(of: snapshot, repositoryID: harness.repository.id)
+            label: harness.model.recordLabel(of: snapshot, repositoryID: harness.repository.id)
         )
         #expect(name == "Stub Plan")
 

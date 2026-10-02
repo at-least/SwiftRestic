@@ -149,18 +149,18 @@ extension AppModel {
         return snapshotsLoadedAt[repositoryID]
     }
 
-    /// The repository's snapshots grouped the way a Restore node shows
-    /// them, the lineage with the newest backup first.
-    func lineages(for repositoryID: UUID) -> [SnapshotLineage] {
-        snapshotLineages[repositoryID] ?? []
+    /// The repository's backups sorted to where the sidebar shows them:
+    /// under its plans, the rest under Other backups.
+    func shelves(for repositoryID: UUID) -> BackupShelves {
+        backupShelves[repositoryID] ?? BackupShelves(listing: [], plans: plans(in: repositoryID))
     }
 
-    /// How a Restore node labels the lineage `record` belongs to — the
-    /// same lookup its group rows make, for surfaces that name one backup
-    /// (with `SnapshotLineage.displayName(of:label:)`) instead of a second
-    /// rule of their own.
-    func lineageLabel(of record: Snapshot, repositoryID: UUID) -> SnapshotLineage.Label? {
-        SnapshotLineage.labels(for: lineages(for: repositoryID), plans: configuration.plans)[record.lineageKey]
+    /// How the sidebar names the place `record` sits — its plan, or its
+    /// group under Other backups — for surfaces that name one backup (with
+    /// `SnapshotLineage.displayName(of:label:)`) instead of a second rule of
+    /// their own.
+    func recordLabel(of record: Snapshot, repositoryID: UUID) -> SnapshotLineage.Label? {
+        shelves(for: repositoryID).label(of: record, allPlans: configuration.plans)
     }
 
     /// The record a "Restore Files…" lands on — Arq's "Restoring from an
