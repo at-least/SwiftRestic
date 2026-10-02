@@ -93,12 +93,23 @@ struct RunDetailPanel: View {
             if let destination = run.destinationPath {
                 // "Snapshot" beside the Snapshot row, as Copy Details says it;
                 // "backup" is the Restore pane's word.
-                DetailRow("Item") {
-                    Text(run.sourcePath ?? "Entire snapshot")
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                        .help(run.sourcePath ?? "Every folder in the snapshot, under its full original path")
+                if let paths = run.sourcePaths {
+                    // The names in the row, every full path in the tooltip.
+                    DetailRow("Items") {
+                        Text(paths.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .textSelection(.enabled)
+                            .help(paths.joined(separator: "\n"))
+                    }
+                } else {
+                    DetailRow("Item") {
+                        Text(run.sourcePath ?? "Entire snapshot")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                            .help(run.sourcePath ?? "Every folder in the snapshot, under its full original path")
+                    }
                 }
                 DetailRow(run.outcome == .succeeded ? "Restored to" : "Destination") {
                     RevealRow(path: destination, runID: run.id)

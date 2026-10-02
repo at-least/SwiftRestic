@@ -60,6 +60,61 @@ extension AppModel {
         }
     }
 
+    /// Several items of one backup, each into its directory — one folder for
+    /// all, or each back into its own parent — in one restic call per folder
+    /// of the backup and directory (`RestoreBatch.groups`,
+    /// `ResticService.restoreItems`). Each call is a step of one run with a
+    /// record of its own; one banner names the lot. The caller has already
+    /// dropped items inside other selected folders and refused names that
+    /// would land twice in one directory (`RestoreBatch.covering`,
+    /// `collidingNames`).
+    func restore(
+        repositoryID: UUID,
+        snapshotID: String,
+        items: [(node: SnapshotNode, directory: URL)],
+        overwrite: RestoreOverwritePolicy
+    ) {
+        let reporter = restoreProgressReporter()
+        let steps = RestoreBatch.groups(items).map { group in
+            let label = Self.itemsLabel(group.nodes.map(\.name))
+            return RestoreStep(
+                label: label,
+                description: "Restoring \(label)",
+                sourcePath: nil,
+                sourcePaths: group.nodes.map(\.path),
+                destinationPath: group.directory.path,
+                itemCount: group.nodes.count,
+                operation: { service, context in
+                    try await service.restoreItems(
+                        context,
+                        snapshotID: snapshotID,
+                        parent: group.parent,
+                        nodes: group.nodes,
+                        destinationDirectory: group.directory,
+                        overwrite: overwrite,
+                        onProgress: reporter
+                    )
+                }
+            )
+        }
+        let landings = items.map { ResticService.restoredItemURL(for: $0.node, in: $0.directory) }
+        let directories = Set(items.map(\.directory))
+        beginRestore(repositoryID: repositoryID, snapshotID: snapshotID, steps: steps) { [weak self] summaries in
+            self?.post(Self.itemsRestoreBanner(
+                landings: landings,
+                directory: directories.count == 1 ? directories.first : nil,
+                summaries: summaries,
+                policy: overwrite
+            ))
+        }
+    }
+
+    /// Several items as one subject — Activity's record, the progress
+    /// strip: the first by name, the rest counted.
+    nonisolated static func itemsLabel(_ names: [String]) -> String {
+        names.count == 1 ? names[0] : "\(names[0]) and \(Format.count(names.count - 1)) more"
+    }
+
     /// Restores every file in a snapshot, keeping the original absolute layout
     /// beneath `destination`.
     func restoreWholeSnapshot(
@@ -121,7 +176,7 @@ extension AppModel {
                 title: "Restored the whole backup",
                 message: [landing.path, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
                 isError: false,
-                revealPath: landing.path
+                revealPaths: [landing.path]
             )
         }
         if !isDirectory, kept > 0, (summary?.filesRestored ?? 0) == 0 {
@@ -129,14 +184,44 @@ extension AppModel {
                 title: "Kept the existing “\(itemName)”",
                 message: "\(landing.path)\nA file with this name was already there, so nothing was restored.",
                 isError: false,
-                revealPath: landing.path
+                revealPaths: [landing.path]
             )
         }
         return Banner(
             title: "Restored \(itemName)",
             message: [landing.path, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
             isError: false,
-            revealPath: landing.path
+            revealPaths: [landing.path]
+        )
+    }
+
+    /// The banner a restore of several items posts: how many, where — the
+    /// folder they went into, or each back where it was backed up from —
+    /// and what Keep left as it was, counted as `restoreBanner` counts it.
+    /// Reveal in Finder selects every one of them.
+    nonisolated static func itemsRestoreBanner(
+        landings: [URL],
+        directory: URL?,
+        summaries: [ResticSummary?],
+        policy: RestoreOverwritePolicy
+    ) -> Banner {
+        let restored = summaries.reduce(0) { $0 + ($1?.filesRestored ?? 0) }
+        let kept = policy == .keepExisting ? summaries.reduce(0) { $0 + ($1?.filesSkipped ?? 0) } : 0
+        let place = directory?.path ?? "Each back in the folder it was backed up from."
+        let reveal = landings.map(\.path)
+        if kept > 0, restored == 0 {
+            return Banner(
+                title: "Kept the existing items",
+                message: "\(place)\nThey were already there, so nothing was restored.",
+                isError: false,
+                revealPaths: reveal
+            )
+        }
+        return Banner(
+            title: "Restored \(Format.plural(landings.count, "item"))",
+            message: [place, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
+            isError: false,
+            revealPaths: reveal
         )
     }
 
@@ -148,13 +233,8 @@ extension AppModel {
         }
     }
 
-    /// Shared bookkeeping for both restore shapes: one at a time, progress
-    /// published, and the outcome written to the run history either way —
-    /// with the backup it read (`snapshotID` as asked for), the item
-    /// (`sourcePath`, nil for a whole backup) and where it lands
-    /// (`destinationPath`: the restored item itself, or the folder a whole
-    /// backup goes into), plus the run's log. `label` is the record's
-    /// subject in Activity, `description` the progress strip's title.
+    /// One item, or a whole backup: a run of one restic restore. See
+    /// `beginRestore(repositoryID:snapshotID:steps:onSuccess:)`.
     private func beginRestore(
         repositoryID: UUID,
         label: String,
@@ -164,6 +244,39 @@ extension AppModel {
         destinationPath: String,
         operation: @escaping @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?,
         onSuccess: @escaping @MainActor (ResticSummary?) -> Void
+    ) {
+        beginRestore(
+            repositoryID: repositoryID,
+            snapshotID: snapshotID,
+            steps: [RestoreStep(
+                label: label,
+                description: description,
+                sourcePath: sourcePath,
+                sourcePaths: nil,
+                destinationPath: destinationPath,
+                itemCount: 1,
+                operation: operation
+            )],
+            onSuccess: { onSuccess($0[0]) }
+        )
+    }
+
+    /// Shared bookkeeping for every restore shape: one run at a time,
+    /// progress published, and each step's outcome written to the run
+    /// history either way — with the backup it read (`snapshotID` as asked
+    /// for), the items (`sourcePath`, `sourcePaths`, neither for a whole
+    /// backup) and where they land (`destinationPath`: the restored item
+    /// itself, or the folder several items or a whole backup go into), plus
+    /// the step's log. A step's `label` is its record's subject in Activity,
+    /// its `description` the progress strip's title. The steps run in order
+    /// and the first that fails or is cancelled ends the run: its banner
+    /// says how many items the steps before it restored, and `onSuccess`
+    /// (handed every step's summary) runs only when all of them succeeded.
+    private func beginRestore(
+        repositoryID: UUID,
+        snapshotID: String,
+        steps: [RestoreStep],
+        onSuccess: @escaping @MainActor ([ResticSummary?]) -> Void
     ) {
         guard !tasks.isOccupied(.restore) else {
             // Every other refused start says why; a restore request that
@@ -175,69 +288,35 @@ extension AppModel {
             ))
             return
         }
+        // The strip's title for each step; "(2 of 3)" only when there are
+        // several.
+        let titles = steps.enumerated().map { index, step in
+            steps.count > 1 ? "\(step.description) (\(index + 1) of \(steps.count))" : step.description
+        }
         restoreActivity = OperationProgress()
-        restoreDescription = description
+        restoreDescription = titles[0]
         restoreRepositoryID = repositoryID
 
         tasks.install(Task { [weak self] in
             guard let self else { return }
-            var record = RunRecord(
-                kind: .restore,
-                planName: label,
-                repositoryID: repositoryID
-            )
-            record.snapshotID = snapshotID
-            record.snapshotTime = self.snapshots(for: repositoryID)
-                .first { $0.id == snapshotID || $0.shortID == snapshotID }?.time
-            record.sourcePath = sourcePath
-            record.destinationPath = destinationPath
-            // Bound around the restore's own restic call only, like the
-            // run engines'.
-            let transcript = RunTranscript()
-            do {
-                guard let repository = self.repository(id: repositoryID) else {
-                    throw ResticError.repositoryMissing
+            var summaries: [ResticSummary?] = []
+            let itemTotal = steps.reduce(0) { $0 + $1.itemCount }
+            var itemsRestored = 0
+            for (index, step) in steps.enumerated() {
+                if index > 0 {
+                    self.restoreActivity = OperationProgress()
+                    self.restoreDescription = titles[index]
                 }
-                let service = try self.service()
-                let context = try await self.context(for: repository)
-                let summary = try await RunTranscript.$current.withValue(transcript) {
-                    try await operation(service, context)
-                }
-                record.outcome = .succeeded
-                // A repeat restore answers with files_skipped alone — no
-                // files_restored key — so both are kept, zero when absent.
-                record.filesRestored = summary?.filesRestored ?? 0
-                record.filesSkipped = summary?.filesSkipped ?? 0
-                record.bytesProcessed = summary?.bytesRestored ?? 0
-                onSuccess(summary)
-            } catch {
-                record.setOutcome(from: error, cancellationMessage: self.cancellationMessage)
-                self.noteAuthFailure(error, repositoryID: repositoryID)
-                if record.outcome == .cancelled {
-                    // The strip vanishing is the only signal a cancelled
-                    // restore otherwise leaves — including when it is the
-                    // repository's removal that cancelled it. During shutdown
-                    // the banner would die with the process, and the quit
-                    // confirmation has already said it.
-                    if !self.isShuttingDown {
-                        self.post(Banner(
-                            title: "Restore cancelled",
-                            message: "The restore was cancelled before it finished.",
-                            isError: false
-                        ))
-                    }
-                } else {
-                    self.post(Banner(
-                        title: "Restore failed",
-                        message: record.failureMessage ?? "",
-                        isError: true
-                    ))
-                }
+                guard case let .succeeded(summary) = await self.runRestoreStep(
+                    step,
+                    repositoryID: repositoryID,
+                    snapshotID: snapshotID,
+                    restoredBefore: steps.count > 1 ? (itemsRestored, itemTotal) : nil
+                ) else { break }
+                summaries.append(summary)
+                itemsRestored += step.itemCount
             }
-            record.finishedAt = .now
-            record.exitCode = transcript.contents.firstExitCode
-            await self.seal(&record, transcript: transcript.contents)
-            self.append(record: record)
+            if summaries.count == steps.count { onSuccess(summaries) }
             self.restoreActivity = nil
             self.restoreDescription = ""
             self.restoreRepositoryID = nil
@@ -246,6 +325,82 @@ extension AppModel {
             self.restoreRunToken = UUID()
             self.tasks.clear(.restore)
         }, in: .restore)
+    }
+
+    /// One step of a restore run: its record, built, sealed and appended
+    /// whatever happens, and its banner when it fails or is cancelled —
+    /// saying, in a run of several steps, how many items the earlier ones
+    /// restored.
+    private func runRestoreStep(
+        _ step: RestoreStep,
+        repositoryID: UUID,
+        snapshotID: String,
+        restoredBefore: (count: Int, total: Int)?
+    ) async -> RestoreStepOutcome {
+        var record = RunRecord(
+            kind: .restore,
+            planName: step.label,
+            repositoryID: repositoryID
+        )
+        record.snapshotID = snapshotID
+        record.snapshotTime = snapshots(for: repositoryID)
+            .first { $0.id == snapshotID || $0.shortID == snapshotID }?.time
+        record.sourcePath = step.sourcePath
+        record.sourcePaths = step.sourcePaths
+        record.destinationPath = step.destinationPath
+        // Bound around the restore's own restic call only, like the
+        // run engines'.
+        let transcript = RunTranscript()
+        var outcome = RestoreStepOutcome.stopped
+        do {
+            guard let repository = repository(id: repositoryID) else {
+                throw ResticError.repositoryMissing
+            }
+            let service = try service()
+            let context = try await context(for: repository)
+            let summary = try await RunTranscript.$current.withValue(transcript) {
+                try await step.operation(service, context)
+            }
+            record.outcome = .succeeded
+            // A repeat restore answers with files_skipped alone — no
+            // files_restored key — so both are kept, zero when absent.
+            record.filesRestored = summary?.filesRestored ?? 0
+            record.filesSkipped = summary?.filesSkipped ?? 0
+            record.bytesProcessed = summary?.bytesRestored ?? 0
+            outcome = .succeeded(summary)
+        } catch {
+            record.setOutcome(from: error, cancellationMessage: cancellationMessage)
+            noteAuthFailure(error, repositoryID: repositoryID)
+            let partial = restoredBefore.map {
+                "\(Format.count($0.count)) of \(Format.plural($0.total, "item")) were restored before it stopped."
+            }
+            if record.outcome == .cancelled {
+                // The strip vanishing is the only signal a cancelled
+                // restore otherwise leaves — including when it is the
+                // repository's removal that cancelled it. During shutdown
+                // the banner would die with the process, and the quit
+                // confirmation has already said it.
+                if !isShuttingDown {
+                    post(Banner(
+                        title: "Restore cancelled",
+                        message: ["The restore was cancelled before it finished.", partial]
+                            .compactMap { $0 }.joined(separator: " "),
+                        isError: false
+                    ))
+                }
+            } else {
+                post(Banner(
+                    title: "Restore failed",
+                    message: [record.failureMessage ?? "", partial].compactMap { $0 }.joined(separator: "\n"),
+                    isError: true
+                ))
+            }
+        }
+        record.finishedAt = .now
+        record.exitCode = transcript.contents.firstExitCode
+        await seal(&record, transcript: transcript.contents)
+        append(record: record)
+        return outcome
     }
 
     func cancelRestore() { tasks.cancel(.restore) }
@@ -436,4 +591,25 @@ extension AppModel {
             try? fileManager.removeItem(at: url)
         }
     }
+}
+
+/// One restic restore in a restore run, with what its run record says
+/// about it. See `AppModel.beginRestore(repositoryID:snapshotID:steps:onSuccess:)`.
+private struct RestoreStep {
+    var label: String
+    var description: String
+    var sourcePath: String?
+    var sourcePaths: [String]?
+    var destinationPath: String
+    /// How many of the run's items this step restores, for the banner of a
+    /// run that stops part-way.
+    var itemCount: Int
+    var operation: @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?
+}
+
+/// How one step of a restore run ended: with restic's summary (which can
+/// itself be absent), or failed or cancelled, which ends the run.
+private enum RestoreStepOutcome {
+    case succeeded(ResticSummary?)
+    case stopped
 }

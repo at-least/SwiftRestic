@@ -56,9 +56,10 @@ struct Banner: Identifiable, Equatable {
     var title: String
     var message: String
     var isError: Bool
-    /// When set, the banner offers a Reveal-in-Finder button — a restore that
-    /// ends with "here is the path" reads finished only half-way.
-    var revealPath: String?
+    /// When set, the banner offers a Reveal-in-Finder button, which selects
+    /// them all — a restore that ends with "here is the path" reads finished
+    /// only half-way.
+    var revealPaths: [String] = []
 }
 
 /// Which pane the detail column is showing — the sidebar's selection, or the

@@ -119,6 +119,19 @@ protocol ResticClient: Sendable {
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> ResticSummary?
 
+    /// Several items sharing one folder of the backup, in one restic call;
+    /// each lands in `destinationDirectory` as `restore` would put it.
+    @discardableResult
+    func restoreItems(
+        _ context: RepositoryContext,
+        snapshotID: String,
+        parent: String,
+        nodes: [SnapshotNode],
+        destinationDirectory: URL,
+        overwrite: RestoreOverwritePolicy,
+        onProgress: (@Sendable (OperationProgress) -> Void)?
+    ) async throws -> ResticSummary?
+
     @discardableResult
     func restoreWholeSnapshot(
         _ context: RepositoryContext,

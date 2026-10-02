@@ -114,9 +114,9 @@ struct BannerView: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
-                if let revealPath = banner.revealPath {
+                if !banner.revealPaths.isEmpty {
                     Button("Reveal in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: revealPath)])
+                        NSWorkspace.shared.activateFileViewerSelecting(banner.revealPaths.map { URL(fileURLWithPath: $0) })
                     }
                     .controlSize(.small)
                 }

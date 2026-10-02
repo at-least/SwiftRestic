@@ -136,7 +136,11 @@ enum RunRecordPresentation {
             // "Entire snapshot" would be a guess about them. The drawer's
             // word, beside its Snapshot row — "backup" is the Restore pane's.
             if let destination = run.destinationPath {
-                lines.append("Item: \(run.sourcePath ?? "Entire snapshot")")
+                if let paths = run.sourcePaths {
+                    lines.append("Items: \(paths.joined(separator: ", "))")
+                } else {
+                    lines.append("Item: \(run.sourcePath ?? "Entire snapshot")")
+                }
                 lines.append("\(run.outcome == .succeeded ? "Restored to" : "Destination"): \(destination)")
             }
             if run.outcome == .succeeded, run.filesRestored + run.filesSkipped > 0 {

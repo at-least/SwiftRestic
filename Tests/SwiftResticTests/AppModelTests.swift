@@ -1592,7 +1592,7 @@ struct RestoreBannerTests {
         )
         #expect(kept.title == "Restored Project")
         #expect(kept.message == "/Users/x/Restored/Project\nKept 3 existing files as they were.")
-        #expect(kept.revealPath == "/Users/x/Restored/Project")
+        #expect(kept.revealPaths == ["/Users/x/Restored/Project"])
         #expect(!kept.isError)
 
         let keptOne = AppModel.restoreBanner(
@@ -1609,7 +1609,7 @@ struct RestoreBannerTests {
         )
         #expect(replaced.title == "Restored Project")
         #expect(replaced.message == "/Users/x/Restored/Project")
-        #expect(replaced.revealPath == "/Users/x/Restored/Project")
+        #expect(replaced.revealPaths == ["/Users/x/Restored/Project"])
 
         let fileLanding = URL(fileURLWithPath: "/Users/x/Restored/a.txt")
         let keptFile = AppModel.restoreBanner(
@@ -1618,7 +1618,7 @@ struct RestoreBannerTests {
         )
         #expect(keptFile.title == "Kept the existing “a.txt”")
         #expect(keptFile.message == "/Users/x/Restored/a.txt\nA file with this name was already there, so nothing was restored.")
-        #expect(keptFile.revealPath == "/Users/x/Restored/a.txt")
+        #expect(keptFile.revealPaths == ["/Users/x/Restored/a.txt"])
 
         let silent = AppModel.restoreBanner(
             itemName: "a.txt", isDirectory: false, landing: fileLanding,
@@ -1637,6 +1637,6 @@ struct RestoreBannerTests {
         )
         #expect(whole.title == "Restored the whole backup")
         #expect(whole.message == "/Users/x/Restored\nKept 4 existing files as they were.")
-        #expect(whole.revealPath == "/Users/x/Restored")
+        #expect(whole.revealPaths == ["/Users/x/Restored"])
     }
 }

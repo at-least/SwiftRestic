@@ -606,6 +606,72 @@ struct ResticIntegrationTests {
         #expect(!names.contains { $0.hasSuffix(".partial") }, "left behind: \(names)")
     }
 
+    @Test("several items of one folder restore in one call, each where it would land alone, matched by its exact name")
+    func restoreItemsLandsEachByName() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        // Names restic's patterns read as patterns, and one only a pattern
+        // would match: "star*.txt" unescaped brings "starfish.txt" along.
+        for name in ["a[1].txt", "star*.txt", "starfish.txt"] {
+            try name.write(to: fixture.sourceDirectory.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+        let (snapshotID, children) = try await backedUpChildren(fixture)
+        let picked = ["a.txt", "sub", "a[1].txt", "star*.txt", "\u{0301}leading.txt"]
+        let nodes = try picked.map { name in try #require(children.first { $0.name == name }, "no \(name)") }
+        let destination = fixture.root.appendingPathComponent("restore-items")
+
+        let summary = try await fixture.service.restoreItems(
+            fixture.context, snapshotID: snapshotID, parent: fixture.sourceDirectory.path, nodes: nodes,
+            destinationDirectory: destination, overwrite: .keepExisting
+        )
+
+        let landed = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+        #expect(Set(landed.map { Array($0.unicodeScalars) }) == Set(picked.map { Array($0.unicodeScalars) }), "landed: \(landed)")
+        #expect(try String(contentsOf: destination.appendingPathComponent("sub/b.txt"), encoding: .utf8) == "nested")
+        #expect(try String(contentsOf: destination.appendingPathComponent("star*.txt"), encoding: .utf8) == "star*.txt")
+        #expect((summary?.filesRestored ?? 0) > 0)
+    }
+
+    @Test("a restore of several items refuses a landing restic would damage, before restic runs")
+    func restoreItemsGuardsLandings() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let (snapshotID, children) = try await backedUpChildren(fixture)
+        let sub = try #require(children.first { $0.name == "sub" })
+        let file = try #require(children.first { $0.name == "a.txt" })
+        let restore = { (nodes: [SnapshotNode], destination: URL, policy: RestoreOverwritePolicy) in
+            try await fixture.service.restoreItems(
+                fixture.context, snapshotID: snapshotID, parent: fixture.sourceDirectory.path, nodes: nodes,
+                destinationDirectory: destination, overwrite: policy
+            )
+        }
+
+        // A file where the folder goes: restic deletes it, under Keep too.
+        let fileThere = fixture.root.appendingPathComponent("file-there")
+        try FileManager.default.createDirectory(at: fileThere, withIntermediateDirectories: true)
+        try "mine".write(to: fileThere.appendingPathComponent("sub"), atomically: true, encoding: .utf8)
+        await #expect(throws: (any Error).self) { try await restore([sub, file], fileThere, .keepExisting) }
+        #expect(try String(contentsOf: fileThere.appendingPathComponent("sub"), encoding: .utf8) == "mine")
+
+        // A folder where the file goes, under Replace: restic fails on it
+        // after taking its permissions away.
+        let folderThere = fixture.root.appendingPathComponent("folder-there")
+        let inside = folderThere.appendingPathComponent("a.txt/inside.txt")
+        try FileManager.default.createDirectory(at: inside.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "mine".write(to: inside, atomically: true, encoding: .utf8)
+        await #expect(throws: ResticError.folderInTheWay(path: folderThere.appendingPathComponent("a.txt").path)) {
+            try await restore([sub, file], folderThere, .replaceExisting)
+        }
+        #expect(try String(contentsOf: inside, encoding: .utf8) == "mine")
+
+        // Under Keep the folder stays and the file counts as kept, as a
+        // single file's restore keeps it.
+        let kept = try await restore([sub, file], folderThere, .keepExisting)
+        #expect(kept?.filesSkipped == 1)
+        #expect(try String(contentsOf: inside, encoding: .utf8) == "mine")
+        #expect(try String(contentsOf: folderThere.appendingPathComponent("sub/b.txt"), encoding: .utf8) == "nested")
+    }
+
     @Test("whole-snapshot keep-existing restore passes the policy to restic")
     func keepExistingWholeRestore() async throws {
         let fixture = try makeFixture()

@@ -112,10 +112,15 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 
     /// When the backup restored from was made, if the listing knew it.
     var snapshotTime: Date?
-    /// The item restored, or nil for a whole backup.
+    /// The item restored, or nil for a whole backup or several items.
     var sourcePath: String?
+    /// Several items restored in one restic call, each its path in the
+    /// backup — all from one folder of it (`RestoreBatch.Group`). Nil for
+    /// one item or a whole backup.
+    var sourcePaths: [String]?
     /// Where it landed: the restored item itself (what Reveal in Finder
-    /// selects), or for a whole backup, the folder it was restored into.
+    /// selects), or for a whole backup or several items, the folder they
+    /// were restored into.
     var destinationPath: String?
     var filesRestored: Int = 0
     /// Files restic left as they were because the destination already held
@@ -168,6 +173,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         hasLog = c.value(.hasLog, default: false)
         snapshotTime = c.optional(.snapshotTime)
         sourcePath = c.optional(.sourcePath)
+        sourcePaths = c.optional(.sourcePaths)
         destinationPath = c.optional(.destinationPath)
         filesRestored = c.value(.filesRestored, default: 0)
         filesSkipped = c.value(.filesSkipped, default: 0)

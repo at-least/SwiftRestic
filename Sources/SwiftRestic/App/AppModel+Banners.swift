@@ -29,7 +29,7 @@ extension AppModel {
             let oldestSuccess = banners.lastIndex(where: { !$0.isError }).flatMap { $0 > 0 ? $0 : nil }
             banners.remove(at: oldestSuccess ?? banners.count - 1)
         }
-        guard !banner.isError, banner.revealPath == nil else { return }
+        guard !banner.isError, banner.revealPaths.isEmpty else { return }
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(8))
             guard let self else { return }

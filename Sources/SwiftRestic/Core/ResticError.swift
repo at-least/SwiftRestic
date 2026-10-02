@@ -36,6 +36,10 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// older than 0.17: it has no `--overwrite` and would replace it.
     /// Refused before restic runs.
     case keepNeedsNewerRestic(path: String)
+    /// A folder stands where a Replace restore of several items would put a
+    /// file. restic fails on it — after taking away the folder's permissions
+    /// (0.19.1, probed) — so it is refused before restic runs.
+    case folderInTheWay(path: String)
 
     var errorDescription: String? {
         switch self {
@@ -76,6 +80,8 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
         case let .keepNeedsNewerRestic(path):
             return "Keeping the files already at \(path) needs restic 0.17 or later — this restic would replace them, so nothing was restored. Update restic, restore into an empty folder, or choose “Replace it with the backed-up version”."
+        case let .folderInTheWay(path):
+            return "A folder is already at \(path), where a restored file would go, so nothing was restored. Move it aside, or restore somewhere else."
         }
     }
 

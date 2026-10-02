@@ -201,9 +201,83 @@ struct AppModelStubTests {
         let banner = try #require(harness.model.banners.first)
         #expect(banner.title == "Restored Project")
         #expect(banner.message.contains("Kept 3 existing files as they were."), "banner said: \(banner.message)")
-        #expect(banner.revealPath == landing.path)
+        #expect(banner.revealPaths == [landing.path])
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.filesSkipped == 3)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("several items restore in one restic call per folder, each a record, under one banner that reveals them all")
+    func restoringSeveralItems() async throws {
+        let harness = try await makeHarness(mode: "restoreskip")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        harness.model.resticVersion = "restic 0.19.1 compiled with go1.26.5 on darwin/arm64"
+
+        let project = SnapshotNode(name: "Project", type: .dir, path: "/src/Project")
+        let notes = SnapshotNode(name: "notes.txt", type: .file, path: "/src/notes.txt")
+        let photo = SnapshotNode(name: "a[1].jpg", type: .file, path: "/pictures/a[1].jpg")
+        let destination = harness.root.appendingPathComponent("restored")
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            items: [(project, destination), (photo, destination), (notes, destination)],
+            overwrite: .keepExisting
+        )
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        let trace = try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+        let restores = trace.split(separator: "\n").filter { line in
+            line.hasPrefix("start args=[") && line.replacingOccurrences(of: "[", with: " ").contains(" restore ")
+        }
+        #expect(restores.count == 2, "restores: \(restores)")
+        #expect(restores.first?.contains("latest:/src --target \(destination.path) --include /Project --include /notes.txt --overwrite never") == true,
+                "first: \(restores.first ?? "none")")
+        #expect(restores.last?.contains(#"latest:/pictures --target \#(destination.path) --include /a\[1\].jpg"#) == true,
+                "last: \(restores.last ?? "none")")
+
+        // One record per call, newest first, each naming its items.
+        let records = harness.model.configuration.runs
+        #expect(records.map(\.sourcePaths) == [["/pictures/a[1].jpg"], ["/src/Project", "/src/notes.txt"]])
+        #expect(records.map(\.planName) == ["a[1].jpg", "Project and 1 more"])
+        #expect(records.allSatisfy { $0.outcome == .succeeded && $0.destinationPath == destination.path && $0.sourcePath == nil })
+
+        let banner = try #require(harness.model.banners.first)
+        #expect(banner.title == "Restored 3 items")
+        // Each call kept 3 under the stub: one banner counts both.
+        #expect(banner.message == "\(destination.path)\nKept 6 existing files as they were.")
+        #expect(banner.revealPaths == ["Project", "a[1].jpg", "notes.txt"].map { destination.appendingPathComponent($0).path })
+        // The folder's landing was made before restic ran — the guard
+        // against restic deleting a file standing there.
+        #expect(FileManager.default.fileExists(atPath: destination.appendingPathComponent("Project").path))
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a restore of several items stops at the first failing call and says how many were restored")
+    func severalItemsStopAtTheFirstFailure() async throws {
+        let harness = try await makeHarness(mode: "plainfail")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let destination = harness.root.appendingPathComponent("restored")
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            items: [
+                (SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt"), destination),
+                (SnapshotNode(name: "b.txt", type: .file, path: "/src/b.txt"), destination),
+                (SnapshotNode(name: "c.txt", type: .file, path: "/other/c.txt"), destination),
+            ],
+            overwrite: .keepExisting
+        )
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        // The second call never ran: one record, failed.
+        #expect(harness.model.configuration.runs.map(\.outcome) == [.failed])
+        let banner = try #require(harness.model.banners.first)
+        #expect(banner.title == "Restore failed")
+        #expect(banner.message.hasSuffix("\n0 of 3 items were restored before it stopped."), "banner said: \(banner.message)")
+        #expect(banner.isError)
 
         await harness.model.shutdown()
     }
