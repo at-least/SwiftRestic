@@ -141,8 +141,8 @@ struct BannerView: View {
 // MARK: - Stat tile
 
 /// One figure: a caption above a large rounded numeral, on its own card
-/// plate. The compare sheet's statistics are its one use since the Overview
-/// and the repository page moved to label/value cards.
+/// plate. The compare sheet's statistics are its one use since the
+/// dashboard and the repository page moved to label/value cards.
 struct StatTile: View {
     let title: String
     let value: String

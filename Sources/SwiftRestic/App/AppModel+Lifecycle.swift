@@ -33,7 +33,7 @@ extension AppModel {
     /// login — or when nothing is scheduled.
     ///
     /// It passes the hold, like every display of what will actually fire,
-    /// and names it first, as the Overview's card leads with it: a timed
+    /// and names it first, as the Next runs card leads with it: a timed
     /// hold moves the date to its end; an open-ended one sets no date, so a
     /// slot still ahead keeps its own, and a due run is waiting, not due
     /// now. The hold is read at `now`, so the date and the hold agree.
@@ -296,7 +296,7 @@ extension AppModel {
     var isResticAvailable: Bool { binary != nil }
 
     /// A click that turns start at login on or off, wherever it comes from —
-    /// the Settings switch, the plan editor, the Overview. Optimistic: the
+    /// the Settings switch, the plan editor, a Next runs card. Optimistic: the
     /// mirror moves now, and the daemon's answer in `setStartsAtLogin`
     /// confirms or corrects it.
     func requestStartsAtLogin(_ enabled: Bool) {

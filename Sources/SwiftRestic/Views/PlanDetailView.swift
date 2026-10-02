@@ -131,7 +131,7 @@ struct PlanDetailView: View {
     /// progress tick (~1/sec) re-renders the strip instead of the whole
     /// pane (progress lives in its own observable storage precisely so
     /// phase-reading views — the strip's title, the sidebar's and the
-    /// Overview's rows — stay
+    /// Plans card's rows — stay
     /// untouched by it), and `content`'s cards never rerun per tick.
     private struct OperationStrip: View {
         @Environment(AppModel.self) private var model
@@ -280,7 +280,7 @@ struct PlanDetailView: View {
             if let repositoryID = plan.repositoryID {
                 HStack(spacing: 8) {
                     // Arq's "Restoring from an Active Backup Plan": expand
-                    // the sidebar's Restore section and select this plan's
+                    // its repository's Restore node and select this plan's
                     // newest backup — the plan's own, not whichever plan
                     // sharing the repository ran last.
                     Button("Restore Files…") {

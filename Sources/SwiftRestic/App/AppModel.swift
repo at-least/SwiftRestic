@@ -48,7 +48,7 @@ final class AppModel {
     /// Live backup progress per plan, in its own observable storage: a
     /// restic status tick (~1/sec) lands here and invalidates only the views
     /// that read progress — the running strip and nothing else. `activity`
-    /// keeps the phase strip, the sidebar's rows and the Overview's rows,
+    /// keeps the phase strip, the sidebar's rows and the Plans card's rows,
     /// which must not re-render per tick; the pair is installed and retired
     /// together by `installPlanActivity` and the run's unwind.
     var planProgress: [UUID: OperationProgress] = [:]
@@ -108,7 +108,7 @@ final class AppModel {
     /// read and never optimistically.
     var loginItemNeedsApproval = false
     /// Whether this copy could be registered as a login item, read once at
-    /// launch so the Overview's body does not resolve symlinks on every
+    /// launch so the Next runs card's body does not resolve symlinks on every
     /// render. It feeds only what the surfaces offer: registering keeps its
     /// own live check (`performSetStartsAtLogin`).
     @ObservationIgnored let loginItemInstallable: Bool

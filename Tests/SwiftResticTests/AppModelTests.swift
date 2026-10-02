@@ -875,7 +875,7 @@ struct PausingTests {
 }
 
 /// The scheduler lives in the app's process, so a schedule dies with it. What
-/// the Overview, the plan editor and the quit alert say about that, from
+/// the Next runs card, the plan editor and the quit alert say about that, from
 /// the model's side.
 @Suite("Start at login surfaces")
 @MainActor

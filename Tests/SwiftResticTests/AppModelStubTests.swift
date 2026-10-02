@@ -1215,6 +1215,14 @@ struct AppModelStubTests {
         harness.model.configuration.repositories.append(other)
         harness.model.configuration.plans.append(kept)
         let runsBefore = harness.model.configuration.runs
+        // deletePlan's bookkeeping, installed with no run in flight, so its
+        // removal below can only be deletePlan's own doing.
+        let removed = harness.plan.id
+        harness.model.problemsSeenAt[removed] = .now
+        harness.model.pauseStoppedPlanIDs.insert(removed)
+        harness.model.activity[removed] = PlanActivity()
+        harness.model.planProgress[removed] = OperationProgress()
+        harness.model.backupRunTokens[removed] = UUID()
 
         harness.model.deleteRepository(id: harness.repository.id)
 
@@ -1225,6 +1233,13 @@ struct AppModelStubTests {
         // The history is the record of what ran; removal does not rewrite it.
         #expect(harness.model.configuration.runs == runsBefore)
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
+        // The same bookkeeping as Delete Plan…, so the two ways a plan goes
+        // cannot drift apart.
+        #expect(harness.model.problemsSeenAt[removed] == nil)
+        #expect(!harness.model.pauseStoppedPlanIDs.contains(removed))
+        #expect(harness.model.activity[removed] == nil)
+        #expect(harness.model.planProgress[removed] == nil)
+        #expect(harness.model.backupRunTokens[removed] == nil)
 
         await harness.model.shutdown()
     }

@@ -107,7 +107,7 @@ struct SettingsView: View {
                 Toggle("Start SwiftRestic at login", isOn: Binding(
                     get: { model.startsAtLogin },
                     // Optimistic flip, shared with the plan editor's and the
-                    // Overview's Start at Login: the model var moves now,
+                    // Next runs card's Start at Login: the model var moves now,
                     // and the daemon's answer confirms or corrects it.
                     set: { value in model.requestStartsAtLogin(value) }
                 ))

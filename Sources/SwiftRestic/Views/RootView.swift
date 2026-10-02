@@ -31,7 +31,7 @@ struct RootView: View {
     @State private var pendingConfirmation: CommandConfirmation?
     /// Apply Retention Now…'s sheet, for the plan it previews.
     @State private var retentionTarget: RetentionTarget?
-    /// Which Restore-section repositories are expanded in the sidebar — the
+    /// Which repositories' Restore nodes are open in the sidebar — the
     /// backup records underneath are the restore pane's entry points.
     @State private var expandedRestoreRepos: Set<UUID> = []
     #if DEBUG
@@ -54,7 +54,7 @@ struct RootView: View {
         SidebarView(
             expandedRestoreRepos: $expandedRestoreRepos,
             onEditPlan: { editingPlan = $0 },
-            onNewPlan: { editingPlan = BackupPlan() },
+            onNewPlan: { editingPlan = newPlan(in: $0) },
             onEditRepository: { editingRepository = $0 },
             onNewRepository: { editingRepository = Repository() },
             onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
@@ -229,7 +229,6 @@ struct RootView: View {
         case "find": isShowingFind = true
         case "concepts": isShowingConcepts = true
         case "console": router.selection = .console
-        case "overview": router.selection = .overview
         // The restore pane needs a snapshot row to select, and those arrive
         // only after the launch refresh — see the snapshots onChange below.
         case "restore":
@@ -255,8 +254,7 @@ struct RootView: View {
         // Before the configuration is read there is nothing to decide from;
         // the `isBootstrapping` change handler picks the landing pane.
         guard router.selection == nil, !model.isBootstrapping else { return }
-        // The dashboard is the useful landing place once anything is configured.
-        router.selection = model.configuration.repositories.isEmpty ? nil : .overview
+        router.selection = SidebarTree.landingSelection(repositories: model.configuration.repositories)
     }
 
     /// Applies one consumed intent. An ask arriving while a sheet is up is
@@ -320,15 +318,16 @@ struct RootView: View {
 
     /// After a deletion the selected plan or repository may no longer exist;
     /// landing on "Plan not found" is a dead end whose only exit is the
-    /// sidebar, so retarget to the dashboard instead.
+    /// sidebar, so retarget to the landing pane instead.
     private func revalidateSelection() {
+        let landing = SidebarTree.landingSelection(repositories: model.configuration.repositories)
         switch router.selection {
         case .plan(let id) where model.plan(id: id) == nil,
              .repository(let id) where model.repository(id: id) == nil:
-            router.selection = model.configuration.repositories.isEmpty ? nil : .overview
+            router.selection = landing
         case .restoreSnapshot(let repositoryID, _)
             where model.repository(id: repositoryID) == nil:
-            router.selection = model.configuration.repositories.isEmpty ? nil : .overview
+            router.selection = landing
         case let .restoreSnapshot(repositoryID, snapshotID)
             where model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }) == nil:
             // The record itself is gone; the repository's newest record (or

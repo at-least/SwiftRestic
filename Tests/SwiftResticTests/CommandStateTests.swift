@@ -51,7 +51,7 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
 
-        for selection: SidebarItem? in [nil, .overview, .activity, .console, .repository(repository.id)] {
+        for selection: SidebarItem? in [nil, .activity, .console, .repository(repository.id)] {
             let state = model.planCommands(for: selection)
             #expect(state.planID == nil, "selection \(String(describing: selection))")
             #expect(!state.canBackUp && !state.canStop && !state.canEdit && !state.canToggleSchedule)
@@ -218,7 +218,7 @@ struct CommandStateTests {
         #expect(model.commandRepositoryID(for: .plan(orphan.id)) == nil)
         #expect(model.commandRepositoryID(for: .plan(unset.id)) == nil)
         #expect(model.commandRepositoryID(for: .repository(UUID())) == nil)
-        for selection: SidebarItem? in [.activity, .console, .overview, nil] {
+        for selection: SidebarItem? in [.activity, .console, nil] {
             #expect(model.commandRepositoryID(for: selection) == nil)
         }
 

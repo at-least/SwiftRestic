@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The start-at-login caveat and its one step, as the Overview's Next runs
+/// The start-at-login caveat and its one step, as a repository page's Next runs
 /// card and the plan editor's footer show it — one view, so the two say
 /// the same words beside the same button. The rules for when it shows are
 /// `LoginItemAdvice`'s; this reads only model state, never the daemon.

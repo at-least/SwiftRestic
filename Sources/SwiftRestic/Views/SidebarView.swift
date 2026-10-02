@@ -1,22 +1,32 @@
 import SwiftUI
 
-/// The split view's sidebar: Arq's sections plus the dashboard (Overview,
-/// Backup Plans, Restore, Activity), the restore disclosure groups, the
-/// context menus and the Add footer. Every repository is listed once: its
-/// Restore row opens the repository's page and expands to its backups.
+/// The split view's sidebar: each repository with its plans and its Restore
+/// node always in view beneath it, then Activity. The repository's row
+/// opens its page, which is its overview, and never collapses; beneath it
+/// sit its plans, "New Backup Plan…" while it has none, and Restore, which
+/// folds open to the repository's dated backups. The context menus and the
+/// Add footer ride along.
+///
+/// Every row is a top-level List row, and the tree's levels are leading
+/// indentation (`Indent`): a DisclosureGroup draws its triangle at the
+/// row's outer edge, which an indented child would leave stranded far to
+/// the left of its title. Only places carry a tag — a repository, a plan, a
+/// backup record — so selection stays unique; Restore and the lineage
+/// groups are folds, and "New Backup Plan…" is an action.
 ///
 /// Split out of `RootView` as a real child view so the sidebar's list
 /// type-checks on its own: the root's modifier chain sat at the compiler's
 /// type-check budget, and the sheet/deletion intents the sidebar raises are
-/// passed back as closures — the presenting state stays in `RootView`.
+/// passed back as closures — the presenting state stays in `RootView`. For
+/// the same budget each row kind is its own function.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Environment(\.now) private var now
 
-    /// Which Restore-section repositories are expanded — the backup records
+    /// Which repositories' Restore nodes are open — the backup records
     /// underneath are the restore pane's entry points. Shared with the detail
-    /// column: selecting a record from anywhere must find its group open.
+    /// column: selecting a record from anywhere must find its node open.
     @Binding var expandedRestoreRepos: Set<UUID>
 
     /// Lineage groups under Restore that the user folded shut. Groups start
@@ -25,7 +35,8 @@ struct SidebarView: View {
     @State private var collapsedRestoreLineages: Set<RestoreLineageID> = []
 
     let onEditPlan: (BackupPlan) -> Void
-    let onNewPlan: () -> Void
+    /// Opens the plan editor, with the repository preset when one is given.
+    let onNewPlan: (_ repositoryID: UUID?) -> Void
     let onEditRepository: (Repository) -> Void
     let onNewRepository: () -> Void
     /// Arms the shared deletion confirmation — the sidebar's menus must not
@@ -45,43 +56,23 @@ struct SidebarView: View {
                 since: OverviewMetrics.problemWindowStart(from: now)
             )
             Section {
-                Label("Overview", systemImage: "square.grid.2x2")
-                    .tag(SidebarItem.overview)
-            }
-
-            Section("Backup Plans") {
-                ForEach(model.configuration.plans) { plan in
-                    PlanSidebarRow(plan: plan)
-                        .tag(SidebarItem.plan(plan.id))
-                        .contextMenu { planContextMenu(plan) }
-                }
-                if model.configuration.plans.isEmpty, !model.isBootstrapping {
-                    Text("No plans yet")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Restore") {
                 ForEach(model.configuration.repositories) { repository in
-                    restoreGroup(repository)
-                }
-                if model.configuration.repositories.isEmpty, !model.isBootstrapping {
-                    Text("No repositories to restore from")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    repositoryRow(repository)
+                    ForEach(SidebarTree.children(of: repository.id, in: model.configuration.plans), id: \.self) { child in
+                        childRows(child, of: repository)
+                    }
                 }
             }
 
-            // Header-less, like Overview: one row needs no title above it.
-            // The restic console has no row — it is a power tool, reached
-            // from Repository ▸ restic Console….
+            // Header-less: one row needs no title above it. The restic
+            // console has no row — it is a power tool, reached from
+            // Repository ▸ restic Console….
             Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
                     // The window's unread badge, wired to the same 7-day
-                    // window the tray dot, the Overview's Recent problems
-                    // and the menu's problem line share: one count, so no
-                    // surface can claim trouble another denies. It also
+                    // window the tray dot, a repository page's Recent
+                    // problems and the menu's problem line share: one count,
+                    // so no surface can claim trouble another denies. It also
                     // yields to the unconfigured state like the tray's
                     // problem face does — a removed repository's old
                     // failures must not summon setup-bound attention — and
@@ -101,6 +92,18 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         .safeAreaInset(edge: .bottom) { sidebarFooter }
+        // The keyboard the outline gave the old disclosure rows: with a
+        // repository selected, → opens its Restore node and ← closes it.
+        // The node itself takes no selection, so the arrows act through
+        // the repository that owns it.
+        // Plain arrows only: a modified arrow keeps its system meaning, the
+        // restore pane's rule for its own folds.
+        .onKeyPress(.rightArrow, phases: .down) { press in
+            isPlain(press) ? foldSelectedRepository(open: true) : .ignored
+        }
+        .onKeyPress(.leftArrow, phases: .down) { press in
+            isPlain(press) ? foldSelectedRepository(open: false) : .ignored
+        }
         .onChange(of: router.selection) {
             guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
                   let snapshot = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
@@ -112,11 +115,11 @@ struct SidebarView: View {
     /// Arq's bare + in the corner. A missing restic is not repeated here: the
     /// banner above every pane (RootDetailView) already says it, with the
     /// install instruction a cursor-only triangle could not show. The bar
-    /// background stays — an expanded Restore section scrolls under it.
+    /// background stays — an open Restore node scrolls under it.
     private var sidebarFooter: some View {
         HStack(spacing: 8) {
             Menu {
-                Button("New Backup Plan…") { onNewPlan() }
+                Button("New Backup Plan…") { onNewPlan(nil) }
                     .disabled(model.configuration.repositories.isEmpty)
                 Button("Add Repository…") { onNewRepository() }
             } label: {
@@ -170,6 +173,8 @@ struct SidebarView: View {
     @ViewBuilder
     private func repositoryContextMenu(_ repository: Repository) -> some View {
         let commands = model.repositoryCommands(for: .repository(repository.id))
+        Button("New Backup Plan…") { onNewPlan(repository.id) }
+        Divider()
         Button("Edit…") { onEditRepository(repository) }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
         Divider()
@@ -185,104 +190,39 @@ struct SidebarView: View {
         }
     }
 
-    // MARK: - Restore
+    // MARK: - Repository
 
-    /// Arq's RESTORE section: each repository expands to its backup
-    /// records, and picking a record shows its files in the detail pane.
-    /// The repository's own row is Arq's storage-location row, both group
-    /// header and target: clicking it opens the repository's page, the
-    /// disclosure triangle lists its backups.
-    @ViewBuilder
-    private func restoreGroup(_ repository: Repository) -> some View {
-        let listing = model.snapshots(for: repository.id)
-        DisclosureGroup(isExpanded: Binding(
-            get: { expandedRestoreRepos.contains(repository.id) },
-            set: { opened in
-                if opened {
-                    expandedRestoreRepos.insert(repository.id)
-                    // First expand loads the record list; later refreshes
-                    // come from the launch sweep and the repository's own
-                    // Refresh.
-                    if model.snapshotListingOutcome(for: repository.id) == .idle {
-                        Task { await model.refreshSnapshots(repositoryID: repository.id) }
-                    }
-                } else {
-                    expandedRestoreRepos.remove(repository.id)
-                }
-            }
-        )) {
-            if model.loadingSnapshots.contains(repository.id), listing.isEmpty {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Reading backups…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else if case let .failed(message) = model.snapshotListingOutcome(for: repository.id), listing.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    // Orange only on the glyph, the words secondary — the
-                    // plan rows' contrast rule.
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .imageScale(.small)
-                            .foregroundStyle(Theme.warning)
-                            .accessibilityHidden(true)
-                        Text(Format.firstSentence(message))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                    .font(.caption)
-                    Button("Try Again") {
-                        Task { await model.refreshSnapshots(repositoryID: repository.id) }
-                    }
-                    .controlSize(.small)
-                }
-            } else if listing.isEmpty {
-                Text("No backups yet")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else {
-                // One lineage — one plan, or a repository only one tree ever
-                // went into — stays a flat list: a group level would only
-                // repeat the repository row above it.
-                let lineages = model.lineages(for: repository.id)
-                if lineages.count > 1 {
-                    let labels = SnapshotLineage.labels(for: lineages, plans: model.configuration.plans)
-                    ForEach(lineages) { lineage in
-                        lineageGroup(lineage, label: labels[lineage.key], repositoryID: repository.id)
-                    }
-                } else {
-                    ForEach(listing) { snapshot in
-                        RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                            .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
-                    }
-                }
-            }
-        } label: {
-            Label {
+    /// The trunk: Arq's storage-location row, the target of its page. It
+    /// never folds — its children are the next level of the tree, always in
+    /// view.
+    private func repositoryRow(_ repository: Repository) -> some View {
+        Label {
+            HStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(repository.name)
                         .lineLimit(1)
-                    restoreCaption(repository, listing: listing)
+                    restoreCaption(repository, listing: model.snapshots(for: repository.id))
                 }
-            } icon: {
-                // The sidebar's own icon tint, as on Overview and Activity:
-                // it turns white under the selection, where an explicit
-                // accent vanished into the selection's blue.
-                Image(systemName: repository.kind.symbolName)
+                Spacer(minLength: 4)
+                attentionMark(repository)
             }
-            .tag(SidebarItem.repository(repository.id))
-            .contextMenu { repositoryContextMenu(repository) }
+        } icon: {
+            // The sidebar's own icon tint, as on Activity: it turns white
+            // under the selection, where an explicit accent vanished into
+            // the selection's blue.
+            Image(systemName: repository.kind.symbolName)
         }
+        .tag(SidebarItem.repository(repository.id))
+        .contextMenu { repositoryContextMenu(repository) }
     }
 
     /// The repository row's second line: how many backups it holds — but
     /// only once that is known. A repository still being read, or whose
     /// read failed (a wrong password, an unreachable server), never says
     /// "0 backups", which reads as "your data is gone"; it says what the
-    /// expanded group says — a repository missing from its location (restic
+    /// Restore node says — a repository missing from its location (restic
     /// exit 10, an unplugged disk) included. A count from an earlier listing
-    /// stands under a failed re-read, as the expanded records do.
+    /// stands under a failed re-read, as the records do.
     @ViewBuilder
     private func restoreCaption(_ repository: Repository, listing: [Snapshot]) -> some View {
         Group {
@@ -303,36 +243,227 @@ struct SidebarView: View {
         .foregroundStyle(.secondary)
     }
 
+    /// The warning a repository wears while one of its plans is not
+    /// protected and should be — the rows its page's Plans card shows, read
+    /// from the same derivation. With no dashboard over every repository,
+    /// this is where an unreadable repository shows at a glance: the badge
+    /// and the menu bar count failed runs, and a wrong password fails none.
+    /// The words stay with the rows; the mark only points at them.
+    @ViewBuilder
+    private func attentionMark(_ repository: Repository) -> some View {
+        let rows = OverviewMetrics.needingAttention(
+            model.protectionRows(for: model.plans(in: repository.id), now: now)
+        )
+        if !rows.isEmpty {
+            let words = rows.map { "\($0.planName): \($0.stateText)" }.joined(separator: "\n")
+            Image(systemName: "exclamationmark.triangle.fill")
+                .imageScale(.small)
+                .foregroundStyle(Theme.warning)
+                .help(words)
+                .accessibilityLabel(words)
+        }
+    }
+
+    // MARK: - Children
+
+    @ViewBuilder
+    private func childRows(_ child: SidebarChild, of repository: Repository) -> some View {
+        switch child {
+        case let .plan(id):
+            if let plan = model.plan(id: id) {
+                PlanSidebarRow(plan: plan)
+                    .padding(.leading, Indent.child)
+                    .tag(SidebarItem.plan(plan.id))
+                    .contextMenu { planContextMenu(plan) }
+            }
+        case .addPlan:
+            addPlanRow(repository)
+        case .restore:
+            restoreRow(repository)
+            if expandedRestoreRepos.contains(repository.id) {
+                restoreContents(repository)
+            }
+        }
+    }
+
+    /// The way to a repository's first plan, where its plans would be. An
+    /// action, not a place: no tag, no chevron. It leaves once a plan exists;
+    /// the page's Plans card and the row's menu keep offering the next one.
+    private func addPlanRow(_ repository: Repository) -> some View {
+        Button { onNewPlan(repository.id) } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "plus.circle")
+                    .foregroundStyle(Theme.tint)
+                    .frame(width: Indent.slot)
+                    .accessibilityHidden(true)
+                Text("New Backup Plan…")
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, Indent.child)
+        .help("Create a backup plan that backs up to “\(repository.name)”")
+        // Every repository without a plan has one: the name tells them apart.
+        .accessibilityLabel("New Backup Plan for “\(repository.name)”…")
+    }
+
+    // MARK: - Restore
+
+    /// The repository's Restore node, Arq's RESTORE tree one level down:
+    /// it folds open to the repository's backup records, and picking a
+    /// record shows its files in the detail pane. It carries no tag — as a
+    /// selection it would duplicate the repository row or a record — so a
+    /// click only folds it. Its chevron sits in the slot a plan's state mark
+    /// uses, so the word Restore starts where plan names do.
+    private func restoreRow(_ repository: Repository) -> some View {
+        let isExpanded = expandedRestoreRepos.contains(repository.id)
+        return Button { toggleRestore(repository.id) } label: {
+            HStack(spacing: 4) {
+                FoldChevron(isExpanded: isExpanded)
+                    .frame(width: Indent.slot)
+                Text("Restore")
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, Indent.child)
+        .help("Browse the backups in “\(repository.name)” and restore files")
+        // Named for its repository: every repository has a Restore node, and
+        // as flat rows they have no outline parent to tell them apart.
+        .accessibilityLabel("Restore “\(repository.name)”")
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    }
+
+    private func isPlain(_ press: KeyPress) -> Bool {
+        press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
+    }
+
+    private func foldSelectedRepository(open: Bool) -> KeyPress.Result {
+        guard case let .repository(id) = router.selection else { return .ignored }
+        if open != expandedRestoreRepos.contains(id) { toggleRestore(id) }
+        return .handled
+    }
+
+    /// The first opening loads the record list; later refreshes come from
+    /// the launch sweep and the repository's own Refresh.
+    /// Spoken when it folds, as a disclosure row was: the fold is a button,
+    /// whose changed value VoiceOver does not read out by itself.
+    private func toggleRestore(_ repositoryID: UUID) {
+        let opened = expandedRestoreRepos.remove(repositoryID) == nil
+        if opened {
+            expandedRestoreRepos.insert(repositoryID)
+            if model.snapshotListingOutcome(for: repositoryID) == .idle {
+                Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+            }
+        }
+        if let repository = model.repository(id: repositoryID) {
+            announceFold("Restore “\(repository.name)”", opened: opened)
+        }
+    }
+
+    private func announceFold(_ name: String, opened: Bool) {
+        AccessibilityNotification.Announcement("\(name) \(opened ? "expanded" : "collapsed")").post()
+    }
+
+    @ViewBuilder
+    private func restoreContents(_ repository: Repository) -> some View {
+        let listing = model.snapshots(for: repository.id)
+        if listing.isEmpty {
+            restoreStatusRow(repository)
+                .padding(.leading, Indent.grandchild)
+        } else {
+            // One lineage — one plan, or a repository only one tree ever
+            // went into — stays a flat list: a group level would only
+            // repeat the Restore row above it.
+            let lineages = model.lineages(for: repository.id)
+            if lineages.count > 1 {
+                let labels = SnapshotLineage.labels(for: lineages, plans: model.configuration.plans)
+                ForEach(lineages) { lineage in
+                    lineageRows(lineage, label: labels[lineage.key], repository: repository)
+                }
+            } else {
+                ForEach(listing) { snapshot in
+                    RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+                        .padding(.leading, Indent.grandchild)
+                        .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+                }
+            }
+        }
+    }
+
+    /// What an open Restore node says while it holds no record. "No backups
+    /// yet" only once a listing has succeeded: before that it is still being
+    /// read, and after a failure it says why.
+    @ViewBuilder
+    private func restoreStatusRow(_ repository: Repository) -> some View {
+        let outcome = model.snapshotListingOutcome(for: repository.id)
+        if model.loadingSnapshots.contains(repository.id) || outcome == .idle {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Reading backups…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else if case let .failed(message) = outcome {
+            VStack(alignment: .leading, spacing: 4) {
+                // Orange only on the glyph, the words secondary — the
+                // plan rows' contrast rule.
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
+                    Text(Format.firstSentence(message))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .font(.caption)
+                Button("Try Again") {
+                    Task { await model.refreshSnapshots(repositoryID: repository.id) }
+                }
+                .controlSize(.small)
+            }
+        } else {
+            Text("No backups yet")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     /// One lineage's records — Arq's backed-up-folder level, so a
     /// repository several plans share no longer interleaves their dates, and
     /// the row below a record is the one its Change column compares against.
-    private func lineageGroup(
+    @ViewBuilder
+    private func lineageRows(
         _ lineage: SnapshotLineage,
         label: SnapshotLineage.Label?,
-        repositoryID: UUID
+        repository: Repository
     ) -> some View {
+        let repositoryID = repository.id
         let id = RestoreLineageID(repositoryID: repositoryID, key: lineage.key)
+        let isExpanded = !collapsedRestoreLineages.contains(id)
+        let title = label?.title ?? "Backups"
         let caption = [Format.plural(lineage.snapshots.count, "backup"), label?.qualifier]
             .compactMap { $0 }
             .joined(separator: " · ")
-        return DisclosureGroup(isExpanded: Binding(
-            get: { !collapsedRestoreLineages.contains(id) },
-            set: { opened in
-                if opened {
-                    collapsedRestoreLineages.remove(id)
-                } else {
-                    collapsedRestoreLineages.insert(id)
-                }
+        Button {
+            if isExpanded {
+                collapsedRestoreLineages.insert(id)
+            } else {
+                collapsedRestoreLineages.remove(id)
             }
-        )) {
-            ForEach(lineage.snapshots) { snapshot in
-                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                    .tag(SidebarItem.restoreSnapshot(repositoryID, snapshot.id))
-            }
+            announceFold(title, opened: !isExpanded)
         } label: {
-            Label {
+            HStack(spacing: 4) {
+                FoldChevron(isExpanded: isExpanded)
+                    .frame(width: Indent.lineageSlot)
+                Image(systemName: "folder")
+                    .foregroundStyle(Theme.tint)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(label?.title ?? "Backups")
+                    Text(title)
                         .lineLimit(1)
                     Text(caption)
                         .font(.caption)
@@ -340,12 +471,53 @@ struct SidebarView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-            } icon: {
-                Image(systemName: "folder")
-                    .foregroundStyle(Theme.tint)
+                Spacer(minLength: 0)
             }
-            .help(label?.detail ?? "")
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .padding(.leading, Indent.grandchild)
+        .help(label?.detail ?? "")
+        // The same folders from the same Mac can sit in two repositories.
+        .accessibilityLabel("\(title), \(caption), in “\(repository.name)”")
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+        if isExpanded {
+            ForEach(lineage.snapshots) { snapshot in
+                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+                    .padding(.leading, Indent.lineageRecord)
+                    .tag(SidebarItem.restoreSnapshot(repositoryID, snapshot.id))
+            }
+        }
+    }
+}
+
+/// The tree's levels, as the leading indentation of top-level List rows.
+/// A repository's child keeps a fixed slot ahead of its title — a plan's
+/// state mark, the plus of "New Backup Plan…", Restore's chevron — so every
+/// child's title starts at one x.
+private enum Indent {
+    static let slot: CGFloat = 26
+    /// A repository's plans, "New Backup Plan…" and Restore.
+    static let child: CGFloat = 16
+    /// Under Restore: past the child's slot and its spacing, so a record or
+    /// a lineage group starts where the word Restore does.
+    static let grandchild: CGFloat = child + slot + 4
+    /// A lineage group's chevron, narrower than a child's slot.
+    static let lineageSlot: CGFloat = 14
+    /// A record under a lineage group, starting where the group's folder does.
+    static let lineageRecord: CGFloat = grandchild + lineageSlot + 4
+}
+
+/// A fold's disclosure mark, the restore pane's own: chevron right when
+/// closed, down when open. The row around it is the button.
+private struct FoldChevron: View {
+    let isExpanded: Bool
+
+    var body: some View {
+        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
     }
 }
 
@@ -356,7 +528,7 @@ private struct RestoreLineageID: Hashable {
     let key: SnapshotLineage.Key
 }
 
-/// One dated backup record in the Restore section — the row whose selection
+/// One dated backup record under a repository's Restore node — the row whose selection
 /// fills the detail pane with that record's files. One line, like Arq's: the
 /// completeness mark and the moment are the whole record at sidebar size.
 private struct RestoreRecordRow: View {
@@ -394,7 +566,7 @@ private struct PlanSidebarRow: View {
     let plan: BackupPlan
 
     var body: some View {
-        // As of the window's minute clock, the Overview's Protection card
+        // As of the window's minute clock, the repository page's Plans card
         // spells the same run from the same tick.
         let caption = PlanStatus.sidebarCaption(
             for: plan,
@@ -406,17 +578,17 @@ private struct PlanSidebarRow: View {
         )
         HStack(spacing: 4) {
             // A fixed leading slot on every row, marker or not, so every plan
-            // name starts at the same x — 26 + 4 = 30 pt, the title inset of
-            // the Label rows under Restore at the default sidebar icon size
-            // (measured equal). The marker sat inline before, and a dotted
-            // Photos stood 17 pt right of an idle name.
+            // name starts at the same x — and at the x of the words "New
+            // Backup Plan…" and "Restore", whose plus and chevron sit in the
+            // same slot (`Indent.slot`). The marker sat inline before, and a
+            // dotted Photos stood 17 pt right of an idle name.
             // Color.clear holds the slot's width: an empty marker is an
             // EmptyView, and EmptyView drops `.frame`.
             ZStack {
                 Color.clear
                 marker
             }
-            .frame(width: 26)
+            .frame(width: Indent.slot)
             VStack(alignment: .leading, spacing: 1) {
                 Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
                     .lineLimit(1)

@@ -73,9 +73,7 @@ extension AppDelegate {
         guard let model, let router else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        var stops: [(name: String, select: () async -> Void)] = [
-            ("overview", { router.selection = .overview }),
-        ]
+        var stops: [(name: String, select: () async -> Void)] = []
         if let plan = model.configuration.plans.first {
             stops.append(("plan", { router.selection = .plan(plan.id) }))
         }

@@ -13,7 +13,7 @@ struct RootDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
 
-    /// Which Restore-section repositories are expanded — selecting a record
+    /// Which repositories' Restore nodes are open — selecting a record
     /// from anywhere (the repository page's Restore Files button included)
     /// must find its group open in the sidebar.
     @Binding var expandedRestoreRepos: Set<UUID>
@@ -69,8 +69,6 @@ struct RootDetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 switch router.selection {
-                case .overview:
-                    OverviewView()
                 case let .plan(id):
                     if let plan = model.plan(id: id) {
                         PlanDetailView(

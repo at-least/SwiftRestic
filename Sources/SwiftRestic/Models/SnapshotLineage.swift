@@ -4,8 +4,8 @@ import Foundation
 /// from the same host — exactly one group of restic's default
 /// `--group-by host,paths`.
 ///
-/// The app's single answer to "the same backup, over time". The Restore
-/// section groups a repository's records by it, and both the restore pane's
+/// The app's single answer to "the same backup, over time". A repository's
+/// Restore node groups its records by it, and both the restore pane's
 /// Change column and the Compare sheet default to the previous snapshot in
 /// it. Retention is narrower on purpose: `forget` runs per plan
 /// (`--tag <plan>`), and restic groups that plan's snapshots by host+paths —
@@ -76,7 +76,7 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
 }
 
 extension SnapshotLineage {
-    /// How the Restore section names one lineage among its repository's others.
+    /// How a Restore node names one lineage among its repository's others.
     struct Label: Equatable, Sendable {
         var title: String
         /// What tells two lineages apart when the title alone cannot: the

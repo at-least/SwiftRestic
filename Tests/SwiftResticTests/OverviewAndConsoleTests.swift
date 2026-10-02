@@ -93,8 +93,9 @@ struct OverviewMetricsTests {
     func protectedRowMatchesTheSidebar() {
         // 1 h 43 min ago: Date.RelativeFormatStyle rounds this to "2 hours
         // ago" while the sidebar's Format.relative (RelativeDateTimeFormatter)
-        // says "1 hour ago" — the Overview and the sidebar disagreed about
-        // the same backup, side by side (captured 2026-10-02).
+        // says "1 hour ago" — the dashboard's Protection card (now a
+        // repository page's Plans card) and the sidebar disagreed about the
+        // same backup, side by side (captured 2026-10-02).
         let repository = UUID()
         let time = Date.now.addingTimeInterval(-103 * 60)
         let rows = OverviewMetrics.protectionRows(
@@ -195,9 +196,10 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { $0 == docs.id ? failed : nil }
         )
-        // One derivation of the words: the Overview printed "Last backup 4
-        // hours ago" beside the sidebar's "Failed — Just now" (captured
-        // 2026-10-02), and "2 of 2 protected" above it.
+        // One derivation of the words: the dashboard (now a repository
+        // page's Plans card) printed "Last backup 4 hours ago" beside the
+        // sidebar's "Failed — Just now" (captured 2026-10-02), and "2 of 2
+        // protected" above it.
         let sidebar = PlanStatus.sidebarCaption(
             for: docs, activity: nil, problem: failed, existingRepositoryIDs: [repository]
         )

@@ -32,39 +32,10 @@ struct ProtectionCard: View {
     /// the count once it is not.
     var onAddPlan: (() -> Void)?
 
-    private var rows: [ProtectionRow] {
-        // One pass over the plans, with the model lookups behind closures so
-        // this view keeps its observation on the state the rows read.
-        OverviewMetrics.protectionRows(
-            plans: plans,
-            latestSnapshot: { repositoryID, planID in
-                model.snapshots(for: repositoryID, planID: planID).first
-            },
-            repositoryHasSnapshots: { repositoryID in
-                !model.snapshots(for: repositoryID).isEmpty
-            },
-            listingOutcome: { repositoryID in
-                model.snapshotListingOutcome(for: repositoryID)
-            },
-            isChecking: { repositoryID in
-                model.loadingSnapshots.contains(repositoryID)
-            },
-            activity: { planID in
-                model.activity[planID]
-            },
-            standingProblem: { planID in
-                model.currentProblem(for: planID)
-            },
-            relative: { date in
-                Format.ago(date, now: now)
-            }
-        )
-    }
-
     var body: some View {
         // The rows feed both the card and its caption; captured once so a
         // render costs one pass over the plans, not two.
-        let rows = rows
+        let rows = model.protectionRows(for: plans, now: now)
         return Card(title) {
             VStack(alignment: .leading, spacing: 7) {
                 if rows.isEmpty {

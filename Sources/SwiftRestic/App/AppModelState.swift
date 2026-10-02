@@ -67,10 +67,10 @@ struct Banner: Identifiable, Equatable {
 /// menu "Back Up Now" that stays enabled over a non-plan selection is a menu
 /// that lies.
 enum SidebarItem: Hashable {
-    case overview
     case plan(UUID)
+    /// The repository's page, which is also its overview.
     case repository(UUID)
-    /// A backup record picked in the sidebar's Restore section — the pane
+    /// A backup record picked under a repository's Restore node — the pane
     /// browses that record's file tree directly, Arq-style.
     case restoreSnapshot(UUID, String)
     case console

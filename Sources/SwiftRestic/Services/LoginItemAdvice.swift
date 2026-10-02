@@ -2,8 +2,8 @@ import Foundation
 
 /// What to say about starting at login, and where. The scheduler lives in
 /// the app's process, so a schedule stops at the first restart or logout
-/// unless the app comes back by itself; the plan editor and the Overview's
-/// Next runs card say so, from these rules.
+/// unless the app comes back by itself; the plan editor and a repository
+/// page's Next runs card say so, from these rules.
 enum LoginItemAdvice {
     enum Offer: Equatable, Sendable {
         /// Registering would work: one click.

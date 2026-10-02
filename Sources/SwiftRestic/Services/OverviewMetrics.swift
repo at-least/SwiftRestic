@@ -1,6 +1,6 @@
 import Foundation
 
-/// One plan's row on the dashboard's Protection card. Data only — the hues it
+/// One plan's row on a repository page's Plans card. Data only — the hues it
 /// wears live in the view.
 struct ProtectionRow: Identifiable, Sendable, Equatable {
     let planID: UUID
@@ -92,7 +92,16 @@ enum OverviewMetrics {
         problems(in: runs, since: since).filter { $0.repositoryID == repositoryID }
     }
 
-    /// The Protection card's rows, one per plan. The lookups arrive as
+    /// The rows whose plan is not protected and should be: an unreadable
+    /// listing, a plan known to have no backup, or one whose last backup
+    /// failed — never one still being read or one whose backup is in flight. A repository's sidebar row
+    /// wears a warning for these, since the badge and the menu bar count
+    /// failed runs only, and an unreadable repository has none.
+    static func needingAttention(_ rows: [ProtectionRow]) -> [ProtectionRow] {
+        rows.filter { $0.severityRank <= 1 }
+    }
+
+    /// The Plans card's rows, one per plan. The lookups arrive as
     /// closures so the derivation stays pure — and testable — while the view
     /// keeps its observation on the model state behind them. `relative`
     /// spells a past moment; the view passes the window's minute clock, as

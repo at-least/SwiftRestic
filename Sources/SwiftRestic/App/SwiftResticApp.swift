@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Coming back from System Settings is the only sign that Full Disk
     /// Access was granted or taken away, or that the login item was approved
     /// or removed under Login Items, so every activation asks again — here
-    /// rather than in Settings, so the Overview and the plan editor catch
+    /// rather than in Settings, so the Next runs card and the plan editor catch
     /// up while no Settings window exists. Two tasks, so neither answer
     /// waits on the other's round trip. The model arrives with the scene's
     /// task; an activation before that is covered by bootstrap's own reads.
@@ -315,7 +315,8 @@ struct SwiftResticApp: App {
     /// A submenu of the three pause lengths. `.disabled` on a Menu in the
     /// menu bar greys only its items: the submenu's own row stays enabled
     /// (measured via Accessibility — "Pause Schedule" read enabled over
-    /// three greyed lengths with Overview selected), an item that opens onto
+    /// three greyed lengths with a non-plan pane, the since-removed
+    /// Overview, selected), an item that opens onto
     /// nothing it can do. So a submenu that cannot act is a plain disabled
     /// item of the same title.
     @ViewBuilder

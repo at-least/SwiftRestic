@@ -14,6 +14,37 @@ extension AppModel {
         configuration.plans.filter { $0.repositoryID == repositoryID }
     }
 
+    /// These plans' Protection rows as of `now` — one derivation for the
+    /// repository page's Plans card and its sidebar row's warning. Read from
+    /// a view body, the lookups below still register that view's
+    /// observation of the state they touch.
+    func protectionRows(for plans: [BackupPlan], now: Date) -> [ProtectionRow] {
+        OverviewMetrics.protectionRows(
+            plans: plans,
+            latestSnapshot: { repositoryID, planID in
+                self.snapshots(for: repositoryID, planID: planID).first
+            },
+            repositoryHasSnapshots: { repositoryID in
+                !self.snapshots(for: repositoryID).isEmpty
+            },
+            listingOutcome: { repositoryID in
+                self.snapshotListingOutcome(for: repositoryID)
+            },
+            isChecking: { repositoryID in
+                self.loadingSnapshots.contains(repositoryID)
+            },
+            activity: { planID in
+                self.activity[planID]
+            },
+            standingProblem: { planID in
+                self.currentProblem(for: planID)
+            },
+            relative: { date in
+                Format.ago(date, now: now)
+            }
+        )
+    }
+
     func upsert(plan: BackupPlan) {
         if let index = configuration.plans.firstIndex(where: { $0.id == plan.id }) {
             configuration.plans[index] = configuration.plans[index].merging(draft: plan)

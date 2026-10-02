@@ -72,7 +72,7 @@ extension AppModel {
     }
 
     /// What holds every scheduled run back right now, if anything — the one
-    /// answer the tray, the Overview, Settings and the plan page show.
+    /// answer the tray, a repository's page, Settings and the plan page show.
     var scheduleHold: ScheduleHold? {
         Scheduler.hold(
             pause: configuration.settings.schedulePause,
@@ -125,7 +125,7 @@ extension AppModel {
         )
     }
 
-    /// The Overview's start-at-login caveat: `nil` while nothing is
+    /// The Next runs card's start-at-login caveat: `nil` while nothing is
     /// scheduled or the app already starts at login. The enumeration is the
     /// ungated one on purpose — a paused or on-battery schedule is still a
     /// schedule, and it dies with the process all the same.

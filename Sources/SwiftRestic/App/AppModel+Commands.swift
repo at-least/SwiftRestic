@@ -133,7 +133,7 @@ extension AppModel {
         case let .repository(id): id
         case let .restoreSnapshot(id, _): id
         case let .plan(planID): plan(id: planID)?.repositoryID
-        case .overview, .console, .activity, nil: nil
+        case .console, .activity, nil: nil
         }
         return repository(id: id)?.id
     }

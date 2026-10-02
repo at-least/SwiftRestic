@@ -164,7 +164,7 @@ struct PlanEditorSheet: View {
 
     /// The plan's identity, above the tabs and so on screen from every one
     /// of them — Arq's place for it, with our live controls: the sheet often
-    /// opens over the Overview or Activity, where nothing else names the
+    /// opens over a repository's page or Activity, where nothing else names the
     /// plan being edited, and the repository stays changeable here.
     private var identityHeader: some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {

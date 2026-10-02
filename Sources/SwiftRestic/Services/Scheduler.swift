@@ -2,7 +2,7 @@ import Foundation
 
 /// What is holding every scheduled run back, app-wide: the user's Pause
 /// Backups, or the battery while "Pause scheduled backups on battery power"
-/// is on. One value, so the tray, the Overview, Settings and the plan page
+/// is on. One value, so the tray, a repository's page, Settings and the plan page
 /// say the same thing the scheduler does.
 enum ScheduleHold: Equatable, Sendable {
     /// Pause Backups; `until` is `nil` for Until I Resume.
@@ -116,7 +116,7 @@ enum Scheduler {
     /// A repository page's Next check or Next prune, as the scheduler will
     /// start it: the app-wide hold holds upkeep too, so a timed hold moves
     /// the date to its end and a due task under an open-ended one (Until I
-    /// Resume, the battery) reads "Waiting" — the Overview's word — never
+    /// Resume, the battery) reads "Waiting" — the Next runs card's word — never
     /// "Due now".
     static func nextMaintenanceText(
         _ task: MaintenanceTask,

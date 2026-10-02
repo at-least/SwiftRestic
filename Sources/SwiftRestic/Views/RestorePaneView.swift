@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The restore pane: one backup record's file tree, browsed straight from
-/// the sidebar's Restore section — Arq's arrangement, where picking a
+/// a repository's Restore node in the sidebar — Arq's arrangement, where picking a
 /// dated record in the source list shows its files in the main pane.
 ///
 /// The app's one snapshot-first browser: the run drawer's Browse, both

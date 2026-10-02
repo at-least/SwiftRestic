@@ -42,8 +42,8 @@ struct RepositoryDetailView: View {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
                 .help("Re-read snapshots and statistics")
-                // Arq's restore entry: expand the sidebar's Restore section
-                // on this repository and select its newest backup record —
+                // Arq's restore entry: open this repository's Restore node
+                // in the sidebar and select its newest backup record —
                 // the Restore pane does the rest. Disabled while no records
                 // exist; loading them is Refresh's job, not a side effect.
                 Button("Restore Files…", systemImage: "arrow.down.doc") {
@@ -81,7 +81,7 @@ struct RepositoryDetailView: View {
             // Arq's storage-location page, plus the two numbers a backup
             // user asks of a destination: how big, and how full is its disk.
             // The backups themselves are the sidebar's, under this
-            // repository's Restore row.
+            // repository's Restore node.
             Card("Details") {
                 VStack(alignment: .leading, spacing: 10) {
                     DetailGrid {

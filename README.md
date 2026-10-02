@@ -40,8 +40,15 @@ checked in so a normal build does not need it.
 
 ## What it does
 
-- **Overview dashboard** — what is protected, what runs next, and what has gone
-  wrong lately.
+- **Repositories in the sidebar** — each repository is a row with its backup
+  plans and its *Restore* node always in view beneath it; a repository with
+  no plan yet shows *New Backup Plan…* where its plans would be. A
+  repository wears a warning while one of its plans is not protected — its
+  backups cannot be read, a plan has no backup, or a plan's last backup
+  failed; the warning's tooltip names the plan.
+- **A repository's page is its overview** — its plans and whether each is
+  protected, what runs next, and what has gone wrong with it lately, then
+  where it is, how big it is, and its maintenance.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob
   Storage, Google Cloud Storage, an rclone remote, or a restic REST server.
   Creating one runs `restic init`; the app refuses to save a repository it could
@@ -57,10 +64,10 @@ checked in so a normal build does not need it.
   Running Backups* also stops backups in flight, which start over when the
   pause ends — restic cannot resume a backup. A plan's own *Pause Schedule*
   takes the same lengths. With *Pause scheduled backups on battery power* on,
-  the menu bar, the Overview and Settings say that backups wait for power
+  the menu bar, the repository pages and Settings say that backups wait for power
   instead of announcing runs that will not start.
 - **Browsing and restore** — every *Browse*, *Restore Files…* and *Show in
-  Restore* opens the one browser, under the sidebar's Restore section: a
+  Restore* opens the one browser, under the repository's Restore node: a
   backup's folders as a tree, with a Change column and search, and three ways
   to restore — drag an item to Finder, select one and choose *Restore…*, or
   *Restore Entire Backup…*, which recreates its folders under their full
@@ -75,10 +82,9 @@ checked in so a normal build does not need it.
   confirming first when something is actually there to replace. restic before
   0.17 has no `--overwrite`; with such a restic, keeping restores a folder or a
   whole backup only where nothing is there yet, and refuses otherwise. The
-  sidebar's Restore section lists each repository once, as Arq lists a storage
-  location: clicking its row opens the repository's page, and its disclosure
-  triangle shows its backups, grouped by the folders and Mac they came from
-  (restic's own `host,paths` grouping). The file list's Change column compares
+  sidebar's Restore node under each repository folds open to its backups,
+  grouped by the folders and Mac they came from (restic's own `host,paths`
+  grouping) once there is more than one such group. The file list's Change column compares
   each backup with the previous one in its group; the pane's header names the
   open backup and says what its Change column is compared with, or that it is
   the first of its group. On a plan's page, *Browse
@@ -153,7 +159,7 @@ App/        AppModel       @MainActor @Observable — configuration, run state,
                             lifecycles over sink protocols, unit-testable
             TaskRegistry   the in-flight task census shutdown drains
             ConsoleModel   the console pane's state (dependencies injected)
-Views/      NavigationSplitView UI, the dashboard, restic console;
+Views/      NavigationSplitView UI, the dashboard cards, restic console;
             the root composes SidebarView + RootDetailView child views
 ```
 
@@ -266,14 +272,14 @@ checked:
 
 ```sh
 open --env SWIFTRESTIC_CONFIG_DIR=/tmp/demo \
-  --env SWIFTRESTIC_CAPTURE=/tmp/overview.png \
-  --env SWIFTRESTIC_CAPTURE_PANE=overview \
+  --env SWIFTRESTIC_CAPTURE=/tmp/repository.png \
+  --env SWIFTRESTIC_CAPTURE_PANE=repository \
   SwiftRestic.app
 ```
 
 `SWIFTRESTIC_CONFIG_DIR` points the app at a throwaway configuration instead of
 your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
-`SWIFTRESTIC_CAPTURE_PANE` picks which screen (`overview`, `plan`, `repository`,
+`SWIFTRESTIC_CAPTURE_PANE` picks which screen (`plan`, `repository`, `restore`,
 `activity`, `find`, `console`). `all` instead photographs every pane in one
 run — `SWIFTRESTIC_CAPTURE` names a directory, each pane lands as
 `pane-<name>.png`, and `SWIFTRESTIC_CAPTURE_DELAY` becomes the settle time per
@@ -456,7 +462,7 @@ stretch.
   `/Applications` first. On an ad-hoc-signed build macOS may still ask for
   approval in System Settings; the toggle catches up when you come back to the
   app. The plan editor offers *Start at Login* when a save turns a schedule on,
-  and the Overview's *Next runs* card says the same while a run is scheduled
+  and a repository page's *Next runs* card says the same while a run is scheduled
   and start at login is off. Quitting from SwiftRestic's own Quit — the app
   menu, ⌘Q or the menu bar item — while a plan is scheduled and start at login
   is off names the run that will be missed; a quit asked for by the Dock,

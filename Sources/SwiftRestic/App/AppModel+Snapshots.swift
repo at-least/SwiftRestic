@@ -149,13 +149,13 @@ extension AppModel {
         return snapshotsLoadedAt[repositoryID]
     }
 
-    /// The repository's snapshots grouped the way the Restore section shows
+    /// The repository's snapshots grouped the way a Restore node shows
     /// them, the lineage with the newest backup first.
     func lineages(for repositoryID: UUID) -> [SnapshotLineage] {
         snapshotLineages[repositoryID] ?? []
     }
 
-    /// How the Restore section labels the lineage `record` belongs to — the
+    /// How a Restore node labels the lineage `record` belongs to — the
     /// same lookup its group rows make, for surfaces that name one backup
     /// (with `SnapshotLineage.displayName(of:label:)`) instead of a second
     /// rule of their own.
