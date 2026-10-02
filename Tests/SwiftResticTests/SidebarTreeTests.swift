@@ -86,12 +86,13 @@ struct SidebarTreeTests {
         #expect(SidebarTree.landingSelection(repositories: []) == nil)
     }
 
-    @Test("a backup sits under the plan of the repository that made it, the rest under Other backups by lineage")
+    @Test("a backup sits under the plan of the repository that made it, the rest under Other backups by plan or lineage")
     func shelves() throws {
         let nas = UUID()
         let documents = plan("Documents", in: nas)
         let photos = plan("Photos", in: nas)
         let movedAway = plan("Music", in: UUID())
+        let deleted = UUID()
         let docsTag = ResticService.planTag(documents.id)
         let photosTag = ResticService.planTag(photos.id)
 
@@ -108,19 +109,22 @@ struct SidebarTreeTests {
         let x1 = try snapshot("x1", time: "2026-09-27T02:00:00Z", paths: ["/Data/Music"], host: "old-mac")
         // A deleted plan's tag.
         let g1 = try snapshot("g1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Gone"],
-                              tags: [ResticService.planTag(UUID())])
+                              tags: [ResticService.planTag(deleted)])
 
-        let shelves = BackupShelves(listing: [d2, p1, d1, m1, x1, g1], plans: [documents, photos])
+        let shelves = BackupShelves(listing: [d2, p1, d1, m1, x1, g1], plans: [documents, photos],
+                                    allPlans: [documents, photos, movedAway])
         #expect(shelves.byPlan[documents.id]?.map(\.id) == ["d2", "d1"])
         #expect(shelves.byPlan[photos.id]?.map(\.id) == ["p1"])
+        // The groups interleave newest-first, whatever kind they are.
+        #expect(shelves.others.map(\.id) == [.plan(movedAway.id), .lineage(x1.lineageKey), .plan(deleted)])
         #expect(shelves.others.map { $0.snapshots.map(\.id) } == [["m1"], ["x1"], ["g1"]])
         #expect(shelves.hasOtherBackups)
 
         // Every backup a plan of the repository made: no Other backups.
-        let tidy = BackupShelves(listing: [d2, p1, d1], plans: [documents, photos])
+        let tidy = BackupShelves(listing: [d2, p1, d1], plans: [documents, photos], allPlans: [documents, photos])
         #expect(!tidy.hasOtherBackups)
-        // A repository without plans: all of it is other.
-        #expect(BackupShelves(listing: [d2], plans: []).others.map(\.key) == [d2.lineageKey])
+        // A repository without plans: all of it is other, still by plan.
+        #expect(BackupShelves(listing: [d2], plans: [], allPlans: []).others.map(\.id) == [.plan(documents.id)])
     }
 
     @Test("a backup two plans' tags claim sits under the first of them, once")
@@ -132,11 +136,130 @@ struct SidebarTreeTests {
         let photos = plan("Photos", in: nas)
         let both = try snapshot("b1", time: "2026-09-30T02:00:00Z",
                                 tags: [ResticService.planTag(photos.id), ResticService.planTag(documents.id)])
-        let shelves = BackupShelves(listing: [both], plans: [documents, photos])
+        let shelves = BackupShelves(listing: [both], plans: [documents, photos], allPlans: [documents, photos])
         #expect(shelves.byPlan[documents.id]?.map(\.id) == ["b1"])
         #expect(shelves.byPlan[photos.id] == nil)
         #expect(BackupShelves.owner(of: both, among: [documents, photos]) == documents.id)
         #expect(BackupShelves.owner(of: both, among: [photos, documents]) == photos.id)
+    }
+
+    @Test("an orphan two deleted plans' tags claim sits with the lexicographically first")
+    func dualTaggedOrphanHasOneHome() throws {
+        // The snapshot index's own rule for the same outside-`restic tag`
+        // situation, whatever order the tags arrive in.
+        let first = UUID(uuidString: "0a000000-0000-4000-8000-00000000000a")!
+        let second = UUID(uuidString: "0b000000-0000-4000-8000-00000000000b")!
+        let both = try snapshot("o1", time: "2026-09-30T02:00:00Z",
+                                tags: [ResticService.planTag(second), ResticService.planTag(first)])
+        let shelves = BackupShelves(listing: [both], plans: [], allPlans: [])
+        #expect(shelves.others.map(\.id) == [.plan(first)])
+        #expect(shelves.others.map { $0.snapshots.map(\.id) } == [["o1"]])
+    }
+
+    @Test("a plan tag's UUID parses back to the plan, and nothing else does")
+    func planUUIDRoundTrip() {
+        let planID = UUID()
+        #expect(ResticService.planUUID(fromTag: ResticService.planTag(planID)) == planID)
+        // Anything else names no plan: another client's tag, a plain word,
+        // a mangled tail, or the UUID in upper case.
+        #expect(ResticService.planUUID(fromTag: "swiftrestic-plan-") == nil)
+        #expect(ResticService.planUUID(fromTag: "swiftrestic-plan-not-a-uuid") == nil)
+        #expect(ResticService.planUUID(fromTag: "vacation") == nil)
+        #expect(ResticService.planUUID(fromTag: "") == nil)
+        // The prefix stays, the UUID's tail goes upper case: the tail still
+        // parses, so it is the round trip — the tag the app writes is lower
+        // case — that rejects it.
+        let upper = ResticService.planTagPrefix + planID.uuidString.uppercased()
+        #expect(ResticService.planUUID(fromTag: upper) == nil)
+    }
+
+    @Test("one plan's history stays one group across hosts and folder sets, newest member first")
+    func spanningGroupStaysOne() throws {
+        let deleted = UUID()
+        let tag = ResticService.planTag(deleted)
+        let newest = try snapshot("g3", time: "2026-09-30T02:00:00Z", paths: ["/Data/Docs"], tags: [tag])
+        // The plan ran from a laptop for a while, then dropped a folder.
+        let laptop = try snapshot("g2", time: "2026-09-29T02:00:00Z", paths: ["/Data/Old"],
+                                  host: "laptop", tags: [tag])
+        let oldest = try snapshot("g1", time: "2026-09-28T02:00:00Z", paths: ["/Data/Docs"], tags: [tag])
+        let shelves = BackupShelves(listing: [oldest, laptop, newest], plans: [], allPlans: [])
+        #expect(shelves.others.map(\.id) == [.plan(deleted)])
+        #expect(shelves.others[0].snapshots.map(\.id) == ["g3", "g2", "g1"])
+        // The newest member names the group. It came from this Mac, so the
+        // caption names no Mac at all — the laptop's backups do not change
+        // that.
+        let label = shelves.otherLabels(repositories: [], localHost: "mac")[shelves.others[0].id]
+        #expect(label?.title == "Docs")
+        #expect(label?.caption?.text == "3 backups · not set up here")
+        #expect(label?.qualifier == nil)
+        // Read on the laptop, the newest backup is another Mac's, and the
+        // caption says whose: the host is a piece that gives way, the kind
+        // one that stays whole.
+        let onLaptop = shelves.otherLabels(repositories: [], localHost: "laptop")[shelves.others[0].id]
+        #expect(onLaptop?.caption == .init(count: "3 backups", qualifiers: ["mac"], kind: ["not set up here"]))
+        #expect(onLaptop?.qualifier == "mac")
+    }
+
+    @Test("a group's caption says which of the three kinds it is")
+    func captionKinds() throws {
+        let offsite = repository("Offsite")
+        let music = plan("Music", in: offsite.id)
+        // A plan that now backs up elsewhere; a console backup; a deleted
+        // plan's history. All from this Mac, so no caption names a host.
+        let m1 = try snapshot("m1", time: "2026-09-30T02:00:00Z", paths: ["/Data/Music"],
+                              tags: [ResticService.planTag(music.id)])
+        let x1 = try snapshot("x1", time: "2026-09-29T02:00:00Z", paths: ["/Data/Sites"])
+        let deleted = UUID()
+        let g1 = try snapshot("g1", time: "2026-09-28T02:00:00Z", paths: ["/Data/Gone"],
+                              tags: [ResticService.planTag(deleted)])
+        let shelves = BackupShelves(listing: [m1, x1, g1], plans: [], allPlans: [music])
+        let labels = shelves.otherLabels(repositories: [offsite], localHost: "mac")
+        #expect(labels[.plan(music.id)]?.caption?.text == "1 backup · now backs up to “Offsite”")
+        #expect(labels[.lineage(x1.lineageKey)]?.caption?.text == "1 backup · outside SwiftRestic")
+        #expect(labels[.plan(deleted)]?.caption?.text == "1 backup · not set up here")
+        #expect(labels[.plan(music.id)]?.detail
+            == "/Data/Music — from mac\nThe “Music” plan backs up to “Offsite” now; these are its earlier backups.")
+        #expect(labels[.plan(deleted)]?.detail == "/Data/Gone — from mac\nBacked up by a plan not set up here")
+        #expect(labels[.lineage(x1.lineageKey)]?.detail == "/Data/Sites — from mac\n"
+            + "These backups carry no plan ID, so they can't be adopted. "
+            + "restic's `tag` command (Repository ▸ restic Console…) can give them one, "
+            + "but it rewrites every snapshot's ID.")
+        // The restore header names the orphan record by its group, as the
+        // sidebar row does.
+        #expect(RestoreRecordHeading(record: g1, label: labels[.plan(deleted)], comparison: nil).name
+            == "Gone")
+    }
+
+    @Test("the newest member's folders read sorted, whatever order its snapshot lists them in")
+    func unsortedPathsReadSorted() throws {
+        // Only restic's own listing is sorted; another writer's snapshot can
+        // list its paths any way. The lineage key's sorted rule is the one
+        // every folder list reads — and here it also qualifies the two
+        // groups' shared title.
+        let deleted = UUID()
+        let g1 = try snapshot("g1", time: "2026-09-30T02:00:00Z", paths: ["/Data/Zeta", "/Data/Alpha"],
+                              tags: [ResticService.planTag(deleted)])
+        let x1 = try snapshot("x1", time: "2026-09-29T02:00:00Z", paths: ["/Data/Zeta", "/Data/Alpha"])
+        let shelves = BackupShelves(listing: [g1, x1], plans: [], allPlans: [])
+        let labels = shelves.otherLabels(repositories: [], localHost: "mac")
+        #expect(labels[.plan(deleted)]?.title == "Alpha, Zeta")
+        #expect(labels[.lineage(x1.lineageKey)]?.title == "Alpha, Zeta")
+        #expect(labels[.plan(deleted)]?.qualifier == "/Data/Alpha, /Data/Zeta")
+        #expect(labels[.lineage(x1.lineageKey)]?.caption?.text == "1 backup · /Data/Alpha, /Data/Zeta · outside SwiftRestic")
+        #expect(labels[.lineage(x1.lineageKey)]?.detail == "/Data/Alpha, /Data/Zeta — from mac\n"
+            + "These backups carry no plan ID, so they can't be adopted. "
+            + "restic's `tag` command (Repository ▸ restic Console…) can give them one, "
+            + "but it rewrites every snapshot's ID.")
+    }
+
+    @Test("backups no plan tag marks keep grouping by folders and Mac")
+    func untaggedPassThrough() throws {
+        let newest = try snapshot("x2", time: "2026-09-30T02:00:00Z", paths: ["/Data/Music"], host: "old-mac")
+        let older = try snapshot("x1", time: "2026-09-29T02:00:00Z", paths: ["/Data/Music"], host: "old-mac")
+        let other = try snapshot("y1", time: "2026-09-28T02:00:00Z", paths: ["/Data/Sites"], host: "old-mac")
+        let shelves = BackupShelves(listing: [older, other, newest], plans: [], allPlans: [])
+        #expect(shelves.others.map(\.id) == [.lineage(newest.lineageKey), .lineage(other.lineageKey)])
+        #expect(shelves.others.map { $0.snapshots.map(\.id) } == [["x2", "x1"], ["y1"]])
     }
 
     @Test("picking a backup from anywhere opens the fold it sits in")
@@ -145,12 +268,23 @@ struct SidebarTreeTests {
         let documents = plan("Documents", in: nas)
         let mine = try snapshot("d1", time: "2026-09-30T02:00:00Z", tags: [ResticService.planTag(documents.id)])
         let foreign = try snapshot("x1", time: "2026-09-29T02:00:00Z", host: "old-mac")
+        let deleted = UUID()
+        let tagged = try snapshot("g1", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(deleted)])
 
         var folds = SidebarFolds()
         folds.reveal(mine, in: nas, plans: [documents])
-        #expect(folds == SidebarFolds(plans: [documents.id], otherBackups: []))
+        #expect(folds == SidebarFolds(plans: [documents.id], otherBackups: [], otherGroups: []))
         folds.reveal(foreign, in: nas, plans: [documents])
-        #expect(folds == SidebarFolds(plans: [documents.id], otherBackups: [nas]))
+        #expect(folds == SidebarFolds(plans: [documents.id], otherBackups: [nas], otherGroups: []))
+        // A tagged orphan's group is a fold of its own, closed at launch —
+        // selecting one of its records must open it, or the record lands in
+        // a group the sidebar never shows.
+        folds.reveal(tagged, in: nas, plans: [documents])
+        #expect(folds == SidebarFolds(
+            plans: [documents.id],
+            otherBackups: [nas],
+            otherGroups: [OtherGroupFoldID(repositoryID: nas, planID: deleted)]
+        ))
     }
 
     @Test("a backup is named for where it sits: its plan, or its group among the Other backups")
@@ -158,7 +292,8 @@ struct SidebarTreeTests {
         let nas = UUID()
         let hourly = plan("Hourly Docs", in: nas)
         let nightly = plan("Nightly Docs", in: nas)
-        let music = plan("Music", in: UUID())
+        let offsite = repository("Offsite")
+        let music = plan("Music", in: offsite.id)
         let allPlans = [hourly, nightly, music]
 
         // Two plans backing up the same folders: one lineage, which the
@@ -174,26 +309,45 @@ struct SidebarTreeTests {
         let m1 = try snapshot("m1", time: "2026-09-28T02:00:00Z", paths: ["/Data/Music"],
                               tags: [ResticService.planTag(music.id)])
         let x1 = try snapshot("x1", time: "2026-09-27T02:00:00Z", paths: ["/Data/Music"], host: "old-mac")
-        let shelves = BackupShelves(listing: [h1, n1, h0, m1, x1], plans: [hourly, nightly])
+        let shelves = BackupShelves(listing: [h1, n1, h0, m1, x1], plans: [hourly, nightly], allPlans: allPlans)
 
-        #expect(shelves.label(of: n1, allPlans: allPlans) == SnapshotLineage.Label(
+        #expect(shelves.label(of: n1, repositories: [offsite], localHost: "mac") == SnapshotLineage.Label(
             title: "Nightly Docs",
             qualifier: nil,
+            caption: nil,
             detail: "/Data/Docs — from mac"
         ))
         // A plan whose backups span two sets of folders: the folders say
         // which one an open backup holds.
-        #expect(shelves.label(of: h1, allPlans: allPlans)?.title == "Hourly Docs")
-        #expect(shelves.label(of: h1, allPlans: allPlans)?.qualifier == "/Data/Docs")
-        #expect(shelves.label(of: h0, allPlans: allPlans)?.qualifier == "/Data/Docs, /Data/Notes")
+        #expect(shelves.label(of: h1, repositories: [offsite], localHost: "mac")?.title == "Hourly Docs")
+        #expect(shelves.label(of: h1, repositories: [offsite], localHost: "mac")?.qualifier == "/Data/Docs")
+        #expect(shelves.label(of: h0, repositories: [offsite], localHost: "mac")?.qualifier == "/Data/Docs, /Data/Notes")
 
-        // Under Other backups, among the groups shown there together: two
-        // hosts, so each says which; the moved plan's group keeps its name.
-        let others = shelves.otherLabels(allPlans: allPlans)
-        #expect(others[m1.lineageKey]?.title == "Music")
-        #expect(others[m1.lineageKey]?.qualifier == "mac · /Data/Music")
-        #expect(others[x1.lineageKey]?.qualifier == "old-mac · /Data/Music")
-        #expect(shelves.label(of: x1, allPlans: allPlans) == others[x1.lineageKey])
+        // Under Other backups, among the groups shown there together: the
+        // console's lineage came from another Mac, so it says which, while
+        // this Mac's goes unnamed; the moved plan's group and the console's
+        // lineage share the title "Music", so the folders qualify both. The
+        // caption's kind word is what tells them apart.
+        let others = shelves.otherLabels(repositories: [offsite], localHost: "mac")
+        #expect(others[.plan(music.id)] == SnapshotLineage.Label(
+            title: "Music",
+            qualifier: "/Data/Music",
+            caption: .init(count: "1 backup", qualifiers: ["/Data/Music"], kind: ["now backs up to “Offsite”"]),
+            detail: "/Data/Music — from mac\nThe “Music” plan backs up to “Offsite” now; these are its earlier backups."
+        ))
+        #expect(others[.lineage(x1.lineageKey)] == SnapshotLineage.Label(
+            title: "Music",
+            qualifier: "old-mac · /Data/Music",
+            caption: .init(count: "1 backup", qualifiers: ["old-mac", "/Data/Music"], kind: ["outside SwiftRestic"]),
+            detail: "/Data/Music — from old-mac\nThese backups carry no plan ID, so they can't be adopted. "
+                + "restic's `tag` command (Repository ▸ restic Console…) can give them one, "
+                + "but it rewrites every snapshot's ID."
+        ))
+        #expect(shelves.label(of: x1, repositories: [offsite], localHost: "mac") == others[.lineage(x1.lineageKey)])
+        // The restore header names an orphan record the way the sidebar names
+        // its group, not by the record's own folders alone.
+        #expect(SnapshotLineage.displayName(of: m1, label: shelves.label(of: m1, repositories: [offsite], localHost: "mac"))
+            == "Music · /Data/Music")
     }
 
     @Test("a group under Other backups that one plan wrote names the plan, which now backs up elsewhere")
@@ -203,13 +357,49 @@ struct SidebarTreeTests {
         let documents = plan("Documents", in: UUID())
         let m1 = try snapshot("m1", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(documents.id)])
         let x1 = try snapshot("x1", time: "2026-09-27T02:00:00Z", paths: ["/Data/Music"], host: "old-mac")
-        let shelves = BackupShelves(listing: [m1, x1], plans: [])
-        #expect(shelves.others.map { shelves.formerPlan(of: $0, allPlans: [documents])?.id }
-            == [documents.id, nil])
-        // A console backup of the same folders: no single plan wrote the group.
-        let console = try snapshot("c1", time: "2026-09-26T02:00:00Z")
-        let shared = BackupShelves(listing: [m1, console], plans: [])
-        #expect(shared.others.map { shared.formerPlan(of: $0, allPlans: [documents])?.id } == [nil])
+        let shelves = BackupShelves(listing: [m1, x1], plans: [], allPlans: [documents])
+        // The classification is configuration-wide: the plan belongs to
+        // another repository, so the group is its former one — never one to
+        // adopt. A deleted plan's and a console backup's groups are not.
+        #expect(shelves.others.map { shelves.formerPlan(of: $0)?.id } == [documents.id, nil])
+        let gone = BackupShelves(listing: [m1], plans: [], allPlans: [])
+        #expect(gone.others.map { gone.formerPlan(of: $0)?.id } == [nil])
+    }
+
+    @Test("a shared title brings the folders in, and a caption that still matches brings the tag's last four hex digits")
+    func collisionFallbackChain() throws {
+        // Two untagged groups whose folders share a last component: the
+        // folders say which is which.
+        let music = try snapshot("x1", time: "2026-09-30T02:00:00Z", paths: ["/Data/Music"])
+        let volume = try snapshot("x2", time: "2026-09-29T02:00:00Z", paths: ["/Volumes/Music"])
+        let untagged = BackupShelves(listing: [music, volume], plans: [], allPlans: [])
+        let untaggedLabels = untagged.otherLabels(repositories: [], localHost: "mac")
+        #expect(untaggedLabels[.lineage(music.lineageKey)]?.title == "Music")
+        #expect(untaggedLabels[.lineage(music.lineageKey)]?.caption?.text == "1 backup · /Data/Music · outside SwiftRestic")
+        #expect(untaggedLabels[.lineage(volume.lineageKey)]?.caption?.text == "1 backup · /Volumes/Music · outside SwiftRestic")
+
+        // Two deleted plans that backed up the same folders from the same
+        // host: title, folders and caption all match, so the tag's last four
+        // hex digits — the one identifier left — tell them apart, in the
+        // header's name as well as the row's caption.
+        let first = UUID(uuidString: "00000000-0000-4000-8000-000000000021")!
+        let second = UUID(uuidString: "00000000-0000-4000-8000-0000000000ab")!
+        let a1 = try snapshot("a1", time: "2026-09-30T02:00:00Z", paths: ["/Data/Music"],
+                              tags: [ResticService.planTag(first)])
+        let b1 = try snapshot("b1", time: "2026-09-29T02:00:00Z", paths: ["/Data/Music"],
+                              tags: [ResticService.planTag(second)])
+        let shelves = BackupShelves(listing: [a1, b1], plans: [], allPlans: [])
+        let labels = shelves.otherLabels(repositories: [], localHost: "mac")
+        #expect(labels[.plan(first)]?.caption?.text == "1 backup · /Data/Music · not set up here · 0021")
+        // The hex joins the kind, which the row keeps whole; the folders are
+        // what give way.
+        #expect(labels[.plan(first)]?.caption == .init(
+            count: "1 backup", qualifiers: ["/Data/Music"], kind: ["not set up here", "0021"]
+        ))
+        #expect(labels[.plan(second)]?.caption?.text == "1 backup · /Data/Music · not set up here · 00ab")
+        #expect(labels[.plan(first)]?.qualifier == "/Data/Music · 0021")
+        #expect(labels[.plan(second)]?.qualifier == "/Data/Music · 00ab")
+        #expect(SnapshotLineage.displayName(of: a1, label: labels[.plan(first)]) == "Music · /Data/Music · 0021")
     }
 
     @Test("a repository needs attention for an unreadable listing or a known-unprotected plan, never for pending or running ones")

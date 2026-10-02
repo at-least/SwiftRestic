@@ -81,7 +81,7 @@ struct SnapshotLineageTests {
         #expect(labels[photos.lineageKey]?.detail == "/Data/Pictures, /Volumes/Card/DCIM — from mac")
     }
 
-    @Test("a lineage more than one writer shares is named after its folders, whichever ran last")
+    @Test("two plans' interleaved backups of the same folders stay two groups, never one plan's name")
     func sharedLineageTitleIsStable() throws {
         var hourly = BackupPlan()
         hourly.name = "Hourly Docs"
@@ -89,28 +89,30 @@ struct SnapshotLineageTests {
         nightly.name = "Nightly Docs"
         let hourlyTag = ResticService.planTag(hourly.id)
         let nightlyTag = ResticService.planTag(nightly.id)
-        let plans = [hourly, nightly]
 
-        // Two plans backing up the same folders on one host: one lineage.
+        // Two plans backing up the same folders on one host, interleaved —
+        // both since deleted. Naming a group after its plan flipped the
+        // title with whichever ran last and claimed the other's backups;
+        // the plan tag groups them instead, and the folders name each. The
+        // group order follows the newest member, whichever plan that is.
         let h1 = try snapshot("h1", time: "2026-09-25T01:00:00Z", paths: ["/Data/Docs"], tags: [hourlyTag])
         let n1 = try snapshot("n1", time: "2026-09-25T02:00:00Z", paths: ["/Data/Docs"], tags: [nightlyTag])
         let h2 = try snapshot("h2", time: "2026-09-25T03:00:00Z", paths: ["/Data/Docs"], tags: [hourlyTag])
-        let afterHourly = SnapshotLineage.labels(for: SnapshotLineage.grouping([h1, n1, h2]), plans: plans)
+        let afterHourly = BackupShelves(listing: [h1, n1, h2], plans: [], allPlans: [])
         let n2 = try snapshot("n2", time: "2026-09-25T04:00:00Z", paths: ["/Data/Docs"], tags: [nightlyTag])
-        let afterNightly = SnapshotLineage.labels(for: SnapshotLineage.grouping([h1, n1, h2, n2]), plans: plans)
+        let afterNightly = BackupShelves(listing: [h1, n1, h2, n2], plans: [], allPlans: [])
+        #expect(afterHourly.others.map(\.id) == [.plan(hourly.id), .plan(nightly.id)])
+        #expect(afterNightly.others.map(\.id) == [.plan(nightly.id), .plan(hourly.id)])
 
-        // Naming the group after the newest snapshot's plan flipped the title
-        // with every run and claimed the other plan's backups for it.
-        #expect(afterHourly[h1.lineageKey]?.title == "Docs")
-        #expect(afterNightly[h1.lineageKey]?.title == "Docs")
-        #expect(afterNightly[h1.lineageKey]?.detail == "/Data/Docs — from mac\nBacked up by Hourly Docs and Nightly Docs")
-
-        // One plan plus a snapshot taken outside it (the Console, another
-        // client): the plan did not write the whole group either.
-        let console = try snapshot("c1", time: "2026-09-26T05:00:00Z", paths: ["/Data/Docs"])
-        let mixed = SnapshotLineage.labels(for: SnapshotLineage.grouping([h1, h2, console]), plans: plans)
-        #expect(mixed[h1.lineageKey]?.title == "Docs")
-        #expect(mixed[h1.lineageKey]?.detail == "/Data/Docs — from mac\nBacked up by Hourly Docs and outside SwiftRestic")
+        let labels = afterNightly.otherLabels(repositories: [], localHost: "mac")
+        #expect(labels[.plan(hourly.id)]?.title == "Docs")
+        #expect(labels[.plan(nightly.id)]?.title == "Docs")
+        // Same title, same folders, same host: the tags' last four hex
+        // digits are what tells the two histories apart.
+        let hourlyHex = String(hourly.id.uuidString.lowercased().suffix(4))
+        let nightlyHex = String(nightly.id.uuidString.lowercased().suffix(4))
+        #expect(labels[.plan(hourly.id)]?.caption?.text == "2 backups · /Data/Docs · not set up here · \(hourlyHex)")
+        #expect(labels[.plan(nightly.id)]?.caption?.text == "2 backups · /Data/Docs · not set up here · \(nightlyHex)")
     }
 
     @Test("the model re-sorts a repository's backups when its listing or its plans are written, not when a view asks")
@@ -155,6 +157,7 @@ struct SnapshotLineageTests {
         #expect(changed[before.lineageKey] == SnapshotLineage.Label(
             title: "Work",
             qualifier: "/Data/Work",
+            caption: nil,
             detail: "/Data/Work — from mac"
         ))
         #expect(changed[after.lineageKey]?.qualifier == "/Data/Clients, /Data/Work")
@@ -202,16 +205,27 @@ struct SnapshotLineageTests {
         #expect(SnapshotLineage.displayName(of: after, label: nil) == "Clients, Work")
 
         // The model's lookup reads the same shelves and plans the sidebar
-        // does. Work backs up elsewhere: here its backups are Other backups.
+        // does. Work backs up elsewhere: here its two backups are one group
+        // under Other backups, with the group's one label — the plan's name,
+        // the folders of its newest member — so both records' headers agree
+        // with the group row.
         let model = AppModel(
             store: ConfigStore(directory: FileManager.default.temporaryDirectory
                 .appendingPathComponent("SwiftResticHeading-\(UUID().uuidString)")),
-            secrets: .inMemory()
+            secrets: .inMemory(),
+            localHostname: "mac"
         )
         let repositoryID = UUID()
         model.configuration.plans = [work]
         model.snapshots[repositoryID] = [after, before]
-        #expect(model.recordLabel(of: before, repositoryID: repositoryID) == workLabels[before.lineageKey])
+        #expect(model.recordLabel(of: before, repositoryID: repositoryID) == SnapshotLineage.Label(
+            title: "Work",
+            qualifier: nil,
+            caption: .init(count: "2 backups"),
+            detail: "/Data/Clients, /Data/Work — from mac"
+        ))
+        #expect(model.recordLabel(of: after, repositoryID: repositoryID)
+            == model.recordLabel(of: before, repositoryID: repositoryID))
         #expect(model.recordLabel(of: docs, repositoryID: repositoryID) == nil)
         // Work backs up here: its backups sit under it, named for it, with
         // the folders that tell its two sets apart.
@@ -234,7 +248,8 @@ struct SnapshotLineageTests {
         let model = AppModel(
             store: ConfigStore(directory: FileManager.default.temporaryDirectory
                 .appendingPathComponent("SwiftResticHeading-\(UUID().uuidString)")),
-            secrets: .inMemory()
+            secrets: .inMemory(),
+            localHostname: "mac"
         )
         model.configuration.plans = [hourly]
         model.snapshots[repositoryID] = [console, h1]

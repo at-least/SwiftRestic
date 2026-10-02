@@ -26,7 +26,7 @@ enum ChangeComparison: Equatable, Sendable {
 struct RestoreRecordHeading: Equatable, Sendable {
     /// The name of the place the sidebar shows the backup — its plan, or
     /// its group under Other backups — qualified when the name alone is
-    /// ambiguous (`BackupShelves.label(of:allPlans:)`).
+    /// ambiguous (`BackupShelves.label(of:repositories:localHost:)`).
     var name: String
     /// The record's moment. Kept apart from `name` so the view can truncate a
     /// long qualifier and never the day.

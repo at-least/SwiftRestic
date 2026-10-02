@@ -45,28 +45,38 @@ enum SidebarTree {
 /// One repository's backups, sorted to where the sidebar shows them: each
 /// under the plan of this repository that made it — the plan's tag
 /// (`ResticService.planTag`) says which — and the rest under Other backups,
-/// by lineage. Every backup has exactly one place, so its selection tag is
+/// grouped by the plan that made them when a plan tag says which, by lineage
+/// otherwise. Every backup has exactly one place, so its selection tag is
 /// unique.
 struct BackupShelves {
     /// The repository's plans, in configuration order.
     let plans: [BackupPlan]
+    /// Every configured plan, this repository's among them: what tells a
+    /// plan-UUID group under Other backups apart — a UUID that names one of
+    /// them is a plan that now backs up to another repository, any other is
+    /// a plan no configuration sets up. Classification is configuration-wide
+    /// on purpose: a UUID that belongs to a configured plan of another
+    /// repository must never read as adoptable.
+    let allPlans: [BackupPlan]
     /// Each plan's backups, newest first — one flat list even when the plan's
     /// folders changed: the Change column finds its baseline by lineage in
     /// the whole listing (`SnapshotLineage.changeBaseline`), not by the row
     /// below. A plan with none here has no entry.
     let byPlan: [UUID: [Snapshot]]
-    /// The rest, by lineage: backups with no plan tag (another Mac, the
-    /// console), a deleted plan's, or those of a plan that now backs up to
-    /// another repository.
-    let others: [SnapshotLineage]
+    /// The rest — a deleted plan's or another repository's plan's backups by
+    /// their plan UUID, backups with no plan tag (another Mac, the console)
+    /// by lineage.
+    let others: [OtherBackupsGroup]
 
     var hasOtherBackups: Bool { !others.isEmpty }
 
-    /// `listing` newest first, as `ResticService.snapshots` sorts it; `plans`
-    /// the repository's own, in configuration order.
-    init(listing: [Snapshot], plans: [BackupPlan]) {
-        self.plans = plans
-        let tags = Self.tags(of: plans)
+    /// `listing` newest first, as `ResticService.snapshots` sorts it;
+    /// `plans` the repository's own and `allPlans` every configured plan,
+    /// both in configuration order.
+    init(listing: [Snapshot], plans repositoryPlans: [BackupPlan], allPlans: [BackupPlan]) {
+        self.plans = repositoryPlans
+        self.allPlans = allPlans
+        let tags = Self.tags(of: repositoryPlans)
         var byPlan: [UUID: [Snapshot]] = [:]
         var rest: [Snapshot] = []
         for snapshot in listing {
@@ -77,7 +87,7 @@ struct BackupShelves {
             }
         }
         self.byPlan = byPlan
-        others = SnapshotLineage.grouping(rest)
+        others = OtherBackupsGroup.grouping(rest)
     }
 
     /// The plan among `plans` a backup sits under: the first, in their
@@ -98,8 +108,11 @@ struct BackupShelves {
 
     /// The names of the groups under Other backups, told apart among
     /// themselves — the set the sidebar shows together.
-    func otherLabels(allPlans: [BackupPlan]) -> [SnapshotLineage.Key: SnapshotLineage.Label] {
-        SnapshotLineage.labels(for: others, plans: allPlans)
+    func otherLabels(
+        repositories: [Repository],
+        localHost: String
+    ) -> [OtherBackupsGroup.ID: SnapshotLineage.Label] {
+        OtherBackupsGroup.labels(for: others, plans: allPlans, repositories: repositories, localHost: localHost)
     }
 
     /// How a backup is named where one backup is named — the restore pane's
@@ -107,21 +120,24 @@ struct BackupShelves {
     /// shows it: its plan's name, with the folders when the plan's backups
     /// here span more than one set of them and the Mac when more than one
     /// Mac made them; under Other backups, its group's label.
-    func label(of record: Snapshot, allPlans: [BackupPlan]) -> SnapshotLineage.Label? {
+    func label(of record: Snapshot, repositories: [Repository], localHost: String) -> SnapshotLineage.Label? {
         guard let planID = Self.owner(of: record, among: plans),
               let plan = plans.first(where: { $0.id == planID })
-        else { return otherLabels(allPlans: allPlans)[record.lineageKey] }
+        else { return otherLabels(repositories: repositories, localHost: localHost)[record.otherGroupID] }
         let lineages = SnapshotLineage.grouping(byPlan[planID] ?? [])
         var label = SnapshotLineage.labels(for: lineages, plans: [plan])[record.lineageKey]
         label?.title = plan.name.isEmpty ? "Untitled Plan" : plan.name
         return label
     }
 
-    /// The one plan that wrote a group under Other backups: it now backs up
-    /// to another repository, which is why its backups here are not under
-    /// it. Nil when the group mixes writers or its plan is gone.
-    func formerPlan(of lineage: SnapshotLineage, allPlans: [BackupPlan]) -> BackupPlan? {
-        SnapshotLineage.soleWriter(of: lineage, plans: allPlans)
+    /// The one configured plan a group under Other backups belongs to: it
+    /// backs up to another repository now, which is why its backups here are
+    /// not under it. Nil for a group no configuration sets up (a deleted
+    /// plan's, or one still running on another Mac) and for an untagged
+    /// lineage.
+    func formerPlan(of group: OtherBackupsGroup) -> BackupPlan? {
+        guard case let .plan(id, _) = group else { return nil }
+        return allPlans.first { $0.id == id }
     }
 }
 
@@ -133,14 +149,29 @@ struct SidebarFolds: Equatable {
     var plans: Set<UUID> = []
     /// Repositories whose Other backups are showing.
     var otherBackups: Set<UUID> = []
+    /// Plan-UUID groups under Other backups whose records are showing — the
+    /// plan folds' own syntax (closed until opened), where the untagged
+    /// lineages' folds are the sidebar's view state and start open.
+    var otherGroups: Set<OtherGroupFoldID> = []
 
     /// Opens the fold `record` sits in — its plan's, or its repository's
-    /// Other backups. `plans` are the repository's own.
+    /// Other backups and, under it, the plan-UUID group that holds it.
+    /// `plans` are the repository's own.
     mutating func reveal(_ record: Snapshot, in repositoryID: UUID, plans repositoryPlans: [BackupPlan]) {
         if let planID = BackupShelves.owner(of: record, among: repositoryPlans) {
             plans.insert(planID)
         } else {
             otherBackups.insert(repositoryID)
+            if let planID = record.planID {
+                otherGroups.insert(OtherGroupFoldID(repositoryID: repositoryID, planID: planID))
+            }
         }
     }
+}
+
+/// A plan-UUID group under one repository's Other backups: the same plan can
+/// have left backups in two repositories, and each group folds on its own.
+struct OtherGroupFoldID: Hashable {
+    let repositoryID: UUID
+    let planID: UUID
 }

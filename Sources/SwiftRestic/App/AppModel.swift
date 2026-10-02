@@ -247,13 +247,19 @@ final class AppModel {
     /// them has even been read.
     @ObservationIgnored var suppressConfigurationSave = false
 
+    /// The hostname this Mac's backups carry, which the names under Other
+    /// backups leave out (`OtherBackupsGroup.labels`). Tests name their own.
+    let localHostname: String
+
     init(
         store: ConfigStore = ConfigStore(),
         secrets: SecretStore = .keychain,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        localHostname: String = ResticService.localHostname
     ) {
         self.store = store
         self.secrets = secrets
+        self.localHostname = localHostname
         self.indexCoordinator = IndexCoordinator(directory: store.directory)
         self.viewDefaults = defaults
         self.problemsSeenAt = ProblemDotsStore.load(from: defaults)
@@ -288,11 +294,13 @@ final class AppModel {
         }
     }
 
-    /// Re-derives one repository's `backupShelves` from its listing and its
-    /// plans; a repository without a listing has none.
+    /// Re-derives one repository's `backupShelves` from its listing, its own
+    /// plans and every configured plan (which tells a moved plan's group
+    /// under Other backups from an adoptable one); a repository without a
+    /// listing has none.
     private func reshelve(_ repositoryID: UUID) {
         backupShelves[repositoryID] = snapshots[repositoryID].map {
-            BackupShelves(listing: $0, plans: plans(in: repositoryID))
+            BackupShelves(listing: $0, plans: plans(in: repositoryID), allPlans: configuration.plans)
         }
     }
 

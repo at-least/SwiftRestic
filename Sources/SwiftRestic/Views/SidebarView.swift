@@ -5,15 +5,16 @@ import SwiftUI
 /// its overview, and never collapses; beneath it sit its plans — each folds
 /// open to the dated backups it made there — "New Backup Plan…" while it has
 /// none, and Other backups while the repository holds backups none of its
-/// plans made (`BackupShelves`). The context menus and the Add footer ride
-/// along.
+/// plans made (`BackupShelves`), grouped by the plan that made them when a
+/// plan tag says which, by folders and Mac otherwise. The context menus and
+/// the Add footer ride along.
 ///
 /// Every row is a top-level List row, and the tree's levels are leading
 /// indentation (`Indent`): a DisclosureGroup draws its triangle at the
 /// row's outer edge, which an indented child would leave stranded far to
 /// the left of its title. Only places carry a tag — a repository, a plan, a
 /// backup record — so selection stays unique; a plan's chevron, Other
-/// backups and the lineage groups are folds, and "New Backup Plan…" is an
+/// backups and the groups under it are folds, and "New Backup Plan…" is an
 /// action.
 ///
 /// Split out of `RootView` as a real child view so the sidebar's list
@@ -31,9 +32,11 @@ struct SidebarView: View {
     /// column: selecting a record from anywhere must find its fold open.
     @Binding var folds: SidebarFolds
 
-    /// Lineage groups under Other backups that the user folded shut. Groups
-    /// start open, as Arq's tree does, and a record selected from anywhere
-    /// reopens its group — the promise `folds` keeps one level up.
+    /// Untagged lineage groups under Other backups that the user folded
+    /// shut. They start open, as Arq's tree does, and a record selected from
+    /// anywhere reopens its group — the promise `folds` keeps one level up.
+    /// The plan-UUID groups follow the plan folds' syntax instead: closed
+    /// until opened, in `folds.otherGroups`.
     @State private var collapsedLineages: Set<LineageFoldID> = []
     /// Taken back by a click in the sidebar (`focusOnClick`), once a click
     /// in the restore tree has taken it away.
@@ -118,12 +121,18 @@ struct SidebarView: View {
         }
         .onChange(of: router.selection) {
             // Only a record under Other backups sits in a group: a plan's
-            // record of the same folders must not reopen one.
+            // record of the same folders must not reopen one. A tagged
+            // record's group is a plan fold (closed until opened); an
+            // untagged one's is a lineage the user may have folded shut.
             guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
                   let snapshot = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }),
                   BackupShelves.owner(of: snapshot, among: model.plans(in: repositoryID)) == nil
             else { return }
-            collapsedLineages.remove(LineageFoldID(repositoryID: repositoryID, key: snapshot.lineageKey))
+            if let planID = snapshot.planID {
+                folds.otherGroups.insert(OtherGroupFoldID(repositoryID: repositoryID, planID: planID))
+            } else {
+                collapsedLineages.remove(LineageFoldID(repositoryID: repositoryID, key: snapshot.lineageKey))
+            }
         }
     }
 
@@ -490,51 +499,96 @@ struct SidebarView: View {
         announceFold("\(title) in “\(repository.name)”", opened: opened)
     }
 
-    /// Always by lineage, one group or several: unlike a plan's, these
-    /// backups have no name above them to say what they are.
+    /// Both kinds of group, interleaved newest-first: a plan's history here
+    /// that none of the repository's plans owns, and the backups no plan
+    /// made — which, unlike a plan's, have no name above them to say what
+    /// they are.
     @ViewBuilder
     private func otherBackups(_ repository: Repository, shelves: BackupShelves) -> some View {
-        let plans = model.configuration.plans
-        let labels = shelves.otherLabels(allPlans: plans)
-        ForEach(shelves.others) { lineage in
-            lineageRows(
-                lineage,
-                label: labels[lineage.key],
-                movedTo: shelves.formerPlan(of: lineage, allPlans: plans)
-                    .flatMap { model.repository(id: $0.repositoryID) },
-                repository: repository
-            )
+        let labels = shelves.otherLabels(
+            repositories: model.configuration.repositories, localHost: model.localHostname
+        )
+        ForEach(shelves.others) { group in
+            switch group {
+            case let .plan(id, snapshots):
+                planGroupRows(
+                    id: id,
+                    snapshots: snapshots,
+                    label: labels[.plan(id)],
+                    repository: repository
+                )
+            case let .lineage(lineage):
+                lineageRows(lineage, label: labels[.lineage(lineage.key)], repository: repository)
+            }
+        }
+    }
+
+    /// One plan's history in this repository that none of the repository's
+    /// plans owns — a deleted plan's, or a plan that now backs up elsewhere.
+    /// A fold, like a lineage group; its records start where a plan's do, so
+    /// the group reads as the plan's history and not a folder's. The label's
+    /// caption and tooltip say which of the three kinds it is.
+    @ViewBuilder
+    private func planGroupRows(
+        id planID: UUID,
+        snapshots: [Snapshot],
+        label: SnapshotLineage.Label?,
+        repository: Repository
+    ) -> some View {
+        let id = OtherGroupFoldID(repositoryID: repository.id, planID: planID)
+        let isExpanded = folds.otherGroups.contains(id)
+        let title = label?.title ?? "Backups"
+        let caption = label?.caption ?? .init(count: Format.plural(snapshots.count, "backup"))
+        Button {
+            if isExpanded {
+                folds.otherGroups.remove(id)
+            } else {
+                folds.otherGroups.insert(id)
+            }
+            announceFold(title, opened: !isExpanded)
+        } label: {
+            HStack(spacing: 4) {
+                FoldChevron(isExpanded: isExpanded)
+                    .frame(width: Indent.lineageSlot)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .lineLimit(1)
+                    GroupCaptionLine(caption: caption)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, Indent.groupPad)
+        .help(label?.detail ?? "")
+        // The same plan can have left backups in two repositories.
+        .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+        if isExpanded {
+            ForEach(snapshots) { snapshot in
+                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+                    .padding(.leading, Indent.grandchild)
+                    .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+            }
         }
     }
 
     /// One lineage's records — Arq's backed-up-folder level, so the row
-    /// below a record is the one its Change column compares against. A group
-    /// one plan wrote wears the plan's name, and `movedTo` says why it is not
-    /// under that plan: the plan backs up to another repository now.
+    /// below a record is the one its Change column compares against. The
+    /// label's caption carries the qualifier and the "outside SwiftRestic"
+    /// kind; the tooltip names the console escape hatch.
     @ViewBuilder
     private func lineageRows(
         _ lineage: SnapshotLineage,
         label: SnapshotLineage.Label?,
-        movedTo: Repository?,
         repository: Repository
     ) -> some View {
         let repositoryID = repository.id
         let id = LineageFoldID(repositoryID: repositoryID, key: lineage.key)
         let isExpanded = !collapsedLineages.contains(id)
         let title = label?.title ?? "Backups"
-        let caption = [
-            Format.plural(lineage.snapshots.count, "backup"),
-            label?.qualifier,
-            movedTo.map { "now backs up to “\($0.name)”" },
-        ]
-        .compactMap { $0 }
-        .joined(separator: " · ")
-        let help = [
-            label?.detail,
-            movedTo.map { "The “\(title)” plan backs up to “\($0.name)” now; these are its earlier backups." },
-        ]
-        .compactMap { $0 }
-        .joined(separator: "\n")
+        let caption = label?.caption ?? .init(count: Format.plural(lineage.snapshots.count, "backup"))
         Button {
             if isExpanded {
                 collapsedLineages.insert(id)
@@ -549,11 +603,7 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .lineLimit(1)
-                    Text(caption)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    GroupCaptionLine(caption: caption)
                 }
                 Spacer(minLength: 0)
             }
@@ -561,9 +611,9 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, Indent.groupPad)
-        .help(help)
+        .help(label?.detail ?? "")
         // The same folders from the same Mac can sit in two repositories.
-        .accessibilityLabel("\(title), \(caption), in “\(repository.name)”")
+        .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         if isExpanded {
             ForEach(lineage.snapshots) { snapshot in
@@ -590,17 +640,17 @@ private enum Indent {
     /// canvas is a point wider; only its empty margin overhangs — the
     /// drawn circle (13 pt of ink, measured) fits.
     static let fold: CGFloat = 14
-    /// A lineage group under Other backups: its chevron column starts
-    /// where the plan family's titles do, putting its title one fold
-    /// deeper than theirs.
+    /// A group under Other backups, of either kind: its chevron column
+    /// starts where the plan family's titles do, putting its title one
+    /// fold deeper than theirs.
     static let groupPad: CGFloat = child + fold + 4
-    /// Records under a plan, and the status rows an open plan's fold
-    /// shows. A bare number since the marker slot went — it keeps the
-    /// records at the x they have always started rather than deriving
-    /// from the plan row above.
+    /// Records under a plan or a plan-UUID group, and the status rows an
+    /// open plan's fold shows. A bare number since the marker slot went —
+    /// it keeps the records at the x they have always started rather than
+    /// deriving from the plan row above.
     static let grandchild: CGFloat = 46
-    /// A lineage group's chevron column, from which its records derive
-    /// their pad (`lineageRecord`).
+    /// A group's chevron column (either kind; a plan-UUID group's records
+    /// sit at `grandchild`, a lineage's derive their pad from here).
     static let lineageSlot: CGFloat = 14
     /// A record under a lineage group, starting past the group's chevron
     /// column.
@@ -657,6 +707,31 @@ private struct RestoreRecordRow: View {
         // merges with the date, so there is no second row label to keep
         // in step with it.
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// An Other backups group's second line. The count and the kind keep their
+/// width; the qualifiers between them take what is left and lose their
+/// middle first, so "not set up here" survives a long hostname. Each piece
+/// after the first carries its own leading separator.
+private struct GroupCaptionLine: View {
+    let caption: SnapshotLineage.Label.Caption
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(caption.count)
+            if !caption.qualifiers.isEmpty {
+                Text(" · " + caption.qualifiers.joined(separator: " · "))
+                    .truncationMode(.middle)
+                    .layoutPriority(-1)
+            }
+            if !caption.kind.isEmpty {
+                Text(" · " + caption.kind.joined(separator: " · "))
+            }
+        }
+        .lineLimit(1)
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }
 

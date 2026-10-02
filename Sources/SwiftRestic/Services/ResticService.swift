@@ -129,6 +129,30 @@ struct ResticService: ResticClient {
     /// this one constant.
     static let planTagPrefix = "swiftrestic-plan-"
 
+    /// The plan a `swiftrestic-plan-` tag names — the inverse of
+    /// `planTag(_:)`: the tag it accepts is exactly the tag that writes, so
+    /// a UUID in upper case or a mangled tail names no plan and the backup
+    /// reads as untagged. Nil for anything else.
+    static func planUUID(fromTag tag: String) -> UUID? {
+        guard tag.hasPrefix(Self.planTagPrefix),
+              let planID = UUID(uuidString: String(tag.dropFirst(Self.planTagPrefix.count))),
+              planTag(planID) == tag
+        else { return nil }
+        return planID
+    }
+
+    /// The hostname restic records for a backup made on this Mac — the app
+    /// never passes `--host`, so restic takes gethostname(3), the
+    /// `kern.hostname` Go's os.Hostname reads. Not ProcessInfo's hostName,
+    /// which lowercases it: probed with restic 0.19.1, a backup recorded
+    /// exactly gethostname's mixed-case name, and hostName differed from
+    /// it in case alone. Read once per launch.
+    static let localHostname: String = {
+        var name = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
+        precondition(gethostname(&name, name.count) == 0, "gethostname failed: errno \(errno)")
+        return String(decoding: name.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }()
+
     // MARK: - Repository lifecycle
 
     func version() async throws -> String {

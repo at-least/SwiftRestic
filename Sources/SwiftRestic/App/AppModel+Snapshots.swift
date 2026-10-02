@@ -152,7 +152,8 @@ extension AppModel {
     /// The repository's backups sorted to where the sidebar shows them:
     /// under its plans, the rest under Other backups.
     func shelves(for repositoryID: UUID) -> BackupShelves {
-        backupShelves[repositoryID] ?? BackupShelves(listing: [], plans: plans(in: repositoryID))
+        backupShelves[repositoryID]
+            ?? BackupShelves(listing: [], plans: plans(in: repositoryID), allPlans: configuration.plans)
     }
 
     /// How the sidebar names the place `record` sits — its plan, or its
@@ -160,7 +161,9 @@ extension AppModel {
     /// `SnapshotLineage.displayName(of:label:)`) instead of a second rule of
     /// their own.
     func recordLabel(of record: Snapshot, repositoryID: UUID) -> SnapshotLineage.Label? {
-        shelves(for: repositoryID).label(of: record, allPlans: configuration.plans)
+        shelves(for: repositoryID).label(
+            of: record, repositories: configuration.repositories, localHost: localHostname
+        )
     }
 
     /// The record a "Restore Files…" lands on — Arq's "Restoring from an

@@ -45,8 +45,13 @@ checked in so a normal build does not need it.
   made there; a repository with no plan yet shows *New Backup Plan…* where
   its plans would be. Backups no plan of the repository made — from another
   Mac or the restic console, a deleted plan, or a plan that now backs up to
-  another repository — sit under *Other backups*, grouped by the folders and
-  Mac they came from (restic's own `host,paths` grouping). A
+  another repository — sit under *Other backups*, grouped by the plan that
+  made them (its `swiftrestic-plan-` tag says which, so a deleted plan's
+  history stays one group); backups no plan made stay grouped by the folders
+  and Mac they came from (restic's own `host,paths` grouping). Each group's
+  caption says which kind it is — *not set up here*, *now backs up to
+  “Offsite”*, *outside SwiftRestic* — and names the Mac its newest backup
+  came from when that isn't this one. A
   repository wears a warning while one of its plans is not protected — its
   backups cannot be read, a plan has no backup, or a plan's last backup
   failed; the warning's tooltip names the plan.

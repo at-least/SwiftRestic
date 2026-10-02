@@ -123,7 +123,8 @@ struct RootDetailView: View {
         }
         // A restore record picked from anywhere (the repository page's
         // Restore Files button included) must find its fold open: its
-        // plan's, or its repository's Other backups.
+        // plan's, or its repository's Other backups and the group under it
+        // that holds it.
         .onChange(of: router.selection) {
             guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
                   let record = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
