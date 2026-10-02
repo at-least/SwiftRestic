@@ -11,6 +11,10 @@ struct RestoreDestinationRequest: Identifiable {
     /// The backup's one name (02b's `SnapshotLineage.displayName`), which a
     /// whole-backup restore's header needs; an item restore names the item.
     var backupName: String?
+    /// A line under the headline about how the selection became the
+    /// subject: selected items inside a selected folder, which come with it
+    /// (`RestoreBatch.coveredNote`).
+    var selectionNote: String?
     let backupTime: Date?
     let snapshotShortID: String
     /// Starts the restore with this policy, into these directories: one per
@@ -75,6 +79,10 @@ struct RestoreDestinationSheet: View {
                     .truncationMode(.middle)
                 Text(backupLine)
                     .foregroundStyle(.secondary)
+                if let note = request.selectionNote {
+                    caption(note)
+                        .padding(.top, 4)
+                }
             }
 
             Form {

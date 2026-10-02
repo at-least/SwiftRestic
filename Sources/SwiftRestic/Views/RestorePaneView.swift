@@ -804,14 +804,18 @@ struct RestorePaneView: View {
     }
 
     /// One item goes the way a single item always has; several go together,
-    /// less any inside another selected folder, which brings them anyway.
+    /// less any inside another selected folder, which brings them anyway —
+    /// and the sheet says so, or three selected rows would read as two.
     private func restoreSelection() {
-        let nodes = RestoreBatch.covering(selectedNodes)
+        let selected = selectedNodes
+        let nodes = RestoreBatch.covering(selected)
+        let note = RestoreBatch.coveredNote(RestoreBatch.covered(selected))
         guard let record, let first = nodes.first else { return }
         let repositoryID = repositoryID
         guard nodes.count > 1 else {
             destinationRequest = RestoreDestinationRequest(
                 subject: .item(name: first.name, path: first.path, isDirectory: first.isDirectory),
+                selectionNote: note,
                 backupTime: record.time,
                 snapshotShortID: record.shortID
             ) { directories, overwrite in
@@ -827,6 +831,7 @@ struct RestorePaneView: View {
         }
         destinationRequest = RestoreDestinationRequest(
             subject: .items(nodes.map { RestoreItem(name: $0.name, path: $0.path, isDirectory: $0.isDirectory) }),
+            selectionNote: note,
             backupTime: record.time,
             snapshotShortID: record.shortID
         ) { directories, overwrite in

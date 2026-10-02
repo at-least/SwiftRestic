@@ -27,6 +27,36 @@ struct RestoreBatchTests {
         #expect(RestoreBatch.covering([file("/Data/a"), file("/Data/a/b")]).count == 2)
     }
 
+    @Test("what was dropped for being inside a selected folder, with the folder that brings it, in words")
+    func coveredAndItsNote() {
+        let project = folder("/Data/Project")
+        let src = folder("/Data/Project/src")
+        let main = file("/Data/Project/src/main.swift")
+        let notes = file("/Data/Project/notes.txt")
+        let photos = folder("/Data/Photos")
+        let trip = file("/Data/Photos/trip.jpg")
+        let other = file("/Data/todo.txt")
+
+        // A file inside a folder inside the selected one is restored with
+        // the outermost — the folder `covering` keeps.
+        let covered = RestoreBatch.covered([project, src, main, other])
+        #expect(covered.map(\.item.path) == ["/Data/Project/src", "/Data/Project/src/main.swift"])
+        #expect(covered.map(\.folder.path) == ["/Data/Project", "/Data/Project"])
+        // A row twice is restored once, and was not inside anything.
+        #expect(RestoreBatch.covered([project, other, project]).isEmpty)
+        // Nothing inside anything: nothing to say.
+        #expect(RestoreBatch.covered([project, other]).isEmpty)
+        #expect(RestoreBatch.coveredNote([]) == nil)
+
+        func note(_ nodes: [SnapshotNode]) -> String? {
+            RestoreBatch.coveredNote(RestoreBatch.covered(nodes))
+        }
+        #expect(note([src, main]) == "“main.swift” is inside “src” and is restored with it.")
+        #expect(note([project, notes, main]) == "“notes.txt” and “main.swift” are inside “Project” and are restored with it.")
+        #expect(note([project, notes, main, src]) == "3 of the selected items are inside “Project” and are restored with it.")
+        #expect(note([project, notes, photos, trip]) == "2 of the selected items are inside selected folders and are restored with them.")
+    }
+
     @Test("two names differing only in normalization are two items, not one")
     func coveringIsByteExact() {
         // "é" precomposed and decomposed: equal as Swift strings.

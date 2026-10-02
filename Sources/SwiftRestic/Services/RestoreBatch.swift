@@ -20,14 +20,59 @@ enum RestoreBatch {
 
     /// The items a selection restores, in its order. A folder brings
     /// everything in it, so an item selected inside a selected folder would
-    /// be restored twice — it is dropped, as Finder drops it from a copy.
+    /// be restored twice — it is dropped, as Finder's own copy drops it
+    /// (`duplicate` of a folder, a file in it and another file gave the
+    /// folder and the other file; probed).
     static func covering(_ nodes: [SnapshotNode]) -> [SnapshotNode] {
-        let folders = nodes.filter(\.isDirectory).map { $0.path.hasSuffix("/") ? $0.path : $0.path + "/" }
+        let folders = nodes.filter(\.isDirectory)
         var seen: Set<PathKey> = []
         return nodes.filter { node in
             guard seen.insert(PathKey(node.path)).inserted else { return false }
-            return !folders.contains { node.path.utf8.starts(with: $0.utf8) }
+            return !folders.contains { isInside(node, $0) }
         }
+    }
+
+    /// The items `covering` drops for being inside another selected folder,
+    /// each with the selected folder it is restored with — the outermost,
+    /// the one `covering` keeps.
+    static func covered(_ nodes: [SnapshotNode]) -> [(item: SnapshotNode, folder: SnapshotNode)] {
+        let kept = covering(nodes)
+        let keptPaths = Set(kept.map { PathKey($0.path) })
+        let keptFolders = kept.filter(\.isDirectory)
+        var reported: Set<PathKey> = []
+        return nodes.compactMap { node in
+            let key = PathKey(node.path)
+            guard !keptPaths.contains(key), reported.insert(key).inserted,
+                  let folder = keptFolders.first(where: { isInside(node, $0) })
+            else { return nil }
+            return (node, folder)
+        }
+    }
+
+    /// The destination sheet's line about `covered` items, so a selection of
+    /// three rows read as "Restore 2 items" says where the third went. Nil
+    /// when nothing was dropped.
+    static func coveredNote(_ covered: [(item: SnapshotNode, folder: SnapshotNode)]) -> String? {
+        guard let first = covered.first else { return nil }
+        let folders = Set(covered.map { PathKey($0.folder.path) })
+        guard folders.count == 1 else {
+            return "\(Format.count(covered.count)) of the selected items are inside selected folders and are restored with them."
+        }
+        let folder = "“\(first.folder.name)”"
+        switch covered.count {
+        case 1:
+            return "“\(first.item.name)” is inside \(folder) and is restored with it."
+        case 2:
+            return "“\(first.item.name)” and “\(covered[1].item.name)” are inside \(folder) and are restored with it."
+        default:
+            return "\(Format.count(covered.count)) of the selected items are inside \(folder) and are restored with it."
+        }
+    }
+
+    /// Whether `node` is somewhere inside `folder`, by bytes: a sibling whose
+    /// name only begins with the folder's is not.
+    private static func isInside(_ node: SnapshotNode, _ folder: SnapshotNode) -> Bool {
+        node.path.utf8.starts(with: (folder.path.hasSuffix("/") ? folder.path : folder.path + "/").utf8)
     }
 
     /// Names two items would both land under in one directory — the same
