@@ -48,7 +48,15 @@ enum SidebarTree {
 /// grouped by the plan that made them when a plan tag says which, by lineage
 /// otherwise. Every backup has exactly one place, so its selection tag is
 /// unique.
-struct BackupShelves {
+///
+/// Equatable so the root view can watch the shelves themselves: `reshelve`
+/// rewrites them on any plan add, remove, rename or move, which is the one
+/// signal that sees a plan leave for another repository — no count changes,
+/// the listing does not change. Equality is the synthesized value one, so
+/// a reshelve that changes nothing compares equal, and one that moves a
+/// backup between shelves — or renames a plan — does not; revalidating on
+/// a rename is a no-op.
+struct BackupShelves: Equatable {
     /// The repository's plans, in configuration order.
     let plans: [BackupPlan]
     /// Every configured plan, this repository's among them: what tells a

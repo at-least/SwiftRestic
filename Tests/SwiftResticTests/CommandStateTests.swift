@@ -51,7 +51,8 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
 
-        for selection: SidebarItem? in [nil, .activity, .console, .repository(repository.id)] {
+        for selection: SidebarItem? in [nil, .activity, .console, .repository(repository.id),
+                                         .orphanPlan(repositoryID: repository.id, planID: UUID())] {
             let state = model.planCommands(for: selection)
             #expect(state.planID == nil, "selection \(String(describing: selection))")
             #expect(!state.canBackUp && !state.canStop && !state.canEdit && !state.canToggleSchedule)
@@ -217,6 +218,12 @@ struct CommandStateTests {
         #expect(model.commandRepositoryID(for: .plan(plan.id)) == repository.id)
         #expect(model.commandRepositoryID(for: .plan(orphan.id)) == nil)
         #expect(model.commandRepositoryID(for: .plan(unset.id)) == nil)
+        // A group under Other backups resolves to the repository it sits in
+        // — whatever its plan ID names — and to nothing once that
+        // repository is gone.
+        #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: repository.id, planID: orphan.id)) == repository.id)
+        #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: repository.id, planID: UUID())) == repository.id)
+        #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: UUID(), planID: orphan.id)) == nil)
         #expect(model.commandRepositoryID(for: .repository(UUID())) == nil)
         for selection: SidebarItem? in [.activity, .console, nil] {
             #expect(model.commandRepositoryID(for: selection) == nil)
@@ -225,6 +232,9 @@ struct CommandStateTests {
         let viaPlan = model.repositoryCommands(for: .plan(plan.id))
         #expect(viaPlan.repositoryID == repository.id)
         #expect(viaPlan.canMaintain && viaPlan.canEdit && viaPlan.canRemove)
+        let viaGroup = model.repositoryCommands(for: .orphanPlan(repositoryID: repository.id, planID: orphan.id))
+        #expect(viaGroup.repositoryID == repository.id)
+        #expect(viaGroup.canMaintain && viaGroup.canEdit && viaGroup.canRemove)
         let nothing = model.repositoryCommands(for: .activity)
         #expect(nothing.repositoryID == nil)
         #expect(!nothing.canMaintain && !nothing.canEdit && !nothing.canRemove)

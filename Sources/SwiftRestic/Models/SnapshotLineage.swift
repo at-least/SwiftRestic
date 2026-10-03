@@ -133,9 +133,7 @@ extension SnapshotLineage {
         var labels: [Key: Label] = [:]
         for lineage in lineages {
             let title = titles[lineage.key] ?? ""
-            let folders = lineage.key.paths
-                .map { ($0 as NSString).abbreviatingWithTildeInPath }
-                .joined(separator: ", ")
+            let folders = lineage.key.folderList
             let host = lineage.key.hostname ?? "Unknown host"
             var qualifiers: [String] = []
             if severalHosts { qualifiers.append(host) }
@@ -293,9 +291,7 @@ extension OtherBackupsGroup {
             let title = titles[group.id] ?? ""
             // The lineage key's sorted paths: the one order every folder
             // list reads, whatever order the snapshot lists them in.
-            let folders = newest.lineageKey.paths
-                .map { ($0 as NSString).abbreviatingWithTildeInPath }
-                .joined(separator: ", ")
+            let folders = newest.lineageKey.folderList
             let host = newest.hostname ?? "Unknown host"
             var qualifiers: [String] = []
             // Another Mac's backups are what a name here must warn about;
@@ -371,6 +367,16 @@ extension OtherBackupsGroup {
         }
         let names = group.snapshots[0].lineageKey.paths.map { ($0 as NSString).lastPathComponent }
         return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")
+    }
+}
+
+extension SnapshotLineage.Key {
+    /// The folders as every folder list reads them — the one order (sorted,
+    /// as restic's own grouping compares them), tilde-abbreviated and
+    /// joined. `SnapshotLineage.labels` qualifies with it, a group's page
+    /// lists a set of them, and nowhere spells it a second way.
+    var folderList: String {
+        paths.map { ($0 as NSString).abbreviatingWithTildeInPath }.joined(separator: ", ")
     }
 }
 

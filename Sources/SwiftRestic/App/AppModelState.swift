@@ -71,6 +71,13 @@ enum SidebarItem: Hashable {
     case plan(UUID)
     /// The repository's page, which is also its overview.
     case repository(UUID)
+    /// The page of one plan-UUID group under a repository's Other backups —
+    /// a plan's history in this repository that none of its plans owns: a
+    /// plan deleted here or still running on another Mac, or a plan that now
+    /// backs up to another repository. The plan ID is the group's own rule
+    /// (`OtherBackupsGroup`), so the page survives regrouping and the
+    /// selection revalidates to the repository's page once the group is gone.
+    case orphanPlan(repositoryID: UUID, planID: UUID)
     /// A backup record picked under its plan, or under a repository's Other
     /// backups — the pane browses that record's file tree directly,
     /// Arq-style.

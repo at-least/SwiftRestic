@@ -6,16 +6,18 @@ import SwiftUI
 /// open to the dated backups it made there — "New Backup Plan…" while it has
 /// none, and Other backups while the repository holds backups none of its
 /// plans made (`BackupShelves`), grouped by the plan that made them when a
-/// plan tag says which, by folders and Mac otherwise. The context menus and
-/// the Add footer ride along.
+/// plan tag says which, by folders and Mac otherwise. A plan-UUID group's
+/// row is a page like a plan's is — the row selects, the chevron ahead of
+/// it folds — while an untagged lineage's row and the Other backups node
+/// stay folds only. The context menus and the Add footer ride along.
 ///
 /// Every row is a top-level List row, and the tree's levels are leading
 /// indentation (`Indent`): a DisclosureGroup draws its triangle at the
 /// row's outer edge, which an indented child would leave stranded far to
-/// the left of its title. Only places carry a tag — a repository, a plan, a
-/// backup record — so selection stays unique; a plan's chevron, Other
-/// backups and the groups under it are folds, and "New Backup Plan…" is an
-/// action.
+/// the left of its title. Only places carry a tag — a repository, a plan,
+/// a plan-UUID group, a backup record — so selection stays unique; a
+/// plan's or a group's chevron and the Other backups node are folds, and
+/// "New Backup Plan…" is an action.
 ///
 /// Split out of `RootView` as a real child view so the sidebar's list
 /// type-checks on its own: the root's modifier chain sat at the compiler's
@@ -51,6 +53,10 @@ struct SidebarView: View {
     /// be a faster way around it.
     let onDeletePlan: (BackupPlan) -> Void
     let onRemoveRepository: (Repository) -> Void
+    /// Opens Browse Folders for a plan-UUID group's context menu. The
+    /// sidebar raises its sheets through the root, which owns the
+    /// presenting state.
+    let onBrowseFolders: (FolderBrowserTarget) -> Void
 
     var body: some View {
         List(selection: Binding(
@@ -109,15 +115,15 @@ struct SidebarView: View {
         .focusOnClick($isFocused)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         .safeAreaInset(edge: .bottom) { sidebarFooter }
-        // The keyboard an outline gives its disclosure rows: with a plan
-        // selected, → shows its backups and ← hides them.
+        // The keyboard an outline gives its disclosure rows: with a plan or
+        // a plan-UUID group selected, → shows its backups and ← hides them.
         // Plain arrows only: a modified arrow keeps its system meaning, the
         // restore pane's rule for its own folds.
         .onKeyPress(.rightArrow, phases: .down) { press in
-            isPlain(press) ? foldSelectedPlan(open: true) : .ignored
+            isPlain(press) ? foldSelection(open: true) : .ignored
         }
         .onKeyPress(.leftArrow, phases: .down) { press in
-            isPlain(press) ? foldSelectedPlan(open: false) : .ignored
+            isPlain(press) ? foldSelection(open: false) : .ignored
         }
         .onChange(of: router.selection) {
             // Only a record under Other backups sits in a group: a plan's
@@ -377,10 +383,32 @@ struct SidebarView: View {
         press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
     }
 
-    private func foldSelectedPlan(open: Bool) -> KeyPress.Result {
-        guard case let .plan(id) = router.selection, let plan = model.plan(id: id) else { return .ignored }
-        if open != folds.plans.contains(id) { togglePlan(plan) }
-        return .handled
+    /// The keyboard fold for whatever selectable row holds a fold: a plan,
+    /// or a plan-UUID group under Other backups. Other rows ignore the key.
+    private func foldSelection(open: Bool) -> KeyPress.Result {
+        switch router.selection {
+        case let .plan(id):
+            guard let plan = model.plan(id: id) else { return .ignored }
+            if open != folds.plans.contains(id) { togglePlan(plan) }
+            return .handled
+        case let .orphanPlan(repositoryID, planID):
+            // The group's title, by the same label derivation the row read
+            // it from — also how a selection the shelves no longer hold is
+            // told apart from one to fold.
+            guard let title = model.shelves(for: repositoryID)
+                .otherLabels(repositories: model.configuration.repositories, localHost: model.localHostname)[.plan(planID)]?.title
+            else { return .ignored }
+            let id = OtherGroupFoldID(repositoryID: repositoryID, planID: planID)
+            if open != folds.otherGroups.contains(id) { toggleOtherGroup(id, title: title) }
+            // The group's rows render only inside the repository's Other
+            // backups node, so opening one whose node is folded shut would
+            // move a fold nobody can see — reveal the node too, the same
+            // reveal a record's selection performs.
+            if open { folds.otherBackups.insert(repositoryID) }
+            return .handled
+        default:
+            return .ignored
+        }
     }
 
     /// The first opening loads the record list; later refreshes come from
@@ -515,7 +543,8 @@ struct SidebarView: View {
                     id: id,
                     snapshots: snapshots,
                     label: labels[.plan(id)],
-                    repository: repository
+                    repository: repository,
+                    formerPlan: shelves.formerPlan(of: group)
                 )
             case let .lineage(lineage):
                 lineageRows(lineage, label: labels[.lineage(lineage.key)], repository: repository)
@@ -525,46 +554,39 @@ struct SidebarView: View {
 
     /// One plan's history in this repository that none of the repository's
     /// plans owns — a deleted plan's, or a plan that now backs up elsewhere.
-    /// A fold, like a lineage group; its records start where a plan's do, so
-    /// the group reads as the plan's history and not a folder's. The label's
+    /// A page, the plan row's own grammar: the row selects, the chevron
+    /// ahead of it folds, and its records start where a plan's do, so the
+    /// group reads as the plan's history and not a folder's. The label's
     /// caption and tooltip say which of the three kinds it is.
     @ViewBuilder
     private func planGroupRows(
         id planID: UUID,
         snapshots: [Snapshot],
         label: SnapshotLineage.Label?,
-        repository: Repository
+        repository: Repository,
+        formerPlan: BackupPlan?
     ) -> some View {
         let id = OtherGroupFoldID(repositoryID: repository.id, planID: planID)
         let isExpanded = folds.otherGroups.contains(id)
         let title = label?.title ?? "Backups"
         let caption = label?.caption ?? .init(count: Format.plural(snapshots.count, "backup"))
-        Button {
-            if isExpanded {
-                folds.otherGroups.remove(id)
-            } else {
-                folds.otherGroups.insert(id)
+        HStack(spacing: 4) {
+            groupFold(id: id, title: title, isExpanded: isExpanded)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .lineLimit(1)
+                GroupCaptionLine(caption: caption)
             }
-            announceFold(title, opened: !isExpanded)
-        } label: {
-            HStack(spacing: 4) {
-                FoldChevron(isExpanded: isExpanded)
-                    .frame(width: Indent.lineageSlot)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .lineLimit(1)
-                    GroupCaptionLine(caption: caption)
-                }
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
         .padding(.leading, Indent.groupPad)
+        .tag(SidebarItem.orphanPlan(repositoryID: repository.id, planID: planID))
         .help(label?.detail ?? "")
+        .contextMenu {
+            groupContextMenu(planID: planID, snapshots: snapshots, repository: repository, formerPlan: formerPlan)
+        }
         // The same plan can have left backups in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         if isExpanded {
             ForEach(snapshots) { snapshot in
                 RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
@@ -574,10 +596,65 @@ struct SidebarView: View {
         }
     }
 
+    /// A group's fold, the plan fold's own grammar: a chevron column that
+    /// toggles, named for what it holds.
+    private func groupFold(id: OtherGroupFoldID, title: String, isExpanded: Bool) -> some View {
+        Button { toggleOtherGroup(id, title: title) } label: {
+            FoldChevron(isExpanded: isExpanded)
+                .frame(width: Indent.lineageSlot)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isExpanded ? "Hide this group's backups" : "Show this group's backups")
+        .accessibilityLabel("Backups of “\(title)”")
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    }
+
+    /// The plan folds' open/closed idiom, for a group under Other backups.
+    private func toggleOtherGroup(_ id: OtherGroupFoldID, title: String) {
+        let opened = folds.otherGroups.remove(id) == nil
+        if opened { folds.otherGroups.insert(id) }
+        announceFold(title, opened: opened)
+    }
+
+    /// A plan-UUID group's menu: a moved plan's history opens that plan,
+    /// and every group gets its two ways in. The adoptable group's Adopt
+    /// item arrives with the verb itself, next stage.
+    @ViewBuilder
+    private func groupContextMenu(
+        planID: UUID,
+        snapshots: [Snapshot],
+        repository: Repository,
+        formerPlan: BackupPlan?
+    ) -> some View {
+        if let formerPlan {
+            Button("Open the “\(formerPlan.name.isEmpty ? "Untitled Plan" : formerPlan.name)” Plan") {
+                router.selection = .plan(formerPlan.id)
+            }
+        }
+        restoreFromGroupItem(snapshots, repository: repository)
+        Button("Browse Folders…") {
+            onBrowseFolders(FolderBrowserTarget(repositoryID: repository.id, planID: planID))
+        }
+    }
+
+    /// Restore Files…, the one entry an untagged lineage's menu has — and
+    /// the group row's other one: the history's newest record, selected in
+    /// the sidebar, which opens the fold it sits in. A group exists only
+    /// around backups, so it always has a newest one.
+    private func restoreFromGroupItem(_ snapshots: [Snapshot], repository: Repository) -> some View {
+        Button("Restore Files…") {
+            router.showRestore(repositoryID: repository.id, snapshotID: snapshots[0].id)
+        }
+    }
+
     /// One lineage's records — Arq's backed-up-folder level, so the row
     /// below a record is the one its Change column compares against. The
     /// label's caption carries the qualifier and the "outside SwiftRestic"
-    /// kind; the tooltip names the console escape hatch.
+    /// kind; the tooltip names the console escape hatch. Still a fold
+    /// only, never a page: with no plan tag there is no identity to be
+    /// one, which is also why its menu offers no Browse Folders….
     @ViewBuilder
     private func lineageRows(
         _ lineage: SnapshotLineage,
@@ -612,6 +689,11 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .padding(.leading, Indent.groupPad)
         .help(label?.detail ?? "")
+        // Restore Files…, its newest record: the one verb an untagged
+        // group's identity supports — no chain to browse, no plan to open.
+        .contextMenu {
+            restoreFromGroupItem(lineage.snapshots, repository: repository)
+        }
         // The same folders from the same Mac can sit in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")

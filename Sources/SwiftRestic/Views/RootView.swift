@@ -34,8 +34,24 @@ struct RootView: View {
     /// Which plans and Other backups are open in the sidebar — the backup
     /// records underneath are the restore pane's entry points.
     @State private var sidebarFolds = SidebarFolds()
+    /// A group's Browse Folders…, raised from the sidebar's context menus —
+    /// the sidebar raises its sheets through the root, which owns the
+    /// presenting state. The pages that browse their own plan (the plan
+    /// page, a group's page) present theirs themselves.
+    @State private var browsingFolders: FolderBrowserTarget?
     #if DEBUG
     @State private var didApplyCaptureOverride = false
+    /// Which Other-backups group pane a capture run asked for, waiting for
+    /// the listing that creates group rows — the restore pane's own wait
+    /// (`pendingCaptureRestore`).
+    @State private var pendingCaptureGroupPane: CaptureGroupPane?
+
+    /// Debug-only: the group panes a capture run can photograph. The
+    /// adoptable group is the flow's landing, so it has its own value.
+    private enum CaptureGroupPane {
+        case adoptable
+        case moved
+    }
     #endif
     /// Debug-capture state owned here, consumed by the detail column's
     /// DEBUG-only capture path — see `RootDetailView.pendingCaptureRestore`.
@@ -58,7 +74,8 @@ struct RootView: View {
             onEditRepository: { editingRepository = $0 },
             onNewRepository: { editingRepository = Repository() },
             onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
-            onRemoveRepository: { pendingConfirmation = .removeRepository($0.id) }
+            onRemoveRepository: { pendingConfirmation = .removeRepository($0.id) },
+            onBrowseFolders: { browsingFolders = $0 }
         )
     }
 
@@ -107,6 +124,15 @@ struct RootView: View {
         }
         .sheet(isPresented: $isShowingConcepts) {
             ConceptsView()
+        }
+        // A group's Browse Folders… from the sidebar's context menus. Show
+        // in Restore closes the browser and hands the Restore pane the
+        // version and folder it was showing — the plan page's own wiring.
+        .sheet(item: $browsingFolders) { target in
+            FolderBrowserView(target: target, onShowInRestore: { snapshotID, folder in
+                router.showRestore(repositoryID: target.repositoryID, snapshotID: snapshotID, focusPath: folder)
+            })
+            .environment(model)
         }
         // The destructive confirmations and the retention sheet, in a
         // modifier of their own: this chain sits at the type-check limit.
@@ -175,6 +201,17 @@ struct RootView: View {
         .onChange(of: model.configuration.repositories.count) {
             revalidateSelection()
         }
+        // The one trigger that sees a plan move to another repository: no
+        // count changes and the listing holds the same records, but
+        // `reshelve` rewrites the shelves — the structure the sidebar and
+        // the pages both read. The same write sees a group adopted away
+        // and one a refresh drops.
+        .onChange(of: model.backupShelves) {
+            revalidateSelection()
+            #if DEBUG
+            consumeCaptureGroupPane()
+            #endif
+        }
         // The load finishing is what selects the landing pane: onAppear runs
         // before `bootstrap` has read anything, so without this a configured
         // app sat on the Welcome screen until the user clicked somewhere.
@@ -238,6 +275,14 @@ struct RootView: View {
         // only after the launch refresh — see the snapshots onChange below.
         case "restore":
             pendingCaptureRestore = true
+        // The group pages need group rows, which the listing builds: the
+        // ask parks and the backupShelves onChange consumes it — the same
+        // wait. The adoptable group is the redesign's landing flow, so it
+        // gets its own value; the moved plan's page is the other variant.
+        case "orphanGroup":
+            pendingCaptureGroupPane = .adoptable
+        case "movedGroup":
+            pendingCaptureGroupPane = .moved
         case "repositoryHooks": editingRepository = model.configuration.repositories.first
         // Same sheet on its first tab: captures a specific kind's fields, e.g.
         // the rclone Remote row and its suggestion menu.
@@ -252,6 +297,35 @@ struct RootView: View {
         case "planRetention": editingPlan = model.configuration.plans.first
         default: break
         }
+    }
+
+    /// The parked group-pane ask, once the shelves hold a group of its
+    /// kind: selects its page and opens its fold beside it, so the capture
+    /// shows the page with its records in view. Keeps waiting while no
+    /// matching group exists — a later listing may still build one.
+    private func consumeCaptureGroupPane() {
+        guard let pane = pendingCaptureGroupPane,
+              let target = captureGroupTarget(pane)
+        else { return }
+        pendingCaptureGroupPane = nil
+        router.selection = .orphanPlan(repositoryID: target.repositoryID, planID: target.planID)
+        sidebarFolds.otherBackups.insert(target.repositoryID)
+        sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: target.repositoryID, planID: target.planID))
+    }
+
+    /// The first group of the pane's kind, repositories in configuration
+    /// order, groups in the sidebar's own newest-first order.
+    private func captureGroupTarget(_ pane: CaptureGroupPane) -> (repositoryID: UUID, planID: UUID)? {
+        for repository in model.configuration.repositories {
+            let shelves = model.shelves(for: repository.id)
+            for group in shelves.others {
+                guard case let .plan(planID, _) = group else { continue }
+                if (pane == .moved) == (shelves.formerPlan(of: group) != nil) {
+                    return (repository.id, planID)
+                }
+            }
+        }
+        return nil
     }
     #endif
 
@@ -325,7 +399,10 @@ struct RootView: View {
 
     /// After a deletion the selected plan or repository may no longer exist;
     /// landing on "Plan not found" is a dead end whose only exit is the
-    /// sidebar, so retarget to the landing pane instead.
+    /// sidebar, so retarget to the landing pane instead. A selected
+    /// Other-backups group falls back to its repository's page — the place
+    /// it lived — for every way it can disappear: adopted, its plan moved
+    /// by the editor, refreshed away, its repository removed.
     private func revalidateSelection() {
         let landing = SidebarTree.landingSelection(repositories: model.configuration.repositories)
         switch router.selection {
@@ -342,6 +419,14 @@ struct RootView: View {
             router.selection = model.snapshots(for: repositoryID).first
                 .map { .restoreSnapshot(repositoryID, $0.id) }
                 ?? .repository(repositoryID)
+        case let .orphanPlan(repositoryID, planID)
+            where model.shelves(for: repositoryID).orphanPlanGroup(planID) == nil:
+            // The group is gone — adopted, its plan moved by the editor, or
+            // refreshed away. Its repository's page is where it lived; the
+            // landing pane when the repository went with it.
+            router.selection = model.repository(id: repositoryID) == nil
+                ? landing
+                : .repository(repositoryID)
         case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable:
             // Repository ▸ restic Console… is now disabled; a selection
             // parked on the pane would be one the menu no longer offers.

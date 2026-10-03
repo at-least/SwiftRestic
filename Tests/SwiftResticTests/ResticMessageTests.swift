@@ -247,6 +247,22 @@ struct ResticMessageTests {
         #expect(snapshots[0].totalFilesProcessed == 3)
     }
 
+    @Test("a snapshot records the exclude patterns its backup ran with")
+    func excludesDecoded() throws {
+        // Verbatim from restic 0.19.1 (probed 2026-10-03, paths shortened):
+        // a backup with --exclude patterns carries them beside the paths —
+        // the group page's Excludes row reads them, and next stage's
+        // adoption prefills from them.
+        let withPatterns = #"[{"time":"2026-10-03T00:35:06.329044+08:00","tree":"0cc37688","paths":["/tmp/src/alpha","/tmp/src/zeta"],"hostname":"newlixs-MacBook-Air.local","username":"newlix","uid":501,"gid":20,"excludes":["*/junk"],"tags":["swiftrestic-plan-3f2a1b0c-0000-4000-8000-abcdefabcdef","travel"],"program_version":"restic 0.19.1","id":"37c99198ae40bec5e31c123b16d829a55cfc0007578b550da1a79346ed97d1df","short_id":"37c99198"}]"#
+        let patterned = try ResticMessageDecoder.jsonDecoder.decode([Snapshot].self, from: Data(withPatterns.utf8))
+        #expect(patterned[0].excludes == ["*/junk"])
+        // A backup with no pattern omits the key entirely (restic 0.19.1,
+        // probed), like tags: absent must read as none, not as a failure.
+        let without = #"{"time":"2026-09-05T00:53:25.22662+08:00","paths":["/tmp/data"],"hostname":"mac","id":"6ed59088467b1e0388a3bb3b63f3cee920b9de2b69e082544441e1e7d5c56443"}"#
+        let bare = try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(without.utf8))
+        #expect(bare.excludes == [])
+    }
+
     @Test("stats --mode raw-data")
     func stats() throws {
         let json = #"{"total_size":80314095,"total_uncompressed_size":80328265,"compression_ratio":1.0001764322937337,"compression_progress":100,"compression_space_saving":0.017640117087058815,"total_blob_count":105,"snapshots_count":2}"#

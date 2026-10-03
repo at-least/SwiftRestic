@@ -11,11 +11,17 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var hostname: String?
     var username: String?
     var tags: [String]
+    /// The `--exclude` patterns the backup ran with, which restic 0.19.1
+    /// records beside the paths (`excludes` in `snapshots --json`, probed
+    /// 2026-10-03: a backup with patterns carries them, one without omits
+    /// the key entirely) — what a plan-UUID group's page shows, and what
+    /// next stage's adoption prefills from.
+    var excludes: [String]
     var programVersion: String?
     var summary: ResticSummary?
 
     private enum CodingKeys: String, CodingKey {
-        case id, time, tree, paths, hostname, username, tags, summary
+        case id, time, tree, paths, hostname, username, tags, excludes, summary
         case shortID = "short_id"
         case programVersion = "program_version"
     }
@@ -30,6 +36,7 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
         hostname = try c.decodeIfPresent(String.self, forKey: .hostname)
         username = try c.decodeIfPresent(String.self, forKey: .username)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        excludes = try c.decodeIfPresent([String].self, forKey: .excludes) ?? []
         programVersion = try c.decodeIfPresent(String.self, forKey: .programVersion)
         summary = try c.decodeIfPresent(ResticSummary.self, forKey: .summary)
     }

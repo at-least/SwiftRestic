@@ -55,6 +55,17 @@ checked in so a normal build does not need it.
   repository wears a warning while one of its plans is not protected — its
   backups cannot be read, a plan has no backup, or a plan's last backup
   failed; the warning's tooltip names the plan.
+- **A plan-UUID group is a page** — a group's row selects like a plan's
+  (the chevron ahead of it folds), and the page says what the history is:
+  a plan not set up in SwiftRestic — deleted here, or still running on
+  another Mac — or a plan that now backs up elsewhere, with *Open the
+  “Music” Plan* to go to it. The page's Backups card brackets the history
+  (newest, oldest), names the Macs it was made from and lists each folder
+  set it spans, carries the exclude patterns and user tags, and shows the
+  plan tag itself — selectable, the one honest identifier. *Restore
+  Files…* opens the group's newest backup and *Browse Folders…* walks its
+  folders through every backup, from the page and the group's context
+  menu; an untagged lineage's menu carries *Restore Files…* alone.
 - **A repository's page is its overview** — its plans and whether each is
   protected, what runs next, and what has gone wrong with it lately, then
   where it is, how big it is, and its maintenance.
@@ -294,7 +305,10 @@ open --env SWIFTRESTIC_CONFIG_DIR=/tmp/demo \
 `SWIFTRESTIC_CONFIG_DIR` points the app at a throwaway configuration instead of
 your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 `SWIFTRESTIC_CAPTURE_PANE` picks which screen (`plan`, `repository`, `restore`,
-`activity`, `find`, `console`). `all` instead photographs every pane in one
+`activity`, `find`, `console`), plus `orphanGroup` and `movedGroup` — the page
+of the first adoptable group under Other backups, or of the first moved plan's
+group, with its sidebar fold open. Both wait for the snapshot listing that
+builds group rows, like `restore` does. `all` instead photographs every pane in one
 run — `SWIFTRESTIC_CAPTURE` names a directory, each pane lands as
 `pane-<name>.png`, and `SWIFTRESTIC_CAPTURE_DELAY` becomes the settle time per
 pane. The sweep is the whole-window regression check: a defect like macOS 26's

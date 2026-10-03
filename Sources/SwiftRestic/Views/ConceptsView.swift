@@ -23,7 +23,7 @@ struct ConceptsView: View {
         ),
         Concept(
             term: "Plan",
-            definition: "What gets backed up, on what schedule, with what retention. Each plan stamps its snapshots with an ID tag so its history stays separate."
+            definition: "What gets backed up, on what schedule, with what retention. Each plan stamps its snapshots with an ID tag so its history stays separate. A deleted plan's backups keep its tag and can be adopted back from Other backups."
         ),
         Concept(
             term: "Retention",
@@ -51,7 +51,7 @@ struct ConceptsView: View {
         ),
         Concept(
             term: "Host and paths",
-            definition: "Snapshots remember which Mac and which folders they came from. Compare defaults to the same host and paths so a diff means something."
+            definition: "Snapshots remember which Mac and which folders they came from. Compare defaults to the same host and paths so a diff means something. Under Other backups, backups that carry no plan ID group by them."
         ),
     ]
 
