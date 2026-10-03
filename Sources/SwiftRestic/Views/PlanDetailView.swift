@@ -305,18 +305,25 @@ struct PlanDetailView: View {
     }
 
     /// Arq's "View Latest Backup Record…" as the value itself: the time is a
-    /// handle to its run's record in Activity, with what that backup added.
-    /// Only when a record exists to land on — "Never" has nowhere to go.
+    /// handle to its run's record in Activity, with what that backup added —
+    /// when the plan has a run to land on. History it arrived with shows the
+    /// snapshot's own moment and figure as plain text, and "Never" has
+    /// nowhere to go.
     @ViewBuilder
     private func lastBackupValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
-        let value = Format.ago(plan.lastSuccessAt, now: now)
+        // The one moment every surface's "Last backup" counts from
+        // (PlanStatus.lastBackupAt) — the sidebar caption's and the
+        // Protection line's own derivation, so history the plan arrived
+        // with is not "Never" here.
+        let value = Format.ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshot: snapshots.first), now: now)
         // The destination must be the run the value claims — the newest
         // backup that stamped `lastSuccessAt` (PlanStatus.lastBackupRun).
         let lastSuccessfulRun = PlanStatus.lastBackupRun(planID: plan.id, in: model.configuration.runs)
         // The run record is the primary source. When the global history cap
         // has evicted this plan's newest record — a busy plan can do that to
-        // a quiet neighbour — the newest snapshot's own summary answers the
-        // same question, because a snapshot carries what its backup added.
+        // a quiet neighbour — or the history arrived with the repository and
+        // no run exists, the newest snapshot's own summary answers the same
+        // question, because a snapshot carries what its backup added.
         let added = (lastSuccessfulRun?.dataAdded ?? snapshots.first?.dataAdded).flatMap { $0 > 0 ? $0 : nil }
         let text = added.map { "\(value) · added \(Format.bytes($0))" } ?? value
         if let lastSuccessfulRun, let onShowRun {

@@ -14,10 +14,11 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     /// A run of the plan is in flight, and the line says its phase.
     let isRunning: Bool
     /// The moment the plan's "Last backup" counts from — the run's stamp
-    /// when the app ran it, else its newest snapshot's own time. Nil in
-    /// every state that spells no moment (no snapshot yet, unreadable,
-    /// still loading); the Protection line reads the newest of these
-    /// across a repository's plans.
+    /// when the app ran it, else its newest snapshot's own time, both from
+    /// `PlanStatus.lastBackupAt`, the one derivation every surface reads.
+    /// Nil in every state that spells no moment (no snapshot yet,
+    /// unreadable, still loading); the Protection line reads the newest of
+    /// these across a repository's plans.
     let lastBackupAt: Date?
     var id: UUID { planID }
 
@@ -207,16 +208,13 @@ enum OverviewMetrics {
             // the Protection line's "Last backup" reads the newest of these
             // across a repository's plans.
             var moment: Date?
-            if let latest {
-                // The sidebar's words, formatter and moment, so the two
-                // never disagree side by side: Date.RelativeFormatStyle
-                // rounds 1 h 43 min up to "2 hours ago", where
-                // Format.relative says "1 hour ago"; and the snapshot's
-                // own time comes after the plan's before-backup hooks,
-                // where the sidebar, the plan page and Activity count from
-                // the run's start. The snapshot's time only for a plan
-                // with no run of its own on record.
-                let stamped = plan.lastSuccessAt ?? latest.time
+            if let latest, let stamped = PlanStatus.lastBackupAt(plan: plan, latestSnapshot: latest) {
+                // The sidebar's words and formatter, and the one moment
+                // every surface's "Last backup" counts from
+                // (`PlanStatus.lastBackupAt`: the run's stamp, else the
+                // snapshot's own time for history the plan arrived with) —
+                // Date.RelativeFormatStyle rounds 1 h 43 min up to
+                // "2 hours ago", where Format.relative says "1 hour ago".
                 moment = stamped
                 line = "Last backup \(relative(stamped))"
             } else if !repositoryHasSnapshots(repositoryID) {

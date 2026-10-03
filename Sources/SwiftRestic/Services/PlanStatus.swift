@@ -39,8 +39,10 @@ struct PlanCaption: Equatable, Sendable {
     }
 }
 
-/// The plan page's words, kept out of the view so they can be tested: the
-/// status row for a problem that still stands, and the Next backup value.
+/// The plan page's words and the app's one "Last backup" moment, kept out
+/// of the view so they can be tested: the status row for a problem that
+/// still stands, the Next backup value, the sidebar caption, and the
+/// moment (`lastBackupAt`) every surface's "Last backup" counts from.
 enum PlanStatus {
     private static let retentionSkippedFact = "Retention skipped"
     static let unnamedUnreadFact = "Some source data could not be read"
@@ -111,13 +113,27 @@ enum PlanStatus {
         )
     }
 
+    /// The moment a plan's "Last backup" says — the run's stamp when the
+    /// app ran it, else its newest snapshot's own time: history a plan can
+    /// arrive with (adopted, or a repository added with its snapshots
+    /// already in it) is still the plan's last backup. The sidebar caption,
+    /// the repository page's Protection line and the plan page's Last
+    /// backup row all read this one moment, so the same backup cannot read
+    /// three ways side by side.
+    static func lastBackupAt(plan: BackupPlan, latestSnapshot: Snapshot?) -> Date? {
+        plan.lastSuccessAt ?? latestSnapshot?.time
+    }
+
     /// The run the plan page's Last backup value lands on: the newest
-    /// backup that stamped `lastSuccessAt`, the time the value says —
-    /// `markPlanRun`'s predicate. The stamp lands as soon as the snapshot is
-    /// written, so a run whose after-hooks then failed counts
-    /// (`.completedWithErrors`), and so does one whose retention was stopped
-    /// afterwards (`.cancelled`, its snapshot written); a failed run, or one
-    /// stopped before its snapshot, never stamped.
+    /// backup that stamped `lastSuccessAt` — the moment `lastBackupAt`
+    /// names while the plan's history is runs of its own; history that
+    /// arrived with the repository names the newest snapshot's time and
+    /// has no run to land on. `markPlanRun`'s predicate: the stamp lands
+    /// as soon as the snapshot is written, so a run whose after-hooks
+    /// then failed counts (`.completedWithErrors`), and so does one whose
+    /// retention was stopped afterwards (`.cancelled`, its snapshot
+    /// written); a failed run, or one stopped before its snapshot, never
+    /// stamped.
     static func lastBackupRun(planID: UUID, in runs: [RunRecord]) -> RunRecord? {
         runs
             .filter {
@@ -243,9 +259,12 @@ enum PlanStatus {
     /// news, so a paused plan with a standing problem gets both — the
     /// problem first, beside its glyph, and the pause on a line of its own
     /// (before, the pause took the line and an unseen problem showed only
-    /// as the dot). A never-run plan the scheduler skips — no folders, or a
-    /// repository it cannot find — reads "Not scheduled", as its
-    /// Next backup value does, rather than a schedule it will not keep.
+    /// as the dot). The last backup is `lastBackupAt`'s one moment — what
+    /// the Protection line and the plan page read too — so history a plan
+    /// arrived with counts here as well. A plan with no backup at all that
+    /// the scheduler skips — no folders, or a repository it cannot find —
+    /// reads "Not scheduled", as its Next backup value does, rather than a
+    /// schedule it will not keep.
     ///
     /// In the plain last-backup state alone, a schedule that will fire it
     /// (active, not manual, no app-wide hold) adds the next run, spelled by
@@ -257,6 +276,7 @@ enum PlanStatus {
         for plan: BackupPlan,
         activity: PlanActivity?,
         problem: RunRecord?,
+        latestSnapshot: Snapshot? = nil,
         existingRepositoryIDs: Set<UUID>,
         hold: ScheduleHold? = nil,
         now: Date = .now,
@@ -277,13 +297,13 @@ enum PlanStatus {
         if let pause {
             return PlanCaption(text: pause)
         }
-        if let lastSuccessAt = plan.lastSuccessAt {
-            var caption = PlanCaption(text: "Last backup \(relative(lastSuccessAt))")
+        if let lastBackupAt = lastBackupAt(plan: plan, latestSnapshot: latestSnapshot) {
+            var caption = PlanCaption(text: "Last backup \(relative(lastBackupAt))")
             // The pause branches above have returned, so the schedule is
             // active; a manual one never promises a run, and under the
             // app-wide hold the run the scheduler will fire is not this
             // one's date to name. A plan the scheduler skips — the same
-            // check the never-run branch below makes — gets no next run
+            // check the no-backup branch below makes — gets no next run
             // either: "Next" names a moment, never "Not scheduled".
             if plan.schedule.frequency != .manual, hold == nil,
                !Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty

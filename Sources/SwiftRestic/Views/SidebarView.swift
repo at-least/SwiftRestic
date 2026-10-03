@@ -305,7 +305,11 @@ struct SidebarView: View {
         switch child {
         case let .plan(id):
             if let plan = model.plan(id: id) {
-                planRow(plan)
+                // The newest snapshot from the same shelf the fold below
+                // shows — one dictionary hit — rather than re-filtering the
+                // repository's whole listing inside the row, whose body
+                // re-runs on every minute tick and selection change.
+                planRow(plan, latestSnapshot: shelves.byPlan[plan.id]?.first)
                 if folds.plans.contains(plan.id) {
                     planBackups(shelves.byPlan[plan.id] ?? [], in: repository)
                 }
@@ -351,10 +355,10 @@ struct SidebarView: View {
     /// backup plan's records sit under the plan. The row pads by `child`
     /// and the chevron fills the shared fold column, so the plan's title
     /// starts where every repository child's does.
-    private func planRow(_ plan: BackupPlan) -> some View {
+    private func planRow(_ plan: BackupPlan, latestSnapshot: Snapshot?) -> some View {
         HStack(spacing: 4) {
             planFold(plan)
-            PlanSidebarRow(plan: plan)
+            PlanSidebarRow(plan: plan, latestSnapshot: latestSnapshot)
         }
         .padding(.leading, Indent.child)
         .tag(SidebarItem.plan(plan.id))
@@ -829,14 +833,22 @@ private struct PlanSidebarRow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.now) private var now
     let plan: BackupPlan
+    /// The plan's newest snapshot, from the same shelf the fold beneath
+    /// this row shows. It is what the moment falls back to when the app
+    /// never ran the plan: history adopted with the repository counts as
+    /// its last backup.
+    let latestSnapshot: Snapshot?
 
     var body: some View {
-        // As of the window's minute clock — the same tick the repository
-        // page's Protection line counts its Last backup moment from.
+        // As of the window's minute clock, and counting from the one moment
+        // every surface's "Last backup" reads (PlanStatus.lastBackupAt) —
+        // the repository page's Protection line and the plan page agree
+        // with this row by construction.
         let caption = PlanStatus.sidebarCaption(
             for: plan,
             activity: model.activity[plan.id],
             problem: model.currentProblem(for: plan.id),
+            latestSnapshot: latestSnapshot,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
             hold: model.scheduleHold,
             now: now,

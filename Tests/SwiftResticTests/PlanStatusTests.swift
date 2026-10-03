@@ -372,8 +372,9 @@ struct PlanStatusTests {
             now: now, relative: relative
         ).line == "Last backup 5 minutes ago")
 
-        // A manual plan never promises a run; a never-run plan's caption is
-        // the schedule branch, which carries no suffix.
+        // A manual plan never promises a run; a plan with no backup at all
+        // — no run of its own, no snapshot either — has the schedule branch
+        // for its caption, which carries no suffix.
         plan.schedule.frequency = .manual
         #expect(PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: nil,

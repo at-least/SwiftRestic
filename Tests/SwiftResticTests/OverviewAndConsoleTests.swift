@@ -143,6 +143,76 @@ struct OverviewMetricsTests {
         #expect(rows.first?.isProtected == true)
     }
 
+    @Test("one Last backup: the caption, the Protection line and the plan page's value say the same moment")
+    func lastBackupSaidOneWay() {
+        // The surfaces that say when a plan last backed up — the sidebar
+        // caption, the repository page's Protection line, the plan page's
+        // Last backup value — all read PlanStatus.lastBackupAt, spelled by
+        // one formatter as of one tick. Before that was one derivation, a
+        // plan whose history arrived with the repository (adopted, or a
+        // repository added with its snapshots already in it) read three
+        // ways at once: the line "Last backup 2 days ago", the plan page
+        // "Never", the sidebar "Daily at 02:00" (probe, 2026-10-03). The
+        // tray and Settings say no last backup at all.
+        let repository = UUID()
+        let tick = Date.now
+        let ago = { Format.ago($0, now: tick) }
+
+        // The same plan/snapshot state through each surface's derivation.
+        func surfaces(_ plan: BackupPlan, newest: Snapshot?) -> (caption: String, row: String, line: String?, page: String) {
+            let rows = OverviewMetrics.protectionRows(
+                plans: [plan],
+                latestSnapshot: { _, _ in newest },
+                repositoryHasSnapshots: { _ in newest != nil },
+                listingOutcome: { _ in .loaded },
+                isChecking: { _ in false },
+                activity: { _ in nil },
+                standingProblem: { _ in nil },
+                relative: ago
+            )
+            let summary = OverviewMetrics.protectionSummary(
+                rows: rows, listingLoaded: true, otherBackupsCount: 0,
+                hold: nil, now: tick, relative: ago
+            )
+            let caption = PlanStatus.sidebarCaption(
+                for: plan, activity: nil, problem: nil, latestSnapshot: newest,
+                existingRepositoryIDs: [repository], now: tick, relative: ago
+            )
+            // The plan page's value is this moment through the same
+            // formatter (PlanDetailView.lastBackupValue).
+            let page = ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshot: newest))
+            return (caption.text, rows[0].stateText, summary?.text, page)
+        }
+
+        // History that arrived with the repository: no run of the plan's
+        // own, the newest snapshot two days old — that snapshot is the
+        // moment everywhere, never "Never" or the schedule beside it.
+        var adopted = plan("Docs", repository: repository)
+        adopted.sources = ["/Users/someone/Documents"]
+        adopted.schedule.frequency = .daily
+        let adoptedWords = ago(tick.addingTimeInterval(-2 * 86_400))
+        let adoptedSurfaces = surfaces(adopted, newest: snapshot("snapDocs", at: tick.addingTimeInterval(-2 * 86_400)))
+        #expect(adoptedSurfaces.caption == "Last backup \(adoptedWords)")
+        #expect(adoptedSurfaces.row == "Last backup \(adoptedWords)")
+        #expect(adoptedSurfaces.page == adoptedWords)
+        #expect(adoptedSurfaces.line == "1 of 1 plan protected · Last backup \(adoptedWords)")
+
+        // A run of the plan's own: the run's start is the moment even while
+        // restic stamped the snapshot later (the before-backup hooks), so
+        // the same backup cannot straddle a minute between surfaces.
+        var ranHere = plan("Photos", repository: repository)
+        ranHere.lastSuccessAt = tick.addingTimeInterval(-207)
+        let ranWords = ago(tick.addingTimeInterval(-207))
+        let ranSurfaces = surfaces(ranHere, newest: snapshot("snapPhotos", at: tick.addingTimeInterval(-162)))
+        #expect(ranSurfaces.caption == "Last backup \(ranWords)")
+        #expect(ranSurfaces.row == "Last backup \(ranWords)")
+        #expect(ranSurfaces.page == ranWords)
+        #expect(ranSurfaces.line == "1 of 1 plan protected · Last backup \(ranWords)")
+
+        // "Never" only when there is truly nothing: no run, no snapshot.
+        #expect(PlanStatus.lastBackupAt(plan: plan("Empty", repository: repository), latestSnapshot: nil) == nil)
+    }
+
     @Test("an idle repository that is not refreshing says so, not Checking…")
     func idleNotChecking() {
         let idle = UUID()
