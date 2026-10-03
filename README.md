@@ -51,13 +51,9 @@ checked in so a normal build does not need it.
   and Mac they came from (restic's own `host,paths` grouping). Each group's
   caption says which kind it is — *not set up here*, *now backs up to
   “Offsite”*, *outside SwiftRestic* — and names the Mac its newest backup
-  came from when that isn't this one. A plan's row caption says when its
-  next run is (*“Last backup 1 hour ago · Next Today 2:05 AM”*) while its
-  schedule is active, not manual, and nothing else claims the line — no run
-  in flight, no standing failure, no app-wide hold. Where the row is too
-  narrow for both, the next run gives way and the tooltip keeps the whole
-  line: at the default sidebar width most next-run times need a wider
-  sidebar. A
+  came from when that isn't this one. A plan's row caption gives its last
+  backup (*“Last backup 1 hour ago”*); the plan's page, the tray and
+  Settings say when it runs next. A
   repository wears a warning while one of its plans is not protected — its
   backups cannot be read, a plan has no backup, or a plan's last backup
   failed; the warning's tooltip names the plan.
@@ -93,12 +89,13 @@ checked in so a normal build does not need it.
   plans protected · Last backup 1 hour ago”; with no plans yet, the count
   of backups from no plan here), which carries the hold's own words while
   backups are held app-wide and a *Resume* button while the hold is your
-  own *Pause Backups*, beside *New Backup
-  Plan…*; an *Other backups* card listing each adoptable group while there
-  is one; the week's problems against it; then where it is, how big it is,
-  and its maintenance. The *Snapshots* row splits the backups no plan of
-  the repository made (“11 · 6 from no plan here”, or “all” when none of
-  them is a plan's). A repository whose
+  own *Pause Backups*; an *Other backups* card listing each adoptable
+  group while there is one; the week's problems against it; then where it
+  is, how big it is, and its maintenance. *New Backup Plan…* is in the
+  page's toolbar, and the Protection card carries it as a button while
+  the repository has no plan. The *Snapshots* row splits the backups no
+  plan of the repository made (“11 · 6 from no plan here”, or “all” when
+  none of them is a plan's). A repository whose
   first listing finds no plans and adoptable history opens its *Other
   backups* shelf so the groups are in view; no modal, no wizard.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob

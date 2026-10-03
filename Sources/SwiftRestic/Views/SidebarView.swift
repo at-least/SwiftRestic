@@ -327,8 +327,8 @@ struct SidebarView: View {
     /// The way to a repository's first plan, where its plans would be. An
     /// action, not a place: no tag, no chevron — its plus fills the fold
     /// column, so its title starts where plan names do. It leaves once a
-    /// plan exists; the page's Protection card and the row's menu keep
-    /// offering the next one.
+    /// plan exists; the page's toolbar and the row's menu keep offering
+    /// the next one.
     private func addPlanRow(_ repository: Repository) -> some View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
@@ -443,11 +443,11 @@ struct SidebarView: View {
     private func planBackups(_ records: [Snapshot], in repository: Repository) -> some View {
         if records.isEmpty {
             backupsStatusRow(repository)
-                .padding(.leading, Indent.grandchild)
+                .padding(.leading, Indent.planRecord)
         } else {
             ForEach(records) { snapshot in
                 RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                    .padding(.leading, Indent.grandchild)
+                    .padding(.leading, Indent.planRecord)
                     .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
             }
         }
@@ -563,9 +563,10 @@ struct SidebarView: View {
     /// One plan's history in this repository that none of the repository's
     /// plans owns — a deleted plan's, or a plan that now backs up elsewhere.
     /// A page, the plan row's own grammar: the row selects, the chevron
-    /// ahead of it folds, and its records start where a plan's do, so the
-    /// group reads as the plan's history and not a folder's. The label's
-    /// caption and tooltip say which of the three kinds it is.
+    /// ahead of it folds, and its records sit one fold-step under its
+    /// title, the way a plan's sit under it, so the group reads as the
+    /// plan's history and not a folder's. The label's caption and tooltip
+    /// say which of the three kinds it is.
     @ViewBuilder
     private func planGroupRows(
         id planID: UUID,
@@ -598,7 +599,7 @@ struct SidebarView: View {
         if isExpanded {
             ForEach(snapshots) { snapshot in
                 RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                    .padding(.leading, Indent.grandchild)
+                    .padding(.leading, Indent.groupRecord)
                     .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
             }
         }
@@ -712,7 +713,7 @@ struct SidebarView: View {
         if isExpanded {
             ForEach(lineage.snapshots) { snapshot in
                 RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                    .padding(.leading, Indent.lineageRecord)
+                    .padding(.leading, Indent.groupRecord)
                     .tag(SidebarItem.restoreSnapshot(repositoryID, snapshot.id))
             }
         }
@@ -723,7 +724,9 @@ struct SidebarView: View {
 /// A repository's children keep one shared column ahead of their titles —
 /// a plan's or Other backups' fold chevron, the plus of "New Backup
 /// Plan…" — so every child's title starts at one x, level with the
-/// repository's own title.
+/// repository's own title. A backup record sits one fold-step (a
+/// chevron column plus the row spacing) past its parent's title, and no
+/// further.
 private enum Indent {
     /// A repository's children: plan rows, "New Backup Plan…" and the
     /// Other backups node. With `fold` and the row's spacing it puts the
@@ -738,17 +741,16 @@ private enum Indent {
     /// starts where the plan family's titles do, putting its title one
     /// fold deeper than theirs.
     static let groupPad: CGFloat = child + fold + 4
-    /// Records under a plan or a plan-UUID group, and the status rows an
-    /// open plan's fold shows. A bare number since the marker slot went —
-    /// it keeps the records at the x they have always started rather than
-    /// deriving from the plan row above.
-    static let grandchild: CGFloat = 46
-    /// A group's chevron column (either kind; a plan-UUID group's records
-    /// sit at `grandchild`, a lineage's derive their pad from here).
+    /// A group's chevron column, either kind. With the row spacing it is
+    /// the fold-step a record sits past its parent's title.
     static let lineageSlot: CGFloat = 14
-    /// A record under a lineage group, starting past the group's chevron
-    /// column.
-    static let lineageRecord: CGFloat = grandchild + lineageSlot + 4
+    /// A record under a plan, and the status rows an open plan's fold
+    /// shows: one fold-step past the plan's title, the x a group's title
+    /// starts at.
+    static let planRecord: CGFloat = groupPad + lineageSlot + 4
+    /// A record under an Other-backups group, plan-UUID or lineage
+    /// alike: one fold-step past the group's title.
+    static let groupRecord: CGFloat = planRecord + lineageSlot + 4
 }
 
 /// A fold's disclosure mark, the restore pane's own: chevron right when
@@ -781,27 +783,34 @@ private struct RestoreRecordRow: View {
     let run: RunRecord?
 
     var body: some View {
-        HStack(spacing: 6) {
-            // A fixed slot, so every timestamp starts at the same x whether
-            // or not its row wears the incomplete triangle.
-            SnapshotCompletenessMark(run: run)
-                .font(.caption)
-                .frame(width: 14)
-            // The row's help sits on the timestamp, not the HStack: a help
-            // on the HStack overwrites the mark's own ("Incomplete: …") in
-            // the accessibility tree.
-            Text(Format.timestamp(snapshot.time))
-                .lineLimit(1)
-                .help("Browse this backup's files and restore from it")
-                // The date leads the combined utterance, as in a list of
-                // dates it should; the mark sits first only on screen.
-                .accessibilitySortPriority(1)
-        }
-        // One utterance per record: the mark's label, when it has one,
-        // merges with the date, so there is no second row label to keep
-        // in step with it.
-        .accessibilityElement(children: .combine)
+        Text(Format.timestamp(snapshot.time))
+            .lineLimit(1)
+            // The row's help sits on the timestamp, not the row: a help on
+            // the row overwrites the mark's own ("Incomplete: …") in the
+            // accessibility tree.
+            .help("Browse this backup's files and restore from it")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // State trails identity, PlanSidebarRow's rule: the mark sits at
+            // the row's right end, and only a visible one claims room there.
+            // A slot held on every row cost each date its width, and group
+            // records' dates truncated at the default sidebar width (seen
+            // live, 2026-10-03).
+            .padding(.trailing, run?.snapshotCompleteness == .incomplete ? Self.markWidth + 6 : 0)
+            // An overlay, so the clear "Complete" text and the hidden
+            // slot-holder stay in the row — VoiceOver keeps its
+            // Complete/Incomplete word — without taking the date's width.
+            .overlay(alignment: .trailing) {
+                SnapshotCompletenessMark(run: run)
+                    .font(.caption)
+                    .frame(width: Self.markWidth)
+            }
+            // One utterance per record: the mark's label, when it has one,
+            // merges with the date, so there is no second row label to keep
+            // in step with it.
+            .accessibilityElement(children: .combine)
     }
+
+    private static let markWidth: CGFloat = 14
 }
 
 /// An Other backups group's second line. The count and the kind keep their
@@ -850,7 +859,6 @@ private struct PlanSidebarRow: View {
             problem: model.currentProblem(for: plan.id),
             latestSnapshot: latestSnapshot,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
-            hold: model.scheduleHold,
             now: now,
             relative: { Format.ago($0, now: now) }
         )
@@ -873,24 +881,14 @@ private struct PlanSidebarRow: View {
                             .foregroundStyle(StatusPalette.status(outcome))
                             .accessibilityHidden(true)
                     }
-                    // The next run gives way whole where the line cannot
-                    // hold both: at the default sidebar width "Last backup
-                    // 15 hours ago · Next Tomorrow 3:10 AM" needs 248 pt of
-                    // the caption's ~200 (measured 2026-10-03), and a middle
-                    // cut took the end of one fact and the start of the
-                    // other. Middle truncation still guards the last form:
-                    // the trailing marker narrows the column, and a tail
-                    // cut would take "ago" — when it happened. The tooltip
-                    // and VoiceOver keep the whole line.
-                    ViewThatFits(in: .horizontal) {
-                        Text(caption.line)
-                        Text(caption.text)
-                    }
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(caption.line)
-                    .accessibilityLabel(caption.line)
+                    // Middle truncation: the trailing marker narrows the
+                    // column, and a tail cut would take "ago" — when it
+                    // happened. The tooltip and VoiceOver keep the whole line.
+                    Text(caption.text)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(caption.text)
                 }
                 .font(.caption)
                 // A paused plan whose problem took the line above: the pause

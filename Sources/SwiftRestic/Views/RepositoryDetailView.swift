@@ -36,16 +36,20 @@ struct RepositoryDetailView: View {
         }
         .navigationTitle(repository?.name ?? "Repository")
         .toolbar {
-            // The page's verbs: read it again, get files back, change it.
-            // Check, Prune, the lock and index repairs and Remove from
-            // SwiftRestic… are the Repository menu's (all of them, acting on
-            // this page's repository) and the sidebar row's (all but the two
-            // repairs), each through the one shared confirmation.
+            // The page's verbs: read it again, start a plan in it, get
+            // files back, change it. Check, Prune, the lock and index
+            // repairs and Remove from SwiftRestic… are the Repository
+            // menu's (all of them, acting on this page's repository) and
+            // the sidebar row's (all but the two repairs), each through
+            // the one shared confirmation.
             ToolbarItemGroup {
                 Button("Refresh", systemImage: "arrow.clockwise") {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
                 .help("Re-read snapshots and statistics")
+                Button("New Backup Plan…", systemImage: "plus", action: onAddPlan)
+                    .labelStyle(.titleAndIcon)
+                    .help("Create a backup plan that backs up to “\(repository?.name ?? "Repository")”")
                 // Arq's restore entry: select this repository's newest
                 // backup record, which opens its fold in the sidebar — its
                 // plan's or Other backups — and the Restore pane does the

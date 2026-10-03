@@ -326,7 +326,7 @@ private struct RunSnapshotRow: View {
     }
 
     /// 09's mark: the run itself for a backup, the backup that wrote it for
-    /// a restore. A fixed slot, as in the sidebar.
+    /// a restore. A fixed slot.
     private func completenessMark(for snapshotID: String) -> some View {
         SnapshotCompletenessMark(run: run.kind == .backup ? run : model.backupRun(forSnapshot: snapshotID))
             .font(.caption)

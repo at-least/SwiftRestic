@@ -133,8 +133,8 @@ struct OverviewMetricsTests {
         let sidebar = PlanStatus.sidebarCaption(
             for: photos, activity: nil, problem: nil, existingRepositoryIDs: [repository]
         )
-        // This plan has no folders, so the scheduler skips it and the
-        // caption carries no next-run suffix — the shared derivation is the
+        // The caption is the bare last-backup line — the sidebar carries
+        // no next run — so the shared derivation shows directly: the
         // "Last backup" moment itself, spelled identically, and the row's
         // lastBackupAt is that same moment (the run's stamp, not the
         // snapshot's own time).

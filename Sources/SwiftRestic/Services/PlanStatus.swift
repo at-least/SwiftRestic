@@ -27,16 +27,6 @@ struct PlanCaption: Equatable, Sendable {
     /// The pause, on a line of its own, when a standing problem took the
     /// first one — so neither state hides the other.
     var pauseNote: String?
-    /// When the schedule fires next, in the plan page's Next backup words —
-    /// beside the last backup only, while the schedule will fire one.
-    var nextRun: String?
-
-    /// The whole line: `text`, then " · Next …" when there is a next run.
-    /// The row shows it where it fits; where it does not, the next run
-    /// gives way whole and this stays the tooltip and VoiceOver's line.
-    var line: String {
-        nextRun.map { "\(text) · Next \($0)" } ?? text
-    }
 }
 
 /// The plan page's words and the app's one "Last backup" moment, kept out
@@ -266,19 +256,15 @@ enum PlanStatus {
     /// reads "Not scheduled", as its Next backup value does, rather than a
     /// schedule it will not keep.
     ///
-    /// In the plain last-backup state alone, a schedule that will fire it
-    /// (active, not manual, no app-wide hold) adds the next run, spelled by
-    /// `nextBackupTile` — the plan page's Next backup value's own
-    /// derivation, so the two surfaces cannot disagree about the same run.
-    /// Every other state keeps its words; the plan's page is where each of
-    /// them meets its next run.
+    /// The caption carries no next run: the sidebar says only the last
+    /// backup, and a plan's next run stays with the surfaces that act on
+    /// it — the plan page's Next backup value, the tray and Settings.
     static func sidebarCaption(
         for plan: BackupPlan,
         activity: PlanActivity?,
         problem: RunRecord?,
         latestSnapshot: Snapshot? = nil,
         existingRepositoryIDs: Set<UUID>,
-        hold: ScheduleHold? = nil,
         now: Date = .now,
         calendar: Calendar = .current,
         relative: (Date) -> String = { Format.relative($0) }
@@ -298,19 +284,7 @@ enum PlanStatus {
             return PlanCaption(text: pause)
         }
         if let lastBackupAt = lastBackupAt(plan: plan, latestSnapshot: latestSnapshot) {
-            var caption = PlanCaption(text: "Last backup \(relative(lastBackupAt))")
-            // The pause branches above have returned, so the schedule is
-            // active; a manual one never promises a run, and under the
-            // app-wide hold the run the scheduler will fire is not this
-            // one's date to name. A plan the scheduler skips — the same
-            // check the no-backup branch below makes — gets no next run
-            // either: "Next" names a moment, never "Not scheduled".
-            if plan.schedule.frequency != .manual, hold == nil,
-               !Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty
-            {
-                caption.nextRun = nextBackupTile(for: plan, existingRepositoryIDs: existingRepositoryIDs, now: now).value
-            }
-            return caption
+            return PlanCaption(text: "Last backup \(relative(lastBackupAt))")
         }
         if plan.schedule.frequency != .manual,
            Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty

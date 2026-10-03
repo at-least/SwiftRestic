@@ -10,11 +10,12 @@ import SwiftUI
 
 /// The repository page's Protection card: one line — how many of the
 /// repository's plans are protected, when its newest backup landed, and,
-/// while one is on, the app-wide hold's words with a Resume — plus the
-/// page's one visible way to a new plan. The line is static text by rule:
-/// no hover, no chevron, no destination — the plans it summarizes sit in
-/// the sidebar beside it. It waits for a succeeded listing (the caveat
-/// under Details says why in words); the card and its button stay.
+/// while one is on, the app-wide hold's words with a Resume. The line is
+/// static text by rule: no hover, no chevron, no destination — the plans
+/// it summarizes sit in the sidebar beside it. It waits for a succeeded
+/// listing (the caveat under Details says why in words); the card and
+/// the plan-less page's prominent button stay, and the toolbar's
+/// New Backup Plan… is there at every state of the page.
 struct ProtectionCard: View {
     @Environment(AppModel.self) private var model
     /// The window's minute clock, as the sidebar's captions read it.
@@ -46,24 +47,14 @@ struct ProtectionCard: View {
                 }
                 // The repository's first plan: the way to it is the whole
                 // point of a plan-less page, in the empty card's prominent
-                // form. A sidebar row carries it too, but it leaves as soon
-                // as a plan exists — this button is the one that stays.
+                // form. The toolbar button is there at every state of the
+                // page; this one leads it while no plan exists yet.
                 if plans.isEmpty {
                     Button("New Backup Plan…", action: onAddPlan)
                         .buttonStyle(.borderedProminent)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-        } accessory: {
-            // The slot the count caption used to fill. With plans, the page
-            // has no other visible way to the next one: the sidebar's row
-            // is the first plan's only, and ⌘N and the footer menu are
-            // invisible until asked for.
-            if !plans.isEmpty {
-                Button("New Backup Plan…", action: onAddPlan)
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-            }
         }
     }
 }
