@@ -377,8 +377,10 @@ struct PlanDetailView: View {
         }
     }
 
-    /// What, then where and when: the plan's defining fact — the folders it
-    /// backs up — leads, as the repository page leads with its location.
+    /// What, then when: the plan's defining facts — the folders it backs up
+    /// and the patterns it leaves out, as the editor's Files tab pairs
+    /// them — lead. Where is the sidebar's: the plan sits under its
+    /// repository.
     private func configurationCard(_ plan: BackupPlan) -> some View {
         Card("Configuration") {
             VStack(alignment: .leading, spacing: 10) {
@@ -403,36 +405,38 @@ struct PlanDetailView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+                // As the user typed them, tilde and all; none, no section —
+                // as Hooks below.
+                if !plan.excludePatterns.isEmpty {
+                    Text("Excluding")
+                        .font(.subheadline.weight(.medium))
+                    ForEach(plan.excludePatterns, id: \.self) { pattern in
+                        Label {
+                            Text(pattern)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(pattern)
+                        } icon: {
+                            // The editor's glyph for the list, holding the
+                            // pattern where the folders' names start —
+                            // secondary, not the folders' tint: these are
+                            // what stays out of the backup.
+                            Image(systemName: "eye.slash")
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                        }
+                        .font(.callout)
+                    }
+                }
 
                 Divider()
 
                 DetailGrid {
-                    DetailRow("Repository") {
-                        if let repository = model.repository(id: plan.repositoryID) {
-                            // The sidebar row's destination, and the Last
-                            // backup value's look one card up.
-                            Button { router.selection = .repository(repository.id) } label: {
-                                HStack(spacing: 4) {
-                                    Text(repository.name)
-                                    Image(systemName: "chevron.forward")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.tertiary)
-                                        .accessibilityHidden(true)
-                                }
-                            }
-                            .buttonStyle(HoverableButtonStyle())
-                            .help("Open the repository's page")
-                            .accessibilityLabel("Repository \(repository.name). Show its page")
-                        } else {
-                            Text("Not set").foregroundStyle(Theme.warning)
-                        }
-                    }
                     DetailRow("Schedule", PlanStatus.scheduleRow(for: plan))
                     // Applying it now is Plan ▸ Apply Retention Now… (and the
                     // sidebar row's menu); what it will keep is the editor's
                     // Retention tab.
                     DetailRow("Retention", plan.retention.summary)
-                    DetailRow("Excludes", Format.plural(plan.excludePatterns.count, "pattern"))
                     if !plan.hooks.isEmpty {
                         DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")
                     }
