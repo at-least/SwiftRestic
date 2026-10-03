@@ -25,6 +25,25 @@ Two rules the flaky-run hunt of 2026-09-14 added:
   the restart banner — which also fires for a plain test crash or timeout,
   so read the xcresult before blaming a collision.
 
+Four timing tests fail now and then under load and pass on a re-run. Not
+fixed. On 2026-10-04, 5 of 13 `./build.sh test` runs failed on one or more of
+them. Other work on the Mac held the load average between 7 and 53 at the
+time: another project's simulator UI tests and builds, and mediaanalysisd.
+No other test failed in any of the 13 runs:
+
+| Test | Failed | What it reported |
+| --- | --- | --- |
+| "a backgrounded grandchild cannot outlive a finished hook's answer" | 2 of 13 | `GrandchildPipeTests.swift:40`: `.timedOut(seconds: 1.0, command: "restic")` |
+| "a child that keeps reporting is never stopped by the stall cap" | 2 of 13 | `IdleWatchdogTests.swift:51`: `.idleStalled(seconds: 1.5, command: "restic")` |
+| "status lines are decoded and delivered while the run is still going" | 4 of 13 | `StubResticTests.swift:568`: `arrival < 0.7 * elapsed` |
+| "cancelling a backup ends the run and the child process is really gone" | 3 of 13 | `StubResticTests.swift:522`: "the stub never established its hang within 10 s; trace: [no trace]" |
+
+On the cancel test:
+- The stub never wrote its trace.
+- The `ps` snapshot in the message showed no stub process. Its `sleep ` filter matched only an unrelated shell that was running `sleep 10`.
+
+The grandchild test was A/B'd against `b26bde1`, the commit before the Files view redesign. It ran 11 times on each side and failed once on each, with the same error, so the redesign did not cause it. The stall-cap and fault-path suites ran 3 times on each side without failing, which shows nothing either way.
+
 ## The snapshot index
 
 What it is and where it lives: the README's Architecture section. Rules for
@@ -164,3 +183,42 @@ vibrancy materials (README records that a locked screen hides the window from
 capture entirely). The pixel identity between `screencapture -l` and the
 ScreenCaptureKit pipeline shows both read the same WindowServer surface —
 equivalence, not independent confirmation.
+
+## Open items from the Files view redesign
+
+The 2026-10-04 redesign (`8305539`..`a561666`) added the sidebar's Backups | Files control, the Files panes and the plan page's cards. It left the items below open.
+
+What was checked live, one capture each, in light mode, against a scratch configuration:
+- the sidebar's Files tree, with a deleted file dimmed;
+- a folder pane;
+- a file pane: "3 versions in 4 backups", with sizes matching the demo files;
+- a plan-UUID group in Files;
+- the plan page, idle and scheduled;
+- the sidebar view surviving a relaunch.
+
+### Not verified
+
+- **Plan page states other than idle and scheduled.** Not seen:
+  - Back Up Now turning into Stop while a backup runs;
+  - Resume Schedule while the plan is paused;
+  - no Schedule control on a manual plan;
+  - the list of lengths under the Pause arrow.
+  None of the cards' buttons was clicked either.
+- **Interaction in the Files panes.** Not exercised:
+  - double-click or Return opening an item at the backup time the pane had chosen. `preferredVersion` and the router's hint being spent once are unit-tested; the wiring between them is not;
+  - dragging items to Finder;
+  - Restore… and Restore Folder… through the destination sheet. No restore was run from the new panes. Whoever runs one restores into a scratch folder, never the real Desktop;
+  - Show in Backups.
+- **The sidebar tree's fallback through restic.** A plan the index holds nothing of yet is listed from its newest backup with `restic ls` (`FilesTree`). No test and no capture reached that branch.
+- **An untagged lineage in Files.** Nothing was checked live there, nor the Show Files button or menu item on a group. Only `SidebarFolds.revealFiles` is unit-tested.
+- **Scale.**
+  - How the sidebar responds with thousands of rows open. The 200-item cap is unit-tested, but its "N more items…" row was never shown live.
+  - The file pane's single `restic find` per opened file, on a repository with about 1,000 snapshots or on a remote one. The only timing is 0.6 s, measured locally on 20,000 files × 12 snapshots.
+- **The first launch after the upgrade.** Schema 3 deletes every existing index file and reads it again. That mismatch path is tested with `user_version` 99, but how long the reread takes on real repositories was not measured.
+- **Dark mode** of the new panes and cards.
+- **The ⌘1 and ⌘2 shortcuts.** The View menu items were clicked; the keys themselves were never pressed.
+
+### Not handled
+
+- **Show Versions from elsewhere.** The design discussion left two links for later: a Show Versions item in the Restore pane's item menu, and the same on Find Files results, each opening the file in the Files view. Neither exists.
+- **The flaky timing tests.** See Build.
