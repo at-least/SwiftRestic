@@ -79,6 +79,17 @@ final class AppRouter {
     /// never steer an unrelated load; the pane spends it on its next load.
     private(set) var restoreFocus: RestoreFocus?
 
+    /// The backup a folder's listing was read from when one of its items
+    /// was opened from it: the item's pane opens at it when the item exists
+    /// then, so walking down keeps the era. Transient; the next Files pane
+    /// to load spends it, whichever item that is.
+    @ObservationIgnored var filesVersionHint: String?
+
+    func takeFilesVersionHint() -> String? {
+        defer { filesVersionHint = nil }
+        return filesVersionHint
+    }
+
     /// The main window's `openWindow` action, parked by the root view the
     /// first time the window appears — the AppKit tray has no view
     /// environment to call it from, and it outlives the window it was

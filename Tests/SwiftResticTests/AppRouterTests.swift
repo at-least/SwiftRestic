@@ -79,6 +79,22 @@ struct AppRouterTests {
         #expect(router.selection == .restoreSnapshot(repository, "s1"))
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
     }
+
+    @Test("a Files version hint is spent by the next pane that takes it, once; switching views keeps the selection")
+    func filesVersionHintIsSpentOnce() {
+        let router = AppRouter()
+        #expect(router.takeFilesVersionHint() == nil)
+        router.filesVersionHint = "abc"
+        #expect(router.takeFilesVersionHint() == "abc")
+        #expect(router.takeFilesVersionHint() == nil)
+
+        router.selection = .repository(UUID())
+        let selection = router.selection
+        router.sidebarMode = .files
+        #expect(router.selection == selection)
+        router.sidebarMode = .backups
+        #expect(router.selection == selection)
+    }
 }
 
 

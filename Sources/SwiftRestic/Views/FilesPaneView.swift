@@ -1,31 +1,43 @@
 import SwiftUI
 
-/// The pane for a folder or file picked in the Files view: what it is, where
-/// it lives, and the backups that hold it — newest first, from the index —
-/// with Show in Backups for the one selected, which opens that backup at
-/// that place in the Backups view.
+/// The pane for a folder or file picked in the Files view: what it is,
+/// where it lives and where it stands in its chain's history, then the item
+/// by version — a folder as any backup holding it held it
+/// (`FolderVersionsView`), a file as the backups that hold it.
 struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     let node: FileNode
+    /// Opens an item of a folder's listing in the sidebar, at the backup the
+    /// listing was read from.
+    let onOpen: (FileNode, _ versionID: String) -> Void
 
     /// The backups of the chain holding the item, newest first.
     @State private var versions: [IndexVersion] = []
-    @State private var selectedVersion: String?
+    /// The backup the item is shown at; nil for the newest.
+    @State private var chosenID: String?
     @State private var isLoading = true
     @State private var loadError: String?
     @State private var indexComplete = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            FilesPaneHeader(node: node, versions: versions, chainNewest: chainNewest, isLoading: isLoading)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
+            VStack(alignment: .leading, spacing: 8) {
+                FilesPaneHeader(node: node, versions: versions, chainNewest: chainNewest, isLoading: isLoading)
+                if !indexComplete {
+                    Label(
+                        "The index is still reading this repository — older backups may be missing.",
+                        systemImage: "clock.arrow.circlepath"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
             Divider()
-            versionList
+            content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
-            footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle(node.isRoots ? "Files" : node.name)
@@ -51,7 +63,7 @@ struct FilesPaneView: View {
     }
 
     @ViewBuilder
-    private var versionList: some View {
+    private var content: some View {
         if let loadError {
             ContentUnavailableView {
                 Label("Could not read its backups", systemImage: "exclamationmark.triangle")
@@ -60,68 +72,11 @@ struct FilesPaneView: View {
             }
         } else if isLoading, versions.isEmpty {
             ProgressView("Reading…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if versions.isEmpty {
-            ContentUnavailableView(
-                "No backups hold it yet",
-                systemImage: "clock.arrow.circlepath",
-                description: Text("The index is still reading this repository's backups.")
-            )
+        } else if node.isDirectory {
+            FolderVersionsView(node: node, versions: versions, chosenID: $chosenID, onOpen: onOpen)
         } else {
-            List(versions, id: \.id, selection: $selectedVersion) { version in
-                HStack {
-                    Text(Format.timestamp(version.time))
-                    Spacer()
-                    Text(version.id.prefix(8))
-                        .font(.callout.monospaced())
-                        .foregroundStyle(.secondary)
-                }
-                .tag(version.id)
-            }
-            .listStyle(.inset)
-            .contextMenu(forSelectionType: String.self) { _ in
-                EmptyView()
-            } primaryAction: { ids in
-                guard ids.count == 1, let id = ids.first, let version = versions.first(where: { $0.id == id }) else { return }
-                showInBackups(version)
-            }
+            BackupsHoldingView(node: node, versions: versions, chosenID: $chosenID)
         }
-    }
-
-    private var footer: some View {
-        HStack(spacing: 10) {
-            if !indexComplete {
-                Label(
-                    "The index is still reading this repository — older backups may be missing.",
-                    systemImage: "clock.arrow.circlepath"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Show in Backups") {
-                if let version = shownVersion { showInBackups(version) }
-            }
-            .disabled(shownVersion == nil)
-            .help("Open this backup in the Backups view, at this item — drag to Finder, see what changed, or restore the whole backup")
-        }
-        .padding(12)
-    }
-
-    /// The selected backup, or the newest when none is selected.
-    private var shownVersion: IndexVersion? {
-        versions.first { $0.id == selectedVersion } ?? versions.first
-    }
-
-    /// The Backups view at that backup, its tree opened at the item's
-    /// folder: the folder itself, or the one holding the file.
-    private func showInBackups(_ version: IndexVersion) {
-        router.sidebarMode = .backups
-        router.showRestore(
-            repositoryID: node.repositoryID,
-            snapshotID: version.id,
-            focusPath: node.isDirectory ? node.path : ResticPath.parent(of: node.path)
-        )
     }
 
     private func load() async {
@@ -134,12 +89,70 @@ struct FilesPaneView: View {
             guard !Task.isCancelled else { return }
             versions = loaded
             loadError = nil
+            // The time the user was reading one level up, when this item
+            // existed then: walking down keeps the era (Browse Folders'
+            // rule). Spent on the first read only.
+            if let hint = router.takeFilesVersionHint(), chosenID == nil {
+                chosenID = loaded.preferredVersion(previousID: hint)?.id
+            }
         } catch {
             guard !Task.isCancelled else { return }
             versions = []
             loadError = error.localizedDescription
         }
         isLoading = false
+    }
+}
+
+/// A file's backups, newest first, with Show in Backups for the one picked.
+private struct BackupsHoldingView: View {
+    @Environment(AppRouter.self) private var router
+    let node: FileNode
+    let versions: [IndexVersion]
+    @Binding var chosenID: String?
+
+    private var chosen: IndexVersion? {
+        versions.first { $0.id == chosenID } ?? versions.first
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if versions.isEmpty {
+                ContentUnavailableView(
+                    "No backup holds it yet",
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text("The index is still reading this repository's backups.")
+                )
+                .frame(maxHeight: .infinity)
+            } else {
+                List(versions, id: \.id, selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) { version in
+                    HStack {
+                        Text(Format.timestamp(version.time))
+                        Spacer()
+                        Text(version.id.prefix(8))
+                            .font(.callout.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .listStyle(.inset)
+            }
+            Divider()
+            HStack {
+                Spacer()
+                Button("Show in Backups") {
+                    guard let chosen else { return }
+                    router.sidebarMode = .backups
+                    router.showRestore(
+                        repositoryID: node.repositoryID,
+                        snapshotID: chosen.id,
+                        focusPath: ResticPath.parent(of: node.path)
+                    )
+                }
+                .disabled(chosen == nil)
+                .help("Open this backup in the Backups view, at this file's folder")
+            }
+            .padding(12)
+        }
     }
 }
 

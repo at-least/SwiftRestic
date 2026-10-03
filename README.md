@@ -64,9 +64,14 @@ checked in so a normal build does not need it.
   snapshot index; while the index is still reading a repository it fills in
   as it goes, and a plan the index holds nothing of yet lists its newest
   backup. A folder lists at most 200 items in the sidebar, then one row that
-  opens the folder in the pane. Picking a folder or file shows the backups
-  that hold it; *Show in Backups* opens the one selected at that place.
-  Switching views leaves the pane alone.
+  opens the folder in the pane. Picking a folder lists it as a backup held
+  it — *As backed up* picks which of the backups holding it, newest first —
+  where items select several at a time and restore together, drag to
+  Finder, or open in the sidebar with a double-click, keeping the chosen
+  time when they existed then; with nothing selected, *Restore Folder…*
+  restores the whole folder. Picking a file shows the backups that hold
+  it. *Show in Backups* opens the chosen backup at that place. Switching
+  views leaves the pane alone.
 - **A plan-UUID group is a page** — a group's row selects like a plan's
   (the chevron ahead of it folds), and the page says what the history is:
   a plan not set up in SwiftRestic — deleted here, or still running on
