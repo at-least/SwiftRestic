@@ -267,7 +267,9 @@ actor IndexCoordinator {
             }
             let delta = try collector.delta()
             try await Self.offActor {
-                try store.ingestDelta(snapshotID: target, from: base, added: delta.added, removed: delta.removed)
+                try store.ingestDelta(
+                    snapshotID: target, from: base, added: delta.added, removed: delta.removed, modified: delta.modified
+                )
             }
             return .ended(.landed)
         } catch {
@@ -351,6 +353,12 @@ actor IndexCoordinator {
     /// newest backup no longer has included — the Files view's tree level.
     nonisolated func children(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
         try await read(repositoryID) { try await $0.children(ofPath: path, inChain: chainKey) }
+    }
+
+    /// One path's content versions within one chain — the Files view's
+    /// version list.
+    nonisolated func contentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
+        try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }
 
     /// The Restore pane's search: basename hits across every indexed path —
@@ -932,16 +940,20 @@ enum IncompleteStream: Error, Equatable {
 ///
 /// `+` is added and `-` removed, each kept as the entry the store takes
 /// (`IndexedEntry(diffSpelling:)`: the path without restic's trailing `/`,
-/// the kind that `/` marks). `M` and `U` change content or metadata, not
-/// existence, and are ignored. A `T` line ends the delta (`IncompleteStream
-/// .typeChange`): the snapshot must take the full route, and the index's own
-/// `kindChanged` refusal backs that up for a kind change that slips through
-/// spelled as an add. Nothing more is kept after a `T`; the rest of the
-/// stream is read to its end and dropped.
+/// the kind that `/` marks). `M` — content changed, the only change restic
+/// reports for a path in both snapshots without `--metadata`, which the
+/// walk does not pass — is kept as modified, for the store's content
+/// versions; so is `?`, which `ResticDiffChange` counts as modified too. `U`
+/// changes only metadata and is ignored. A `T` line ends the delta
+/// (`IncompleteStream.typeChange`): the snapshot must take the full route,
+/// and the index's own `kindChanged` refusal backs that up for a kind change
+/// that slips through spelled as an add. Nothing more is kept after a `T`;
+/// the rest of the stream is read to its end and dropped.
 final class DeltaCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var added: [IndexedEntry] = []
     private var removed: [IndexedEntry] = []
+    private var modified: [IndexedEntry] = []
     private var typeChange: String?
 
     func consume(_ change: ResticDiffChange) {
@@ -952,22 +964,24 @@ final class DeltaCollector: @unchecked Sendable {
             typeChange = change.path
             added = []
             removed = []
+            modified = []
             return
         }
         switch change.category {
         case .added: added.append(IndexedEntry(diffSpelling: change.path))
         case .removed: removed.append(IndexedEntry(diffSpelling: change.path))
-        case .modified, .metadataOnly: break
+        case .modified: modified.append(IndexedEntry(diffSpelling: change.path))
+        case .metadataOnly: break
         }
     }
 
     /// The delta to apply, or `IncompleteStream.typeChange` when a `T` line
     /// means there is none.
-    func delta() throws -> (added: [IndexedEntry], removed: [IndexedEntry]) {
+    func delta() throws -> (added: [IndexedEntry], removed: [IndexedEntry], modified: [IndexedEntry]) {
         lock.lock()
         defer { lock.unlock() }
         if let typeChange { throw IncompleteStream.typeChange(path: typeChange) }
-        return (added, removed)
+        return (added, removed, modified)
     }
 }
 

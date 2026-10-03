@@ -210,7 +210,8 @@ Services/   ResticService     typed restic commands (idle caps on the streaming 
             SecretStore       Keychain, injectable so tests never touch yours
             ConfigStore, Scheduler, KeychainStore
   Index/    SnapshotIndex     per repository, one SQLite file: which snapshots
-                              hold a path, basename search, browse caches
+                              hold a path and where its content changed,
+                              basename search, browse caches
             IndexCoordinator  actor: reconcile each listing, backfill by
                               restic diff or ls, housekeeping, orphan sweep
             FileTree          the restore browser's lazily loaded tree
@@ -263,7 +264,10 @@ A few seams worth knowing by name:
   for backups no plan made), the ranges of snapshots each path exists in, so a
   backup writes only what changed. It reads a group's newest snapshot with
   `restic ls` and, as a rule, each other one with a `restic diff` against a
-  neighbour already read. Its failure never fails a refresh or a backup: a file
+  neighbour already read, keeping the files that diff says changed (`M`) — so
+  a file's versions are the backups where its content changed, not every
+  backup that holds it; a neighbour read in full instead is marked as a step
+  that may have changed anything. Its failure never fails a refresh or a backup: a file
   it cannot use is deleted and read again, *Rebuild Search Index…* does the same
   on request, and until it has read every snapshot Find Files searches through
   restic instead. Only the `SnapshotIndex*.swift` files touch GRDB. At launch,

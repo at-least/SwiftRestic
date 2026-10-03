@@ -336,15 +336,29 @@ enum IndexTestData {
         return (added.sorted(by: SnapshotIndex.bytesLess), removed.sorted(by: SnapshotIndex.bytesLess))
     }
 
+    /// What a complete diff calls modified (`M`): the files both snapshots
+    /// hold whose revisions differ — a file missing from its snapshot's
+    /// revisions is revision 0.
+    static func modified(
+        from base: IndexContent, _ baseRevisions: [String: Int],
+        to target: IndexContent, _ targetRevisions: [String: Int]
+    ) -> [String] {
+        target.keys.filter { path in
+            target[path] == false && base[path] == false
+                && baseRevisions[path, default: 0] != targetRevisions[path, default: 0]
+        }.sorted(by: SnapshotIndex.bytesLess)
+    }
+
     /// The planner loop both `runToDone`s drive: to `.done` or `maxSteps`,
     /// each full step as one chunk through `full`, each delta as a complete
-    /// diff through `delta`, falling back to `full` when that throws.
-    /// Returns the trace.
+    /// diff through `delta` — its modified files from `revisions`, per
+    /// snapshot ID — falling back to `full` when that throws. Returns the
+    /// trace.
     static func runPlanner(
-        _ contents: [String: IndexContent], maxSteps: Int,
+        _ contents: [String: IndexContent], revisions: [String: [String: Int]] = [:], maxSteps: Int,
         next: () throws -> IndexStep,
         full: (_ id: String, _ entries: [IndexedEntry]) throws -> Void,
-        delta: (_ id: String, _ base: String, _ added: [String], _ removed: [String]) throws -> Void
+        delta: (_ id: String, _ base: String, _ added: [String], _ removed: [String], _ modified: [String]) throws -> Void
     ) throws -> [String] {
         var trace: [String] = []
         for _ in 0 ..< maxSteps {
@@ -357,8 +371,11 @@ enum IndexTestData {
             case .delta(let id, let base):
                 trace.append("delta(\(id)<-\(base))")
                 let (added, removed) = diff(from: contents[base] ?? [:], to: contents[id] ?? [:])
+                let changed = modified(
+                    from: contents[base] ?? [:], revisions[base] ?? [:], to: contents[id] ?? [:], revisions[id] ?? [:]
+                )
                 do {
-                    try delta(id, base, added, removed)
+                    try delta(id, base, added, removed, changed)
                 } catch {
                     trace.append("deltaThrew")
                     try full(id, ls(contents[id] ?? [:]))
@@ -381,11 +398,14 @@ extension SnapshotIndex {
     /// with its trailing `/` — each converted as `DeltaCollector` converts
     /// it (`IndexedEntry(diffSpelling:)`), so a test writes what restic
     /// writes.
-    func ingestDiff(snapshotID: String, from base: String, added: [String], removed: [String]) throws {
+    func ingestDiff(
+        snapshotID: String, from base: String, added: [String], removed: [String], modified: [String] = []
+    ) throws {
         try ingestDelta(
             snapshotID: snapshotID, from: base,
             added: added.map(IndexedEntry.init(diffSpelling:)),
-            removed: removed.map(IndexedEntry.init(diffSpelling:))
+            removed: removed.map(IndexedEntry.init(diffSpelling:)),
+            modified: modified.map(IndexedEntry.init(diffSpelling:))
         )
     }
 
@@ -393,24 +413,26 @@ extension SnapshotIndex {
     /// delta as a complete diff (falling back to the full route if it is
     /// refused), a full step as one chunk. Returns the trace.
     @discardableResult
-    func runToDone(_ contents: [String: IndexContent], maxSteps: Int = 100) throws -> [String] {
+    func runToDone(
+        _ contents: [String: IndexContent], revisions: [String: [String: Int]] = [:], maxSteps: Int = 100
+    ) throws -> [String] {
         try IndexTestData.runPlanner(
-            contents, maxSteps: maxSteps,
+            contents, revisions: revisions, maxSteps: maxSteps,
             next: { try nextStep() },
             full: { try ingestWhole($0, $1) },
-            delta: { try ingestDiff(snapshotID: $0, from: $1, added: $2, removed: $3) }
+            delta: { try ingestDiff(snapshotID: $0, from: $1, added: $2, removed: $3, modified: $4) }
         )
     }
 
     /// The stored-state violations that must be absent at this point.
-    /// (a)–(c) are established by housekeeping, so they are checked only
-    /// right after it; `excusing` names letters the caller knows to be
+    /// (a)–(c) and (l) are established by housekeeping, so they are checked
+    /// only right after it; `excusing` names letters the caller knows to be
     /// legitimately broken (risk 8's crash leftovers are (i)).
     func violations(afterHousekeeping: Bool, excusing: Set<Character> = []) throws -> [String] {
         try invariantViolations().filter { line in
             guard line.count > 1 else { return true }
             let letter = line[line.index(after: line.startIndex)]
-            if !afterHousekeeping, "abc".contains(letter) { return false }
+            if !afterHousekeeping, "abcl".contains(letter) { return false }
             return !excusing.contains(letter)
         }
     }
@@ -587,11 +609,11 @@ final class CheckedIndex {
     }
 
     func delta(
-        _ id: String, from base: String, added: [String], removed: [String],
+        _ id: String, from base: String, added: [String], removed: [String], modified: [String] = [],
         sourceLocation: SourceLocation = #_sourceLocation
     ) throws {
         try checked("ingestDelta(\(id) <- \(base))", sourceLocation) {
-            try index.ingestDiff(snapshotID: id, from: base, added: added, removed: removed)
+            try index.ingestDiff(snapshotID: id, from: base, added: added, removed: removed, modified: modified)
         }
     }
 
@@ -602,14 +624,14 @@ final class CheckedIndex {
     /// `SnapshotIndex.runToDone`, every write checked.
     @discardableResult
     func runToDone(
-        _ contents: [String: IndexContent], maxSteps: Int = 100,
+        _ contents: [String: IndexContent], revisions: [String: [String: Int]] = [:], maxSteps: Int = 100,
         sourceLocation: SourceLocation = #_sourceLocation
     ) throws -> [String] {
         try IndexTestData.runPlanner(
-            contents, maxSteps: maxSteps,
+            contents, revisions: revisions, maxSteps: maxSteps,
             next: { try index.nextStep() },
             full: { try full($0, $1, sourceLocation: sourceLocation) },
-            delta: { try delta($0, from: $1, added: $2, removed: $3, sourceLocation: sourceLocation) }
+            delta: { try delta($0, from: $1, added: $2, removed: $3, modified: $4, sourceLocation: sourceLocation) }
         )
     }
 }

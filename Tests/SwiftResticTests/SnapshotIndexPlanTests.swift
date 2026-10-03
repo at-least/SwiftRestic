@@ -73,6 +73,8 @@ struct SnapshotIndexPlanTests {
         "reverseFreeze": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq=?)"]),
         "reverseBottomRun": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq=?)"]),
         "reverseInsert": Rule(contains: []),
+        "editInsert": Rule(contains: []),
+        "blindInsert": Rule(contains: []),
         "stageInsert": Rule(contains: []),
         "stageClear": Rule(contains: []),
         // One row: the scan stops at the first (the SQL's LIMIT 1).
@@ -131,6 +133,12 @@ struct SnapshotIndexPlanTests {
         "hkTopNodes": Rule(contains: ["INDEX run_closed (chain_id=? AND last_seq>? AND last_seq<?)"]),
         "hkOrphanChainNodes": Rule(contains: ["SCAN run"], scans: ["run"]),
         "hkOrphanChainRuns": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=?)"]),
+        // The content marks a death strands, by seq within the chain: the
+        // edits through their chain index, the blinds by their key.
+        "hkEditsUpTo": Rule(contains: ["INDEX edit_chain (chain_id=? AND seq<?)"]),
+        "hkEditsAbove": Rule(contains: ["INDEX edit_chain (chain_id=? AND seq>?)"]),
+        "hkBlindsUpTo": Rule(contains: ["SEARCH blind USING PRIMARY KEY (chain_id=? AND seq<?)"]),
+        "hkBlindsAbove": Rule(contains: ["SEARCH blind USING PRIMARY KEY (chain_id=? AND seq>?)"]),
         "gcClear": Rule(contains: []),
         "gcInsert": Rule(contains: []),
         "gcKeepCollectable": Rule(
@@ -143,6 +151,7 @@ struct SnapshotIndexPlanTests {
             scans: ["temp.gc"]),
         "gcParents": Rule(contains: ["SCAN g", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["g"]),
         "gcDeleteFTS": Rule(contains: ["SCAN g", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["g"]),
+        "gcDeleteEdits": Rule(contains: ["SEARCH edit USING PRIMARY KEY (node_id=?)"]),
         "gcDeleteNodes": Rule(contains: ["SEARCH node USING INTEGER PRIMARY KEY (rowid=?)"]),
         "versionsTimed": Rule(contains: byPrimaryKeyVersions + ["USE TEMP B-TREE FOR ORDER BY"]),
         "versionsInChain": Rule(contains: [
@@ -171,6 +180,21 @@ struct SnapshotIndexPlanTests {
                 "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
             ],
             excludes: ["TEMP B-TREE"]),
+        // versionsInChain's route, its extra columns read off the same rows.
+        "heldInChain": Rule(contains: [
+            "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=?)",
+            "SCALAR SUBQUERY",
+            "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",
+            "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
+        ]),
+        "editSeqs": Rule(contains: [
+            "SEARCH edit USING PRIMARY KEY (node_id=? AND chain_id=?)",
+            "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",
+        ]),
+        "blindSeqs": Rule(contains: [
+            "SEARCH blind USING PRIMARY KEY (chain_id=? AND seq>? AND seq<?)",
+            "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",
+        ]),
         // The chain's indexed snapshots, sorted by time: one chain's
         // listing, not the repository's.
         "chainNewestIndexed": Rule(contains: [

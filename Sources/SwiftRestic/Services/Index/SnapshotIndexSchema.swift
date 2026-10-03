@@ -20,7 +20,11 @@ import Foundation
 /// the two sentinels make a window move cost only the change: `first_seq = 0`
 /// reads "from lo", `last_seq = 2147483647` reads "through hi". A snapshot
 /// that leaves the listing loses its row, so runs over its seq simply claim
-/// nothing there; every read is the interval test plus `state = 1`.
+/// nothing there; every read is the interval test plus `state = 1`. Within a
+/// run, an `edit` at seq `e` says the file's content changed between `e` and
+/// the indexed snapshot below it, and a `blind` at `e` that no diff compared
+/// that pair; two indexed snapshots one run covers hold the same content
+/// unless an edit or blind lies above the lower and at or below the upper.
 ///
 /// There is no migrator: the index is a rebuildable cache that has never
 /// shipped, so a file with any other `user_version` is deleted and rebuilt.
@@ -86,6 +90,25 @@ enum SnapshotIndexSchema {
     -- restates the literal predicate (a bound parameter proves nothing to the planner).
     CREATE INDEX run_closed ON run (chain_id, last_seq) WHERE last_seq < 2147483647;
 
+    -- A file's content changed between two neighbouring indexed snapshots of a chain, as the
+    -- `restic diff` that compared them said (M): recorded at the upper seq of the pair, the
+    -- snapshot whose content differs from the indexed one below it at the time. Existence
+    -- changes are the runs'; these split one run into the versions a browser shows.
+    CREATE TABLE edit (
+        node_id   INTEGER NOT NULL,
+        chain_id  INTEGER NOT NULL,
+        seq       INTEGER NOT NULL,
+        PRIMARY KEY (node_id, chain_id, seq)
+    ) STRICT, WITHOUT ROWID;
+    CREATE INDEX edit_chain ON edit (chain_id, seq);   -- housekeeping's sweeps by seq
+    -- A window step a full read took beside an indexed neighbour: no diff compared the pair,
+    -- so any path's content may differ across it. At the pair's upper seq, as an edit is.
+    CREATE TABLE blind (
+        chain_id  INTEGER NOT NULL,
+        seq       INTEGER NOT NULL,
+        PRIMARY KEY (chain_id, seq)
+    ) STRICT, WITHOUT ROWID;
+
     -- Housekeeping queue: seqs whose death may have left closed runs that claim nothing.
     CREATE TABLE hk_pending (
         chain_id  INTEGER NOT NULL,
@@ -113,7 +136,7 @@ enum SnapshotIndexSchema {
         snapshot_id  TEXT PRIMARY KEY
     ) STRICT, WITHOUT ROWID;
 
-    PRAGMA user_version = 2;
+    PRAGMA user_version = 3;
     """
 
     /// Created on the pool's writer connection when the store opens. TEMP
@@ -208,6 +231,10 @@ enum SnapshotIndexSchema {
             "SELECT is_dir FROM run WHERE node_id = ? AND chain_id = ? AND first_seq = 0"
         let reverseInsert =
             "INSERT INTO run (node_id, chain_id, first_seq, last_seq, is_dir) VALUES (?, ?, 0, ?, ?)"
+
+        // MARK: Content changes (an edit per `M` a delta saw, a blind per full step)
+        let editInsert = "INSERT OR IGNORE INTO edit (node_id, chain_id, seq) VALUES (?, ?, ?)"
+        let blindInsert = "INSERT OR IGNORE INTO blind (chain_id, seq) VALUES (?, ?)"
 
         // MARK: Full ingest: a staged `restic ls` compared with the sentinel-ended runs
         let stageInsert = "INSERT OR IGNORE INTO temp.stage (node_id, snap_id, is_dir) VALUES (?, ?, ?)"
@@ -330,6 +357,15 @@ enum SnapshotIndexSchema {
         let hkOrphanChainRuns =
             "DELETE FROM " + Self.orphanChainRuns + " AND node_id IN (SELECT id FROM temp.gc)"
 
+        /// The content marks a death left with no indexed snapshot on one
+        /// side: at or below the lowest indexed seq above a dead bottom (its
+        /// pair's lower snapshot is gone), above the highest below a dead
+        /// top. A whole chain's death is the first with the top sentinel.
+        let hkEditsUpTo = "DELETE FROM edit WHERE chain_id = ? AND seq <= ?"
+        let hkEditsAbove = "DELETE FROM edit WHERE chain_id = ? AND seq > ?"
+        let hkBlindsUpTo = "DELETE FROM blind WHERE chain_id = ? AND seq <= ?"
+        let hkBlindsAbove = "DELETE FROM blind WHERE chain_id = ? AND seq > ?"
+
         // MARK: Node GC, one level at a time over temp.gc
         let gcClear = "DELETE FROM temp.gc"
         let gcInsert = "INSERT OR IGNORE INTO temp.gc (id) VALUES (?)"
@@ -350,6 +386,9 @@ enum SnapshotIndexSchema {
             INSERT INTO node_fts (node_fts, rowid, name)
             SELECT 'delete', n.id, n.name FROM temp.gc g JOIN node n ON n.id = g.id
             """
+        /// A collected node's edits go with it: a later node could take its
+        /// id, and the edits would then split another path's versions.
+        let gcDeleteEdits = "DELETE FROM edit WHERE node_id IN (SELECT id FROM temp.gc)"
         let gcDeleteNodes = "DELETE FROM node WHERE id IN (SELECT id FROM temp.gc)"
 
         // MARK: Reads
@@ -412,6 +451,22 @@ enum SnapshotIndexSchema {
                 AND s.seq BETWEEN r.first_seq AND r.last_seq
             WHERE n.parent = ?
             GROUP BY n.name
+            """
+        /// `versionsInChain` with each snapshot's seq and the run that
+        /// claims it (its `first_seq`, unique per node and chain): what a
+        /// content-version split walks. In the versions' time order, which
+        /// is also what keeps the planner on the run's key rather than on
+        /// every indexed snapshot of the chain.
+        let heldInChain = """
+            SELECT s.hash, s.time, s.seq, r.first_seq FROM run r
+            JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
+                AND s.seq BETWEEN r.first_seq AND r.last_seq
+            WHERE r.node_id = ? AND r.chain_id = (SELECT id FROM chain WHERE key = ?)
+            ORDER BY s.time DESC, s.id DESC
+            """
+        let editSeqs = "SELECT seq FROM edit WHERE node_id = ? AND chain_id = (SELECT id FROM chain WHERE key = ?)"
+        let blindSeqs = """
+            SELECT seq FROM blind WHERE chain_id = (SELECT id FROM chain WHERE key = ?) AND seq > ? AND seq <= ?
             """
         /// The chain's newest indexed snapshot, the versions' own order.
         let chainNewestIndexed = """

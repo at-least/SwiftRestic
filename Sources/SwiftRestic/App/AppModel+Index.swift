@@ -68,6 +68,12 @@ extension AppModel {
         try await indexCoordinator.children(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
+    /// One path's content versions within one chain, from the index. Throws
+    /// when the index fails, as `indexedChildren` does.
+    func indexedContentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
+        try await indexCoordinator.contentVersions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
+    }
+
     /// Whether the index has read every listed snapshot of the repository —
     /// the folder browser's completeness signal. An index that cannot answer
     /// reads as "not complete", never as a failure.

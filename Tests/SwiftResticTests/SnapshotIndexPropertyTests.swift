@@ -77,6 +77,8 @@ struct SnapshotIndexPropertyTests {
         #expect((totals["delta"] ?? 0) > 0 && (totals["full"] ?? 0) > 0)
         #expect((totals["comparedHeld"] ?? 0) > 0)
         #expect((totals["comparedChildren"] ?? 0) > 0)
+        #expect((totals["modifiedDelta"] ?? 0) > 0)
+        #expect((totals["comparedVersionCuts"] ?? 0) > 0 && (totals["comparedVersionMerges"] ?? 0) > 0)
         #expect((totals["tOnlyRefused"] ?? 0) > 0)
         if variant.flaps { #expect((totals["midStreamFlap"] ?? 0) > 0) }
         if variant.crashes { #expect((totals["crashReopen"] ?? 0) > 0) }
@@ -91,6 +93,8 @@ private struct WorldSnapshot {
     var micros: Int64
     var chain: String
     var content: IndexContent
+    /// Each file's content as a number: equal numbers, equal content.
+    var revisions: [String: Int]
     var snapshot: Snapshot
 }
 
@@ -100,6 +104,7 @@ private struct World {
     var clock: Int64 = 10_000_000_000
     var usedTimes = Set<Int64>()
     var serial = 0
+    var revisionSerial = 0
 
     var listing: [Snapshot] {
         alive.compactMap { all[$0] }.sorted { ($0.micros, $0.id) < ($1.micros, $1.id) }.map(\.snapshot)
@@ -133,6 +138,10 @@ private final class PropertyRun {
     let variant: SnapshotIndexPropertyTests.Variant
     let fixture: IndexFixture
     var dice: Dice
+    /// Rolls only which files' content changes: a stream of its own, so the
+    /// scenarios `dice` draws are the ones the harness drew before content
+    /// was modelled.
+    var revisionDice: Dice
     var world = World()
     var stats: [String: Int] = [:]
     var failures: [String] = []
@@ -146,6 +155,7 @@ private final class PropertyRun {
     init(seed: UInt64, variant: SnapshotIndexPropertyTests.Variant) throws {
         self.variant = variant
         dice = Dice(generator: SeededGenerator(seed: seed))
+        revisionDice = Dice(generator: SeededGenerator(seed: seed ^ 0x5EED_C0DE))
         fixture = try IndexFixture()
     }
 
@@ -208,7 +218,7 @@ private final class PropertyRun {
         }
         while world.usedTimes.contains(micros) { micros += 7 }
         world.usedTimes.insert(micros)
-        let base = world.all.values.filter { $0.chain == chain }.max { $0.micros < $1.micros }?.content
+        let base = world.all.values.filter { $0.chain == chain }.max { $0.micros < $1.micros }
         let tags: [String]
         let host: String
         switch chain {
@@ -218,8 +228,27 @@ private final class PropertyRun {
         default: tags = ["user-tag"]; host = "other"
         }
         let snapshot = try IndexTestData.snapshot(id, micros: micros, tags: tags, hostname: host, paths: ["/r"])
-        world.all[id] = WorldSnapshot(id: id, micros: micros, chain: chain, content: randomContent(from: base), snapshot: snapshot)
+        let content = randomContent(from: base?.content)
+        world.all[id] = WorldSnapshot(
+            id: id, micros: micros, chain: chain, content: content,
+            revisions: randomRevisions(of: content, from: base), snapshot: snapshot
+        )
         world.alive.append(id)
+    }
+
+    /// Each file keeps the base's content, or — one time in three, and
+    /// always when it is new or was not a file there — gets new content.
+    func randomRevisions(of content: IndexContent, from base: WorldSnapshot?) -> [String: Int] {
+        var revisions: [String: Int] = [:]
+        for (path, isDirectory) in content where !isDirectory {
+            if let base, base.content[path] == false, let kept = base.revisions[path], !revisionDice.chance(0.33) {
+                revisions[path] = kept
+            } else {
+                world.revisionSerial += 1
+                revisions[path] = world.revisionSerial
+            }
+        }
+        return revisions
     }
 
     /// The harness's content generator: a small universe with a directory
@@ -385,13 +414,20 @@ private final class PropertyRun {
                     return
                 }
                 guard view.alive.contains(base), !dice.chance(0.15),
-                      let target = view.all[id]?.content, let from = view.all[base]?.content
+                      let targetSnapshot = view.all[id], let baseSnapshot = view.all[base]
                 else {
                     bump("diffFailed")
                     feedFull(view, id, flap: nil)
                     continue
                 }
+                let (target, from) = (targetSnapshot.content, baseSnapshot.content)
                 let complete = IndexTestData.diff(from: from, to: target)
+                // What restic's `M` lines say: the files both hold whose
+                // content differs.
+                let modified = IndexTestData.modified(
+                    from: from, baseSnapshot.revisions, to: target, targetSnapshot.revisions
+                )
+                if !modified.isEmpty { bump("modifiedDelta") }
                 let flipped = from.keys.filter { target[$0] != nil && target[$0] != from[$0] }
                 if !flipped.isEmpty, dice.chance(0.5) {
                     // restic's form: one `T` line in the new spelling, both
@@ -412,7 +448,10 @@ private final class PropertyRun {
                 }
                 do {
                     try write("delta") {
-                        try index.ingestDiff(snapshotID: id, from: base, added: complete.added, removed: complete.removed)
+                        try index.ingestDiff(
+                            snapshotID: id, from: base,
+                            added: complete.added, removed: complete.removed, modified: modified
+                        )
                     }
                     bump("delta")
                 } catch {
@@ -564,6 +603,40 @@ private final class PropertyRun {
                 }
                 if !want.isEmpty { bump("comparedChildren") }
                 if got != want { fail("mismatch", "\(label): children(\(folder), \(chain)) got \(got) want \(want)") }
+            }
+        }
+        // Content versions: every listed snapshot of the chain holding the
+        // path, in time order, cut into versions that never mix two
+        // contents; only the oldest version has no `since`. Exactness the
+        // other way — no spare cut — is not owed (a death can join two
+        // snapshots of one content across an edit) and is pinned by the
+        // scripted cases instead.
+        for chain in Set(alive.map(\.chain)) {
+            let members = alive.filter { $0.chain == chain }
+            guard let newest = members.max(by: { $0.micros < $1.micros }) else { continue }
+            let key = SnapshotIndex.chainKey(for: newest.snapshot)
+            let byID = Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0) })
+            for path in universeFiles + ["/r/k", "/r/c"] {
+                let want = members.filter { $0.content[path] != nil }.sorted { $0.micros > $1.micros }.map(\.id)
+                let got = try await index.contentVersions(ofPath: path, inChain: key)
+                let flat = got.flatMap(\.snapshots).map(\.id)
+                if flat != want {
+                    fail("mismatch", "\(label): contentVersions(\(path), \(chain)) holds \(flat.map { $0.suffix(4) }) want \(want.map { $0.suffix(4) })")
+                    continue
+                }
+                for version in got {
+                    let contents = Set(version.snapshots.compactMap { byID[$0.id] }.map { snapshot in
+                        snapshot.content[path] == true ? "dir" : "file \(snapshot.revisions[path] ?? -1)"
+                    })
+                    if contents.count > 1 {
+                        fail("mismatch", "\(label): contentVersions(\(path), \(chain)) merged \(contents.sorted())")
+                    }
+                }
+                if got.last?.since != nil || got.dropLast().contains(where: { $0.since == nil }) {
+                    fail("mismatch", "\(label): contentVersions(\(path), \(chain)) since misplaced")
+                }
+                if got.count > 1 { bump("comparedVersionCuts") }
+                if got.contains(where: { $0.snapshots.count > 1 }) { bump("comparedVersionMerges") }
             }
         }
         // Global search: paths some listed snapshot holds, each with its

@@ -168,6 +168,16 @@ extension SnapshotIndex {
             let end = forward ? hi : lo
             try requireNoPending(db, target, between: forward ? hi : target.seq, and: forward ? target.seq : lo)
             try enqueueIfDead(db, target.chainID, end)
+            // No diff compared the target with its indexed neighbour on this
+            // side, so any path's content may differ across the step — when
+            // there is a neighbour: past a dead end every snapshot may have
+            // died, and a mark with nothing below it would split nothing.
+            let neighbour = forward
+                ? try Int64.fetchOne(db.cachedStatement(sql: SQL.hkAliveBelow), arguments: [target.chainID, target.seq])
+                : try Int64.fetchOne(db.cachedStatement(sql: SQL.hkAliveAbove), arguments: [target.chainID, lo - 1])
+            if neighbour != nil {
+                try db.cachedStatement(sql: SQL.blindInsert).execute(arguments: [target.chainID, forward ? target.seq : lo])
+            }
             try db.cachedStatement(sql: forward ? SQL.fullForwardClose : SQL.fullReverseFreeze)
                 .execute(arguments: [end, target.chainID, target.id])
             try db.cachedStatement(sql: forward ? SQL.fullForwardInsert : SQL.fullReverseInsert)
@@ -205,7 +215,20 @@ extension SnapshotIndex {
     /// under the other kind — restic's `T`, which omits both subtrees — is
     /// refused (`kindChanged`) and the snapshot must take the full route.
     /// Idempotent for an already indexed target.
-    func ingestDelta(snapshotID: String, from base: String, added: [IndexedEntry], removed: [IndexedEntry]) throws {
+    ///
+    /// `modified` holds the paths whose content the diff says changed
+    /// (restic's `M`), each recorded as an edit at the upper seq of the pair
+    /// — the target's going forward, the base's going back. So is an added
+    /// path the base holds as the same kind: a file<->symlink `T`, whose
+    /// content changed too. A modified path the index never held is skipped,
+    /// as a removed one is.
+    func ingestDelta(
+        snapshotID: String,
+        from base: String,
+        added: [IndexedEntry],
+        removed: [IndexedEntry],
+        modified: [IndexedEntry] = []
+    ) throws {
         try pool.write { db in
             guard let target = try Target.fetch(db, snapshotID) else { throw IndexError.unknownSnapshot(snapshotID) }
             guard target.state != State.indexed else { return }
@@ -230,7 +253,9 @@ extension SnapshotIndex {
             let close = try db.cachedStatement(sql: forward ? SQL.forwardClose : SQL.reverseFreeze)
             let endRun = try db.cachedStatement(sql: forward ? SQL.forwardOpenRun : SQL.reverseBottomRun)
             let open = try db.cachedStatement(sql: forward ? SQL.forwardInsert : SQL.reverseInsert)
+            let mark = try db.cachedStatement(sql: SQL.editInsert)
             let end = forward ? hi : lo
+            let markSeq = forward ? target.seq : lo
             var memo: [[UInt8]: Int64] = [:]
             for entry in removed {
                 guard let node = try Self.resolve(nodes, entry.path, create: false, memo: &memo) else { continue }
@@ -240,12 +265,20 @@ extension SnapshotIndex {
                 guard let node = try Self.resolve(nodes, entry.path, create: true, memo: &memo) else { continue }
                 if let kind = try Bool.fetchOne(endRun, arguments: [node, target.chainID]) {
                     // Present at the base already: the same kind is a
-                    // file<->symlink `T` and changes nothing; another kind is
-                    // a file<->dir change the diff did not spell as removed.
-                    if kind == entry.isDirectory { continue }
+                    // file<->symlink `T`, which keeps the run and changes the
+                    // content; another kind is a file<->dir change the diff
+                    // did not spell as removed.
+                    if kind == entry.isDirectory {
+                        try mark.execute(arguments: [node, target.chainID, markSeq])
+                        continue
+                    }
                     throw IndexError.kindChanged(snapshot: snapshotID, path: entry.path)
                 }
                 try open.execute(arguments: [node, target.chainID, target.seq, entry.isDirectory])
+            }
+            for entry in modified {
+                guard let node = try Self.resolve(nodes, entry.path, create: false, memo: &memo) else { continue }
+                try mark.execute(arguments: [node, target.chainID, markSeq])
             }
             try nodes.indexNewNames()
             try Self.setWindow(db, target.chainID, lo: forward ? lo : target.seq, hi: forward ? target.seq : hi)

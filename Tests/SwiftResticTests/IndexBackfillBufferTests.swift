@@ -130,13 +130,13 @@ struct IndexBackfillBufferTests {
     }
 }
 
-/// The delta route's reading of a `restic diff`: existence changes only, as
-/// the entries the store takes (the path without restic's trailing `/`, the
-/// kind that `/` marks), and any `T` line means the diff cannot build the
-/// target.
+/// The delta route's reading of a `restic diff`: existence and content
+/// changes, as the entries the store takes (the path without restic's
+/// trailing `/`, the kind that `/` marks), and any `T` line means the diff
+/// cannot build the target.
 struct DeltaCollectorTests {
-    @Test("added and removed arrive as entries, the kind read off restic's trailing slash; content and metadata changes are not existence")
-    func keepsExistenceChanges() throws {
+    @Test("added, removed and modified arrive as entries, the kind read off restic's trailing slash; a metadata-only change is none of them")
+    func keepsExistenceAndContentChanges() throws {
         let collector = DeltaCollector()
         for (path, modifier) in [
             ("/d/new.txt", "+"), ("/d/sub/", "+"), ("/d/new\u{0600}/", "+"),
@@ -154,6 +154,12 @@ struct DeltaCollectorTests {
         #expect(delta.removed == [
             IndexedEntry(path: "/d/gone.txt", isDirectory: false),
             IndexedEntry(path: "/d/old", isDirectory: true),
+        ])
+        // A content change with or without a metadata one; `U` alone keeps
+        // the content.
+        #expect(delta.modified == [
+            IndexedEntry(path: "/d/edit.txt", isDirectory: false),
+            IndexedEntry(path: "/d/both", isDirectory: false),
         ])
         // Byte-exact: the Prepend directory's slash is gone, not kept inside
         // its last Character (`IndexedEntry`'s `==` is String's, which is

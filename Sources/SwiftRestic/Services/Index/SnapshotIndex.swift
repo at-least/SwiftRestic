@@ -44,6 +44,28 @@ struct IndexChild: Sendable, Equatable {
     var isInNewest: Bool
 }
 
+/// One content of a path in a chain: the indexed snapshots holding it with
+/// nothing to say it changed between them — a row of the Files view's
+/// version list, where a file backed up daily for a year and edited twice
+/// is three versions, not 365.
+struct ContentVersion: Sendable, Equatable {
+    /// How a version follows the next older one.
+    enum Since: Sendable, Equatable {
+        /// A `restic diff` between two of their snapshots said the content
+        /// changed (`M`).
+        case changed
+        /// It may have: no diff compared them (a full read took the step),
+        /// the path was absent in between, or the two sit apart in the
+        /// backups' arrival order.
+        case uncertain
+    }
+
+    /// Newest first.
+    var snapshots: [IndexVersion]
+    /// nil for the oldest version.
+    var since: Since?
+}
+
 /// A path's version list reduced to what Find Files shows: how many indexed
 /// snapshots hold it, and the newest of them. Output-light whatever the
 /// version count, which is the point.
@@ -306,10 +328,11 @@ enum IndexError: Error, Equatable {
 /// serializes them too — hence `@unchecked Sendable`. Reads run async on
 /// pool readers, beside the writer.
 final class SnapshotIndex: @unchecked Sendable {
-    /// 2, not 1: development builds wrote this schema as 1 before
-    /// `listing_applied` existed, and such a file must be rebuilt rather
-    /// than read without the table.
-    static let schemaVersion: Int32 = 2
+    /// 3: version 2 had no `edit` or `blind`, and a file without them knows
+    /// nothing of content changes, so it is rebuilt rather than read as if
+    /// no file had ever changed. (2, not 1, because development builds wrote
+    /// the schema as 1 before `listing_applied` existed.)
+    static let schemaVersion: Int32 = 3
     /// Node ids per batched read: under SQLite's pre-3.32 variable limit of
     /// 999, whatever the system library.
     static let lookupChunk = 400
@@ -654,6 +677,81 @@ final class SnapshotIndex: @unchecked Sendable {
                         isInNewest: seq == newestSeq
                     )
                 }
+        }
+    }
+
+    /// `path`'s content versions within one chain, newest first: the
+    /// indexed snapshots holding it, in `versions(ofPath:inChain:)`'s order,
+    /// cut wherever the content may differ between neighbours.
+    ///
+    /// Content is known equal across two snapshots one run covers with no
+    /// edit or blind above the lower's seq and at or below the upper's, so
+    /// the snapshots are first cut, in seq order, into segments of one
+    /// content each; in time order — which back-dated arrivals can make
+    /// differ from seq order — a version is a stretch of one segment. A cut
+    /// is never missing: two snapshots of different content never share a
+    /// version. One can be spare: when a death left two snapshots of the
+    /// same content side by side across an edit, or a file came back as it
+    /// was. Unknown paths and chains answer `[]`.
+    func contentVersions(ofPath path: String, inChain chainKey: String) async throws -> [ContentVersion] {
+        try await pool.read { db in
+            var lookup = try NodeLookup(db)
+            guard let node = try lookup.node(for: path) else { return [] }
+            let held = try Row.fetchAll(db.cachedStatement(sql: SQL.heldInChain), arguments: [node, chainKey])
+                .map { row in
+                    (version: IndexVersion(id: row[0], time: Self.date(micros: row[1])), seq: row[2] as Int64, run: row[3] as Int64)
+                }
+            let bySeq = held.indices.sorted { held[$0].seq < held[$1].seq }
+            guard let low = bySeq.first.map({ held[$0].seq }), let high = bySeq.last.map({ held[$0].seq }) else {
+                return []
+            }
+            let edits = try Int64.fetchAll(db.cachedStatement(sql: SQL.editSeqs), arguments: [node, chainKey]).sorted()
+            let blinds = try Int64.fetchAll(db.cachedStatement(sql: SQL.blindSeqs), arguments: [chainKey, low, high])
+                .sorted()
+
+            // Each snapshot's segment, and how each segment begins.
+            var segment = Array(repeating: 0, count: held.count)
+            var begins: [ContentVersion.Since?] = [nil]
+            var nextEdit = 0
+            var nextBlind = 0
+            for (k, i) in bySeq.enumerated() where k > 0 {
+                let lower = held[bySeq[k - 1]]
+                let upper = held[i]
+                /// Whether a mark lies in `(lower.seq, upper.seq]`; the
+                /// cursor walks the sorted marks once across the whole pass.
+                func crossed(_ marks: [Int64], _ cursor: inout Int) -> Bool {
+                    while cursor < marks.count, marks[cursor] <= lower.seq { cursor += 1 }
+                    return cursor < marks.count && marks[cursor] <= upper.seq
+                }
+                let edited = crossed(edits, &nextEdit)
+                let blind = crossed(blinds, &nextBlind)
+                if upper.run != lower.run {
+                    begins.append(.uncertain)
+                } else if edited {
+                    begins.append(.changed)
+                } else if blind {
+                    begins.append(.uncertain)
+                }
+                segment[i] = begins.count - 1
+            }
+
+            var versions: [ContentVersion] = []
+            var segments: [Int] = []
+            for i in held.indices {
+                if segments.last == segment[i] {
+                    versions[versions.count - 1].snapshots.append(held[i].version)
+                } else {
+                    versions.append(ContentVersion(snapshots: [held[i].version], since: nil))
+                    segments.append(segment[i])
+                }
+            }
+            // A boundary between seq-neighbouring segments is the upper
+            // one's beginning; farther apart, nothing compared the two.
+            for k in versions.indices.dropLast() {
+                let (newer, older) = (segments[k], segments[k + 1])
+                versions[k].since = abs(newer - older) == 1 ? begins[max(newer, older)] : .uncertain
+            }
+            return versions
         }
     }
 
@@ -1161,11 +1259,13 @@ final class SnapshotIndex: @unchecked Sendable {
     /// The stored-state checks of FINAL.md 2.2, each violation a line that
     /// starts with its letter, plus (j), the premise `stageOwner` rests on,
     /// and (k), that every collection leaves `temp.gc` empty, so the next
-    /// one starts from exactly what its own write queued. (d)–(k) hold after
-    /// every write. (a)–(c) —
-    /// the queue is empty, no closed run claims nothing, no chain is left
-    /// without snapshots — hold only right after `housekeeping()`, which is
-    /// what establishes them; callers filter by letter. (i) has one allowed
+    /// one starts from exactly what its own write queued, (l), that every
+    /// content mark splits two indexed snapshots, and (m), that none names
+    /// a node or chain that is gone. (d)–(k) and (m) hold after every write.
+    /// (a)–(c) and (l) — the queue is empty, no closed run claims nothing, no
+    /// chain is left without snapshots, no mark splits nothing — hold only
+    /// right after `housekeeping()`, which is what establishes them; callers
+    /// filter by letter. (i) has one allowed
     /// exception the store cannot see: the nodes of a stream that was open
     /// when its connection went away (a crash or a reopen), which nothing
     /// collects. Runs on the writer, because `stage` lives there.
@@ -1220,6 +1320,23 @@ final class SnapshotIndex: @unchecked Sendable {
                 SELECT CASE WHEN COUNT(DISTINCT snap_id) > 1 THEN COUNT(DISTINCT snap_id) ELSE 0 END FROM temp.stage
                 """)
             try count("(k) node ids left queued in temp.gc", "SELECT COUNT(*) FROM temp.gc")
+            func splitsNothing(_ table: String) -> String {
+                """
+                (SELECT COUNT(*) FROM \(table) m WHERE NOT EXISTS (
+                        SELECT 1 FROM snap s WHERE s.chain_id = m.chain_id AND s.state = 1 AND s.seq < m.seq)
+                    OR NOT EXISTS (
+                        SELECT 1 FROM snap s WHERE s.chain_id = m.chain_id AND s.state = 1 AND s.seq >= m.seq))
+                """
+            }
+            try count(
+                "(l) content marks with no indexed snapshot of their chain below them, or none at or above",
+                "SELECT " + splitsNothing("edit") + " + " + splitsNothing("blind")
+            )
+            try count("(m) edits of a missing node or chain, blinds of a missing chain", """
+                SELECT (SELECT COUNT(*) FROM edit e WHERE NOT EXISTS (SELECT 1 FROM node n WHERE n.id = e.node_id)
+                        OR NOT EXISTS (SELECT 1 FROM chain c WHERE c.id = e.chain_id))
+                    + (SELECT COUNT(*) FROM blind b WHERE NOT EXISTS (SELECT 1 FROM chain c WHERE c.id = b.chain_id))
+                """)
             return out
         }
     }

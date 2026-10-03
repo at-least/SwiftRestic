@@ -4,9 +4,10 @@ import GRDB
 /// Housekeeping: space reclamation, and nothing else.
 ///
 /// Every statement here that writes the index's own tables is a DELETE — of
-/// closed runs that claim no indexed snapshot, of a snapshot-less chain's
-/// runs and row, of queue rows, and of nodes nothing holds, with their FTS
-/// rows through FTS5's delete-by-INSERT; the only other inserts go to the
+/// closed runs that claim no indexed snapshot, of content marks with no
+/// indexed snapshot left on one side, of a snapshot-less chain's runs, marks
+/// and row, of queue rows, and of nodes nothing holds, with their FTS rows
+/// through FTS5's delete-by-INSERT and their edits; the only other inserts go to the
 /// TEMP scratch list `gc`, which names nodes to consider, never a claim.
 /// None writes `snap`, a window or `next_seq`, and a claim is a run joined
 /// to an indexed snap row, so housekeeping can remove claims but never add
@@ -47,10 +48,24 @@ extension SnapshotIndex {
                 if db.changesCount > 0 { queued = true }
                 try db.cachedStatement(sql: delete).execute(arguments: arguments)
             }
+            /// The content marks with no indexed snapshot left on one side of
+            /// them, which split nothing: at or below `upTo`, or above
+            /// `above`.
+            func dropMarks(upTo: Int64? = nil, above: Int64? = nil, _ chainID: Int64) throws {
+                if let upTo {
+                    try db.cachedStatement(sql: SQL.hkEditsUpTo).execute(arguments: [chainID, upTo])
+                    try db.cachedStatement(sql: SQL.hkBlindsUpTo).execute(arguments: [chainID, upTo])
+                }
+                if let above {
+                    try db.cachedStatement(sql: SQL.hkEditsAbove).execute(arguments: [chainID, above])
+                    try db.cachedStatement(sql: SQL.hkBlindsAbove).execute(arguments: [chainID, above])
+                }
+            }
             for chainID in try Int64.fetchAll(db.cachedStatement(sql: SQL.hkChains)) {
                 let seqs = try Int64.fetchAll(db.cachedStatement(sql: SQL.hkSeqs), arguments: [chainID])
                 if try Bool.fetchOne(db.cachedStatement(sql: SQL.hkChainHasSnap), arguments: [chainID]) != true {
                     try reclaim(SQL.hkOrphanChainNodes, SQL.hkOrphanChainRuns, [chainID])
+                    try dropMarks(upTo: Self.top, chainID)
                     try db.cachedStatement(sql: SQL.hkChainDelete).execute(arguments: [chainID])
                 } else {
                     var gaps = Set<Gap>()
@@ -65,11 +80,18 @@ extension SnapshotIndex {
                         case (nil, let above):
                             // Nothing indexed below: every closed run ending
                             // under `above` is a dead fact — every closed run
-                            // at all when no indexed snapshot is left.
+                            // at all when no indexed snapshot is left — and so
+                            // is every content mark up to `above`, whose pair
+                            // lost its lower snapshot.
                             try reclaim(SQL.hkBottomNodes, SQL.hkBottom, [chainID, above ?? Self.top])
+                            try dropMarks(upTo: above ?? Self.top, chainID)
                         case (let below?, nil):
                             try reclaim(SQL.hkTopNodes, SQL.hkTop, [chainID, below, below])
+                            try dropMarks(above: below, chainID)
                         case (let below?, let above?):
+                            // The marks inside the gap stay: each still says
+                            // the content may differ between `below` and
+                            // `above`.
                             try reclaim(SQL.hkGapNodes, SQL.hkGap, [chainID, below, above, below])
                         }
                     }
@@ -147,6 +169,7 @@ extension SnapshotIndex {
             // walk the whole (parent, name) index.
             let parents = Set(try Int64.fetchAll(db.cachedStatement(sql: SQL.gcParents)))
             try db.cachedStatement(sql: SQL.gcDeleteFTS).execute()
+            try db.cachedStatement(sql: SQL.gcDeleteEdits).execute()
             try db.cachedStatement(sql: SQL.gcDeleteNodes).execute()
             try db.cachedStatement(sql: SQL.gcClear).execute()
             guard !parents.isEmpty else { return }
