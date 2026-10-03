@@ -186,12 +186,19 @@ struct OverviewMetricsTests {
 
         // History that arrived with the repository: no run of the plan's
         // own, the newest snapshot two days old — that snapshot is the
-        // moment everywhere, never "Never" or the schedule beside it.
+        // moment everywhere, never "Never" or the schedule beside it. An
+        // hour past the day boundary: `RelativeDateTimeFormatter` reads
+        // 48 h flat as "2 days ago" but a hair under it as "1 day ago"
+        // (probed: 172800 s → "2 days ago", 172799.999999881 s → "1 day
+        // ago"), and `snapshot(_:, at:)`'s JSON round-trip can take an
+        // exact two-day delta that hair under — a tick every few runs read
+        // "1 day ago" in the surfaces and "2 days ago" here.
         var adopted = plan("Docs", repository: repository)
         adopted.sources = ["/Users/someone/Documents"]
         adopted.schedule.frequency = .daily
-        let adoptedWords = ago(tick.addingTimeInterval(-2 * 86_400))
-        let adoptedSurfaces = surfaces(adopted, newest: snapshot("snapDocs", at: tick.addingTimeInterval(-2 * 86_400)))
+        let adoptedSnapshotTime = tick.addingTimeInterval(-2 * 86_400 - 3_600)
+        let adoptedWords = ago(adoptedSnapshotTime)
+        let adoptedSurfaces = surfaces(adopted, newest: snapshot("snapDocs", at: adoptedSnapshotTime))
         #expect(adoptedSurfaces.caption == "Last backup \(adoptedWords)")
         #expect(adoptedSurfaces.row == "Last backup \(adoptedWords)")
         #expect(adoptedSurfaces.page == adoptedWords)
