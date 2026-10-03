@@ -60,7 +60,8 @@ checked in so a normal build does not need it.
 - **Backups or Files** — the control above the sidebar picks what every
   plan folds open to: its backups by date, or its folders and files across
   every backup it made, items its newest backup no longer holds included and
-  dimmed (View ▸ Show Backups ⌘1, Show Files ⌘2). The tree comes from the
+  dimmed (View ▸ Show Backups ⌘1, Show Files ⌘2; the choice is kept across
+  launches, and a capture run never changes it). The tree comes from the
   snapshot index; while the index is still reading a repository it fills in
   as it goes, and a plan the index holds nothing of yet lists its newest
   backup. A folder lists at most 200 items in the sidebar, then one row that

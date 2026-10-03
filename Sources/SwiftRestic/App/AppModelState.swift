@@ -126,6 +126,20 @@ struct FileNode: Hashable, Sendable {
 enum SidebarMode: String, CaseIterable {
     case backups
     case files
+
+    static let defaultsKey = "SidebarMode"
+
+    /// The view the sidebar showed last, from the defaults — where the
+    /// restore sheet keeps its destination too. Not the scene's state
+    /// (`@SceneStorage`): with it a relaunch came back to Backups, and the
+    /// Mac it was tried on held no saved window state for the app at all.
+    static func remembered(in defaults: UserDefaults = .standard) -> SidebarMode {
+        defaults.string(forKey: defaultsKey).flatMap(SidebarMode.init(rawValue:)) ?? .backups
+    }
+
+    static func remember(_ mode: SidebarMode, in defaults: UserDefaults = .standard) {
+        defaults.set(mode.rawValue, forKey: defaultsKey)
+    }
 }
 
 /// The last settled outcome of a repository's snapshot listing.

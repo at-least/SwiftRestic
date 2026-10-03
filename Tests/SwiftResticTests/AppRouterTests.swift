@@ -96,6 +96,19 @@ struct AppRouterTests {
         #expect(router.selection == selection)
     }
 
+    @Test("the sidebar's view is remembered in the defaults, Backups until one is")
+    func sidebarModeIsRemembered() throws {
+        let suite = "SwiftResticSidebarModeTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(SidebarMode.remembered(in: defaults) == .backups)
+        SidebarMode.remember(.files, in: defaults)
+        #expect(SidebarMode.remembered(in: defaults) == .files)
+        // A value no build wrote reads as the default, not as a crash.
+        defaults.set("timeline", forKey: SidebarMode.defaultsKey)
+        #expect(SidebarMode.remembered(in: defaults) == .backups)
+    }
+
     @Test("every way into a backup shows Backups, where its record's row is")
     func showRestoreShowsBackups() {
         let router = AppRouter()

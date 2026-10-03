@@ -29,9 +29,6 @@ struct SidebarView: View {
     @Environment(AppRouter.self) private var router
     @Environment(FilesTree.self) private var filesTree
     @Environment(\.now) private var now
-    /// The mode across launches; the router holds it while the app runs,
-    /// so the View menu's ⌘1 and ⌘2 reach it.
-    @SceneStorage("sidebarMode") private var storedMode: SidebarMode = .backups
 
     /// Which plans and Other backups are open — the backup records
     /// underneath are the restore pane's entry points. Shared with the detail
@@ -119,8 +116,17 @@ struct SidebarView: View {
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         .safeAreaInset(edge: .top) { modePicker }
         .safeAreaInset(edge: .bottom) { sidebarFooter }
-        .onAppear { router.sidebarMode = storedMode }
-        .onChange(of: router.sidebarMode) { storedMode = router.sidebarMode }
+        // The mode across launches (`SidebarMode.remembered`); the router
+        // holds it while the app runs, so the View menu's ⌘1 and ⌘2 reach it.
+        .onAppear { router.sidebarMode = SidebarMode.remembered() }
+        .onChange(of: router.sidebarMode) {
+            #if DEBUG
+            // A capture run sets the view it photographs; the user's own
+            // stays as it was.
+            if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE"] != nil { return }
+            #endif
+            SidebarMode.remember(router.sidebarMode)
+        }
         // The Files view's open levels, read and kept current; keyed by what
         // is open and the listings they were read under, so opening a folder
         // or a refresh restarts it.
