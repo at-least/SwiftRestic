@@ -6,7 +6,7 @@ import SwiftUI
 /// files in the main pane.
 ///
 /// The app's one snapshot-first browser: the run drawer's Browse, a
-/// group's Restore Files… and Browse Folders' Show in Restore all land here
+/// group's Restore Files… and the Files view's Show in Backups all land here
 /// (`AppRouter.showRestore`), so the Change column, search, drag-to-Finder
 /// and whole-backup restore never depend on which button you came through.
 ///
@@ -776,7 +776,7 @@ struct RestorePaneView: View {
             // complete before the query has read the open backup the hits
             // are split against. Until then the open backup itself may be
             // unread, and its own files would look as if only other backups
-            // held them — FindFilesView and FolderBrowserView ask the same.
+            // held them — FindFilesView and the Files view ask the same.
             let indexIsComplete = await model.indexIsComplete(repositoryID: repositoryID)
             let found: SearchWithMembership
             do {

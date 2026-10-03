@@ -344,7 +344,7 @@ actor IndexCoordinator {
     // MARK: - Reads
 
     /// The indexed snapshots holding one path within one chain — a plan's
-    /// tag — newest first, in SQL. The folder browser's core question.
+    /// tag — newest first, in SQL. The Files view's core question.
     nonisolated func versions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
         try await read(repositoryID) { try await $0.versions(ofPath: path, inChain: chainKey) }
     }

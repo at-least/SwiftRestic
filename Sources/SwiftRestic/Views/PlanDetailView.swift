@@ -11,8 +11,6 @@ struct PlanDetailView: View {
     /// wired by RootView so this view owns no navigation of its own.
     var onShowRun: (() -> Void)? = nil
 
-    @State private var browsingFolders: FolderBrowserTarget?
-
     private var plan: BackupPlan? { model.plan(id: planID) }
 
     var body: some View {
@@ -34,56 +32,35 @@ struct PlanDetailView: View {
         // (RootDetailView gives it no per-plan identity), so onAppear never
         // fired for the second plan and its dot outlived the visit.
         .onChange(of: planID, initial: true) { model.markProblemSeen(planID: planID) }
-        .toolbar {
-            ToolbarItemGroup {
-                if let plan {
-                    // The Plan menu's predicates, so this toolbar and the
-                    // menu bar cannot disagree about either button.
-                    let commands = model.planCommands(for: .plan(plan.id))
-                    if model.isRunning(planID: plan.id) {
-                        // "Stop", as every command that ends a run says;
-                        // the progress strip keeps its Cancel.
-                        // Worded like the Back Up Now it replaces: a bare
-                        // square in its place read as a glyph, not a verb.
-                        Button("Stop", systemImage: "stop.fill") {
-                            model.cancelBackup(planID: plan.id)
-                        }
-                        .labelStyle(.titleAndIcon)
-                        .disabled(!commands.canStop)
-                        .help("\(commands.stopTitle) (⌘.) — recorded as cancelled")
-                    } else {
-                        Button("Back Up Now", systemImage: "arrow.up.circle.fill") {
-                            model.runBackup(planID: plan.id)
-                        }
-                        .disabled(!commands.canBackUp)
-                        .labelStyle(.titleAndIcon)
-                        .help("Run this plan's backup now")
-                    }
-                    scheduleControl(plan)
-                    // The page's verbs only. Deleting is rare and final, so
-                    // it is not chrome: Plan ▸ Delete Plan… and the sidebar
-                    // row's menu, through the one shared confirmation.
-                    Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
-                        .labelStyle(.titleAndIcon)
-                        .help("Change this plan's folders, schedule and retention")
-                }
+    }
+
+    /// The Backups card's verb: Back Up Now, Stop while a run is in
+    /// flight — worded as every command that ends a run is; the progress
+    /// strip keeps its Cancel. The Plan menu's predicates, so the card and
+    /// the menu bar cannot disagree about either.
+    @ViewBuilder
+    private func backUpControl(_ plan: BackupPlan) -> some View {
+        let commands = model.planCommands(for: .plan(plan.id))
+        if model.isRunning(planID: plan.id) {
+            Button("Stop", systemImage: "stop.fill") {
+                model.cancelBackup(planID: plan.id)
             }
-        }
-        .sheet(item: $browsingFolders) { target in
-            // Show in Restore leaves this page for the Restore pane, at the
-            // version and folder the folder browser was showing.
-            FolderBrowserView(target: target, onShowInRestore: { snapshotID, folder in
-                router.showRestore(repositoryID: target.repositoryID, snapshotID: snapshotID, focusPath: folder)
-            })
-            .environment(model)
+            .disabled(!commands.canStop)
+            .help("\(commands.stopTitle) (⌘.) — recorded as cancelled")
+        } else {
+            Button("Back Up Now", systemImage: "arrow.up.circle.fill") {
+                model.runBackup(planID: plan.id)
+            }
+            .disabled(!commands.canBackUp)
+            .help("Run this plan's backup now (⌘B)")
         }
     }
 
-    /// Pause Schedule and Resume Schedule. A click on Pause keeps its
-    /// one-click open-ended pause; the arrow offers the timed lengths. A
-    /// manual plan has no schedule to pause, so the control stands disabled
-    /// there and says why — hidden, it would leave the toolbar shifting
-    /// between plans.
+    /// Pause Schedule and Resume Schedule, the Schedule card's verb. A
+    /// click on Pause keeps its one-click open-ended pause; the arrow offers
+    /// the timed lengths. A manual plan has no schedule to pause and shows
+    /// none: its Schedule row already says "Manually", and a card's corner,
+    /// unlike the toolbar it replaced, has no row of neighbours to shift.
     @ViewBuilder
     private func scheduleControl(_ plan: BackupPlan) -> some View {
         let now = Date.now
@@ -93,12 +70,7 @@ struct PlanDetailView: View {
             }
             .labelStyle(.titleAndIcon)
             .help(resumeHelp(plan, now: now))
-        } else if plan.schedule.frequency == .manual {
-            Button("Pause Schedule", systemImage: "pause.circle") {}
-                .labelStyle(.titleAndIcon)
-                .disabled(true)
-                .help("This plan runs only when you click Back Up Now — it has no schedule to pause")
-        } else {
+        } else if plan.schedule.frequency != .manual {
             Menu("Pause Schedule", systemImage: "pause.circle") {
                 ForEach(PauseLength.allCases) { length in
                     Button(length.menuTitle) {
@@ -152,7 +124,7 @@ struct PlanDetailView: View {
     /// The plan's standing problem: what went wrong, when, restic's first
     /// words about it and the counts behind them, with the way to the full
     /// record. No dismiss button — it lasts exactly as long as the problem,
-    /// and a retry is the toolbar's Back Up Now a few points away.
+    /// and a retry is the Backups card's Back Up Now just above it.
     private struct PlanProblemRow: View {
         @Environment(\.now) private var now
         let summary: PlanProblemSummary
@@ -245,20 +217,36 @@ struct PlanDetailView: View {
                 PlanProblemRow(summary: PlanStatus.summary(of: problem), run: problem, onShowInActivity: showInActivity(problem))
             }
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
+            scheduleCard(plan)
             configurationCard(plan)
         }
         .detailPane()
     }
 
     /// The page's answer, in Arq's label/value idiom: did this plan back
-    /// up, when does it run next, and its folders through time. Its
-    /// records are the sidebar's, under the plan, so the page neither
-    /// lists them a second time nor offers a second way to open them.
+    /// up, and how many backups it holds — with the verb that makes the
+    /// next one now. Its records are the sidebar's, under the plan, and its
+    /// files are the sidebar's Files view, so the page neither lists them a
+    /// second time nor offers a second way to open them.
     private func backupsCard(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
-        // The scheduler's own answer, so a paused plan reads "Paused" and one
-        // it skips never shows a date. The full form is the tooltip: the
-        // short one leaves out the date when it is today or tomorrow.
+        return Card("Backups") {
+            DetailGrid {
+                DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
+                DetailRow("Snapshots") { snapshotsValue(plan, snapshots: snapshots) }
+            }
+        } accessory: {
+            backUpControl(plan)
+                .labelStyle(.titleAndIcon)
+                .controlSize(.small)
+        }
+    }
+
+    /// When the plan runs: its schedule, and the scheduler's own answer for
+    /// the next run — so a paused plan reads "Paused" and one it skips never
+    /// shows a date; the full form is the tooltip, the short one leaving out
+    /// the date when it is today or tomorrow — with the pause in its corner.
+    private func scheduleCard(_ plan: BackupPlan) -> some View {
         let next = PlanStatus.nextBackupTile(
             for: plan,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
@@ -266,27 +254,19 @@ struct PlanDetailView: View {
             isBackingUp: model.activity[plan.id]?.isBackup == true,
             now: now
         )
-        return Card("Backups") {
+        return Card("Schedule") {
             DetailGrid {
-                DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
+                DetailRow("Schedule", PlanStatus.scheduleRow(for: plan))
                 DetailRow("Next backup") {
                     Text(next.value)
                         .help(next.help ?? "")
                 }
-                DetailRow("Snapshots") { snapshotsValue(plan, snapshots: snapshots) }
             }
         } accessory: {
-            if let repositoryID = plan.repositoryID {
-                // The folder-first entry: pick a folder, then flip
-                // through the snapshots that contain it. Needs at least
-                // one snapshot to stand in as the newest version.
-                Button("Browse Folders…") {
-                    browsingFolders = FolderBrowserTarget(repositoryID: repositoryID, planID: plan.id)
-                }
-                .disabled(snapshots.isEmpty)
-                .help("Walk this plan's folders and flip through the snapshots that contain them")
+            scheduleControl(plan)
+                .labelStyle(.titleAndIcon)
                 .controlSize(.small)
-            }
+                .fixedSize()
         }
     }
 
@@ -377,10 +357,10 @@ struct PlanDetailView: View {
         }
     }
 
-    /// What, then when: the plan's defining facts — the folders it backs up
-    /// and the patterns it leaves out, as the editor's Files tab pairs
-    /// them — lead. Where is the sidebar's: the plan sits under its
-    /// repository.
+    /// The plan's defining facts — the folders it backs up and the patterns
+    /// it leaves out, as the editor's Files tab pairs them — then what it
+    /// keeps, with Edit in its corner. When is the Schedule card's; where is
+    /// the sidebar's: the plan sits under its repository.
     private func configurationCard(_ plan: BackupPlan) -> some View {
         Card("Configuration") {
             VStack(alignment: .leading, spacing: 10) {
@@ -432,7 +412,6 @@ struct PlanDetailView: View {
                 Divider()
 
                 DetailGrid {
-                    DetailRow("Schedule", PlanStatus.scheduleRow(for: plan))
                     // Applying it now is Plan ▸ Apply Retention Now… (and the
                     // sidebar row's menu); what it will keep is the editor's
                     // Retention tab.
@@ -442,6 +421,14 @@ struct PlanDetailView: View {
                     }
                 }
             }
+        } accessory: {
+            // Deleting is rare and final, so it is not here: Plan ▸ Delete
+            // Plan… and the sidebar row's menu, through the one shared
+            // confirmation.
+            Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
+                .labelStyle(.titleAndIcon)
+                .controlSize(.small)
+                .help("Change this plan's folders, schedule and retention")
         }
     }
 }

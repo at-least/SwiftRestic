@@ -441,7 +441,7 @@ struct SnapshotIndexTests {
         #expect(summarized.summaries.count == 2)
     }
 
-    // MARK: - Version picking (the folder browser's selection rule)
+    // MARK: - Version picking (the Files view's selection rule)
 
     private func version(_ id: String) -> IndexVersion {
         IndexVersion(id: id, time: Date(timeIntervalSince1970: 0))

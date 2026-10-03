@@ -569,7 +569,7 @@ enum BrowserListGrammar {
     }
 }
 
-/// The row Browse Folders renders for one node: icon, name, and the size
+/// The row a Files-view folder lists for one node: icon, name, and the size
 /// and modification columns. (The restore pane's change-annotated row is
 /// its own shape.)
 struct SnapshotNodeRow: View {

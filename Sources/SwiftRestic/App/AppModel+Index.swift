@@ -53,16 +53,10 @@ extension AppModel {
         return listingGeneration
     }
 
-    /// The versions the index knows for one path within one chain — a
-    /// plan's tag — newest first. Empty — not an error — when the index has
-    /// not read that path yet; the folder browser degrades to the newest
-    /// snapshot and says so.
-    func indexedVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async -> [IndexVersion] {
-        (try? await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)) ?? []
-    }
-
-    /// `indexedVersions`, throwing when the index fails: the Files view says
-    /// so, rather than reading a broken index as "no backup holds it".
+    /// The backups of one chain — a plan's tag, or a lineage's key — that
+    /// hold one path, newest first, from the index. Throws when the index
+    /// fails: the Files view says so, rather than reading a broken index as
+    /// "no backup holds it".
     func indexedHolders(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
         try await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
@@ -81,7 +75,7 @@ extension AppModel {
     }
 
     /// Whether the index has read every listed snapshot of the repository —
-    /// the folder browser's completeness signal. An index that cannot answer
+    /// the Files view's completeness signal. An index that cannot answer
     /// reads as "not complete", never as a failure.
     func indexIsComplete(repositoryID: UUID) async -> Bool {
         (try? await indexCoordinator.isComplete(repositoryID: repositoryID)) ?? false

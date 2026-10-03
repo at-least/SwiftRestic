@@ -236,7 +236,7 @@ struct FindFilesView: View {
 
                 TableColumn("Versions") { row in
                     // The index engine knows how many snapshots hold the path
-                    // (older ones reachable through Browse Folders); the restic
+                    // (older ones reachable through the Files view); the restic
                     // engine walked exactly what it lists.
                     Text(row.versionsCount.map { "of \($0)" } ?? "this one")
                         .monospacedDigit()

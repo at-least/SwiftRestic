@@ -104,8 +104,8 @@ struct FilesPaneView: View {
             contentVersions = contents
             loadError = nil
             // The time the user was reading one level up, when this item
-            // existed then: walking down keeps the era (Browse Folders'
-            // rule). Spent on the first read only.
+            // existed then: walking down keeps the era. Spent on the first
+            // read only.
             if let hint = router.takeFilesVersionHint(), chosenID == nil {
                 chosenID = node.isDirectory
                     ? loaded.preferredVersion(previousID: hint)?.id

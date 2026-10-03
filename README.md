@@ -130,7 +130,14 @@ checked in so a normal build does not need it.
   not reach.
 - **Backup plans** — a set of folders, exclude patterns, a schedule and a
   retention policy, pointed at one repository. Each plan stamps its snapshots
-  with a private tag so retention can only ever touch its own.
+  with a private tag so retention can only ever touch its own. A plan's page
+  is three cards, each with its verb in its corner: *Backups* (its last
+  backup and how many it holds) with *Back Up Now* — *Stop* while it runs —
+  *Schedule* (its schedule and when it runs next) with *Pause Schedule*, its
+  arrow offering the lengths, or *Resume Schedule* while paused (a manual
+  plan has nothing to pause and shows none), and *Configuration* (its
+  folders, exclude patterns, retention and hooks) with *Edit*. Every one of
+  them is in the Plan menu and the plan row's menu too.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day.
@@ -167,8 +174,8 @@ checked in so a normal build does not need it.
   same folders from the same Mac — not merely the row below it, which for a
   plan whose folders changed is a backup of other folders; the pane's header
   names the open backup and says what its Change column is compared with, or
-  that it is the first of its folders. On a plan's page, *Browse
-  Folders…* walks one folder through every snapshot that contains it. The file
+  that it is the first of its folders. The Files view (above) walks one
+  folder or file through every backup that holds it. The file
   list answers Finder's outline keys: → opens a folder, ← closes it or steps to
   the folder that holds the selection. Its search covers the open backup and
   says how many matches only other backups hold; *Search All Backups…* carries
@@ -282,8 +289,8 @@ A few seams worth knowing by name:
   typed intents; the root view consumes them on appear-or-change, and every
   window-targeting command also opens the window so no ask is parked unheard.
 - **The snapshot index is a cache of what restic cannot answer quickly**: which
-  snapshots hold a path, and a name search across all of them — for Browse
-  Folders' version list, Find Files and the Restore pane's search — plus cached
+  snapshots hold a path, and a name search across all of them — for the Files
+  view's tree and versions, Find Files and the Restore pane's search — plus cached
   folder listings and diffs. One SQLite file per repository,
   `index/<repository UUID>.sqlite` in the configuration folder, stores every
   path once as a tree of names and, per plan (or per restic `host,paths` group

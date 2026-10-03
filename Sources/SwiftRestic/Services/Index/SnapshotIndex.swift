@@ -78,7 +78,7 @@ struct VersionSummary: Sendable, Equatable {
 }
 
 extension Array where Element == IndexVersion {
-    /// The version a folder browser opens a path at: the newest — unless the
+    /// The version the Files view opens a path at: the newest — unless the
     /// version the user was reading one level up holds this path too,
     /// because flipping through time should survive walking down into a
     /// folder. The list arrives newest first from the index.
@@ -639,7 +639,7 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// `versions(ofPath:)` restricted to one chain — Browse Folders' plan
+    /// `versions(ofPath:)` restricted to one chain — the Files view's plan
     /// filter, in SQL. An unknown chain key answers `[]`.
     func versions(ofPath path: String, inChain chainKey: String) async throws -> [IndexVersion] {
         try await pool.read { db in
@@ -765,7 +765,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// bytes asked for (`PathKey`), so canonically equal spellings keep
     /// their own answers. Find Files reads the summaries inside its search
     /// (`searchWithSummaries`); this path-keyed form is what the tests hold
-    /// that read to, as `versions(ofPath:)` is for the folder browser.
+    /// that read to, as `versions(ofPath:)` is for the Files view.
     func versionSummaries(ofPaths paths: [String]) async throws -> [PathKey: VersionSummary] {
         try await pool.read { db in
             var lookup = try NodeLookup(db)
