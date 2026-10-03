@@ -19,6 +19,7 @@ extension AppModel {
     func indexReconcile(repositoryID: UUID, listing: [Snapshot], generation: UInt64) {
         tasks.addBackground(Task {
             await indexCoordinator.reconcile(repositoryID: repositoryID, snapshots: listing, generation: generation)
+            indexTakenGeneration[repositoryID] = max(indexTakenGeneration[repositoryID] ?? 0, generation)
             // Backfill needs the repository and its credentials; if either is
             // gone mid-refresh, the next refresh retries the whole pass.
             guard let repository = repository(id: repositoryID),
@@ -76,9 +77,14 @@ extension AppModel {
 
     /// Whether the index has read every listed snapshot of the repository —
     /// the Files view's completeness signal. An index that cannot answer
-    /// reads as "not complete", never as a failure.
+    /// reads as "not complete", never as a failure. So does one that has not
+    /// taken the listing on screen yet: its reconcile runs after the listing
+    /// lands, and until it returns the index answers for the listing before —
+    /// complete for that one, perhaps, but blind to what this one added or
+    /// forgot.
     func indexIsComplete(repositoryID: UUID) async -> Bool {
-        (try? await indexCoordinator.isComplete(repositoryID: repositoryID)) ?? false
+        guard indexTakenGeneration[repositoryID] == snapshotsGeneration[repositoryID] else { return false }
+        return (try? await indexCoordinator.isComplete(repositoryID: repositoryID)) ?? false
     }
 
     /// Throws the index away and rebuilds it from the listing the model

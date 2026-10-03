@@ -162,6 +162,7 @@ extension AppModel {
         snapshotsLoadedAt[id] = nil
         adoptionLandingsConsidered.remove(id)
         snapshotsGeneration[id] = nil
+        indexTakenGeneration[id] = nil
         pendingSnapshotRefreshes.remove(id)
         repositoriesMissingPassword.remove(id)
         statsFailureNoted.remove(id)

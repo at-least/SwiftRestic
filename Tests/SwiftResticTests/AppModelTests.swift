@@ -1608,3 +1608,38 @@ struct RestoreBannerTests {
         #expect(whole.revealPaths == ["/Users/x/Restored"])
     }
 }
+
+/// The index answers for the last listing it took. A listing the model
+/// already shows but whose reconcile has not returned is not one of those:
+/// read then, an index complete for the listing before said "complete" for
+/// this one too, and the Files view kept an empty folder — or a backup
+/// already forgotten — without reading again (seen live, 2026-10-04).
+@MainActor
+@Suite("Index completeness")
+struct IndexCompletenessTests {
+    @Test("a listing whose reconcile has not returned is not complete, however complete the index is for the one before")
+    func completenessWaitsForTheReconcile() async {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticIndexCompleteness-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory([:])
+        )
+        let repositoryID = UUID()
+
+        // The index takes an empty listing: complete for it.
+        model.snapshotsGeneration[repositoryID] = 1
+        model.indexReconcile(repositoryID: repositoryID, listing: [], generation: 1)
+        await model.tasks.drain()
+        #expect(await model.indexIsComplete(repositoryID: repositoryID))
+
+        // A newer listing on screen, its reconcile not yet run.
+        model.snapshotsGeneration[repositoryID] = 2
+        #expect(await !model.indexIsComplete(repositoryID: repositoryID))
+
+        model.indexReconcile(repositoryID: repositoryID, listing: [], generation: 2)
+        await model.tasks.drain()
+        #expect(await model.indexIsComplete(repositoryID: repositoryID))
+    }
+}

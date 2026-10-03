@@ -102,6 +102,11 @@ final class AppModel {
     /// The generation `snapshots` was read under, per repository, so a
     /// rebuild of the index re-sends the held listing under its own number.
     @ObservationIgnored var snapshotsGeneration: [UUID: UInt64] = [:]
+    /// The newest generation the index has taken, per repository — set as
+    /// its reconcile returns, whatever it decided. Until it is the
+    /// generation `snapshots` was read under, the index answers for an
+    /// older listing (`indexIsComplete`).
+    @ObservationIgnored var indexTakenGeneration: [UUID: UInt64] = [:]
     /// Repositories with no password in the Keychain yet. Upkeep is not scheduled
     /// for these: there is nothing to run, and stamping a "last checked" time for
     /// a check that never happened would be a lie on the repository screen.
