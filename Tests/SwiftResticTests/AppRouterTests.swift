@@ -116,6 +116,25 @@ struct AppRouterTests {
         #expect(router.tab(of: plan) == .overview)
     }
 
+    @Test("a group's Show Files lands on its page's Files tab, either kind of group")
+    func showFilesOpensThePageOnFiles() throws {
+        let router = AppRouter()
+        let repositoryID = UUID()
+        let group = SidebarItem.otherGroup(repositoryID: repositoryID, id: .plan(UUID()))
+        router.showFiles(of: group)
+        #expect(router.selection == group)
+        #expect(router.tab(of: group) == .files)
+
+        let key = SnapshotLineage.Key(hostname: "mac", paths: ["/Data/Music"])
+        let lineage = SidebarItem.otherGroup(repositoryID: repositoryID, id: .lineage(key))
+        #expect(lineage == .lineage(repositoryID: repositoryID, key: key))
+        #expect(router.tab(of: lineage) == .overview)
+        router.showFiles(of: lineage)
+        #expect(router.selection == lineage)
+        #expect(router.tab(of: lineage) == .files)
+        #expect(router.tab(of: group) == .files)
+    }
+
     @Test("the sidebar's view is remembered in the defaults, Backups until one is")
     func sidebarModeIsRemembered() throws {
         let suite = "SwiftResticSidebarModeTests-\(UUID().uuidString)"

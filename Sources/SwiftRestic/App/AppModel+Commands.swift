@@ -138,6 +138,7 @@ extension AppModel {
         case let .restoreSnapshot(id, _): id
         case let .plan(planID): plan(id: planID)?.repositoryID
         case let .orphanPlan(id, _): id
+        case let .lineage(id, _): id
         case let .file(node): node.repositoryID
         case .console, .activity, nil: nil
         }

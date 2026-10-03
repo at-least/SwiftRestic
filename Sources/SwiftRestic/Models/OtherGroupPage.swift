@@ -1,17 +1,19 @@
 import Foundation
 
-/// What the page of one plan-UUID group under Other backups shows: the
-/// explanation card's sentence and the Backups card's rows, derived once
-/// here so the page and the sidebar's words for the same group
-/// (`OtherBackupsGroup.labels`, which names it) can never disagree — and
-/// so what the adopt sheet prefills from reads the same facts.
+/// What the page of one group under Other backups shows — a plan-UUID
+/// group's or an untagged lineage's: the explanation card's sentence and
+/// the Backups card's rows, derived once here so the page and the sidebar's
+/// words for the same group (`OtherBackupsGroup.labels`, which names it)
+/// can never disagree — and so what the adopt sheet prefills from reads the
+/// same facts.
 ///
 /// The group's kind decides the explanation: a UUID no configuration sets
 /// up is adoptable — the sentence says what could have happened (deleted
 /// here, still running on another Mac) and asserts neither, the labels'
-/// own rule — while a UUID that names a configured plan is that plan's
-/// earlier history here, said with where the plan went.
-struct OrphanPlanPageSummary: Equatable {
+/// own rule — a UUID that names a configured plan is that plan's earlier
+/// history here, said with where the plan went, and backups with no plan
+/// tag were made outside SwiftRestic and cannot be adopted.
+struct OtherGroupPageSummary: Equatable {
     /// The group's label title — the page's name is the sidebar row's.
     var title: String
     /// The explanation card's whole sentence.
@@ -39,26 +41,39 @@ struct OrphanPlanPageSummary: Equatable {
     /// The user tags among the backups' tags — everything but plan tags,
     /// which are the group's own plumbing. Empty hides the row.
     var userTags: [String]
-    /// The group's one honest identifier, selectable on the page.
-    var planTag: String
+    /// A plan-UUID group's one honest identifier, selectable on the page;
+    /// nil for an untagged lineage, which has none.
+    var planTag: String?
+    /// The index's chain the group's files are read from
+    /// (`SnapshotIndex.chainKey`): the plan tag, or the lineage's host and
+    /// folders.
+    var chainKey: String
 
     /// `snapshots` are the group's, newest first as `OtherBackupsGroup`
     /// sorts them, and never empty — a group exists only around backups.
+    /// `planID` is the plan tag's UUID, nil for an untagged lineage.
     init(
         snapshots: [Snapshot],
         title: String,
         formerPlan: BackupPlan?,
         repositories: [Repository],
-        planID: UUID
+        planID: UUID?
     ) {
         self.title = title
         self.formerPlan = formerPlan
         newestAt = snapshots[0].time
         oldestAt = snapshots[snapshots.count - 1].time
         newestSnapshotID = snapshots[0].id
-        planTag = ResticService.planTag(planID)
+        planTag = planID.map(ResticService.planTag)
+        chainKey = SnapshotIndex.chainKey(for: snapshots[0])
 
-        if let formerPlan {
+        if planID == nil {
+            // The labels' "outside SwiftRestic", as a sentence: no plan
+            // made them, so there is no plan to adopt them into.
+            explanation = snapshots.count == 1
+                ? "This backup carries no plan ID — it was made outside SwiftRestic — so it can't be adopted as a plan."
+                : "These \(Format.plural(snapshots.count, "backup")) carry no plan ID — they were made outside SwiftRestic — so they can't be adopted as a plan."
+        } else if let formerPlan {
             let name = formerPlan.name.isEmpty ? "Untitled Plan" : formerPlan.name
             // Where it went: the destination the sidebar's caption names,
             // read the same way. A plan that names no reachable repository
@@ -116,18 +131,31 @@ extension BackupShelves {
         others.first { $0.id == .plan(planID) }
     }
 
-    /// The page that group's selection shows, or nil when the group is not
-    /// under this repository's Other backups.
-    func orphanPlanPage(
-        planID: UUID,
+    /// The untagged lineage under this repository's Other backups whose
+    /// host and folders are `key` — its page's and the selection
+    /// revalidation's one lookup. Nil when it is gone: forgotten, tagged
+    /// by the console, or refreshed away.
+    func lineageGroup(_ key: SnapshotLineage.Key) -> OtherBackupsGroup? {
+        others.first { $0.id == .lineage(key) }
+    }
+
+    /// The page a group's selection shows, either kind, or nil when the
+    /// group is not under this repository's Other backups.
+    func otherGroupPage(
+        _ id: OtherBackupsGroup.ID,
         repositories: [Repository],
         localHost: String
-    ) -> OrphanPlanPageSummary? {
-        guard let group = orphanPlanGroup(planID) else { return nil }
+    ) -> OtherGroupPageSummary? {
+        let group: OtherBackupsGroup? = switch id {
+        case let .plan(planID): orphanPlanGroup(planID)
+        case let .lineage(key): lineageGroup(key)
+        }
+        guard let group else { return nil }
         // The label that named the row names the page; otherLabels names
         // every group it is given.
         let label = otherLabels(repositories: repositories, localHost: localHost)[group.id]!
-        return OrphanPlanPageSummary(
+        let planID: UUID? = if case let .plan(planID) = id { planID } else { nil }
+        return OtherGroupPageSummary(
             snapshots: group.snapshots,
             title: label.title,
             formerPlan: formerPlan(of: group),

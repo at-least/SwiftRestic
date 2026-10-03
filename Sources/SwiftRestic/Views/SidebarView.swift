@@ -6,18 +6,18 @@ import SwiftUI
 /// open to the dated backups it made there — "New Backup Plan…" while it has
 /// none, and Other backups while the repository holds backups none of its
 /// plans made (`BackupShelves`), grouped by the plan that made them when a
-/// plan tag says which, by folders and Mac otherwise. A plan-UUID group's
-/// row is a page like a plan's is — the row selects, the chevron ahead of
-/// it folds — while an untagged lineage's row and the Other backups node
-/// stay folds only. The context menus and the Add footer ride along.
+/// plan tag says which, by folders and Mac otherwise. A group's row, either
+/// kind, is a page like a plan's is — the row selects, the chevron ahead of
+/// it folds — while the Other backups node stays a fold only. The context
+/// menus and the Add footer ride along.
 ///
 /// Every row is a top-level List row, and the tree's levels are leading
 /// indentation (`Indent`): a DisclosureGroup draws its triangle at the
 /// row's outer edge, which an indented child would leave stranded far to
 /// the left of its title. Only places carry a tag — a repository, a plan,
-/// a plan-UUID group, a backup record — so selection stays unique; a
-/// plan's or a group's chevron and the Other backups node are folds, and
-/// "New Backup Plan…" is an action.
+/// a group under Other backups, a backup record — so selection stays
+/// unique; a plan's or a group's chevron and the Other backups node are
+/// folds, and "New Backup Plan…" is an action.
 ///
 /// Split out of `RootView` as a real child view so the sidebar's list
 /// type-checks on its own: the root's modifier chain sat at the compiler's
@@ -207,19 +207,6 @@ struct SidebarView: View {
             collapsedLineages.contains(LineageFoldID(repositoryID: repository.id, key: lineage.key))
                 ? nil : lineage.snapshots.first.map(SnapshotIndex.chainKey(for:))
         }
-    }
-
-    /// Show Files for an Other backups group: Files mode, the group's fold
-    /// open, and the folder its tree opens at selected — so the pane shows
-    /// that folder by version.
-    private func showFiles(chainKey: String, in repository: Repository, reveal: () -> Void) {
-        router.sidebarMode = .files
-        folds.otherBackups.insert(repository.id)
-        reveal()
-        guard let root = FilesTree.firstRoot(of: chainKey, repositoryID: repository.id, in: model.snapshots(for: repository.id))
-        else { return }
-        folds.folders.insert(root)
-        router.selection = .file(root)
     }
 
     private func planRoots(_ plan: BackupPlan, in repository: Repository) -> FileNode {
@@ -483,7 +470,7 @@ struct SidebarView: View {
     }
 
     /// The keyboard fold for whatever selectable row holds a fold: a plan,
-    /// or a plan-UUID group under Other backups. Other rows ignore the key.
+    /// or a group under Other backups. Other rows ignore the key.
     private func foldSelection(open: Bool) -> KeyPress.Result {
         switch router.selection {
         case let .plan(id):
@@ -503,6 +490,15 @@ struct SidebarView: View {
             // backups node, so opening one whose node is folded shut would
             // move a fold nobody can see — reveal the node too, the same
             // reveal a record's selection performs.
+            if open { folds.otherBackups.insert(repositoryID) }
+            return .handled
+        case let .lineage(repositoryID, key):
+            guard let title = model.shelves(for: repositoryID)
+                .otherLabels(repositories: model.configuration.repositories, localHost: model.localHostname)[.lineage(key)]?.title
+            else { return .ignored }
+            let id = LineageFoldID(repositoryID: repositoryID, key: key)
+            // Open is "not folded shut": a lineage starts open.
+            if open == collapsedLineages.contains(id) { toggleLineage(id, title: title) }
             if open { folds.otherBackups.insert(repositoryID) }
             return .handled
         case let .file(node) where node.isDirectory:
@@ -698,7 +694,7 @@ struct SidebarView: View {
         let title = label?.title ?? "Backups"
         let caption = label?.caption ?? .init(count: Format.plural(snapshots.count, "backup"))
         HStack(spacing: 4) {
-            groupFold(id: id, title: title, isExpanded: isExpanded)
+            groupFold(title: title, isExpanded: isExpanded) { toggleOtherGroup(id, title: title) }
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .lineLimit(1)
@@ -730,10 +726,10 @@ struct SidebarView: View {
         }
     }
 
-    /// A group's fold, the plan fold's own grammar: a chevron column that
-    /// toggles, named for what it holds.
-    private func groupFold(id: OtherGroupFoldID, title: String, isExpanded: Bool) -> some View {
-        Button { toggleOtherGroup(id, title: title) } label: {
+    /// A group's fold, either kind, the plan fold's own grammar: a chevron
+    /// column that toggles, named for what it holds.
+    private func groupFold(title: String, isExpanded: Bool, toggle: @escaping () -> Void) -> some View {
+        Button(action: toggle) {
             FoldChevron(isExpanded: isExpanded)
                 .frame(width: Indent.lineageSlot)
                 .frame(maxHeight: .infinity)
@@ -757,9 +753,16 @@ struct SidebarView: View {
         announceFold(title, opened: opened)
     }
 
+    /// A lineage's fold: open unless the user folded it shut.
+    private func toggleLineage(_ id: LineageFoldID, title: String) {
+        let opened = collapsedLineages.remove(id) != nil
+        if !opened { collapsedLineages.insert(id) }
+        announceFold(title, opened: opened)
+    }
+
     /// A plan-UUID group's menu: an adoptable group's verb first, a moved
     /// plan's history opens that plan, and every group gets its two ways in
-    /// — its newest backup, and its files.
+    /// — its newest backup, and its page's Files.
     @ViewBuilder
     private func groupContextMenu(
         planID: UUID,
@@ -779,9 +782,7 @@ struct SidebarView: View {
         }
         restoreFromGroupItem(snapshots, repository: repository)
         Button("Show Files") {
-            showFiles(chainKey: ResticService.planTag(planID), in: repository) {
-                folds.otherGroups.insert(OtherGroupFoldID(repositoryID: repository.id, planID: planID))
-            }
+            router.showFiles(of: .orphanPlan(repositoryID: repository.id, planID: planID))
         }
     }
 
@@ -798,10 +799,12 @@ struct SidebarView: View {
     /// One lineage's records — Arq's backed-up-folder level, so the row
     /// below a record is the one its Change column compares against — or,
     /// in Files, its files: the index chains a lineage by its host and
-    /// folders, so it has a tree as a plan does. The label's caption
+    /// folders, so it has a tree as a plan does. A page, the plan-UUID
+    /// group's grammar: the row selects, the chevron ahead of it folds —
+    /// its host and folders are identity enough for a page that browses
+    /// and restores, though not for a plan to adopt. The label's caption
     /// carries the qualifier and the "outside SwiftRestic" kind; the
-    /// tooltip names the console escape hatch. Still a fold only, never a
-    /// page: with no plan tag there is no identity to be one.
+    /// tooltip names the console escape hatch.
     @ViewBuilder
     private func lineageRows(
         _ lineage: SnapshotLineage,
@@ -813,41 +816,27 @@ struct SidebarView: View {
         let isExpanded = !collapsedLineages.contains(id)
         let title = label?.title ?? "Backups"
         let caption = label?.caption ?? .init(count: Format.plural(lineage.snapshots.count, "backup"))
-        Button {
-            if isExpanded {
-                collapsedLineages.insert(id)
-            } else {
-                collapsedLineages.remove(id)
+        HStack(spacing: 4) {
+            groupFold(title: title, isExpanded: isExpanded) { toggleLineage(id, title: title) }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .lineLimit(1)
+                GroupCaptionLine(caption: caption)
             }
-            announceFold(title, opened: !isExpanded)
-        } label: {
-            HStack(spacing: 4) {
-                FoldChevron(isExpanded: isExpanded)
-                    .frame(width: Indent.lineageSlot)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .lineLimit(1)
-                    GroupCaptionLine(caption: caption)
-                }
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
         .padding(.leading, Indent.groupPad)
+        .tag(SidebarItem.lineage(repositoryID: repositoryID, key: lineage.key))
         .help(label?.detail ?? "")
         // Its newest record and its files: no plan to open or adopt.
         .contextMenu {
             restoreFromGroupItem(lineage.snapshots, repository: repository)
-            if let chain = lineage.snapshots.first.map(SnapshotIndex.chainKey(for:)) {
-                Button("Show Files") {
-                    showFiles(chainKey: chain, in: repository) { collapsedLineages.remove(id) }
-                }
+            Button("Show Files") {
+                router.showFiles(of: .lineage(repositoryID: repositoryID, key: lineage.key))
             }
         }
         // The same folders from the same Mac can sit in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         if isExpanded {
             if router.sidebarMode == .files, let chain = lineage.snapshots.first.map(SnapshotIndex.chainKey(for:)) {
                 chainFiles(FileNode.roots(repositoryID: repositoryID, chainKey: chain), in: repository, base: Indent.groupRecord)

@@ -53,6 +53,7 @@ struct RootView: View {
     private enum CaptureGroupPane {
         case adoptable
         case moved
+        case lineage
     }
     #endif
     /// Debug-capture state owned here, consumed by the detail column's
@@ -383,6 +384,8 @@ struct RootView: View {
             pendingCaptureGroupPane = .adoptable
         case "movedGroup":
             pendingCaptureGroupPane = .moved
+        case "lineage":
+            pendingCaptureGroupPane = .lineage
         case "repositoryHooks": editingRepository = model.configuration.repositories.first
         // Same sheet on its first tab: captures a specific kind's fields, e.g.
         // the rclone Remote row and its suggestion menu.
@@ -418,29 +421,37 @@ struct RootView: View {
               let target = captureGroupTarget(pane)
         else { return }
         pendingCaptureGroupPane = nil
-        router.selection = .orphanPlan(repositoryID: target.repositoryID, planID: target.planID)
+        router.selection = .otherGroup(repositoryID: target.repositoryID, id: target.id)
         sidebarFolds.otherBackups.insert(target.repositoryID)
-        sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: target.repositoryID, planID: target.planID))
+        // A lineage's fold starts open; a plan-UUID group's is opened here.
+        guard case let .plan(planID) = target.id else {
+            applyCaptureTab()
+            return
+        }
+        sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: target.repositoryID, planID: planID))
         applyCaptureTab()
         // The adopt sheet over the page it adopts: `adopt` opens it on the
         // Files tab, `adoptRetention` on the Retention tab, where the dry-run
         // preview and the anchored count live.
         let sheet = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"]
         if pane == .adoptable, sheet == "adopt" || sheet == "adoptRetention" {
-            adoptGroup(repositoryID: target.repositoryID, planID: target.planID)
+            adoptGroup(repositoryID: target.repositoryID, planID: planID)
         }
     }
 
     /// The first group of the pane's kind, repositories in configuration
     /// order, groups in the sidebar's own newest-first order.
-    private func captureGroupTarget(_ pane: CaptureGroupPane) -> (repositoryID: UUID, planID: UUID)? {
+    private func captureGroupTarget(_ pane: CaptureGroupPane) -> (repositoryID: UUID, id: OtherBackupsGroup.ID)? {
         for repository in model.configuration.repositories {
             let shelves = model.shelves(for: repository.id)
             for group in shelves.others {
-                guard case let .plan(planID, _) = group else { continue }
-                if (pane == .moved) == (shelves.formerPlan(of: group) != nil) {
-                    return (repository.id, planID)
+                let matches = switch (pane, group) {
+                case (.lineage, .lineage): true
+                case (.adoptable, .plan): shelves.formerPlan(of: group) == nil
+                case (.moved, .plan): shelves.formerPlan(of: group) != nil
+                default: false
                 }
+                if matches { return (repository.id, group.id) }
             }
         }
         return nil
@@ -550,6 +561,13 @@ struct RootView: View {
             // The group is gone — adopted, its plan moved by the editor, or
             // refreshed away. Its repository's page is where it lived; the
             // landing pane when the repository went with it.
+            router.selection = model.repository(id: repositoryID) == nil
+                ? landing
+                : .repository(repositoryID)
+        case let .lineage(repositoryID, key)
+            where model.shelves(for: repositoryID).lineageGroup(key) == nil:
+            // The same for a lineage — forgotten, given a plan tag by the
+            // console, or refreshed away.
             router.selection = model.repository(id: repositoryID) == nil
                 ? landing
                 : .repository(repositoryID)

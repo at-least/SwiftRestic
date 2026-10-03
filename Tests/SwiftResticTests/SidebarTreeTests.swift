@@ -454,8 +454,8 @@ struct SidebarTreeTests {
         #expect(OverviewMetrics.needingAttention([protected, pending, running]).isEmpty)
     }
 
-    @Test("a group's Show Files opens at its newest backup's first folder, and reveals the group's fold and that folder")
-    func groupShowFiles() throws {
+    @Test("a chain's Files tab opens at its newest backup's first folder")
+    func filesFirstRoot() throws {
         let repositoryID = UUID()
         let planID = UUID()
         let tag = ResticService.planTag(planID)
@@ -468,11 +468,5 @@ struct SidebarTreeTests {
         let root = try #require(FilesTree.firstRoot(of: tag, repositoryID: repositoryID, in: listing))
         #expect(root == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos", isDirectory: true))
         #expect(FilesTree.firstRoot(of: "swiftrestic-plan-none", repositoryID: repositoryID, in: listing) == nil)
-
-        var folds = SidebarFolds()
-        folds.revealFiles(ofGroup: planID, in: repositoryID, root: root)
-        #expect(folds.otherBackups == [repositoryID])
-        #expect(folds.otherGroups == [OtherGroupFoldID(repositoryID: repositoryID, planID: planID)])
-        #expect(folds.folders == [root])
     }
 }

@@ -109,6 +109,12 @@ final class AppRouter {
         pageTabs[page] = tab
     }
 
+    /// A page on its Files tab: a group's Show Files.
+    func showFiles(of page: SidebarItem) {
+        selection = page
+        pageTabs[page] = .files
+    }
+
     /// The toolbar picker's binding for one page.
     func tabBinding(for page: SidebarItem) -> Binding<PageTab> {
         Binding(get: { self.tab(of: page) }, set: { self.setTab($0, of: page) })
@@ -167,7 +173,8 @@ final class AppRouter {
     }
 }
 
-/// A page's two views — the toolbar's Overview | Files on a plan's page:
+/// A page's two views — the toolbar's Overview | Files on a plan's page and
+/// on a group's under Other backups:
 /// its overview, and its folders and files across every backup, each by
 /// version.
 enum PageTab: Hashable {

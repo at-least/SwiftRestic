@@ -78,6 +78,11 @@ enum SidebarItem: Hashable {
     /// (`OtherBackupsGroup`), so the page survives regrouping and the
     /// selection revalidates to the repository's page once the group is gone.
     case orphanPlan(repositoryID: UUID, planID: UUID)
+    /// The page of one untagged lineage under a repository's Other backups
+    /// — the backups of one Mac's folders that no plan made. Its host and
+    /// folders are its identity, so the page survives regrouping and the
+    /// selection revalidates to the repository's page once it is gone.
+    case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     /// A backup record picked under its plan, or under a repository's Other
     /// backups — the pane browses that record's file tree directly,
     /// Arq-style.
@@ -87,6 +92,16 @@ enum SidebarItem: Hashable {
     case file(FileNode)
     case console
     case activity
+}
+
+extension SidebarItem {
+    /// The page of a group under `repositoryID`'s Other backups, either kind.
+    static func otherGroup(repositoryID: UUID, id: OtherBackupsGroup.ID) -> SidebarItem {
+        switch id {
+        case let .plan(planID): .orphanPlan(repositoryID: repositoryID, planID: planID)
+        case let .lineage(key): .lineage(repositoryID: repositoryID, key: key)
+        }
+    }
 }
 
 /// One item of the Files view's tree: a path in one chain's history — a

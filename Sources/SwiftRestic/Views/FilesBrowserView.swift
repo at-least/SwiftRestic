@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// A page's Files view: one chain's folders and files across every backup —
-/// a plan's — the tree on the leading side, and the folder or file selected
+/// a plan's, or a group's under Other backups — the tree on the leading
+/// side, and the folder or file selected
 /// in it on the trailing side, by version (`FilesPaneView`). The tree starts
 /// at the page's edge rather than under a repository and a plan, and its
 /// divider drags: a deep folder keeps its names.
@@ -17,6 +18,12 @@ struct FilesBrowserView: View {
     let roots: FileNode
 
     @FocusState private var treeIsFocused: Bool
+    /// The tree's width, dragged at its edge — the window's, kept across
+    /// pages and tabs while it is open.
+    @SceneStorage("FilesTreeWidth") private var treeWidth: Double = 280
+    /// The view's own width, which bounds the drag: the pane keeps room for
+    /// its version rows.
+    @State private var width: CGFloat = 0
 
     private var selected: FileNode? {
         router.filesSelection[roots]
@@ -35,14 +42,18 @@ struct FilesBrowserView: View {
     }
 
     var body: some View {
-        HSplitView {
-            // The split opens each side at its minimum, whatever its ideal
-            // (seen live), so the minimum is the tree's opening width.
+        // An HStack, not HSplitView: the split would not narrow the pane
+        // below the width it first laid out at, so a wider tree pushed the
+        // window's content past its edges — the sidebar and the pane's
+        // buttons clipped (seen live).
+        HStack(spacing: 0) {
             tree
-                .frame(minWidth: 240, maxWidth: 520)
+                .frame(width: min(max(treeWidth, treeWidthBounds.lowerBound), treeWidthBounds.upperBound))
+            TreeEdge(width: $treeWidth, bounds: treeWidthBounds)
             pane
-                .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         // The levels on screen, read and kept current; keyed by what is
         // open and the listings they were read under, so opening a folder
         // or a refresh restarts it.
@@ -124,6 +135,13 @@ struct FilesBrowserView: View {
         }
     }
 
+    /// How far the tree's edge drags: no narrower than a folder's name
+    /// needs, no wider than leaves the pane its rows.
+    private var treeWidthBounds: ClosedRange<Double> {
+        let lower = 220.0
+        return lower...max(lower, min(560, Double(width) - 380))
+    }
+
     /// Each level one fold-step deeper: a row starts with its fold column,
     /// so a file's name lines up with a folder's.
     private static func indent(_ depth: Int) -> CGFloat {
@@ -172,6 +190,32 @@ extension View {
                 .help("The overview, or the folders and files across every backup, each by version")
             }
         }
+    }
+}
+
+/// The tree's edge: a hairline with a wider grip that drags the tree's width.
+private struct TreeEdge: View {
+    @Binding var width: Double
+    let bounds: ClosedRange<Double>
+    @State private var startWidth: Double?
+
+    var body: some View {
+        Divider()
+            .overlay {
+                Color.clear
+                    .frame(width: 8)
+                    .contentShape(Rectangle())
+                    .pointerStyle(.columnResize)
+                    .gesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                            .onChanged { drag in
+                                let start = startWidth ?? width
+                                startWidth = start
+                                width = min(max(start + drag.translation.width, bounds.lowerBound), bounds.upperBound)
+                            }
+                            .onEnded { _ in startWidth = nil }
+                    )
+            }
     }
 }
 

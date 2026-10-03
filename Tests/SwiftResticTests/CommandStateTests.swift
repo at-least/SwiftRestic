@@ -224,6 +224,11 @@ struct CommandStateTests {
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: repository.id, planID: orphan.id)) == repository.id)
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: repository.id, planID: UUID())) == repository.id)
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: UUID(), planID: orphan.id)) == nil)
+        let lineage = SnapshotLineage.Key(hostname: "studio", paths: ["/Data/Music"])
+        #expect(model.commandRepositoryID(for: .lineage(repositoryID: repository.id, key: lineage)) == repository.id)
+        #expect(model.commandRepositoryID(for: .lineage(repositoryID: UUID(), key: lineage)) == nil)
+        // A lineage is no plan either.
+        #expect(model.planCommands(for: .lineage(repositoryID: repository.id, key: lineage)).planID == nil)
         // A Files item resolves to its repository the same way.
         let file = FileNode(repositoryID: repository.id, chainKey: "swiftrestic-plan-x", path: "/a/b", isDirectory: false)
         #expect(model.commandRepositoryID(for: .file(file)) == repository.id)
