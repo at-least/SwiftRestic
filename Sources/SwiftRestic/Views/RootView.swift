@@ -37,11 +37,6 @@ struct RootView: View {
     /// The Files view's levels, read once and shared by the sidebar's rows
     /// and the panes that open them.
     @State private var filesTree = FilesTree()
-    /// A group's Browse Folders…, raised from the sidebar's context menus —
-    /// the sidebar raises its sheets through the root, which owns the
-    /// presenting state. The pages that browse their own plan (the plan
-    /// page, a group's page) present theirs themselves.
-    @State private var browsingFolders: FolderBrowserTarget?
     /// The adopt sheet, raised from a group's context menu or page — one
     /// presentation for both, so selecting the new plan and revealing its
     /// fold afterwards live here too.
@@ -82,7 +77,6 @@ struct RootView: View {
             onNewRepository: { editingRepository = Repository() },
             onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
             onRemoveRepository: { pendingConfirmation = .removeRepository($0.id) },
-            onBrowseFolders: { browsingFolders = $0 },
             onAdoptGroup: adoptGroup
         )
         .environment(filesTree)
@@ -142,15 +136,6 @@ struct RootView: View {
         }
         .sheet(isPresented: $isShowingConcepts) {
             ConceptsView()
-        }
-        // A group's Browse Folders… from the sidebar's context menus. Show
-        // in Restore closes the browser and hands the Restore pane the
-        // version and folder it was showing — the plan page's own wiring.
-        .sheet(item: $browsingFolders) { target in
-            FolderBrowserView(target: target, onShowInRestore: { snapshotID, folder in
-                router.showRestore(repositoryID: target.repositoryID, snapshotID: snapshotID, focusPath: folder)
-            })
-            .environment(model)
         }
         // The adopt sheet, from a group's context menu or its page. Adopt's
         // landing is the new plan's own page with its records revealed under
@@ -332,6 +317,11 @@ struct RootView: View {
         guard !model.configuration.plans.isEmpty || !model.configuration.repositories.isEmpty
         else { return }
         didApplyCaptureOverride = true
+        // Any pane with the sidebar in Files (or Backups): what a group's
+        // fold opens onto beside its page.
+        if let mode = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SIDEBAR"].flatMap(SidebarMode.init(rawValue:)) {
+            router.sidebarMode = mode
+        }
         switch ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_PANE"] {
         case "plan": router.selection = model.configuration.plans.first.map { .plan($0.id) }
         case "repository": router.selection = model.configuration.repositories.first.map { .repository($0.id) }
@@ -459,7 +449,7 @@ struct RootView: View {
     /// a Pause Schedule under the plan editor would be undone by its save
     /// (`merging(draft:)` keeps the draft's `isEnabled`), a Remove from
     /// SwiftRestic… would leave the editor saving against a repository
-    /// that is gone. The panes' own sheets (Compare, Browse Folders) are
+    /// that is gone. The panes' own sheets (Compare, a restore's destination) are
     /// invisible from here, so AppKit is asked: SwiftUI presents every
     /// sheet as the window's attached sheet (seen in the AX tree as an
     /// AXSheet). Each ask is checked again against the model — it may

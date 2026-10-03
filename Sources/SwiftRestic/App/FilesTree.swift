@@ -9,8 +9,8 @@ import Observation
 /// when a newer listing lands. While the index is still reading the
 /// repository, a level may lack older items, so it is read again every
 /// `recheckInterval` for as long as it is on screen; and a chain the index
-/// holds nothing of yet is listed from its newest backup through restic, as
-/// Browse Folders did, and says so.
+/// holds nothing of yet is listed from its newest backup through restic,
+/// and says so.
 @MainActor
 @Observable
 final class FilesTree {
@@ -168,6 +168,16 @@ final class FilesTree {
         }
     }
 
+    /// The folder a chain's tree opens at for Show Files: the first path its
+    /// newest backup names, taken for a folder as the roots are until the
+    /// index says otherwise. nil while the listing holds none of the chain.
+    nonisolated static func firstRoot(of chainKey: String, repositoryID: UUID, in listing: [Snapshot]) -> FileNode? {
+        guard let path = listing.first(where: { SnapshotIndex.chainKey(for: $0) == chainKey })?.paths.first else {
+            return nil
+        }
+        return FileNode(repositoryID: repositoryID, chainKey: chainKey, path: path, isDirectory: true)
+    }
+
     /// The chain's backups, newest first, from the repository's listing.
     private static func backups(of node: FileNode, model: AppModel) -> [Snapshot] {
         model.snapshots(for: node.repositoryID).filter { SnapshotIndex.chainKey(for: $0) == node.chainKey }
@@ -176,7 +186,7 @@ final class FilesTree {
     /// The top of a chain's tree: every folder its backups name as backed
     /// up (`paths`), each with the newest backup naming it. Their kinds come
     /// from the index, one read per parent folder; a root the index has not
-    /// read yet is taken for a folder, as Browse Folders took every root.
+    /// read yet is taken for a folder: a plan's sources almost always are.
     private static func roots(of node: FileNode, model: AppModel) async throws -> Level {
         let backups = backups(of: node, model: model)
         var holders: [PathKey: Snapshot] = [:]

@@ -95,6 +95,14 @@ struct AppRouterTests {
         router.sidebarMode = .backups
         #expect(router.selection == selection)
     }
+
+    @Test("every way into a backup shows Backups, where its record's row is")
+    func showRestoreShowsBackups() {
+        let router = AppRouter()
+        router.sidebarMode = .files
+        router.showRestore(repositoryID: UUID(), snapshotID: "s1", focusPath: "/D")
+        #expect(router.sidebarMode == .backups)
+    }
 }
 
 

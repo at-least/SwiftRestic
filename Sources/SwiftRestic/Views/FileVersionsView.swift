@@ -92,7 +92,6 @@ struct FileVersionsView: View {
                 Spacer()
                 Button("Show in Backups") {
                     guard let backup = chosen?.snapshots.first else { return }
-                    router.sidebarMode = .backups
                     router.showRestore(
                         repositoryID: node.repositoryID,
                         snapshotID: backup.id,

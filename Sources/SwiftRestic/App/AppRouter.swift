@@ -67,8 +67,8 @@ final class AppRouter {
     var activityShowsProblemsOnly = false
 
     /// A folder the Restore pane should open and select when it next loads
-    /// this exact record — Browse Folders' "Show in Restore", which closes
-    /// the folder browser the user was reading and must not lose their place.
+    /// this exact record — the Files view's Show in Backups, which leaves
+    /// the folder or file the user was reading and must not lose their place.
     struct RestoreFocus: Equatable {
         var repositoryID: UUID
         var snapshotID: String
@@ -113,11 +113,15 @@ final class AppRouter {
     /// the run drawer's Browse, Restore Files…, Show in Restore: select
     /// the record in the sidebar, where the Change column, search, drag and
     /// whole-backup restore all live, whichever button was pressed. A plain
-    /// route clears an older focus request rather than inheriting it.
+    /// route clears an older focus request rather than inheriting it. The
+    /// sidebar shows Backups, where the record's row is: every way into a
+    /// backup lands where its row can be seen, Files' Show in Backups
+    /// included.
     func showRestore(repositoryID: UUID, snapshotID: String, focusPath: String? = nil) {
         restoreFocus = focusPath.map {
             RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
         }
+        sidebarMode = .backups
         selection = .restoreSnapshot(repositoryID, snapshotID)
     }
 

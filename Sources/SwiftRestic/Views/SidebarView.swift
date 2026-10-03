@@ -57,10 +57,8 @@ struct SidebarView: View {
     /// be a faster way around it.
     let onDeletePlan: (BackupPlan) -> Void
     let onRemoveRepository: (Repository) -> Void
-    /// Opens Browse Folders for a plan-UUID group's context menu, and the
-    /// adopt sheet for an adoptable group's menu. The sidebar raises its
-    /// sheets through the root, which owns the presenting state.
-    let onBrowseFolders: (FolderBrowserTarget) -> Void
+    /// Opens the adopt sheet for an adoptable group's menu. The sidebar
+    /// raises its sheets through the root, which owns the presenting state.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     var body: some View {
@@ -170,9 +168,9 @@ struct SidebarView: View {
         .help("Show each plan's backups by date (⌘1), or its folders and files across every backup (⌘2)")
     }
 
-    /// Every level the Files view has on screen: each open plan's roots and
-    /// the open folders under them. Empty in Backups mode, which ends the
-    /// load task.
+    /// Every level the Files view has on screen: each open plan's and Other
+    /// backups group's roots and the open folders under them. Empty in
+    /// Backups mode, which ends the load task.
     private var openFileLevels: [FileNode] {
         guard router.sidebarMode == .files else { return [] }
         var nodes: [FileNode] = []
@@ -180,8 +178,42 @@ struct SidebarView: View {
             for plan in model.plans(in: repository.id) where folds.plans.contains(plan.id) {
                 nodes += filesTree.needed(under: planRoots(plan, in: repository), open: folds.folders)
             }
+            guard folds.otherBackups.contains(repository.id) else { continue }
+            for group in model.shelves(for: repository.id).others {
+                guard let key = openGroupChain(group, in: repository) else { continue }
+                nodes += filesTree.needed(
+                    under: FileNode.roots(repositoryID: repository.id, chainKey: key), open: folds.folders
+                )
+            }
         }
         return nodes
+    }
+
+    /// An Other backups group's chain when its fold is open: a plan-UUID
+    /// group's plan tag, an untagged lineage's own key — the index's chains,
+    /// so either kind has a Files tree.
+    private func openGroupChain(_ group: OtherBackupsGroup, in repository: Repository) -> String? {
+        switch group {
+        case let .plan(planID, _):
+            folds.otherGroups.contains(OtherGroupFoldID(repositoryID: repository.id, planID: planID))
+                ? ResticService.planTag(planID) : nil
+        case let .lineage(lineage):
+            collapsedLineages.contains(LineageFoldID(repositoryID: repository.id, key: lineage.key))
+                ? nil : lineage.snapshots.first.map(SnapshotIndex.chainKey(for:))
+        }
+    }
+
+    /// Show Files for an Other backups group: Files mode, the group's fold
+    /// open, and the folder its tree opens at selected — so the pane shows
+    /// that folder by version.
+    private func showFiles(chainKey: String, in repository: Repository, reveal: () -> Void) {
+        router.sidebarMode = .files
+        folds.otherBackups.insert(repository.id)
+        reveal()
+        guard let root = FilesTree.firstRoot(of: chainKey, repositoryID: repository.id, in: model.snapshots(for: repository.id))
+        else { return }
+        folds.folders.insert(root)
+        router.selection = .file(root)
     }
 
     private func planRoots(_ plan: BackupPlan, in repository: Repository) -> FileNode {
@@ -518,13 +550,20 @@ struct SidebarView: View {
     /// backup lacks dimmed.
     @ViewBuilder
     private func planFiles(_ plan: BackupPlan, in repository: Repository) -> some View {
-        ForEach(filesTree.rows(under: planRoots(plan, in: repository), open: folds.folders)) { row in
-            fileRow(row, in: repository)
+        chainFiles(planRoots(plan, in: repository), in: repository, base: Indent.planRecord)
+    }
+
+    /// A chain's tree, its roots at `base` — where the chain's records
+    /// would sit.
+    @ViewBuilder
+    private func chainFiles(_ roots: FileNode, in repository: Repository, base: CGFloat) -> some View {
+        ForEach(filesTree.rows(under: roots, open: folds.folders)) { row in
+            fileRow(row, in: repository, base: base)
         }
     }
 
     @ViewBuilder
-    private func fileRow(_ row: FilesTree.Row, in repository: Repository) -> some View {
+    private func fileRow(_ row: FilesTree.Row, in repository: Repository, base: CGFloat) -> some View {
         switch row {
         case let .entry(entry, depth):
             FilesTreeRow(
@@ -533,7 +572,7 @@ struct SidebarView: View {
                 isExpanded: folds.folders.contains(entry.node),
                 onToggle: { toggleFolder(entry.node) }
             )
-            .padding(.leading, Indent.files(depth))
+            .padding(.leading, Indent.files(depth, from: base))
             .tag(SidebarItem.file(entry.node))
         case let .more(folder, count, depth):
             // An action, not a place: it opens the folder whose rows it
@@ -546,15 +585,15 @@ struct SidebarView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.leading, Indent.files(depth) + Indent.lineageSlot + 4)
+            .padding(.leading, Indent.files(depth, from: base) + Indent.lineageSlot + 4)
             .help("Show everything in “\(folder.name)” in the pane")
         case let .status(node, depth):
             if node.isRoots {
                 backupsStatusRow(repository)
-                    .padding(.leading, Indent.planRecord)
+                    .padding(.leading, base)
             } else {
                 filesStatusRow(node)
-                    .padding(.leading, Indent.files(depth) + Indent.lineageSlot + 4)
+                    .padding(.leading, Indent.files(depth, from: base) + Indent.lineageSlot + 4)
             }
         }
     }
@@ -744,10 +783,17 @@ struct SidebarView: View {
         // The same plan can have left backups in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
         if isExpanded {
-            ForEach(snapshots) { snapshot in
-                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                    .padding(.leading, Indent.groupRecord)
-                    .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+            if router.sidebarMode == .files {
+                chainFiles(
+                    FileNode.roots(repositoryID: repository.id, chainKey: ResticService.planTag(planID)),
+                    in: repository, base: Indent.groupRecord
+                )
+            } else {
+                ForEach(snapshots) { snapshot in
+                    RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+                        .padding(.leading, Indent.groupRecord)
+                        .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+                }
             }
         }
     }
@@ -762,9 +808,14 @@ struct SidebarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(isExpanded ? "Hide this group's backups" : "Show this group's backups")
-        .accessibilityLabel("Backups of “\(title)”")
+        .help(groupFoldHelp(isExpanded: isExpanded))
+        .accessibilityLabel("\(router.sidebarMode == .files ? "Files" : "Backups") of “\(title)”")
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    }
+
+    private func groupFoldHelp(isExpanded: Bool) -> String {
+        let what = router.sidebarMode == .files ? "files" : "backups"
+        return isExpanded ? "Hide this group's \(what)" : "Show this group's \(what)"
     }
 
     /// The plan folds' open/closed idiom, for a group under Other backups.
@@ -775,7 +826,8 @@ struct SidebarView: View {
     }
 
     /// A plan-UUID group's menu: an adoptable group's verb first, a moved
-    /// plan's history opens that plan, and every group gets its two ways in.
+    /// plan's history opens that plan, and every group gets its two ways in
+    /// — its newest backup, and its files.
     @ViewBuilder
     private func groupContextMenu(
         planID: UUID,
@@ -794,8 +846,10 @@ struct SidebarView: View {
             }
         }
         restoreFromGroupItem(snapshots, repository: repository)
-        Button("Browse Folders…") {
-            onBrowseFolders(FolderBrowserTarget(repositoryID: repository.id, planID: planID))
+        Button("Show Files") {
+            showFiles(chainKey: ResticService.planTag(planID), in: repository) {
+                folds.otherGroups.insert(OtherGroupFoldID(repositoryID: repository.id, planID: planID))
+            }
         }
     }
 
@@ -810,11 +864,12 @@ struct SidebarView: View {
     }
 
     /// One lineage's records — Arq's backed-up-folder level, so the row
-    /// below a record is the one its Change column compares against. The
-    /// label's caption carries the qualifier and the "outside SwiftRestic"
-    /// kind; the tooltip names the console escape hatch. Still a fold
-    /// only, never a page: with no plan tag there is no identity to be
-    /// one, which is also why its menu offers no Browse Folders….
+    /// below a record is the one its Change column compares against — or,
+    /// in Files, its files: the index chains a lineage by its host and
+    /// folders, so it has a tree as a plan does. The label's caption
+    /// carries the qualifier and the "outside SwiftRestic" kind; the
+    /// tooltip names the console escape hatch. Still a fold only, never a
+    /// page: with no plan tag there is no identity to be one.
     @ViewBuilder
     private func lineageRows(
         _ lineage: SnapshotLineage,
@@ -849,19 +904,27 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .padding(.leading, Indent.groupPad)
         .help(label?.detail ?? "")
-        // Restore Files…, its newest record: the one verb an untagged
-        // group's identity supports — no chain to browse, no plan to open.
+        // Its newest record and its files: no plan to open or adopt.
         .contextMenu {
             restoreFromGroupItem(lineage.snapshots, repository: repository)
+            if let chain = lineage.snapshots.first.map(SnapshotIndex.chainKey(for:)) {
+                Button("Show Files") {
+                    showFiles(chainKey: chain, in: repository) { collapsedLineages.remove(id) }
+                }
+            }
         }
         // The same folders from the same Mac can sit in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         if isExpanded {
-            ForEach(lineage.snapshots) { snapshot in
-                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                    .padding(.leading, Indent.groupRecord)
-                    .tag(SidebarItem.restoreSnapshot(repositoryID, snapshot.id))
+            if router.sidebarMode == .files, let chain = lineage.snapshots.first.map(SnapshotIndex.chainKey(for:)) {
+                chainFiles(FileNode.roots(repositoryID: repositoryID, chainKey: chain), in: repository, base: Indent.groupRecord)
+            } else {
+                ForEach(lineage.snapshots) { snapshot in
+                    RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+                        .padding(.leading, Indent.groupRecord)
+                        .tag(SidebarItem.restoreSnapshot(repositoryID, snapshot.id))
+                }
             }
         }
     }
@@ -898,11 +961,12 @@ private enum Indent {
     /// A record under an Other-backups group, plan-UUID or lineage
     /// alike: one fold-step past the group's title.
     static let groupRecord: CGFloat = planRecord + lineageSlot + 4
-    /// A Files-view row `depth` levels under its plan: the roots where a
-    /// plan's records sit, each level one fold-step deeper. A row starts
-    /// with its fold column, so a file's name lines up with a folder's.
-    static func files(_ depth: Int) -> CGFloat {
-        planRecord + CGFloat(depth) * (lineageSlot + 4)
+    /// A Files-view row `depth` levels under its plan or group: the roots
+    /// at `base`, where that parent's records sit, each level one fold-step
+    /// deeper. A row starts with its fold column, so a file's name lines up
+    /// with a folder's.
+    static func files(_ depth: Int, from base: CGFloat) -> CGFloat {
+        base + CGFloat(depth) * (lineageSlot + 4)
     }
 }
 

@@ -3,8 +3,8 @@ import SwiftUI
 /// The page of one plan-UUID group under a repository's Other backups — a
 /// plan's history in this repository that none of its plans owns. What the
 /// history is, in one sentence; the facts that identify it (when, from
-/// which Mac, which folders, which patterns, its plan tag); and the way
-/// into its files. The records themselves are the sidebar's, under the
+/// which Mac, which folders, which patterns, its plan tag); and the two
+/// ways into its files: its newest backup, and the Files view. The records themselves are the sidebar's, under the
 /// group — the plan page's own rule — so the page does not list them a
 /// second time.
 ///
@@ -21,8 +21,9 @@ struct OrphanPlanView: View {
     /// Opens the adopt sheet for this group — the root owns the presenting
     /// state, as it does for every sheet a pane raises.
     let onAdopt: () -> Void
-
-    @State private var browsingFolders: FolderBrowserTarget?
+    /// Shows the group's files: the sidebar in Files with the group's tree
+    /// open, its first folder selected — the root owns the folds.
+    let onShowFiles: () -> Void
 
     private var summary: OrphanPlanPageSummary? {
         model.shelves(for: repositoryID).orphanPlanPage(
@@ -44,15 +45,6 @@ struct OrphanPlanView: View {
             }
         }
         .navigationTitle(summary?.title ?? "Backups")
-        .sheet(item: $browsingFolders) { target in
-            // Show in Restore leaves for the Restore pane at the version
-            // and folder the folder browser was showing — the plan page's
-            // own wiring.
-            FolderBrowserView(target: target, onShowInRestore: { snapshotID, folder in
-                router.showRestore(repositoryID: target.repositoryID, snapshotID: snapshotID, focusPath: folder)
-            })
-            .environment(model)
-        }
     }
 
     private func content(_ summary: OrphanPlanPageSummary) -> some View {
@@ -146,13 +138,10 @@ struct OrphanPlanView: View {
                     router.showRestore(repositoryID: repositoryID, snapshotID: summary.newestSnapshotID)
                 }
                 .help("Browse these backups and restore files — opens the group's newest record in the sidebar")
-                // The orphan UUID is all a target needs: the browser walks
-                // the plan tag's chain and lists from the tag's snapshots,
-                // neither of which asks whether a plan is configured.
-                Button("Browse Folders…") {
-                    browsingFolders = FolderBrowserTarget(repositoryID: repositoryID, planID: planID)
-                }
-                .help("Walk these folders and flip through the backups that contain them")
+                // The plan tag's chain is all the Files view needs: it
+                // never asks whether a plan is configured.
+                Button("Show Files", action: onShowFiles)
+                    .help("Show these backups' folders and files in the sidebar, each by version")
             }
             .controlSize(.small)
         }

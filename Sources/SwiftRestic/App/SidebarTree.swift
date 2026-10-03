@@ -186,6 +186,15 @@ struct SidebarFolds: Equatable {
     /// in both modes: open is open, whatever it opens onto.
     var folders: Set<FileNode> = []
 
+    /// A plan-UUID group's Files tree in view: its repository's Other
+    /// backups, the group's fold, and `root` — the folder its tree opens
+    /// at — open. The group's page's and menu's Show Files.
+    mutating func revealFiles(ofGroup planID: UUID, in repositoryID: UUID, root: FileNode?) {
+        otherBackups.insert(repositoryID)
+        otherGroups.insert(OtherGroupFoldID(repositoryID: repositoryID, planID: planID))
+        if let root { folders.insert(root) }
+    }
+
     /// Opens the fold `record` sits in — its plan's, or its repository's
     /// Other backups and, under it, the plan-UUID group that holds it.
     /// `plans` are the repository's own.

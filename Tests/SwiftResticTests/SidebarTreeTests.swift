@@ -453,4 +453,26 @@ struct SidebarTreeTests {
             == ["Unreadable", "Exposed"])
         #expect(OverviewMetrics.needingAttention([protected, pending, running]).isEmpty)
     }
+
+    @Test("a group's Show Files opens at its newest backup's first folder, and reveals the group's fold and that folder")
+    func groupShowFiles() throws {
+        let repositoryID = UUID()
+        let planID = UUID()
+        let tag = ResticService.planTag(planID)
+        // Newest first, as the listing arrives.
+        let listing = [
+            try snapshot("b2", time: "2026-10-02T10:00:00Z", paths: ["/Data/Photos", "/Data/Music"], tags: [tag]),
+            try snapshot("b1", time: "2026-10-01T10:00:00Z", paths: ["/Data/Old"], tags: [tag]),
+            try snapshot("x1", time: "2026-10-03T10:00:00Z", paths: ["/Data/Other"]),
+        ]
+        let root = try #require(FilesTree.firstRoot(of: tag, repositoryID: repositoryID, in: listing))
+        #expect(root == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos", isDirectory: true))
+        #expect(FilesTree.firstRoot(of: "swiftrestic-plan-none", repositoryID: repositoryID, in: listing) == nil)
+
+        var folds = SidebarFolds()
+        folds.revealFiles(ofGroup: planID, in: repositoryID, root: root)
+        #expect(folds.otherBackups == [repositoryID])
+        #expect(folds.otherGroups == [OtherGroupFoldID(repositoryID: repositoryID, planID: planID)])
+        #expect(folds.folders == [root])
+    }
 }

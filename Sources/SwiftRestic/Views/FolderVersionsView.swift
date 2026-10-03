@@ -2,14 +2,13 @@ import SwiftUI
 
 /// A folder of the Files view, by version: the backups that hold it in a
 /// picker — newest first, from the index — and the folder as the chosen one
-/// held it, listed by restic (or the browse cache). What Browse Folders did
-/// in a sheet, in the pane: the sidebar walks the folders, this flips them
-/// through time.
+/// held it, listed by restic (or the browse cache): the sidebar walks the
+/// folders, this flips them through time.
 ///
 /// Items select several at a time, as in the Restore pane, and restore
 /// together through the destination sheet, or drag to Finder one by one; a
 /// double-click opens one in the sidebar, keeping the chosen time when the
-/// item exists then, as walking down in Browse Folders did.
+/// item exists then, so walking down stays in the same era.
 struct FolderVersionsView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -129,7 +128,6 @@ struct FolderVersionsView: View {
             HStack {
                 Button("Show in Backups") {
                     guard let chosen else { return }
-                    router.sidebarMode = .backups
                     router.showRestore(repositoryID: node.repositoryID, snapshotID: chosen.id, focusPath: node.path)
                 }
                 .disabled(chosen == nil)

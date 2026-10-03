@@ -119,7 +119,17 @@ struct RootDetailView: View {
                     OrphanPlanView(
                         repositoryID: repositoryID,
                         planID: planID,
-                        onAdopt: { onAdoptGroup(repositoryID, planID) }
+                        onAdopt: { onAdoptGroup(repositoryID, planID) },
+                        onShowFiles: {
+                            let root = FilesTree.firstRoot(
+                                of: ResticService.planTag(planID),
+                                repositoryID: repositoryID,
+                                in: model.snapshots(for: repositoryID)
+                            )
+                            router.sidebarMode = .files
+                            folds.revealFiles(ofGroup: planID, in: repositoryID, root: root)
+                            if let root { router.selection = .file(root) }
+                        }
                     )
                 case .console:
                     ResticConsoleView()

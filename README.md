@@ -77,7 +77,9 @@ checked in so a normal build does not need it.
   and size come from one `restic find` of the file's exact path, its glob
   characters escaped. Return or *Restore…* restores the chosen version, and
   a row drags to Finder. *Show in Backups* opens the chosen backup at that
-  place. Switching views leaves the pane alone.
+  place — and every way into a backup (the run drawer's *Browse*, *Restore
+  Files…*, *Show in Backups*) switches the sidebar to Backups, where that
+  backup's row is. Otherwise switching views leaves the pane alone.
 - **A plan-UUID group is a page** — a group's row selects like a plan's
   (the chevron ahead of it folds), and the page says what the history is:
   a plan not set up in SwiftRestic — deleted here, or still running on
@@ -86,9 +88,12 @@ checked in so a normal build does not need it.
   (newest, oldest), names the Macs it was made from and lists each folder
   set it spans, carries the exclude patterns and user tags, and shows the
   plan tag itself — selectable, the one honest identifier. *Restore
-  Files…* opens the group's newest backup and *Browse Folders…* walks its
-  folders through every backup, from the page and the group's context
-  menu; an untagged lineage's menu carries *Restore Files…* alone.
+  Files…* opens the group's newest backup and *Show Files* its folders and
+  files in the Files view, the group open at its first folder, from the
+  page and the group's context menu; an untagged lineage's menu carries
+  both too. In Files every group, untagged or not, folds open to its files
+  as a plan does — the index chains an untagged lineage by its host and
+  folders.
 - **Adopting** — a group no plan anywhere carries the ID of can be adopted
   back into one: *Adopt as a Backup Plan…*, from the page's explanation
   card, the group's context menu, and an *Other backups* card on the
@@ -377,7 +382,9 @@ a folder spelled with a trailing `/`) with every folder above it open — and
 `orphanGroup` and `movedGroup` — the page
 of the first adoptable group under Other backups, or of the first moved plan's
 group, with its sidebar fold open. Both wait for the snapshot listing that
-builds group rows, like `restore` does. `findMoved` opens Find Files on the
+builds group rows, like `restore` does. `SWIFTRESTIC_CAPTURE_SIDEBAR`
+(`backups`/`files`) sets the sidebar's view for any pane — a group's page
+beside the files its fold opens onto. `findMoved` opens Find Files on the
 first plan whose repository is not the first, so a shot shows the picker
 starting on the selection's repository rather than the landing pane's (a
 configuration without such a plan stops the run). `all` instead photographs
