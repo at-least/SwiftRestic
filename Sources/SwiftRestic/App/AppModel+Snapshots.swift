@@ -166,16 +166,6 @@ extension AppModel {
         )
     }
 
-    /// The record a "Restore Files…" lands on — Arq's "Restoring from an
-    /// Active Backup Plan", which selects the latest backup record: a plan's
-    /// own newest when a plan asks, the repository's newest otherwise. Never
-    /// the repository-wide newest for a plan, which in a shared repository is
-    /// another plan's backup. Newest first is the listing's own order
-    /// (`ResticService.snapshots` sorts it by time, descending).
-    func newestRecord(repositoryID: UUID, planID: UUID? = nil) -> Snapshot? {
-        snapshots(for: repositoryID, planID: planID).first
-    }
-
     func snapshots(for repositoryID: UUID?, planID: UUID? = nil) -> [Snapshot] {
         guard let repositoryID, let all = snapshots[repositoryID] else { return [] }
         guard let planID else { return all }

@@ -251,10 +251,9 @@ struct PlanDetailView: View {
     }
 
     /// The page's answer, in Arq's label/value idiom: did this plan back
-    /// up, when does it run next, and the way into its files. Restore
-    /// Files… opens the one browser at this plan's newest backup — its
-    /// records are the sidebar's, under the plan, so the page does not list
-    /// them a second time.
+    /// up, when does it run next, and its folders through time. Its
+    /// records are the sidebar's, under the plan, so the page neither
+    /// lists them a second time nor offers a second way to open them.
     private func backupsCard(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
         // The scheduler's own answer, so a paused plan reads "Paused" and one
@@ -278,27 +277,14 @@ struct PlanDetailView: View {
             }
         } accessory: {
             if let repositoryID = plan.repositoryID {
-                HStack(spacing: 8) {
-                    // Arq's "Restoring from an Active Backup Plan": open
-                    // this plan's backups in the sidebar and select its
-                    // newest — the plan's own, not whichever plan sharing
-                    // the repository ran last.
-                    Button("Restore Files…") {
-                        if let latest = model.newestRecord(repositoryID: repositoryID, planID: plan.id) {
-                            router.showRestore(repositoryID: repositoryID, snapshotID: latest.id)
-                        }
-                    }
-                    .disabled(snapshots.isEmpty)
-                    .help("Browse this plan's backups and restore files — opens them in the sidebar and selects the newest")
-                    // The folder-first entry: pick a folder, then flip
-                    // through the snapshots that contain it. Needs at least
-                    // one snapshot to stand in as the newest version.
-                    Button("Browse Folders…") {
-                        browsingFolders = FolderBrowserTarget(repositoryID: repositoryID, planID: plan.id)
-                    }
-                    .disabled(snapshots.isEmpty)
-                    .help("Walk this plan's folders and flip through the snapshots that contain them")
+                // The folder-first entry: pick a folder, then flip
+                // through the snapshots that contain it. Needs at least
+                // one snapshot to stand in as the newest version.
+                Button("Browse Folders…") {
+                    browsingFolders = FolderBrowserTarget(repositoryID: repositoryID, planID: plan.id)
                 }
+                .disabled(snapshots.isEmpty)
+                .help("Walk this plan's folders and flip through the snapshots that contain them")
                 .controlSize(.small)
             }
         }

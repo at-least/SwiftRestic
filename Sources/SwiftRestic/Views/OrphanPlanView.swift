@@ -140,8 +140,8 @@ struct OrphanPlanView: View {
             }
         } accessory: {
             HStack(spacing: 8) {
-                // The plan page's own entry: the group's newest record,
-                // selected in the sidebar, which opens the group's fold.
+                // The group's newest record, selected in the sidebar,
+                // which opens the group's fold.
                 Button("Restore Files…") {
                     router.showRestore(repositoryID: repositoryID, snapshotID: summary.newestSnapshotID)
                 }
