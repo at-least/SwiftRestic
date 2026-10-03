@@ -27,7 +27,11 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    @Environment(FilesTree.self) private var filesTree
     @Environment(\.now) private var now
+    /// The mode across launches; the router holds it while the app runs,
+    /// so the View menu's ⌘1 and ⌘2 reach it.
+    @SceneStorage("sidebarMode") private var storedMode: SidebarMode = .backups
 
     /// Which plans and Other backups are open — the backup records
     /// underneath are the restore pane's entry points. Shared with the detail
@@ -115,7 +119,16 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .focusOnClick($isFocused)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
+        .safeAreaInset(edge: .top) { modePicker }
         .safeAreaInset(edge: .bottom) { sidebarFooter }
+        .onAppear { router.sidebarMode = storedMode }
+        .onChange(of: router.sidebarMode) { storedMode = router.sidebarMode }
+        // The Files view's open levels, read and kept current; keyed by what
+        // is open and the listings they were read under, so opening a folder
+        // or a refresh restarts it.
+        .task(id: FilesLoadKey(nodes: openFileLevels, listings: model.snapshotsLoadedAt)) {
+            await filesTree.keep(openFileLevels, model: model)
+        }
         // The keyboard an outline gives its disclosure rows: with a plan or
         // a plan-UUID group selected, → shows its backups and ← hides them.
         // Plain arrows only: a modified arrow keeps its system meaning, the
@@ -141,6 +154,38 @@ struct SidebarView: View {
                 collapsedLineages.remove(LineageFoldID(repositoryID: repositoryID, key: snapshot.lineageKey))
             }
         }
+    }
+
+    /// Backups or Files: what every plan's fold opens onto. Above the tree,
+    /// where it stays in reach however far the tree scrolls.
+    private var modePicker: some View {
+        Picker("Show", selection: Binding(get: { router.sidebarMode }, set: { router.sidebarMode = $0 })) {
+            Text("Backups").tag(SidebarMode.backups)
+            Text("Files").tag(SidebarMode.files)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .help("Show each plan's backups by date (⌘1), or its folders and files across every backup (⌘2)")
+    }
+
+    /// Every level the Files view has on screen: each open plan's roots and
+    /// the open folders under them. Empty in Backups mode, which ends the
+    /// load task.
+    private var openFileLevels: [FileNode] {
+        guard router.sidebarMode == .files else { return [] }
+        var nodes: [FileNode] = []
+        for repository in model.configuration.repositories {
+            for plan in model.plans(in: repository.id) where folds.plans.contains(plan.id) {
+                nodes += filesTree.needed(under: planRoots(plan, in: repository), open: folds.folders)
+            }
+        }
+        return nodes
+    }
+
+    private func planRoots(_ plan: BackupPlan, in repository: Repository) -> FileNode {
+        FileNode.roots(repositoryID: repository.id, chainKey: ResticService.planTag(plan.id))
     }
 
     /// Arq's bare + in the corner. A missing restic is not repeated here: the
@@ -311,7 +356,11 @@ struct SidebarView: View {
                 // re-runs on every minute tick and selection change.
                 planRow(plan, latestSnapshot: shelves.byPlan[plan.id]?.first)
                 if folds.plans.contains(plan.id) {
-                    planBackups(shelves.byPlan[plan.id] ?? [], in: repository)
+                    if router.sidebarMode == .files {
+                        planFiles(plan, in: repository)
+                    } else {
+                        planBackups(shelves.byPlan[plan.id] ?? [], in: repository)
+                    }
                 }
             }
         case .addPlan:
@@ -374,15 +423,21 @@ struct SidebarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(isExpanded ? "Hide this plan's backups" : "Show this plan's backups")
+        .help(planFoldHelp(isExpanded: isExpanded))
         .accessibilityLabel(planFoldName(plan))
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    }
+
+    private func planFoldHelp(isExpanded: Bool) -> String {
+        let what = router.sidebarMode == .files ? "files" : "backups"
+        return isExpanded ? "Hide this plan's \(what)" : "Show this plan's \(what)"
     }
 
     /// Named for its plan: every plan has a fold, and as flat rows they
     /// have no outline parent to tell them apart.
     private func planFoldName(_ plan: BackupPlan) -> String {
-        "Backups of “\(plan.name.isEmpty ? "Untitled Plan" : plan.name)”"
+        let what = router.sidebarMode == .files ? "Files" : "Backups"
+        return "\(what) of “\(plan.name.isEmpty ? "Untitled Plan" : plan.name)”"
     }
 
     private func isPlain(_ press: KeyPress) -> Bool {
@@ -411,6 +466,9 @@ struct SidebarView: View {
             // move a fold nobody can see — reveal the node too, the same
             // reveal a record's selection performs.
             if open { folds.otherBackups.insert(repositoryID) }
+            return .handled
+        case let .file(node) where node.isDirectory:
+            if open != folds.folders.contains(node) { toggleFolder(node) }
             return .handled
         default:
             return .ignored
@@ -451,6 +509,95 @@ struct SidebarView: View {
                     .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
             }
         }
+    }
+
+    // MARK: - Files
+
+    /// An open plan's folders and files across every backup it made: its
+    /// roots, and under each open folder what it ever held, items its newest
+    /// backup lacks dimmed.
+    @ViewBuilder
+    private func planFiles(_ plan: BackupPlan, in repository: Repository) -> some View {
+        ForEach(filesTree.rows(under: planRoots(plan, in: repository), open: folds.folders)) { row in
+            fileRow(row, in: repository)
+        }
+    }
+
+    @ViewBuilder
+    private func fileRow(_ row: FilesTree.Row, in repository: Repository) -> some View {
+        switch row {
+        case let .entry(entry, depth):
+            FilesTreeRow(
+                entry: entry,
+                title: depth == 0 ? (entry.node.path as NSString).abbreviatingWithTildeInPath : entry.node.name,
+                isExpanded: folds.folders.contains(entry.node),
+                onToggle: { toggleFolder(entry.node) }
+            )
+            .padding(.leading, Indent.files(depth))
+            .tag(SidebarItem.file(entry.node))
+        case let .more(folder, count, depth):
+            // An action, not a place: it opens the folder whose rows it
+            // stands for, and the pane lists them all.
+            Button { router.selection = .file(folder) } label: {
+                Text("\(Format.count(count)) more items…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, Indent.files(depth) + Indent.lineageSlot + 4)
+            .help("Show everything in “\(folder.name)” in the pane")
+        case let .status(node, depth):
+            if node.isRoots {
+                backupsStatusRow(repository)
+                    .padding(.leading, Indent.planRecord)
+            } else {
+                filesStatusRow(node)
+                    .padding(.leading, Indent.files(depth) + Indent.lineageSlot + 4)
+            }
+        }
+    }
+
+    /// What an open folder says while it lists nothing: still reading, why
+    /// it could not, or that it held nothing in any backup.
+    @ViewBuilder
+    private func filesStatusRow(_ node: FileNode) -> some View {
+        switch filesTree.state(of: node) {
+        case nil, .loading:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Reading…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        case let .failed(message):
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
+                    Text(Format.firstSentence(message))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .help(message)
+                }
+                .font(.caption)
+                Button("Try Again") { filesTree.reread(node) }
+                    .controlSize(.small)
+            }
+        case .loaded:
+            Text("Empty folder")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func toggleFolder(_ node: FileNode) {
+        let opened = folds.folders.remove(node) == nil
+        if opened { folds.folders.insert(node) }
+        announceFold("Contents of “\(node.name)”", opened: opened)
     }
 
     /// What an open plan says while it holds no record. "No backups yet"
@@ -751,6 +898,69 @@ private enum Indent {
     /// A record under an Other-backups group, plan-UUID or lineage
     /// alike: one fold-step past the group's title.
     static let groupRecord: CGFloat = planRecord + lineageSlot + 4
+    /// A Files-view row `depth` levels under its plan: the roots where a
+    /// plan's records sit, each level one fold-step deeper. A row starts
+    /// with its fold column, so a file's name lines up with a folder's.
+    static func files(_ depth: Int) -> CGFloat {
+        planRecord + CGFloat(depth) * (lineageSlot + 4)
+    }
+}
+
+/// What the Files view's load task is keyed by: the levels on screen, and
+/// the listings they must be current with.
+private struct FilesLoadKey: Equatable {
+    let nodes: [FileNode]
+    let listings: [UUID: Date]
+}
+
+/// One folder or file in the Files view's tree: a fold column (a chevron
+/// for a folder, empty for a file, so names line up), the kind's icon and
+/// its name. An item the plan's newest backup no longer holds is dimmed,
+/// and says when it was last backed up.
+private struct FilesTreeRow: View {
+    let entry: FilesTree.Entry
+    /// The name, or for a root its whole path, tilde-abbreviated.
+    let title: String
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if entry.node.isDirectory {
+                Button(action: onToggle) {
+                    FoldChevron(isExpanded: isExpanded)
+                        .frame(width: Indent.lineageSlot)
+                        .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(isExpanded ? "Hide this folder's contents" : "Show this folder's contents")
+                .accessibilityLabel("Contents of “\(title)”")
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            } else {
+                Color.clear
+                    .frame(width: Indent.lineageSlot)
+                    .accessibilityHidden(true)
+            }
+            Label {
+                Text(title)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } icon: {
+                Image(systemName: entry.node.isDirectory ? "folder" : "doc")
+            }
+            .foregroundStyle(entry.isInNewest ? .primary : .secondary)
+            .help(help)
+            .accessibilityLabel(entry.isInNewest ? title : "\(title), not in the newest backup")
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var help: String {
+        entry.isInNewest
+            ? entry.node.path
+            : "Not in this plan's newest backup — last backed up \(Format.timestamp(entry.newest.time))"
+    }
 }
 
 /// A fold's disclosure mark, the restore pane's own: chevron right when

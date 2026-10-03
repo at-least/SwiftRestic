@@ -57,4 +57,12 @@ enum ResticPath {
         guard let last = path.unicodeScalars.lastIndex(of: "/") else { return path }
         return String(path.unicodeScalars[last...].dropFirst())
     }
+
+    /// What precedes the last separator: "/" for a child of the root, the
+    /// path itself when it has no separator. Cut in the scalar view, as
+    /// `basename` is.
+    static func parent(of path: String) -> String {
+        guard let last = path.unicodeScalars.lastIndex(of: "/") else { return path }
+        return last == path.unicodeScalars.startIndex ? "/" : String(path.unicodeScalars[..<last])
+    }
 }

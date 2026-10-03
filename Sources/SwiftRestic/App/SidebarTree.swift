@@ -182,6 +182,9 @@ struct SidebarFolds: Equatable {
     /// plan folds' own syntax (closed until opened), where the untagged
     /// lineages' folds are the sidebar's view state and start open.
     var otherGroups: Set<OtherGroupFoldID> = []
+    /// Folders open in the Files view's tree. A plan's own fold is `plans`
+    /// in both modes: open is open, whatever it opens onto.
+    var folders: Set<FileNode> = []
 
     /// Opens the fold `record` sits in — its plan's, or its repository's
     /// Other backups and, under it, the plan-UUID group that holds it.

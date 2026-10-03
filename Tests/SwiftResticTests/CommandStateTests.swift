@@ -224,6 +224,13 @@ struct CommandStateTests {
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: repository.id, planID: orphan.id)) == repository.id)
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: repository.id, planID: UUID())) == repository.id)
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: UUID(), planID: orphan.id)) == nil)
+        // A Files item resolves to its repository the same way.
+        let file = FileNode(repositoryID: repository.id, chainKey: "swiftrestic-plan-x", path: "/a/b", isDirectory: false)
+        #expect(model.commandRepositoryID(for: .file(file)) == repository.id)
+        let goneFile = FileNode(repositoryID: UUID(), chainKey: "swiftrestic-plan-x", path: "/a/b", isDirectory: false)
+        #expect(model.commandRepositoryID(for: .file(goneFile)) == nil)
+        // A Files item is no plan: the Plan menu stays grey over it.
+        #expect(model.planCommands(for: .file(file)).planID == nil)
         #expect(model.commandRepositoryID(for: .repository(UUID())) == nil)
         for selection: SidebarItem? in [.activity, .console, nil] {
             #expect(model.commandRepositoryID(for: selection) == nil)

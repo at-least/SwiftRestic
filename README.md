@@ -57,6 +57,16 @@ checked in so a normal build does not need it.
   repository wears a warning while one of its plans is not protected — its
   backups cannot be read, a plan has no backup, or a plan's last backup
   failed; the warning's tooltip names the plan.
+- **Backups or Files** — the control above the sidebar picks what every
+  plan folds open to: its backups by date, or its folders and files across
+  every backup it made, items its newest backup no longer holds included and
+  dimmed (View ▸ Show Backups ⌘1, Show Files ⌘2). The tree comes from the
+  snapshot index; while the index is still reading a repository it fills in
+  as it goes, and a plan the index holds nothing of yet lists its newest
+  backup. A folder lists at most 200 items in the sidebar, then one row that
+  opens the folder in the pane. Picking a folder or file shows the backups
+  that hold it; *Show in Backups* opens the one selected at that place.
+  Switching views leaves the pane alone.
 - **A plan-UUID group is a page** — a group's row selects like a plan's
   (the chevron ahead of it folds), and the page says what the history is:
   a plan not set up in SwiftRestic — deleted here, or still running on
@@ -349,7 +359,11 @@ open --env SWIFTRESTIC_CONFIG_DIR=/tmp/demo \
 `SWIFTRESTIC_CONFIG_DIR` points the app at a throwaway configuration instead of
 your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 `SWIFTRESTIC_CAPTURE_PANE` picks which screen (`plan`, `repository`, `restore`,
-`activity`, `find`, `console`), plus `orphanGroup` and `movedGroup` — the page
+`activity`, `find`, `console`), plus `files` — the sidebar in Files mode,
+the first plan's tree open at its first source and that folder selected, or
+the item `SWIFTRESTIC_CAPTURE_ITEM` names (an absolute path under that source,
+a folder spelled with a trailing `/`) with every folder above it open — and
+`orphanGroup` and `movedGroup` — the page
 of the first adoptable group under Other backups, or of the first moved plan's
 group, with its sidebar fold open. Both wait for the snapshot listing that
 builds group rows, like `restore` does. `findMoved` opens Find Files on the

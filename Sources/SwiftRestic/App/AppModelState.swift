@@ -82,8 +82,50 @@ enum SidebarItem: Hashable {
     /// backups — the pane browses that record's file tree directly,
     /// Arq-style.
     case restoreSnapshot(UUID, String)
+    /// A folder or file in the Files view's tree — the pane shows it by
+    /// version.
+    case file(FileNode)
     case console
     case activity
+}
+
+/// One item of the Files view's tree: a path in one chain's history — a
+/// plan's tag, or an untagged lineage's key (`SnapshotIndex.chainKey`) — in
+/// one repository, as a folder or a file. Identity is byte-exact
+/// (`PathKey`), as every index read's is: two names that differ only in
+/// Unicode normalization are two rows. The kind is part of it, so a path
+/// that changed kind is another row.
+struct FileNode: Hashable, Sendable {
+    let repositoryID: UUID
+    let chainKey: String
+    let pathKey: PathKey
+    let isDirectory: Bool
+
+    init(repositoryID: UUID, chainKey: String, path: String, isDirectory: Bool) {
+        self.repositoryID = repositoryID
+        self.chainKey = chainKey
+        pathKey = PathKey(path)
+        self.isDirectory = isDirectory
+    }
+
+    /// The level a chain's tree hangs from: the folders its backups hold at
+    /// their top, a plan's sources. Not a path, so never a row or a
+    /// selection.
+    static func roots(repositoryID: UUID, chainKey: String) -> FileNode {
+        FileNode(repositoryID: repositoryID, chainKey: chainKey, path: "", isDirectory: true)
+    }
+
+    var path: String { pathKey.path }
+    var name: String { ResticPath.basename(of: path) }
+    var isRoots: Bool { path.isEmpty }
+}
+
+/// What a plan's fold opens onto in the sidebar: its backups by date, or its
+/// folders and files. The sidebar's top control; the trunk — repositories,
+/// plans, Other backups, Activity — is the same in both.
+enum SidebarMode: String, CaseIterable {
+    case backups
+    case files
 }
 
 /// The last settled outcome of a repository's snapshot listing.

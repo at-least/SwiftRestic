@@ -125,9 +125,9 @@ extension AppModel {
     }
 
     /// The repository the Repository menu acts on: the selected one, the
-    /// one a selected Restore record belongs to, the selected plan's —
-    /// Arq's Backup Plan menu acts through the plan the same way — or the
-    /// one a selected Other-backups group sits under (which is where that
+    /// one a selected Restore record or Files item belongs to, the selected
+    /// plan's — Arq's Backup Plan menu acts through the plan the same way —
+    /// or the one a selected Other-backups group sits under (which is where that
     /// menu acts even for a moved plan's group: the plan's own repository
     /// is the other one). Nil for a target that no longer exists and for
     /// every other pane. A group is no plan, so the Plan menu stays grey
@@ -138,6 +138,7 @@ extension AppModel {
         case let .restoreSnapshot(id, _): id
         case let .plan(planID): plan(id: planID)?.repositoryID
         case let .orphanPlan(id, _): id
+        case let .file(node): node.repositoryID
         case .console, .activity, nil: nil
         }
         return repository(id: id)?.id

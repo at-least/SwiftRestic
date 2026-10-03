@@ -104,6 +104,10 @@ struct RootDetailView: View {
                         // to another must not carry paths or history over —
                         // the pane's own @State resets with the identity.
                         .id(repositoryID)
+                case let .file(node):
+                    FilesPaneView(node: node)
+                        // Each item's version state is its own.
+                        .id(node)
                 case let .orphanPlan(repositoryID, planID):
                     OrphanPlanView(
                         repositoryID: repositoryID,

@@ -61,6 +61,12 @@ extension AppModel {
         (try? await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)) ?? []
     }
 
+    /// `indexedVersions`, throwing when the index fails: the Files view says
+    /// so, rather than reading a broken index as "no backup holds it".
+    func indexedHolders(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
+        try await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
+    }
+
     /// What one chain ever held directly under `path`, from the index. Throws
     /// when the index fails: the Files view says so beside the fallback it
     /// lists instead, rather than reading a broken index as an empty folder.

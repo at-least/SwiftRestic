@@ -34,6 +34,9 @@ struct RootView: View {
     /// Which plans and Other backups are open in the sidebar — the backup
     /// records underneath are the restore pane's entry points.
     @State private var sidebarFolds = SidebarFolds()
+    /// The Files view's levels, read once and shared by the sidebar's rows
+    /// and the panes that open them.
+    @State private var filesTree = FilesTree()
     /// A group's Browse Folders…, raised from the sidebar's context menus —
     /// the sidebar raises its sheets through the root, which owns the
     /// presenting state. The pages that browse their own plan (the plan
@@ -82,6 +85,7 @@ struct RootView: View {
             onBrowseFolders: { browsingFolders = $0 },
             onAdoptGroup: adoptGroup
         )
+        .environment(filesTree)
     }
 
     private var detail: some View {
@@ -99,6 +103,7 @@ struct RootView: View {
                 isShowingFind = true
             }
         )
+        .environment(filesTree)
     }
 
     /// The sheets and confirmation dialogs that ride on the root split view.
@@ -346,6 +351,34 @@ struct RootView: View {
             }
             router.selection = .plan(plan.id)
             isShowingFind = true
+        // The Files view: the first plan's tree open at its first source,
+        // that folder selected — or SWIFTRESTIC_CAPTURE_ITEM, an absolute
+        // path under that source (a folder spelled with a trailing slash),
+        // with every folder above it open.
+        case "files":
+            guard let plan = model.configuration.plans.first, let repositoryID = plan.repositoryID,
+                  let source = plan.sources.first
+            else { preconditionFailure("files needs a plan with a repository and a source") }
+            router.sidebarMode = .files
+            sidebarFolds.plans.insert(plan.id)
+            let chain = ResticService.planTag(plan.id)
+            func folder(_ path: String) -> FileNode {
+                FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: true)
+            }
+            sidebarFolds.folders.insert(folder(source))
+            router.selection = .file(folder(source))
+            if let item = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"] {
+                let isDirectory = ResticPath.isDirectorySpelling(item)
+                let path = ResticPath.normalized(item)
+                var above = ResticPath.parent(of: path)
+                while above.utf8.count > source.utf8.count {
+                    sidebarFolds.folders.insert(folder(above))
+                    above = ResticPath.parent(of: above)
+                }
+                router.selection = .file(FileNode(
+                    repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory
+                ))
+            }
         case "concepts": isShowingConcepts = true
         case "console": router.selection = .console
         // The restore pane needs a snapshot row to select, and those arrive
@@ -503,6 +536,14 @@ struct RootView: View {
             router.selection = model.snapshots(for: repositoryID).first
                 .map { .restoreSnapshot(repositoryID, $0.id) }
                 ?? .repository(repositoryID)
+        case let .file(node) where model.repository(id: node.repositoryID) == nil:
+            router.selection = landing
+        case let .file(node)
+            where model.snapshotListingOutcome(for: node.repositoryID) == .loaded
+                && !model.snapshots(for: node.repositoryID).contains { SnapshotIndex.chainKey(for: $0) == node.chainKey }:
+            // Every backup of its chain is gone — forgotten, or the plan's
+            // history moved away. The repository's page is where it lived.
+            router.selection = .repository(node.repositoryID)
         case let .orphanPlan(repositoryID, planID)
             where model.shelves(for: repositoryID).orphanPlanGroup(planID) == nil:
             // The group is gone — adopted, its plan moved by the editor, or

@@ -43,7 +43,12 @@ final class AppRouter {
     }
 
     /// The pane the sidebar is showing.
-    var selection: SidebarItem? 
+    var selection: SidebarItem?
+
+    /// What a plan's fold opens onto: its backups or its files. Switching
+    /// leaves `selection` alone — the pane stays until something else is
+    /// picked, as Xcode's navigators leave the editor.
+    var sidebarMode: SidebarMode = .backups
 
     /// The pending intent, if any. One slot, not a queue: a second request
     /// before the first was consumed replaces it — two sheets cannot present
