@@ -156,7 +156,8 @@ checked in so a normal build does not need it.
 - **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
   runs `restic diff` against the previous snapshot of the same folders from the
   same Mac (any earlier one can be chosen) and lists what was added, removed or
-  modified, filterable by kind and path, with restic's byte totals. Answers
+  modified, filterable by kind and path, with restic's byte totals, under a
+  header that names the repository the diff ran against. Answers
   "what did last night's backup actually pick up?" without restoring anything.
 - **Start at login** — the scheduler only runs while the app runs, so SwiftRestic
   can register itself as a login item and sit in the menu bar.
@@ -172,10 +173,13 @@ checked in so a normal build does not need it.
 - **restic console** — run any restic command against a repository and read its
   own output, for the things the UI does not cover (*Repository › restic
   Console…*).
-- **Activity** — every run recorded with its outcome, duration, bytes added, the
-  files restic could not read, and a plain-text log of what restic printed
-  (Show Log…, Copy Details); restores record which backup, which item and where
-  it went.
+- **Activity** — every run recorded with its outcome, its repository, duration,
+  bytes added, the files restic could not read, and a plain-text log of what
+  restic printed (Show Log…, Copy Details); the drawer below a selected run
+  opens its plan or its repository, and restores record which backup, which
+  item and where it went. Run names carry their repository on every surface
+  that names a run — the log sheet's header, notifications and failure
+  alerts, the menu bar and Settings.
 - **Menus** — the *Plan* and *Repository* menus act on what the sidebar has
   selected: a plan, a repository, or the repository a selected plan or backup
   record uses. Items with nothing to act on are greyed out. ⌘B backs up the

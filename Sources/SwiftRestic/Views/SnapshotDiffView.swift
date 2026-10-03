@@ -108,7 +108,14 @@ struct SnapshotDiffView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Changes in snapshot \(newer.shortID)")
+                    // The sheet's scope is exactly one repository, and the
+                    // header says which — no suffix only in the window where
+                    // the repository was just removed and the load below has
+                    // nothing to compare anyway.
+                    Text(
+                        "Changes in snapshot \(newer.shortID)"
+                            + (model.repository(id: target.repositoryID).map { " — \($0.name)" } ?? "")
+                    )
                         .font(.headline)
                     Text(Format.timestamp(newer.time))
                         .font(.caption)

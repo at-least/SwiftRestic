@@ -116,9 +116,17 @@ extension AppModel {
 
         let failures = await NotificationPoster.broadcast(event, to: channels)
         if !failures.isEmpty {
+            // The queue is global: the first line names the run the
+            // undelivered alert was about.
+            let subject = RunRecordPresentation.displayName(
+                for: record,
+                plans: configuration.plans,
+                repositories: configuration.repositories
+            )
             post(Banner(
                 title: "Could not send \(failures.count) notification(s)",
-                message: failures.joined(separator: "\n"),
+                message: (subject.isEmpty ? failures : ["About \(subject)"] + failures)
+                    .joined(separator: "\n"),
                 isError: true
             ))
         }

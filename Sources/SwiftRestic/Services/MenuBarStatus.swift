@@ -105,9 +105,15 @@ enum MenuBarStatus {
     /// Yields to `hasNoRepositories`: the `unconfigured` icon face is what
     /// summoned the menu, and the line under it must not answer with a
     /// failure belonging to a since-removed repository's runs.
+    ///
+    /// Plans and repositories default empty: `iconState` asks only whether a
+    /// problem exists, and no name can change that answer; the tray passes
+    /// both so the subject is named by the one run-naming rule.
     static func problemLine(
         runs: [RunRecord],
         hasNoRepositories: Bool,
+        plans: [BackupPlan] = [],
+        repositories: [Repository] = [],
         now: Date = .now,
         relative: (Date) -> String = { Format.relative($0) }
     ) -> String? {
@@ -115,20 +121,22 @@ enum MenuBarStatus {
         let problems = OverviewMetrics.problems(in: runs, since: OverviewMetrics.problemWindowStart(from: now))
         guard let newest = problems.max(by: { $0.finishedAt < $1.finishedAt }) else { return nil }
 
-        // A backup names its plan the way Activity does; a restore names what
-        // it restored; check and prune name the repository, because "NAS
-        // failed" would read as the NAS failing.
+        // The subject is the run's display name — the plan with its
+        // repository for a backup, the repository alone for a check or prune
+        // ("NAS failed" would read as the NAS failing) — so the line says
+        // which repository's problem it is.
+        let name = RunRecordPresentation.displayName(for: newest, plans: plans, repositories: repositories)
         let subject: String
-        if newest.planName.isEmpty {
+        if name.isEmpty {
             subject = newest.kind.rawValue.capitalized
         } else {
             switch newest.kind {
             case .backup:
-                subject = newest.planName
+                subject = name
             case .restore:
-                subject = "Restore of \(newest.planName)"
+                subject = "Restore of \(name)"
             case .check, .prune, .forget, .initialize:
-                subject = "\(newest.kind.rawValue.capitalized) on \(newest.planName)"
+                subject = "\(newest.kind.rawValue.capitalized) on \(name)"
             }
         }
         let verb = newest.outcome == .failed ? "failed" : "finished with errors"
@@ -137,14 +145,17 @@ enum MenuBarStatus {
 
     /// The single line above the plan buttons. `nil` while anything is running:
     /// the running lines replace it rather than sitting underneath. Restores
-    /// and repository upkeep count as running — a "Next: Nightly" headline
+    /// and repository upkeep count as running — a next-run headline
     /// over a running restore reads as if the restore is not happening.
     /// `hasNoRepositories` answers the question the `unconfigured` icon face
     /// asks: the plan list below this line is empty either way, but "no
     /// repository set up yet" tells a first-time user what to do next, where
     /// the plain empty-schedule copy would not. `nil` under a hold too: the
-    /// hold's own line leads the menu, and "Next: Nightly in 5 minutes" on
+    /// hold's own line leads the menu, and a next-run headline on
     /// battery announced a run the scheduler would not fire.
+    ///
+    /// The plan is named with its repository — the tray's one answer to two
+    /// repositories holding same-named plans.
     static func headline(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity] = [:],
@@ -152,13 +163,21 @@ enum MenuBarStatus {
         isConsoleRunning: Bool = false,
         hasNoRepositories: Bool = false,
         hold: ScheduleHold? = nil,
+        repositories: [Repository],
         nextRun: (plan: BackupPlan, date: Date)?
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring, !isConsoleRunning else { return nil }
         guard hold == nil else { return nil }
         if hasNoRepositories { return "No repository set up yet" }
         guard let nextRun else { return "No backups scheduled" }
-        return "Next: \(nextRun.plan.name) \(Format.relative(nextRun.date))"
+        let name = RunRecordPresentation.planWithRepository(
+            nextRun.plan.name,
+            repositoryName: repositories.first { $0.id == nextRun.plan.repositoryID }?.name
+        )
+        // The plan page's Next backup tile spells the same moment in these
+        // words; the scheduler clamps its date to now, so the tile clock's
+        // "Due now" case here is a run coming due.
+        return "Next: \(name) — \(Format.tileTimestamp(nextRun.date))"
     }
 
     /// One tray row per plan, in configuration order: Back Up Now while the
@@ -216,6 +235,36 @@ enum MenuBarStatus {
         phase == .applyingRetention
     }
 
+    /// One tray submenu per repository: its plans' rows under the
+    /// repository's own name, repositories in configuration order and plans
+    /// in theirs — the flat list could not tell two repositories'
+    /// same-named plans apart. A single repository still gets its submenu:
+    /// the shape never changes when a second repository arrives, and the
+    /// rule stays one rule. Every plan lives under a repository that exists
+    /// (removing a repository removes its plans), so grouping by repository
+    /// leaves no plan without a group.
+    struct PlanGroup: Equatable {
+        var repositoryID: UUID
+        var title: String
+        var rows: [PlanRow]
+    }
+
+    static func planGroups(
+        plans: [BackupPlan],
+        repositories: [Repository],
+        activity: [UUID: PlanActivity],
+        isResticAvailable: Bool
+    ) -> [PlanGroup] {
+        repositories.compactMap { repository in
+            let rows = planRows(
+                plans: plans.filter { $0.repositoryID == repository.id },
+                activity: activity,
+                isResticAvailable: isResticAvailable
+            )
+            return rows.isEmpty ? nil : PlanGroup(repositoryID: repository.id, title: repository.name, rows: rows)
+        }
+    }
+
     /// One line per job in flight, in the order plans, upkeep, restore — the
     /// menu reads top-down from the plan the user most likely came for.
     /// Identified by a stable string (two lines can share a display name, and
@@ -227,13 +276,20 @@ enum MenuBarStatus {
 
     static func runningLines(
         plans: [BackupPlan],
+        repositories: [Repository],
         activity: [UUID: PlanActivity],
         progress: [UUID: OperationProgress]
     ) -> [RunningLine] {
-        plans.filter { activity[$0.id] != nil }.map {
-            RunningLine(
-                id: $0.id.uuidString,
-                text: "\($0.name) — \(progressText(activity: activity[$0.id], progress: progress[$0.id]))"
+        plans.filter { activity[$0.id] != nil }.map { plan in
+            // The plan with its repository, like the idle headline — two
+            // same-named plans can run at once.
+            let name = RunRecordPresentation.planWithRepository(
+                plan.name,
+                repositoryName: repositories.first { $0.id == plan.repositoryID }?.name
+            )
+            return RunningLine(
+                id: plan.id.uuidString,
+                text: "\(name) — \(progressText(activity: activity[plan.id], progress: progress[plan.id]))"
             )
         }
     }

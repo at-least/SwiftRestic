@@ -172,15 +172,20 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         }
         // The failure line leads, unless the `?` face summoned the menu and
         // an old failure from a since-removed repository would talk over the
-        // setup question — the same yield MenuBarStatus defines.
+        // setup question — the same yield MenuBarStatus defines. The subject
+        // names the repository, so a failure from one repository cannot read
+        // as another's.
         if let problem = MenuBarStatus.problemLine(
             runs: model.configuration.runs,
-            hasNoRepositories: hasNoRepositories
+            hasNoRepositories: hasNoRepositories,
+            plans: model.configuration.plans,
+            repositories: model.configuration.repositories
         ) {
             menu.addItem(disabledItem(problem))
         }
         var lines = MenuBarStatus.runningLines(
             plans: model.configuration.plans,
+            repositories: model.configuration.repositories,
             activity: model.activity,
             progress: model.planProgress
         )
@@ -201,6 +206,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             isConsoleRunning: model.console.isRunning,
             hasNoRepositories: hasNoRepositories,
             hold: hold,
+            repositories: model.configuration.repositories,
             nextRun: model.nextScheduledRun
         ) {
             menu.addItem(disabledItem(headline))
@@ -223,23 +229,39 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             add.target = self
             menu.addItem(add)
         } else {
-            for row in MenuBarStatus.planRows(
+            // One submenu per repository, in configuration order — the tray
+            // is the only plan list that never showed which repository a
+            // plan belongs to. App-wide items stay outside: they act on
+            // every repository at once.
+            for group in MenuBarStatus.planGroups(
                 plans: model.configuration.plans,
+                repositories: model.configuration.repositories,
                 activity: model.activity,
                 isResticAvailable: model.isResticAvailable
             ) {
-                let action: Selector? = switch row.action {
-                case .backUp: #selector(backUpNow(_:))
-                case .stop: #selector(stopBackup(_:))
-                case .none: nil
+                let submenu = NSMenu(title: group.title)
+                submenu.autoenablesItems = false
+                for row in group.rows {
+                    let action: Selector? = switch row.action {
+                    case .backUp: #selector(backUpNow(_:))
+                    case .stop: #selector(stopBackup(_:))
+                    case .none: nil
+                    }
+                    let item = NSMenuItem(title: row.title, action: action, keyEquivalent: "")
+                    item.target = self
+                    // Explicit, not auto-enabled: see `autoenablesItems`
+                    // above.
+                    item.isEnabled = row.isEnabled
+                    item.tag = nextPlanTag
+                    planIDsByTag[nextPlanTag] = row.planID
+                    nextPlanTag += 1
+                    submenu.addItem(item)
                 }
-                let item = NSMenuItem(title: row.title, action: action, keyEquivalent: "")
-                item.target = self
-                // Explicit, not auto-enabled: see `autoenablesItems` above.
-                item.isEnabled = row.isEnabled
-                item.tag = nextPlanTag
-                planIDsByTag[nextPlanTag] = row.planID
-                nextPlanTag += 1
+                let item = NSMenuItem(title: group.title, action: nil, keyEquivalent: "")
+                item.submenu = submenu
+                // Enabled even with every row disabled, like the pause
+                // submenu: the rows carry their own state.
+                item.isEnabled = true
                 menu.addItem(item)
             }
         }

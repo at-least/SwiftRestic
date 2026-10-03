@@ -99,7 +99,15 @@ extension AppModel {
                 self.post(Banner(title: "Removed stale locks", message: repository.name, isError: false))
             } catch {
                 self.noteAuthFailure(error, repositoryID: repositoryID)
-                self.post(Banner(title: "Unlock failed", message: error.localizedDescription, isError: true))
+                // The queue is global: name the repository whose locks
+                // stayed, as the success banner names the one it cleaned.
+                self.post(
+                    Banner(
+                        title: "Unlock failed",
+                        message: "Could not remove “\(repository.name)”'s stale locks: \(error.localizedDescription)",
+                        isError: true
+                    )
+                )
             }
         })
     }

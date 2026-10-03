@@ -127,8 +127,15 @@ extension AppModel: BackupRunEngine.Sink {
 
     /// The in-app counterpart to `notify`: a finished backup lands in the
     /// banner queue so "did it work?" is answered in the pane the user is
-    /// looking at, without a trip to Activity.
+    /// looking at, without a trip to Activity. The queue is global, so the
+    /// title names the plan with its repository — a banner arriving while
+    /// another repository's page is open says whose backup it was.
     private func announceInApp(record: RunRecord) {
+        let name = RunRecordPresentation.displayName(
+            for: record,
+            plans: configuration.plans,
+            repositories: configuration.repositories
+        )
         switch record.outcome {
         case .cancelled:
             // The user asked for this stop — or confirmed the quit that caused
@@ -136,7 +143,7 @@ extension AppModel: BackupRunEngine.Sink {
             return
         case .succeeded:
             post(Banner(
-                title: "“\(record.planName)” backed up",
+                title: "“\(name)” backed up",
                 message: "Backed up \(Format.bytes(record.dataAdded)) of new data in \(Format.duration(record.duration)).",
                 isError: false
             ))
@@ -148,10 +155,10 @@ extension AppModel: BackupRunEngine.Sink {
             // follows.
             var message = RunRecordPresentation.warningBannerMessage(for: record)
             if let hint = ItemErrorDiagnosis.headline(for: record) { message += " " + hint }
-            post(Banner(title: "“\(record.planName)” finished with warnings", message: message, isError: true))
+            post(Banner(title: "“\(name)” finished with warnings", message: message, isError: true))
         case .failed:
             post(Banner(
-                title: "Backup of “\(record.planName)” failed",
+                title: "Backup of “\(name)” failed",
                 message: record.failureMessage ?? "",
                 isError: true
             ))

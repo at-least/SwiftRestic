@@ -114,7 +114,14 @@ struct NotificationEvent: Sendable, Equatable {
 
     /// One line suitable for a chat message or a Healthchecks log entry.
     var summary: String {
-        let subject = planName.isEmpty ? repositoryName : planName
+        // The subject follows the app's one run-naming rule: the plan with
+        // its repository ("Documents (NAS)"). A check or prune reports the
+        // repository in `planName` too, and the rule's same-name guard says
+        // it once. The webhook's separate plan/repository keys keep their
+        // own values; this is only the sentence.
+        let subject = planName.isEmpty
+            ? repositoryName
+            : RunRecordPresentation.planWithRepository(planName, repositoryName: repositoryName)
         switch stage {
         case .started:
             return "\(operation) started: \(subject)"

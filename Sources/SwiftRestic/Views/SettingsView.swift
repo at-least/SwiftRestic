@@ -128,7 +128,16 @@ struct SettingsView: View {
                 if let hold = model.scheduleHold {
                     LabeledContent("Next run", value: hold.summary())
                 } else if let next = model.nextScheduledRun {
-                    LabeledContent("Next run", value: "\(next.plan.name) — \(Format.timestamp(next.date))")
+                    // The plan with its repository, the tray headline's
+                    // words — two repositories can hold same-named plans.
+                    LabeledContent(
+                        "Next run",
+                        value: RunRecordPresentation.nextRunLine(
+                            plan: next.plan,
+                            date: next.date,
+                            repositories: model.configuration.repositories
+                        )
+                    )
                 } else {
                     LabeledContent("Next run", value: "Nothing scheduled")
                 }

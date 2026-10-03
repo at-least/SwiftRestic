@@ -52,7 +52,11 @@ extension AppModel {
         guard wantsNotification, Self.supportsNotifications else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = record.planName.isEmpty ? "SwiftRestic" : record.planName
+        content.title = Self.notificationTitle(
+            for: record,
+            plans: configuration.plans,
+            repositories: configuration.repositories
+        )
         content.body = Self.notificationBody(for: record)
         let request = UNNotificationRequest(
             identifier: record.id.uuidString,
@@ -91,6 +95,18 @@ extension AppModel {
                 ))
             }
         }
+    }
+
+    /// The local notification's title: the run's display name — the plan
+    /// with its repository, the one rule every run surface names by — or
+    /// the app's name when the record names nothing.
+    static func notificationTitle(
+        for record: RunRecord,
+        plans: [BackupPlan],
+        repositories: [Repository]
+    ) -> String {
+        let name = RunRecordPresentation.displayName(for: record, plans: plans, repositories: repositories)
+        return name.isEmpty ? "SwiftRestic" : name
     }
 
     /// The local notification's text. A warning counts restic's unreadable

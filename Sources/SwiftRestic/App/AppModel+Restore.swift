@@ -374,6 +374,12 @@ extension AppModel {
             let partial = restoredBefore.map {
                 "\(Format.count($0.count)) of \(Format.plural($0.total, "item")) were restored before it stopped."
             }
+            // The queue is global, so the title names the repository the
+            // restore read from — a long restore can outlive the pane that
+            // started it. Removing the repository is one thing that cancels
+            // a restore, and by then there is no name to say; the removal
+            // dialog has already disclosed it.
+            let repositoryName = repository(id: repositoryID)?.name
             if record.outcome == .cancelled {
                 // The strip vanishing is the only signal a cancelled
                 // restore otherwise leaves — including when it is the
@@ -381,16 +387,18 @@ extension AppModel {
                 // the banner would die with the process, and the quit
                 // confirmation has already said it.
                 if !isShuttingDown {
+                    let title = repositoryName.map { "Restore from “\($0)” cancelled" } ?? "Restore cancelled"
                     post(Banner(
-                        title: "Restore cancelled",
+                        title: title,
                         message: ["The restore was cancelled before it finished.", partial]
                             .compactMap { $0 }.joined(separator: " "),
                         isError: false
                     ))
                 }
             } else {
+                let title = repositoryName.map { "Restore from “\($0)” failed" } ?? "Restore failed"
                 post(Banner(
-                    title: "Restore failed",
+                    title: title,
                     message: [record.failureMessage ?? "", partial].compactMap { $0 }.joined(separator: "\n"),
                     isError: true
                 ))

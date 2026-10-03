@@ -86,16 +86,23 @@ extension AppModel: RetentionRunEngine.Sink {
         var record = record
         await seal(&record, transcript: transcript)
         append(record: record)
+        // Retention runs against the plan's repository, and the queue is
+        // global — the title names both, the one run-naming rule.
+        let name = RunRecordPresentation.displayName(
+            for: record,
+            plans: configuration.plans,
+            repositories: configuration.repositories
+        )
         switch record.outcome {
         case .succeeded, .completedWithErrors:
             post(Banner(
-                title: "Applied retention to “\(record.planName)”",
+                title: "Applied retention to “\(name)”",
                 message: record.detailText ?? "",
                 isError: false
             ))
         case .failed:
             post(Banner(
-                title: "Could not apply retention to “\(record.planName)”",
+                title: "Could not apply retention to “\(name)”",
                 message: record.failureMessage ?? "",
                 isError: true
             ))

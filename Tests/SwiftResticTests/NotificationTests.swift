@@ -128,6 +128,45 @@ struct NotificationTests {
         #expect(event(.started).summary.contains("started"))
     }
 
+    @Test("the summary's subject names the plan with its repository, and never says a repository twice")
+    func summarySubjectNamesTheRepository() {
+        // The app's one run-naming rule: a chat line about "Documents" says
+        // which Documents.
+        #expect(event(.succeeded).summary.contains("Documents (NAS)"))
+        // A check or prune reports the repository in planName as well; the
+        // rule's same-name guard leaves it said once. (The hand-built event
+        // keeps the struct's "Backup" default for `operation`, which is not
+        // what is being pinned here.)
+        let check = NotificationEvent(stage: .failed, planName: "NAS", repositoryName: "NAS", errorMessage: "locked")
+        #expect(check.summary == "Backup FAILED: NAS — locked", "summary was \(check.summary)")
+        #expect(!check.summary.contains("NAS (NAS)"))
+        // An event with no plan names the repository alone, as before.
+        let bare = NotificationEvent(stage: .failed, planName: "", repositoryName: "NAS", errorMessage: "locked")
+        #expect(bare.summary == "Backup FAILED: NAS — locked", "summary was \(bare.summary)")
+    }
+
+    @MainActor
+    @Test("the local notification's title is the run's display name")
+    func notificationTitleNamesPlanAndRepository() {
+        var home = Repository()
+        home.name = "Home Disk"
+        var documents = BackupPlan()
+        documents.name = "Documents"
+        documents.repositoryID = home.id
+
+        func title(for record: RunRecord) -> String {
+            AppModel.notificationTitle(for: record, plans: [documents], repositories: [home])
+        }
+
+        #expect(
+            title(for: RunRecord(kind: .backup, planID: documents.id, planName: "Documents", repositoryID: home.id))
+                == "Documents (Home Disk)"
+        )
+        // A record that names nothing falls back to the app's name, as the
+        // title always did.
+        #expect(title(for: RunRecord(kind: .backup)) == "SwiftRestic")
+    }
+
     @MainActor
     @Test("a warned run's hint reaches chat summaries and the webhook")
     func hintReachesChannels() throws {

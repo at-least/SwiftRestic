@@ -275,7 +275,7 @@ struct AppModelStubTests {
         // The second call never ran: one record, failed.
         #expect(harness.model.configuration.runs.map(\.outcome) == [.failed])
         let banner = try #require(harness.model.banners.first)
-        #expect(banner.title == "Restore failed")
+        #expect(banner.title == "Restore from “Stub Repo” failed")
         #expect(banner.message.hasSuffix("\n0 of 3 items were restored before it stopped."), "banner said: \(banner.message)")
         #expect(banner.isError)
 
@@ -301,7 +301,7 @@ struct AppModelStubTests {
         #expect(record.kind == .restore)
         #expect(record.outcome == .failed)
         #expect(record.failureMessage != nil)
-        #expect(harness.model.banners.first?.title == "Restore failed")
+        #expect(harness.model.banners.first?.title == "Restore from “Stub Repo” failed")
 
         await harness.model.shutdown()
     }
@@ -344,7 +344,7 @@ struct AppModelStubTests {
         #expect(record.failureMessage == "Cancelled")
         // The strip vanishing is not the whole story: a settled, non-error
         // banner says the restore stopped and nothing is still running.
-        let cancelledBanner = await bannerTitled("Restore cancelled", in: harness.model)
+        let cancelledBanner = await bannerTitled("Restore from “Stub Repo” cancelled", in: harness.model)
         #expect(
             cancelledBanner?.isError == false,
             "banners were: \(harness.model.banners.map(\.title))"
@@ -1446,7 +1446,7 @@ struct AppModelStubTests {
         // Not a backup: the plan's run stamps stay where the backups left them.
         #expect(harness.model.plan(id: planID)?.lastRunAt == nil)
         #expect(harness.model.plan(id: planID)?.lastSuccessAt == nil)
-        #expect(await bannerTitled("Applied retention to “Stub Plan”", in: harness.model) != nil)
+        #expect(await bannerTitled("Applied retention to “Stub Plan (Stub Repo)”", in: harness.model) != nil)
 
         // Attended and not a backup: nothing leaves the Mac — a Healthchecks
         // ping would reset the dead-man's switch for a run that backed

@@ -17,6 +17,165 @@ struct RunRecordPresentationTests {
         return record
     }
 
+    private func plan(name: String, repositoryID: UUID) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.name = name
+        plan.repositoryID = repositoryID
+        return plan
+    }
+
+    private func repository(name: String) -> Repository {
+        var repository = Repository()
+        repository.name = name
+        return repository
+    }
+
+    @Test("a plan and its repository are said in one string, once each")
+    func planWithRepository() {
+        #expect(RunRecordPresentation.planWithRepository("Documents", repositoryName: "Home Disk") == "Documents (Home Disk)")
+        // No repository to say — or one named exactly like the plan, which
+        // would state the same fact twice.
+        #expect(RunRecordPresentation.planWithRepository("Documents", repositoryName: nil) == "Documents")
+        #expect(RunRecordPresentation.planWithRepository("Documents", repositoryName: "") == "Documents")
+        #expect(RunRecordPresentation.planWithRepository("Home Disk", repositoryName: "Home Disk") == "Home Disk")
+        // An unnamed plan stays unnamed; the caller decides its fallback.
+        #expect(RunRecordPresentation.planWithRepository("", repositoryName: "Home Disk") == "")
+    }
+
+    @Test("a run's display name is derived from IDs, for every kind")
+    func displayNameForEveryKind() {
+        let home = repository(name: "Home Disk")
+        let documents = plan(name: "Documents", repositoryID: home.id)
+
+        func run(
+            _ kind: RunRecord.Kind,
+            planID: UUID? = nil,
+            planName: String,
+            repositoryID: UUID? = nil
+        ) -> RunRecord {
+            RunRecord(kind: kind, planID: planID, planName: planName, repositoryID: repositoryID)
+        }
+
+        // Backup and forget: the plan by its current name, with the repository.
+        #expect(
+            RunRecordPresentation.displayName(
+                for: run(.backup, planID: documents.id, planName: "Documents", repositoryID: home.id),
+                plans: [documents],
+                repositories: [home]
+            ) == "Documents (Home Disk)"
+        )
+        #expect(
+            RunRecordPresentation.displayName(
+                for: run(.forget, planID: documents.id, planName: "Documents", repositoryID: home.id),
+                plans: [documents],
+                repositories: [home]
+            ) == "Documents (Home Disk)"
+        )
+        // The plan is called what it is called now.
+        var renamed = documents
+        renamed.name = "Papers"
+        #expect(
+            RunRecordPresentation.displayName(
+                for: run(.backup, planID: documents.id, planName: "Documents", repositoryID: home.id),
+                plans: [renamed],
+                repositories: [home]
+            ) == "Papers (Home Disk)"
+        )
+        // Restore: its step label with the repository, as for backups.
+        #expect(
+            RunRecordPresentation.displayName(
+                for: run(.restore, planName: "Budget.numbers", repositoryID: home.id),
+                plans: [documents],
+                repositories: [home]
+            ) == "Budget.numbers (Home Disk)"
+        )
+        // Check, prune and initialize: the repository from its ID.
+        for kind in [RunRecord.Kind.check, .prune, .initialize] {
+            #expect(
+                RunRecordPresentation.displayName(
+                    for: run(kind, planName: "Whatever was stored", repositoryID: home.id),
+                    plans: [],
+                    repositories: [home]
+                ) == "Home Disk"
+            )
+        }
+    }
+
+    @Test("an ID that no longer resolves falls back to the stored name, and that is history")
+    func displayNameFallbacks() {
+        let home = repository(name: "Home Disk")
+
+        // The plan is gone; the record keeps the name it was recorded under.
+        #expect(
+            RunRecordPresentation.displayName(
+                for: RunRecord(kind: .backup, planID: UUID(), planName: "Documents", repositoryID: home.id),
+                plans: [],
+                repositories: [home]
+            ) == "Documents (Home Disk)"
+        )
+        // The repository is gone: a backup names its plan alone, a check or
+        // prune the repository name the record stored at run time.
+        #expect(
+            RunRecordPresentation.displayName(
+                for: RunRecord(kind: .backup, planID: nil, planName: "Documents", repositoryID: nil),
+                plans: [],
+                repositories: [home]
+            ) == "Documents"
+        )
+        #expect(
+            RunRecordPresentation.displayName(
+                for: RunRecord(kind: .check, planName: "Home NAS", repositoryID: nil),
+                plans: [],
+                repositories: []
+            ) == "Home NAS"
+        )
+    }
+
+    @Test("the log sheet's header names the run by the same rule")
+    func logSheetTitle() {
+        let home = repository(name: "Home Disk")
+        let documents = plan(name: "Documents", repositoryID: home.id)
+
+        #expect(
+            RunRecordPresentation.logSheetTitle(
+                for: RunRecord(kind: .backup, planID: documents.id, planName: "Documents", repositoryID: home.id),
+                plans: [documents],
+                repositories: [home]
+            ) == "Backup log — Documents (Home Disk)"
+        )
+        #expect(
+            RunRecordPresentation.logSheetTitle(
+                for: RunRecord(kind: .check, planName: "Home Disk", repositoryID: home.id),
+                plans: [],
+                repositories: [home]
+            ) == "Check log — Home Disk"
+        )
+        #expect(
+            RunRecordPresentation.logSheetTitle(
+                for: RunRecord(kind: .restore, planName: "Budget.numbers", repositoryID: home.id),
+                plans: [],
+                repositories: [home]
+            ) == "Restore log — Budget.numbers (Home Disk)"
+        )
+    }
+
+    @Test("Settings' Next run line says the plan with its repository, then when")
+    func nextRunLine() {
+        let home = repository(name: "Home Disk")
+        let documents = plan(name: "Documents", repositoryID: home.id)
+        let date = Date(timeIntervalSince1970: 1_790_409_497) // RunLogTests' pinned instant
+
+        #expect(
+            RunRecordPresentation.nextRunLine(plan: documents, date: date, repositories: [home])
+                == "Documents (Home Disk) — \(Format.timestamp(date))"
+        )
+        // A repository the list does not resolve leaves the plan's name alone.
+        #expect(
+            RunRecordPresentation.nextRunLine(plan: documents, date: date, repositories: [])
+                == "Documents — \(Format.timestamp(date))"
+        )
+    }
+
     @Test("the Detail column's wording for each kind of run")
     func detailWording() {
         let detail = RunRecordPresentation.detail(for:)

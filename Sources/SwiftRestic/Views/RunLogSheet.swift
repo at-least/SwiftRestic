@@ -18,7 +18,13 @@ struct RunLogSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(run.kind.rawValue.capitalized) log — \(run.planName)")
+                // The one run-naming rule: the plan with its repository,
+                // the repository alone for a check or prune.
+                Text(RunRecordPresentation.logSheetTitle(
+                    for: run,
+                    plans: model.configuration.plans,
+                    repositories: model.configuration.repositories
+                ))
                     .font(.headline)
                 Text(Format.timestamp(run.startedAt))
                     .font(.caption)

@@ -16,6 +16,7 @@ struct RunDetailPanel: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord
     var onOpenPlan: ((UUID) -> Void)?
+    var onOpenRepository: ((UUID) -> Void)?
     var onCompare: (SnapshotDiffTarget) -> Void
     var onShowLog: (RunRecord) -> Void
 
@@ -208,8 +209,16 @@ struct RunDetailPanel: View {
 
     private var buttons: some View {
         HStack(spacing: 10) {
-            if let planID = run.planID, let plan = model.plan(id: planID) {
+            if let planID = run.planID, model.plan(id: planID) != nil {
                 Button("Open Plan") { onOpenPlan?(planID) }
+            }
+            // The run's other home, beside Open Plan. Only where the
+            // repository still resolves — a removed one has no page to open,
+            // and the Repository row above already says it is gone.
+            if let repositoryID = run.repositoryID, repositoryName != nil {
+                Button("Open Repository") { onOpenRepository?(repositoryID) }
+            }
+            if let planID = run.planID, let plan = model.plan(id: planID) {
                 // A retry only where there is something to retry: a clean
                 // record's next step is not a pointless re-run.
                 if run.kind == .backup, run.outcome != .succeeded, plan.isConfigurationComplete {

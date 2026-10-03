@@ -3,8 +3,10 @@ import SwiftUI
 struct ActivityView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    /// Route from a failure to the plan that owns it.
+    /// Route from a failure to the plan that owns it, and to the repository
+    /// the drawer's Open Repository lands on.
     var onOpenPlan: ((UUID) -> Void)?
+    var onOpenRepository: ((UUID) -> Void)?
     @State private var selection: RunRecord.ID?
     /// Taken by a click in the table (`focusOnClick`), so ↑ and ↓ walk the
     /// runs rather than the sidebar out of Activity.
@@ -81,7 +83,7 @@ struct ActivityView: View {
                     }
                     .width(24)
 
-                    // Four columns after the glyph, Arq's one-line row with
+                    // Five columns after the glyph, Arq's one-line row with
                     // the kind and the verdict beside it: how long a run
                     // took and what it added are in the drawer below and in
                     // Copy Details. Widths: the caps on the fixed-length
@@ -93,11 +95,12 @@ struct ActivityView: View {
                     // caps. So each minimum is what its column shows on
                     // arrival — Started's is the widest timestamp, "May 31,
                     // 2026 at 10:00 AM" (161.6 pt), Subject's holds a plan
-                    // name like "Photos Library" (88.1 pt). A row is 16 + the
-                    // column widths + 4 × 17 + 16 pt wide, and the 940-pt
+                    // name like "Photos Library" (88.1 pt), Repository's a
+                    // repository name of the same length. A row is 16 + the
+                    // column widths + 5 × 17 + 16 pt wide, and the 940-pt
                     // window with the sidebar at its default 260 plus the
                     // split's 8 pt leaves the table 672, so the minimums may
-                    // add up to 572 (they are 414) — room for a legacy
+                    // add up to 555 (they are 510) — room for a legacy
                     // scroller's 17 without a sideways scroll.
                     TableColumn("Started", value: \.startedAt) { run in
                         Text(Format.timestamp(run.startedAt))
@@ -105,14 +108,45 @@ struct ActivityView: View {
                     }
                     .width(min: 162, ideal: 164, max: 164)
 
-                    // Check and prune runs belong to a repository, backups to
-                    // a plan — the column names the subject, the Kind column
-                    // names the operation.
-                    TableColumn("Subject", value: \.planName) { run in
-                        Text(run.planName.isEmpty ? "—" : run.planName)
-                            .help(run.planName)
+                    // Backups and restores name their plan or item, the Kind
+                    // column names the operation. A check, prune or
+                    // initialize has no plan to name — its subject is the
+                    // repository, which the Repository column beside this
+                    // one now says, and saying it here too would state one
+                    // fact twice in adjacent columns. Display-only for the
+                    // same reason: those rows' stored name is the
+                    // repository's, so a sort on this header would order
+                    // their "—" cells by a value on screen nowhere.
+                    TableColumn("Subject") { run in
+                        Group {
+                            switch run.kind {
+                            case .backup, .forget, .restore:
+                                Text(run.planName.isEmpty ? "—" : run.planName)
+                                    .help(run.planName)
+                            case .check, .prune, .initialize:
+                                Text("—")
+                            }
+                        }
                     }
                     .width(min: 96, ideal: 112, max: 120)
+
+                    // The repository a run belongs to, by ID at render time
+                    // — check and prune runs recorded it in `planName` alone,
+                    // which could not survive a repository rename. A "—" is
+                    // either a run recorded before runs carried a repository
+                    // or a repository since removed; the data cannot tell the
+                    // two apart, so the tooltip says both and asserts
+                    // neither.
+                    TableColumn("Repository") { run in
+                        if let name = model.repository(id: run.repositoryID)?.name {
+                            Text(name)
+                                .help(name)
+                        } else {
+                            Text("—")
+                                .help("This run's repository is not known — it predates per-run records, or the repository was removed.")
+                        }
+                    }
+                    .width(min: 96, ideal: 104, max: 140)
 
                     TableColumn("Kind") { run in
                         Text(run.kind.rawValue.capitalized)
@@ -163,6 +197,7 @@ struct ActivityView: View {
                     RunDetailPanel(
                         run: selected,
                         onOpenPlan: onOpenPlan,
+                        onOpenRepository: onOpenRepository,
                         onCompare: { comparing = $0 },
                         onShowLog: { loggedRun = $0 }
                     )

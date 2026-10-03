@@ -13,7 +13,13 @@ extension AppModel {
             // never actually landed.
             if password?.isEmpty == false { repositoriesMissingPassword.remove(repository.id) }
         } catch {
-            post(Banner(title: "Keychain", message: error.localizedDescription, isError: true))
+            // Name the repository: a Keychain failure for one repository
+            // must not read as a problem with another's.
+            post(Banner(
+                title: "Keychain",
+                message: "Could not save “\(repository.name)”'s password: \(error.localizedDescription)",
+                isError: true
+            ))
         }
         // The cache key compares the Repository value, which by design carries
         // no secrets — a password-only or provider-secret-only edit leaves it
@@ -39,7 +45,7 @@ extension AppModel {
         if !overridden.isEmpty {
             post(Banner(
                 title: "Ignored environment variables",
-                message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; an entry for it in this repository's extra environment (configuration file) has no effect.",
+                message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; an entry for it in “\(repository.name)”'s extra environment (configuration file) has no effect.",
                 isError: false
             ))
         }

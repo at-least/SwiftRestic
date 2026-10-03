@@ -1,15 +1,82 @@
 import Foundation
 
 /// A run's words outside its log: the Activity Detail column, the drawer's
-/// rows, and Copy Details. The one place a run's one-line summary is worded,
-/// built on the plan page's facts (`PlanStatus.facts(for:)`) so Activity and
-/// the plan row cannot disagree.
+/// rows, Copy Details, and the name every app-wide surface calls the run by.
+/// The one place a run's one-line summary is worded, built on the plan
+/// page's facts (`PlanStatus.facts(for:)`) so Activity and the plan row
+/// cannot disagree.
 enum RunRecordPresentation {
     /// "Backup of “Documents”", "Restore of “Budget.numbers”", "Check of
     /// “Home NAS”" — the subject line the log and Copy Details open with.
     static func subject(of run: RunRecord) -> String {
         let kind = run.kind.rawValue.capitalized
         return run.planName.isEmpty ? kind : "\(kind) of “\(run.planName)”"
+    }
+
+    /// "Documents (Home Disk)" — the one way a plan and its repository are
+    /// said in a single string, wherever a surface must name both (the run
+    /// surfaces below, the tray's "Next:" headline, Settings' Next run
+    /// line). A repository named exactly like the plan is not said twice —
+    /// one fact, one hearing, the rule Activity's Subject and Repository
+    /// columns also follow.
+    static func planWithRepository(_ planName: String, repositoryName: String?) -> String {
+        guard !planName.isEmpty else { return planName }
+        guard let repositoryName, !repositoryName.isEmpty, repositoryName != planName else {
+            return planName
+        }
+        return "\(planName) (\(repositoryName))"
+    }
+
+    /// What a run is called by the surfaces that have one string for it:
+    /// the log sheet's header, the local notification's title, the tray's
+    /// problem line. Derived from IDs at render time — the plan by its
+    /// current name, check and prune by the repository `repositoryID` names
+    /// — because `planName` is overloaded storage: the plan for a backup,
+    /// the repository for a check or prune, a step label for a restore. An
+    /// ID that no longer resolves falls back to the stored name, which is
+    /// honest history rather than a silent fallback: the record outlives
+    /// its plan, and the name it was recorded under is the truest one it
+    /// has left.
+    static func displayName(
+        for run: RunRecord,
+        plans: [BackupPlan],
+        repositories: [Repository]
+    ) -> String {
+        let repositoryName = repositories.first { $0.id == run.repositoryID }?.name
+        switch run.kind {
+        case .backup, .forget, .restore:
+            // The plan's name as it is called now. A restore carries no
+            // planID, so its step label is the stored name — the label is
+            // its subject.
+            let planName = run.planID.flatMap { id in plans.first { $0.id == id }?.name } ?? run.planName
+            return planWithRepository(planName, repositoryName: repositoryName)
+        case .check, .prune, .initialize:
+            // The repository is the subject; the stored planName already
+            // holds it when the repository is gone.
+            return repositoryName ?? run.planName
+        }
+    }
+
+    /// The run log sheet's header: "Backup log — Documents (Home Disk)",
+    /// "Check log — Home Disk". A derivation rather than view text so the
+    /// header's words are pinned with the naming rule they follow.
+    static func logSheetTitle(
+        for run: RunRecord,
+        plans: [BackupPlan],
+        repositories: [Repository]
+    ) -> String {
+        "\(run.kind.rawValue.capitalized) log — \(displayName(for: run, plans: plans, repositories: repositories))"
+    }
+
+    /// Settings ▸ General ▸ Scheduling's "Next run" line, in the tray
+    /// headline's words: the plan with its repository, then when — the
+    /// timestamp clock, as Settings has always said the date.
+    static func nextRunLine(plan: BackupPlan, date: Date, repositories: [Repository]) -> String {
+        let name = planWithRepository(
+            plan.name,
+            repositoryName: repositories.first { $0.id == plan.repositoryID }?.name
+        )
+        return "\(name) — \(Format.timestamp(date))"
     }
 
     /// The Activity Detail column: why a run failed, else its problems as
