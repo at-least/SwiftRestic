@@ -59,9 +59,13 @@ struct FindFilesView: View {
     /// The restore waiting in the destination sheet, over this one.
     @State private var destinationRequest: RestoreDestinationRequest?
 
-    init(prefill: Prefill? = nil) {
+    /// `initialRepositoryID` starts the picker when no prefill names a
+    /// repository — the window selection's repository
+    /// (`AppModel.findFilesRepositoryID`), read by the root, which can see
+    /// the selection from where the sheet hangs.
+    init(prefill: Prefill? = nil, initialRepositoryID: UUID? = nil) {
         self.prefill = prefill
-        _repositoryID = State(initialValue: prefill?.repositoryID)
+        _repositoryID = State(initialValue: prefill?.repositoryID ?? initialRepositoryID)
         _pattern = State(initialValue: prefill?.pattern ?? "")
     }
 
@@ -103,7 +107,6 @@ struct FindFilesView: View {
                 .environment(model)
         }
         .onAppear {
-            if repositoryID == nil { repositoryID = model.configuration.repositories.first?.id }
             patternFieldIsFocused = true
             // A handed-over search runs at once; `search` picks the engine.
             if prefill != nil, canSearch { search() }

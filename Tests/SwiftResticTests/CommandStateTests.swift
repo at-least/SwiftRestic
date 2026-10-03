@@ -245,6 +245,44 @@ struct CommandStateTests {
         #expect(!model.repositoryCommands(for: nil).canRefreshAll)
     }
 
+    @Test("Find Files opens on the selection's repository, and a handed-over search wins")
+    func findFilesOpensWhereTheSelectionPoints() {
+        let model = makeModel()
+        let first = makeRepository("First")
+        let second = makeRepository("Second")
+        let plan = makePlan(on: second)
+        model.configuration.repositories = [first, second]
+        model.configuration.plans = [plan]
+
+        // Every selection kind the Repository menu acts through.
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(second.id)) == second.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .plan(plan.id)) == second.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .restoreSnapshot(second.id, "abc")) == second.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .orphanPlan(repositoryID: second.id, planID: UUID())) == second.id)
+
+        // Nothing to look at — Activity, the console, nothing selected, or a
+        // selection whose target is gone — and the picker starts on the
+        // first repository.
+        let gone = makeRepository("Gone")
+        let orphan = makePlan("Orphan", on: gone)
+        model.configuration.plans = [plan, orphan]
+        for selection: SidebarItem? in [.activity, .console, nil, .plan(orphan.id), .repository(gone.id)] {
+            #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: selection) == first.id,
+                    "selection \(String(describing: selection))")
+        }
+
+        // The Restore pane's "Search All Backups…" hand-off wins over
+        // whatever the window has selected.
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: .repository(second.id)) == first.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: second.id, selection: nil) == second.id)
+
+        // No repositories: the picker starts empty, unless a hand-off names
+        // one — the prefill still wins.
+        model.configuration.repositories = []
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(first.id)) == nil)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: nil) == first.id)
+    }
+
     @Test("a busy repository holds maintenance and retention back, never its removal")
     func busyRepositoryBlocksMaintenanceAndRetentionNotRemoval() {
         let model = makeModel()

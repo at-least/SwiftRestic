@@ -109,8 +109,14 @@ struct RootView: View {
     private func presented<V: View>(over content: V) -> some View {
         // Read here, not inside the sheet's closure: read only there, the
         // prefill set together with `isShowingFind` never reached the sheet
-        // — Find Files opened with an empty pattern (seen live).
+        // — Find Files opened with an empty pattern (seen live). The opening
+        // repository is read the same way: derived here beside the prefill,
+        // out of `router.selection`, and handed to the sheet as a parameter.
         let prefill = findPrefill
+        let findFilesRepositoryID = model.findFilesRepositoryID(
+            prefillRepositoryID: prefill?.repositoryID,
+            selection: router.selection
+        )
         return content
         .sheet(item: $editingPlan) { plan in
             PlanEditorSheet(plan: plan)
@@ -126,7 +132,8 @@ struct RootView: View {
             .environment(model)
         }
         .sheet(isPresented: $isShowingFind, onDismiss: { findPrefill = nil }) {
-            FindFilesView(prefill: prefill).environment(model)
+            FindFilesView(prefill: prefill, initialRepositoryID: findFilesRepositoryID)
+                .environment(model)
         }
         .sheet(isPresented: $isShowingConcepts) {
             ConceptsView()
@@ -325,6 +332,20 @@ struct RootView: View {
         case "repository": router.selection = model.configuration.repositories.first.map { .repository($0.id) }
         case "activity": router.selection = .activity
         case "find": isShowingFind = true
+        // The Find pane on a selection naming a non-first repository — the
+        // first plan whose repository is not the landing pane's. Plain
+        // `find` cannot tell the opening rule from the first-repository
+        // fallback: the landing selection IS the first repository, so both
+        // read the same there — so a configuration without such a plan
+        // stops the run rather than photographing that fallback.
+        case "findMoved":
+            guard let plan = model.configuration.plans.first(where: {
+                $0.repositoryID != model.configuration.repositories.first?.id
+            }) else {
+                preconditionFailure("findMoved needs a plan whose repository is not the first")
+            }
+            router.selection = .plan(plan.id)
+            isShowingFind = true
         case "concepts": isShowingConcepts = true
         case "console": router.selection = .console
         // The restore pane needs a snapshot row to select, and those arrive

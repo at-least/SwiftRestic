@@ -143,6 +143,16 @@ extension AppModel {
         return repository(id: id)?.id
     }
 
+    /// The repository Find Files opens on: the Restore pane's "Search All
+    /// Backups…" hand-off wins; otherwise the window's selection by the
+    /// Repository menu's own rule — and the first repository only when that
+    /// names none to look at (Activity, the console, nothing). The root
+    /// reads this beside the prefill — the read that provably reaches the
+    /// sheet — and hands the answer over, so FindFilesView needs no router.
+    func findFilesRepositoryID(prefillRepositoryID: UUID?, selection: SidebarItem?) -> UUID? {
+        prefillRepositoryID ?? commandRepositoryID(for: selection) ?? configuration.repositories.first?.id
+    }
+
     // MARK: - Confirmations
 
     /// A confirmation's title and message, naming its target — the dialog

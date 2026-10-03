@@ -151,7 +151,11 @@ checked in so a normal build does not need it.
   says how many matches only other backups hold; *Search All Backups…* carries
   the search on in Find Files.
 - **Find files across snapshots** — search every snapshot for a name or glob when
-  you do not know which backup still has the file, then restore the match. The
+  you do not know which backup still has the file, then restore the match. It
+  opens on the repository you are looking at — a selected plan's, backup
+  record's or group's; the first repository when the selection names none
+  (Activity, the console, nothing) — unless the Restore pane's *Search All
+  Backups…* handed a search over, which names its own repository. The
   toolbar's magnifier, or ⇧⌘F.
 - **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
   runs `restic diff` against the previous snapshot of the same folders from the
@@ -181,10 +185,11 @@ checked in so a normal build does not need it.
   that names a run — the log sheet's header, notifications and failure
   alerts, the menu bar and Settings.
 - **Menus** — the *Plan* and *Repository* menus act on what the sidebar has
-  selected: a plan, a repository, or the repository a selected plan or backup
-  record uses. Items with nothing to act on are greyed out. ⌘B backs up the
-  selected plan, ⌘. stops it, ⇧⌘B backs up every plan, ⇧⌘F finds files and ⌘R
-  refreshes every repository's snapshots; *Pause Backups* is there as well as in
+  selected: a plan, a repository, or the repository a selected plan, backup
+  record or Other-backups group belongs to. Items with nothing to act on are
+  greyed out. ⌘B backs up the selected plan, ⌘. stops it, ⇧⌘B backs up every
+  plan, ⇧⌘F finds files and ⌘R refreshes every repository's snapshots;
+  *Pause Backups* is there as well as in
   the menu bar. While a sheet is up, a command that opens a sheet or the
   console, or acts on the selected plan or repository, beeps and does nothing;
   *Back Up All Plans Now*, *Pause Backups*, *Resume Backups*, *Pause and Stop
@@ -346,10 +351,13 @@ your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 `activity`, `find`, `console`), plus `orphanGroup` and `movedGroup` — the page
 of the first adoptable group under Other backups, or of the first moved plan's
 group, with its sidebar fold open. Both wait for the snapshot listing that
-builds group rows, like `restore` does. `all` instead photographs every pane in one
-run — `SWIFTRESTIC_CAPTURE` names a directory, each pane lands as
-`pane-<name>.png`, and `SWIFTRESTIC_CAPTURE_DELAY` becomes the settle time per
-pane. The sweep is the whole-window regression check: a defect like macOS 26's
+builds group rows, like `restore` does. `findMoved` opens Find Files on the
+first plan whose repository is not the first, so a shot shows the picker
+starting on the selection's repository rather than the landing pane's (a
+configuration without such a plan stops the run). `all` instead photographs
+every pane in one run — `SWIFTRESTIC_CAPTURE` names a directory, each pane
+lands as `pane-<name>.png`, and `SWIFTRESTIC_CAPTURE_DELAY` becomes the settle
+time per pane. The sweep is the whole-window regression check: a defect like macOS 26's
 floating title-bar material shows up on every pane, including the ones nobody
 was just then looking at. Captures prefer ScreenCaptureKit, which renders
 Tahoe's glass materials correctly but needs a one-time grant (System Settings
