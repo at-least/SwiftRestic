@@ -2,8 +2,8 @@ import Foundation
 
 /// What to say about starting at login, and where. The scheduler lives in
 /// the app's process, so a schedule stops at the first restart or logout
-/// unless the app comes back by itself; the plan editor and a repository
-/// page's Next runs card say so, from these rules.
+/// unless the app comes back by itself; the plan editor says so, from
+/// these rules.
 enum LoginItemAdvice {
     enum Offer: Equatable, Sendable {
         /// Registering would work: one click.
@@ -38,7 +38,7 @@ enum LoginItemAdvice {
     /// The plan editor's offer: only when saving turns a schedule on — a
     /// new scheduled plan, or a manual or paused one whose draft is
     /// scheduled. An ordinary edit of a plan already on its schedule says
-    /// nothing; the Next runs card covers the steady state.
+    /// nothing; Settings' switch carries the steady state.
     static func editorOffer(
         draft: BackupPlan,
         initial: BackupPlan?,

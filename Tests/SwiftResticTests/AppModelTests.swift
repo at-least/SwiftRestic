@@ -875,8 +875,7 @@ struct PausingTests {
 }
 
 /// The scheduler lives in the app's process, so a schedule dies with it. What
-/// the Next runs card, the plan editor and the quit alert say about that, from
-/// the model's side.
+/// the plan editor and the quit alert say about that, from the model's side.
 @Suite("Start at login surfaces")
 @MainActor
 struct StartAtLoginSurfaceTests {
@@ -900,37 +899,6 @@ struct StartAtLoginSurfaceTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
         return (model, plan)
-    }
-
-    @Test("the Next runs caveat shows only while a scheduled run is ahead and the app will not start at login")
-    func nextRunsCaveat() {
-        let (model, _) = makeModel()
-        #expect(model.loginItemOffer(isInstallable: true) == .startAtLogin)
-        model.loginItemNeedsApproval = true
-        #expect(model.loginItemOffer(isInstallable: true) == .awaitingApproval)
-        model.loginItemNeedsApproval = false
-        #expect(model.loginItemOffer(isInstallable: false) == .moveToApplications)
-        model.startsAtLogin = true
-        #expect(model.loginItemOffer(isInstallable: true) == nil)
-        model.startsAtLogin = false
-
-        // A paused schedule is still a schedule that dies with the process.
-        model.pauseBackups(for: .untilResumed)
-        #expect(model.loginItemOffer(isInstallable: true) == .startAtLogin)
-        model.resumeBackups()
-        model.pausePlanSchedule(id: model.configuration.plans[0].id, for: .oneHour)
-        #expect(model.loginItemOffer(isInstallable: true) == .startAtLogin)
-        model.configuration.plans[0].pausedUntil = nil
-
-        model.configuration.plans[0].schedule.frequency = .manual
-        #expect(model.loginItemOffer(isInstallable: true) == nil)
-        model.configuration.plans[0].schedule.frequency = .daily
-        model.configuration.plans[0].isEnabled = false
-        #expect(model.loginItemOffer(isInstallable: true) == nil)
-        model.configuration.plans[0].isEnabled = true
-        #expect(model.loginItemOffer(isInstallable: true) == .startAtLogin)
-        model.configuration.repositories = []
-        #expect(model.loginItemOffer(isInstallable: true) == nil)
     }
 
     @Test("an idle quit asks only when the user chose it — a quit requested from outside never waits")
@@ -982,7 +950,7 @@ struct StartAtLoginSurfaceTests {
         #expect(imminent.hasPrefix("Documents is due now."))
     }
 
-    @Test("under a hold the quit sentence names it first, as the Next runs card does")
+    @Test("under a hold the quit sentence names it first, as the tray's line does")
     func quitNoticeNamesTheHold() throws {
         let (model, _) = makeModel()
         let now = anchorToRealClock(model)
@@ -998,7 +966,7 @@ struct StartAtLoginSurfaceTests {
 
         // An open-ended hold sets no date. A slot still ahead keeps its
         // date, which the scheduler keeps only if the hold lifts by then —
-        // so the hold is named, as the card names it above its rows …
+        // so the hold is named, as the tray's line names it …
         model.pauseBackups(for: .untilResumed, now: now)
         model.configuration.plans[0].lastRunAt = now
         let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: now, now: now))

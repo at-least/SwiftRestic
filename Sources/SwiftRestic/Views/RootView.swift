@@ -232,6 +232,11 @@ struct RootView: View {
             consumeCaptureGroupPane()
             #endif
         }
+        // A listing completing is the add-with-history landing's one
+        // moment: the groups it builds are what that reveal opens.
+        .onChange(of: model.snapshots) {
+            considerAdoptionLandings()
+        }
         // The load finishing is what selects the landing pane: onAppear runs
         // before `bootstrap` has read anything, so without this a configured
         // app sat on the Welcome screen until the user clicked somewhere.
@@ -272,6 +277,29 @@ struct RootView: View {
     /// was on is revalidating away in the same breath.
     private func adoptGroup(repositoryID: UUID, planID: UUID) {
         adoptingPlan = model.adoptDraft(repositoryID: repositoryID, planID: planID)
+    }
+
+    /// The add-with-history landing: a repository whose first completed
+    /// listing holds no plan of its own and at least one adoptable group
+    /// opens the shelf that history sits on — Other backups, and the first
+    /// group's fold — so the groups are in view without hunting; the
+    /// repository page's card offers Adopt… anyway, and no modal or wizard
+    /// interrupts. A repository whose first listing arrives beside plans
+    /// never lands here, and each repository is considered once however the
+    /// listing answers — the mark lives in the model, so a closed and
+    /// reopened window cannot re-arm the reveal.
+    private func considerAdoptionLandings() {
+        for repository in model.configuration.repositories {
+            guard model.snapshotsLoadedAt(for: repository.id) != nil,
+                  !model.adoptionLandingsConsidered.contains(repository.id)
+            else { continue }
+            model.adoptionLandingsConsidered.insert(repository.id)
+            guard model.plans(in: repository.id).isEmpty,
+                  case let .plan(planID, _)? = model.shelves(for: repository.id).adoptableGroups.first
+            else { continue }
+            sidebarFolds.otherBackups.insert(repository.id)
+            sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: repository.id, planID: planID))
+        }
     }
 
     /// ⌘B: run whichever plan the sidebar is on — when the Plan menu's

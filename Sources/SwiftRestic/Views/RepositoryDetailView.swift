@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// A repository's page, and its overview: its plans' protection, their next
-/// runs and the week's problems against it first — the questions asked of a
-/// backup destination, in the order they are asked — then the facts about
-/// the destination itself, Details and Maintenance.
+/// A repository's page, and its overview: protection in one line, the
+/// adoptable history a repository may have arrived with, and the week's
+/// problems against it — the questions asked of a backup destination, in
+/// the order they are asked — then the facts about the destination itself,
+/// Details and Maintenance.
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -13,6 +14,9 @@ struct RepositoryDetailView: View {
     let onEdit: () -> Void
     /// Opens the plan editor with this repository preset.
     let onAddPlan: () -> Void
+    /// Opens the adopt sheet for a group row on this page — the root owns
+    /// the presenting state, as for every sheet a pane raises.
+    let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     /// Read off the body: `resourceValues` is synchronous filesystem IO, and
     /// a spun-down external disk can take seconds to answer — re-run on every
@@ -69,14 +73,8 @@ struct RepositoryDetailView: View {
                 BannerView(banner: banner)
             }
 
-            let plans = model.plans(in: repositoryID)
-            ProtectionCard(
-                title: "Plans",
-                plans: plans,
-                emptyText: "No plans back up to this repository yet.",
-                onAddPlan: onAddPlan
-            )
-            NextRunsCard(plans: plans)
+            ProtectionCard(repositoryID: repositoryID, onAddPlan: onAddPlan)
+            OtherBackupsCard(repositoryID: repositoryID, onAdoptGroup: onAdoptGroup)
             RecentProblemsCard(repositoryID: repositoryID)
 
             // Arq's storage-location page, plus the two numbers a backup
@@ -126,13 +124,19 @@ struct RepositoryDetailView: View {
 
     /// A count only once the listing it derives from has succeeded; before
     /// that, or after a failure, "—" with the reason as its tooltip — the
-    /// caveat under the card says it in words.
+    /// caveat under the card says it in words. Loaded, the count splits
+    /// when some of the repository's backups belong to no plan of it, by
+    /// the same count the sidebar's Other backups node carries.
     @ViewBuilder
     private var snapshotsValue: some View {
         switch model.snapshotListingOutcome(for: repositoryID) {
         case .loaded:
-            Text(Format.count(model.repositoryStats[repositoryID]?.snapshotsCount ?? model.snapshots(for: repositoryID).count))
-                .monospacedDigit()
+            Text(OverviewMetrics.snapshotsLine(
+                total: model.repositoryStats[repositoryID]?.snapshotsCount
+                    ?? model.snapshots(for: repositoryID).count,
+                otherBackups: model.shelves(for: repositoryID).otherBackupsCount
+            ))
+            .monospacedDigit()
         case let .failed(message):
             Text("—").help(message)
         case .idle:

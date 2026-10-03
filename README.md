@@ -51,7 +51,13 @@ checked in so a normal build does not need it.
   and Mac they came from (restic's own `host,paths` grouping). Each group's
   caption says which kind it is — *not set up here*, *now backs up to
   “Offsite”*, *outside SwiftRestic* — and names the Mac its newest backup
-  came from when that isn't this one. A
+  came from when that isn't this one. A plan's row caption says when its
+  next run is (*“Last backup 1 hour ago · Next Today 2:05 AM”*) while its
+  schedule is active, not manual, and nothing else claims the line — no run
+  in flight, no standing failure, no app-wide hold. Where the row is too
+  narrow for both, the next run gives way and the tooltip keeps the whole
+  line: at the default sidebar width most next-run times need a wider
+  sidebar. A
   repository wears a warning while one of its plans is not protected — its
   backups cannot be read, a plan has no backup, or a plan's last backup
   failed; the warning's tooltip names the plan.
@@ -68,7 +74,9 @@ checked in so a normal build does not need it.
   menu; an untagged lineage's menu carries *Restore Files…* alone.
 - **Adopting** — a group no plan anywhere carries the ID of can be adopted
   back into one: *Adopt as a Backup Plan…*, from the page's explanation
-  card and the group's context menu, opens the plan editor with the
+  card, the group's context menu, and an *Other backups* card on the
+  repository's page that lists each adoptable group while there is one,
+  opens the plan editor with the
   group's own name and, from the newest backup this Mac made — or the
   newest of all, when another Mac made them all — its folders, exclude
   patterns and user tags, with the repository locked to the one the
@@ -81,9 +89,18 @@ checked in so a normal build does not need it.
   under Other backups and can be adopted back. Moving a plan to another
   repository in the editor says what stays behind — the backups are never
   thinned, and retention runs against the plan's current repository only.
-- **A repository's page is its overview** — its plans and whether each is
-  protected, what runs next, and what has gone wrong with it lately, then
-  where it is, how big it is, and its maintenance.
+- **A repository's page is its overview** — a *Protection* line (“2 of 2
+  plans protected · Last backup 1 hour ago”; with no plans yet, the count
+  of backups from no plan here), which carries the hold's own words while
+  backups are held app-wide and a *Resume* button while the hold is your
+  own *Pause Backups*, beside *New Backup
+  Plan…*; an *Other backups* card listing each adoptable group while there
+  is one; the week's problems against it; then where it is, how big it is,
+  and its maintenance. The *Snapshots* row splits the backups no plan of
+  the repository made (“11 · 6 from no plan here”, or “all” when none of
+  them is a plan's). A repository whose
+  first listing finds no plans and adoptable history opens its *Other
+  backups* shelf so the groups are in view; no modal, no wizard.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob
   Storage, Google Cloud Storage, an rclone remote, or a restic REST server.
   Creating one runs `restic init`; the app refuses to save a repository it could
@@ -199,7 +216,8 @@ App/        AppModel       @MainActor @Observable — configuration, run state,
                             lifecycles over sink protocols, unit-testable
             TaskRegistry   the in-flight task census shutdown drains
             ConsoleModel   the console pane's state (dependencies injected)
-Views/      NavigationSplitView UI, the dashboard cards, restic console;
+Views/      NavigationSplitView UI, the sidebar and the repository page's
+            cards, restic console;
             the root composes SidebarView + RootDetailView child views
 ```
 
@@ -302,7 +320,8 @@ Five layers:
   what macOS 15 ships, built from the official amalgamation.
 
 Plus the pure layers that are easy to get quietly wrong: notification payloads
-per provider, the dashboard's protection rows, console argument tokenising, and
+per provider, the protection rows and the Protection line, console argument
+tokenising, and
 that configuration written by an older build still decodes.
 
 ### Looking at the app
@@ -507,9 +526,8 @@ stretch.
   replaces, and that stale entry outlives the build. Move the app to
   `/Applications` first. On an ad-hoc-signed build macOS may still ask for
   approval in System Settings; the toggle catches up when you come back to the
-  app. The plan editor offers *Start at Login* when a save turns a schedule on,
-  and a repository page's *Next runs* card says the same while a run is scheduled
-  and start at login is off. Quitting from SwiftRestic's own Quit — the app
+  app. The plan editor offers *Start at Login* when a save turns a schedule on.
+  Quitting from SwiftRestic's own Quit — the app
   menu, ⌘Q or the menu bar item — while a plan is scheduled and start at login
   is off names the run that will be missed; a quit asked for by the Dock,
   AppleScript, a logout, restart or shutdown never waits on that question.

@@ -1,267 +1,165 @@
 import SwiftUI
 
-// The dashboard's three cards — what is protected, what runs next, what
-// has gone wrong — over whichever plans a page shows, in the order the
-// questions are asked. No charts or tiles: sizes live on each repository's
-// page, history in Activity.
+// The repository page's cards — protection in one line, the adoptable
+// history a repository may have arrived with, and the week's problems
+// against it — over the repository the page shows, in the order the
+// questions are asked. No charts or tiles: sizes live in the Details card,
+// history in Activity.
 
 // MARK: - Protection
 
-/// One row per plan with its own state texture — protected, empty,
-/// unreadable, unknown — instead of one aggregate number that cannot say
-/// which plan it is worried about. The count survives as a derived caption,
-/// never the headline. The row type and its derivation live in
-/// `OverviewMetrics`; the view keeps only the hue each state wears.
-///
-/// The state line's words carry every state, and scannability comes from
-/// severity ordering. Only trouble adds a glyph, since orange caption text
-/// measured 2.05:1 on the card: the warning triangle for an unreadable
-/// listing, and for a standing problem the sidebar row's own outcome glyph
-/// beside the sidebar row's own words.
+/// The repository page's Protection card: one line — how many of the
+/// repository's plans are protected, when its newest backup landed, and,
+/// while one is on, the app-wide hold's words with a Resume — plus the
+/// page's one visible way to a new plan. The line is static text by rule:
+/// no hover, no chevron, no destination — the plans it summarizes sit in
+/// the sidebar beside it. It waits for a succeeded listing (the caveat
+/// under Details says why in words); the card and its button stay.
 struct ProtectionCard: View {
     @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
     /// The window's minute clock, as the sidebar's captions read it.
     @Environment(\.now) private var now
 
-    let title: LocalizedStringKey
-    let plans: [BackupPlan]
-    let emptyText: LocalizedStringKey
-    /// "New Backup Plan…", when the page has a repository to preset: the
-    /// prominent next step while the card is empty, a small button beside
-    /// the count once it is not.
-    var onAddPlan: (() -> Void)?
+    let repositoryID: UUID
+    let onAddPlan: () -> Void
 
     var body: some View {
-        // The rows feed both the card and its caption; captured once so a
-        // render costs one pass over the plans, not two.
-        let rows = model.protectionRows(for: plans, now: now)
-        return Card(title) {
+        let plans = model.plans(in: repositoryID)
+        let summary = model.protectionSummary(repositoryID: repositoryID, now: now)
+        return Card("Protection") {
             VStack(alignment: .leading, spacing: 7) {
-                if rows.isEmpty {
-                    Text(emptyText)
-                        .foregroundStyle(.secondary)
-                    if let onAddPlan {
-                        Button("New Backup Plan…", action: onAddPlan)
-                            .buttonStyle(.borderedProminent)
-                    }
-                } else {
-                    ForEach(rows) { row in
-                        protectionRow(row)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } accessory: {
-            HStack(spacing: 10) {
-                let known = rows.filter(\.isKnown)
-                if !known.isEmpty {
-                    Text("\(known.filter(\.isProtected).count) of \(known.count) protected")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                if let onAddPlan, !rows.isEmpty {
-                    Button("New Backup Plan…", action: onAddPlan)
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
-                }
-            }
-        }
-    }
-
-    /// The row opens its plan. The three cards list the same shape, so
-    /// they share one grammar: a row that goes somewhere wears the hover
-    /// tint and a trailing chevron, as Recent problems' rows do. Retry stays
-    /// its own control beside the row, not a button inside a button.
-    private func protectionRow(_ row: ProtectionRow) -> some View {
-        HStack(spacing: 8) {
-            Button { router.selection = .plan(row.planID) } label: {
-                HStack(spacing: 8) {
-                    protectionRowText(row)
-                    Spacer(minLength: 12)
-                    DashboardRowChevron()
-                }
-            }
-            .buttonStyle(HoverableButtonStyle())
-            .accessibilityLabel("\(row.planName): \(row.stateText). Show plan")
-            if row.didFail, let repositoryID = row.repositoryID {
-                Button("Retry") {
-                    Task { await model.refreshSnapshots(repositoryID: repositoryID) }
-                }
-                .controlSize(.small)
-                .accessibilityLabel("Retry reading snapshots for \(row.planName)")
-            }
-        }
-    }
-
-    private func protectionRowText(_ row: ProtectionRow) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(row.planName)
-                .lineLimit(1)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                // Beside words that say it: decoration to VoiceOver.
-                if row.didFail {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .imageScale(.small)
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityHidden(true)
-                } else if let outcome = row.problemOutcome, let symbol = outcome.symbolName {
-                    Image(systemName: symbol)
-                        .imageScale(.small)
-                        .foregroundStyle(StatusPalette.status(outcome))
-                        .accessibilityHidden(true)
-                }
-                Text(row.stateText)
-                    .foregroundStyle(row.stateHue)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .font(.caption)
-        }
-    }
-}
-
-private extension ProtectionRow {
-    /// "Not protected" is the row's real news and reads at full weight; a
-    /// pending, running or protected line stays quiet, and so do an
-    /// unreadable listing's words — its glyph wears the warning hue. A
-    /// first backup in flight is not protected yet, and not news either.
-    var stateHue: Color {
-        if isRunning { return .secondary }
-        if isKnown, !isProtected { return .primary }
-        return .secondary
-    }
-}
-
-// MARK: - Next runs
-
-struct NextRunsCard: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
-    /// Whether a run is due, and the dates, are as of the window's clock.
-    @Environment(\.now) private var now
-
-    let plans: [BackupPlan]
-
-    var body: some View {
-        Card("Next runs") {
-            VStack(alignment: .leading, spacing: 7) {
-                // The scheduler's own enumeration: an incomplete plan is
-                // filtered out exactly where the scheduler filters it, so
-                // the card can no longer announce a run that will never fire.
-                // A timed hold moves every date to its end, where the
-                // scheduler will pick the runs up.
-                let hold = model.scheduleHold
-                let upcoming = Scheduler.upcomingRuns(
-                    in: plans,
-                    now: now,
-                    existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
-                    heldUntil: hold?.resumesAt
-                )
-                .sorted { $0.1 < $1.1 }
-                .prefix(5)
-
-                // First, above the rows: while backups are held, that is
-                // what the rows mean.
-                if let hold {
+                if let summary {
                     HStack(spacing: 8) {
-                        Label(hold.summary(), systemImage: hold == .onBattery ? "battery.25" : "pause.circle")
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 8)
-                        if case .paused = hold {
+                        Text(summary.text)
+                        // The deleted Next runs card's hold line and its
+                        // control, moved: this is the one in-window Resume,
+                        // and only the user's own pause has one — the
+                        // battery's ends by plugging in.
+                        if summary.showsResume {
+                            Spacer(minLength: 8)
                             Button("Resume") { model.resumeBackups() }
                                 .buttonStyle(.borderless)
+                                .controlSize(.small)
                                 .help("Resume scheduled backups, checks and prunes")
                         }
                     }
                 }
-
-                if upcoming.isEmpty {
-                    Text("Nothing scheduled.").foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(upcoming), id: \.0.id) { plan, date in
-                        let status = UpcomingStatus(date: date, now: now, isBackingUp: model.activity[plan.id]?.isBackup == true, hold: hold)
-                        // Opens the plan, as the Protection rows do.
-                        Button { router.selection = .plan(plan.id) } label: {
-                            HStack {
-                                Text(plan.name).lineLimit(1)
-                                Spacer()
-                                switch status {
-                                case .runningNow:
-                                    // The due run is the one in flight, and
-                                    // nothing stamps its slot until it ends:
-                                    // "Due now" stood over every scheduled
-                                    // backup beside the sidebar's spinner. The
-                                    // plan page's Next backup says the same.
-                                    Text(status.text)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                case .waiting:
-                                    // Due, but held: it runs once the hold lifts,
-                                    // not now. Icon and word in the secondary
-                                    // colour — a wait, not an alarm.
-                                    Label(status.text, systemImage: "pause.circle")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                case .dueNow:
-                                    // Icon + word, not colour alone, and only
-                                    // the glyph wears the warning hue: the word
-                                    // in orange measured 2.33:1 on the card.
-                                    Label {
-                                        Text(status.text)
-                                    } icon: {
-                                        Image(systemName: "clock.badge.exclamationmark")
-                                            .foregroundStyle(Theme.warning)
-                                    }
-                                    .font(.caption.weight(.semibold))
-                                case .at:
-                                    Text(status.text)
-                                        .font(.callout.monospacedDigit())
-                                        .foregroundStyle(.secondary)
-                                }
-                                DashboardRowChevron()
-                            }
-                        }
-                        .buttonStyle(HoverableButtonStyle())
-                        .accessibilityLabel("\(plan.name): \(status.text). Show plan")
-                    }
-                    // Last, under the rows it qualifies: they promise runs,
-                    // and this is the condition on that promise. "Nothing
-                    // scheduled." has nothing to qualify.
-                    if let offer = model.loginItemOffer() {
-                        Divider()
-                        LoginItemOfferLine(offer: offer)
-                    }
+                // The repository's first plan: the way to it is the whole
+                // point of a plan-less page, in the empty card's prominent
+                // form. A sidebar row carries it too, but it leaves as soon
+                // as a plan exists — this button is the one that stays.
+                if plans.isEmpty {
+                    Button("New Backup Plan…", action: onAddPlan)
+                        .buttonStyle(.borderedProminent)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } accessory: {
+            // The slot the count caption used to fill. With plans, the page
+            // has no other visible way to the next one: the sidebar's row
+            // is the first plan's only, and ⌘N and the footer menu are
+            // invisible until asked for.
+            if !plans.isEmpty {
+                Button("New Backup Plan…", action: onAddPlan)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+            }
+        }
+    }
+}
+
+// MARK: - Other backups
+
+/// The repository page's Other backups card — the adopt flow's landing
+/// place, for a repository added with history already in it: one row per
+/// adoptable plan-UUID group, with the group's own Adopt… beside it. An
+/// accepted, deliberate exception to "the sidebar lists them": the rows
+/// carry a verb, the card exists only while something can be adopted, and
+/// the groups it leaves out — a moved plan's, an untagged lineage's — stay
+/// visible in the sidebar beside it, counted by the Details split rather
+/// than restated here. It hides while the listing has not succeeded, and
+/// adopting the last group empties it away.
+struct OtherBackupsCard: View {
+    @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
+
+    let repositoryID: UUID
+    /// Opens the adopt sheet for one adoptable group — the root owns the
+    /// presenting state, as for every sheet a pane raises.
+    let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
+
+    @ViewBuilder
+    var body: some View {
+        let shelves = model.shelves(for: repositoryID)
+        let groups = shelves.adoptableGroups
+        // The same rule as the Protection line: adoptable rows beside a
+        // failed read promise action on stale facts. The sidebar keeps its
+        // old groups beside the failure sentence, under its own rule.
+        if !groups.isEmpty, !listingFailed {
+            // The node's own name — "Other" only beside plans — and its
+            // total, both the sidebar's derivations, so the card and the
+            // tree it sits beside cannot disagree.
+            Card(LocalizedStringKey(SidebarTree.otherBackupsTitle(repositoryHasPlans: !shelves.plans.isEmpty))) {
+                VStack(alignment: .leading, spacing: 7) {
+                    // otherLabels names every group it is given, and these
+                    // are among the shelves' own.
+                    let labels = shelves.otherLabels(
+                        repositories: model.configuration.repositories,
+                        localHost: model.localHostname
+                    )
+                    ForEach(groups) { group in
+                        if case let .plan(planID, _) = group {
+                            row(planID: planID, label: labels[group.id]!)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } accessory: {
+                Text(Format.plural(shelves.otherBackupsCount, "backup"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
-    /// A Next runs row's status. Its words are the row's text and its
-    /// VoiceOver label both.
-    private enum UpcomingStatus {
-        case runningNow, waiting, dueNow
-        case at(Date)
+    /// Whether the last read of the listing failed — the card hides with
+    /// the Protection line when it did.
+    private var listingFailed: Bool {
+        if case .failed = model.snapshotListingOutcome(for: repositoryID) { return true }
+        return false
+    }
 
-        init(date: Date, now: Date, isBackingUp: Bool, hold: ScheduleHold?) {
-            if date > now {
-                self = .at(date)
-            } else if isBackingUp {
-                self = .runningNow
-            } else {
-                self = hold != nil ? .waiting : .dueNow
+    /// One adoptable group. The row opens the group's page — the in-page
+    /// row grammar, hover and trailing chevron — and Adopt… sits before the
+    /// chevron as its own control, Retry's grammar: never a button inside
+    /// a button.
+    private func row(planID: UUID, label: SnapshotLineage.Label) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                router.selection = .orphanPlan(repositoryID: repositoryID, planID: planID)
+            } label: {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(label.title)
+                            .lineLimit(1)
+                        if let caption = label.caption {
+                            Text(caption.text)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 12)
+                }
             }
-        }
-
-        var text: String {
-            switch self {
-            case .runningNow: "Running now"
-            case .waiting: "Waiting"
-            case .dueNow: "Due now"
-            case let .at(date): Format.timestamp(date)
-            }
+            .buttonStyle(HoverableButtonStyle())
+            .accessibilityLabel("\(label.title): \(label.caption?.text ?? ""). Show group page")
+            Button("Adopt…") { onAdoptGroup(repositoryID, planID) }
+                .controlSize(.small)
+                // The group page's own words for the verb it opens.
+                .help("Rebuild a plan around these backups — their history becomes its own, and nothing is written to the repository")
+                .accessibilityLabel("Adopt \(label.title) as a backup plan")
+            DashboardRowChevron()
         }
     }
 }

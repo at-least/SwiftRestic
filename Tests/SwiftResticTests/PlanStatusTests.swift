@@ -325,7 +325,75 @@ struct PlanStatusTests {
             for: plan, activity: nil, problem: nil,
             existingRepositoryIDs: [repositoryID], now: now, calendar: calendar, relative: relative
         )
+        // The pause lapsed, so the schedule is live again: the plain line,
+        // next run appended (locale-owned, pinned by prefix).
         #expect(lapsed.text == "Last backup 5 minutes ago")
+        #expect(lapsed.line.hasPrefix("Last backup 5 minutes ago · Next "))
+        #expect(lapsed.pauseNote == nil)
+    }
+
+    @Test("the caption's plain state appends the next run, in the tile's own words")
+    func captionNextSuffix() {
+        var plan = completeDailyPlan()
+        plan.lastSuccessAt = now.addingTimeInterval(-3600)
+
+        // One derivation: the suffix is the plan page's Next backup value
+        // itself, so the two surfaces cannot disagree about the same run.
+        let tile = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], now: now)
+        let caption = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(caption.nextRun == tile.value)
+        #expect(caption.text == "Last backup 5 minutes ago")
+        #expect(caption.line == "Last backup 5 minutes ago · Next \(tile.value)")
+
+        // Only the plain state: a run in flight, a standing problem, the
+        // plan's own pause and the app-wide hold each keep the line.
+        var activity = PlanActivity()
+        activity.phase = .backingUp
+        #expect(PlanStatus.sidebarCaption(
+            for: plan, activity: activity, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        ).line == "Backing up")
+        #expect(PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: run(.failed),
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        ).line == "Failed — 5 minutes ago")
+        plan.isEnabled = false
+        #expect(PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        ).line.hasPrefix("Paused"))
+        plan.isEnabled = true
+        #expect(PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], hold: .paused(until: nil),
+            now: now, relative: relative
+        ).line == "Last backup 5 minutes ago")
+
+        // A manual plan never promises a run; a never-run plan's caption is
+        // the schedule branch, which carries no suffix.
+        plan.schedule.frequency = .manual
+        #expect(PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        ).line == "Last backup 5 minutes ago")
+        plan.schedule.frequency = .daily
+        // A plan the scheduler skips — its folders emptied, its repository
+        // gone from the configuration — carries no suffix either: "Next"
+        // names a moment, never "Not scheduled".
+        plan.sources = []
+        #expect(PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        ).line == "Last backup 5 minutes ago")
+        plan.sources = ["/Users/someone/Documents"]
+        plan.lastSuccessAt = nil
+        #expect(PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        ).line == plan.schedule.summary)
     }
 
     @Test("a plan the scheduler skips never promises its schedule; a running one names its phase")

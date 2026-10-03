@@ -30,8 +30,9 @@ struct RootDetailView: View {
     let onAddRepository: () -> Void
     /// Opens the plan editor, with the repository preset when one is given.
     let onAddPlan: (_ repositoryID: UUID?) -> Void
-    /// Opens the adopt sheet for a plan-UUID group's page — the root owns
-    /// the presenting state, as for every sheet a pane raises.
+    /// Opens the adopt sheet for an Other backups group — its page or the
+    /// repository page's card — the root owns the presenting state, as for
+    /// every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
     /// The Restore pane's "Search All Backups…": Find Files, prefilled.
@@ -87,7 +88,8 @@ struct RootDetailView: View {
                         RepositoryDetailView(
                             repositoryID: repository.id,
                             onEdit: { onEditRepository(repository) },
-                            onAddPlan: { onAddPlan(repository.id) }
+                            onAddPlan: { onAddPlan(repository.id) },
+                            onAdoptGroup: onAdoptGroup
                         )
                     } else {
                         ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")

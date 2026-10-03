@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Coming back from System Settings is the only sign that Full Disk
     /// Access was granted or taken away, or that the login item was approved
     /// or removed under Login Items, so every activation asks again — here
-    /// rather than in Settings, so the Next runs card and the plan editor catch
+    /// rather than in Settings, so the plan editor catches
     /// up while no Settings window exists. Two tasks, so neither answer
     /// waits on the other's round trip. The model arrives with the scene's
     /// task; an activation before that is covered by bootstrap's own reads.

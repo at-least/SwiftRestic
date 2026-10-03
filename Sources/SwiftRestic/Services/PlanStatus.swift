@@ -27,6 +27,16 @@ struct PlanCaption: Equatable, Sendable {
     /// The pause, on a line of its own, when a standing problem took the
     /// first one — so neither state hides the other.
     var pauseNote: String?
+    /// When the schedule fires next, in the plan page's Next backup words —
+    /// beside the last backup only, while the schedule will fire one.
+    var nextRun: String?
+
+    /// The whole line: `text`, then " · Next …" when there is a next run.
+    /// The row shows it where it fits; where it does not, the next run
+    /// gives way whole and this stays the tooltip and VoiceOver's line.
+    var line: String {
+        nextRun.map { "\(text) · Next \($0)" } ?? text
+    }
 }
 
 /// The plan page's words, kept out of the view so they can be tested: the
@@ -118,15 +128,15 @@ enum PlanStatus {
     }
 
     /// The plan page's Next backup value (named for the tile it once was),
-    /// from the same enumeration the scheduler, a repository page's Next runs
-    /// card and the tray read, so the page cannot show a date nothing will
+    /// from the same enumeration the scheduler and the tray read, so the
+    /// page cannot show a date nothing will
     /// fire at. A paused plan says so instead of
     /// "Manually" — a paused manual one without promising a schedule to
     /// resume; an enabled plan the scheduler skips — no folders, or a
     /// repository it cannot find — says it is not scheduled.
     /// A timed pause, the plan's own or the app-wide `hold`, moves the date
     /// to its end; under an open-ended hold a run already due reads
-    /// "Waiting", as on the Next runs card, never "Due now". A due slot
+    /// "Waiting", never "Due now". A due slot
     /// whose backup is in flight (`isBackingUp`) reads "Running now".
     static func nextBackupTile(
         for plan: BackupPlan,
@@ -236,11 +246,19 @@ enum PlanStatus {
     /// as the dot). A never-run plan the scheduler skips — no folders, or a
     /// repository it cannot find — reads "Not scheduled", as its
     /// Next backup value does, rather than a schedule it will not keep.
+    ///
+    /// In the plain last-backup state alone, a schedule that will fire it
+    /// (active, not manual, no app-wide hold) adds the next run, spelled by
+    /// `nextBackupTile` — the plan page's Next backup value's own
+    /// derivation, so the two surfaces cannot disagree about the same run.
+    /// Every other state keeps its words; the plan's page is where each of
+    /// them meets its next run.
     static func sidebarCaption(
         for plan: BackupPlan,
         activity: PlanActivity?,
         problem: RunRecord?,
         existingRepositoryIDs: Set<UUID>,
+        hold: ScheduleHold? = nil,
         now: Date = .now,
         calendar: Calendar = .current,
         relative: (Date) -> String = { Format.relative($0) }
@@ -260,7 +278,19 @@ enum PlanStatus {
             return PlanCaption(text: pause)
         }
         if let lastSuccessAt = plan.lastSuccessAt {
-            return PlanCaption(text: "Last backup \(relative(lastSuccessAt))")
+            var caption = PlanCaption(text: "Last backup \(relative(lastSuccessAt))")
+            // The pause branches above have returned, so the schedule is
+            // active; a manual one never promises a run, and under the
+            // app-wide hold the run the scheduler will fire is not this
+            // one's date to name. A plan the scheduler skips — the same
+            // check the never-run branch below makes — gets no next run
+            // either: "Next" names a moment, never "Not scheduled".
+            if plan.schedule.frequency != .manual, hold == nil,
+               !Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty
+            {
+                caption.nextRun = nextBackupTile(for: plan, existingRepositoryIDs: existingRepositoryIDs, now: now).value
+            }
+            return caption
         }
         if plan.schedule.frequency != .manual,
            Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty

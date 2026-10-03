@@ -53,9 +53,9 @@ final class AppModel {
     /// Live backup progress per plan, in its own observable storage: a
     /// restic status tick (~1/sec) lands here and invalidates only the views
     /// that read progress — the running strip and nothing else. `activity`
-    /// keeps the phase strip, the sidebar's rows and the Plans card's rows,
-    /// which must not re-render per tick; the pair is installed and retired
-    /// together by `installPlanActivity` and the run's unwind.
+    /// keeps the phase strip, the sidebar's rows and the Protection line's
+    /// rows, which must not re-render per tick; the pair is installed and
+    /// retired together by `installPlanActivity` and the run's unwind.
     var planProgress: [UUID: OperationProgress] = [:]
     /// Repository upkeep currently in flight, keyed by repository.
     var maintenance: [UUID: MaintenanceActivity] = [:]
@@ -90,6 +90,11 @@ final class AppModel {
     /// When the listing last succeeded. A freshness stamp the surfaces show
     /// so a number can always be traced to the moment it was read.
     var snapshotsLoadedAt: [UUID: Date] = [:]
+    /// Repositories whose first completed listing the add-with-history
+    /// landing has already been considered for — model state, not window
+    /// state, so a closed and reopened main window cannot re-arm the
+    /// reveal. Dropped with the repository's other runtime state.
+    @ObservationIgnored var adoptionLandingsConsidered: Set<UUID> = []
     /// The last listing generation handed out, one counter for every
     /// repository — see `nextListingGeneration`. Only the index reads these
     /// numbers, and it compares them only within one repository.
@@ -114,9 +119,9 @@ final class AppModel {
     /// read and never optimistically.
     var loginItemNeedsApproval = false
     /// Whether this copy could be registered as a login item, read once at
-    /// launch so the Next runs card's body does not resolve symlinks on every
-    /// render. It feeds only what the surfaces offer: registering keeps its
-    /// own live check (`performSetStartsAtLogin`).
+    /// launch so the plan editor's start-at-login offer does not resolve
+    /// symlinks on every render. It feeds only what the surfaces offer:
+    /// registering keeps its own live check (`performSetStartsAtLogin`).
     @ObservationIgnored let loginItemInstallable: Bool
     /// Whether SwiftRestic — and so its restic — may read what Full Disk
     /// Access guards. Probed, not asked: see `refreshFullDiskAccess()`.

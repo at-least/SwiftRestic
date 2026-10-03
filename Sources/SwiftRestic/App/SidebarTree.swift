@@ -78,6 +78,27 @@ struct BackupShelves: Equatable {
 
     var hasOtherBackups: Bool { !others.isEmpty }
 
+    /// How many of the repository's backups none of its plans made — the
+    /// sidebar's Other backups node, the repository page's Protection line,
+    /// its Other backups card and its Snapshots split all count it from
+    /// here, so no two of them can disagree.
+    var otherBackupsCount: Int {
+        others.reduce(0) { $0 + $1.snapshots.count }
+    }
+
+    /// The groups a repository's page offers to adopt: plan-UUID groups no
+    /// configuration sets up — a deleted plan's history, or one still
+    /// running on another Mac. Not a moved plan's (its plan exists, so its
+    /// page offers that instead) and not an untagged lineage's (it has no
+    /// UUID to adopt). The same classification `AppModel.adoptDraft`'s
+    /// guard reads.
+    var adoptableGroups: [OtherBackupsGroup] {
+        others.filter { group in
+            guard case .plan = group else { return false }
+            return formerPlan(of: group) == nil
+        }
+    }
+
     /// `listing` newest first, as `ResticService.snapshots` sorts it;
     /// `plans` the repository's own and `allPlans` every configured plan,
     /// both in configuration order.

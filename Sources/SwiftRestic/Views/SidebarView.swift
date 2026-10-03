@@ -277,10 +277,11 @@ struct SidebarView: View {
     }
 
     /// The warning a repository wears while one of its plans is not
-    /// protected and should be — the rows its page's Plans card shows, read
-    /// from the same derivation. With no dashboard over every repository,
-    /// this is where an unreadable repository shows at a glance: the badge
-    /// and the menu bar count failed runs, and a wrong password fails none.
+    /// protected and should be — the rows its page's Protection line
+    /// counts, read from the same derivation. With no page over every
+    /// repository, this is where an unreadable repository shows at a
+    /// glance: the badge and the menu bar count failed runs, and a wrong
+    /// password fails none.
     /// The words stay with the rows; the mark only points at them.
     @ViewBuilder
     private func attentionMark(_ repository: Repository) -> some View {
@@ -322,8 +323,8 @@ struct SidebarView: View {
     /// The way to a repository's first plan, where its plans would be. An
     /// action, not a place: no tag, no chevron — its plus fills the fold
     /// column, so its title starts where plan names do. It leaves once a
-    /// plan exists; the page's Plans card and the row's menu keep offering
-    /// the next one.
+    /// plan exists; the page's Protection card and the row's menu keep
+    /// offering the next one.
     private func addPlanRow(_ repository: Repository) -> some View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
@@ -497,7 +498,9 @@ struct SidebarView: View {
     private func otherBackupsRow(_ repository: Repository, shelves: BackupShelves) -> some View {
         let isExpanded = folds.otherBackups.contains(repository.id)
         let title = SidebarTree.otherBackupsTitle(repositoryHasPlans: !shelves.plans.isEmpty)
-        let count = Format.plural(shelves.others.reduce(0) { $0 + $1.snapshots.count }, "backup")
+        // The one count every surface reads — the page's Protection line,
+        // its Other backups card and its Snapshots split included.
+        let count = Format.plural(shelves.otherBackupsCount, "backup")
         return Button { toggleOtherBackups(repository, title: title) } label: {
             HStack(spacing: 4) {
                 FoldChevron(isExpanded: isExpanded)
@@ -828,13 +831,14 @@ private struct PlanSidebarRow: View {
     let plan: BackupPlan
 
     var body: some View {
-        // As of the window's minute clock, the repository page's Plans card
-        // spells the same run from the same tick.
+        // As of the window's minute clock — the same tick the repository
+        // page's Protection line counts its Last backup moment from.
         let caption = PlanStatus.sidebarCaption(
             for: plan,
             activity: model.activity[plan.id],
             problem: model.currentProblem(for: plan.id),
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
+            hold: model.scheduleHold,
             now: now,
             relative: { Format.ago($0, now: now) }
         )
@@ -857,14 +861,24 @@ private struct PlanSidebarRow: View {
                             .foregroundStyle(StatusPalette.status(outcome))
                             .accessibilityHidden(true)
                     }
-                    // Middle truncation: the trailing marker narrows the
-                    // column, and a tail cut would take "ago" — when it
-                    // happened. The tooltip and VoiceOver keep the whole line.
-                    Text(caption.text)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(caption.text)
+                    // The next run gives way whole where the line cannot
+                    // hold both: at the default sidebar width "Last backup
+                    // 15 hours ago · Next Tomorrow 3:10 AM" needs 248 pt of
+                    // the caption's ~200 (measured 2026-10-03), and a middle
+                    // cut took the end of one fact and the start of the
+                    // other. Middle truncation still guards the last form:
+                    // the trailing marker narrows the column, and a tail
+                    // cut would take "ago" — when it happened. The tooltip
+                    // and VoiceOver keep the whole line.
+                    ViewThatFits(in: .horizontal) {
+                        Text(caption.line)
+                        Text(caption.text)
+                    }
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(caption.line)
+                    .accessibilityLabel(caption.line)
                 }
                 .font(.caption)
                 // A paused plan whose problem took the line above: the pause

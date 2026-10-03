@@ -85,17 +85,19 @@ struct OverviewMetricsTests {
         ])
         #expect(rows.last?.stateText.hasPrefix("Last backup ") == true)
         #expect(rows.last?.isProtected == true)
-        // The failure row is the only unknown-and-failing one.
+        // The failure row is the only unknown-and-failing one, and the only
+        // loaded one with no lastBackupAt to count.
         #expect(rows.filter(\.didFail).map(\.planName) == ["Failed"])
+        #expect(rows.first { $0.planName == "Failed" }?.lastBackupAt == nil)
     }
 
     @Test("a protected row says when in the sidebar's words, from the same formatter")
     func protectedRowMatchesTheSidebar() {
         // 1 h 43 min ago: Date.RelativeFormatStyle rounds this to "2 hours
         // ago" while the sidebar's Format.relative (RelativeDateTimeFormatter)
-        // says "1 hour ago" — the dashboard's Protection card (now a
-        // repository page's Plans card) and the sidebar disagreed about the
-        // same backup, side by side (captured 2026-10-02).
+        // says "1 hour ago" — the dashboard's Protection card and the
+        // sidebar disagreed about the same backup, side by side (captured
+        // 2026-10-02).
         let repository = UUID()
         let time = Date.now.addingTimeInterval(-103 * 60)
         let rows = OverviewMetrics.protectionRows(
@@ -131,7 +133,13 @@ struct OverviewMetricsTests {
         let sidebar = PlanStatus.sidebarCaption(
             for: photos, activity: nil, problem: nil, existingRepositoryIDs: [repository]
         )
-        #expect(rows.map(\.stateText) == [sidebar.text])
+        // This plan has no folders, so the scheduler skips it and the
+        // caption carries no next-run suffix — the shared derivation is the
+        // "Last backup" moment itself, spelled identically, and the row's
+        // lastBackupAt is that same moment (the run's stamp, not the
+        // snapshot's own time).
+        #expect(sidebar.text == rows[0].stateText)
+        #expect(rows.first?.lastBackupAt == photos.lastSuccessAt)
         #expect(rows.first?.isProtected == true)
     }
 
@@ -196,15 +204,13 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { $0 == docs.id ? failed : nil }
         )
-        // One derivation of the words: the dashboard (now a repository
-        // page's Plans card) printed "Last backup 4 hours ago" beside the
-        // sidebar's "Failed — Just now" (captured 2026-10-02), and "2 of 2
-        // protected" above it.
+        // One derivation of the words: the dashboard printed "Last backup
+        // 4 hours ago" beside the sidebar's "Failed — Just now" (captured
+        // 2026-10-02), and "2 of 2 protected" above it.
         let sidebar = PlanStatus.sidebarCaption(
             for: docs, activity: nil, problem: failed, existingRepositoryIDs: [repository]
         )
         #expect(rows.map(\.stateText) == [sidebar.text])
-        #expect(rows.first?.problemOutcome == .failed)
         #expect(rows.first?.isKnown == true)
         #expect(rows.first?.isProtected == false)
     }
@@ -213,13 +219,17 @@ struct OverviewMetricsTests {
     func standingWarning() {
         let repository = UUID()
         let docs = plan("Docs", repository: repository)
+        let warnedAt = Date.now.addingTimeInterval(-540)
         var warned = RunRecord(kind: .backup, planName: "Docs", startedAt: .now.addingTimeInterval(-600))
         warned.planID = docs.id
         warned.outcome = .completedWithErrors
-        warned.finishedAt = .now.addingTimeInterval(-540)
+        warned.finishedAt = warnedAt
+        // The listing's moment is the decoded snapshot's own time: a Date's
+        // trip through the helper's JSON number moves its last bits.
+        let written = snapshot("snapDocs", at: warnedAt)
         let rows = OverviewMetrics.protectionRows(
             plans: [docs],
-            latestSnapshot: { _, _ in snapshot("snapDocs", at: .now.addingTimeInterval(-540)) },
+            latestSnapshot: { _, _ in written },
             repositoryHasSnapshots: { _ in true },
             listingOutcome: { _ in .loaded },
             isChecking: { _ in false },
@@ -227,8 +237,9 @@ struct OverviewMetricsTests {
             standingProblem: { _ in warned }
         )
         #expect(rows.first?.stateText.hasPrefix("\(RunRecord.Outcome.completedWithErrors.displayName) — ") == true)
-        #expect(rows.first?.problemOutcome == .completedWithErrors)
         #expect(rows.first?.isProtected == true)
+        // The problem override keeps the listing's moment for the line.
+        #expect(rows.first?.lastBackupAt == written.time)
     }
 
     @Test("an unreadable listing outranks a standing problem: its row owns the Retry")
@@ -249,7 +260,125 @@ struct OverviewMetricsTests {
         )
         #expect(rows.map(\.stateText) == ["Can't read snapshots — Repository /nas is not reachable"])
         #expect(rows.first?.didFail == true)
-        #expect(rows.first?.problemOutcome == nil)
+    }
+
+    private func protectionRow(
+        _ name: String,
+        isKnown: Bool,
+        isProtected: Bool,
+        lastBackupAt: Date? = nil
+    ) -> ProtectionRow {
+        ProtectionRow(
+            plan: plan(name, repository: UUID()),
+            stateText: name,
+            isKnown: isKnown,
+            isProtected: isProtected,
+            didFail: false,
+            lastBackupAt: lastBackupAt
+        )
+    }
+
+    @Test("the Protection line counts known rows, names the newest last backup, and carries the hold")
+    func protectionLine() {
+        let rows = [
+            protectionRow("Protected", isKnown: true, isProtected: true, lastBackupAt: date("2026-09-05 09:00:00")),
+            protectionRow("Exposed", isKnown: true, isProtected: false, lastBackupAt: date("2026-09-05 10:00:00")),
+            protectionRow("Reading", isKnown: false, isProtected: false),
+        ]
+        // The still-reading plan is in neither number, and the last backup
+        // is the newer of the two moments that have one.
+        let plain = OverviewMetrics.protectionSummary(
+            rows: rows, listingLoaded: true, otherBackupsCount: 3,
+            hold: nil, now: date("2026-09-05 11:00:00"),
+            relative: { _ in "1 hour ago" }
+        )
+        #expect(plain?.text == "1 of 2 plans protected · Last backup 1 hour ago")
+        #expect(plain?.showsResume == false)
+
+        // The hold's words are the hold's own summary, joined on.
+        let end = date("2026-09-05 14:00:00")
+        let paused = OverviewMetrics.protectionSummary(
+            rows: rows, listingLoaded: true, otherBackupsCount: 0,
+            hold: .paused(until: end), now: date("2026-09-05 11:00:00"),
+            relative: { _ in "1 hour ago" }
+        )
+        #expect(paused?.text == "1 of 2 plans protected · Last backup 1 hour ago · "
+            + ScheduleHold.paused(until: end).summary(now: date("2026-09-05 11:00:00")))
+        #expect(paused?.showsResume == true)
+
+        // Only the user's own pause gets the button; the battery's ends by
+        // plugging in.
+        let onBattery = OverviewMetrics.protectionSummary(
+            rows: rows, listingLoaded: true, otherBackupsCount: 0,
+            hold: .onBattery, now: date("2026-09-05 11:00:00"),
+            relative: { _ in "1 hour ago" }
+        )
+        #expect(onBattery?.text == "1 of 2 plans protected · Last backup 1 hour ago · Backups wait for power — this Mac is on battery")
+        #expect(onBattery?.showsResume == false)
+
+        // One plan spells its own noun; no plan with a backup yet omits the
+        // moment entirely rather than promising "Never".
+        let single = OverviewMetrics.protectionSummary(
+            rows: [protectionRow("Only", isKnown: true, isProtected: true, lastBackupAt: nil)],
+            listingLoaded: true, otherBackupsCount: 0, hold: nil,
+            now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
+        )
+        #expect(single?.text == "1 of 1 plan protected")
+        let neverRan = OverviewMetrics.protectionSummary(
+            rows: [
+                protectionRow("Empty", isKnown: true, isProtected: false),
+                protectionRow("Adopted", isKnown: true, isProtected: false),
+            ],
+            listingLoaded: true, otherBackupsCount: 0, hold: nil,
+            now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
+        )
+        #expect(neverRan?.text == "0 of 2 plans protected")
+    }
+
+    @Test("the Protection line waits for a succeeded listing")
+    func protectionLineWaitsForTheListing() {
+        let rows = [protectionRow("Fine", isKnown: true, isProtected: true, lastBackupAt: date("2026-09-05 10:00:00"))]
+        // Still reading, or unreadable: the caveat under Details speaks,
+        // and the line hides — with plans and without.
+        #expect(OverviewMetrics.protectionSummary(
+            rows: rows, listingLoaded: false, otherBackupsCount: 2,
+            hold: .paused(until: nil), now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
+        ) == nil)
+        #expect(OverviewMetrics.protectionSummary(
+            rows: [], listingLoaded: false, otherBackupsCount: 2,
+            hold: nil, now: date("2026-09-05 11:00:00")
+        ) == nil)
+    }
+
+    @Test("with no plans, the line names the adoptable side — or nothing to name")
+    func protectionLineWithNoPlans() {
+        let now = date("2026-09-05 11:00:00")
+        let withHistory = OverviewMetrics.protectionSummary(
+            rows: [], listingLoaded: true, otherBackupsCount: 6, hold: nil, now: now
+        )
+        #expect(withHistory?.text == "No plans yet · 6 backups from no plan here")
+        #expect(withHistory?.showsResume == false)
+
+        let empty = OverviewMetrics.protectionSummary(
+            rows: [], listingLoaded: true, otherBackupsCount: 0, hold: nil, now: now
+        )
+        #expect(empty?.text == "No plans yet")
+
+        // The hold joins here too: it holds this repository's checks and
+        // prunes, plans or no plans.
+        let held = OverviewMetrics.protectionSummary(
+            rows: [], listingLoaded: true, otherBackupsCount: 0, hold: .paused(until: nil), now: now
+        )
+        #expect(held?.text == "No plans yet · Backups paused until you resume")
+        #expect(held?.showsResume == true)
+    }
+
+    @Test("the Snapshots value splits the count no plan of the repository made")
+    func snapshotsValueSplit() {
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6) == "11 · 6 from no plan here")
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 0) == "11")
+        // A plan-less repository's: none of its backups is a plan's.
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11) == "11 · all from no plan here")
     }
 
     @Test("problem figures")

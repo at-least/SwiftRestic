@@ -191,7 +191,7 @@ struct SchedulingTests {
         )?.plan.name == "orphaned")
     }
 
-    @Test("upcomingRuns is the scheduler's own enumeration, shared with the Next runs card")
+    @Test("upcomingRuns is the scheduler's own enumeration, shared with the plan page's Next backup value")
     func upcomingRunsFiltering() {
         let repositoryID = UUID()
         func makePlan(name: String, enabled: Bool, sources: [String], lastRunAt: Date?) -> BackupPlan {
@@ -1028,7 +1028,7 @@ struct LoginItemTests {
         #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: true) == .startAtLogin)
         #expect(offer(draft: plan(.manual), initial: plan(.manual), isNew: true) == nil)
         #expect(offer(draft: plan(.daily, enabled: false), initial: plan(.daily), isNew: true) == nil)
-        // An already-scheduled plan: the Next runs card covers the steady
+        // An already-scheduled plan: Settings' switch covers the steady
         // state, so an ordinary edit says nothing.
         #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: false) == nil)
         #expect(offer(draft: plan(.daily), initial: plan(.manual), isNew: false) == .startAtLogin)

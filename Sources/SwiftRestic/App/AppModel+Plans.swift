@@ -15,7 +15,7 @@ extension AppModel {
     }
 
     /// These plans' Protection rows as of `now` — one derivation for the
-    /// repository page's Plans card and its sidebar row's warning. Read from
+    /// repository page's Protection line and its sidebar row's warning. Read from
     /// a view body, the lookups below still register that view's
     /// observation of the state they touch.
     func protectionRows(for plans: [BackupPlan], now: Date) -> [ProtectionRow] {
@@ -42,6 +42,21 @@ extension AppModel {
             relative: { date in
                 Format.ago(date, now: now)
             }
+        )
+    }
+
+    /// The repository page's Protection line, from the same rows the
+    /// repository's sidebar row reads its warning from — one derivation.
+    /// Read from a view body, the lookups still register that view's
+    /// observation of the state they touch.
+    func protectionSummary(repositoryID: UUID, now: Date) -> ProtectionSummary? {
+        OverviewMetrics.protectionSummary(
+            rows: protectionRows(for: plans(in: repositoryID), now: now),
+            listingLoaded: snapshotListingOutcome(for: repositoryID) == .loaded,
+            otherBackupsCount: shelves(for: repositoryID).otherBackupsCount,
+            hold: scheduleHold,
+            now: now,
+            relative: { Format.ago($0, now: now) }
         )
     }
 

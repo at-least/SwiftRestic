@@ -116,7 +116,8 @@ enum Scheduler {
     /// A repository page's Next check or Next prune, as the scheduler will
     /// start it: the app-wide hold holds upkeep too, so a timed hold moves
     /// the date to its end and a due task under an open-ended one (Until I
-    /// Resume, the battery) reads "Waiting" — the Next runs card's word — never
+    /// Resume, the battery) reads "Waiting", as a due plan's Next backup
+    /// value does — never
     /// "Due now".
     static func nextMaintenanceText(
         _ task: MaintenanceTask,
@@ -133,12 +134,12 @@ enum Scheduler {
     }
 
     /// Every enabled, complete plan's next run date, in plan order — the one
-    /// enumeration the scheduler's pick and the dashboard's "Next runs" card
-    /// both derive from, so the card cannot announce a run the scheduler
-    /// will never fire (an incomplete plan used to sit on the card as due
-    /// forever). Dates are raw: the card labels a past one "Due now" —
-    /// "Waiting" under a hold, "Running now" while its backup is in flight;
-    /// only `nextScheduledRun` clamps to `now`.
+    /// enumeration the scheduler's pick and the plan page's Next backup
+    /// value both derive from, so no surface can announce a run the
+    /// scheduler will never fire (an incomplete plan used to sit on the
+    /// dashboard as due forever). Dates are raw: the surfaces label a past
+    /// one "Due now" — "Waiting" under a hold, "Running now" while its
+    /// backup is in flight; only `nextScheduledRun` clamps to `now`.
     ///
     /// A pause with an end moves a date to that end, where the scheduler
     /// will pick the run up: the plan's own timed pause, and `heldUntil`,

@@ -366,6 +366,34 @@ struct SidebarTreeTests {
         #expect(gone.others.map { gone.formerPlan(of: $0)?.id } == [nil])
     }
 
+    @Test("the repository page adopts the groups no configuration sets up, and counts every other backup")
+    func adoptableGroupsAndCount() throws {
+        let nas = UUID()
+        // A plan that now backs up elsewhere, a deleted plan, and the
+        // console's lineage — the sidebar shows all three, the page's card
+        // offers only the deleted plan's.
+        let movedAway = plan("Music", in: UUID())
+        let m1 = try snapshot("m1", time: "2026-09-30T02:00:00Z", tags: [ResticService.planTag(movedAway.id)])
+        let deleted = UUID()
+        let g1 = try snapshot("g1", time: "2026-09-29T02:00:00Z", tags: [ResticService.planTag(deleted)])
+        let g0 = try snapshot("g0", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(deleted)])
+        let x1 = try snapshot("x1", time: "2026-09-27T02:00:00Z", paths: ["/Data/Sites"], host: "old-mac")
+        let shelves = BackupShelves(listing: [m1, g1, g0, x1], plans: [], allPlans: [movedAway])
+        #expect(shelves.adoptableGroups.map(\.id) == [.plan(deleted)])
+        #expect(shelves.adoptableGroups.map { $0.snapshots.map(\.id) } == [["g1", "g0"]])
+        // The card's accessory total is the node's own: every other backup,
+        // not just the adoptable ones.
+        #expect(shelves.otherBackupsCount == 4)
+
+        // A repository whose every backup a plan of it made has none to
+        // adopt and none to count.
+        let documents = plan("Documents", in: nas)
+        let d1 = try snapshot("d1", time: "2026-09-30T02:00:00Z", tags: [ResticService.planTag(documents.id)])
+        let tidy = BackupShelves(listing: [d1], plans: [documents], allPlans: [documents])
+        #expect(tidy.adoptableGroups.isEmpty)
+        #expect(tidy.otherBackupsCount == 0)
+    }
+
     @Test("a shared title brings the folders in, and a caption that still matches brings the tag's last four hex digits")
     func collisionFallbackChain() throws {
         // Two untagged groups whose folders share a last component: the

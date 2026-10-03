@@ -131,7 +131,7 @@ struct PlanDetailView: View {
     /// progress tick (~1/sec) re-renders the strip instead of the whole
     /// pane (progress lives in its own observable storage precisely so
     /// phase-reading views — the strip's title, the sidebar's and the
-    /// Plans card's rows — stay
+    /// Protection line's rows — stay
     /// untouched by it), and `content`'s cards never rerun per tick.
     private struct OperationStrip: View {
         @Environment(AppModel.self) private var model
