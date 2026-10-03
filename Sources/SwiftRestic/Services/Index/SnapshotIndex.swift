@@ -48,7 +48,7 @@ struct IndexChild: Sendable, Equatable {
 /// nothing to say it changed between them — a row of the Files view's
 /// version list, where a file backed up daily for a year and edited twice
 /// is three versions, not 365.
-struct ContentVersion: Sendable, Equatable {
+struct ContentVersion: Sendable, Equatable, Identifiable {
     /// How a version follows the next older one.
     enum Since: Sendable, Equatable {
         /// A `restic diff` between two of their snapshots said the content
@@ -60,10 +60,13 @@ struct ContentVersion: Sendable, Equatable {
         case uncertain
     }
 
-    /// Newest first.
+    /// Newest first; never empty — a version is the snapshots holding it.
     var snapshots: [IndexVersion]
     /// nil for the oldest version.
     var since: Since?
+
+    /// The newest snapshot's ID: no two versions share a snapshot.
+    var id: String { snapshots[0].id }
 }
 
 /// A path's version list reduced to what Find Files shows: how many indexed

@@ -413,6 +413,25 @@ struct ResticService: ResticClient {
         return separator == path.unicodeScalars.startIndex ? "/" : String(path.unicodeScalars[..<separator])
     }
 
+    /// `path` as a `restic find` pattern that matches that path alone: the
+    /// glob's metacharacters `*`, `?`, `[` and the escape `\` itself, each
+    /// escaped with a backslash. Unescaped, `a[1].txt` matched `a1.txt` and
+    /// not itself, and `b*c.txt` matched `bXc.txt` too (restic 0.19.1,
+    /// probed). A full path also keeps restic's walk to that path's folders:
+    /// 0.6 s against 5.3 s for a name pattern over 20,000 files and 12
+    /// snapshots (probed).
+    /// Scalar by scalar, as `ResticPath` cuts paths: a combining mark after
+    /// a `[` makes one Character of the two, which a Character scan would
+    /// pass unescaped.
+    static func globEscaped(_ path: String) -> String {
+        var escaped = String.UnicodeScalarView()
+        for scalar in path.unicodeScalars {
+            if "*?[\\".unicodeScalars.contains(scalar) { escaped.append("\\") }
+            escaped.append(scalar)
+        }
+        return String(escaped)
+    }
+
     /// Searches every snapshot for paths matching a glob.
     ///
     /// `restic find` walks the trees, so this is a real search rather than an

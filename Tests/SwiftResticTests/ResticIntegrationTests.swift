@@ -1158,4 +1158,50 @@ struct ResticFindTests {
         let restored = destination.appendingPathComponent("recovery-codes.txt")
         #expect(try String(contentsOf: restored, encoding: .utf8) == "the codes")
     }
+
+    /// The Files view's version rows read one file's node in every backup
+    /// through its escaped path: exactly that file, whatever glob
+    /// characters its name holds, with its size in each backup.
+    @Test("an escaped path finds exactly that file in every backup, with its size in each")
+    func escapedPathFindsOneFile() async throws {
+        let binary = try ResticBinary.locate(userOverride: nil)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticFindExact-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let root = base.resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = root.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        // Each target beside the name its raw glob would also match.
+        for (name, body) in [("a[1].txt", "one"), ("a1.txt", "x"), ("b*c.txt", "two"), ("bXc.txt", "y")] {
+            try body.write(to: source.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+        var plan = BackupPlan()
+        plan.name = "Exact"
+        plan.repositoryID = repository.id
+        plan.sources = [source.path]
+        plan.excludePatterns = []
+
+        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let context = RepositoryContext(repository: repository, password: "exact-test")
+        _ = try await service.initializeRepository(context)
+        _ = try await service.backup(context, plan: plan)
+        try "one, longer".write(to: source.appendingPathComponent("a[1].txt"), atomically: true, encoding: .utf8)
+        _ = try await service.backup(context, plan: plan)
+
+        for (name, sizes) in [("a[1].txt", Set<Int64>([3, 11])), ("b*c.txt", Set<Int64>([3]))] {
+            let path = source.appendingPathComponent(name).path
+            let results = try await service.find(
+                context, pattern: ResticService.globEscaped(path), ignoreCase: false, snapshotID: nil
+            )
+            #expect(results.count == 2, "\(name): one result per backup")
+            #expect(results.allSatisfy { $0.matches.map(\.path) == [path] }, "\(name): \(results.map { $0.matches.map(\.path) })")
+            #expect(Set(results.compactMap { $0.matches.first?.size }) == sizes)
+        }
+    }
 }

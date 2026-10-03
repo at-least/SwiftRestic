@@ -87,6 +87,17 @@ struct FilesTreeTests {
         #expect(node("/a/b.txt", folder: false).name == "b.txt")
     }
 
+    @Test("a path becomes a find pattern matching only itself: glob characters and the escape escaped, scalar by scalar")
+    func globEscaping() {
+        #expect(ResticService.globEscaped("/d/a[1].txt") == #"/d/a\[1].txt"#)
+        #expect(ResticService.globEscaped("/d/b*c?.txt") == #"/d/b\*c\?.txt"#)
+        #expect(ResticService.globEscaped(#"/d/back\slash"#) == #"/d/back\\slash"#)
+        #expect(ResticService.globEscaped("/d/plain.txt") == "/d/plain.txt")
+        // A combining mark after "[" makes one Character of the two; the
+        // bracket is still escaped.
+        #expect(ResticService.globEscaped("/d/[\u{301}x") == "/d/\\[\u{301}x")
+    }
+
     @Test("ResticPath.parent cuts at the last separator, the root's children under /")
     func parentPaths() {
         #expect(ResticPath.parent(of: "/a/b/c") == "/a/b")

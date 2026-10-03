@@ -69,9 +69,15 @@ checked in so a normal build does not need it.
   where items select several at a time and restore together, drag to
   Finder, or open in the sidebar with a double-click, keeping the chosen
   time when they existed then; with nothing selected, *Restore Folder…*
-  restores the whole folder. Picking a file shows the backups that hold
-  it. *Show in Backups* opens the chosen backup at that place. Switching
-  views leaves the pane alone.
+  restores the whole folder. Picking a file lists its versions — each
+  content it had, with the backups that held it unchanged (“3 versions in
+  214 backups”), from the index: a version starts where restic's diff said
+  the file changed, or *may have changed* where no diff compared two
+  backups or the file was absent in between. Each row's modification time
+  and size come from one `restic find` of the file's exact path, its glob
+  characters escaped. Return or *Restore…* restores the chosen version, and
+  a row drags to Finder. *Show in Backups* opens the chosen backup at that
+  place. Switching views leaves the pane alone.
 - **A plan-UUID group is a page** — a group's row selects like a plan's
   (the chevron ahead of it folds), and the page says what the history is:
   a plan not set up in SwiftRestic — deleted here, or still running on

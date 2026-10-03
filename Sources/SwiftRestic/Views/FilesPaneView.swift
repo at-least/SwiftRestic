@@ -3,7 +3,8 @@ import SwiftUI
 /// The pane for a folder or file picked in the Files view: what it is,
 /// where it lives and where it stands in its chain's history, then the item
 /// by version — a folder as any backup holding it held it
-/// (`FolderVersionsView`), a file as the backups that hold it.
+/// (`FolderVersionsView`), a file as each content it had
+/// (`FileVersionsView`).
 struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -14,7 +15,10 @@ struct FilesPaneView: View {
 
     /// The backups of the chain holding the item, newest first.
     @State private var versions: [IndexVersion] = []
-    /// The backup the item is shown at; nil for the newest.
+    /// A file's contents through those backups, newest first.
+    @State private var contentVersions: [ContentVersion] = []
+    /// The backup the item is shown at — for a file, its version's newest —
+    /// nil for the newest.
     @State private var chosenID: String?
     @State private var isLoading = true
     @State private var loadError: String?
@@ -23,7 +27,11 @@ struct FilesPaneView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                FilesPaneHeader(node: node, versions: versions, chainNewest: chainNewest, isLoading: isLoading)
+                FilesPaneHeader(
+                    node: node, versions: versions,
+                    versionCount: node.isDirectory ? nil : contentVersions.count,
+                    chainNewest: chainNewest
+                )
                 if !indexComplete {
                     Label(
                         "The index is still reading this repository — older backups may be missing.",
@@ -75,7 +83,7 @@ struct FilesPaneView: View {
         } else if node.isDirectory {
             FolderVersionsView(node: node, versions: versions, chosenID: $chosenID, onOpen: onOpen)
         } else {
-            BackupsHoldingView(node: node, versions: versions, chosenID: $chosenID)
+            FileVersionsView(node: node, versions: contentVersions, chosenID: $chosenID)
         }
     }
 
@@ -83,76 +91,33 @@ struct FilesPaneView: View {
         isLoading = true
         indexComplete = await model.indexIsComplete(repositoryID: node.repositoryID)
         do {
-            let loaded = try await model.indexedHolders(
+            // A file's backups are its versions' together, so one read
+            // answers both; a folder has no content versions.
+            let contents = node.isDirectory ? [] : try await model.indexedContentVersions(
                 ofPath: node.path, inChain: node.chainKey, repositoryID: node.repositoryID
             )
+            let loaded = node.isDirectory ? try await model.indexedHolders(
+                ofPath: node.path, inChain: node.chainKey, repositoryID: node.repositoryID
+            ) : contents.flatMap(\.snapshots)
             guard !Task.isCancelled else { return }
             versions = loaded
+            contentVersions = contents
             loadError = nil
             // The time the user was reading one level up, when this item
             // existed then: walking down keeps the era (Browse Folders'
             // rule). Spent on the first read only.
             if let hint = router.takeFilesVersionHint(), chosenID == nil {
-                chosenID = loaded.preferredVersion(previousID: hint)?.id
+                chosenID = node.isDirectory
+                    ? loaded.preferredVersion(previousID: hint)?.id
+                    : contents.first { $0.snapshots.contains { $0.id == hint } }?.id
             }
         } catch {
             guard !Task.isCancelled else { return }
             versions = []
+            contentVersions = []
             loadError = error.localizedDescription
         }
         isLoading = false
-    }
-}
-
-/// A file's backups, newest first, with Show in Backups for the one picked.
-private struct BackupsHoldingView: View {
-    @Environment(AppRouter.self) private var router
-    let node: FileNode
-    let versions: [IndexVersion]
-    @Binding var chosenID: String?
-
-    private var chosen: IndexVersion? {
-        versions.first { $0.id == chosenID } ?? versions.first
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if versions.isEmpty {
-                ContentUnavailableView(
-                    "No backup holds it yet",
-                    systemImage: "clock.arrow.circlepath",
-                    description: Text("The index is still reading this repository's backups.")
-                )
-                .frame(maxHeight: .infinity)
-            } else {
-                List(versions, id: \.id, selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) { version in
-                    HStack {
-                        Text(Format.timestamp(version.time))
-                        Spacer()
-                        Text(version.id.prefix(8))
-                            .font(.callout.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .listStyle(.inset)
-            }
-            Divider()
-            HStack {
-                Spacer()
-                Button("Show in Backups") {
-                    guard let chosen else { return }
-                    router.sidebarMode = .backups
-                    router.showRestore(
-                        repositoryID: node.repositoryID,
-                        snapshotID: chosen.id,
-                        focusPath: ResticPath.parent(of: node.path)
-                    )
-                }
-                .disabled(chosen == nil)
-                .help("Open this backup in the Backups view, at this file's folder")
-            }
-            .padding(12)
-        }
     }
 }
 
@@ -171,8 +136,9 @@ struct FilesPaneHeader: View {
     let node: FileNode
     /// The backups holding it, newest first.
     let versions: [IndexVersion]
+    /// A file's number of content versions; nil for a folder.
+    let versionCount: Int?
     let chainNewest: Snapshot?
-    let isLoading: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -202,13 +168,16 @@ struct FilesPaneHeader: View {
         }
     }
 
-    /// "In 214 backups · newest 1 hour ago", or, for an item the chain's
-    /// newest backup lacks, when it was last backed up.
+    /// "In 214 backups · newest 1 hour ago" — for a file, "3 versions in
+    /// 214 backups" — or, for an item the chain's newest backup lacks, when
+    /// it was last backed up.
     private var standing: String? {
         guard let newest = versions.first else { return nil }
         if let chainNewest, newest.id != chainNewest.id {
             return "Not in the newest backup — last backed up \(Format.timestamp(newest.time))"
         }
-        return "In \(Format.plural(versions.count, "backup")) · newest \(Format.ago(newest.time, now: now))"
+        let held = Format.plural(versions.count, "backup")
+        let span = versionCount.map { "\(Format.plural($0, "version")) in \(held)" } ?? "In \(held)"
+        return "\(span) · newest \(Format.ago(newest.time, now: now))"
     }
 }

@@ -225,6 +225,25 @@ extension AppModel {
         )
     }
 
+    /// One file's node in every backup of the repository holding it — its
+    /// size and modification time there — by backup ID, from one `restic
+    /// find` of its exact path: the Files view's version rows. Case-exact,
+    /// as a path is, and matched by bytes, as the index keys paths.
+    func fileHistory(repositoryID: UUID, path: String) async throws -> [String: FindMatch] {
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        let (service, context) = try await resticContext(for: repository)
+        let results = try await service.find(
+            context, pattern: ResticService.globEscaped(path), ignoreCase: false, snapshotID: nil
+        )
+        var history: [String: FindMatch] = [:]
+        for result in results {
+            if let match = result.matches.first(where: { PathKey($0.path) == PathKey(path) }) {
+                history[result.snapshot] = match
+            }
+        }
+        return history
+    }
+
     /// Compares two snapshots; `+` in the result means present only in `newer`.
     func diffSnapshots(
         repositoryID: UUID,
