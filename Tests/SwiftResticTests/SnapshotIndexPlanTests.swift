@@ -87,10 +87,16 @@ struct SnapshotIndexPlanTests {
             contains: ["SCAN run", "SEARCH g USING PRIMARY KEY (node_id=? AND snap_id=?)"], scans: ["run"]),
         "fullReverseInsert": Rule(
             contains: ["SCAN g", "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq=?)"], scans: ["g"]),
+        // 3.43.2 runs a WHERE clause's EXISTS as a CORRELATED SCALAR
+        // SUBQUERY over `SEARCH snap USING …`; 3.54.0's EXISTS-to-JOIN
+        // optimization makes it a join it prints `SEARCH snap EXISTS USING
+        // …`. Either way one snap_cover probe per outer row that stops at
+        // the first match. The fragment starts after the word so both
+        // versions match.
         "pendingChains": Rule(
             contains: [
                 "SCAN chain USING COVERING INDEX sqlite_autoindex_chain_1",
-                "SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=?)",
+                "USING COVERING INDEX snap_cover (chain_id=? AND state=?)",
             ],
             scans: ["chain"]),
         "pendingDesc": Rule(
@@ -148,21 +154,21 @@ struct SnapshotIndexPlanTests {
         "summaryCounts": Rule(contains: byPrimaryKeyVersions, excludes: ["TEMP B-TREE"]),
         "summaryNewest": Rule(contains: byPrimaryKeyVersions + ["USE TEMP B-TREE FOR ORDER BY"]),
         "containsKind": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq<?)"]),
+        // The EXISTS as pendingChains': one probe per run.
         "aliveRuns": Rule(contains: [
             "SEARCH r USING PRIMARY KEY (node_id=?)",
-            "CORRELATED SCALAR SUBQUERY",
-            "SEARCH s USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
+            "USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
         ]),
         "newestCover": Rule(contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)"]),
         "searchFTS": Rule(
             contains: ["SCAN f VIRTUAL TABLE INDEX 0:M1", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["f"]),
         // `listing_applied` holds one row at most (its CHECK), so its scan
-        // is one row.
+        // is one row. The inner EXISTS as pendingChains'.
         "notComplete": Rule(
             contains: [
                 "SCAN listing_applied",
                 "SCAN chain USING COVERING INDEX sqlite_autoindex_chain_1",
-                "SEARCH snap USING COVERING INDEX snap_cover (chain_id=? AND state=?)",
+                "USING COVERING INDEX snap_cover (chain_id=? AND state=?)",
             ],
             scans: ["listing_applied", "chain", "CONSTANT"]),
         "cacheOwnerPut": Rule(contains: []),
