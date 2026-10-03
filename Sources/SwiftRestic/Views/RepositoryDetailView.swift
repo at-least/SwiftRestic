@@ -7,7 +7,6 @@ import SwiftUI
 /// Details and Maintenance.
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
     /// The window's minute clock: the maintenance dates are as of it.
     @Environment(\.now) private var now
     let repositoryID: UUID
@@ -36,12 +35,13 @@ struct RepositoryDetailView: View {
         }
         .navigationTitle(repository?.name ?? "Repository")
         .toolbar {
-            // The page's verbs: read it again, start a plan in it, get
-            // files back, change it. Check, Prune, the lock and index
-            // repairs and Remove from SwiftRestic… are the Repository
-            // menu's (all of them, acting on this page's repository) and
-            // the sidebar row's (all but the two repairs), each through
-            // the one shared confirmation.
+            // The page's verbs: read it again, start a plan in it, change
+            // it. Getting files back starts from the sidebar, where the
+            // backups sit under the plans that made them. Check, Prune, the
+            // lock and index repairs and Remove from SwiftRestic… are the
+            // Repository menu's (all of them, acting on this page's
+            // repository) and the sidebar row's (all but the two repairs),
+            // each through the one shared confirmation.
             ToolbarItemGroup {
                 Button("Refresh", systemImage: "arrow.clockwise") {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
@@ -50,19 +50,6 @@ struct RepositoryDetailView: View {
                 Button("New Backup Plan…", systemImage: "plus", action: onAddPlan)
                     .labelStyle(.titleAndIcon)
                     .help("Create a backup plan that backs up to “\(repository?.name ?? "Repository")”")
-                // Arq's restore entry: select this repository's newest
-                // backup record, which opens its fold in the sidebar — its
-                // plan's or Other backups — and the Restore pane does the
-                // rest. Disabled while no records
-                // exist; loading them is Refresh's job, not a side effect.
-                Button("Restore Files…", systemImage: "arrow.down.doc") {
-                    if let latest = model.newestRecord(repositoryID: repositoryID) {
-                        router.showRestore(repositoryID: repositoryID, snapshotID: latest.id)
-                    }
-                }
-                .labelStyle(.titleAndIcon)
-                .disabled(model.snapshots(for: repositoryID).isEmpty)
-                .help("Browse backups and restore files — selects the newest backup in the sidebar")
                 Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                     .labelStyle(.titleAndIcon)
                     .help("Change this repository's location, credentials and maintenance")

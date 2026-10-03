@@ -14,8 +14,8 @@ struct RootDetailView: View {
     @Environment(AppRouter.self) private var router
 
     /// Which plans and Other backups are open in the sidebar — selecting a
-    /// record from anywhere (the repository page's Restore Files button
-    /// included) must find its fold open.
+    /// record from anywhere (a run's Browse, a group's Restore Files…)
+    /// must find its fold open.
     @Binding var folds: SidebarFolds
 
     /// Debug-capture state: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record
@@ -137,10 +137,9 @@ struct RootDetailView: View {
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }
-        // A restore record picked from anywhere (the repository page's
-        // Restore Files button included) must find its fold open: its
-        // plan's, or its repository's Other backups and the group under it
-        // that holds it.
+        // A restore record picked from anywhere (a run's Browse, a group's
+        // Restore Files…) must find its fold open: its plan's, or its
+        // repository's Other backups and the group under it that holds it.
         .onChange(of: router.selection) {
             guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
                   let record = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
