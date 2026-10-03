@@ -30,6 +30,9 @@ struct RootDetailView: View {
     let onAddRepository: () -> Void
     /// Opens the plan editor, with the repository preset when one is given.
     let onAddPlan: (_ repositoryID: UUID?) -> Void
+    /// Opens the adopt sheet for a plan-UUID group's page — the root owns
+    /// the presenting state, as for every sheet a pane raises.
+    let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
     /// The Restore pane's "Search All Backups…": Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
@@ -100,7 +103,11 @@ struct RootDetailView: View {
                         // the pane's own @State resets with the identity.
                         .id(repositoryID)
                 case let .orphanPlan(repositoryID, planID):
-                    OrphanPlanView(repositoryID: repositoryID, planID: planID)
+                    OrphanPlanView(
+                        repositoryID: repositoryID,
+                        planID: planID,
+                        onAdopt: { onAdoptGroup(repositoryID, planID) }
+                    )
                 case .console:
                     ResticConsoleView()
                 case .activity:

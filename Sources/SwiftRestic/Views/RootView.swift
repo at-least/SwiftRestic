@@ -39,6 +39,10 @@ struct RootView: View {
     /// presenting state. The pages that browse their own plan (the plan
     /// page, a group's page) present theirs themselves.
     @State private var browsingFolders: FolderBrowserTarget?
+    /// The adopt sheet, raised from a group's context menu or page — one
+    /// presentation for both, so selecting the new plan and revealing its
+    /// fold afterwards live here too.
+    @State private var adoptingPlan: BackupPlan?
     #if DEBUG
     @State private var didApplyCaptureOverride = false
     /// Which Other-backups group pane a capture run asked for, waiting for
@@ -75,7 +79,8 @@ struct RootView: View {
             onNewRepository: { editingRepository = Repository() },
             onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
             onRemoveRepository: { pendingConfirmation = .removeRepository($0.id) },
-            onBrowseFolders: { browsingFolders = $0 }
+            onBrowseFolders: { browsingFolders = $0 },
+            onAdoptGroup: adoptGroup
         )
     }
 
@@ -87,6 +92,7 @@ struct RootView: View {
             onEditRepository: { editingRepository = $0 },
             onAddRepository: { editingRepository = Repository() },
             onAddPlan: { editingPlan = newPlan(in: $0) },
+            onAdoptGroup: adoptGroup,
             onRevalidateSelection: revalidateSelection,
             onSearchAllBackups: { repositoryID, query in
                 findPrefill = FindFilesView.Prefill(repositoryID: repositoryID, pattern: query)
@@ -132,6 +138,20 @@ struct RootView: View {
             FolderBrowserView(target: target, onShowInRestore: { snapshotID, folder in
                 router.showRestore(repositoryID: target.repositoryID, snapshotID: snapshotID, focusPath: folder)
             })
+            .environment(model)
+        }
+        // The adopt sheet, from a group's context menu or its page. Adopt's
+        // landing is the new plan's own page with its records revealed under
+        // it — the click's whole result in one place.
+        .sheet(item: $adoptingPlan) { plan in
+            PlanEditorSheet(
+                plan: plan,
+                mode: .adopt,
+                onAdopted: { planID in
+                    router.selection = .plan(planID)
+                    sidebarFolds.plans.insert(planID)
+                }
+            )
             .environment(model)
         }
         // The destructive confirmations and the retention sheet, in a
@@ -246,6 +266,14 @@ struct RootView: View {
         return plan
     }
 
+    /// Opens the adopt sheet for a group — the one presentation both the
+    /// sidebar's menu and the group's page raise through. A group that no
+    /// longer reads as adoptable answers nil and nothing opens; the page it
+    /// was on is revalidating away in the same breath.
+    private func adoptGroup(repositoryID: UUID, planID: UUID) {
+        adoptingPlan = model.adoptDraft(repositoryID: repositoryID, planID: planID)
+    }
+
     /// ⌘B: run whichever plan the sidebar is on — when the Plan menu's
     /// Back Up Now would be enabled for it (complete, idle, restic found).
     private func runSelectedPlan() {
@@ -311,6 +339,13 @@ struct RootView: View {
         router.selection = .orphanPlan(repositoryID: target.repositoryID, planID: target.planID)
         sidebarFolds.otherBackups.insert(target.repositoryID)
         sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: target.repositoryID, planID: target.planID))
+        // The adopt sheet over the page it adopts: `adopt` opens it on the
+        // Files tab, `adoptRetention` on the Retention tab, where the dry-run
+        // preview and the anchored count live.
+        let sheet = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"]
+        if pane == .adoptable, sheet == "adopt" || sheet == "adoptRetention" {
+            adoptGroup(repositoryID: target.repositoryID, planID: target.planID)
+        }
     }
 
     /// The first group of the pane's kind, repositories in configuration
@@ -350,7 +385,7 @@ struct RootView: View {
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
         let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFind || isShowingConcepts
-            || pendingConfirmation != nil || retentionTarget != nil
+            || pendingConfirmation != nil || retentionTarget != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
         guard !sheetsUp else {
             NSSound.beep()

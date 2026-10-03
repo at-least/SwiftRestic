@@ -4,7 +4,7 @@ import Foundation
 /// explanation card's sentence and the Backups card's rows, derived once
 /// here so the page and the sidebar's words for the same group
 /// (`OtherBackupsGroup.labels`, which names it) can never disagree — and
-/// so what an adoption prefills from, next stage, reads the same facts.
+/// so what the adopt sheet prefills from reads the same facts.
 ///
 /// The group's kind decides the explanation: a UUID no configuration sets
 /// up is adoptable — the sentence says what could have happened (deleted
@@ -18,7 +18,7 @@ struct OrphanPlanPageSummary: Equatable {
     var explanation: String
     /// The one configured plan the group belonged to, when it still is
     /// one: the moved variant's "Open the … Plan" target. Nil for an
-    /// adoptable group, whose button is next stage's verb.
+    /// adoptable group, whose page offers the adopt verb instead.
     var formerPlan: BackupPlan?
     var newestAt: Date
     var oldestAt: Date
@@ -79,11 +79,7 @@ struct OrphanPlanPageSummary: Equatable {
                 + " — it was deleted here, or it's still running on another Mac."
         }
 
-        var hosts: [String] = []
-        for snapshot in snapshots {
-            let host = snapshot.hostname ?? "Unknown host"
-            if !hosts.contains(host) { hosts.append(host) }
-        }
+        let hosts = Snapshot.distinctHosts(of: snapshots)
         madeFrom = hosts.count == 1
             ? hosts[0]
             : "\(hosts.count) Macs — \(hosts.joined(separator: ", "))"

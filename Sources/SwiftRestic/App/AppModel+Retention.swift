@@ -21,6 +21,24 @@ extension AppModel {
         }
     }
 
+    /// The adopt sheet's dry run: what the draft's rules would leave of the
+    /// history being adopted. The draft is not saved yet, so it cannot be
+    /// looked up the way `previewRetention(planID:)` looks a plan up — the
+    /// draft itself travels to restic, which is all the preview ever needed
+    /// from the plan.
+    func previewRetention(draft: BackupPlan) async throws -> RetentionPreview {
+        guard let repository = repository(id: draft.repositoryID)
+        else { throw ResticError.repositoryMissing }
+        do {
+            let service = try service()
+            let context = try await context(for: repository)
+            return try await service.forgetPreview(context, plan: draft)
+        } catch {
+            noteAuthFailure(error, repositoryID: repository.id)
+            throw error
+        }
+    }
+
     /// Runs the plan's forget now, as the post-backup retention step does —
     /// its "Also prune" included — in the plan's own slot, so Stop, the
     /// sidebar's spinner, quitting and the busy repository behave as for a

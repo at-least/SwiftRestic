@@ -132,6 +132,27 @@ enum Format {
         return date.formatted(timestampStyle)
     }
 
+    /// The span a group's history was made over — "Sep 28 – Oct 2, 2026",
+    /// the adopt sheet's header — each end only as specific as it has to be:
+    /// one day says itself, a year both ends share is said once.
+    static func historySpan(oldest: Date, newest: Date, calendar: Calendar = .current) -> String {
+        func parts(_ date: Date) -> (month: Int, day: Int, year: Int) {
+            (calendar.component(.month, from: date), calendar.component(.day, from: date),
+             calendar.component(.year, from: date))
+        }
+        func monthDay(_ parts: (month: Int, day: Int, year: Int)) -> String {
+            "\(calendar.shortMonthSymbols[parts.month - 1]) \(parts.day)"
+        }
+        let old = parts(oldest)
+        let new = parts(newest)
+        if old.year == new.year {
+            return old.month == new.month && old.day == new.day
+                ? "\(monthDay(new)), \(new.year)"
+                : "\(monthDay(old)) – \(monthDay(new)), \(new.year)"
+        }
+        return "\(monthDay(old)), \(old.year) – \(monthDay(new)), \(new.year)"
+    }
+
     /// A next-run moment, spelled short for the plan page's Next backup
     /// value (once a stat tile, which truncated `timestamp`'s full "Sep 9,
     /// 2026 at 3:00 AM" right through its AM/PM — the one part that says

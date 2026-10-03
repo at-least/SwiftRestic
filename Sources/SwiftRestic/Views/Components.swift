@@ -636,7 +636,11 @@ struct PathListEditor: View {
                         .tag(path)
                 }
             }
-            .frame(minHeight: 110, maxHeight: 220)
+            // The plan editor's give: the lists grow toward 220 when the
+            // sheet has room, and shrink first when it does not — the adopt
+            // sheet stacks a header strip and footer warnings on the same
+            // frame, and content that outgrows a sheet loses its top edge.
+            .frame(minHeight: 44, maxHeight: 220)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)

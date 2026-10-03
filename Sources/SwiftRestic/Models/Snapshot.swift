@@ -15,7 +15,7 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     /// records beside the paths (`excludes` in `snapshots --json`, probed
     /// 2026-10-03: a backup with patterns carries them, one without omits
     /// the key entirely) — what a plan-UUID group's page shows, and what
-    /// next stage's adoption prefills from.
+    /// the adopt sheet prefills from.
     var excludes: [String]
     var programVersion: String?
     var summary: ResticSummary?
@@ -252,5 +252,17 @@ extension Snapshot {
         return snapshots
             .filter { $0.id != id && $0.time < time && $0.lineageKey == key }
             .max { $0.time < $1.time }
+    }
+
+    /// The Macs a history was made from, first-seen order, once each — one
+    /// derivation, so the group page's "Made from" row and the adopt
+    /// sheet's header cannot count the Macs differently.
+    static func distinctHosts(of snapshots: [Snapshot]) -> [String] {
+        var hosts: [String] = []
+        for snapshot in snapshots {
+            let host = snapshot.hostname ?? "Unknown host"
+            if !hosts.contains(host) { hosts.append(host) }
+        }
+        return hosts
     }
 }

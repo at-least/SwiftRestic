@@ -28,24 +28,78 @@ struct PlanEditorSheet: View {
     /// Settings switch does: if the daemon answers otherwise, the mirror
     /// moves back and the offer, or the approval caption, returns.
     @State private var requestedLoginItem = false
+    /// Adopt's asking-again dialog, armed only when the group's facts ask
+    /// for it (a foreign-host snapshot, or a newest backup under 48 h).
+    /// Its words are captured when it is armed: the group can leave while
+    /// the dialog is up, and an empty dialog is worse than last moment's
+    /// true words.
+    @State private var isConfirmingAdopt = false
+    @State private var armedAdoptConfirmation: ConfirmationCopy?
+    /// Which kind of editing this sheet is for. Inferred today from the
+    /// plan's emptiness, and still defaulted that way — but an adopt draft
+    /// is prefilled, so it would read as an edit; adoption says so. The
+    /// presenting root names `.adopt` when it raises the sheet.
+    enum Mode {
+        /// A fresh plan, nothing prefilled.
+        case new
+        /// An existing plan, opened by Edit.
+        case editing
+        /// A plan-UUID group's history, prefilled for adoption.
+        case adopt
+    }
+    private let mode: Mode
+    /// `Mode.adopt`'s completion: the presenting surface selects the new
+    /// plan and reveals its fold, which are its states to move.
+    private let onAdopted: ((UUID) -> Void)?
     private let isNew: Bool
+    /// The schedule default the adopt draft opened with, so the Schedule tab
+    /// can say why it picked Manual — a fact of the prefill, not of the
+    /// draft the user may have edited since.
+    private let adoptDefaultedToManual: Bool
 
     private enum Tab: Hashable { case files, schedule, retention, hooks }
 
-    init(plan: BackupPlan) {
-        _draft = State(initialValue: plan)
-        isNew = plan.name.isEmpty && plan.sources.isEmpty
+    init(plan: BackupPlan, mode: Mode? = nil, onAdopted: ((UUID) -> Void)? = nil) {
+        var plan = plan
+        let mode = mode ?? (plan.name.isEmpty && plan.sources.isEmpty ? .new : .editing)
+        self.mode = mode
+        self.onAdopted = onAdopted
+        isNew = mode != .editing
+        adoptDefaultedToManual = mode == .adopt && plan.schedule.frequency == .manual
         #if DEBUG
         // Debug-only: lets a capture run land on the Retention tab.
-        if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "retention" {
+        let sheet = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"]
+        if sheet == "retention" || sheet == "adoptRetention" {
             _tab = State(initialValue: .retention)
         }
+        // The dry run that tab exists for: a capture run cannot flip the
+        // toggle the preview is gated on, so the capture draft opens with
+        // a thinning policy for restic to answer — keep the latest alone,
+        // the one rule that answers with a smaller history.
+        if sheet == "adoptRetention", mode == .adopt {
+            plan.retention.isEnabled = true
+            plan.retention.keepLast = 1
+            plan.retention.keepHourly = 0
+            plan.retention.keepDaily = 0
+            plan.retention.keepWeekly = 0
+            plan.retention.keepMonthly = 0
+            plan.retention.keepYearly = 0
+        }
         #endif
+        _draft = State(initialValue: plan)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            identityHeader
+        // One derivation per render pass: the header, footer, locked
+        // repository row and dialog below all read this pass's answer —
+        // and deriving it stats the filesystem once per source, work the
+        // render path should not pay five times over.
+        let briefing = mode == .adopt ? model.adoptBriefing(for: draft) : nil
+        return VStack(spacing: 0) {
+            if let briefing {
+                adoptHeader(briefing)
+            }
+            identityHeader(briefing)
             TabView(selection: $tab) {
                 sourcesTab.tabItem { Label("Files", systemImage: "folder") }
                     .tag(Tab.files)
@@ -68,15 +122,46 @@ struct PlanEditorSheet: View {
                 // what Create does, and the Schedule tab that explains the
                 // escape hatch may never be opened.
                 VStack(alignment: .leading, spacing: 4) {
+                    // Adopt's warnings and standing sentence, beside the
+                    // button they qualify — every tab's footer, so the words
+                    // never sit behind a tab the user may not open.
+                    if let briefing {
+                        ForEach(briefing.warnings, id: \.self) { warning in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(Theme.warning)
+                                    .accessibilityHidden(true)
+                                Text(warning)
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Text(AdoptBriefing.footer)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if mode == .adopt {
+                        // The group left while the sheet was open — its page
+                        // is revalidating away behind the sheet. Say it here
+                        // rather than letting the button grey without a why.
+                        Text("These backups are no longer in the repository — there is nothing to adopt.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let reason = missingRequirement {
                         Text(reason)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     if startsFirstBackupOnCreate {
-                        Text("Creating this plan starts its first backup within a minute.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text(mode == .adopt
+                            ? "Adopting this plan starts its first backup within a minute."
+                            : "Creating this plan starts its first backup within a minute."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                     // Only when this save turns a schedule on — the moment
                     // the user commits to it. `initial` is nil until
@@ -103,13 +188,20 @@ struct PlanEditorSheet: View {
                 Spacer(minLength: 20)
                 Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
-                Button(isNew ? "Create Plan" : "Save") {
-                    model.upsert(plan: draft)
-                    dismiss()
+                Button(mode == .adopt ? "Adopt" : (isNew ? "Create Plan" : "Save")) {
+                    guard mode == .adopt else {
+                        model.upsert(plan: draft)
+                        dismiss()
+                        return
+                    }
+                    adopt()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(!draft.isConfigurationComplete)
+                // In adopt mode the group must still be there: with the
+                // history gone there is nothing to adopt, and the footer
+                // above says so beside the greyed button.
+                .disabled(!draft.isConfigurationComplete || (mode == .adopt && briefing == nil))
             }
             .padding(12)
         }
@@ -118,6 +210,12 @@ struct PlanEditorSheet: View {
         // at exactly the moment the user has the most to paste. The repository
         // editor already works this way. Tall enough that the Hooks tab's
         // Command field clears the fixed hook list band without scrolling.
+        // Adopt's header strip and footer warnings fit the same frame because
+        // the Files tab's lists give way first (PathListEditor's floor).
+        // Content that outgrows the sheet is centred in it: measured
+        // 2026-10-03, the adopt header sat 34 pt above the sheet's top edge
+        // over "projects" and 47 pt over "movies", and the tab bar drew its
+        // four labels stacked in one 34-pt blob. Fitted, both render.
         .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 620)
         .onAppear {
             if draft.repositoryID == nil {
@@ -139,6 +237,68 @@ struct PlanEditorSheet: View {
         } message: {
             Text("The plan has unsaved changes.")
         }
+        // Only armed when the briefing's facts ask for it — a group that is
+        // entirely this Mac's and older than two days adopts in one click,
+        // the sheet having already said everything the dialog would repeat.
+        .confirmationDialog(
+            armedAdoptConfirmation?.title ?? "",
+            isPresented: $isConfirmingAdopt,
+            titleVisibility: .visible
+        ) {
+            Button("Adopt") { performAdopt() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(armedAdoptConfirmation?.message ?? "")
+        }
+    }
+
+    /// The adopt sheet's facts, read fresh as the model changes so a backup
+    /// landing while the sheet is open keeps the words true. Nil in every
+    /// other mode, and once the group is gone. The body derives its own
+    /// single pass; this one serves the button's click.
+    private var briefing: AdoptBriefing? {
+        guard mode == .adopt else { return nil }
+        return model.adoptBriefing(for: draft)
+    }
+
+    /// The adopt sheet's title: what the group's backups become, when they
+    /// were made and where they stay. The sheet has no other header of its
+    /// own — the identity grid below is the same one every mode edits.
+    private func adoptHeader(_ briefing: AdoptBriefing) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(briefing.historyLine)
+                .font(.callout.weight(.semibold))
+            Text(briefing.madeLine)
+                .foregroundStyle(.secondary)
+        }
+        .font(.callout)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 4)
+    }
+
+    private func adopt() {
+        guard let briefing else {
+            // The group left while the sheet was open: nothing left to ask
+            // about. The model says what the click found, and the plan the
+            // draft still describes is a coherent one to keep or cancel.
+            performAdopt()
+            return
+        }
+        guard briefing.needsConfirmation else {
+            performAdopt()
+            return
+        }
+        armedAdoptConfirmation = briefing.confirmation
+        isConfirmingAdopt = true
+    }
+
+    private func performAdopt() {
+        model.adopt(draft: draft)
+        onAdopted?(draft.id)
+        dismiss()
     }
 
     private func cancel() {
@@ -154,10 +314,11 @@ struct PlanEditorSheet: View {
     }
 
     /// The first backup of a new scheduled plan starts within a minute of
-    /// Create — the scheduler ticks once a minute and a never-run plan counts
-    /// as immediately due. Stated at the button, on every tab, because the
-    /// schedule picker that could avoid it sits behind a tab the user may
-    /// never open.
+    /// the button that saves it — Create for a fresh plan, Adopt for a
+    /// prefilled one whose folders are all here. The scheduler ticks once a
+    /// minute and a never-run plan counts as immediately due. Stated at the
+    /// button, on every tab, because the schedule picker that could avoid it
+    /// sits behind a tab the user may never open.
     private var startsFirstBackupOnCreate: Bool {
         isNew && draft.isEnabled && draft.schedule.frequency != .manual
     }
@@ -165,26 +326,45 @@ struct PlanEditorSheet: View {
     /// The plan's identity, above the tabs and so on screen from every one
     /// of them — Arq's place for it, with our live controls: the sheet often
     /// opens over a repository's page or Activity, where nothing else names the
-    /// plan being edited, and the repository stays changeable here.
-    private var identityHeader: some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
-            GridRow {
-                Text("Name")
-                    .gridColumnAlignment(.trailing)
-                TextField("Name", text: $draft.name, prompt: Text("Documents to NAS"))
-                    .labelsHidden()
-                    .focused($isNameFocused)
-            }
-            GridRow {
-                Text("Repository")
-                Picker("Repository", selection: $draft.repositoryID) {
-                    Text("Choose…").tag(UUID?.none)
-                    ForEach(model.configuration.repositories) { repository in
-                        Text(repository.name).tag(UUID?.some(repository.id))
+    /// plan being edited, and the repository stays changeable here. An adopt
+    /// draft is the exception: its history lives in this one repository, and
+    /// a picker is the one control that could silently point the plan at
+    /// another — moving a plan is the editor's own guarded act, with its
+    /// consequence said below.
+    private func identityHeader(_ briefing: AdoptBriefing?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
+                GridRow {
+                    Text("Name")
+                        .gridColumnAlignment(.trailing)
+                    TextField("Name", text: $draft.name, prompt: Text("Documents to NAS"))
+                        .labelsHidden()
+                        .focused($isNameFocused)
+                }
+                GridRow {
+                    Text("Repository")
+                    if mode == .adopt {
+                        // Locked, and the briefing's own words. While the
+                        // group is gone — its page revalidating away — the
+                        // bare name still says where this draft points.
+                        Text(briefing?.repositoryLine ?? model.repository(id: draft.repositoryID)?.name ?? "")
+                    } else {
+                        Picker("Repository", selection: $draft.repositoryID) {
+                            Text("Choose…").tag(UUID?.none)
+                            ForEach(model.configuration.repositories) { repository in
+                                Text(repository.name).tag(UUID?.some(repository.id))
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
                     }
                 }
-                .labelsHidden()
-                .fixedSize()
+            }
+            if let consequence = model.moveConsequence(for: draft) {
+                Text(consequence)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 20)
@@ -258,6 +438,13 @@ struct PlanEditorSheet: View {
                 Text("This plan only runs when you press Back Up Now.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                // Why the adopt draft opened on Manual: the folders it
+                // prefilled from were not all here to back up.
+                if adoptDefaultedToManual {
+                    Text("Recommended — the folders may not exist on this Mac.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             case .hourly:
                 Stepper(
                     "Every \(draft.schedule.intervalHours) hour(s)",
@@ -338,6 +525,17 @@ struct PlanEditorSheet: View {
         Form {
             Toggle("Apply retention after each backup", isOn: $draft.retention.isEnabled)
 
+            // The adopt draft starts here off, and the consequence of turning
+            // it on is not the editor's usual one: the plan's tag is shared
+            // with every Mac that ever ran it, so its rules reach each Mac's
+            // backups of it at the next run.
+            if mode == .adopt {
+                Text("Turning retention on applies to every Mac's backups of this plan at the next run.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if draft.retention.isEnabled {
                 // The question people actually have, in the words they'd
                 // answer it with. The six buckets are the machinery that
@@ -365,14 +563,21 @@ struct PlanEditorSheet: View {
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                 }
+                if mode == .adopt, draft.retention.isEnabled, draft.retention.isSafeToRun {
+                    AdoptRetentionPreview(draft: draft)
+                }
                 // Anchor the projection to the snapshot count that exists
                 // today, so "≈ 41 would survive" can be read against a real
-                // number rather than floating free.
-                if !isNew, let repositoryID = draft.repositoryID,
+                // number rather than floating free. Keyed on what the draft's
+                // plan tag already holds here — an adopt draft's group counts,
+                // the one history it is about to own.
+                if let repositoryID = draft.repositoryID,
                    case .loaded = model.snapshotListingOutcome(for: repositoryID)
                 {
                     let count = model.snapshots(for: repositoryID, planID: draft.id).count
-                    LabeledContent("Snapshots now", value: Format.count(count))
+                    if count > 0 {
+                        LabeledContent("Snapshots now", value: Format.count(count))
+                    }
                 }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
                     Label(
@@ -441,5 +646,97 @@ struct PlanEditorSheet: View {
         Stepper(value: value, in: 0 ... max) {
             LabeledContent(title, value: value.wrappedValue == 0 ? "off" : "\(value.wrappedValue)")
         }
+    }
+}
+
+/// The adopt sheet's dry run over the draft itself: restic's own answer, not
+/// the synthetic projection above it, because the question here is about
+/// backups that already exist — what the rules the user just turned on would
+/// leave of the history being adopted. `previewRetention(planID:)` cannot
+/// serve this sheet (the plan is not saved yet), so the draft travels to
+/// `forget --dry-run --no-lock` directly: no lock taken, nothing removed.
+private struct AdoptRetentionPreview: View {
+    @Environment(AppModel.self) private var model
+    /// The sheet's live draft; the repository is locked in adopt mode, and
+    /// the plan tag is the group's own UUID.
+    let draft: BackupPlan
+
+    @State private var result: RetentionPreview?
+    @State private var isLoading = true
+    @State private var failure: String?
+    @State private var retry = 0
+
+    /// What the preview depends on: the rules, and the newest backup the
+    /// rules would judge — a backup landing while the sheet is open changes
+    /// the answer, so it re-runs — plus Try Again.
+    private struct PreviewKey: Hashable {
+        var retention: RetentionPolicy
+        var newestSnapshotID: String?
+        var retry: Int
+    }
+
+    private var previewKey: PreviewKey {
+        PreviewKey(
+            retention: draft.retention,
+            newestSnapshotID: model.snapshots(for: draft.repositoryID, planID: draft.id).first?.id,
+            retry: retry
+        )
+    }
+
+    var body: some View {
+        // The task rides on the always-present container: a modifier on an
+        // `if` branch never renders while that branch is empty, and the
+        // preview would never start.
+        VStack(alignment: .leading, spacing: 6) {
+            if isLoading {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Asking restic what these rules would keep…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let failure {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
+                    Text(Format.firstSentence(failure))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .help(failure)
+                Button("Try Again") { retry += 1 }
+                    .controlSize(.small)
+            } else if let result {
+                // The glyph is decoration beside a sentence that says it all;
+                // no alarm colour — a dry run has not failed anything.
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .accessibilityHidden(true)
+                    Text(result.adoptionLine)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .task(id: previewKey) { await load() }
+    }
+
+    private func load() async {
+        isLoading = true
+        failure = nil
+        do {
+            let preview = try await model.previewRetention(draft: draft)
+            // A newer key (or the sheet closing) cancelled this read; its
+            // successor owns the state now.
+            guard !Task.isCancelled else { return }
+            result = preview
+        } catch {
+            guard !Task.isCancelled else { return }
+            failure = error.localizedDescription
+            result = nil
+        }
+        isLoading = false
     }
 }

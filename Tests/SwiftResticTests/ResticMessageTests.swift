@@ -251,8 +251,8 @@ struct ResticMessageTests {
     func excludesDecoded() throws {
         // Verbatim from restic 0.19.1 (probed 2026-10-03, paths shortened):
         // a backup with --exclude patterns carries them beside the paths —
-        // the group page's Excludes row reads them, and next stage's
-        // adoption prefills from them.
+        // the group page's Excludes row reads them, and the adopt sheet
+        // prefills from them.
         let withPatterns = #"[{"time":"2026-10-03T00:35:06.329044+08:00","tree":"0cc37688","paths":["/tmp/src/alpha","/tmp/src/zeta"],"hostname":"newlixs-MacBook-Air.local","username":"newlix","uid":501,"gid":20,"excludes":["*/junk"],"tags":["swiftrestic-plan-3f2a1b0c-0000-4000-8000-abcdefabcdef","travel"],"program_version":"restic 0.19.1","id":"37c99198ae40bec5e31c123b16d829a55cfc0007578b550da1a79346ed97d1df","short_id":"37c99198"}]"#
         let patterned = try ResticMessageDecoder.jsonDecoder.decode([Snapshot].self, from: Data(withPatterns.utf8))
         #expect(patterned[0].excludes == ["*/junk"])

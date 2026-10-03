@@ -53,10 +53,11 @@ struct SidebarView: View {
     /// be a faster way around it.
     let onDeletePlan: (BackupPlan) -> Void
     let onRemoveRepository: (Repository) -> Void
-    /// Opens Browse Folders for a plan-UUID group's context menu. The
-    /// sidebar raises its sheets through the root, which owns the
-    /// presenting state.
+    /// Opens Browse Folders for a plan-UUID group's context menu, and the
+    /// adopt sheet for an adoptable group's menu. The sidebar raises its
+    /// sheets through the root, which owns the presenting state.
     let onBrowseFolders: (FolderBrowserTarget) -> Void
+    let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     var body: some View {
         List(selection: Binding(
@@ -618,9 +619,8 @@ struct SidebarView: View {
         announceFold(title, opened: opened)
     }
 
-    /// A plan-UUID group's menu: a moved plan's history opens that plan,
-    /// and every group gets its two ways in. The adoptable group's Adopt
-    /// item arrives with the verb itself, next stage.
+    /// A plan-UUID group's menu: an adoptable group's verb first, a moved
+    /// plan's history opens that plan, and every group gets its two ways in.
     @ViewBuilder
     private func groupContextMenu(
         planID: UUID,
@@ -628,6 +628,11 @@ struct SidebarView: View {
         repository: Repository,
         formerPlan: BackupPlan?
     ) -> some View {
+        if formerPlan == nil {
+            Button("Adopt as a Backup Plan…") {
+                onAdoptGroup(repository.id, planID)
+            }
+        }
         if let formerPlan {
             Button("Open the “\(formerPlan.name.isEmpty ? "Untitled Plan" : formerPlan.name)” Plan") {
                 router.selection = .plan(formerPlan.id)

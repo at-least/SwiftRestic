@@ -66,6 +66,19 @@ struct RetentionPreview: Sendable, Equatable {
         return "\(removed.count) of this plan's \(total) snapshots would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(newest.time)). \(stay)"
     }
 
+    /// The adopt sheet's one line: what the rules the user just turned on
+    /// would leave of the history being adopted. No applying can follow from
+    /// the sheet, so unlike `summary` the line never counts removals — only
+    /// what the history would become.
+    var adoptionLine: String {
+        let total = kept.count + removed.count
+        guard total > 0 else { return "This plan has no snapshots in the repository yet." }
+        if removed.isEmpty {
+            return "All \(Format.plural(total, "backup")) would stay."
+        }
+        return "With this policy, \(Format.plural(total, "backup")) would become \(kept.count)."
+    }
+
     /// The run record's Detail after the real forget: what went, and
     /// whether its data went with it (the plan's "Also prune").
     static func appliedSummary(removed: Int, pruned: Bool) -> String {

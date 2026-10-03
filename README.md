@@ -66,6 +66,21 @@ checked in so a normal build does not need it.
   Files…* opens the group's newest backup and *Browse Folders…* walks its
   folders through every backup, from the page and the group's context
   menu; an untagged lineage's menu carries *Restore Files…* alone.
+- **Adopting** — a group no plan anywhere carries the ID of can be adopted
+  back into one: *Adopt as a Backup Plan…*, from the page's explanation
+  card and the group's context menu, opens the plan editor with the
+  group's own name and, from the newest backup this Mac made — or the
+  newest of all, when another Mac made them all — its folders, exclude
+  patterns and user tags, with the repository locked to the one the
+  backups live in, the schedule set to Daily only when every prefilled
+  folder exists here, and retention off. Adopting writes one plan whose ID is the group's UUID and
+  nothing else: no snapshot is retagged, nothing is written to the
+  repository, and the records move under the new plan by themselves. A
+  group with a backup from another Mac, or one less than 48 hours old, is
+  asked once more before adopting; deleting a plan says its snapshots stay
+  under Other backups and can be adopted back. Moving a plan to another
+  repository in the editor says what stays behind — the backups are never
+  thinned, and retention runs against the plan's current repository only.
 - **A repository's page is its overview** — its plans and whether each is
   protected, what runs next, and what has gone wrong with it lately, then
   where it is, how big it is, and its maintenance.
@@ -326,8 +341,11 @@ directly both work:
 
 Three more environment variables shape a capture run: `SWIFTRESTIC_APPEARANCE`
 (`light`/`dark`) pins the appearance instead of following the system,
-`SWIFTRESTIC_CAPTURE_SHEET=diff` opens Activity's compare sheet on the newest
-backup run (with `SWIFTRESTIC_CAPTURE_PANE=activity`),
+`SWIFTRESTIC_CAPTURE_SHEET` opens a sheet — `diff` on Activity's compare sheet
+(with `SWIFTRESTIC_CAPTURE_PANE=activity`), `retention` lands the plan editor
+on its Retention tab, and `adopt`/`adoptRetention` open the adopt sheet of the
+first adoptable group (with `SWIFTRESTIC_CAPTURE_PANE=orphanGroup`, the latter
+on its Retention tab),
 and `SWIFTRESTIC_REPO_PASSWORD` hands repositories a password directly (only
 honoured together with `SWIFTRESTIC_CONFIG_DIR`), so capture runs never touch
 the login Keychain. Capture runs also do not arm the scheduler, so a due plan

@@ -10,14 +10,17 @@ import SwiftUI
 ///
 /// Every fact comes from `OrphanPlanPageSummary`, the one derivation the
 /// sidebar's labels already feed. The toolbar is empty on purpose: there
-/// is nothing to edit before the group is adopted (next stage's verb, from
-/// this page's explanation card) and nothing to refresh that the
-/// repository's page does not already offer.
+/// is nothing to edit before the group is adopted (the explanation card's
+/// verb, raised through the root as the sidebar's is) and nothing to
+/// refresh that the repository's page does not already offer.
 struct OrphanPlanView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     let repositoryID: UUID
     let planID: UUID
+    /// Opens the adopt sheet for this group — the root owns the presenting
+    /// state, as it does for every sheet a pane raises.
+    let onAdopt: () -> Void
 
     @State private var browsingFolders: FolderBrowserTarget?
 
@@ -64,10 +67,11 @@ struct OrphanPlanView: View {
         .detailPane()
     }
 
-    /// What the history is, in the summary's one sentence — and, for a
-    /// plan that now backs up elsewhere, the way back to it. Moving a plan
-    /// back is the plan editor's guarded path, so this page offers the
-    /// plan, not a second way to move it.
+    /// What the history is, in the summary's one sentence — and the way on
+    /// from it: adopting, for a plan no configuration sets up, or the plan
+    /// itself, for one that now backs up elsewhere. Moving a plan back is
+    /// the plan editor's guarded path, so this page offers the plan, not a
+    /// second way to move it.
     private func explanationCard(_ summary: OrphanPlanPageSummary) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(summary.explanation)
@@ -80,6 +84,13 @@ struct OrphanPlanView: View {
                 }
                 .controlSize(.small)
                 .help("Show this plan's page, where it backs up now")
+            } else {
+                // The flow's main entry: the group selected, adopt beside
+                // what it adopts — the group's context menu carries the
+                // same verb.
+                Button("Adopt as a Backup Plan…", action: onAdopt)
+                    .controlSize(.small)
+                    .help("Rebuild a plan around these backups — their history becomes its own, and nothing is written to the repository")
             }
         }
         .padding(Theme.Space.cardPadding)

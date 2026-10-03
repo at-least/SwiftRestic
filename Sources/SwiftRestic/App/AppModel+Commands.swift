@@ -153,13 +153,35 @@ extension AppModel {
         case let .deletePlan(id):
             guard let plan = plan(id: id) else { return nil }
             let name = plan.name.isEmpty ? "Untitled Plan" : plan.name
+            // Where the snapshots land, said when there are some: the count
+            // and the shelf the sidebar will move them to, so the dialog and
+            // what happens next cannot disagree. Deleting is the main source
+            // of adoptable groups — re-adoption restores this same UUID.
+            let landing: String
+            if let repositoryID = plan.repositoryID,
+               let repository = repository(id: repositoryID),
+               let count = shelves(for: repositoryID).byPlan[id]?.count,
+               count > 0
+            {
+                // The shelf's title as it will read once this plan is gone —
+                // the sidebar's own derivation, counted without the plan
+                // being deleted, so the dialog never names a section by a
+                // title it will not have ("Backups" beside no plan).
+                let shelf = SidebarTree.otherBackupsTitle(
+                    repositoryHasPlans: plans(in: repositoryID).count > 1
+                )
+                landing = "Its \(Format.plural(count, "snapshot")) \(count == 1 ? "stays" : "stay")"
+                    + " in “\(repository.name)”, under \(shelf), and can be adopted back."
+            } else {
+                landing = "Snapshots already written to the repository are not deleted."
+            }
             return ConfirmationCopy(
                 title: "Delete “\(name)”?",
                 // The plan page's words: it could see a run in flight, and
                 // now every surface can.
                 message: isRunning(planID: id)
-                    ? "The running backup will be stopped and recorded as cancelled. Snapshots already written to the repository are not deleted."
-                    : "The plan and its schedule are removed. Snapshots already written to the repository are not deleted."
+                    ? "The running backup will be stopped and recorded as cancelled. \(landing)"
+                    : "The plan and its schedule are removed. \(landing)"
             )
         case let .removeRepository(id):
             guard let repository = repository(id: id) else { return nil }

@@ -347,6 +347,124 @@ struct ResticIntegrationTests {
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
     }
 
+    /// The model over the fixture repository, with the history read in: what
+    /// the app runs when a repository page shows a group under Other backups.
+    @MainActor
+    private func adoptableModel(fixture: Fixture, repository: Repository) async throws -> AppModel {
+        let model = AppModel(
+            store: ConfigStore(directory: fixture.root.appendingPathComponent("config")),
+            secrets: .inMemory([repository.id: (password: Self.password, providerSecret: nil)])
+        )
+        model.binary = try ResticBinary.locate(userOverride: nil)
+        model.configuration.repositories = [repository]
+        model.snapshots[repository.id] = try await fixture.service.snapshots(fixture.context)
+        return model
+    }
+
+    @MainActor
+    @Test("adopting a group writes nothing to the repository and reshelves it under the new plan")
+    func adoptingWritesNothingAndReshelves() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // Two backups one plan made, and no plan configured anywhere — the
+        // group sits under Other backups waiting to be adopted.
+        var plan = fixture.plan
+        plan.name = "Projects"
+        for index in 0 ..< 2 {
+            try "change \(index)".write(
+                to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+            _ = try await fixture.service.backup(fixture.context, plan: plan)
+            try await Task.sleep(for: .milliseconds(1100))
+        }
+
+        var repository = Repository()
+        repository.name = "Integration"
+        repository.kind = .local
+        repository.localPath = fixture.root.appendingPathComponent("repo").path
+        let model = try await adoptableModel(fixture: fixture, repository: repository)
+
+        // The repository's own answer, read raw: adopting must leave this
+        // byte-identical.
+        func rawSnapshots() async throws -> String {
+            try await fixture.service.runner.run(
+                binary: fixture.service.binary,
+                invocation: ResticInvocation(
+                    arguments: fixture.context.globalArguments + ["snapshots", "--json"],
+                    environment: fixture.context.environment,
+                    retainFullOutput: true
+                )
+            ).stdout
+        }
+        let before = try await rawSnapshots()
+
+        #expect(model.shelves(for: repository.id).orphanPlanGroup(plan.id) != nil)
+        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: plan.id))
+        // No configuration holds the UUID, so the group's own label names it:
+        // the newest backup's folder, not the plan name the repository never
+        // knew.
+        #expect(draft.name == "source")
+        #expect(draft.sources == [fixture.sourceDirectory.path])
+        // The folder exists on this Mac, so the schedule dares to be Daily.
+        #expect(draft.schedule.frequency == .daily)
+
+        model.adopt(draft: draft)
+
+        #expect(model.configuration.plans.map(\.id) == [plan.id])
+        #expect(model.configuration.runs.isEmpty)
+        let shelves = model.shelves(for: repository.id)
+        #expect(shelves.others.isEmpty)
+        #expect(shelves.byPlan[plan.id]?.count == 2)
+
+        let after = try await rawSnapshots()
+        #expect(after == before)
+    }
+
+    @MainActor
+    @Test("the adopt sheet's dry run answers with the draft's own rules, over the unsaved plan")
+    func adoptDraftPreviewAnswersForTheDraft() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        let plan = fixture.plan
+        for index in 0 ..< 2 {
+            try "change \(index)".write(
+                to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+            _ = try await fixture.service.backup(fixture.context, plan: plan)
+            try await Task.sleep(for: .milliseconds(1100))
+        }
+
+        var repository = Repository()
+        repository.name = "Integration"
+        repository.kind = .local
+        repository.localPath = fixture.root.appendingPathComponent("repo").path
+        let model = try await adoptableModel(fixture: fixture, repository: repository)
+
+        var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: plan.id))
+        // Retention starts off; the sheet's preview turns a policy on in the
+        // draft alone — the plan is not saved, so the draft itself travels to
+        // restic.
+        #expect(!draft.retention.isEnabled)
+        draft.retention = RetentionPolicy(
+            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
+            keepWeekly: 0, keepMonthly: 0, keepYearly: 0, runPrune: false
+        )
+        let preview = try await model.previewRetention(draft: draft)
+        #expect(preview.kept.count == 1)
+        #expect(preview.removed.count == 1)
+        #expect(preview.adoptionLine == "With this policy, 2 backups would become 1.")
+        // A dry run over an unsaved plan removed nothing.
+        #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 2)
+    }
+
     /// Polls rather than `waitUntilExit()`: from this suite's async tests
     /// that call never returned — twice, 3 and 9 minutes, the terminated
     /// restic long gone from the process table, the waiting thread parked
