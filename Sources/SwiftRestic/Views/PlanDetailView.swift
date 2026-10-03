@@ -16,12 +16,16 @@ struct PlanDetailView: View {
     var body: some View {
         Group {
             if let plan {
-                content(plan)
+                switch router.tab(of: .plan(planID)) {
+                case .overview: content(plan)
+                case .files: files(plan)
+                }
             } else {
                 ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
             }
         }
         .navigationTitle(plan?.name ?? "Plan")
+        .pageTabPicker(router.tabBinding(for: .plan(planID)))
         // Opening the page is the Mail "read": whatever failure the sidebar's
         // dot was announcing is seen now — honestly, because the problem row
         // under the Backups card shows that failure for as long as it stands. The
@@ -223,10 +227,25 @@ struct PlanDetailView: View {
         .detailPane()
     }
 
+    /// The Files tab: the plan's own history in the repository it backs up
+    /// to, folders and files across every backup.
+    @ViewBuilder
+    private func files(_ plan: BackupPlan) -> some View {
+        if let repositoryID = plan.repositoryID {
+            FilesBrowserView(roots: FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id)))
+        } else {
+            ContentUnavailableView(
+                "No repository set",
+                systemImage: "questionmark.folder",
+                description: Text("Choose where this plan backs up in Edit; its files appear here after its first backup.")
+            )
+        }
+    }
+
     /// The page's answer, in Arq's label/value idiom: did this plan back
     /// up, and how many backups it holds — with the verb that makes the
     /// next one now. Its records are the sidebar's, under the plan, and its
-    /// files are the sidebar's Files view, so the page neither lists them a
+    /// files are this page's Files tab, so the card neither lists them a
     /// second time nor offers a second way to open them.
     private func backupsCard(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)

@@ -79,11 +79,40 @@ final class AppRouter {
     /// never steer an unrelated load; the pane spends it on its next load.
     private(set) var restoreFocus: RestoreFocus?
 
+    /// The view each page shows, by the page's selection — the toolbar's
+    /// Overview | Files. Transient: a page keeps the view it was left on for
+    /// the session, so a trip to a backup's record and back finds it there,
+    /// and every page opens on its overview after a launch, where "is it
+    /// backing up" is answered.
+    private(set) var pageTabs: [SidebarItem: PageTab] = [:]
+
+    /// The folders open in the Files views' trees, every chain's together:
+    /// a node names its chain, so one set serves them all. Transient, as the
+    /// sidebar's folds are.
+    var openFolders: Set<FileNode> = []
+
+    /// The folder or file each chain's Files view has selected, by the
+    /// chain's roots (`FileNode.roots`). Transient.
+    var filesSelection: [FileNode: FileNode] = [:]
+
     /// The backup a folder's listing was read from when one of its items
     /// was opened from it: the item's pane opens at it when the item exists
     /// then, so walking down keeps the era. Transient; the next Files pane
     /// to load spends it, whichever item that is.
     @ObservationIgnored var filesVersionHint: String?
+
+    func tab(of page: SidebarItem) -> PageTab {
+        pageTabs[page] ?? .overview
+    }
+
+    func setTab(_ tab: PageTab, of page: SidebarItem) {
+        pageTabs[page] = tab
+    }
+
+    /// The toolbar picker's binding for one page.
+    func tabBinding(for page: SidebarItem) -> Binding<PageTab> {
+        Binding(get: { self.tab(of: page) }, set: { self.setTab($0, of: page) })
+    }
 
     func takeFilesVersionHint() -> String? {
         defer { filesVersionHint = nil }
@@ -136,6 +165,14 @@ final class AppRouter {
         else { return nil }
         return restoreFocus.path
     }
+}
+
+/// A page's two views — the toolbar's Overview | Files on a plan's page:
+/// its overview, and its folders and files across every backup, each by
+/// version.
+enum PageTab: Hashable {
+    case overview
+    case files
 }
 
 /// The destructive (or slow) actions that ask first, wherever they are

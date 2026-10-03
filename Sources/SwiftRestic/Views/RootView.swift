@@ -397,6 +397,16 @@ struct RootView: View {
         case "planRetention": editingPlan = model.configuration.plans.first
         default: break
         }
+        applyCaptureTab()
+    }
+
+    /// `SWIFTRESTIC_CAPTURE_TAB=files`: the page the run selected, on its
+    /// Files tab. A selection with no tabs ignores it.
+    private func applyCaptureTab() {
+        guard ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_TAB"] == "files",
+              let page = router.selection
+        else { return }
+        router.setTab(.files, of: page)
     }
 
     /// The parked group-pane ask, once the shelves hold a group of its
@@ -411,6 +421,7 @@ struct RootView: View {
         router.selection = .orphanPlan(repositoryID: target.repositoryID, planID: target.planID)
         sidebarFolds.otherBackups.insert(target.repositoryID)
         sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: target.repositoryID, planID: target.planID))
+        applyCaptureTab()
         // The adopt sheet over the page it adopts: `adopt` opens it on the
         // Files tab, `adoptRetention` on the Retention tab, where the dry-run
         // preview and the anchored count live.

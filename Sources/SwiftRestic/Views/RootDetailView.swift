@@ -115,6 +115,7 @@ struct RootDetailView: View {
                     })
                     // Each item's version state is its own.
                     .id(node)
+                    .navigationTitle(node.name)
                 case let .orphanPlan(repositoryID, planID):
                     OrphanPlanView(
                         repositoryID: repositoryID,

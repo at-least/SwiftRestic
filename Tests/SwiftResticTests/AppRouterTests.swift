@@ -96,6 +96,26 @@ struct AppRouterTests {
         #expect(router.selection == selection)
     }
 
+    @Test("a page opens on its overview and keeps the view it was left on; each page its own, a trip to a backup and back included")
+    func pageTabsArePerPage() {
+        let router = AppRouter()
+        let plan = SidebarItem.plan(UUID())
+        let other = SidebarItem.plan(UUID())
+        #expect(router.tab(of: plan) == .overview)
+
+        router.tabBinding(for: plan).wrappedValue = .files
+        #expect(router.tab(of: plan) == .files)
+        #expect(router.tab(of: other) == .overview)
+
+        router.selection = plan
+        router.showRestore(repositoryID: UUID(), snapshotID: "s1")
+        router.selection = plan
+        #expect(router.tab(of: plan) == .files)
+
+        router.setTab(.overview, of: plan)
+        #expect(router.tab(of: plan) == .overview)
+    }
+
     @Test("the sidebar's view is remembered in the defaults, Backups until one is")
     func sidebarModeIsRemembered() throws {
         let suite = "SwiftResticSidebarModeTests-\(UUID().uuidString)"

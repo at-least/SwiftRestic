@@ -48,7 +48,6 @@ struct FilesPaneView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .navigationTitle(node.isRoots ? "Files" : node.name)
         // Read under each listing, and again every `recheckInterval` while
         // the index is still reading the repository — the sidebar's tree
         // rule, so the pane fills in as the tree does.

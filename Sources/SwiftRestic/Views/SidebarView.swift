@@ -538,7 +538,7 @@ struct SidebarView: View {
     @ViewBuilder
     private func planBackups(_ records: [Snapshot], in repository: Repository) -> some View {
         if records.isEmpty {
-            backupsStatusRow(repository)
+            BackupsStatusRow(repositoryID: repository.id)
                 .padding(.leading, Indent.planRecord)
         } else {
             ForEach(records) { snapshot in
@@ -595,47 +595,12 @@ struct SidebarView: View {
             .help("Show everything in “\(folder.name)” in the pane")
         case let .status(node, depth):
             if node.isRoots {
-                backupsStatusRow(repository)
+                BackupsStatusRow(repositoryID: repository.id)
                     .padding(.leading, base)
             } else {
-                filesStatusRow(node)
+                FilesStatusRow(node: node)
                     .padding(.leading, Indent.files(depth, from: base) + Indent.lineageSlot + 4)
             }
-        }
-    }
-
-    /// What an open folder says while it lists nothing: still reading, why
-    /// it could not, or that it held nothing in any backup.
-    @ViewBuilder
-    private func filesStatusRow(_ node: FileNode) -> some View {
-        switch filesTree.state(of: node) {
-        case nil, .loading:
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Reading…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        case let .failed(message):
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .imageScale(.small)
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityHidden(true)
-                    Text(Format.firstSentence(message))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .help(message)
-                }
-                .font(.caption)
-                Button("Try Again") { filesTree.reread(node) }
-                    .controlSize(.small)
-            }
-        case .loaded:
-            Text("Empty folder")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -643,45 +608,6 @@ struct SidebarView: View {
         let opened = folds.folders.remove(node) == nil
         if opened { folds.folders.insert(node) }
         announceFold("Contents of “\(node.name)”", opened: opened)
-    }
-
-    /// What an open plan says while it holds no record. "No backups yet"
-    /// only once a listing has succeeded: before that it is still being
-    /// read, and after a failure it says why.
-    @ViewBuilder
-    private func backupsStatusRow(_ repository: Repository) -> some View {
-        let outcome = model.snapshotListingOutcome(for: repository.id)
-        if model.loadingSnapshots.contains(repository.id) || outcome == .idle {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Reading backups…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        } else if case let .failed(message) = outcome {
-            VStack(alignment: .leading, spacing: 4) {
-                // Orange only on the glyph, the words secondary — the
-                // plan rows' contrast rule.
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .imageScale(.small)
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityHidden(true)
-                    Text(Format.firstSentence(message))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                .font(.caption)
-                Button("Try Again") {
-                    Task { await model.refreshSnapshots(repositoryID: repository.id) }
-                }
-                .controlSize(.small)
-            }
-        } else {
-            Text("No backups yet")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
     }
 
     // MARK: - Other backups
@@ -976,66 +902,9 @@ private enum Indent {
     }
 }
 
-/// What the Files view's load task is keyed by: the levels on screen, and
-/// the listings they must be current with.
-private struct FilesLoadKey: Equatable {
-    let nodes: [FileNode]
-    let listings: [UUID: Date]
-}
-
-/// One folder or file in the Files view's tree: a fold column (a chevron
-/// for a folder, empty for a file, so names line up), the kind's icon and
-/// its name. An item the plan's newest backup no longer holds is dimmed,
-/// and says when it was last backed up.
-private struct FilesTreeRow: View {
-    let entry: FilesTree.Entry
-    /// The name, or for a root its whole path, tilde-abbreviated.
-    let title: String
-    let isExpanded: Bool
-    let onToggle: () -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            if entry.node.isDirectory {
-                Button(action: onToggle) {
-                    FoldChevron(isExpanded: isExpanded)
-                        .frame(width: Indent.lineageSlot)
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(isExpanded ? "Hide this folder's contents" : "Show this folder's contents")
-                .accessibilityLabel("Contents of “\(title)”")
-                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-            } else {
-                Color.clear
-                    .frame(width: Indent.lineageSlot)
-                    .accessibilityHidden(true)
-            }
-            Label {
-                Text(title)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            } icon: {
-                Image(systemName: entry.node.isDirectory ? "folder" : "doc")
-            }
-            .foregroundStyle(entry.isInNewest ? .primary : .secondary)
-            .help(help)
-            .accessibilityLabel(entry.isInNewest ? title : "\(title), not in the newest backup")
-            Spacer(minLength: 0)
-        }
-    }
-
-    private var help: String {
-        entry.isInNewest
-            ? entry.node.path
-            : "Not in this plan's newest backup — last backed up \(Format.timestamp(entry.newest.time))"
-    }
-}
-
 /// A fold's disclosure mark, the restore pane's own: chevron right when
 /// closed, down when open. The row around it is the button.
-private struct FoldChevron: View {
+struct FoldChevron: View {
     let isExpanded: Bool
 
     var body: some View {
@@ -1212,6 +1081,49 @@ private struct PlanSidebarRow: View {
                 .frame(width: 9, height: 9)
                 .help(label)
                 .accessibilityLabel(label)
+        }
+    }
+}
+
+/// What an open plan says while it holds no record — and a Files tree whose
+/// chain has none. "No backups yet" only once a listing has succeeded:
+/// before that it is still being read, and after a failure it says why.
+struct BackupsStatusRow: View {
+    @Environment(AppModel.self) private var model
+    let repositoryID: UUID
+
+    var body: some View {
+        let outcome = model.snapshotListingOutcome(for: repositoryID)
+        if model.loadingSnapshots.contains(repositoryID) || outcome == .idle {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Reading backups…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else if case let .failed(message) = outcome {
+            VStack(alignment: .leading, spacing: 4) {
+                // Orange only on the glyph, the words secondary — the
+                // plan rows' contrast rule.
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
+                    Text(Format.firstSentence(message))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .font(.caption)
+                Button("Try Again") {
+                    Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                }
+                .controlSize(.small)
+            }
+        } else {
+            Text("No backups yet")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
     }
 }
