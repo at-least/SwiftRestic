@@ -347,6 +347,12 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.versions(ofPath: path, inChain: chainKey) }
     }
 
+    /// Everything one chain ever held directly under a folder, items its
+    /// newest backup no longer has included — the Files view's tree level.
+    nonisolated func children(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
+        try await read(repositoryID) { try await $0.children(ofPath: path, inChain: chainKey) }
+    }
+
     /// The Restore pane's search: basename hits across every indexed path —
     /// instant, no restic walk — and which of them the open backup holds,
     /// with their kind there, from one read of the index.

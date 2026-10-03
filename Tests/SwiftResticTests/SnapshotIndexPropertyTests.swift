@@ -76,6 +76,7 @@ struct SnapshotIndexPropertyTests {
         // The drivers must actually have exercised what they claim to.
         #expect((totals["delta"] ?? 0) > 0 && (totals["full"] ?? 0) > 0)
         #expect((totals["comparedHeld"] ?? 0) > 0)
+        #expect((totals["comparedChildren"] ?? 0) > 0)
         #expect((totals["tOnlyRefused"] ?? 0) > 0)
         if variant.flaps { #expect((totals["midStreamFlap"] ?? 0) > 0) }
         if variant.crashes { #expect((totals["crashReopen"] ?? 0) > 0) }
@@ -532,6 +533,37 @@ private final class PropertyRun {
                 let got = try await index.versions(ofPath: path, inChain: key).map(\.id)
                 let want = truth(path, chain: chain)
                 if got != want { fail("mismatch", "\(label): versions(\(path), inChain: \(chain)) got \(got.count) want \(want.count)") }
+            }
+        }
+        // A folder's children across each chain's history: every path a
+        // listed snapshot of the chain holds directly under it, with the
+        // kind and ID of the newest such snapshot, and whether the chain's
+        // newest snapshot holds it.
+        func parent(_ path: String) -> String {
+            guard let cut = path.lastIndex(of: "/") else { return "" }
+            return cut == path.startIndex ? "/" : String(path[..<cut])
+        }
+        for chain in Set(alive.map(\.chain)) {
+            let members = alive.filter { $0.chain == chain }
+            guard let newest = members.max(by: { $0.micros < $1.micros }) else { continue }
+            let key = SnapshotIndex.chainKey(for: newest.snapshot)
+            for folder in ["/", "/r", "/r/a", "/r/c", "/r/c/x", "/r/k"] {
+                var holders: [String: WorldSnapshot] = [:]
+                for snapshot in members {
+                    for path in snapshot.content.keys where parent(path) == folder {
+                        if let known = holders[path], known.micros > snapshot.micros { continue }
+                        holders[path] = snapshot
+                    }
+                }
+                let want = holders.keys.sorted(by: SnapshotIndex.bytesLess).map { path in
+                    let holder = holders[path]!
+                    return "\(path) \(holder.content[path]!) \(holder.id.suffix(4)) \(newest.content[path] != nil)"
+                }
+                let got = try await index.children(ofPath: folder, inChain: key).map {
+                    "\($0.path) \($0.isDirectory) \($0.newest.id.suffix(4)) \($0.isInNewest)"
+                }
+                if !want.isEmpty { bump("comparedChildren") }
+                if got != want { fail("mismatch", "\(label): children(\(folder), \(chain)) got \(got) want \(want)") }
             }
         }
         // Global search: paths some listed snapshot holds, each with its

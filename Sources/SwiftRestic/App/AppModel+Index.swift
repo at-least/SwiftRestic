@@ -61,6 +61,13 @@ extension AppModel {
         (try? await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)) ?? []
     }
 
+    /// What one chain ever held directly under `path`, from the index. Throws
+    /// when the index fails: the Files view says so beside the fallback it
+    /// lists instead, rather than reading a broken index as an empty folder.
+    func indexedChildren(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
+        try await indexCoordinator.children(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
+    }
+
     /// Whether the index has read every listed snapshot of the repository —
     /// the folder browser's completeness signal. An index that cannot answer
     /// reads as "not complete", never as a failure.

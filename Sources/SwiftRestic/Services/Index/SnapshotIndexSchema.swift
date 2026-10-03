@@ -399,6 +399,25 @@ enum SnapshotIndexSchema {
             WHERE chain_id = ? AND state = 1 AND seq BETWEEN ? AND ?
             ORDER BY time DESC, id DESC LIMIT 1
             """
+        /// A folder's children across one chain's indexed history, each with
+        /// the newest indexed snapshot holding it: SQLite takes the bare
+        /// columns of a single-`max()` aggregate from the row with the max,
+        /// so the kind, hash and seq are that snapshot's. Grouped by name —
+        /// unique under one parent — so the groups arrive in the order the
+        /// `(parent, name)` index walks and no sort is needed.
+        let childrenInChain = """
+            SELECT n.name, r.is_dir, s.seq, s.hash, max(s.time) FROM node n
+            JOIN run r ON r.node_id = n.id AND r.chain_id = (SELECT id FROM chain WHERE key = ?)
+            JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
+                AND s.seq BETWEEN r.first_seq AND r.last_seq
+            WHERE n.parent = ?
+            GROUP BY n.name
+            """
+        /// The chain's newest indexed snapshot, the versions' own order.
+        let chainNewestIndexed = """
+            SELECT seq FROM snap WHERE chain_id = (SELECT id FROM chain WHERE key = ?) AND state = 1
+            ORDER BY time DESC, id DESC LIMIT 1
+            """
         let searchFTS = """
             SELECT n.id, n.name FROM node_fts f JOIN node n ON n.id = f.rowid
             WHERE node_fts MATCH ? ORDER BY n.name

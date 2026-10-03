@@ -160,6 +160,23 @@ struct SnapshotIndexPlanTests {
             "USING COVERING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
         ]),
         "newestCover": Rule(contains: ["SEARCH snap USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)"]),
+        // One folder's children: the (parent, name) index in name order —
+        // the GROUP BY's own order, so no sort — then each child's runs in
+        // the chain and the indexed snapshots they cover.
+        "childrenInChain": Rule(
+            contains: [
+                "SEARCH n USING COVERING INDEX sqlite_autoindex_node_1 (parent=?)",
+                "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=?)",
+                "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",
+                "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
+            ],
+            excludes: ["TEMP B-TREE"]),
+        // The chain's indexed snapshots, sorted by time: one chain's
+        // listing, not the repository's.
+        "chainNewestIndexed": Rule(contains: [
+            "SEARCH snap USING INDEX snap_cover (chain_id=? AND state=?)",
+            "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",
+        ]),
         "searchFTS": Rule(
             contains: ["SCAN f VIRTUAL TABLE INDEX 0:M1", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["f"]),
         // `listing_applied` holds one row at most (its CHECK), so its scan

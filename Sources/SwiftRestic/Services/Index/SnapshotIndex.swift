@@ -30,6 +30,20 @@ struct IndexVersion: Sendable, Hashable {
     var time: Date
 }
 
+/// One entry directly under a folder somewhere in a chain's indexed history
+/// — a row of the Files view, which lists what a plan ever backed up, not
+/// only what its newest backup holds.
+struct IndexChild: Sendable, Equatable {
+    var path: String
+    /// The kind in `newest`: a path can change kind over its history.
+    var isDirectory: Bool
+    /// The newest indexed snapshot of the chain holding the path.
+    var newest: IndexVersion
+    /// Whether the chain's newest indexed snapshot holds it — false for an
+    /// item a later backup no longer had: deleted, moved, or excluded since.
+    var isInNewest: Bool
+}
+
 /// A path's version list reduced to what Find Files shows: how many indexed
 /// snapshots hold it, and the newest of them. Output-light whatever the
 /// version count, which is the point.
@@ -607,6 +621,39 @@ final class SnapshotIndex: @unchecked Sendable {
             guard let node = try lookup.node(for: path) else { return [] }
             return try Row.fetchAll(db.cachedStatement(sql: SQL.versionsInChain), arguments: [node, chainKey])
                 .map(Self.version(from:))
+        }
+    }
+
+    /// Everything one chain's indexed snapshots ever held directly under
+    /// `path`, by name bytewise — items a later backup no longer had
+    /// included, marked by `isInNewest`. `/` lists the root's children; an
+    /// unknown path or chain answers `[]`. Two snapshots of one chain at the
+    /// same microsecond tie arbitrarily for `newest`.
+    func children(ofPath path: String, inChain chainKey: String) async throws -> [IndexChild] {
+        try await pool.read { db in
+            let parent: Int64
+            if path == "/" {
+                parent = Self.rootID
+            } else {
+                var lookup = try NodeLookup(db)
+                guard let node = try lookup.node(for: path) else { return [] }
+                parent = node
+            }
+            guard let newestSeq = try Int64.fetchOne(
+                db.cachedStatement(sql: SQL.chainNewestIndexed), arguments: [chainKey]
+            ) else { return [] }
+            let prefix = path == "/" ? "" : path
+            return try Row.fetchAll(db.cachedStatement(sql: SQL.childrenInChain), arguments: [chainKey, parent])
+                .map { row in
+                    let name: String = row[0]
+                    let seq: Int64 = row[2]
+                    return IndexChild(
+                        path: prefix + "/" + name,
+                        isDirectory: row[1],
+                        newest: IndexVersion(id: row[3], time: Self.date(micros: row[4])),
+                        isInNewest: seq == newestSeq
+                    )
+                }
         }
     }
 
