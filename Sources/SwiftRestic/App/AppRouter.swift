@@ -96,6 +96,17 @@ final class AppRouter {
     /// to load spends it, whichever item that is.
     @ObservationIgnored var filesVersionHint: String?
 
+    /// The backup each Files pane was left at, by its item — a folder's
+    /// backup, a file's version by its newest backup — so coming back to
+    /// the item, from Show in Backups or another page, finds it as it was
+    /// read. Transient; a pane reads it as it opens, never while shown.
+    @ObservationIgnored var filesChosenVersion: [FileNode: String] = [:]
+
+    /// Bumped by Show Versions, so the Files pane opens again — at the
+    /// backup it names — even for the item already selected, whose pane
+    /// would otherwise keep its backup and leave the hint for the next.
+    private(set) var filesPaneOpenings = 0
+
     func tab(of page: SidebarItem) -> PageTab {
         pageTabs[page] ?? .overview
     }
@@ -133,6 +144,7 @@ final class AppRouter {
         filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] =
             FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
         filesVersionHint = record.id
+        filesPaneOpenings += 1
         pageTabs[page] = .files
         selection = page
     }

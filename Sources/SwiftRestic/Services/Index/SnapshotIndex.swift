@@ -78,12 +78,29 @@ struct VersionSummary: Sendable, Equatable {
 }
 
 extension Array where Element == IndexVersion {
-    /// The version the Files view opens a path at: the newest — unless the
-    /// version the user was reading one level up holds this path too,
-    /// because flipping through time should survive walking down into a
-    /// folder. The list arrives newest first from the index.
-    func preferredVersion(previousID: String?) -> IndexVersion? {
-        if let previousID, let kept = first(where: { $0.id == previousID }) {
+    /// The version the Files view opens a folder at: the one the user was
+    /// reading one level up, when it holds this folder too — flipping
+    /// through time should survive walking down — else the one the user
+    /// last left this folder at, while a backup still holds it, else the
+    /// newest. The list arrives newest first from the index.
+    func preferredVersion(previousID: String?, rememberedID: String? = nil) -> IndexVersion? {
+        for id in [previousID, rememberedID].compactMap({ $0 }) {
+            if let kept = first(where: { $0.id == id }) { return kept }
+        }
+        return first
+    }
+}
+
+extension Array where Element == ContentVersion {
+    /// The version the Files view opens a file at, by the rule folders
+    /// follow (`preferredVersion(previousID:rememberedID:)`): the one
+    /// holding the backup the user was reading one level up, else the one
+    /// last left at — by its ID — else the newest.
+    func preferredVersion(previousID: String?, rememberedID: String?) -> ContentVersion? {
+        if let previousID, let kept = first(where: { $0.snapshots.contains { $0.id == previousID } }) {
+            return kept
+        }
+        if let rememberedID, let kept = first(where: { $0.id == rememberedID }) {
             return kept
         }
         return first

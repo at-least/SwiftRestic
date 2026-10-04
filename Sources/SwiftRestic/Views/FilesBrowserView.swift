@@ -172,8 +172,9 @@ struct FilesBrowserView: View {
     private var pane: some View {
         if let selected {
             FilesPaneView(node: selected, onOpen: open)
-                // Each item's version state is its own.
-                .id(selected)
+                // Each item's version state is its own, and Show Versions
+                // opens it anew.
+                .id(FilesPaneIdentity(node: selected, opening: router.filesPaneOpenings))
         } else {
             ContentUnavailableView(
                 "Select a folder or file",
@@ -239,6 +240,12 @@ extension View {
             }
         }
     }
+}
+
+/// A Files pane's identity: its item, and which Show Versions opened it.
+private struct FilesPaneIdentity: Hashable {
+    let node: FileNode
+    let opening: Int
 }
 
 /// The tree's edge: a hairline with a wider grip that drags the tree's width.

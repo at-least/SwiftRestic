@@ -494,6 +494,14 @@ struct SidebarTreeTests {
         #expect(router.filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: tag)]
             == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false))
         #expect(router.takeFilesVersionHint() == "b7")
+        // Asked again for the item already selected, the pane opens anew:
+        // its identity moves, so it reads again and spends the hint.
+        let opening = router.filesPaneOpenings
+        router.showVersions(
+            path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false,
+            in: record, repositoryID: repositoryID, page: .plan(planID)
+        )
+        #expect(router.filesPaneOpenings == opening + 1)
 
         // A backed-up folder itself: selected, nothing above it opened.
         let other = AppRouter()

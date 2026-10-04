@@ -20,6 +20,8 @@ struct FilesPaneView: View {
     /// The backup the item is shown at — for a file, its version's newest —
     /// nil for the newest.
     @State private var chosenID: String?
+    /// Whether the first read has settled where the pane opens.
+    @State private var didOpen = false
     @State private var isLoading = true
     @State private var loadError: String?
     @State private var indexComplete = true
@@ -84,10 +86,21 @@ struct FilesPaneView: View {
         } else if isLoading, versions.isEmpty {
             ProgressView("Reading…")
         } else if node.isDirectory {
-            FolderVersionsView(node: node, versions: versions, chosenID: $chosenID, onOpen: onOpen)
+            FolderVersionsView(node: node, versions: versions, chosenID: choice, onOpen: onOpen)
         } else {
-            FileVersionsView(node: node, versions: contentVersions, chosenID: $chosenID)
+            FileVersionsView(node: node, versions: contentVersions, chosenID: choice)
         }
+    }
+
+    /// The backup the user picks, remembered for coming back to the item —
+    /// the newest as nothing, so a backup made meanwhile is what the pane
+    /// opens at then. Only a pick is: where the pane opened is not.
+    private var choice: Binding<String?> {
+        Binding(get: { chosenID }, set: { id in
+            chosenID = id
+            let newest = node.isDirectory ? versions.first?.id : contentVersions.first?.id
+            router.filesChosenVersion[node] = id == newest ? nil : id
+        })
     }
 
     private func load() async {
@@ -106,13 +119,20 @@ struct FilesPaneView: View {
             versions = loaded
             contentVersions = contents
             loadError = nil
-            // The time the user was reading one level up, when this item
-            // existed then: walking down keeps the era. Spent on the first
-            // read only.
-            if let hint = router.takeFilesVersionHint(), chosenID == nil {
-                chosenID = node.isDirectory
-                    ? loaded.preferredVersion(previousID: hint)?.id
-                    : contents.first { $0.snapshots.contains { $0.id == hint } }?.id
+            // Where the pane opens, settled on the first read: the time
+            // the user was reading one level up (or Show Versions named),
+            // when this item existed then — walking down keeps the era —
+            // else the backup this item was last left at.
+            let hint = router.takeFilesVersionHint()
+            if !didOpen {
+                didOpen = true
+                let remembered = router.filesChosenVersion[node]
+                let opening = node.isDirectory
+                    ? loaded.preferredVersion(previousID: hint, rememberedID: remembered)?.id
+                    : contents.preferredVersion(previousID: hint, rememberedID: remembered)?.id
+                // The newest as nothing: an open pane follows a newer backup.
+                let newest = node.isDirectory ? loaded.first?.id : contents.first?.id
+                chosenID = opening == newest ? nil : opening
             }
         } catch {
             guard !Task.isCancelled else { return }
