@@ -229,14 +229,21 @@ Checked live later the same day, against scratch copies of that configuration:
 - **A group's or a lineage's Files tab by click.** Captured, not pressed; it is the same toolbar picker as the plan page's.
 - **Restore… and Restore Folder… through the destination sheet.** Whoever runs one restores into a scratch folder, never the real Desktop.
 - **Try Again on a failed level** (only the load key's change is unit-tested).
-- **The "N more items…" row.** A 260-file folder open in the tree put it below the window, and the tree does not scroll a selected item into view, so the capture could not reach it. The 200-item cap is unit-tested.
 - **A remote repository** (`restic find` and the index read over a network): none was available.
 - **The upgrade's reread of real repositories** (schema 3 drops every index file). The 1,000-backup scratch read above is the only timing.
 - **Dark mode** of the plan page's paused, manual and running states.
 
+Fixed after that run, each checked where it was seen:
+- **A Files pane keeps the backup it was left at.** The router remembers each item's pick (`filesChosenVersion`), the newest as nothing, written only when the user picks, and a pane opens at the era one level up when it holds the item, else at that pick, else the newest (`preferredVersion(previousID:rememberedID:)`, unit-tested for folders and files). Seen through the accessibility API on an earlier form of the fix, which wrote on every change: Photos at Oct 2 kept it through Show in Backups and back; a file's fourth version kept it through a trip to the repository page. The final form was not clicked again — the API had stopped answering. Show Versions asked for the item already selected now opens its pane again (`filesPaneOpenings`); only the router's count is tested.
+- **The tree brings a selected item into view**, once, when its row or its folder's "more items" row is listed (`FilesTree.row(showing:in:)`, unit-tested). Captured: the 43rd file of an open folder, out of sight before, in view after; a file past the 200-item cap brought the "60 more items…" row into view — the first time that row was seen live.
+- **The file pane's `restic find` names each version's newest backup** (`--snapshot`, up to 2,000, past that every backup), the only rows it reads. A real-restic test pins the narrowing and that a name restic no longer holds is skipped (a stderr warning, exit 0, restic 0.19.1). Timed with the pane's exact arguments, 100 of the 1,000 backups against all: 1.6 s of CPU against 10.9 s (28–33 s and 156 s of wall time that hour, at load averages near 60).
+- **The pane no longer swaps its view for "Reading…" on every re-read** while the index has not reached the item: only the first read shows it. Before, the folder view was made anew each time — four times in one minute of the setup below, once after.
+
 ### Not handled
 
-- **A Files pane's chosen backup is lost on leaving the page.** Show in Backups and back finds the folder still selected but its pane at the newest backup again: the choice is the pane's own state, the tab and the selection are the router's.
-- **The tree does not scroll a selected item into view.** Seen with `SWIFTRESTIC_CAPTURE_ITEM` on the 43rd file of an open folder. Show Versions selects the same way, so a deep item can land out of sight.
-- **The file pane's `restic find` grows with the backups** (6.9–8.5 s at 1,000, above). It searches every backup; the rows need one per version, and `restic find` takes `--snapshot` more than once: given one backup per version there (100 of the 1,000), it took 1.9–2.2 s, two runs.
-- **AppKit's reentrancy warning.** One launch on Files (the scale repository, `SWIFTRESTIC_CAPTURE_PANE=files` with a folder item) logged "Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future." Other launches on Files did not.
+- **AppKit's reentrancy warning** ("Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future."). Traced, not fixed:
+  - It reproduces in one setup: the 1,000-backup scratch repository with its index emptied, the Files tab on its 260-file folder, while the index reads. It appeared in every one of 13 launches under lldb, from 36 s to 10 min in, and in 1 of 2 launches without lldb.
+  - It is logged inside AppKit, with no app frame on the stack. A SwiftUI List update (`OutlineListCoordinator.diffRows` → `-[NSTableView endUpdates]`) asks the row-height cache for the top row, and the cache, resizing the table, calls itself: `-[NSTableRowHeightData _cacheRowSpansInRange:heightProvider:]` twice on one stack.
+  - The table was the folder pane's listing: 260 rows of 24 pt, filled at that moment, its frame 20 pt tall and its visible rect empty.
+  - Three changes did not stop it: comparing the listing as equatable so the pane's re-reads skip it (reverted); the flicker fix above (kept for its own sake); keeping the list mounted through its loading and empty states (reverted).
+  - Not tried: fixed row heights through AppKit, a listing that is not a List.
