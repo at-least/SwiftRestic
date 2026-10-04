@@ -967,13 +967,15 @@ struct StubResticTests {
         _ = try await fixture.service.find(fixture.context, patterns: ["/src/a.txt"], ignoreCase: false, snapshotIDs: ["feedface"])
         _ = try await fixture.service.listDirectory(fixture.context, snapshotID: "feedface", path: "/src")
         _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: nil)
+        // Compare with Previous.
+        _ = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe", includeMetadata: false)
 
         let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
         let starts = trace.split(separator: "\n").map(String.init).filter { $0.hasPrefix("start args=[") }
         // Locked, each paid restic's 200 ms wait after writing its lock, failed
         // with exit 11 under retention's exclusive lock, and made a forget
         // starting meanwhile fail the same way (all probed on restic 0.19.1).
-        for command in ["find", "ls", "snapshots"] {
+        for command in ["find", "ls", "snapshots", "diff"] {
             let start = try #require(starts.first { $0.hasPrefix("start args=[\(command) ") }, "trace: \(trace)")
             #expect(start.contains("--no-lock"), "start line: \(start)")
         }
