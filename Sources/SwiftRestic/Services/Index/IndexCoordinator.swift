@@ -466,13 +466,14 @@ actor IndexCoordinator {
         return (cached ?? [:]).mapValues(\.snapshotNode)
     }
 
-    /// Captures one file's nodes for next time, and returns at once, as
-    /// `cacheListing` does: a version row has its size and date in hand.
-    nonisolated func cacheFileNodes(path: String, nodes: [String: SnapshotNode], repositoryID: UUID) {
+    /// Captures files' nodes — by path, then by snapshot ID — for next time,
+    /// and returns at once, as `cacheListing` does: the version rows have
+    /// their sizes and dates in hand.
+    nonisolated func cacheFileNodes(_ nodes: [String: [String: SnapshotNode]], repositoryID: UUID) {
         cacheWrites.start { [self] in
-            let captured = nodes.mapValues(CachedListingNode.init)
+            let captured = nodes.mapValues { $0.mapValues(CachedListingNode.init) }
             _ = await cacheAccess(repositoryID) {
-                try await $0.recordFileNodes(path: path, nodes: captured)
+                try await $0.recordFileNodes(captured)
             }
         }
     }

@@ -1044,7 +1044,7 @@ struct SnapshotIndexBrowseCacheTests {
         try await index.recordListing(snapshotID: "s2", directory: "/src", nodes: [IndexTestData.cachedNode("/src/b.txt")])
         try await index.recordDiff(olderID: "s1", newerID: "s2", changes: [])
         let file = IndexTestData.cachedNode("/src/a.txt")
-        try await index.recordFileNodes(path: "/src/a.txt", nodes: ["s1": file, "s2": file])
+        try await index.recordFileNodes(["/src/a.txt": ["s1": file, "s2": file]])
 
         try index.reconcile(listing: [try snapshot("s2", 2_000_000)])
         #expect(try index.snapStates()["s1"] == nil)
@@ -1068,7 +1068,7 @@ struct SnapshotIndexBrowseCacheTests {
         try await index.recordListing(snapshotID: "s2", directory: "/src", nodes: [IndexTestData.cachedNode("/src/b.txt")])
         try await index.recordListing(snapshotID: "ghost", directory: "/src", nodes: [IndexTestData.cachedNode("/src/a.txt")])
         try await index.recordDiff(olderID: "ghost", newerID: "s2", changes: [])
-        try await index.recordFileNodes(path: "/src/a.txt", nodes: ["ghost": IndexTestData.cachedNode("/src/a.txt")])
+        try await index.recordFileNodes(["/src/a.txt": ["ghost": IndexTestData.cachedNode("/src/a.txt")]])
 
         _ = try index.reconcile(listing: [try snapshot("s2", 2_000_000)])
         #expect(try await index.listing(snapshotID: "ghost", directory: "/src") == nil)
@@ -1084,7 +1084,7 @@ struct SnapshotIndexBrowseCacheTests {
         let mtime = Date(timeIntervalSince1970: 5_000)
         let older = IndexTestData.cachedNode("/src/notes.txt", size: 42, mtime: mtime)
         let newer = IndexTestData.cachedNode("/src/notes.txt", size: 50, mtime: mtime.addingTimeInterval(60))
-        try await index.recordFileNodes(path: "/src/notes.txt", nodes: ["s1": older, "s2": newer])
+        try await index.recordFileNodes(["/src/notes.txt": ["s1": older, "s2": newer]])
 
         let read = try await index.fileNodes(path: "/src/notes.txt", snapshotIDs: ["s2", "s1", "s3"])
         // A snapshot with no capture is absent, not an error.
@@ -1095,7 +1095,7 @@ struct SnapshotIndexBrowseCacheTests {
         #expect(try await index.fileNodes(path: "/src/Notes.txt", snapshotIDs: ["s1"]).isEmpty)
         #expect(try await index.fileNodes(path: "/src/notes.txt/", snapshotIDs: ["s1"]).isEmpty)
 
-        try await index.recordFileNodes(path: "/src/notes.txt", nodes: ["s1": newer])
+        try await index.recordFileNodes(["/src/notes.txt": ["s1": newer]])
         #expect(try await index.fileNodes(path: "/src/notes.txt", snapshotIDs: ["s1"]) == ["s1": older])
     }
 
@@ -1131,7 +1131,7 @@ struct SnapshotIndexBrowseCacheTests {
         #expect(try fixture.index.snapStates()["s1"] != nil)
         #expect(try await fixture.index.listing(snapshotID: "s1", directory: "/src") != nil)
         let file = IndexTestData.cachedNode("/src/a.txt")
-        try await fixture.index.recordFileNodes(path: "/src/a.txt", nodes: ["s1": file])
+        try await fixture.index.recordFileNodes(["/src/a.txt": ["s1": file]])
         #expect(try await fixture.index.fileNodes(path: "/src/a.txt", snapshotIDs: ["s1"]) == ["s1": file])
     }
 }

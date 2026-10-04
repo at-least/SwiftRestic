@@ -75,9 +75,16 @@ final class FilesTree {
     /// Reads one level: the index and restic (`level(of:model:)`), or a
     /// test's own.
     private let read: @MainActor (FileNode, AppModel) async throws -> Level
+    /// Reads ahead the version rows of a level's files
+    /// (`AppModel.warmFileHistory`), or a test's own.
+    private let warm: @MainActor ([FileNode], AppModel) -> Void
 
-    init(read: @escaping @MainActor (FileNode, AppModel) async throws -> Level = { try await FilesTree.level(of: $0, model: $1) }) {
+    init(
+        read: @escaping @MainActor (FileNode, AppModel) async throws -> Level = { try await FilesTree.level(of: $0, model: $1) },
+        warm: @escaping @MainActor ([FileNode], AppModel) -> Void = { $1.warmFileHistory($0) }
+    ) {
         self.read = read
+        self.warm = warm
     }
 
     func state(of node: FileNode) -> State? {
@@ -228,6 +235,13 @@ final class FilesTree {
             level.listedAt = listedAt
             level.indexGeneration = indexGeneration
             states[node] = .loaded(level)
+            // An open folder's files, as many as it lists, so a click on one
+            // finds its version rows read. Only once the index has read every
+            // backup: until then the versions, and the backups they name,
+            // still move.
+            if !node.isRoots, level.isComplete, !level.isFallback {
+                warm(level.entries.prefix(Self.rowCap).map(\.node).filter { !$0.isDirectory }, model)
+            }
         } catch {
             guard readTokens[node] == token else { return }
             if Task.isCancelled {

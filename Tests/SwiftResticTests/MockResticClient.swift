@@ -259,7 +259,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     func find(
         _ context: RepositoryContext,
-        pattern: String,
+        patterns: [String],
         ignoreCase: Bool,
         snapshotIDs: [String]
     ) async throws -> [FindResult] {

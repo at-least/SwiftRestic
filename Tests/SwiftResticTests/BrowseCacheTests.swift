@@ -53,7 +53,7 @@ struct BrowseCacheTests {
         let coordinator = scene.coordinator
         let node = IndexTestData.cachedNode("/src/a.txt", size: 42).snapshotNode
 
-        coordinator.cacheFileNodes(path: "/src/a.txt", nodes: ["s1": node], repositoryID: scene.repositoryID)
+        coordinator.cacheFileNodes(["/src/a.txt": ["s1": node]], repositoryID: scene.repositoryID)
         await coordinator.cacheWritesSettled()
         let read = await coordinator.cachedFileNodes(
             path: "/src/a.txt", snapshotIDs: ["s1", "s2"], repositoryID: scene.repositoryID

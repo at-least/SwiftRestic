@@ -433,7 +433,10 @@ struct ResticService: ResticClient {
         return String(escaped)
     }
 
-    /// Searches every snapshot for paths matching a glob.
+    /// Searches every snapshot for paths matching any of some globs — one
+    /// walk per snapshot however many there are, so a folder's files cost
+    /// about what one does (200 exact paths over five backups took restic
+    /// 0.61 s, one path 0.53 s).
     ///
     /// `restic find` walks the trees, so this is a real search rather than an
     /// index lookup — it gets slower the more snapshots a repository holds, which
@@ -450,14 +453,14 @@ struct ResticService: ResticClient {
     /// same way (probed on restic 0.19.1).
     func find(
         _ context: RepositoryContext,
-        pattern: String,
+        patterns: [String],
         ignoreCase: Bool = true,
         snapshotIDs: [String] = []
     ) async throws -> [FindResult] {
         var args = context.globalArguments + ["find", "--json", "--no-lock"]
         if ignoreCase { args.append("--ignore-case") }
         for id in snapshotIDs { args += ["--snapshot", id] }
-        args.append(pattern)
+        args += patterns
 
         let result = try await runner.run(
             binary: binary,

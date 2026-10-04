@@ -66,7 +66,7 @@ protocol ResticClient: Sendable {
 
     func find(
         _ context: RepositoryContext,
-        pattern: String,
+        patterns: [String],
         ignoreCase: Bool,
         snapshotIDs: [String]
     ) async throws -> [FindResult]

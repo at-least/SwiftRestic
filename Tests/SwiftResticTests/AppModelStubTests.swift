@@ -1888,6 +1888,31 @@ struct AppModelStubTests {
         }
     }
 
+    @Test("a click on a file its folder's read-ahead is asking restic about waits for that find instead of starting one")
+    func fileHistoryWaitsForTheReadAhead() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "findfile")
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+            let model = harness.model
+            let repositoryID = harness.repository.id
+            let backup = String(repeating: "a", count: 64)
+            let path = "/src/notes.txt"
+            // The read-ahead's find, answering a moment after the click.
+            let readAhead = Task<Void, any Error> { @MainActor in
+                try await Task.sleep(for: .milliseconds(300))
+                model.fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: backup, path: PathKey(path))] =
+                    SnapshotNode(name: "notes.txt", type: .file, path: path, size: 7)
+            }
+            model.fileHistoryReadAheads[FileHistoryFile(repositoryID: repositoryID, path: PathKey(path))] = readAhead
+
+            let answers = try await model.fileHistory(repositoryID: repositoryID, path: path, backupIDs: [backup])
+            #expect(answers[backup]?.size == 7)
+            #expect(try stubRuns("find", in: harness) == 0)
+
+            await model.shutdown()
+        }
+    }
+
     @Test("a file's sizes and dates outlive the launch: the next one asks restic only for backups none read")
     func fileHistorySurvivesARelaunch() async throws {
         try await withScratchIndexDirectory {

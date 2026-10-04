@@ -1006,15 +1006,18 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// Caches one file's node in each of some snapshots, as `restic find`
-    /// reported it — the path exact, by bytes, as the index keys paths. As
-    /// immutable as a listing: a repeated capture leaves the first standing.
-    func recordFileNodes(path: String, nodes: [String: CachedListingNode]) async throws {
-        let payloads = try nodes.mapValues { try Self.json($0) }
+    /// Caches files' nodes as `restic find` reported them — by path, exact
+    /// and by bytes as the index keys paths, then by snapshot ID — in one
+    /// write. As immutable as a listing: a repeated capture leaves the first
+    /// standing.
+    func recordFileNodes(_ nodes: [String: [String: CachedListingNode]]) async throws {
+        let payloads = try nodes.mapValues { try $0.mapValues { try Self.json($0) } }
         try await pool.write { db in
-            for (snapshotID, payload) in payloads {
-                try db.cachedStatement(sql: SQL.cacheOwnerPut).execute(arguments: [snapshotID])
-                try db.cachedStatement(sql: SQL.cacheFileNodePut).execute(arguments: [snapshotID, path, payload])
+            for (path, bySnapshot) in payloads {
+                for (snapshotID, payload) in bySnapshot {
+                    try db.cachedStatement(sql: SQL.cacheOwnerPut).execute(arguments: [snapshotID])
+                    try db.cachedStatement(sql: SQL.cacheFileNodePut).execute(arguments: [snapshotID, path, payload])
+                }
             }
         }
     }

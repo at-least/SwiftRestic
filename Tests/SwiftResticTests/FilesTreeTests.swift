@@ -173,6 +173,44 @@ struct FilesTreeTests {
         #expect(tree.loadKey([folder], model: model) == taken)
     }
 
+    @Test("a folder level read whole reads ahead the files it lists; the roots, a fallback or an incomplete level do not")
+    func levelsReadAheadTheirFiles() async {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticFilesTree-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory([:])
+        )
+        let folder = node("/Data")
+        // A subfolder first, then more files than the tree lists.
+        let files = (0 ..< FilesTree.rowCap + 5).map { node(String(format: "/Data/f%03d.txt", $0), folder: false) }
+        let whole = FilesTree.Level(entries: ([node("/Data/Sub")] + files).map(entry), isFallback: false, isComplete: true)
+        let warmed = WarmLog()
+        func tree(_ level: FilesTree.Level) -> FilesTree {
+            FilesTree(read: { _, _ in level }, warm: { files, _ in warmed.calls.append(files) })
+        }
+
+        await tree(whole).keep([folder], model: model)
+        #expect(warmed.calls == [Array(files.prefix(FilesTree.rowCap - 1))])
+
+        warmed.calls = []
+        await tree(whole).keep([FileNode.roots(repositoryID: repositoryID, chainKey: chain)], model: model)
+        var fallback = whole
+        fallback.isFallback = true
+        await tree(fallback).keep([folder], model: model)
+        var incomplete = whole
+        incomplete.isComplete = false
+        let reading = tree(incomplete)
+        // An incomplete level is read again every recheckInterval: stop
+        // after the first read.
+        let task = Task { await reading.keep([folder], model: model) }
+        while reading.state(of: folder) == nil || reading.state(of: folder) == .loading { await Task.yield() }
+        task.cancel()
+        await task.value
+        #expect(warmed.calls.isEmpty)
+    }
+
     @Test("a read a restart cancelled is read again by the restarted task — never left Reading… with no reader")
     func cancelledReadIsReadAgain() async {
         let model = AppModel(
@@ -209,6 +247,12 @@ struct FilesTreeTests {
         }
         #expect(level.entries == read.entries)
     }
+}
+
+/// What a test's tree asked to read ahead, one list per level.
+@MainActor
+private final class WarmLog {
+    var calls: [[FileNode]] = []
 }
 
 /// How many reads a test's level reader has answered.

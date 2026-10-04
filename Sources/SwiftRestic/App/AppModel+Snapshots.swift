@@ -225,7 +225,7 @@ extension AppModel {
         let (service, context) = try await resticContext(for: repository)
         return try await service.find(
             context,
-            pattern: pattern,
+            patterns: [pattern],
             ignoreCase: true,
             snapshotIDs: latestOnly ? ["latest"] : []
         )
@@ -249,12 +249,18 @@ extension AppModel {
     /// process — 0.5–2 s even on a five-backup local repository, most of it
     /// restic deriving the key — so going back to a file asks nothing, even
     /// after a relaunch, and a version list a new backup grew asks only for
-    /// that one.
+    /// that one. A file whose folder `warmFileHistory` is reading ahead
+    /// waits for that find rather than starting one beside it.
     func fileHistory(repositoryID: UUID, path: String, backupIDs: [String]) async throws -> [String: SnapshotNode] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         let pathKey = PathKey(path)
         func key(_ backupID: String) -> FileHistoryKey {
             FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: pathKey)
+        }
+        if let readAhead = fileHistoryReadAheads[FileHistoryFile(repositoryID: repositoryID, path: pathKey)] {
+            // Its failure leaves the file unanswered, and the find below
+            // asks restic again and reports what it says.
+            _ = await readAhead.result
         }
         var unanswered = backupIDs.filter { fileHistoryAnswers[key($0)] == nil }
         if !unanswered.isEmpty {
@@ -266,7 +272,7 @@ extension AppModel {
             let (service, context) = try await resticContext(for: repository)
             let results = try await service.find(
                 context,
-                pattern: ResticService.globEscaped(path),
+                patterns: [ResticService.globEscaped(path)],
                 ignoreCase: false,
                 snapshotIDs: unanswered.count <= Self.fileHistoryNamedLimit ? unanswered : []
             )
@@ -277,13 +283,82 @@ extension AppModel {
                 }
             }
             for (backupID, node) in found { fileHistoryAnswers[key(backupID)] = node }
-            indexCoordinator.cacheFileNodes(path: path, nodes: found, repositoryID: repositoryID)
+            indexCoordinator.cacheFileNodes([path: found], repositoryID: repositoryID)
         }
         var history: [String: SnapshotNode] = [:]
         for backupID in backupIDs {
             history[backupID] = fileHistoryAnswers[key(backupID)]
         }
         return history
+    }
+
+    /// Reads ahead what a click on each of `files` — one open folder's, all
+    /// in one chain — will ask `fileHistory` for: each version's newest
+    /// backup, from the index, then whatever neither the session nor the
+    /// index has kept, from one `restic find` for all of them, which costs
+    /// about what one file's does (200 files over five backups took restic
+    /// 0.61 s, one file 0.53 s). Clicks while the index is read run their
+    /// own find; a click once that find runs waits for it. Returned for
+    /// tests to await.
+    ///
+    /// A failure — the index's or restic's — stores nothing: each click
+    /// then asks for its file, and reports what it is told.
+    @discardableResult
+    func warmFileHistory(_ files: [FileNode]) -> Task<Void, Never> {
+        Task { [self] in await readAhead(files) }
+    }
+
+    private func readAhead(_ files: [FileNode]) async {
+        guard let first = files.first, let repository = repository(id: first.repositoryID) else { return }
+        let repositoryID = repository.id
+        func key(_ backupID: String, _ path: String) -> FileHistoryKey {
+            FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: PathKey(path))
+        }
+        func reading(_ path: String) -> Bool {
+            fileHistoryReadAheads[FileHistoryFile(repositoryID: repositoryID, path: PathKey(path))] != nil
+        }
+        var missing: [String: [String]] = [:]
+        for file in files where !reading(file.path) {
+            guard let versions = try? await indexedContentVersions(
+                ofPath: file.path, inChain: file.chainKey, repositoryID: repositoryID
+            ) else { return }
+            let unanswered = versions.compactMap { $0.snapshots.first?.id }.filter { fileHistoryAnswers[key($0, file.path)] == nil }
+            guard !unanswered.isEmpty else { continue }
+            let kept = await indexCoordinator.cachedFileNodes(path: file.path, snapshotIDs: unanswered, repositoryID: repositoryID)
+            for (backupID, node) in kept { fileHistoryAnswers[key(backupID, file.path)] = node }
+            let rest = unanswered.filter { kept[$0] == nil }
+            if !rest.isEmpty { missing[file.path] = rest }
+        }
+        // A click answered some meanwhile, or another read-ahead took them.
+        missing = missing.filter { path, ids in
+            !reading(path) && ids.contains { fileHistoryAnswers[key($0, path)] == nil }
+        }
+        guard !missing.isEmpty, !isShuttingDown else { return }
+        let paths = Dictionary(uniqueKeysWithValues: missing.keys.map { (PathKey($0), $0) })
+        let backupIDs = Set(missing.values.joined())
+        let find = Task<Void, any Error> { [self] in
+            let (service, context) = try await resticContext(for: repository)
+            let results = try await service.find(
+                context,
+                patterns: paths.values.map(ResticService.globEscaped),
+                ignoreCase: false,
+                snapshotIDs: backupIDs.count <= Self.fileHistoryNamedLimit ? Array(backupIDs) : []
+            )
+            var found: [String: [String: SnapshotNode]] = [:]
+            for result in results {
+                for match in result.matches {
+                    guard let path = paths[PathKey(match.path)] else { continue }
+                    found[path, default: [:]][result.snapshot] = match.node
+                    fileHistoryAnswers[key(result.snapshot, path)] = match.node
+                }
+            }
+            indexCoordinator.cacheFileNodes(found, repositoryID: repositoryID)
+        }
+        let readers = paths.keys.map { FileHistoryFile(repositoryID: repositoryID, path: $0) }
+        for reader in readers { fileHistoryReadAheads[reader] = find }
+        // Its failure leaves the files unanswered: each click asks again.
+        _ = await find.result
+        for reader in readers where fileHistoryReadAheads[reader] == find { fileHistoryReadAheads[reader] = nil }
     }
 
     /// Compares two snapshots; `+` in the result means present only in `newer`.
@@ -309,5 +384,11 @@ extension AppModel {
 struct FileHistoryKey: Hashable {
     let repositoryID: UUID
     let backupID: String
+    let path: PathKey
+}
+
+/// One file of one repository: what a read-ahead in flight is kept under.
+struct FileHistoryFile: Hashable {
+    let repositoryID: UUID
     let path: PathKey
 }

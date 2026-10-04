@@ -964,7 +964,7 @@ struct StubResticTests {
         let fixture = try makeFixture(mode: "default")
         defer { cleanUp(fixture.root) }
 
-        _ = try await fixture.service.find(fixture.context, pattern: "/src/a.txt", ignoreCase: false, snapshotIDs: ["feedface"])
+        _ = try await fixture.service.find(fixture.context, patterns: ["/src/a.txt"], ignoreCase: false, snapshotIDs: ["feedface"])
         _ = try await fixture.service.listDirectory(fixture.context, snapshotID: "feedface", path: "/src")
         _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: nil)
 

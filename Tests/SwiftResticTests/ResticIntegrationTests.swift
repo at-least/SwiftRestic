@@ -1133,10 +1133,10 @@ struct ResticFindTests {
         try FileManager.default.removeItem(at: secret)
         _ = try await service.backup(context, plan: plan)
 
-        let latestOnly = try await service.find(context, pattern: "recovery-codes.txt", snapshotIDs: ["latest"])
+        let latestOnly = try await service.find(context, patterns: ["recovery-codes.txt"], snapshotIDs: ["latest"])
         #expect(latestOnly.isEmpty, "the file was deleted, so the newest snapshot must not have it")
 
-        let all = try await service.find(context, pattern: "recovery-codes.txt")
+        let all = try await service.find(context, patterns: ["recovery-codes.txt"])
         #expect(all.count == 1)
         let result = try #require(all.first)
         let match = try #require(result.matches.first)
@@ -1144,7 +1144,7 @@ struct ResticFindTests {
         #expect(match.size == 9)
 
         // Case-insensitive by default, and globs work.
-        #expect(try await service.find(context, pattern: "RECOVERY-*.TXT").count == 1)
+        #expect(try await service.find(context, patterns: ["RECOVERY-*.TXT"]).count == 1)
 
         // The match restores through the same path a browsed node does.
         let destination = root.appendingPathComponent("restored")
@@ -1197,7 +1197,7 @@ struct ResticFindTests {
         for (name, sizes) in [("a[1].txt", Set<Int64>([3, 11])), ("b*c.txt", Set<Int64>([3]))] {
             let path = source.appendingPathComponent(name).path
             let results = try await service.find(
-                context, pattern: ResticService.globEscaped(path), ignoreCase: false
+                context, patterns: [ResticService.globEscaped(path)], ignoreCase: false
             )
             #expect(results.count == 2, "\(name): one result per backup")
             #expect(results.allSatisfy { $0.matches.map(\.path) == [path] }, "\(name): \(results.map { $0.matches.map(\.path) })")
@@ -1211,7 +1211,7 @@ struct ResticFindTests {
         let path = source.appendingPathComponent("a[1].txt").path
         let narrowed = try await service.find(
             context,
-            pattern: ResticService.globEscaped(path),
+            patterns: [ResticService.globEscaped(path)],
             ignoreCase: false,
             snapshotIDs: [older.id, String(repeating: "0", count: 64)]
         )

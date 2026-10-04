@@ -78,7 +78,9 @@ checked in so a normal build does not need it.
   between. Each row's modification time and size come from one `restic
   find` of the file's exact path, its glob characters escaped, asked once
   per backup: the index keeps each answer, so going back to a file — after
-  a relaunch too — runs no restic. Return or
+  a relaunch too — runs no restic — and an opened folder's files are read
+  ahead in one `find` (once the index has read every backup), so a first
+  click on one is answered too. Return or
   *Restore…* restores the chosen version, and a row drags to Finder. *Show
   in Backups* opens the chosen backup at that place, under its plan in the
   sidebar. Each page keeps its tab, open folders and selection while the app
