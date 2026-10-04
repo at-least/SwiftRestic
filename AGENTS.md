@@ -25,7 +25,7 @@ Two rules the flaky-run hunt of 2026-09-14 added:
   the restart banner — which also fires for a plain test crash or timeout,
   so read the xcresult before blaming a collision.
 
-Four timing tests fail now and then under load and pass on a re-run. Not
+Five timing tests fail now and then under load and pass on a re-run. Not
 fixed. On 2026-10-04, 5 of 13 `./build.sh test` runs failed on one or more of
 them. Other work on the Mac held the load average between 7 and 53 at the
 time: another project's simulator UI tests and builds, and mediaanalysisd.
@@ -37,6 +37,8 @@ No other test failed in any of the 13 runs:
 | "a child that keeps reporting is never stopped by the stall cap" | 2 of 13 | `IdleWatchdogTests.swift:51`: `.idleStalled(seconds: 1.5, command: "restic")` |
 | "status lines are decoded and delivered while the run is still going" | 4 of 13 | `StubResticTests.swift:568`: `arrival < 0.7 * elapsed` |
 | "cancelling a backup ends the run and the child process is really gone" | 3 of 13 | `StubResticTests.swift:522`: "the stub never established its hang within 10 s; trace: [no trace]" |
+
+The fifth showed up later on 2026-10-04, in 1 of 6 `./build.sh test` runs, with the load average between 15 and 18: "a refresh asked while another is running runs after it, not never" (`AppModelStubTests.swift:451`, "the refresh requested mid-flight never ran", after 11.4 s against its 10 s wait). Its suite then passed 3 times out of 3 on its own, the test in 0.55–0.87 s.
 
 On the cancel test:
 - The stub never wrote its trace.
@@ -194,7 +196,20 @@ What was checked live, one capture each, in light mode, against a scratch config
 - a plan-UUID group's Files tab, an untagged lineage's page and its Files tab;
 - a file pane: "3 versions in 4 backups", with sizes matching the demo files (seen when the pane still sat beside the sidebar's tree; the pane is unchanged);
 - the Files tab on a first launch after the repository gained and lost backups — wrong before `0ede383`, right after;
-- the window not overflowing with a long root path, after the split moved from HSplitView to an HStack (`939fa63`).
+- the window not overflowing with a long root path, after the split moved from HSplitView to an HStack (`939fa63`);
+- dark mode of the plan page, a plan's Files tab, a lineage's page and a group's Files tab.
+
+Clicked live the same day, through the accessibility API against a scratch instance, with its window captured after each step:
+- the sidebar without its old control, and the View menu without Show Backups or Show Files;
+- the plan row opening its page on Overview, the toolbar showing Overview | Files;
+- pressing Files: the tab opened with the plan's first folder selected and open;
+- a folder's chevron opening it, and selecting a subfolder moving the pane to it, keeping the chosen backup.
+
+The rest of that run stalled. About 20 minutes in, macOS raised a Screen Recording consent dialog (`universalAccessAuthWarn`), the instance lost activation for good, and accessibility reads failed across the system.
+
+Two facts for the next scripted run:
+- An agent's shell runs in the Background launchd session (`launchctl managername` says so). An app it launches cannot be activated, and System Events sees no windows. The run worked only after it launched the app inside the user's Aqua session through a temporary gui-domain LaunchAgent; boot such an agent out the moment the run ends.
+- Address the scratch instance by its PID, never by name: the user's own SwiftRestic can be running against the real configuration at the same time.
 
 ### Not verified
 
@@ -205,7 +220,9 @@ What was checked live, one capture each, in light mode, against a scratch config
   - the list of lengths under the Pause arrow.
   None of the cards' buttons was clicked either.
 - **Interaction in the Files tab.** Not exercised:
-  - clicking Overview | Files, and a group's Show Files menu item;
+  - a group's or a lineage's Show Files menu item, and their pages' Files tabs by click;
+  - the Plan menu's Back Up Now being enabled while a plan's Files tab shows (read only on the repository page, where it is rightly grey);
+  - a relaunch opening a page on Overview after it was left on Files;
   - dragging the tree's edge, and the edge's bounds at the 940 pt minimum window with a wide sidebar;
   - double-click or Return opening an item at the backup time the pane had chosen. `preferredVersion` and the router's hint being spent once are unit-tested; the wiring between them is not;
   - dragging items to Finder;
@@ -217,7 +234,6 @@ What was checked live, one capture each, in light mode, against a scratch config
   - How the tree responds with thousands of rows open. The 200-item cap is unit-tested, but its "N more items…" row was never shown live.
   - The file pane's single `restic find` per opened file, on a repository with about 1,000 snapshots or on a remote one. The only timing is 0.6 s, measured locally on 20,000 files × 12 snapshots.
 - **The first launch after the upgrade.** Schema 3 deletes every existing index file and reads it again. That mismatch path is tested with `user_version` 99, but how long the reread takes on real repositories was not measured.
-- **Dark mode** of the pages, the cards and the Files tab.
 
 ### Not handled
 
