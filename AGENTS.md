@@ -209,35 +209,34 @@ Clicked live the same day, through the accessibility API against a scratch insta
 
 The rest of that run stalled. About 20 minutes in, macOS raised a Screen Recording consent dialog (`universalAccessAuthWarn`), the instance lost activation for good, and accessibility reads failed across the system.
 
-Two facts for the next scripted run:
+Facts for the next scripted run:
 - An agent's shell runs in the Background launchd session (`launchctl managername` says so). An app it launches cannot be activated, and System Events sees no windows. The run worked only after it launched the app inside the user's Aqua session through a temporary gui-domain LaunchAgent; boot such an agent out the moment the run ends.
+- Later that day the accessibility API did work, for half an hour, on instances launched straight from an agent's shell, with the consent dialog still open: reading the tree, `AXPress`, setting `AXSelected` on sidebar rows, reading the menu bar. Nothing needed activation. Then it stopped again: `AXWindows` answered with the application element, for a fresh instance too.
+- A popup's menu closes when the process that opened it exits: open it and press the item in one process. SwiftUI list rows' context menus are out of reach: `AXShowMenu` is unsupported on the rows and opens nothing on their text.
+- A helper binary compiled during such a run can take a minute or two to start the first time. That afternoon two took 65 s and 110 s, while syspolicyd ran at 40–50% CPU and logged "Error checking with notarization daemon". Launches killed after 10–60 s did not shorten the next one's wait, so let one finish before timing anything.
 - Address the scratch instance by its PID, never by name: the user's own SwiftRestic can be running against the real configuration at the same time.
+
+Checked live later the same day, against scratch copies of that configuration:
+- the plan page's other states, one capture each: paused ("Paused — Daily at 09:30", Resume Schedule, next backup "Paused"); paused for two hours ("Paused until 4:56 PM — Daily at 09:30", Resume Schedule, next backup tomorrow at 09:30); manual (the Schedule card says Manually and has no Pause control); running (the Backups card's Back Up Now is Stop, next backup "Running now", the hook strip above with Cancel). The running state needed a normal launch: `SWIFTRESTIC_CAPTURE_PANE` lands on its pane without `SWIFTRESTIC_CAPTURE`, so the scheduler stays armed, and an overdue plan whose before-backup hook sleeps holds the run while `screencapture -l` takes the window;
+- the Pause arrow, opened through the accessibility API: For 1 Hour, Until Tomorrow, Until I Resume. No length was chosen;
+- through the accessibility API, on a plan page: pressing Files; the Plan menu with Back Up Now, Edit Plan… and Pause Schedule enabled there (Stop Backup grey); the repository page, which has no segment, and back to the plan on Files; an older backup chosen in a folder's pane, then Show in Backups — the Restore pane opened at that backup with the folder selected and open, its plan's fold open — and back to the plan on Files with the folder still selected;
+- a relaunch: the plan page opened on Overview after the last session left it on Files;
+- 1,000 backups (a scratch repository of 2,060 files, three changing per backup; local disk; other work loading the Mac): the index read all of it from empty in 8 min 56 s; the file pane said "100 versions in 1,000 backups" and had every version's Modified and size by the capture, 30 s in. Its `restic find` alone took 6.9–8.5 s, three runs, against 0.6 s at 12 backups.
 
 ### Not verified
 
-- **Plan page states other than idle and scheduled.** Not seen:
-  - Back Up Now turning into Stop while a backup runs;
-  - Resume Schedule while the plan is paused;
-  - no Schedule control on a manual plan;
-  - the list of lengths under the Pause arrow.
-  None of the cards' buttons was clicked either.
-- **Interaction in the Files tab.** Not exercised:
-  - a group's or a lineage's Show Files menu item, and their pages' Files tabs by click;
-  - the Plan menu's Back Up Now being enabled while a plan's Files tab shows (read only on the repository page, where it is rightly grey);
-  - a relaunch opening a page on Overview after it was left on Files;
-  - dragging the tree's edge, and the edge's bounds at the 940 pt minimum window with a wide sidebar;
-  - double-click or Return opening an item at the backup time the pane had chosen. `preferredVersion` and the router's hint being spent once are unit-tested; the wiring between them is not;
-  - dragging items to Finder;
-  - Restore… and Restore Folder… through the destination sheet. Whoever runs one restores into a scratch folder, never the real Desktop;
-  - Show in Backups, and coming back to the page on its Files tab (the router keeping the tab is unit-tested);
-  - Try Again on a failed level (only the load key's change is unit-tested);
-  - Show Versions from the Restore pane's item menu and from Find Files' results (the page each lands on and the route are unit-tested; the menu items were not clicked).
-- **The tree's fallback through restic.** A plan the index holds nothing of yet is listed from its newest backup with `restic ls` (`FilesTree`). No test and no capture reached that branch.
-- **Scale.**
-  - How the tree responds with thousands of rows open. The 200-item cap is unit-tested, but its "N more items…" row was never shown live.
-  - The file pane's single `restic find` per opened file, on a repository with about 1,000 snapshots or on a remote one. The only timing is 0.6 s, measured locally on 20,000 files × 12 snapshots.
-- **The first launch after the upgrade.** Schema 3 deletes every existing index file and reads it again. That mismatch path is tested with `user_version` 99, but how long the reread takes on real repositories was not measured.
+- **Input the accessibility API cannot give.** Double-click or Return opening an item at the pane's backup time, right-click menus (Show Versions on the Restore pane and Find Files, Show Files on a group), dragging the tree's edge or items to Finder: `AXShowMenu` is unsupported on the rows or opens nothing, and posting real events would land in whatever app is in front on a Mac in use. The router and `preferredVersion` behind them are unit-tested.
+- **A group's or a lineage's Files tab by click.** Captured, not pressed; it is the same toolbar picker as the plan page's.
+- **Restore… and Restore Folder… through the destination sheet.** Whoever runs one restores into a scratch folder, never the real Desktop.
+- **Try Again on a failed level** (only the load key's change is unit-tested).
+- **The "N more items…" row.** A 260-file folder open in the tree put it below the window, and the tree does not scroll a selected item into view, so the capture could not reach it. The 200-item cap is unit-tested.
+- **A remote repository** (`restic find` and the index read over a network): none was available.
+- **The upgrade's reread of real repositories** (schema 3 drops every index file). The 1,000-backup scratch read above is the only timing.
+- **Dark mode** of the plan page's paused, manual and running states.
 
 ### Not handled
 
-- **The flaky timing tests.** Fixed; see Build.
+- **A Files pane's chosen backup is lost on leaving the page.** Show in Backups and back finds the folder still selected but its pane at the newest backup again: the choice is the pane's own state, the tab and the selection are the router's.
+- **The tree does not scroll a selected item into view.** Seen with `SWIFTRESTIC_CAPTURE_ITEM` on the 43rd file of an open folder. Show Versions selects the same way, so a deep item can land out of sight.
+- **The file pane's `restic find` grows with the backups** (6.9–8.5 s at 1,000, above). It searches every backup; the rows need one per version, and `restic find` takes `--snapshot` more than once: given one backup per version there (100 of the 1,000), it took 1.9–2.2 s, two runs.
+- **AppKit's reentrancy warning.** One launch on Files (the scale repository, `SWIFTRESTIC_CAPTURE_PANE=files` with a folder item) logged "Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future." Other launches on Files did not.
