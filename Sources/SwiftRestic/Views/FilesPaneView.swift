@@ -22,7 +22,6 @@ struct FilesPaneView: View {
     @State private var chosenID: String?
     /// Whether the first read has settled where the pane opens.
     @State private var didOpen = false
-    @State private var isLoading = true
     @State private var loadError: String?
     @State private var indexComplete = true
 
@@ -83,7 +82,11 @@ struct FilesPaneView: View {
             } description: {
                 Text(loadError).textSelection(.enabled)
             }
-        } else if isLoading, versions.isEmpty {
+        } else if !didOpen {
+            // The first read only: a re-read while the index has not
+            // reached the item yet keeps "No backup holds it yet" up rather
+            // than swapping it for this every recheck — which made the
+            // version view anew each time.
             ProgressView("Reading…")
         } else if node.isDirectory {
             FolderVersionsView(node: node, versions: versions, chosenID: choice, onOpen: onOpen)
@@ -104,7 +107,6 @@ struct FilesPaneView: View {
     }
 
     private func load() async {
-        isLoading = true
         indexComplete = await model.indexIsComplete(repositoryID: node.repositoryID)
         do {
             // A file's backups are its versions' together, so one read
@@ -140,7 +142,6 @@ struct FilesPaneView: View {
             contentVersions = []
             loadError = error.localizedDescription
         }
-        isLoading = false
     }
 }
 
