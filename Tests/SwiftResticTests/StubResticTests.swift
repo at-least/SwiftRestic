@@ -434,6 +434,32 @@ struct StubRestic: Sendable {
                 echo "[]"
                 exit 0
                 ;;
+            findfile)
+                # A file pane's find: one match of the pattern — the file's
+                # exact path, which these tests keep free of glob characters —
+                # in every backup named with --snapshot, as restic answers for
+                # a path each named backup holds. Everything else answers empty.
+                trace "findfile-arm"
+                case " $* " in
+                    *" find "*)
+                        for last in "$@"; do :; done
+                        printf '['
+                        separator=""
+                        previous=""
+                        for arg in "$@"; do
+                            if [ "$previous" = "--snapshot" ]; then
+                                printf '%s{"matches":[{"path":"%s","type":"file","size":42,"mtime":"2026-01-02T03:04:05Z"}],"hits":1,"snapshot":"%s"}' "$separator" "$last" "$arg"
+                                separator=","
+                            fi
+                            previous="$arg"
+                        done
+                        printf ']\\n'
+                        exit 0
+                        ;;
+                esac
+                echo "[]"
+                exit 0
+                ;;
             dumpappears)
                 # A single-file restore whose landing is taken while the dump
                 # runs — a user's copy, an iCloud re-download: `dump` writes

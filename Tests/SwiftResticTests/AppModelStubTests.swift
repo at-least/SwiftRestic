@@ -1845,6 +1845,44 @@ struct AppModelStubTests {
         }
     }
 
+    @Test("a file's sizes and dates are read once per backup: going back to it asks restic nothing, a grown version list only its new backup")
+    func fileHistoryReadsEachBackupOnce() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "findfile")
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+            let older = String(repeating: "a", count: 64)
+            let newer = String(repeating: "b", count: 64)
+            let newest = String(repeating: "c", count: 64)
+            let path = "/src/notes.txt"
+
+            let first = try await harness.model.fileHistory(
+                repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+            )
+            #expect(Set(first.keys) == [newer, older])
+            #expect(first[older]?.size == 42)
+
+            // The pane is made anew for every click, so going back to the
+            // file asks again — with the same backups.
+            let again = try await harness.model.fileHistory(
+                repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+            )
+            #expect(again == first)
+            #expect(try stubRuns("find", in: harness) == 1)
+
+            // A backup made since adds one version's newest backup.
+            let grown = try await harness.model.fileHistory(
+                repositoryID: harness.repository.id, path: path, backupIDs: [newest, newer, older]
+            )
+            #expect(Set(grown.keys) == [newest, newer, older])
+            #expect(try stubRuns("find", in: harness) == 2)
+            let trace = try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+            let lastFind = try #require(trace.components(separatedBy: "\n").last { $0.contains("args=[find ") })
+            #expect(lastFind.contains(newest) && !lastFind.contains(newer) && !lastFind.contains(older), "\(lastFind)")
+
+            await harness.model.shutdown()
+        }
+    }
+
     @Test("a folder browse hands back restic's listing without waiting for the index's writer")
     func browseDoesNotWaitForTheIndexWriter() async throws {
         try await withScratchIndexDirectory {

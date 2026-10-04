@@ -195,6 +195,12 @@ final class AppModel {
     /// the app already holds them in each child's environment.
     @ObservationIgnored var resolvedContexts:
         [UUID: (key: ResolvedContextKey, context: RepositoryContext)] = [:]
+    /// What `fileHistory` has read of a file in a backup — its node, with
+    /// the size and modification time a Files pane's version row shows —
+    /// for the session. A backup ID is restic's hash of the snapshot, so an
+    /// answer never goes stale while its backup lives, and a forgotten
+    /// backup is never asked about again.
+    @ObservationIgnored var fileHistoryAnswers: [FileHistoryKey: FindMatch] = [:]
     /// Where view-state stamps (the seen-problem marks) persist. Injectable
     /// so tests never touch the real defaults, the same way secrets never
     /// touch the login Keychain.

@@ -242,20 +242,36 @@ extension AppModel {
     /// versions needed 1.9–2.2 s. Past `fileHistoryNamedLimit` the find
     /// searches every backup instead, so the command line stays far inside
     /// the system's argument limit.
+    ///
+    /// Each answer is kept (`fileHistoryAnswers`) and only backups without
+    /// one are asked: the pane is made anew for every click, and every find
+    /// costs a restic process — 0.5–2 s even on a five-backup local
+    /// repository, most of it restic deriving the key — so going back to a
+    /// file asks nothing, and a version list a new backup grew asks only
+    /// for that one.
     func fileHistory(repositoryID: UUID, path: String, backupIDs: [String]) async throws -> [String: FindMatch] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
-        let (service, context) = try await resticContext(for: repository)
-        let results = try await service.find(
-            context,
-            pattern: ResticService.globEscaped(path),
-            ignoreCase: false,
-            snapshotIDs: backupIDs.count <= Self.fileHistoryNamedLimit ? backupIDs : []
-        )
-        var history: [String: FindMatch] = [:]
-        for result in results {
-            if let match = result.matches.first(where: { PathKey($0.path) == PathKey(path) }) {
-                history[result.snapshot] = match
+        let pathKey = PathKey(path)
+        let unanswered = backupIDs.filter {
+            fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: $0, path: pathKey)] == nil
+        }
+        if !unanswered.isEmpty {
+            let (service, context) = try await resticContext(for: repository)
+            let results = try await service.find(
+                context,
+                pattern: ResticService.globEscaped(path),
+                ignoreCase: false,
+                snapshotIDs: unanswered.count <= Self.fileHistoryNamedLimit ? unanswered : []
+            )
+            for result in results {
+                if let match = result.matches.first(where: { PathKey($0.path) == pathKey }) {
+                    fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: result.snapshot, path: pathKey)] = match
+                }
             }
+        }
+        var history: [String: FindMatch] = [:]
+        for id in backupIDs {
+            history[id] = fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: id, path: pathKey)]
         }
         return history
     }
@@ -276,4 +292,12 @@ extension AppModel {
             includeMetadata: includeMetadata
         )
     }
+}
+
+/// One file in one backup of one repository: what `fileHistory` keeps an
+/// answer under. The path is matched by bytes, as the index keys paths.
+struct FileHistoryKey: Hashable {
+    let repositoryID: UUID
+    let backupID: String
+    let path: PathKey
 }
