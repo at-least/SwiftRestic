@@ -133,6 +133,7 @@ struct RootView: View {
         .sheet(isPresented: $isShowingFind, onDismiss: { findPrefill = nil }) {
             FindFilesView(prefill: prefill, initialRepositoryID: findFilesRepositoryID)
                 .environment(model)
+                .environment(router)
         }
         .sheet(isPresented: $isShowingConcepts) {
             ConceptsView()

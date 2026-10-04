@@ -18,6 +18,7 @@ struct FindFilesView: View {
     }
 
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     @Environment(\.dismiss) private var dismiss
     @Environment(\.now) private var now
 
@@ -261,6 +262,20 @@ struct FindFilesView: View {
                     // unselected row must not depend on selection state.
                     Button("Restore “\(row.match.name)”…") {
                         restoreSelection(row)
+                    }
+                    if let repositoryID, let record = model.snapshots(for: repositoryID).first(where: { $0.id == row.snapshotID }) {
+                        // Out of the sheet, onto the Files tab that holds
+                        // the match's history, at this match's backup.
+                        Button("Show Versions") {
+                            router.showVersions(
+                                path: row.match.path,
+                                isDirectory: row.match.isDirectory,
+                                in: record,
+                                repositoryID: repositoryID,
+                                page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
+                            )
+                            dismiss()
+                        }
                     }
                 }
             }

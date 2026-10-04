@@ -159,6 +159,13 @@ struct BackupShelves: Equatable {
         return label
     }
 
+    /// The page whose Files tab holds `record`'s history: the plan of this
+    /// repository that made it, or its group under Other backups.
+    func page(of record: Snapshot, repositoryID: UUID) -> SidebarItem {
+        if let planID = Self.owner(of: record, among: plans) { return .plan(planID) }
+        return .otherGroup(repositoryID: repositoryID, id: record.otherGroupID)
+    }
+
     /// The one configured plan a group under Other backups belongs to: it
     /// backs up to another repository now, which is why its backups here are
     /// not under it. Nil for a group no configuration sets up (a deleted

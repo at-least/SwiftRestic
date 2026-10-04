@@ -176,7 +176,10 @@ checked in so a normal build does not need it.
   plan whose folders changed is a backup of other folders; the pane's header
   names the open backup and says what its Change column is compared with, or
   that it is the first of its folders. The Files view (above) walks one
-  folder or file through every backup that holds it. The file
+  folder or file through every backup that holds it: *Show Versions*, in an
+  item's right-click menu here and on Find Files' results, opens the item
+  there — on the Files tab of the plan or group the backup belongs to, at
+  that backup. The file
   list answers Finder's outline keys: → opens a folder, ← closes it or steps to
   the folder that holds the selection. Its search covers the open backup and
   says how many matches only other backups hold; *Search All Backups…* carries

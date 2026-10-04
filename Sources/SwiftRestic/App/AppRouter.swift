@@ -110,6 +110,37 @@ final class AppRouter {
         pageTabs[page] = .files
     }
 
+    /// An item by version, from a backup that holds it — the Restore pane's
+    /// and Find Files' Show Versions: `page`, the one whose Files tab holds
+    /// `record`'s history (`BackupShelves.page(of:)`), on Files, the item
+    /// selected with every folder above it open down from the backed-up
+    /// folder that holds it, and its pane opening at `record`.
+    func showVersions(path: String, isDirectory: Bool, in record: Snapshot, repositoryID: UUID, page: SidebarItem) {
+        let chain = SnapshotIndex.chainKey(for: record)
+        func folder(_ path: String) -> FileNode {
+            FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: true)
+        }
+        if let top = record.paths.filter({ Self.holds($0, path) }).max(by: { $0.utf8.count < $1.utf8.count }) {
+            var above = ResticPath.parent(of: path)
+            while above.utf8.count >= top.utf8.count, Self.holds(top, above) {
+                openFolders.insert(folder(above))
+                above = ResticPath.parent(of: above)
+            }
+        }
+        filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] =
+            FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
+        filesVersionHint = record.id
+        pageTabs[page] = .files
+        selection = page
+    }
+
+    /// Whether `path` is `folder` or inside it, byte for byte, as the
+    /// index compares paths.
+    private static func holds(_ folder: String, _ path: String) -> Bool {
+        if path.utf8.elementsEqual(folder.utf8) { return true }
+        return path.utf8.starts(with: (folder == "/" ? folder : folder + "/").utf8)
+    }
+
     /// The toolbar picker's binding for one page.
     func tabBinding(for page: SidebarItem) -> Binding<PageTab> {
         Binding(get: { self.tab(of: page) }, set: { self.setTab($0, of: page) })

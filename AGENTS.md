@@ -228,7 +228,8 @@ Two facts for the next scripted run:
   - dragging items to Finder;
   - Restore… and Restore Folder… through the destination sheet. Whoever runs one restores into a scratch folder, never the real Desktop;
   - Show in Backups, and coming back to the page on its Files tab (the router keeping the tab is unit-tested);
-  - Try Again on a failed level (only the load key's change is unit-tested).
+  - Try Again on a failed level (only the load key's change is unit-tested);
+  - Show Versions from the Restore pane's item menu and from Find Files' results (the page each lands on and the route are unit-tested; the menu items were not clicked).
 - **The tree's fallback through restic.** A plan the index holds nothing of yet is listed from its newest backup with `restic ls` (`FilesTree`). No test and no capture reached that branch.
 - **Scale.**
   - How the tree responds with thousands of rows open. The 200-item cap is unit-tested, but its "N more items…" row was never shown live.
@@ -239,5 +240,4 @@ Two facts for the next scripted run:
 
 - **Backups made with relative paths.** `restic backup source/Music`, run from the console in a folder, keeps the relative layout inside the snapshot while its `paths` are absolute, so a Files tab opens that root as an empty folder (seen live 2026-10-04 on scratch data). The Restore pane browses such a backup fine.
 - **The removed control's `SidebarMode` default** stays in the defaults of anyone who ran a build with it. Harmless, not deleted.
-- **Show Versions from elsewhere.** The design discussion left two links for later: a Show Versions item in the Restore pane's item menu, and the same on Find Files results, each opening the file in the Files view. Neither exists.
 - **The flaky timing tests.** See Build.

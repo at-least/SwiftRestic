@@ -310,8 +310,10 @@ struct RestorePaneView: View {
             // Double-click, the list's way: it expands a folder, as the
             // chevron does, and leaves a file alone. The list also sends
             // Return here — Return is spent in `handleKeyPress` first.
-            .contextMenu(forSelectionType: String.self) { _ in
-                EmptyView()
+            .contextMenu(forSelectionType: String.self) { ids in
+                if ids.count == 1, let path = ids.first, let node = tree.node(at: path) {
+                    showVersionsItem(path: node.path, isDirectory: node.isDirectory)
+                }
             } primaryAction: { ids in
                 guard ids.count == 1, let path = ids.first,
                       tree.node(at: path)?.isDirectory == true
@@ -383,6 +385,29 @@ struct RestorePaneView: View {
         }
         .listStyle(.inset)
         .focusOnClick($listIsFocused)
+        .contextMenu(forSelectionType: String.self) { ids in
+            if ids.count == 1, let id = ids.first, let hit = hits.first(where: { $0.id == id }) {
+                showVersionsItem(path: hit.path, isDirectory: hit.isDirectory)
+            }
+        }
+    }
+
+    /// Show Versions: the item through every backup of its history, on the
+    /// Files tab of the page that holds it — its plan's, or its group's
+    /// under Other backups — opening at this backup.
+    @ViewBuilder
+    private func showVersionsItem(path: String, isDirectory: Bool) -> some View {
+        if let record {
+            Button("Show Versions") {
+                router.showVersions(
+                    path: path,
+                    isDirectory: isDirectory,
+                    in: record,
+                    repositoryID: repositoryID,
+                    page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
+                )
+            }
+        }
     }
 
     /// Arq's three ways out of a record, in one row: the primary Restore…
