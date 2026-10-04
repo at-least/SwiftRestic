@@ -926,6 +926,26 @@ struct StubResticTests {
         #expect(!start.contains("--prune"), "start line: \(start)")
     }
 
+    @Test("the reads a click or a refresh runs take no repository lock")
+    func clickAndRefreshReadsRunLockFree() async throws {
+        let fixture = try makeFixture(mode: "default")
+        defer { cleanUp(fixture.root) }
+
+        _ = try await fixture.service.find(fixture.context, pattern: "/src/a.txt", ignoreCase: false, snapshotIDs: ["feedface"])
+        _ = try await fixture.service.listDirectory(fixture.context, snapshotID: "feedface", path: "/src")
+        _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: nil)
+
+        let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+        let starts = trace.split(separator: "\n").map(String.init).filter { $0.hasPrefix("start args=[") }
+        // Locked, each paid restic's 200 ms wait after writing its lock, failed
+        // with exit 11 under retention's exclusive lock, and made a forget
+        // starting meanwhile fail the same way (all probed on restic 0.19.1).
+        for command in ["find", "ls", "snapshots"] {
+            let start = try #require(starts.first { $0.hasPrefix("start args=[\(command) ") }, "trace: \(trace)")
+            #expect(start.contains("--no-lock"), "start line: \(start)")
+        }
+    }
+
     @Test("a check exit 1 without an error count is still a failure, not a clean bill")
     func checkExitOneWithoutErrorsFailsTheCommand() async throws {
         let fixture = try makeFixture(mode: "checkbroken")

@@ -309,12 +309,13 @@ struct ResticService: ResticClient {
 
     // MARK: - Snapshots
 
+    /// Lock-free, for `find`'s reasons.
     func snapshots(
         _ context: RepositoryContext,
         planID: UUID? = nil,
         timeout: TimeInterval? = nil
     ) async throws -> [Snapshot] {
-        var args = context.globalArguments + ["snapshots", "--json"]
+        var args = context.globalArguments + ["snapshots", "--json", "--no-lock"]
         if let planID { args += ["--tag", Self.planTag(planID)] }
         let result = try await runner.run(
             binary: binary,
@@ -332,7 +333,7 @@ struct ResticService: ResticClient {
     ///
     /// `restic ls <id>` alone walks the whole tree, which is far too much for a
     /// browser; giving it an absolute directory makes it list one level, plus the
-    /// directory itself, which we drop here.
+    /// directory itself, which we drop here. Lock-free, for `find`'s reasons.
     func listDirectory(
         _ context: RepositoryContext,
         snapshotID: String,
@@ -341,7 +342,7 @@ struct ResticService: ResticClient {
         let result = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
-                arguments: context.globalArguments + ["ls", "--json", snapshotID, path],
+                arguments: context.globalArguments + ["ls", "--json", "--no-lock", snapshotID, path],
                 environment: context.environment
             )
         )
@@ -439,13 +440,20 @@ struct ResticService: ResticClient {
     /// is why the caller can narrow it to some snapshots (none named: every
     /// one). A named snapshot the repository no longer holds is skipped with
     /// a warning on stderr; the rest still answer (restic 0.19.1).
+    ///
+    /// `--no-lock`, as `listDirectory` and `snapshots`: the reads a click or a
+    /// refresh makes. Locked, each paid restic's 200 ms wait after writing
+    /// its lock (0.14–0.32 s of a 0.7–0.9 s file-pane find on a small local
+    /// repository), failed with exit 11 while retention's `forget` held the
+    /// exclusive lock, and made a `forget` starting while it held its lock
+    /// fail the same way (probed on restic 0.19.1).
     func find(
         _ context: RepositoryContext,
         pattern: String,
         ignoreCase: Bool = true,
         snapshotIDs: [String] = []
     ) async throws -> [FindResult] {
-        var args = context.globalArguments + ["find", "--json"]
+        var args = context.globalArguments + ["find", "--json", "--no-lock"]
         if ignoreCase { args.append("--ignore-case") }
         for id in snapshotIDs { args += ["--snapshot", id] }
         args.append(pattern)

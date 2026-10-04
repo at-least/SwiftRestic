@@ -221,8 +221,9 @@ extension AppModel {
         // tccd, and nothing on the first screen waits for the answer.
         Task { await self.refreshFullDiskAccess() }
 
-        // Read the repositories before arming the scheduler. `snapshots`/`stats`
-        // hold a shared repository lock while `forget` needs an exclusive one, so
+        // Read the repositories before arming the scheduler. `stats` holds a
+        // shared repository lock (`snapshots` runs lock-free) while `forget`
+        // needs an exclusive one, so
         // starting the scheduler first makes the app race itself on launch: a due
         // plan's retention step fails against our own refresh.
         await refreshAllSnapshots()

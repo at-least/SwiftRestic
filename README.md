@@ -496,6 +496,10 @@ restic's locks shape most of the scheduling. `backup` takes a shared lock;
   repositories before arming the scheduler, so the app does not race itself.
 - If retention still loses a lock race, the snapshot already exists: the run is
   recorded as *completed with errors* with the reason, never as a failure.
+- The reads a click or a refresh makes — `snapshots`, a folder's `ls`, a file's
+  `find` — and the index's walks run with `--no-lock`. Locked, each waited
+  200 ms after writing its lock, failed (exit 11) while `forget` or `prune`
+  held the exclusive lock, and made a `forget` starting meanwhile fail.
 
 ## Hooks
 
