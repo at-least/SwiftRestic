@@ -75,6 +75,24 @@ struct FilesTreeTests {
         #expect(FilesTree.rows(under: roots, open: [], states: [roots: level(sources)]).count == FilesTree.rowCap + 5)
     }
 
+    @Test("a selected item is shown by its own row, past its folder's cap by the folder's more row, and by nothing while neither is listed")
+    func rowShowingItem() {
+        let roots = FileNode.roots(repositoryID: repositoryID, chainKey: chain)
+        let big = node("/Big")
+        let children = (0 ..< FilesTree.rowCap + 5).map { node(String(format: "/Big/f%04d", $0), folder: false) }
+        let rows = FilesTree.rows(under: roots, open: [big], states: [roots: level([big]), big: level(children)])
+
+        let first = children[0]
+        #expect(FilesTree.row(showing: first, in: rows).map { text([$0]) } == ["1 \(first.path)"])
+        #expect(FilesTree.row(showing: big, in: rows).map { text([$0]) } == ["0 /Big"])
+        let pastCap = children[FilesTree.rowCap + 2]
+        #expect(FilesTree.row(showing: pastCap, in: rows).map { text([$0]) } == ["1 more 5 of /Big"])
+        // A closed folder's item, and another chain's, have no row yet.
+        #expect(FilesTree.row(showing: node("/Other/x", folder: false), in: rows) == nil)
+        let elsewhere = FileNode(repositoryID: repositoryID, chainKey: "swiftrestic-plan-bbbb", path: pastCap.path, isDirectory: false)
+        #expect(FilesTree.row(showing: elsewhere, in: rows) == nil)
+    }
+
     @Test("FileNode's identity is the repository, chain, path bytes and kind; the roots level is no path")
     func fileNodeIdentity() {
         // NFC and NFD spellings of one name: one String to Swift, two paths

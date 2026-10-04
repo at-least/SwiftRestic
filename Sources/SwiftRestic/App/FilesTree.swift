@@ -139,6 +139,26 @@ final class FilesTree {
         return rows
     }
 
+    /// The row that shows `item` among `rows`: its own, or — past its
+    /// folder's `rowCap` — the folder's "more items" row standing for it.
+    /// Nil while neither is listed.
+    nonisolated static func row(showing item: FileNode, in rows: [Row]) -> Row? {
+        let folder = ResticPath.parent(of: item.path)
+        var more: Row?
+        for row in rows {
+            switch row {
+            case let .entry(entry, _) where entry.node == item:
+                return row
+            case let .more(parent, _, _) where parent.chainKey == item.chainKey
+                && parent.repositoryID == item.repositoryID && PathKey(parent.path) == PathKey(folder):
+                more = row
+            default:
+                continue
+            }
+        }
+        return more
+    }
+
     /// The levels the rows under `parent` need: `parent` and every open
     /// folder shown under it.
     func needed(under parent: FileNode, open: Set<FileNode>) -> [FileNode] {

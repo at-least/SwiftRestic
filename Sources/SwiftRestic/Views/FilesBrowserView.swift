@@ -24,6 +24,11 @@ struct FilesBrowserView: View {
     /// The view's own width, which bounds the drag: the pane keeps room for
     /// its version rows.
     @State private var width: CGFloat = 0
+    /// The selected item while the tree has yet to bring it into view: set
+    /// as the selection changes, spent once its row — or the "more items"
+    /// row standing for it — is listed. A deep item a route selected (Show
+    /// Versions, a capture's item) otherwise sat out of sight below.
+    @State private var unrevealed: FileNode?
 
     private var selected: FileNode? {
         router.filesSelection[roots]
@@ -71,21 +76,35 @@ struct FilesBrowserView: View {
     }
 
     private var tree: some View {
-        List(selection: Binding(
-            get: { router.filesSelection[roots] },
-            set: { router.filesSelection[roots] = $0 }
-        )) {
-            ForEach(filesTree.rows(under: roots, open: router.openFolders)) { row in
-                treeRow(row)
+        let rows = filesTree.rows(under: roots, open: router.openFolders)
+        return ScrollViewReader { proxy in
+            List(selection: Binding(
+                get: { router.filesSelection[roots] },
+                set: { router.filesSelection[roots] = $0 }
+            )) {
+                ForEach(rows) { row in
+                    treeRow(row)
+                }
+            }
+            .listStyle(.inset)
+            .focusOnClick($treeIsFocused)
+            // The keyboard an outline gives its disclosure rows: with a folder
+            // selected, → opens it and ← closes it. Plain arrows only, the
+            // restore pane's rule for its own folds.
+            .onKeyPress(.rightArrow, phases: .down) { fold(open: true, press: $0) }
+            .onKeyPress(.leftArrow, phases: .down) { fold(open: false, press: $0) }
+            // Brought into view once, when its row is first there — the
+            // levels above it may still be reading — and never again, so a
+            // re-read does not pull the list back from where it was
+            // scrolled. A click's own row is in view already.
+            .onChange(of: selected, initial: true) { _, item in unrevealed = item }
+            .onChange(of: unrevealed.flatMap { FilesTree.row(showing: $0, in: rows) }) { _, row in
+                guard let row else { return }
+                unrevealed = nil
+                // A turn later: the row may join the list in this update.
+                Task { @MainActor in proxy.scrollTo(row) }
             }
         }
-        .listStyle(.inset)
-        .focusOnClick($treeIsFocused)
-        // The keyboard an outline gives its disclosure rows: with a folder
-        // selected, → opens it and ← closes it. Plain arrows only, the
-        // restore pane's rule for its own folds.
-        .onKeyPress(.rightArrow, phases: .down) { fold(open: true, press: $0) }
-        .onKeyPress(.leftArrow, phases: .down) { fold(open: false, press: $0) }
     }
 
     @ViewBuilder
