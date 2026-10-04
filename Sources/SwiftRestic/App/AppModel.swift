@@ -202,7 +202,8 @@ final class AppModel {
     /// its backup lives, and a forgotten backup is never asked about again.
     @ObservationIgnored var fileHistoryAnswers: [FileHistoryKey: SnapshotNode] = [:]
     /// The find a folder's read-ahead (`warmFileHistory`) runs, by each file
-    /// it asks about, while it runs: a click on one of them waits for it.
+    /// it asks about, while it runs: another read-ahead then leaves those
+    /// files to it.
     @ObservationIgnored var fileHistoryReadAheads: [FileHistoryFile: Task<Void, any Error>] = [:]
     /// Where view-state stamps (the seen-problem marks) persist. Injectable
     /// so tests never touch the real defaults, the same way secrets never

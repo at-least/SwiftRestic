@@ -249,18 +249,12 @@ extension AppModel {
     /// process — 0.5–2 s even on a five-backup local repository, most of it
     /// restic deriving the key — so going back to a file asks nothing, even
     /// after a relaunch, and a version list a new backup grew asks only for
-    /// that one. A file whose folder `warmFileHistory` is reading ahead
-    /// waits for that find rather than starting one beside it.
+    /// that one.
     func fileHistory(repositoryID: UUID, path: String, backupIDs: [String]) async throws -> [String: SnapshotNode] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         let pathKey = PathKey(path)
         func key(_ backupID: String) -> FileHistoryKey {
             FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: pathKey)
-        }
-        if let readAhead = fileHistoryReadAheads[FileHistoryFile(repositoryID: repositoryID, path: pathKey)] {
-            // Its failure leaves the file unanswered, and the find below
-            // asks restic again and reports what it says.
-            _ = await readAhead.result
         }
         var unanswered = backupIDs.filter { fileHistoryAnswers[key($0)] == nil }
         if !unanswered.isEmpty {
@@ -295,14 +289,18 @@ extension AppModel {
     /// Reads ahead what a click on each of `files` — one open folder's, all
     /// in one chain — will ask `fileHistory` for: each version's newest
     /// backup, from the index, then whatever neither the session nor the
-    /// index has kept, from one `restic find` for all of them, which costs
-    /// about what one file's does (200 files over five backups took restic
-    /// 0.61 s, one file 0.53 s). Clicks while the index is read run their
-    /// own find; a click once that find runs waits for it. Returned for
-    /// tests to await.
+    /// index has kept, from one `restic find` for all of them. One walk per
+    /// backup named serves every file — at five backups, 200 files took
+    /// restic 0.61 s against 0.53 s for one — but each backup costs more
+    /// with 200 paths to match (at 60 backups, 2.1 s against 1.0 s), so a
+    /// click never waits for it: one meanwhile runs its own find, as
+    /// before. A folder whose files need more than
+    /// `fileHistoryNamedLimit` backups is not read ahead: restic would walk
+    /// every backup of the repository. Returned for tests to await.
     ///
-    /// A failure — the index's or restic's — stores nothing: each click
-    /// then asks for its file, and reports what it is told.
+    /// A failure — the index's or restic's — keeps what the index had kept
+    /// and reads nothing more: each click then asks for its file, and
+    /// reports what it is told.
     @discardableResult
     func warmFileHistory(_ files: [FileNode]) -> Task<Void, Never> {
         Task { [self] in await readAhead(files) }
@@ -330,31 +328,37 @@ extension AppModel {
             if !rest.isEmpty { missing[file.path] = rest }
         }
         // A click answered some meanwhile, or another read-ahead took them.
-        missing = missing.filter { path, ids in
-            !reading(path) && ids.contains { fileHistoryAnswers[key($0, path)] == nil }
+        for (path, ids) in missing {
+            let unanswered = ids.filter { fileHistoryAnswers[key($0, path)] == nil }
+            missing[path] = reading(path) || unanswered.isEmpty ? nil : unanswered
         }
-        guard !missing.isEmpty, !isShuttingDown else { return }
-        let paths = Dictionary(uniqueKeysWithValues: missing.keys.map { (PathKey($0), $0) })
         let backupIDs = Set(missing.values.joined())
+        guard !missing.isEmpty, backupIDs.count <= Self.fileHistoryNamedLimit, !isShuttingDown else { return }
+        let wanted = Dictionary(uniqueKeysWithValues: missing.map { (PathKey($0.key), (path: $0.key, ids: Set($0.value))) })
         let find = Task<Void, any Error> { [self] in
+            guard !isShuttingDown else { return }
             let (service, context) = try await resticContext(for: repository)
             let results = try await service.find(
                 context,
-                patterns: paths.values.map(ResticService.globEscaped),
+                patterns: wanted.values.map { ResticService.globEscaped($0.path) },
                 ignoreCase: false,
-                snapshotIDs: backupIDs.count <= Self.fileHistoryNamedLimit ? Array(backupIDs) : []
+                snapshotIDs: Array(backupIDs)
             )
+            // Removed meanwhile: its answers went with it.
+            guard self.repository(id: repositoryID) != nil else { return }
             var found: [String: [String: SnapshotNode]] = [:]
             for result in results {
                 for match in result.matches {
-                    guard let path = paths[PathKey(match.path)] else { continue }
-                    found[path, default: [:]][result.snapshot] = match.node
-                    fileHistoryAnswers[key(result.snapshot, path)] = match.node
+                    // What a click asks, no more: every backup named holds
+                    // the folder's other files too.
+                    guard let file = wanted[PathKey(match.path)], file.ids.contains(result.snapshot) else { continue }
+                    found[file.path, default: [:]][result.snapshot] = match.node
+                    fileHistoryAnswers[key(result.snapshot, file.path)] = match.node
                 }
             }
             indexCoordinator.cacheFileNodes(found, repositoryID: repositoryID)
         }
-        let readers = paths.keys.map { FileHistoryFile(repositoryID: repositoryID, path: $0) }
+        let readers = wanted.keys.map { FileHistoryFile(repositoryID: repositoryID, path: $0) }
         for reader in readers { fileHistoryReadAheads[reader] = find }
         // Its failure leaves the files unanswered: each click asks again.
         _ = await find.result

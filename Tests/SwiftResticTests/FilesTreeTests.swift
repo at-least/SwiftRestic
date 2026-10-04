@@ -205,7 +205,11 @@ struct FilesTreeTests {
         // An incomplete level is read again every recheckInterval: stop
         // after the first read.
         let task = Task { await reading.keep([folder], model: model) }
-        while reading.state(of: folder) == nil || reading.state(of: folder) == .loading { await Task.yield() }
+        let deadline = ContinuousClock.now + .seconds(10)
+        while reading.state(of: folder) == nil || reading.state(of: folder) == .loading, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(reading.state(of: folder) != nil && reading.state(of: folder) != .loading, "the level was never read")
         task.cancel()
         await task.value
         #expect(warmed.calls.isEmpty)
