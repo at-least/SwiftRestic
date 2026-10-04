@@ -238,5 +238,4 @@ Two facts for the next scripted run:
 
 ### Not handled
 
-- **The removed control's `SidebarMode` default** stays in the defaults of anyone who ran a build with it. Harmless, not deleted.
 - **The flaky timing tests.** See Build.

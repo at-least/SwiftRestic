@@ -170,6 +170,9 @@ struct SwiftResticApp: App {
             .environment(router)
             .frame(minWidth: 940, minHeight: 600)
             .task {
+                // Where the sidebar's Backups | Files control kept its
+                // choice; the control is gone (0ec4f00), so is the key.
+                UserDefaults.standard.removeObject(forKey: "SidebarMode")
                 appDelegate.wireAppSurface(model: model, router: router)
                 await model.bootstrap()
             }
