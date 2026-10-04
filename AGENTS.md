@@ -241,9 +241,9 @@ Fixed after that run, each checked where it was seen:
 
 ### Not handled
 
-- **AppKit's reentrancy warning** ("Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future."). Traced, not fixed:
-  - It reproduces in one setup: the 1,000-backup scratch repository with its index emptied, the Files tab on its 260-file folder, while the index reads. It appeared in every one of 13 launches under lldb, from 36 s to 10 min in, and in 1 of 2 launches without lldb.
-  - It is logged inside AppKit, with no app frame on the stack. A SwiftUI List update (`OutlineListCoordinator.diffRows` → `-[NSTableView endUpdates]`) asks the row-height cache for the top row, and the cache, resizing the table, calls itself: `-[NSTableRowHeightData _cacheRowSpansInRange:heightProvider:]` twice on one stack.
-  - The table was the folder pane's listing: 260 rows of 24 pt, filled at that moment, its frame 20 pt tall and its visible rect empty.
-  - Three changes did not stop it: comparing the listing as equatable so the pane's re-reads skip it (reverted); the flicker fix above (kept for its own sake); keeping the list mounted through its loading and empty states (reverted).
-  - Not tried: fixed row heights through AppKit, a listing that is not a List.
+- **AppKit's reentrancy warning** ("Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future."). An AppKit bug, with a report for Apple drafted (last point); nothing to fix here yet:
+  - Any NSTableView with automatic row heights logs it when first filled with more than 200 rows, and every SwiftUI List is one. A three-line SwiftUI app with `List(0 ..< 201)` logged it on 3 of 3 launches, with 200 rows on 0 of 3. A plain AppKit table logged it with 201 rows and not with 200, nor with automatic row heights off. macOS 27.0.1, Xcode 27.0, 2026-10-04.
+  - The reentrancy is inside AppKit's row-height cache: `-[NSTableRowHeightData _cacheRowSpansInRange:heightProvider:]` resizes the table and enters itself again on the same stack, with no app frame on it.
+  - In SwiftRestic, the folder pane's listing of a 260-file folder logged it on every launch that showed it (16). By the same rule any List here past 200 rows should too — the Files tree with several large folders open (its cap is per folder), the Restore pane — not checked.
+  - Three app-side changes did not stop it, as the bug's shape explains: comparing the listing as equatable, the flicker fix above (kept for its own sake), and keeping the list mounted. A SwiftUI List cannot turn automatic row heights off.
+  - The report and its two samples were left in `~/Downloads/NSTableView-201-rows-feedback/` for the user to file through Feedback Assistant. Note the FB number here once it is filed.
