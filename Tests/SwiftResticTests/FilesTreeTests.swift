@@ -107,6 +107,15 @@ struct FilesTreeTests {
         #expect(ResticPath.parent(of: "/d\u{0600}/x") == "/d\u{0600}")
     }
 
+    @Test("a path's tails run from the whole path to its last name, split on the separator's byte")
+    func tails() {
+        #expect(FilesTree.tails(of: "/a/b/c") == ["/a/b/c", "/b/c", "/c"])
+        #expect(FilesTree.tails(of: "/a") == ["/a"])
+        #expect(FilesTree.tails(of: "/") == [])
+        // A name starting with a combining mark keeps its own tail.
+        #expect(FilesTree.tails(of: "/d/\u{0301}x") == ["/d/\u{0301}x", "/\u{0301}x"])
+    }
+
     @Test("Try Again changes what the load task is keyed by, so a task that had returned — every level then current — runs again")
     func rereadRestartsTheLoad() {
         let tree = FilesTree()

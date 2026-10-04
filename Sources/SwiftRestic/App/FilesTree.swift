@@ -218,20 +218,31 @@ final class FilesTree {
         }
     }
 
+    /// `path` and every shorter tail of it, longest first — "/a/b/c",
+    /// "/b/c", "/c" — split on the separator's byte, so a name starting with
+    /// a combining mark is never merged into the separator before it.
+    nonisolated static func tails(of path: String) -> [String] {
+        let parts = path.utf8.split(separator: UInt8(ascii: "/")).map { String(decoding: $0, as: UTF8.self) }
+        return parts.indices.map { "/" + parts[$0...].joined(separator: "/") }
+    }
+
     /// One level as the index and restic answer it: the roots from the
     /// listing, a folder from the index or its fallback.
     static func level(of node: FileNode, model: AppModel) async throws -> Level {
         node.isRoots ? try await roots(of: node, model: model) : try await folder(node, model: model)
     }
 
-    /// The folder a chain's tree opens at for Show Files: the first path its
-    /// newest backup names, taken for a folder as the roots are until the
-    /// index says otherwise. nil while the listing holds none of the chain.
-    nonisolated static func firstRoot(of chainKey: String, repositoryID: UUID, in listing: [Snapshot]) -> FileNode? {
-        guard let path = listing.first(where: { SnapshotIndex.chainKey(for: $0) == chainKey })?.paths.first else {
-            return nil
-        }
-        return FileNode(repositoryID: repositoryID, chainKey: chainKey, path: path, isDirectory: true)
+    /// The root a Files tab selects as its roots level changes from `old` to
+    /// `new`: the first one on a first visit (nothing selected), and the
+    /// first again when the selected root has left the level — a relative
+    /// backup's folder, read before the index had read the backup, moves
+    /// from the absolute path the backup names to where its tree holds it.
+    /// Nil leaves the selection alone: the user's pick below the roots, or a
+    /// root still listed.
+    nonisolated static func rootToSelect(selected: FileNode?, old: [FileNode], new: [FileNode]) -> FileNode? {
+        guard let first = new.first else { return nil }
+        guard let selected else { return first }
+        return old.contains(selected) && !new.contains(selected) ? first : nil
     }
 
     /// The chain's backups, newest first, from the repository's listing.
@@ -240,15 +251,38 @@ final class FilesTree {
     }
 
     /// The top of a chain's tree: every folder its backups name as backed
-    /// up (`paths`), each with the newest backup naming it. Their kinds come
-    /// from the index, one read per parent folder; a root the index has not
-    /// read yet is taken for a folder: backed-up roots almost always are.
+    /// up (`paths`), where each backup's tree holds it (`treePath`), each
+    /// with the newest backup naming it. Their kinds come from the index,
+    /// one read per parent folder; a root the index has not read yet is
+    /// taken for a folder: backed-up roots almost always are.
     private static func roots(of node: FileNode, model: AppModel) async throws -> Level {
         let backups = backups(of: node, model: model)
+        var holdersByTail: [PathKey: Set<String>] = [:]
+        /// Where `backup`'s tree holds `path`: the longest tail of it the
+        /// index has `backup` holding. restic names a folder backed up by a
+        /// relative path — `restic backup Documents`, the console's way from
+        /// inside a folder — by its absolute path, but stores only the
+        /// relative one in its tree (/Documents). An absolute backup's whole
+        /// path is its first tail; a backup the index has not read keeps it.
+        func treePath(of path: String, in backup: Snapshot) async throws -> String {
+            for tail in tails(of: path) {
+                let key = PathKey(tail)
+                if holdersByTail[key] == nil {
+                    holdersByTail[key] = Set(try await model.indexedHolders(
+                        ofPath: tail, inChain: node.chainKey, repositoryID: node.repositoryID
+                    ).map(\.id))
+                }
+                if holdersByTail[key]?.contains(backup.id) == true { return tail }
+            }
+            return path
+        }
         var holders: [PathKey: Snapshot] = [:]
-        for backup in backups {
-            for path in backup.paths where holders[PathKey(path)] == nil {
-                holders[PathKey(path)] = backup
+        var newestPaths = Set<PathKey>()
+        for (position, backup) in backups.enumerated() {
+            for path in backup.paths {
+                let key = PathKey(try await treePath(of: path, in: backup))
+                if holders[key] == nil { holders[key] = backup }
+                if position == 0 { newestPaths.insert(key) }
             }
         }
         var kinds: [PathKey: Bool] = [:]
@@ -258,7 +292,6 @@ final class FilesTree {
             )
             for child in children { kinds[PathKey(child.path)] = child.isDirectory }
         }
-        let newestPaths = Set((backups.first?.paths ?? []).map { PathKey($0) })
         let entries = holders.map { key, backup in
             Entry(
                 node: FileNode(

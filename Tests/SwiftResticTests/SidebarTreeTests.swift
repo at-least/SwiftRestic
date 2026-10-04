@@ -503,21 +503,35 @@ struct SidebarTreeTests {
         let sibling = AppRouter()
         sibling.showVersions(path: "/Data2/x.txt", isDirectory: false, in: record, repositoryID: repositoryID, page: .plan(planID))
         #expect(sibling.openFolders.isEmpty)
+
+        // A relative backup's tree holds its folder under a tail of the
+        // absolute path it names: the folders open from there.
+        let relative = try snapshot("r1", time: "2026-10-02T10:00:00Z", paths: ["/Users/x/work/src/Music"])
+        let lineage = SidebarItem.lineage(repositoryID: repositoryID, key: relative.lineageKey)
+        let console = AppRouter()
+        console.showVersions(path: "/src/Music/Album/song.txt", isDirectory: false, in: relative, repositoryID: repositoryID, page: lineage)
+        let chain = SnapshotIndex.chainKey(for: relative)
+        #expect(console.openFolders == [
+            FileNode(repositoryID: repositoryID, chainKey: chain, path: "/src/Music", isDirectory: true),
+            FileNode(repositoryID: repositoryID, chainKey: chain, path: "/src/Music/Album", isDirectory: true),
+        ])
     }
 
-    @Test("a chain's Files tab opens at its newest backup's first folder")
-    func filesFirstRoot() throws {
+    @Test("a Files tab selects its first root on a first visit, and follows the root when a re-read moves it, never a pick of the user's")
+    func filesRootToSelect() {
         let repositoryID = UUID()
-        let planID = UUID()
-        let tag = ResticService.planTag(planID)
-        // Newest first, as the listing arrives.
-        let listing = [
-            try snapshot("b2", time: "2026-10-02T10:00:00Z", paths: ["/Data/Photos", "/Data/Music"], tags: [tag]),
-            try snapshot("b1", time: "2026-10-01T10:00:00Z", paths: ["/Data/Old"], tags: [tag]),
-            try snapshot("x1", time: "2026-10-03T10:00:00Z", paths: ["/Data/Other"]),
-        ]
-        let root = try #require(FilesTree.firstRoot(of: tag, repositoryID: repositoryID, in: listing))
-        #expect(root == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos", isDirectory: true))
-        #expect(FilesTree.firstRoot(of: "swiftrestic-plan-none", repositoryID: repositoryID, in: listing) == nil)
+        func node(_ path: String) -> FileNode {
+            FileNode(repositoryID: repositoryID, chainKey: "lineage:x", path: path, isDirectory: true)
+        }
+        let absolute = node("/Users/x/work/src/Music")
+        let relative = node("/src/Music")
+        // First visit: the first root.
+        #expect(FilesTree.rootToSelect(selected: nil, old: [], new: [relative]) == relative)
+        #expect(FilesTree.rootToSelect(selected: nil, old: [], new: []) == nil)
+        // The relative backup's root read before the index had read it, then again.
+        #expect(FilesTree.rootToSelect(selected: absolute, old: [absolute], new: [relative]) == relative)
+        // A root still listed, and a pick below the roots, stay.
+        #expect(FilesTree.rootToSelect(selected: relative, old: [relative], new: [relative, node("/b")]) == nil)
+        #expect(FilesTree.rootToSelect(selected: node("/src/Music/Album"), old: [absolute], new: [relative]) == nil)
     }
 }

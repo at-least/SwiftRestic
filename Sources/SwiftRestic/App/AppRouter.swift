@@ -114,13 +114,16 @@ final class AppRouter {
     /// and Find Files' Show Versions: `page`, the one whose Files tab holds
     /// `record`'s history (`BackupShelves.page(of:)`), on Files, the item
     /// selected with every folder above it open down from the backed-up
-    /// folder that holds it, and its pane opening at `record`.
+    /// folder that holds it — the tail of a backed-up path a relative
+    /// backup's tree holds it under (`FilesTree.tails`) — and its pane
+    /// opening at `record`.
     func showVersions(path: String, isDirectory: Bool, in record: Snapshot, repositoryID: UUID, page: SidebarItem) {
         let chain = SnapshotIndex.chainKey(for: record)
         func folder(_ path: String) -> FileNode {
             FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: true)
         }
-        if let top = record.paths.filter({ Self.holds($0, path) }).max(by: { $0.utf8.count < $1.utf8.count }) {
+        if let top = record.paths.flatMap(FilesTree.tails(of:)).filter({ Self.holds($0, path) })
+            .max(by: { $0.utf8.count < $1.utf8.count }) {
             var above = ResticPath.parent(of: path)
             while above.utf8.count >= top.utf8.count, Self.holds(top, above) {
                 openFolders.insert(folder(above))

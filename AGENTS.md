@@ -238,6 +238,5 @@ Two facts for the next scripted run:
 
 ### Not handled
 
-- **Backups made with relative paths.** `restic backup source/Music`, run from the console in a folder, keeps the relative layout inside the snapshot while its `paths` are absolute, so a Files tab opens that root as an empty folder (seen live 2026-10-04 on scratch data). The Restore pane browses such a backup fine.
 - **The removed control's `SidebarMode` default** stays in the defaults of anyone who ran a build with it. Harmless, not deleted.
 - **The flaky timing tests.** See Build.

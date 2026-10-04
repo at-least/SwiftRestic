@@ -94,7 +94,9 @@ checked in so a normal build does not need it.
   identifier. *Restore Files…* opens the group's newest backup; the group's
   context menu has it and *Show Files*, which opens the page on Files. An
   untagged lineage's files come from the index's chain of its host and
-  folders.
+  folders. A folder backed up by a relative path — `restic backup Documents`
+  from the console, inside the home folder — shows where restic put it in
+  the backup, `/Documents`, though the backup names `/Users/…/Documents`.
 - **Adopting** — a group no plan anywhere carries the ID of can be adopted
   back into one: *Adopt as a Backup Plan…*, from the page's explanation
   card, the group's context menu, and an *Other backups* card on the

@@ -1205,3 +1205,74 @@ struct ResticFindTests {
         }
     }
 }
+
+/// Backups made outside the app with relative paths, as the console makes
+/// them from inside a folder: restic names the absolute path in the snapshot
+/// and keeps only the relative one in its tree.
+@Suite("restic relative paths", .serialized, .enabled(if: ResticAvailability.isInstalled))
+struct ResticRelativePathTests {
+    @MainActor
+    @Test("a backup made with a relative path lists its folder in Files where restic put it in the tree, not at the absolute path the snapshot names")
+    func relativeBackupRoots() async throws {
+        let binary = try ResticBinary.locate(userOverride: nil)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticRelative-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let root = base.resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let work = root.appendingPathComponent("work")
+        let album = work.appendingPathComponent("src/Music/Album")
+        try FileManager.default.createDirectory(at: album, withIntermediateDirectories: true)
+        try "la".write(to: album.appendingPathComponent("song.txt"), atomically: true, encoding: .utf8)
+
+        var repository = Repository()
+        repository.name = "Relative"
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+        let password = "relative-test"
+        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        _ = try await service.initializeRepository(RepositoryContext(repository: repository, password: password))
+
+        // The console's way, from inside the folder: restic names the
+        // absolute path in the snapshot but stores /src/Music in its tree.
+        let console = Process()
+        console.executableURL = binary.url
+        console.arguments = ["backup", "src/Music", "--quiet"]
+        console.currentDirectoryURL = work
+        console.environment = ProcessInfo.processInfo.environment.merging(
+            ["RESTIC_REPOSITORY": repository.localPath, "RESTIC_PASSWORD": password]
+        ) { $1 }
+        try console.run()
+        console.waitUntilExit()
+        #expect(console.terminationStatus == 0)
+
+        var configuration = AppConfiguration()
+        configuration.repositories = [repository]
+        configuration.settings.resticPathOverride = binary.url.path
+        let store = ConfigStore(directory: root.appendingPathComponent("config"))
+        try await store.save(configuration)
+        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]))
+        await model.bootstrap()
+        await model.refreshSnapshots(repositoryID: repository.id)
+        let deadline = Date.now.addingTimeInterval(60)
+        while !(await model.indexIsComplete(repositoryID: repository.id)), Date.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(await model.indexIsComplete(repositoryID: repository.id), "the index never read the backup")
+
+        let snapshot = try #require(model.snapshots(for: repository.id).first)
+        // Absolute, from the working folder restic resolved (/private/var…).
+        #expect(snapshot.paths.count == 1 && snapshot.paths[0].hasSuffix("/work/src/Music"), "\(snapshot.paths)")
+        let roots = FileNode.roots(repositoryID: repository.id, chainKey: SnapshotIndex.chainKey(for: snapshot))
+        let top = try await FilesTree.level(of: roots, model: model)
+        #expect(top.entries.map(\.node.path) == ["/src/Music"])
+        #expect(top.entries.first?.node.isDirectory == true)
+        #expect(top.entries.first?.isInNewest == true)
+        let music = try #require(top.entries.first?.node)
+        let inside = try await FilesTree.level(of: music, model: model)
+        #expect(inside.entries.map(\.node.name) == ["Album"])
+
+        await model.shutdown()
+    }
+}

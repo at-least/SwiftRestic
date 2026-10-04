@@ -29,10 +29,10 @@ struct FilesBrowserView: View {
         router.filesSelection[roots]
     }
 
-    /// The folder the chain's newest backup names first: where a first
-    /// visit opens, so the pane has something to show from the first look.
-    private var firstRoot: FileNode? {
-        FilesTree.firstRoot(of: roots.chainKey, repositoryID: roots.repositoryID, in: model.snapshots(for: roots.repositoryID))
+    /// The roots level's folders, once read.
+    private var rootEntries: [FileNode] {
+        guard case let .loaded(level)? = filesTree.state(of: roots) else { return [] }
+        return level.entries.map(\.node)
     }
 
     /// Every level the tree has on screen: the roots and the open folders
@@ -60,10 +60,13 @@ struct FilesBrowserView: View {
         .task(id: filesTree.loadKey(neededLevels, model: model)) {
             await filesTree.keep(neededLevels, model: model)
         }
-        .onChange(of: firstRoot, initial: true) {
-            guard selected == nil, let firstRoot else { return }
-            router.filesSelection[roots] = firstRoot
-            router.openFolders.insert(firstRoot)
+        // A first visit opens and selects the first root, so the pane has
+        // something to show from the first look — and follows it when a
+        // re-read moves it (`FilesTree.rootToSelect`).
+        .onChange(of: rootEntries, initial: true) { old, new in
+            guard let root = FilesTree.rootToSelect(selected: selected, old: old, new: new) else { return }
+            router.filesSelection[roots] = root
+            router.openFolders.insert(root)
         }
     }
 
@@ -329,10 +332,21 @@ struct FilesStatusRow: View {
                 Button("Try Again") { filesTree.reread(node) }
                     .controlSize(.small)
             }
-        case .loaded:
+        case let .loaded(level) where !level.isFallback:
             Text("Empty folder")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        case .loaded:
+            // The index holds nothing under it yet, and the newest backup's
+            // listing had nothing at this path either — a relative backup
+            // before the index has read it, say. The next read may fill it,
+            // so it is not called empty.
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Reading…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
