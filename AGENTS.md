@@ -25,26 +25,28 @@ Two rules the flaky-run hunt of 2026-09-14 added:
   the restart banner — which also fires for a plain test crash or timeout,
   so read the xcresult before blaming a collision.
 
-Five timing tests fail now and then under load and pass on a re-run. Not
-fixed. On 2026-10-04, 5 of 13 `./build.sh test` runs failed on one or more of
-them. Other work on the Mac held the load average between 7 and 53 at the
-time: another project's simulator UI tests and builds, and mediaanalysisd.
-No other test failed in any of the 13 runs:
+Five timing tests failed now and then under load and passed on a re-run. On
+2026-10-04, 5 of 13 `./build.sh test` runs failed on one or more of the first
+four, and the fifth failed in 1 of 6 later runs. Other work on the Mac held
+the load average between 7 and 53: another project's simulator UI tests and
+builds, and mediaanalysisd. No other test failed. Each bet on a wall clock
+that load stretches, and each was fixed the same day:
 
-| Test | Failed | What it reported |
-| --- | --- | --- |
-| "a backgrounded grandchild cannot outlive a finished hook's answer" | 2 of 13 | `GrandchildPipeTests.swift:40`: `.timedOut(seconds: 1.0, command: "restic")` |
-| "a child that keeps reporting is never stopped by the stall cap" | 2 of 13 | `IdleWatchdogTests.swift:51`: `.idleStalled(seconds: 1.5, command: "restic")` |
-| "status lines are decoded and delivered while the run is still going" | 4 of 13 | `StubResticTests.swift:568`: `arrival < 0.7 * elapsed` |
-| "cancelling a backup ends the run and the child process is really gone" | 3 of 13 | `StubResticTests.swift:522`: "the stub never established its hang within 10 s; trace: [no trace]" |
+| Test | Failed | What it reported | Now |
+| --- | --- | --- | --- |
+| "a backgrounded grandchild cannot outlive a finished hook's answer" | 2 of 13 | `.timedOut(seconds: 1.0, command: "restic")` | The run's cap is 20 s. At 1 s it fired on the shell itself: the shell was still running a second after the spawn, or the host had not yet seen it exit |
+| "a child that keeps reporting is never stopped by the stall cap" | 2 of 13 | `.idleStalled(seconds: 1.5, command: "restic")` | A line every 0.25 s for ~6 s under a 5 s cap, not every 0.35 s under 1.5 s. The clock starts at the spawn |
+| "status lines are decoded and delivered while the run is still going" | 4 of 13 | `arrival < 0.7 * elapsed` | The stub (`dribble-wait`) holds the run open until the progress callback plants a flag, so mid-run delivery holds by construction |
+| "cancelling a backup ends the run and the child process is really gone" | 3 of 13 | "the stub never established its hang within 10 s; trace: [no trace]", no stub in `ps` | Waits up to 60 s for the hang, and the message says when the backup's task started |
+| "a refresh asked while another is running runs after it, not never" | 1 of 6 | "the refresh requested mid-flight never ran", after 11.4 s against a 10 s poll | Awaits the registry's background lane (`tasks.drain()`), where the re-run is registered |
 
-The fifth showed up later on 2026-10-04, in 1 of 6 `./build.sh test` runs, with the load average between 15 and 18: "a refresh asked while another is running runs after it, not never" (`AppModelStubTests.swift:451`, "the refresh requested mid-flight never ran", after 11.4 s against its 10 s wait). Its suite then passed 3 times out of 3 on its own, the test in 0.55–0.87 s.
+How the fixes were proved, each at the line that failed:
+- **Before.** A stand-in for load on the one term each threshold bet on made each old test fail with its recorded message: the shell living 2 s; 4 s before the first status line; a 3 s gap between lines; the backup's task waiting 11 s before it spawns the stub; the remembered re-run starting 11 s late.
+- **After.** The fixed tests pass under the same stand-ins: 96 tests in the four suites.
+- **Still able to fail.** With the remembered refresh dropped, the refresh test fails in 0.4 s. With the status line delivered after the stub gave up waiting, the status-line test fails.
+- **Natural failures.** A full run that afternoon, before the fixes, failed the grandchild and stall-cap tests on its own, with their recorded messages.
 
-On the cancel test:
-- The stub never wrote its trace.
-- The `ps` snapshot in the message showed no stub process. Its `sleep ` filter matched only an unrelated shell that was running `sleep 10`.
-
-The grandchild test was A/B'd against `b26bde1`, the commit before the Files view redesign. It ran 11 times on each side and failed once on each, with the same error, so the redesign did not cause it. The stall-cap and fault-path suites ran 3 times on each side without failing, which shows nothing either way.
+What load stretched is not measured. The suite runs one test at a time (the scheme's testable is `parallelizable = NO`): while a probe test ran first for 110 s, no other test finished. So no other test was holding the cooperative pool when these failed, and blocking as many pool threads as there are cores for 11 s, from inside the cancel test, did not fail it. The likelier source is the other work on the Mac. With the Mac lightly loaded (load average 6–9), the probe's per-10-s maxima over 45 windows were: a task's wait for the pool ≤ 1 ms; a utility-QoS block's wait ≤ 96 ms; `/bin/sh -c` spawn to observed exit 15–37 ms; a script written just before, run directly as every stub and raw-script test does, 55–897 ms, of which `Process.run()` took ≤ 3 ms.
 
 ## The snapshot index
 
@@ -238,4 +240,4 @@ Two facts for the next scripted run:
 
 ### Not handled
 
-- **The flaky timing tests.** See Build.
+- **The flaky timing tests.** Fixed; see Build.

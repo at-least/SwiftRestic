@@ -50,9 +50,15 @@ struct GrandchildPipeTests {
         }
 
         let start = Date()
+        // A cap this test never means to fire: it only keeps a broken reaper
+        // from riding the grandchild's 291 s, failing as `timedOut` instead.
+        // At 1 s it fired on the shell itself under load (2 of 13 runs on
+        // 2026-10-04, load averages 7-53): a second after the spawn the
+        // shell had not exited, or the starved host had not yet seen it
+        // exit. 20 s leaves that room and stays inside the bound below.
         let result = try await ResticRunner().run(
             binary: script,
-            invocation: ResticInvocation(arguments: [], timeout: 1)
+            invocation: ResticInvocation(arguments: [], timeout: 20)
         )
         let elapsed = Date().timeIntervalSince(start)
         // Child's own lifetime plus the reaper's grace, with room for a

@@ -230,6 +230,28 @@ struct StubRestic: Sendable {
                 echo '{"message_type":"summary","files_new":4,"total_files_processed":4,"total_bytes_processed":400,"snapshot_id":"deadbeef00000000"}'
                 exit 0
                 ;;
+            dribble-wait)
+                # The dribble shape with a handoff instead of a fixed pause:
+                # after the first status line the run stays open until the
+                # test's progress callback plants the flag beside the trace,
+                # so "delivered while the run is still going" holds whatever
+                # load does to the clocks. The patience — 600 sleeps of
+                # 0.05 s, 30 s and more with their spawns — only bounds a
+                # reader that buffers to EOF; the runner's 15-minute idle cap
+                # cannot cut it short.
+                trace "dribble-wait-arm"
+                echo '{"message_type":"status","percent_done":0.25,"total_files":4,"files_done":1,"total_bytes":400,"bytes_done":100,"current_files":["a.txt"],"seconds_elapsed":1}'
+                flag="$(dirname "$SWIFTRESTIC_TRACE")/progress-seen.flag"
+                waited=0
+                while [ ! -f "$flag" ] && [ "$waited" -lt 600 ]; do
+                    sleep 0.05
+                    waited=$((waited + 1))
+                done
+                if [ -f "$flag" ]; then trace "progress-flag-seen"; else trace "progress-flag-timeout"; fi
+                echo '{"message_type":"status","percent_done":1,"total_files":4,"files_done":4,"total_bytes":400,"bytes_done":400,"current_files":[],"seconds_elapsed":2}'
+                echo '{"message_type":"summary","files_new":4,"total_files_processed":4,"total_bytes_processed":400,"snapshot_id":"deadbeef00000000"}'
+                exit 0
+                ;;
             torn)
                 # Binary noise mid-stream, then a well-formed fatal error, then a
                 # final line cut off mid-JSON with no trailing newline: what the
@@ -512,14 +534,26 @@ struct StubResticTests {
         let service = fixture.service
         let context = fixture.context
         let plan = fixture.plan
-        let task = Task { try await service.backup(context, plan: plan) }
+        let createdAt = Date.now
+        let taskStarted = ProgressTimestamp()
+        let task = Task {
+            taskStarted.mark()
+            return try await service.backup(context, plan: plan)
+        }
         // The hang is what guarantees the cancel lands mid-run, so the test
-        // must not assume a fixed delay — a cold first spawn can take a moment.
-        // If the hang never establishes, this fails with the stub's own trace.
-        let hangEstablished = await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 10)
+        // must not assume a fixed delay — a cold first spawn can take a moment,
+        // and under load more than 10 s: 3 of 13 runs on 2026-10-04 found no
+        // stub and no trace by then. The wait ends the moment the hang shows,
+        // so its length costs a healthy run nothing.
+        // If the hang never establishes, this fails with the stub's own trace
+        // and when the backup's task got a thread, if it ever did.
+        let hangEstablished = await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 60)
         if !hangEstablished {
             let trace = (try? String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)) ?? "no trace"
-            Issue.record("the stub never established its hang within 10 s; trace: [\(trace)]; ps saw: [\(Self.processSnapshot())]")
+            let started = taskStarted.value.map {
+                "the backup's task started \(String(format: "%.2f", $0.timeIntervalSince(createdAt))) s after it was made"
+            } ?? "the backup's task never started"
+            Issue.record("the stub never established its hang within 60 s; \(started); trace: [\(trace)]; ps saw: [\(Self.processSnapshot())]")
         }
         task.cancel()
 
@@ -547,25 +581,33 @@ struct StubResticTests {
         }
     }
 
-    @Test("status lines are decoded and delivered while the run is still going")
+    @Test("status lines are decoded and delivered while the run is still going", .timeLimit(.minutes(1)))
     func progressArrivesMidRun() async throws {
-        let fixture = try makeFixture(mode: "dribble")
+        let fixture = try makeFixture(mode: "dribble-wait")
         defer { cleanUp(fixture.root) }
+        let flag = fixture.root.appendingPathComponent("progress-seen.flag")
 
         let firstProgress = ProgressTimestamp()
-        let startedAt = Date.now
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan) { progress in
-            if progress.bytesDone == 100 { firstProgress.mark() }
+            guard progress.bytesDone == 100 else { return }
+            firstProgress.mark()
+            // The handoff: the stub ends only after it sees this flag, so the
+            // run is provably still going when the line is delivered. A
+            // wall-clock ratio stood here before — first line before 70% of
+            // a run held open 1.2 s — and load stretched the time before the
+            // first line past it in 4 of 13 runs on 2026-10-04.
+            FileManager.default.createFile(atPath: flag.path, contents: nil)
         }
-        let elapsed = Date.now.timeIntervalSince(startedAt)
 
         // The status line's numbers must have survived the decode.
-        let at = try #require(firstProgress.value, "no progress with bytes_done == 100 was ever reported")
-        // The stub emits that line first and only exits ~1.2 s later, so a
-        // healthy pipe delivers it near 0% of the run. If the reader buffers
-        // until EOF the ratio jumps to 100% — the regression this guards.
-        let arrival = at.timeIntervalSince(startedAt)
-        #expect(arrival < 0.7 * elapsed, "progress first arrived at \(Int(arrival / elapsed * 100))% of the run — the pipe reader is buffering again")
+        try #require(firstProgress.value != nil, "no progress with bytes_done == 100 was ever reported")
+        // A reader that buffers until EOF delivers the line only after the
+        // stub gave up waiting — the regression this guards.
+        let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+        #expect(
+            trace.contains("progress-flag-seen"),
+            "the stub never saw the first status line delivered mid-run — the pipe reader is buffering again; trace: [\(trace)]"
+        )
 
         // The closing summary is parsed into the outcome.
         #expect(outcome.exitCode == 0)

@@ -50,16 +50,18 @@ struct IdleWatchdogTests {
 
     @Test("a child that keeps reporting is never stopped by the stall cap")
     func idleCapSparesChattyChild() async throws {
-        // ~2.8 s of a line every 0.35 s under a 1.5 s cap: each line resets
-        // the clock with ~4x margin, so the run must outlive the cap and
-        // finish on its own. The margin is deliberate — a loaded test host
-        // stretches the shell's sleeps, and a 2.5x margin once let two
-        // stacked gaps trip the cap in CI.
+        // ~6 s of a line every 0.25 s under a 5 s cap: each line resets the
+        // clock with 20x margin, so the run must outlive the cap and finish
+        // on its own. The margin is the point — the clock starts at the
+        // spawn, and a loaded test host delays the shell's first line and
+        // stretches its gaps: a 2.5x margin once let two stacked gaps trip
+        // the cap in CI, and ~4x still tripped in 2 of 13 runs at load
+        // averages 7-53 (2026-10-04), and again 2 s into a run that day.
         let script = try installScript("""
             i=0
-            while [ $i -lt 8 ]; do
+            while [ $i -lt 24 ]; do
                 echo '{"message_type":"status","percent_done":0.5}'
-                sleep 0.35
+                sleep 0.25
                 i=$((i+1))
             done
             exit 0
@@ -68,7 +70,7 @@ struct IdleWatchdogTests {
 
         let result = try await ResticRunner().run(
             binary: script,
-            invocation: ResticInvocation(arguments: [], idleTimeout: 1.5)
+            invocation: ResticInvocation(arguments: [], idleTimeout: 5)
         )
         #expect(result.exitCode == 0)
     }

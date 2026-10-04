@@ -442,12 +442,11 @@ struct AppModelStubTests {
 
         // The remembered request runs to completion after the in-flight one
         // unwinds: the listing answers (the hang is spent) and freshness
-        // advances past the bootstrap stamp.
-        let rerun = Date.now.addingTimeInterval(10)
-        while Date.now < rerun,
-              harness.model.snapshotsLoadedAt(for: harness.repository.id) == loadedAtStart {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
+        // advances past the bootstrap stamp. The re-run is on the registry's
+        // background lane, so the test awaits it, as a quit does, rather
+        // than a 10 s clock a loaded host outran once in 6 runs. Everything
+        // else on this harness's lane is one-shot, so the wait is bounded.
+        await harness.model.tasks.drain()
         #expect(
             harness.model.snapshotsLoadedAt(for: harness.repository.id) != loadedAtStart,
             "the refresh requested mid-flight never ran"
