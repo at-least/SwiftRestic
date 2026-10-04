@@ -2,12 +2,12 @@ import SwiftUI
 
 /// A folder of the Files view, by version: the backups that hold it in a
 /// picker — newest first, from the index — and the folder as the chosen one
-/// held it, listed by restic (or the browse cache): the sidebar walks the
+/// held it, listed by restic (or the browse cache): the tree walks the
 /// folders, this flips them through time.
 ///
 /// Items select several at a time, as in the Restore pane, and restore
 /// together through the destination sheet, or drag to Finder one by one; a
-/// double-click opens one in the sidebar, keeping the chosen time when the
+/// double-click opens one in the tree, keeping the chosen time when the
 /// item exists then, so walking down stays in the same era.
 struct FolderVersionsView: View {
     @Environment(AppModel.self) private var model
@@ -17,7 +17,7 @@ struct FolderVersionsView: View {
     let versions: [IndexVersion]
     /// The backup the pane opened at, when it has one to keep.
     @Binding var chosenID: String?
-    /// Opens an item of the listing in the sidebar, at the chosen backup.
+    /// Opens an item of the listing in the tree, at the chosen backup.
     let onOpen: (FileNode, _ versionID: String) -> Void
 
     @State private var nodes: [SnapshotNode] = []
@@ -118,7 +118,7 @@ struct FolderVersionsView: View {
                 restoreSelection()
                 return .handled
             }
-            .help("Double-click or Return opens a folder in the sidebar; Return on files restores them; ⌘- or ⇧-click selects several items; drag an item to Finder to restore it there")
+            .help("Double-click or Return opens a folder in the tree; Return on files restores them; ⌘- or ⇧-click selects several items; drag an item to Finder to restore it there")
         }
     }
 
@@ -131,7 +131,7 @@ struct FolderVersionsView: View {
                     router.showRestore(repositoryID: node.repositoryID, snapshotID: chosen.id, focusPath: node.path)
                 }
                 .disabled(chosen == nil)
-                .help("Open this backup in the Backups view at this folder — see what changed, search it, or restore the whole backup")
+                .help("Open this backup at this folder, in the sidebar's list of backups — see what changed, search it, or restore the whole backup")
                 Spacer()
                 Button(selection.isEmpty ? "Restore Folder…" : "Restore…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)

@@ -204,16 +204,6 @@ struct SwiftResticApp: App {
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
-            // The sidebar's two views, as Xcode's navigators take ⌘1 and
-            // up. View state only, so no sheet blocks them and no intent
-            // carries them.
-            CommandGroup(before: .sidebar) {
-                Button("Show Backups") { router.sidebarMode = .backups }
-                    .keyboardShortcut("1", modifiers: .command)
-                Button("Show Files") { router.sidebarMode = .files }
-                    .keyboardShortcut("2", modifiers: .command)
-                Divider()
-            }
             CommandGroup(after: .help) {
                 Button("SwiftRestic Concepts…") {
                     router.request(.showConcepts)

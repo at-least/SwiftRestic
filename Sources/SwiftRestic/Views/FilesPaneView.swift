@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The pane for a folder or file picked in the Files view: what it is,
+/// The pane for a folder or file picked in a Files tab's tree: what it is,
 /// where it lives and where it stands in its chain's history, then the item
 /// by version — a folder as any backup holding it held it
 /// (`FolderVersionsView`), a file as each content it had
@@ -9,7 +9,7 @@ struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     let node: FileNode
-    /// Opens an item of a folder's listing in the sidebar, at the backup the
+    /// Opens an item of a folder's listing in the tree, at the backup the
     /// listing was read from.
     let onOpen: (FileNode, _ versionID: String) -> Void
 

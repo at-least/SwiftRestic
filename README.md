@@ -57,43 +57,43 @@ checked in so a normal build does not need it.
   repository wears a warning while one of its plans is not protected — its
   backups cannot be read, a plan has no backup, or a plan's last backup
   failed; the warning's tooltip names the plan.
-- **Backups or Files** — the control above the sidebar picks what every
-  plan folds open to: its backups by date, or its folders and files across
-  every backup it made, items its newest backup no longer holds included and
-  dimmed (View ▸ Show Backups ⌘1, Show Files ⌘2; the choice is kept across
-  launches, and a capture run never changes it). The tree comes from the
-  snapshot index; while the index is still reading a repository it fills in
-  as it goes, and a plan the index holds nothing of yet lists its newest
-  backup. A folder lists at most 200 items in the sidebar, then one row that
-  opens the folder in the pane. Picking a folder lists it as a backup held
-  it — *As backed up* picks which of the backups holding it, newest first —
-  where items select several at a time and restore together, drag to
-  Finder, or open in the sidebar with a double-click, keeping the chosen
-  time when they existed then; with nothing selected, *Restore Folder…*
-  restores the whole folder. Picking a file lists its versions — each
-  content it had, with the backups that held it unchanged (“3 versions in
-  214 backups”), from the index: a version starts where restic's diff said
-  the file changed, or *may have changed* where no diff compared two
-  backups or the file was absent in between. Each row's modification time
-  and size come from one `restic find` of the file's exact path, its glob
-  characters escaped. Return or *Restore…* restores the chosen version, and
-  a row drags to Finder. *Show in Backups* opens the chosen backup at that
-  place — and every way into a backup (the run drawer's *Browse*, *Restore
-  Files…*, *Show in Backups*) switches the sidebar to Backups, where that
-  backup's row is. Otherwise switching views leaves the pane alone.
-- **A plan-UUID group is a page** — a group's row selects like a plan's
-  (the chevron ahead of it folds), and the page says what the history is:
-  a plan not set up in SwiftRestic — deleted here, or still running on
-  another Mac — or a plan that now backs up elsewhere, with *Open the
-  “Music” Plan* to go to it. The page's Backups card brackets the history
-  (newest, oldest), names the Macs it was made from and lists each folder
-  set it spans, carries the exclude patterns and user tags, and shows the
-  plan tag itself — selectable, the one honest identifier. *Restore
-  Files…* opens the group's newest backup and *Show Files* its folders and
-  files in the Files view, the group open at its first folder, from the
-  page and the group's context menu; an untagged lineage's menu carries
-  both too. In Files every group, untagged or not, folds open to its files
-  as a plan does — the index chains an untagged lineage by its host and
+- **Overview | Files** — a plan's page has both, in the window toolbar.
+  Overview is its cards; Files lists its folders and files across every
+  backup it made, items its newest backup no longer holds included and
+  dimmed: the tree on the left, starting at the page's edge (drag that edge
+  to widen it), the folder or file picked in it on the right. A first visit
+  opens at the plan's first folder. The tree comes from the snapshot index;
+  while the index is still reading a repository it fills in as it goes, and
+  a plan the index holds nothing of yet lists its newest backup. A folder
+  lists at most 200 items in the tree, then one row that opens the folder in
+  the pane. Picking a folder lists it as a backup held it — *As backed up*
+  picks which of the backups holding it, newest first — where items select
+  several at a time and restore together, drag to Finder, or open in the
+  tree with a double-click, keeping the chosen time when they existed then;
+  with nothing selected, *Restore Folder…* restores the whole folder.
+  Picking a file lists its versions — each content it had, with the backups
+  that held it unchanged (“3 versions in 214 backups”), from the index: a
+  version starts where restic's diff said the file changed, or *may have
+  changed* where no diff compared two backups or the file was absent in
+  between. Each row's modification time and size come from one `restic
+  find` of the file's exact path, its glob characters escaped. Return or
+  *Restore…* restores the chosen version, and a row drags to Finder. *Show
+  in Backups* opens the chosen backup at that place, under its plan in the
+  sidebar. Each page keeps its tab, open folders and selection while the app
+  runs — going to a backup and back finds the Files tab as it was left — and
+  every page opens on Overview after a launch.
+- **A group under Other backups is a page** — a group's row selects like a
+  plan's (the chevron ahead of it folds), and the page has the same
+  Overview | Files. Overview says what the history is: a plan not set up in
+  SwiftRestic — deleted here, or still running on another Mac — or a plan
+  that now backs up elsewhere, with *Open the “Music” Plan* to go to it, or
+  backups no plan made, which can't be adopted. Its Backups card brackets
+  the history (newest, oldest), names the Macs it was made from and lists
+  each folder set it spans, carries the exclude patterns and user tags, and
+  shows the plan tag itself when there is one — selectable, the one honest
+  identifier. *Restore Files…* opens the group's newest backup; the group's
+  context menu has it and *Show Files*, which opens the page on Files. An
+  untagged lineage's files come from the index's chain of its host and
   folders.
 - **Adopting** — a group no plan anywhere carries the ID of can be adopted
   back into one: *Adopt as a Backup Plan…*, from the page's explanation
@@ -383,16 +383,16 @@ open --env SWIFTRESTIC_CONFIG_DIR=/tmp/demo \
 `SWIFTRESTIC_CONFIG_DIR` points the app at a throwaway configuration instead of
 your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 `SWIFTRESTIC_CAPTURE_PANE` picks which screen (`plan`, `repository`, `restore`,
-`activity`, `find`, `console`), plus `files` — the sidebar in Files mode,
-the first plan's tree open at its first source and that folder selected, or
-the item `SWIFTRESTIC_CAPTURE_ITEM` names (an absolute path under that source,
-a folder spelled with a trailing `/`) with every folder above it open — and
-`orphanGroup` and `movedGroup` — the page
-of the first adoptable group under Other backups, or of the first moved plan's
-group, with its sidebar fold open. Both wait for the snapshot listing that
-builds group rows, like `restore` does. `SWIFTRESTIC_CAPTURE_SIDEBAR`
-(`backups`/`files`) sets the sidebar's view for any pane — a group's page
-beside the files its fold opens onto. `findMoved` opens Find Files on the
+`activity`, `find`, `console`), plus `files` — the first plan's page on its
+Files tab, its first source open and selected, or the item
+`SWIFTRESTIC_CAPTURE_ITEM` names (an absolute path under that source, a folder
+spelled with a trailing `/`) with every folder above it open — and
+`orphanGroup`, `movedGroup` and `lineage` — the page of the first adoptable
+group under Other backups, of the first moved plan's group, or of the first
+untagged lineage, with its sidebar fold open. All three wait for the snapshot
+listing that builds group rows, like `restore` does.
+`SWIFTRESTIC_CAPTURE_TAB=files` puts the page a run selects — a plan's or a
+group's — on its Files tab. `findMoved` opens Find Files on the
 first plan whose repository is not the first, so a shot shows the picker
 starting on the selection's repository rather than the landing pane's (a
 configuration without such a plan stops the run). `all` instead photographs

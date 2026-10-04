@@ -77,8 +77,8 @@ Debug captures are driven by environment variables on a debug build —
 `SWIFTRESTIC_CAPTURE`, `SWIFTRESTIC_CAPTURE_PANE` (one pane or `all`),
 `SWIFTRESTIC_CAPTURE_DELAY`, `SWIFTRESTIC_APPEARANCE`,
 `SWIFTRESTIC_CAPTURE_SHEET`, `SWIFTRESTIC_CAPTURE_ITEM` (with pane `files`:
-the folder or file to select), `SWIFTRESTIC_CAPTURE_SIDEBAR`
-(`backups`/`files`, for any pane), `SWIFTRESTIC_REPO_PASSWORD`,
+the folder or file to select), `SWIFTRESTIC_CAPTURE_TAB` (`files`: the
+selected plan or group page on its Files tab), `SWIFTRESTIC_REPO_PASSWORD`,
 `SWIFTRESTIC_POWER_SOURCE` (`battery`/`ac`; read at scheduler ticks, so only
 in a normal launch — a capture run never arms the scheduler),
 `SWIFTRESTIC_LOGIN_ITEM_INSTALLABLE` (`1` shows the start-at-login offers'
@@ -186,15 +186,15 @@ equivalence, not independent confirmation.
 
 ## Open items from the Files view redesign
 
-The 2026-10-04 redesign (`8305539`..`a561666`) added the sidebar's Backups | Files control, the Files panes and the plan page's cards. It left the items below open.
+The 2026-10-04 redesign (`8305539`..`a561666`) added the Files view and the plan page's cards. A follow-up the same day (`f461728`..) moved the Files view out of the sidebar, whose Backups | Files control and ⌘1/⌘2 are gone, onto the pages: a plan's page and every Other backups group's — an untagged lineage gained a page for it — have Overview | Files in the window toolbar. The items below are open.
 
 What was checked live, one capture each, in light mode, against a scratch configuration:
-- the sidebar's Files tree, with a deleted file dimmed;
-- a folder pane;
-- a file pane: "3 versions in 4 backups", with sizes matching the demo files;
-- a plan-UUID group in Files;
 - the plan page, idle and scheduled;
-- the sidebar view surviving a relaunch.
+- a plan's Files tab, its first folder opened and selected on a first visit;
+- a plan-UUID group's Files tab, an untagged lineage's page and its Files tab;
+- a file pane: "3 versions in 4 backups", with sizes matching the demo files (seen when the pane still sat beside the sidebar's tree; the pane is unchanged);
+- the Files tab on a first launch after the repository gained and lost backups — wrong before `0ede383`, right after;
+- the window not overflowing with a long root path, after the split moved from HSplitView to an HStack (`939fa63`).
 
 ### Not verified
 
@@ -204,21 +204,24 @@ What was checked live, one capture each, in light mode, against a scratch config
   - no Schedule control on a manual plan;
   - the list of lengths under the Pause arrow.
   None of the cards' buttons was clicked either.
-- **Interaction in the Files panes.** Not exercised:
+- **Interaction in the Files tab.** Not exercised:
+  - clicking Overview | Files, and a group's Show Files menu item;
+  - dragging the tree's edge, and the edge's bounds at the 940 pt minimum window with a wide sidebar;
   - double-click or Return opening an item at the backup time the pane had chosen. `preferredVersion` and the router's hint being spent once are unit-tested; the wiring between them is not;
   - dragging items to Finder;
-  - Restore… and Restore Folder… through the destination sheet. No restore was run from the new panes. Whoever runs one restores into a scratch folder, never the real Desktop;
-  - Show in Backups.
-- **The sidebar tree's fallback through restic.** A plan the index holds nothing of yet is listed from its newest backup with `restic ls` (`FilesTree`). No test and no capture reached that branch.
-- **An untagged lineage in Files.** Nothing was checked live there, nor the Show Files button or menu item on a group. Only `SidebarFolds.revealFiles` is unit-tested.
+  - Restore… and Restore Folder… through the destination sheet. Whoever runs one restores into a scratch folder, never the real Desktop;
+  - Show in Backups, and coming back to the page on its Files tab (the router keeping the tab is unit-tested);
+  - Try Again on a failed level (only the load key's change is unit-tested).
+- **The tree's fallback through restic.** A plan the index holds nothing of yet is listed from its newest backup with `restic ls` (`FilesTree`). No test and no capture reached that branch.
 - **Scale.**
-  - How the sidebar responds with thousands of rows open. The 200-item cap is unit-tested, but its "N more items…" row was never shown live.
+  - How the tree responds with thousands of rows open. The 200-item cap is unit-tested, but its "N more items…" row was never shown live.
   - The file pane's single `restic find` per opened file, on a repository with about 1,000 snapshots or on a remote one. The only timing is 0.6 s, measured locally on 20,000 files × 12 snapshots.
 - **The first launch after the upgrade.** Schema 3 deletes every existing index file and reads it again. That mismatch path is tested with `user_version` 99, but how long the reread takes on real repositories was not measured.
-- **Dark mode** of the new panes and cards.
-- **The ⌘1 and ⌘2 shortcuts.** The View menu items were clicked; the keys themselves were never pressed.
+- **Dark mode** of the pages, the cards and the Files tab.
 
 ### Not handled
 
+- **Backups made with relative paths.** `restic backup source/Music`, run from the console in a folder, keeps the relative layout inside the snapshot while its `paths` are absolute, so a Files tab opens that root as an empty folder (seen live 2026-10-04 on scratch data). The Restore pane browses such a backup fine.
+- **The removed control's `SidebarMode` default** stays in the defaults of anyone who ran a build with it. Harmless, not deleted.
 - **Show Versions from elsewhere.** The design discussion left two links for later: a Show Versions item in the Restore pane's item menu, and the same on Find Files results, each opening the file in the Files view. Neither exists.
 - **The flaky timing tests.** See Build.

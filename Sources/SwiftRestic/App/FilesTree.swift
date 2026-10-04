@@ -44,7 +44,7 @@ final class FilesTree {
         case failed(String)
     }
 
-    /// The sidebar row list for one open level and the open folders under
+    /// The tree's row list for one open level and the open folders under
     /// it, depth-first.
     enum Row: Hashable, Identifiable {
         case entry(Entry, depth: Int)
@@ -56,10 +56,9 @@ final class FilesTree {
         var id: Self { self }
     }
 
-    /// The most children one folder lists in the sidebar; the rest sit
-    /// behind one row that opens the folder, whose pane lists them all. A
-    /// folder of thousands would otherwise push every repository and
-    /// Activity out of reach.
+    /// The most children one folder lists in the tree; the rest sit behind
+    /// one row that opens the folder, whose pane lists them all. A folder of
+    /// thousands would otherwise bury every folder below it.
     static let rowCap = 200
     static let recheckInterval: Duration = .seconds(15)
 
@@ -130,8 +129,8 @@ final class FilesTree {
 
     /// Keeps every level of `needed` read under its repository's current
     /// listing, and while any is incomplete reads those again every
-    /// `recheckInterval`. The sidebar runs it as a task keyed by what is
-    /// open, so opening a folder restarts it and the window closing stops
+    /// `recheckInterval`. A Files tab runs it as a task keyed by
+    /// `loadKey`, so opening a folder restarts it and leaving the tab stops
     /// it; a level already current is not read again.
     func keep(_ needed: [FileNode], model: AppModel) async {
         while !Task.isCancelled {

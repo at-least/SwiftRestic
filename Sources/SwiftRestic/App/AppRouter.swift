@@ -45,11 +45,6 @@ final class AppRouter {
     /// The pane the sidebar is showing.
     var selection: SidebarItem?
 
-    /// What a plan's fold opens onto: its backups or its files. Switching
-    /// leaves `selection` alone — the pane stays until something else is
-    /// picked, as Xcode's navigators leave the editor.
-    var sidebarMode: SidebarMode = .backups
-
     /// The pending intent, if any. One slot, not a queue: a second request
     /// before the first was consumed replaces it — two sheets cannot present
     /// at once, so queueing would only delay a stale ask.
@@ -145,18 +140,16 @@ final class AppRouter {
     }
 
     /// The one route into a backup's contents from outside the sidebar —
-    /// the run drawer's Browse, Restore Files…, Show in Restore: select
-    /// the record in the sidebar, where the Change column, search, drag and
-    /// whole-backup restore all live, whichever button was pressed. A plain
-    /// route clears an older focus request rather than inheriting it. The
-    /// sidebar shows Backups, where the record's row is: every way into a
-    /// backup lands where its row can be seen, Files' Show in Backups
-    /// included.
+    /// the run drawer's Browse, Restore Files…, a Files tab's Show in
+    /// Backups: select the record in the sidebar, where the Change column,
+    /// search, drag and whole-backup restore all live, whichever button was
+    /// pressed. A plain route clears an older focus request rather than
+    /// inheriting it. The page it was asked from keeps its tab, so going
+    /// back to it finds the Files tab where it was left.
     func showRestore(repositoryID: UUID, snapshotID: String, focusPath: String? = nil) {
         restoreFocus = focusPath.map {
             RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
         }
-        sidebarMode = .backups
         selection = .restoreSnapshot(repositoryID, snapshotID)
     }
 

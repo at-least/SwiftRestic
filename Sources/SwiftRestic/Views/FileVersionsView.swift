@@ -99,7 +99,7 @@ struct FileVersionsView: View {
                     )
                 }
                 .disabled(chosen == nil)
-                .help("Open the chosen version's newest backup in the Backups view, at this file's folder")
+                .help("Open the chosen version's newest backup at this file's folder, in the sidebar's list of backups")
                 Button("Restore…") { restoreChosen() }
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)

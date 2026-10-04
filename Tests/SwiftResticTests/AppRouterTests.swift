@@ -80,20 +80,13 @@ struct AppRouterTests {
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
     }
 
-    @Test("a Files version hint is spent by the next pane that takes it, once; switching views keeps the selection")
+    @Test("a Files version hint is spent by the next pane that takes it, once")
     func filesVersionHintIsSpentOnce() {
         let router = AppRouter()
         #expect(router.takeFilesVersionHint() == nil)
         router.filesVersionHint = "abc"
         #expect(router.takeFilesVersionHint() == "abc")
         #expect(router.takeFilesVersionHint() == nil)
-
-        router.selection = .repository(UUID())
-        let selection = router.selection
-        router.sidebarMode = .files
-        #expect(router.selection == selection)
-        router.sidebarMode = .backups
-        #expect(router.selection == selection)
     }
 
     @Test("a page opens on its overview and keeps the view it was left on; each page its own, a trip to a backup and back included")
@@ -135,26 +128,6 @@ struct AppRouterTests {
         #expect(router.tab(of: group) == .files)
     }
 
-    @Test("the sidebar's view is remembered in the defaults, Backups until one is")
-    func sidebarModeIsRemembered() throws {
-        let suite = "SwiftResticSidebarModeTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(SidebarMode.remembered(in: defaults) == .backups)
-        SidebarMode.remember(.files, in: defaults)
-        #expect(SidebarMode.remembered(in: defaults) == .files)
-        // A value no build wrote reads as the default, not as a crash.
-        defaults.set("timeline", forKey: SidebarMode.defaultsKey)
-        #expect(SidebarMode.remembered(in: defaults) == .backups)
-    }
-
-    @Test("every way into a backup shows Backups, where its record's row is")
-    func showRestoreShowsBackups() {
-        let router = AppRouter()
-        router.sidebarMode = .files
-        router.showRestore(repositoryID: UUID(), snapshotID: "s1", focusPath: "/D")
-        #expect(router.sidebarMode == .backups)
-    }
 }
 
 

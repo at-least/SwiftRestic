@@ -87,9 +87,6 @@ enum SidebarItem: Hashable {
     /// backups — the pane browses that record's file tree directly,
     /// Arq-style.
     case restoreSnapshot(UUID, String)
-    /// A folder or file in the Files view's tree — the pane shows it by
-    /// version.
-    case file(FileNode)
     case console
     case activity
 }
@@ -104,7 +101,7 @@ extension SidebarItem {
     }
 }
 
-/// One item of the Files view's tree: a path in one chain's history — a
+/// One item of a Files tab's tree: a path in one chain's history — a
 /// plan's tag, or an untagged lineage's key (`SnapshotIndex.chainKey`) — in
 /// one repository, as a folder or a file. Identity is byte-exact
 /// (`PathKey`), as every index read's is: two names that differ only in
@@ -133,28 +130,6 @@ struct FileNode: Hashable, Sendable {
     var path: String { pathKey.path }
     var name: String { ResticPath.basename(of: path) }
     var isRoots: Bool { path.isEmpty }
-}
-
-/// What a plan's fold opens onto in the sidebar: its backups by date, or its
-/// folders and files. The sidebar's top control; the trunk — repositories,
-/// plans, Other backups, Activity — is the same in both.
-enum SidebarMode: String, CaseIterable {
-    case backups
-    case files
-
-    static let defaultsKey = "SidebarMode"
-
-    /// The view the sidebar showed last, from the defaults — where the
-    /// restore sheet keeps its destination too. Not the scene's state
-    /// (`@SceneStorage`): with it a relaunch came back to Backups, and the
-    /// Mac it was tried on held no saved window state for the app at all.
-    static func remembered(in defaults: UserDefaults = .standard) -> SidebarMode {
-        defaults.string(forKey: defaultsKey).flatMap(SidebarMode.init(rawValue:)) ?? .backups
-    }
-
-    static func remember(_ mode: SidebarMode, in defaults: UserDefaults = .standard) {
-        defaults.set(mode.rawValue, forKey: defaultsKey)
-    }
 }
 
 /// The last settled outcome of a repository's snapshot listing.

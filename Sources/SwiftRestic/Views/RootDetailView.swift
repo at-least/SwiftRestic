@@ -104,18 +104,6 @@ struct RootDetailView: View {
                         // to another must not carry paths or history over —
                         // the pane's own @State resets with the identity.
                         .id(repositoryID)
-                case let .file(node):
-                    FilesPaneView(node: node, onOpen: { item, versionID in
-                        // The folder opens in the sidebar so the item's row
-                        // is there to select, and the item's pane opens at
-                        // the backup the listing was read from.
-                        folds.folders.insert(node)
-                        router.filesVersionHint = versionID
-                        router.selection = .file(item)
-                    })
-                    // Each item's version state is its own.
-                    .id(node)
-                    .navigationTitle(node.name)
                 case let .orphanPlan(repositoryID, planID):
                     OtherGroupView(
                         repositoryID: repositoryID,
