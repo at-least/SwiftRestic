@@ -69,6 +69,16 @@ final class FilesTree {
     private(set) var states: [FileNode: State] = [:]
     /// Levels the recheck asked to read again.
     private var due = Set<FileNode>()
+    /// Which read each level's state is waiting on: a read whose `keep` was
+    /// cancelled must not write over one a later `keep` started.
+    private var readTokens: [FileNode: UUID] = [:]
+    /// Reads one level: the index and restic (`level(of:model:)`), or a
+    /// test's own.
+    private let read: @MainActor (FileNode, AppModel) async throws -> Level
+
+    init(read: @escaping @MainActor (FileNode, AppModel) async throws -> Level = { try await FilesTree.level(of: $0, model: $1) }) {
+        self.read = read
+    }
 
     func state(of node: FileNode) -> State? {
         states[node]
@@ -88,13 +98,15 @@ final class FilesTree {
     }
 
     /// What a Files view's load task is keyed by: the levels on screen, the
-    /// listings they must be current with and the ones the index has taken,
-    /// and Try Again.
+    /// listings they must be current with and the ones the index has taken
+    /// — their repositories' only, so another repository's refresh does not
+    /// cancel a read here — and Try Again.
     func loadKey(_ needed: [FileNode], model: AppModel) -> FilesLoadKey {
-        FilesLoadKey(
+        let repositories = Set(needed.map(\.repositoryID))
+        return FilesLoadKey(
             nodes: needed,
-            listings: model.snapshotsLoadedAt,
-            indexTaken: model.indexTakenGeneration,
+            listings: model.snapshotsLoadedAt.filter { repositories.contains($0.key) },
+            indexTaken: model.indexTakenGeneration.filter { repositories.contains($0.key) },
             rereads: rereads
         )
     }
@@ -111,7 +123,8 @@ final class FilesTree {
         guard case let .loaded(level)? = states[parent], !level.entries.isEmpty else {
             return [.status(parent, depth: depth)]
         }
-        // The roots are a plan's sources: never so many that they need a cap.
+        // The roots are the folders a chain's backups name: never so many
+        // that they need a cap.
         let shown = parent.isRoots ? level.entries[...] : level.entries.prefix(rowCap)
         var rows: [Row] = []
         for entry in shown {
@@ -165,8 +178,12 @@ final class FilesTree {
     private func isStale(_ node: FileNode, model: AppModel) -> Bool {
         if due.contains(node) { return true }
         switch states[node] {
-        case nil: return true
-        case .loading, .failed: return false
+        // A read still in flight belongs to a `keep` a restart cancelled —
+        // SwiftUI starts the new task before the old one unwinds — so this
+        // one reads it again. Skipped, the level was left "Reading…" once
+        // the cancelled read cleared it.
+        case nil, .loading: return true
+        case .failed: return false
         case let .loaded(level)?:
             return level.listedAt != model.snapshotsLoadedAt(for: node.repositoryID)
                 || level.indexGeneration != model.indexTakenGeneration[node.repositoryID]
@@ -175,24 +192,36 @@ final class FilesTree {
 
     /// Reads one level. A level already shown stays on screen while it is
     /// read again; a cancelled first read leaves no state behind, so the
-    /// next `keep` starts it over.
+    /// next `keep` starts it over — unless a later read of the level has
+    /// begun, which owns its state from then on.
     private func load(_ node: FileNode, model: AppModel) async {
         due.remove(node)
+        let token = UUID()
+        readTokens[node] = token
+        defer { if readTokens[node] == token { readTokens[node] = nil } }
         if states[node] == nil { states[node] = .loading }
         let listedAt = model.snapshotsLoadedAt(for: node.repositoryID)
         let indexGeneration = model.indexTakenGeneration[node.repositoryID]
         do {
-            var level = node.isRoots ? try await Self.roots(of: node, model: model) : try await Self.folder(node, model: model)
+            var level = try await read(node, model)
+            guard readTokens[node] == token else { return }
             level.listedAt = listedAt
             level.indexGeneration = indexGeneration
             states[node] = .loaded(level)
         } catch {
+            guard readTokens[node] == token else { return }
             if Task.isCancelled {
                 if states[node] == .loading { states[node] = nil }
             } else {
                 states[node] = .failed(error.localizedDescription)
             }
         }
+    }
+
+    /// One level as the index and restic answer it: the roots from the
+    /// listing, a folder from the index or its fallback.
+    static func level(of node: FileNode, model: AppModel) async throws -> Level {
+        node.isRoots ? try await roots(of: node, model: model) : try await folder(node, model: model)
     }
 
     /// The folder a chain's tree opens at for Show Files: the first path its
@@ -213,7 +242,7 @@ final class FilesTree {
     /// The top of a chain's tree: every folder its backups name as backed
     /// up (`paths`), each with the newest backup naming it. Their kinds come
     /// from the index, one read per parent folder; a root the index has not
-    /// read yet is taken for a folder: a plan's sources almost always are.
+    /// read yet is taken for a folder: backed-up roots almost always are.
     private static func roots(of node: FileNode, model: AppModel) async throws -> Level {
         let backups = backups(of: node, model: model)
         var holders: [PathKey: Snapshot] = [:]

@@ -49,7 +49,7 @@ struct FilesPaneView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // Read under each listing, and again every `recheckInterval` while
-        // the index is still reading the repository — the sidebar's tree
+        // the index is still reading the repository — the tree's own
         // rule, so the pane fills in as the tree does.
         .task(id: FilesPaneLoadKey(
             node: node,

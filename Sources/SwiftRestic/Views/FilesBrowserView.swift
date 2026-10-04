@@ -121,18 +121,26 @@ struct FilesBrowserView: View {
     }
 
     /// What the tree says while its roots list nothing: the listing's own
-    /// row until the repository's listing has landed, and once the roots
-    /// read came back empty — the chain has no backups yet; in between, the
-    /// roots level's own, "Reading…" while it is read and its failure with a
-    /// Try Again that reads it again. The listing's row alone said "No
-    /// backups yet" through both.
+    /// row while the repository's listing is unread or holds no backup of
+    /// the chain — "No backups yet" only then — and "Reading…" while the
+    /// roots of a chain the listing does hold are read, a first backup's
+    /// re-read included (the empty level stays on screen meanwhile); a
+    /// failed roots read says so, with a Try Again that reads it again.
     @ViewBuilder
     private var rootsStatus: some View {
         let listed = model.snapshotListingOutcome(for: roots.repositoryID) == .loaded
-        if case .loaded? = filesTree.state(of: roots) {
-            BackupsStatusRow(repositoryID: roots.repositoryID)
-        } else if listed {
+        let holdsChain = model.snapshots(for: roots.repositoryID).contains {
+            SnapshotIndex.chainKey(for: $0) == roots.chainKey
+        }
+        if case .failed? = filesTree.state(of: roots) {
             FilesStatusRow(node: roots)
+        } else if listed, holdsChain {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Reading…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } else {
             BackupsStatusRow(repositoryID: roots.repositoryID)
         }
@@ -286,7 +294,7 @@ struct FilesTreeRow: View {
     private var help: String {
         entry.isInNewest
             ? entry.node.path
-            : "Not in this plan's newest backup — last backed up \(Format.timestamp(entry.newest.time))"
+            : "Not in the newest backup — last backed up \(Format.timestamp(entry.newest.time))"
     }
 }
 

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// The Files view's sidebar rows, as the pure rule the tree lays out: a
+/// A Files tab's tree rows, as the pure rule the tree lays out: a
 /// level's entries, the open folders under them depth-first, a level not yet
 /// read as one status row, and a folder past the row cap as its first
 /// entries and one row that opens it.
@@ -136,6 +136,56 @@ struct FilesTreeTests {
         let folder = FileNode(repositoryID: UUID(), chainKey: "swiftrestic-plan-x", path: "/Data", isDirectory: true)
         let before = tree.loadKey([folder], model: model)
         model.indexTakenGeneration[folder.repositoryID] = 1
-        #expect(tree.loadKey([folder], model: model) != before)
+        let taken = tree.loadKey([folder], model: model)
+        #expect(taken != before)
+        // Another repository's listing and take leave it alone: they must
+        // not cancel a read of this one.
+        let other = UUID()
+        model.snapshotsLoadedAt[other] = Date(timeIntervalSince1970: 1_000)
+        model.indexTakenGeneration[other] = 7
+        #expect(tree.loadKey([folder], model: model) == taken)
     }
+
+    @Test("a read a restart cancelled is read again by the restarted task — never left Reading… with no reader")
+    func cancelledReadIsReadAgain() async {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticFilesTree-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory([:])
+        )
+        let folder = FileNode(repositoryID: UUID(), chainKey: "swiftrestic-plan-x", path: "/Data", isDirectory: true)
+        let read = FilesTree.Level(entries: [], isFallback: false, isComplete: true)
+        let reads = ReadCount()
+        // The first read is still in flight when its task is cancelled — a
+        // folder being read through restic when a listing restarts the load.
+        let tree = FilesTree { _, _ in
+            reads.value += 1
+            if reads.value == 1 { try await Task.sleep(for: .seconds(600)) }
+            return read
+        }
+
+        let first = Task { await tree.keep([folder], model: model) }
+        while tree.state(of: folder) != .loading { await Task.yield() }
+        // The restarted task runs before the cancelled one unwinds, as a
+        // load-key change does: SwiftUI cancels the old task and starts the
+        // new one at once.
+        let second = Task { await tree.keep([folder], model: model) }
+        await second.value
+        first.cancel()
+        await first.value
+
+        guard case let .loaded(level)? = tree.state(of: folder) else {
+            Issue.record("the folder was left \(String(describing: tree.state(of: folder))), with no read under way")
+            return
+        }
+        #expect(level.entries == read.entries)
+    }
+}
+
+/// How many reads a test's level reader has answered.
+@MainActor
+private final class ReadCount {
+    var value = 0
 }

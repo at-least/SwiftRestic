@@ -150,7 +150,7 @@ checked in so a normal build does not need it.
   the menu bar, the repository pages and Settings say that backups wait for power
   instead of announcing runs that will not start.
 - **Browsing and restore** — every *Browse*, *Restore Files…* and *Show in
-  Restore* opens the one browser, at that backup in the sidebar: a
+  Backups* opens the one browser, at that backup in the sidebar: a
   backup's folders as a tree, with a Change column and search, and three ways
   to restore — drag an item to Finder, select one and choose *Restore…*, or
   *Restore Entire Backup…*, which recreates its folders under their full
