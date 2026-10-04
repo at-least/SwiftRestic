@@ -130,7 +130,7 @@ struct SidebarView: View {
         // The Files view's open levels, read and kept current; keyed by what
         // is open and the listings they were read under, so opening a folder
         // or a refresh restarts it.
-        .task(id: FilesLoadKey(nodes: openFileLevels, listings: model.snapshotsLoadedAt)) {
+        .task(id: filesTree.loadKey(openFileLevels, listings: model.snapshotsLoadedAt)) {
             await filesTree.keep(openFileLevels, model: model)
         }
         // The keyboard an outline gives its disclosure rows: with a plan or

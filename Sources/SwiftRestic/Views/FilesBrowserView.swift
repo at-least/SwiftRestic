@@ -57,7 +57,7 @@ struct FilesBrowserView: View {
         // The levels on screen, read and kept current; keyed by what is
         // open and the listings they were read under, so opening a folder
         // or a refresh restarts it.
-        .task(id: FilesLoadKey(nodes: neededLevels, listings: model.snapshotsLoadedAt)) {
+        .task(id: filesTree.loadKey(neededLevels, listings: model.snapshotsLoadedAt)) {
             await filesTree.keep(neededLevels, model: model)
         }
         .onChange(of: firstRoot, initial: true) {
@@ -112,11 +112,29 @@ struct FilesBrowserView: View {
             .help("Show everything in “\(folder.name)” in the pane")
         case let .status(node, depth):
             if node.isRoots {
-                BackupsStatusRow(repositoryID: roots.repositoryID)
+                rootsStatus
             } else {
                 FilesStatusRow(node: node)
                     .padding(.leading, Self.indent(depth) + FilesTreeRow.foldWidth + 4)
             }
+        }
+    }
+
+    /// What the tree says while its roots list nothing: the listing's own
+    /// row until the repository's listing has landed, and once the roots
+    /// read came back empty — the chain has no backups yet; in between, the
+    /// roots level's own, "Reading…" while it is read and its failure with a
+    /// Try Again that reads it again. The listing's row alone said "No
+    /// backups yet" through both.
+    @ViewBuilder
+    private var rootsStatus: some View {
+        let listed = model.snapshotListingOutcome(for: roots.repositoryID) == .loaded
+        if case .loaded? = filesTree.state(of: roots) {
+            BackupsStatusRow(repositoryID: roots.repositoryID)
+        } else if listed {
+            FilesStatusRow(node: roots)
+        } else {
+            BackupsStatusRow(repositoryID: roots.repositoryID)
         }
     }
 
@@ -217,13 +235,6 @@ private struct TreeEdge: View {
                     )
             }
     }
-}
-
-/// What a Files tree's load task is keyed by: the levels on screen, and the
-/// listings they must be current with.
-struct FilesLoadKey: Equatable {
-    let nodes: [FileNode]
-    let listings: [UUID: Date]
 }
 
 /// One folder or file in a Files tree: a fold column (a chevron for a

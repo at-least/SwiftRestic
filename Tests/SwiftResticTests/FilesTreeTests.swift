@@ -106,4 +106,14 @@ struct FilesTreeTests {
         // In the scalar view: a Prepend character before the slash stays.
         #expect(ResticPath.parent(of: "/d\u{0600}/x") == "/d\u{0600}")
     }
+
+    @Test("Try Again changes what the load task is keyed by, so a task that had returned — every level then current — runs again")
+    func rereadRestartsTheLoad() {
+        let tree = FilesTree()
+        let folder = FileNode(repositoryID: UUID(), chainKey: "swiftrestic-plan-x", path: "/Data", isDirectory: true)
+        let listings = [folder.repositoryID: Date(timeIntervalSince1970: 1_000)]
+        let before = tree.loadKey([folder], listings: listings)
+        tree.reread(folder)
+        #expect(tree.loadKey([folder], listings: listings) != before)
+    }
 }

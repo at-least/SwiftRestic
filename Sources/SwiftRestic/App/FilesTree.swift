@@ -71,9 +71,23 @@ final class FilesTree {
         states[node]
     }
 
-    /// Reads `node` again on the next `keep`: Try Again.
+    /// How many times Try Again was asked, part of the load key: a failed
+    /// level is never stale (`isStale`), so once every other level is
+    /// current `keep` returns, and a key that stayed the same would never
+    /// run it again — the row spun "Reading…" for good.
+    private(set) var rereads = 0
+
+    /// Reads `node` again: Try Again. The load key changes, so the view's
+    /// task runs `keep` again, which finds the level unread.
     func reread(_ node: FileNode) {
         states[node] = nil
+        rereads += 1
+    }
+
+    /// What a Files view's load task is keyed by: the levels on screen, the
+    /// listings they must be current with, and Try Again.
+    func loadKey(_ needed: [FileNode], listings: [UUID: Date]) -> FilesLoadKey {
+        FilesLoadKey(nodes: needed, listings: listings, rereads: rereads)
     }
 
     /// The rows under `parent`, recursing into the open folders whose levels
@@ -266,4 +280,12 @@ final class FilesTree {
             return lhs.node.name.localizedStandardCompare(rhs.node.name) == .orderedAscending
         }
     }
+}
+
+/// What a Files view's load task is keyed by (`FilesTree.loadKey`): a
+/// change restarts it.
+struct FilesLoadKey: Equatable {
+    let nodes: [FileNode]
+    let listings: [UUID: Date]
+    let rereads: Int
 }
