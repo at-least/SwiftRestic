@@ -241,9 +241,9 @@ Fixed after that run, each checked where it was seen:
 
 ### Not handled
 
-- **AppKit's reentrancy warning** ("Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future."). An AppKit bug, with a report for Apple drafted (last point); nothing to fix here yet:
+- **AppKit's reentrancy warning** ("Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future."). An AppKit bug, reported to Apple as FB25056668 (last point); nothing to fix here yet:
   - Any NSTableView with automatic row heights logs it when first filled with more than 200 rows, and every SwiftUI List is one. A three-line SwiftUI app with `List(0 ..< 201)` logged it on 3 of 3 launches, with 200 rows on 0 of 3. A plain AppKit table logged it with 201 rows and not with 200, nor with automatic row heights off. macOS 27.0.1, Xcode 27.0, 2026-10-04.
   - The reentrancy is inside AppKit's row-height cache: `-[NSTableRowHeightData _cacheRowSpansInRange:heightProvider:]` resizes the table and enters itself again on the same stack, with no app frame on it.
   - In SwiftRestic, the folder pane's listing of a 260-file folder logged it on every launch that showed it (16). By the same rule any List here past 200 rows should too — the Files tree with several large folders open (its cap is per folder), the Restore pane — not checked.
   - Three app-side changes did not stop it, as the bug's shape explains: comparing the listing as equatable, the flicker fix above (kept for its own sake), and keeping the list mounted. A SwiftUI List cannot turn automatic row heights off.
-  - The report and its two samples were left in `~/Downloads/NSTableView-201-rows-feedback/` for the user to file through Feedback Assistant. Note the FB number here once it is filed.
+  - Filed through Feedback Assistant on 2026-10-04 as **FB25056668** (macOS › AppKit, Incorrect/Unexpected Behavior), resolution Open. Its text and its one attachment — the two samples and the backtrace, zipped — are in `~/Downloads/NSTableView-201-rows-feedback/`. No sysdiagnose was sent (the user's choice). Check the report when a macOS update ships, and before trusting a List past 200 rows on a release where the warning has become an assert.
