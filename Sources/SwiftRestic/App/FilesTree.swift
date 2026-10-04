@@ -36,6 +36,10 @@ final class FilesTree {
         var isComplete: Bool
         /// The listing it was read under (`AppModel.snapshotsLoadedAt`).
         var listedAt: Date?
+        /// The listing the index had taken when it was read
+        /// (`AppModel.indexTakenGeneration`): a level read before the index
+        /// took the listing it was read under is read again once it has.
+        var indexGeneration: UInt64?
     }
 
     enum State: Equatable {
@@ -84,9 +88,15 @@ final class FilesTree {
     }
 
     /// What a Files view's load task is keyed by: the levels on screen, the
-    /// listings they must be current with, and Try Again.
-    func loadKey(_ needed: [FileNode], listings: [UUID: Date]) -> FilesLoadKey {
-        FilesLoadKey(nodes: needed, listings: listings, rereads: rereads)
+    /// listings they must be current with and the ones the index has taken,
+    /// and Try Again.
+    func loadKey(_ needed: [FileNode], model: AppModel) -> FilesLoadKey {
+        FilesLoadKey(
+            nodes: needed,
+            listings: model.snapshotsLoadedAt,
+            indexTaken: model.indexTakenGeneration,
+            rereads: rereads
+        )
     }
 
     /// The rows under `parent`, recursing into the open folders whose levels
@@ -157,7 +167,9 @@ final class FilesTree {
         switch states[node] {
         case nil: return true
         case .loading, .failed: return false
-        case let .loaded(level)?: return level.listedAt != model.snapshotsLoadedAt(for: node.repositoryID)
+        case let .loaded(level)?:
+            return level.listedAt != model.snapshotsLoadedAt(for: node.repositoryID)
+                || level.indexGeneration != model.indexTakenGeneration[node.repositoryID]
         }
     }
 
@@ -168,9 +180,11 @@ final class FilesTree {
         due.remove(node)
         if states[node] == nil { states[node] = .loading }
         let listedAt = model.snapshotsLoadedAt(for: node.repositoryID)
+        let indexGeneration = model.indexTakenGeneration[node.repositoryID]
         do {
             var level = node.isRoots ? try await Self.roots(of: node, model: model) : try await Self.folder(node, model: model)
             level.listedAt = listedAt
+            level.indexGeneration = indexGeneration
             states[node] = .loaded(level)
         } catch {
             if Task.isCancelled {
@@ -286,5 +300,6 @@ final class FilesTree {
 struct FilesLoadKey: Equatable {
     let nodes: [FileNode]
     let listings: [UUID: Date]
+    let indexTaken: [UUID: UInt64]
     let rereads: Int
 }

@@ -51,7 +51,11 @@ struct FilesPaneView: View {
         // Read under each listing, and again every `recheckInterval` while
         // the index is still reading the repository — the sidebar's tree
         // rule, so the pane fills in as the tree does.
-        .task(id: FilesPaneLoadKey(node: node, listedAt: model.snapshotsLoadedAt(for: node.repositoryID))) {
+        .task(id: FilesPaneLoadKey(
+            node: node,
+            listedAt: model.snapshotsLoadedAt(for: node.repositoryID),
+            indexTaken: model.indexTakenGeneration[node.repositoryID]
+        )) {
             while !Task.isCancelled {
                 await load()
                 guard !indexComplete else { return }
@@ -120,11 +124,13 @@ struct FilesPaneView: View {
     }
 }
 
-/// What the pane's load is keyed by: the item, and the listing it is read
-/// under, so a refresh reads it again.
+/// What the pane's load is keyed by: the item, the listing it is read
+/// under, and the listing the index has taken — so a refresh reads it again,
+/// and so does the index taking that refresh's listing a moment later.
 private struct FilesPaneLoadKey: Equatable {
     let node: FileNode
     let listedAt: Date?
+    let indexTaken: UInt64?
 }
 
 /// The pane's identity block: the kind's icon, the name, the whole path —

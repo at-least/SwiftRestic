@@ -110,10 +110,32 @@ struct FilesTreeTests {
     @Test("Try Again changes what the load task is keyed by, so a task that had returned — every level then current — runs again")
     func rereadRestartsTheLoad() {
         let tree = FilesTree()
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticFilesTree-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory([:])
+        )
         let folder = FileNode(repositoryID: UUID(), chainKey: "swiftrestic-plan-x", path: "/Data", isDirectory: true)
-        let listings = [folder.repositoryID: Date(timeIntervalSince1970: 1_000)]
-        let before = tree.loadKey([folder], listings: listings)
+        let before = tree.loadKey([folder], model: model)
         tree.reread(folder)
-        #expect(tree.loadKey([folder], listings: listings) != before)
+        #expect(tree.loadKey([folder], model: model) != before)
+    }
+
+    @Test("the load key moves when the index takes a listing, so a tree read before it reads again then")
+    func indexTakeRestartsTheLoad() {
+        let tree = FilesTree()
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticFilesTree-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory([:])
+        )
+        let folder = FileNode(repositoryID: UUID(), chainKey: "swiftrestic-plan-x", path: "/Data", isDirectory: true)
+        let before = tree.loadKey([folder], model: model)
+        model.indexTakenGeneration[folder.repositoryID] = 1
+        #expect(tree.loadKey([folder], model: model) != before)
     }
 }

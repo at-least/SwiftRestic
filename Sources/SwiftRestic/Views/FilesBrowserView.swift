@@ -55,9 +55,9 @@ struct FilesBrowserView: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         // The levels on screen, read and kept current; keyed by what is
-        // open and the listings they were read under, so opening a folder
-        // or a refresh restarts it.
-        .task(id: filesTree.loadKey(neededLevels, listings: model.snapshotsLoadedAt)) {
+        // open and the listings they were read under, so opening a folder,
+        // a refresh or the index taking it restarts it.
+        .task(id: filesTree.loadKey(neededLevels, model: model)) {
             await filesTree.keep(neededLevels, model: model)
         }
         .onChange(of: firstRoot, initial: true) {

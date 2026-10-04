@@ -105,8 +105,9 @@ final class AppModel {
     /// The newest generation the index has taken, per repository — set as
     /// its reconcile returns, whatever it decided. Until it is the
     /// generation `snapshots` was read under, the index answers for an
-    /// older listing (`indexIsComplete`).
-    @ObservationIgnored var indexTakenGeneration: [UUID: UInt64] = [:]
+    /// older listing (`indexIsComplete`). Observed: the Files views read
+    /// again the moment it moves, rather than at their next recheck.
+    var indexTakenGeneration: [UUID: UInt64] = [:]
     /// Repositories with no password in the Keychain yet. Upkeep is not scheduled
     /// for these: there is nothing to run, and stamping a "last checked" time for
     /// a check that never happened would be a lie on the repository screen.
