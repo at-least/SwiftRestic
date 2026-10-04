@@ -16,8 +16,8 @@ struct FileVersionsView: View {
     @Binding var chosenID: String?
 
     /// Each version's newest backup's node of the file — size and
-    /// modification time — by backup ID; empty until the find answers.
-    @State private var details: [String: FindMatch] = [:]
+    /// modification time — by backup ID; empty until the answer lands.
+    @State private var details: [String: SnapshotNode] = [:]
     @State private var detailsError: String?
     @State private var isReadingDetails = false
     @State private var destinationRequest: RestoreDestinationRequest?
@@ -115,7 +115,7 @@ struct FileVersionsView: View {
     /// same bytes.
     private func restorable(_ version: ContentVersion) -> (backup: IndexVersion, node: SnapshotNode)? {
         guard let backup = version.snapshots.first else { return nil }
-        let node = details[backup.id]?.node ?? SnapshotNode(name: self.node.name, type: .file, path: self.node.path)
+        let node = details[backup.id] ?? SnapshotNode(name: self.node.name, type: .file, path: self.node.path)
         return (backup, node)
     }
 
@@ -163,7 +163,7 @@ struct FileVersionsView: View {
 private struct FileVersionRow: View {
     let version: ContentVersion
     /// The newest backup's node of the file, once the find has answered.
-    let detail: FindMatch?
+    let detail: SnapshotNode?
     let isReadingDetail: Bool
 
     var body: some View {

@@ -243,17 +243,24 @@ extension AppModel {
     /// searches every backup instead, so the command line stays far inside
     /// the system's argument limit.
     ///
-    /// Each answer is kept (`fileHistoryAnswers`) and only backups without
-    /// one are asked: the pane is made anew for every click, and every find
-    /// costs a restic process — 0.5–2 s even on a five-backup local
-    /// repository, most of it restic deriving the key — so going back to a
-    /// file asks nothing, and a version list a new backup grew asks only
-    /// for that one.
-    func fileHistory(repositoryID: UUID, path: String, backupIDs: [String]) async throws -> [String: FindMatch] {
+    /// Each answer is kept — for the session (`fileHistoryAnswers`) and in
+    /// the index, across launches — and only backups without one are asked:
+    /// the pane is made anew for every click, and every find costs a restic
+    /// process — 0.5–2 s even on a five-backup local repository, most of it
+    /// restic deriving the key — so going back to a file asks nothing, even
+    /// after a relaunch, and a version list a new backup grew asks only for
+    /// that one.
+    func fileHistory(repositoryID: UUID, path: String, backupIDs: [String]) async throws -> [String: SnapshotNode] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         let pathKey = PathKey(path)
-        let unanswered = backupIDs.filter {
-            fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: $0, path: pathKey)] == nil
+        func key(_ backupID: String) -> FileHistoryKey {
+            FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: pathKey)
+        }
+        var unanswered = backupIDs.filter { fileHistoryAnswers[key($0)] == nil }
+        if !unanswered.isEmpty {
+            let kept = await indexCoordinator.cachedFileNodes(path: path, snapshotIDs: unanswered, repositoryID: repositoryID)
+            for (backupID, node) in kept { fileHistoryAnswers[key(backupID)] = node }
+            unanswered.removeAll { kept[$0] != nil }
         }
         if !unanswered.isEmpty {
             let (service, context) = try await resticContext(for: repository)
@@ -263,15 +270,18 @@ extension AppModel {
                 ignoreCase: false,
                 snapshotIDs: unanswered.count <= Self.fileHistoryNamedLimit ? unanswered : []
             )
+            var found: [String: SnapshotNode] = [:]
             for result in results {
                 if let match = result.matches.first(where: { PathKey($0.path) == pathKey }) {
-                    fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: result.snapshot, path: pathKey)] = match
+                    found[result.snapshot] = match.node
                 }
             }
+            for (backupID, node) in found { fileHistoryAnswers[key(backupID)] = node }
+            indexCoordinator.cacheFileNodes(path: path, nodes: found, repositoryID: repositoryID)
         }
-        var history: [String: FindMatch] = [:]
-        for id in backupIDs {
-            history[id] = fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: id, path: pathKey)]
+        var history: [String: SnapshotNode] = [:]
+        for backupID in backupIDs {
+            history[backupID] = fileHistoryAnswers[key(backupID)]
         }
         return history
     }

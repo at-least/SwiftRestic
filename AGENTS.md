@@ -64,6 +64,14 @@ changing it:
   statement registers it. `SnapshotIndexPlanTests` (no `@testable import`)
   pins each by its property name and fails on a statement without a rule, a
   rule without a statement, or a stored property that is not a statement.
+- Every table is in `SnapshotIndexSchema.create` except the browse caches
+  added since schema 3 shipped (`file_node`, a file's `restic find` answer
+  per backup), which `SnapshotIndexSchema.addedCaches` creates at every open
+  with `CREATE TABLE IF NOT EXISTS`. A cache starts empty either way, while
+  bumping `user_version` deletes and rebuilds every repository's index — a
+  full restic re-read. Their statements are registered and pinned like the
+  rest. A table that answers depend on for correctness belongs in `create`,
+  with the bump.
 - Tests open their index in a temporary folder or an injected configuration
   folder, never the real `~/Library/Application Support/com.newlix.SwiftRestic`.
   No code path may open, sweep or delete the `<configDir>/<uuid>.sqlite` files

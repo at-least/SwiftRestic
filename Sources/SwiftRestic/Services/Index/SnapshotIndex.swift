@@ -412,6 +412,7 @@ final class SnapshotIndex: @unchecked Sendable {
             default:
                 throw IndexError.schemaMismatch(found: version)
             }
+            try pool.write { try $0.execute(sql: SnapshotIndexSchema.addedCaches) }
             try pool.writeWithoutTransaction { try $0.execute(sql: SnapshotIndexSchema.temporary) }
         } catch {
             try? pool.close()
@@ -999,6 +1000,19 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
+    /// Caches one file's node in each of some snapshots, as `restic find`
+    /// reported it — the path exact, by bytes, as the index keys paths. As
+    /// immutable as a listing: a repeated capture leaves the first standing.
+    func recordFileNodes(path: String, nodes: [String: CachedListingNode]) async throws {
+        let payloads = try nodes.mapValues { try Self.json($0) }
+        try await pool.write { db in
+            for (snapshotID, payload) in payloads {
+                try db.cachedStatement(sql: SQL.cacheOwnerPut).execute(arguments: [snapshotID])
+                try db.cachedStatement(sql: SQL.cacheFileNodePut).execute(arguments: [snapshotID, path, payload])
+            }
+        }
+    }
+
     /// The cached listing, or nil when none was captured. The directory key
     /// is normalized here too (`ResticPath.normalized`, as `recordListing`
     /// keys it), so a lookup meets its write whatever spelling either used.
@@ -1009,6 +1023,20 @@ final class SnapshotIndex: @unchecked Sendable {
     /// The cached diff between two snapshots, or nil when none was captured.
     func diff(olderID: String, newerID: String) async throws -> [CachedDiffChange]? {
         try await cached(SQL.cacheDiffGet, [olderID, newerID])
+    }
+
+    /// One file's cached node in each of `snapshotIDs` that has one, by
+    /// snapshot ID: a snapshot without one is absent, never an error.
+    func fileNodes(path: String, snapshotIDs: [String]) async throws -> [String: CachedListingNode] {
+        let payloads = try await pool.read { db in
+            let statement = try db.cachedStatement(sql: SQL.cacheFileNodeGet)
+            var found: [String: String] = [:]
+            for snapshotID in snapshotIDs {
+                found[snapshotID] = try String.fetchOne(statement, arguments: [snapshotID, path])
+            }
+            return found
+        }
+        return try payloads.mapValues { try JSONDecoder().decode(CachedListingNode.self, from: Data($0.utf8)) }
     }
 
     /// The payload one cache row holds, decoded; nil when there is no row.
@@ -1029,6 +1057,7 @@ final class SnapshotIndex: @unchecked Sendable {
             try db.cachedStatement(sql: SQL.cacheSweepListing).execute(arguments: [id])
             try db.cachedStatement(sql: SQL.cacheSweepDiffOlder).execute(arguments: [id])
             try db.cachedStatement(sql: SQL.cacheSweepDiffNewer).execute(arguments: [id])
+            try db.cachedStatement(sql: SQL.cacheSweepFileNode).execute(arguments: [id])
             try db.cachedStatement(sql: SQL.cacheSweepOwner).execute(arguments: [id])
         }
     }

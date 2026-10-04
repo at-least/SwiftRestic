@@ -132,6 +132,7 @@ enum SnapshotIndexSchema {
     ) STRICT;
     CREATE INDEX diff_result_newer ON diff_result (newer_id);
     -- Every snapshot ID that has any cache row: makes the sweep keyed, not a table scan.
+    -- (file_node, a cache added after this version shipped, is created by `addedCaches`.)
     CREATE TABLE cache_owner (
         snapshot_id  TEXT PRIMARY KEY
     ) STRICT, WITHOUT ROWID;
@@ -155,6 +156,22 @@ enum SnapshotIndexSchema {
     -- Node ids queued for collection: housekeeping's and a discarded stage's fills queue the
     -- first level, collectNodes each next one, and it leaves the table empty.
     CREATE TEMP TABLE IF NOT EXISTS gc (id INTEGER PRIMARY KEY);
+    """
+
+    /// Browse caches added after schema 3 shipped, created at every open
+    /// rather than in `create`: a cache starts empty either way, and a
+    /// schema bump would delete and rebuild every repository's index — a
+    /// full restic re-read — only to add one. A store from before gains it
+    /// at its next open, a new one right after `create`.
+    static let addedCaches = """
+    -- One file's node in one snapshot, as `restic find` reported it: the size and modification
+    -- time a Files pane's version row shows. Owned through cache_owner and swept with the rest.
+    CREATE TABLE IF NOT EXISTS file_node (
+        snapshot_id  TEXT NOT NULL,
+        path         TEXT NOT NULL,              -- the file's exact path, restic's bytes
+        node         TEXT NOT NULL,              -- JSON CachedListingNode
+        PRIMARY KEY (snapshot_id, path)
+    ) STRICT, WITHOUT ROWID;
     """
 
     /// Every statement the store runs, one stored `let` each, named by its
@@ -493,8 +510,11 @@ enum SnapshotIndexSchema {
             "INSERT INTO dir_listing (snapshot_id, dir_path, nodes) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
         let cacheDiffPut =
             "INSERT INTO diff_result (older_id, newer_id, changes) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
+        let cacheFileNodePut =
+            "INSERT INTO file_node (snapshot_id, path, node) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
         let cacheListingGet = "SELECT nodes FROM dir_listing WHERE snapshot_id = ? AND dir_path = ?"
         let cacheDiffGet = "SELECT changes FROM diff_result WHERE older_id = ? AND newer_id = ?"
+        let cacheFileNodeGet = "SELECT node FROM file_node WHERE snapshot_id = ? AND path = ?"
         /// Every snap row is a listed snapshot, so "no snap row" is "not
         /// listed" — forgotten, or never reconciled at all.
         let cacheSweepIDs = """
@@ -504,6 +524,7 @@ enum SnapshotIndexSchema {
         let cacheSweepListing = "DELETE FROM dir_listing WHERE snapshot_id = ?"
         let cacheSweepDiffOlder = "DELETE FROM diff_result WHERE older_id = ?"
         let cacheSweepDiffNewer = "DELETE FROM diff_result WHERE newer_id = ?"
+        let cacheSweepFileNode = "DELETE FROM file_node WHERE snapshot_id = ?"
         let cacheSweepOwner = "DELETE FROM cache_owner WHERE snapshot_id = ?"
     }
 

@@ -438,9 +438,16 @@ struct StubRestic: Sendable {
                 # A file pane's find: one match of the pattern — the file's
                 # exact path, which these tests keep free of glob characters —
                 # in every backup named with --snapshot, as restic answers for
-                # a path each named backup holds. Everything else answers empty.
+                # a path each named backup holds. The listing is the
+                # snapshots.json beside the trace, when the test wrote one.
+                # Everything else answers empty.
                 trace "findfile-arm"
                 case " $* " in
+                    *" snapshots "*)
+                        listing="$(dirname "$SWIFTRESTIC_TRACE")/snapshots.json"
+                        if [ -f "$listing" ]; then cat "$listing"; else echo "[]"; fi
+                        exit 0
+                        ;;
                     *" find "*)
                         for last in "$@"; do :; done
                         printf '['

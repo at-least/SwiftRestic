@@ -1883,6 +1883,57 @@ struct AppModelStubTests {
         }
     }
 
+    @Test("a file's sizes and dates outlive the launch: the next one asks restic only for backups none read")
+    func fileHistorySurvivesARelaunch() async throws {
+        try await withScratchIndexDirectory {
+            let harness = try await makeHarness(mode: "findfile")
+            defer { try? FileManager.default.removeItem(at: harness.root) }
+            let older = String(repeating: "a", count: 64)
+            let newer = String(repeating: "b", count: 64)
+            let newest = String(repeating: "c", count: 64)
+            let path = "/src/notes.txt"
+
+            let first = try await harness.model.fileHistory(
+                repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+            )
+            // A quit waits for the captures handed over before it.
+            await harness.model.shutdown()
+            #expect(try stubRuns("find", in: harness) == 1)
+
+            // The next launch lists the three backups, so its reconcile keeps
+            // the rows of the two the first one read.
+            let listing = [older, newer, newest].map { id in
+                #"{"id":"\#(id)","short_id":"\#(id.prefix(8))","time":"2026-01-02T03:04:05Z","tree":"00","paths":["/src"],"hostname":"stub","tags":[]}"#
+            }
+            try "[\(listing.joined(separator: ","))]".write(
+                to: harness.root.appendingPathComponent("snapshots.json"), atomically: true, encoding: .utf8
+            )
+            let relaunched = AppModel(
+                store: ConfigStore(directory: harness.root.appendingPathComponent("config")),
+                secrets: .inMemory([harness.repository.id: (password: "test-password", providerSecret: nil)])
+            )
+            await relaunched.bootstrap()
+            #expect(relaunched.snapshots(for: harness.repository.id).count == 3)
+
+            let again = try await relaunched.fileHistory(
+                repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+            )
+            #expect(again == first)
+            #expect(try stubRuns("find", in: harness) == 1)
+
+            let grown = try await relaunched.fileHistory(
+                repositoryID: harness.repository.id, path: path, backupIDs: [newest, newer, older]
+            )
+            #expect(Set(grown.keys) == [newest, newer, older])
+            #expect(try stubRuns("find", in: harness) == 2)
+            let trace = try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+            let lastFind = try #require(trace.components(separatedBy: "\n").last { $0.contains("args=[find ") })
+            #expect(lastFind.contains(newest) && !lastFind.contains(newer) && !lastFind.contains(older), "\(lastFind)")
+
+            await relaunched.shutdown()
+        }
+    }
+
     @Test("a folder browse hands back restic's listing without waiting for the index's writer")
     func browseDoesNotWaitForTheIndexWriter() async throws {
         try await withScratchIndexDirectory {

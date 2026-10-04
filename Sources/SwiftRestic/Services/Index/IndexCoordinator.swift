@@ -459,6 +459,24 @@ actor IndexCoordinator {
         }
     }
 
+    /// One file's cached node in each of `snapshotIDs` that has one, by
+    /// snapshot ID — empty on a miss, or when the cache itself failed.
+    nonisolated func cachedFileNodes(path: String, snapshotIDs: [String], repositoryID: UUID) async -> [String: SnapshotNode] {
+        let cached = await cacheAccess(repositoryID) { try await $0.fileNodes(path: path, snapshotIDs: snapshotIDs) }
+        return (cached ?? [:]).mapValues(\.snapshotNode)
+    }
+
+    /// Captures one file's nodes for next time, and returns at once, as
+    /// `cacheListing` does: a version row has its size and date in hand.
+    nonisolated func cacheFileNodes(path: String, nodes: [String: SnapshotNode], repositoryID: UUID) {
+        cacheWrites.start { [self] in
+            let captured = nodes.mapValues(CachedListingNode.init)
+            _ = await cacheAccess(repositoryID) {
+                try await $0.recordFileNodes(path: path, nodes: captured)
+            }
+        }
+    }
+
     /// Returns once every capture handed over so far has been written or
     /// has failed — including any handed over while it waits. `shutdown`
     /// waits here; so do tests that read back what they just captured.

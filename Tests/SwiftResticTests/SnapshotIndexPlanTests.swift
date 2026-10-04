@@ -215,17 +215,20 @@ struct SnapshotIndexPlanTests {
         "cacheOwnerPut": Rule(contains: []),
         "cacheListingPut": Rule(contains: []),
         "cacheDiffPut": Rule(contains: []),
+        "cacheFileNodePut": Rule(contains: []),
         "cacheListingGet": Rule(contains: [
             "SEARCH dir_listing USING INDEX sqlite_autoindex_dir_listing_1 (snapshot_id=? AND dir_path=?)",
         ]),
         "cacheDiffGet": Rule(contains: [
             "SEARCH diff_result USING INDEX sqlite_autoindex_diff_result_1 (older_id=? AND newer_id=?)",
         ]),
+        "cacheFileNodeGet": Rule(contains: ["SEARCH file_node USING PRIMARY KEY (snapshot_id=? AND path=?)"]),
         "cacheSweepIDs": Rule(
             contains: ["SCAN o", "SEARCH s USING COVERING INDEX sqlite_autoindex_snap_1 (hash=?)"], scans: ["o"]),
         "cacheSweepListing": Rule(contains: ["INDEX sqlite_autoindex_dir_listing_1 (snapshot_id=?)"]),
         "cacheSweepDiffOlder": Rule(contains: ["INDEX sqlite_autoindex_diff_result_1 (older_id=?)"]),
         "cacheSweepDiffNewer": Rule(contains: ["INDEX diff_result_newer (newer_id=?)"]),
+        "cacheSweepFileNode": Rule(contains: ["SEARCH file_node USING PRIMARY KEY (snapshot_id=?)"]),
         "cacheSweepOwner": Rule(contains: ["SEARCH cache_owner USING PRIMARY KEY (snapshot_id=?)"]),
     ]
 
@@ -296,6 +299,7 @@ struct SnapshotIndexPlanTests {
         try index.housekeeping()
         try await index.recordListing(snapshotID: survivors[0].id, directory: "/a", nodes: [])
         try await index.recordDiff(olderID: survivors[0].id, newerID: survivors[1].id, changes: [])
+        try await index.recordFileNodes(path: "/a/d0/f1", nodes: [survivors[0].id: IndexTestData.cachedNode("/a/d0/f1")])
         _ = try index.reconcile(listing: survivors + [try IndexTestData.snapshot(
             IndexTestData.hexID(999), micros: 999_000_000, tags: [IndexTestData.planA], paths: ["/a"])])
         try index.markUnreadable(snapshotID: IndexTestData.hexID(999))

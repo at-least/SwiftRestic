@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 
 /// The snapshot index's contract, through its public API on a file-backed
@@ -1034,7 +1035,7 @@ struct SnapshotIndexBrowseCacheTests {
         #expect(try await index.diff(olderID: "s1", newerID: "s3") == nil)
     }
 
-    @Test("a snapshot's death sweeps its listings and every diff that names it")
+    @Test("a snapshot's death sweeps its listings, its file nodes and every diff that names it")
     func deathSweepsCacheRows() async throws {
         let fixture = try IndexFixture()
         let index = fixture.index
@@ -1042,17 +1043,21 @@ struct SnapshotIndexBrowseCacheTests {
         try await index.recordListing(snapshotID: "s1", directory: "/src", nodes: [IndexTestData.cachedNode("/src/a.txt")])
         try await index.recordListing(snapshotID: "s2", directory: "/src", nodes: [IndexTestData.cachedNode("/src/b.txt")])
         try await index.recordDiff(olderID: "s1", newerID: "s2", changes: [])
+        let file = IndexTestData.cachedNode("/src/a.txt")
+        try await index.recordFileNodes(path: "/src/a.txt", nodes: ["s1": file, "s2": file])
 
         try index.reconcile(listing: [try snapshot("s2", 2_000_000)])
         #expect(try index.snapStates()["s1"] == nil)
         #expect(try await index.listing(snapshotID: "s1", directory: "/src") == nil)
         #expect(try await index.diff(olderID: "s1", newerID: "s2") == nil)
         #expect(try await index.listing(snapshotID: "s2", directory: "/src") != nil)
+        #expect(try await index.fileNodes(path: "/src/a.txt", snapshotIDs: ["s1", "s2"]) == ["s2": file])
 
         // The return starts from an empty cache: the rows were reclaimed.
         try index.reconcile(listing: [try snapshot("s1", 1_000_000), try snapshot("s2", 2_000_000)])
         #expect(try index.snapStates()["s1"] == SnapshotIndex.State.pending)
         #expect(try await index.listing(snapshotID: "s1", directory: "/src") == nil)
+        #expect(try await index.fileNodes(path: "/src/a.txt", snapshotIDs: ["s1"]).isEmpty)
     }
 
     @Test("cache rows naming an ID the index never listed are swept too")
@@ -1063,10 +1068,53 @@ struct SnapshotIndexBrowseCacheTests {
         try await index.recordListing(snapshotID: "s2", directory: "/src", nodes: [IndexTestData.cachedNode("/src/b.txt")])
         try await index.recordListing(snapshotID: "ghost", directory: "/src", nodes: [IndexTestData.cachedNode("/src/a.txt")])
         try await index.recordDiff(olderID: "ghost", newerID: "s2", changes: [])
+        try await index.recordFileNodes(path: "/src/a.txt", nodes: ["ghost": IndexTestData.cachedNode("/src/a.txt")])
 
         _ = try index.reconcile(listing: [try snapshot("s2", 2_000_000)])
         #expect(try await index.listing(snapshotID: "ghost", directory: "/src") == nil)
         #expect(try await index.diff(olderID: "ghost", newerID: "s2") == nil)
         #expect(try await index.listing(snapshotID: "s2", directory: "/src") != nil)
+        #expect(try await index.fileNodes(path: "/src/a.txt", snapshotIDs: ["ghost"]).isEmpty)
+    }
+
+    @Test("a file's node round-trips per snapshot and exact path; the first capture stands")
+    func fileNodeRoundTrip() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let mtime = Date(timeIntervalSince1970: 5_000)
+        let older = IndexTestData.cachedNode("/src/notes.txt", size: 42, mtime: mtime)
+        let newer = IndexTestData.cachedNode("/src/notes.txt", size: 50, mtime: mtime.addingTimeInterval(60))
+        try await index.recordFileNodes(path: "/src/notes.txt", nodes: ["s1": older, "s2": newer])
+
+        let read = try await index.fileNodes(path: "/src/notes.txt", snapshotIDs: ["s2", "s1", "s3"])
+        // A snapshot with no capture is absent, not an error.
+        #expect(read == ["s1": older, "s2": newer])
+        #expect(read["s1"]?.snapshotNode.mtime == mtime)
+        // Paths are exact, by bytes: another case or a trailing slash misses.
+        #expect(try await index.fileNodes(path: "/src/Notes.txt", snapshotIDs: ["s1"]).isEmpty)
+        #expect(try await index.fileNodes(path: "/src/notes.txt/", snapshotIDs: ["s1"]).isEmpty)
+
+        try await index.recordFileNodes(path: "/src/notes.txt", nodes: ["s1": newer])
+        #expect(try await index.fileNodes(path: "/src/notes.txt", snapshotIDs: ["s1"]) == ["s1": older])
+    }
+
+    @Test("a store from before the file-node cache gains it at its next open and keeps what it held")
+    func fileNodeCacheAddedToAnOlderStore() async throws {
+        let fixture = try IndexFixture()
+        _ = try fixture.index.reconcile(listing: [try snapshot("s1", 1_000_000)])
+        try await fixture.index.recordListing(snapshotID: "s1", directory: "/src", nodes: [IndexTestData.cachedNode("/src/a.txt")])
+        try fixture.index.close()
+        // What a schema-3 file written before the table existed looks like.
+        let queue = try DatabaseQueue(path: fixture.path)
+        try await queue.write { try $0.execute(sql: "DROP TABLE file_node") }
+        try queue.close()
+
+        try fixture.reopen()
+        // Opened, not rebuilt: the listing and the snapshot are still there.
+        #expect(try fixture.index.snapStates()["s1"] != nil)
+        #expect(try await fixture.index.listing(snapshotID: "s1", directory: "/src") != nil)
+        let file = IndexTestData.cachedNode("/src/a.txt")
+        try await fixture.index.recordFileNodes(path: "/src/a.txt", nodes: ["s1": file])
+        #expect(try await fixture.index.fileNodes(path: "/src/a.txt", snapshotIDs: ["s1"]) == ["s1": file])
     }
 }

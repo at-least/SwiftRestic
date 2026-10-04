@@ -46,6 +46,21 @@ struct BrowseCacheTests {
         ) == nil)
     }
 
+    @Test("the coordinator serves a file's nodes per repository, a miss as nothing")
+    func coordinatorFileNodes() async throws {
+        let scene = try CoordinatorScene("SwiftResticBrowseCache")
+        defer { scene.remove() }
+        let coordinator = scene.coordinator
+        let node = IndexTestData.cachedNode("/src/a.txt", size: 42).snapshotNode
+
+        coordinator.cacheFileNodes(path: "/src/a.txt", nodes: ["s1": node], repositoryID: scene.repositoryID)
+        await coordinator.cacheWritesSettled()
+        #expect(await coordinator.cachedFileNodes(
+            path: "/src/a.txt", snapshotIDs: ["s1", "s2"], repositoryID: scene.repositoryID
+        ) == ["s1": node])
+        #expect(await coordinator.cachedFileNodes(path: "/src/a.txt", snapshotIDs: ["s1"], repositoryID: UUID()).isEmpty)
+    }
+
     @Test("the coordinator serves the caches per repository and canonicalizes lookups")
     func coordinatorPassThrough() async throws {
         let scene = try CoordinatorScene("SwiftResticBrowseCache")

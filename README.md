@@ -76,7 +76,9 @@ checked in so a normal build does not need it.
   version starts where restic's diff said the file changed, or *may have
   changed* where no diff compared two backups or the file was absent in
   between. Each row's modification time and size come from one `restic
-  find` of the file's exact path, its glob characters escaped. Return or
+  find` of the file's exact path, its glob characters escaped, asked once
+  per backup: the index keeps each answer, so going back to a file — after
+  a relaunch too — runs no restic. Return or
   *Restore…* restores the chosen version, and a row drags to Finder. *Show
   in Backups* opens the chosen backup at that place, under its plan in the
   sidebar. Each page keeps its tab, open folders and selection while the app
