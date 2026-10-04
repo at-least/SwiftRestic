@@ -398,10 +398,11 @@ final class SnapshotIndex: @unchecked Sendable {
     init(path: String) throws {
         let pool = try DatabasePool(path: path, configuration: Self.configuration())
         do {
-            let (version, objects) = try pool.read { db in
+            let (version, objects, hasAddedCaches) = try pool.read { db in
                 (
                     try Int32.fetchOne(db, sql: "PRAGMA user_version") ?? 0,
-                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_schema") ?? 0
+                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_schema") ?? 0,
+                    try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM sqlite_schema WHERE name = 'file_node')") ?? false
                 )
             }
             switch (version, objects) {
@@ -412,7 +413,12 @@ final class SnapshotIndex: @unchecked Sendable {
             default:
                 throw IndexError.schemaMismatch(found: version)
             }
-            try pool.write { try $0.execute(sql: SnapshotIndexSchema.addedCaches) }
+            // Only when missing: the write takes the writer lock, which
+            // another instance on this configuration folder may hold, and a
+            // store that cannot open is deleted and rebuilt.
+            if !hasAddedCaches {
+                try pool.write { try $0.execute(sql: SnapshotIndexSchema.addedCaches) }
+            }
             try pool.writeWithoutTransaction { try $0.execute(sql: SnapshotIndexSchema.temporary) }
         } catch {
             try? pool.close()

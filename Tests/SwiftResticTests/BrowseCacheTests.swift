@@ -55,9 +55,12 @@ struct BrowseCacheTests {
 
         coordinator.cacheFileNodes(path: "/src/a.txt", nodes: ["s1": node], repositoryID: scene.repositoryID)
         await coordinator.cacheWritesSettled()
-        #expect(await coordinator.cachedFileNodes(
+        let read = await coordinator.cachedFileNodes(
             path: "/src/a.txt", snapshotIDs: ["s1", "s2"], repositoryID: scene.repositoryID
-        ) == ["s1": node])
+        )
+        // SnapshotNode's equality is its path: the size is checked itself.
+        #expect(read == ["s1": node])
+        #expect(read["s1"]?.size == 42)
         #expect(await coordinator.cachedFileNodes(path: "/src/a.txt", snapshotIDs: ["s1"], repositoryID: UUID()).isEmpty)
     }
 

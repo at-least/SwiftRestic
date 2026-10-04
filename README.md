@@ -299,7 +299,8 @@ A few seams worth knowing by name:
 - **The snapshot index is a cache of what restic cannot answer quickly**: which
   snapshots hold a path, and a name search across all of them — for the Files
   view's tree and versions, Find Files and the Restore pane's search — plus cached
-  folder listings and diffs. One SQLite file per repository,
+  folder listings, diffs and a file's `restic find` answer per backup. One
+  SQLite file per repository,
   `index/<repository UUID>.sqlite` in the configuration folder, stores every
   path once as a tree of names and, per plan (or per restic `host,paths` group
   for backups no plan made), the ranges of snapshots each path exists in, so a

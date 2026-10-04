@@ -1918,7 +1918,10 @@ struct AppModelStubTests {
             let again = try await relaunched.fileHistory(
                 repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
             )
+            // SnapshotNode's equality is its path: the size and date the row
+            // shows are checked themselves.
             #expect(again == first)
+            #expect(again[older]?.size == 42 && again[older]?.mtime != nil)
             #expect(try stubRuns("find", in: harness) == 1)
 
             let grown = try await relaunched.fileHistory(

@@ -162,7 +162,9 @@ enum SnapshotIndexSchema {
     /// rather than in `create`: a cache starts empty either way, and a
     /// schema bump would delete and rebuild every repository's index — a
     /// full restic re-read — only to add one. A store from before gains it
-    /// at its next open, a new one right after `create`.
+    /// at its next open, a new one right after `create`. The open runs this
+    /// only when its probe finds no `file_node` table, so a cache added here
+    /// joins that probe.
     static let addedCaches = """
     -- One file's node in one snapshot, as `restic find` reported it: the size and modification
     -- time a Files pane's version row shows. Owned through cache_owner and swept with the rest.

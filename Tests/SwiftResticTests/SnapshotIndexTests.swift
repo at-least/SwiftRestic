@@ -1090,12 +1090,29 @@ struct SnapshotIndexBrowseCacheTests {
         // A snapshot with no capture is absent, not an error.
         #expect(read == ["s1": older, "s2": newer])
         #expect(read["s1"]?.snapshotNode.mtime == mtime)
+        #expect(read["s1"]?.snapshotNode.size == 42)
         // Paths are exact, by bytes: another case or a trailing slash misses.
         #expect(try await index.fileNodes(path: "/src/Notes.txt", snapshotIDs: ["s1"]).isEmpty)
         #expect(try await index.fileNodes(path: "/src/notes.txt/", snapshotIDs: ["s1"]).isEmpty)
 
         try await index.recordFileNodes(path: "/src/notes.txt", nodes: ["s1": newer])
         #expect(try await index.fileNodes(path: "/src/notes.txt", snapshotIDs: ["s1"]) == ["s1": older])
+    }
+
+    @Test("a store that has its caches opens while another connection holds its writer")
+    func openWhileAnotherWriterHoldsTheLock() async throws {
+        let fixture = try IndexFixture()
+        _ = try fixture.index.reconcile(listing: [try snapshot("s1", 1_000_000)])
+        // Another app instance on this configuration folder, mid-write: a
+        // store that cannot open is deleted and rebuilt by its coordinator.
+        var holding = Configuration()
+        holding.allowsUnsafeTransactions = true
+        let other = try DatabaseQueue(path: fixture.path, configuration: holding)
+        try await other.writeWithoutTransaction { try $0.execute(sql: "BEGIN IMMEDIATE") }
+        defer { try? other.inDatabase { try $0.execute(sql: "ROLLBACK") } }
+
+        try fixture.reopen()
+        #expect(try fixture.index.snapStates()["s1"] != nil)
     }
 
     @Test("a store from before the file-node cache gains it at its next open and keeps what it held")
