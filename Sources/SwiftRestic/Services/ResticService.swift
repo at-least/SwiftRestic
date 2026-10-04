@@ -436,16 +436,18 @@ struct ResticService: ResticClient {
     ///
     /// `restic find` walks the trees, so this is a real search rather than an
     /// index lookup — it gets slower the more snapshots a repository holds, which
-    /// is why the caller can narrow it to one snapshot.
+    /// is why the caller can narrow it to some snapshots (none named: every
+    /// one). A named snapshot the repository no longer holds is skipped with
+    /// a warning on stderr; the rest still answer (restic 0.19.1).
     func find(
         _ context: RepositoryContext,
         pattern: String,
         ignoreCase: Bool = true,
-        snapshotID: String? = nil
+        snapshotIDs: [String] = []
     ) async throws -> [FindResult] {
         var args = context.globalArguments + ["find", "--json"]
         if ignoreCase { args.append("--ignore-case") }
-        if let snapshotID { args += ["--snapshot", snapshotID] }
+        for id in snapshotIDs { args += ["--snapshot", id] }
         args.append(pattern)
 
         let result = try await runner.run(

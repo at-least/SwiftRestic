@@ -261,7 +261,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         _ context: RepositoryContext,
         pattern: String,
         ignoreCase: Bool,
-        snapshotID: String?
+        snapshotIDs: [String]
     ) async throws -> [FindResult] {
         record("find")
         return []

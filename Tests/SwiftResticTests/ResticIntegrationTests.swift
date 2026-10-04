@@ -1133,7 +1133,7 @@ struct ResticFindTests {
         try FileManager.default.removeItem(at: secret)
         _ = try await service.backup(context, plan: plan)
 
-        let latestOnly = try await service.find(context, pattern: "recovery-codes.txt", snapshotID: "latest")
+        let latestOnly = try await service.find(context, pattern: "recovery-codes.txt", snapshotIDs: ["latest"])
         #expect(latestOnly.isEmpty, "the file was deleted, so the newest snapshot must not have it")
 
         let all = try await service.find(context, pattern: "recovery-codes.txt")
@@ -1197,12 +1197,26 @@ struct ResticFindTests {
         for (name, sizes) in [("a[1].txt", Set<Int64>([3, 11])), ("b*c.txt", Set<Int64>([3]))] {
             let path = source.appendingPathComponent(name).path
             let results = try await service.find(
-                context, pattern: ResticService.globEscaped(path), ignoreCase: false, snapshotID: nil
+                context, pattern: ResticService.globEscaped(path), ignoreCase: false
             )
             #expect(results.count == 2, "\(name): one result per backup")
             #expect(results.allSatisfy { $0.matches.map(\.path) == [path] }, "\(name): \(results.map { $0.matches.map(\.path) })")
             #expect(Set(results.compactMap { $0.matches.first?.size }) == sizes)
         }
+
+        // Named backups narrow it — the version rows name each version's
+        // newest — and a name the repository no longer holds is skipped,
+        // not fatal.
+        let older = try #require(try await service.snapshots(context, planID: nil, timeout: 60).last)
+        let path = source.appendingPathComponent("a[1].txt").path
+        let narrowed = try await service.find(
+            context,
+            pattern: ResticService.globEscaped(path),
+            ignoreCase: false,
+            snapshotIDs: [older.id, String(repeating: "0", count: 64)]
+        )
+        #expect(narrowed.map(\.snapshot) == [older.id])
+        #expect(narrowed.first?.matches.first?.size == 3)
     }
 }
 

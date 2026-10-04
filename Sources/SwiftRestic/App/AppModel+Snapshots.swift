@@ -8,6 +8,12 @@ extension AppModel {
     /// and, at launch, the scheduler that is armed once it finishes — forever.
     static let refreshTimeout: TimeInterval = 300
 
+    /// The most backups `fileHistory` names to restic, 92 bytes each on the
+    /// command line (`--snapshot` and a 64-character ID, with their argv
+    /// pointers): 2,000 is ~184 KB of the 1 MiB `ARG_MAX` macOS allows for
+    /// arguments and environment together.
+    static let fileHistoryNamedLimit = 2_000
+
     func refreshAllSnapshots() async {
         // Concurrent, not serial: the scheduler is armed only after this
         // returns, so one slow or unreachable remote repository must not delay
@@ -221,19 +227,29 @@ extension AppModel {
             context,
             pattern: pattern,
             ignoreCase: true,
-            snapshotID: latestOnly ? "latest" : nil
+            snapshotIDs: latestOnly ? ["latest"] : []
         )
     }
 
-    /// One file's node in every backup of the repository holding it — its
-    /// size and modification time there — by backup ID, from one `restic
-    /// find` of its exact path: the Files view's version rows. Case-exact,
-    /// as a path is, and matched by bytes, as the index keys paths.
-    func fileHistory(repositoryID: UUID, path: String) async throws -> [String: FindMatch] {
+    /// One file's node in `backupIDs` — its size and modification time
+    /// there — by backup ID, from one `restic find` of its exact path: the
+    /// Files view's version rows, which ask for each version's newest
+    /// backup. Case-exact, as a path is, and matched by bytes, as the index
+    /// keys paths.
+    ///
+    /// Naming the backups is what keeps it quick: at 1,000 backups of a
+    /// 2,060-file tree, every backup took restic 6.9–8.5 s, the 100 its
+    /// versions needed 1.9–2.2 s. Past `fileHistoryNamedLimit` the find
+    /// searches every backup instead, so the command line stays far inside
+    /// the system's argument limit.
+    func fileHistory(repositoryID: UUID, path: String, backupIDs: [String]) async throws -> [String: FindMatch] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         let (service, context) = try await resticContext(for: repository)
         let results = try await service.find(
-            context, pattern: ResticService.globEscaped(path), ignoreCase: false, snapshotID: nil
+            context,
+            pattern: ResticService.globEscaped(path),
+            ignoreCase: false,
+            snapshotIDs: backupIDs.count <= Self.fileHistoryNamedLimit ? backupIDs : []
         )
         var history: [String: FindMatch] = [:]
         for result in results {

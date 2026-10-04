@@ -3,8 +3,9 @@ import SwiftUI
 /// A file of the Files view, by version: each content it had through its
 /// chain's history, newest first — the backups that held it unchanged
 /// (`ContentVersion`, from the index) — with when it was modified and how
-/// big it was, from one `restic find` of its path. Pick one to restore it or
-/// open it in its backup; drag one to Finder.
+/// big it was, from one `restic find` of its path in each version's newest
+/// backup. Pick one to restore it or open it in its backup; drag one to
+/// Finder.
 struct FileVersionsView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -14,8 +15,8 @@ struct FileVersionsView: View {
     /// The chosen version, by its newest backup's ID.
     @Binding var chosenID: String?
 
-    /// Each backup's node of the file — size and modification time — by
-    /// backup ID; empty until the find answers.
+    /// Each version's newest backup's node of the file — size and
+    /// modification time — by backup ID; empty until the find answers.
     @State private var details: [String: FindMatch] = [:]
     @State private var detailsError: String?
     @State private var isReadingDetails = false
@@ -141,7 +142,11 @@ struct FileVersionsView: View {
         guard !versions.isEmpty else { return }
         isReadingDetails = true
         do {
-            let found = try await model.fileHistory(repositoryID: node.repositoryID, path: node.path)
+            let found = try await model.fileHistory(
+                repositoryID: node.repositoryID,
+                path: node.path,
+                backupIDs: versions.compactMap { $0.snapshots.first?.id }
+            )
             guard !Task.isCancelled else { return }
             details = found
             detailsError = nil
