@@ -1879,6 +1879,11 @@ struct AppModelStubTests {
             let lastFind = try #require(trace.components(separatedBy: "\n").last { $0.contains("args=[find ") })
             #expect(lastFind.contains(newest) && !lastFind.contains(newer) && !lastFind.contains(older), "\(lastFind)")
 
+            // Removing the repository takes its answers along, as the rest of
+            // its runtime state.
+            harness.model.deleteRepository(id: harness.repository.id)
+            #expect(harness.model.fileHistoryAnswers.isEmpty)
+
             await harness.model.shutdown()
         }
     }

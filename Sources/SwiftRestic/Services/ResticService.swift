@@ -441,12 +441,13 @@ struct ResticService: ResticClient {
     /// one). A named snapshot the repository no longer holds is skipped with
     /// a warning on stderr; the rest still answer (restic 0.19.1).
     ///
-    /// `--no-lock`, as `listDirectory` and `snapshots`: the reads a click or a
-    /// refresh makes. Locked, each paid restic's 200 ms wait after writing
-    /// its lock (0.14–0.32 s of a 0.7–0.9 s file-pane find on a small local
-    /// repository), failed with exit 11 while retention's `forget` held the
-    /// exclusive lock, and made a `forget` starting while it held its lock
-    /// fail the same way (probed on restic 0.19.1).
+    /// `--no-lock`, as `listDirectory` and `snapshots`: what a click in a
+    /// Files tab and the snapshot listing run. Locked, each paid restic's
+    /// 200 ms wait after writing its lock (0.14–0.32 s of a 0.7–0.9 s
+    /// file-pane find on a small local repository); while retention's
+    /// `forget` or a `prune` held the exclusive lock it failed at once with
+    /// exit 11; and a `forget` starting while it held its lock failed the
+    /// same way (probed on restic 0.19.1).
     func find(
         _ context: RepositoryContext,
         pattern: String,

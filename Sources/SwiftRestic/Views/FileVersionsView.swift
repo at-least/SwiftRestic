@@ -171,6 +171,7 @@ private struct FileVersionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modified)
                     .foregroundStyle(detail?.mtime == nil ? .secondary : .primary)
+                    .accessibilityLabel(detail?.mtime == nil ? missing("Modified date") : modified)
                 Text(backedUp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -180,11 +181,12 @@ private struct FileVersionRow: View {
                 .font(.caption)
                 .foregroundStyle(version.since == .uncertain ? .secondary : .tertiary)
                 .help(sinceHelp)
-            Text(detail.map { Format.bytes($0.size) } ?? (isReadingDetail ? "…" : "—"))
+            Text(size)
                 .font(.callout)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .trailing)
+                .accessibilityLabel(detail == nil ? missing("Size") : size)
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
@@ -196,6 +198,16 @@ private struct FileVersionRow: View {
     private var modified: String {
         if let mtime = detail?.mtime { return "Modified \(Format.timestamp(mtime))" }
         return isReadingDetail ? "Modified …" : "Modified —"
+    }
+
+    private var size: String {
+        detail.map { Format.bytes($0.size) } ?? (isReadingDetail ? "…" : "—")
+    }
+
+    /// What VoiceOver says for a value not in hand, which the row shows as
+    /// "…" or "—": one glyph apart, they say nothing of which.
+    private func missing(_ value: String) -> String {
+        isReadingDetail ? "\(value) still being read" : "\(value) not known"
     }
 
     /// "Backed up Oct 3, 2026 at 9:00 PM" for one backup; for several, the

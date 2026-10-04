@@ -37,9 +37,10 @@ enum BackupRunEngine {
         /// channels are read at send time, not capture time — a channel
         /// edited mid-run applies from this ping on.
         func addStartPing(_ event: NotificationEvent)
-        /// The closing refresh also feeds the snapshot index — which is why
-        /// it must stay after retention: the index's restic calls hold
-        /// shared locks, and a forget needs the exclusive one.
+        /// The closing refresh also feeds the snapshot index, and it must
+        /// stay after retention: its `stats` holds a shared lock (`snapshots`
+        /// and the index's walks run lock-free), and a forget needs the
+        /// exclusive one.
         func refreshSnapshots(repositoryID: UUID) async
         /// Stores and announces a finished run: its log, run history,
         /// banner, user notification, external channels.

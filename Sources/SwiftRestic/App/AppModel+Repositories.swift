@@ -167,6 +167,7 @@ extension AppModel {
         repositoriesMissingPassword.remove(id)
         statsFailureNoted.remove(id)
         resolvedContexts[id] = nil
+        fileHistoryAnswers = fileHistoryAnswers.filter { $0.key.repositoryID != id }
     }
 
     func storedSecrets(for repositoryID: UUID) async throws -> (password: String?, providerSecret: String?) {
