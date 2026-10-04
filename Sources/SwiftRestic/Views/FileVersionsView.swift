@@ -170,6 +170,7 @@ private struct FileVersionRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modified)
+                    .foregroundStyle(detail?.mtime == nil ? .secondary : .primary)
                 Text(backedUp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -189,9 +190,12 @@ private struct FileVersionRow: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Filled in quietly while the find runs, as the size column is — the
+    /// backups and the change mark beside it are the index's, already
+    /// shown — never a "Reading…" that every click put on every row.
     private var modified: String {
         if let mtime = detail?.mtime { return "Modified \(Format.timestamp(mtime))" }
-        return isReadingDetail ? "Reading…" : "Modified —"
+        return isReadingDetail ? "Modified …" : "Modified —"
     }
 
     /// "Backed up Oct 3, 2026 at 9:00 PM" for one backup; for several, the
