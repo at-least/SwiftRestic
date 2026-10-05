@@ -584,16 +584,14 @@ struct SnapshotNodeRow: View {
             Text(node.name)
                 .lineLimit(1)
             Spacer()
+            // No Modified column: a folder as of a backup is chosen by the
+            // backup's moment, and a file's dates are its own pane's rows.
             if !node.isDirectory {
                 Text(Format.bytes(node.size))
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
-            Text(Format.timestamp(node.mtime))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .frame(width: 140, alignment: .trailing)
         }
     }
 }

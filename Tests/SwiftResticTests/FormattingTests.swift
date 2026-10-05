@@ -149,6 +149,13 @@ struct FormattingTests {
         #expect(nextYear.hasSuffix("9:00 PM"))
     }
 
+    @Test("a version's size change is signed in the sizes' own units, and an equal size says so")
+    func sizeChanges() {
+        #expect(Format.sizeChange(from: 89, to: 106) == "+" + Format.bytes(17))
+        #expect(Format.sizeChange(from: 106, to: 89) == "−" + Format.bytes(17))
+        #expect(Format.sizeChange(from: 106, to: 106) == "Same size")
+    }
+
     @Test("an item's last backup day reads after until, with the year only when it is another one")
     func untilDays() {
         var calendar = Calendar(identifier: .gregorian)

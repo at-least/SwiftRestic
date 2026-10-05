@@ -60,8 +60,10 @@ struct FolderVersionsView: View {
                 get: { chosen?.id },
                 set: { chosenID = $0 }
             )) {
+                // The moment alone: the short ID is restic's handle, which
+                // the restore sheet and Show in Backups carry.
                 ForEach(versions, id: \.id) { version in
-                    Text(verbatim: "\(Format.timestamp(version.time))  ·  \(version.id.prefix(8))")
+                    Text(verbatim: Format.timestamp(version.time))
                         .tag(Optional(version.id))
                 }
             }
@@ -84,11 +86,8 @@ struct FolderVersionsView: View {
         } else if isLoading, nodes.isEmpty {
             ProgressView("Reading…")
         } else if chosen == nil {
-            ContentUnavailableView(
-                "No backup holds it yet",
-                systemImage: "clock.arrow.circlepath",
-                description: Text("The index is still reading this repository's backups.")
-            )
+            // Why is the pane's banner's to say, while the index reads.
+            ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
         } else if nodes.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
         } else {

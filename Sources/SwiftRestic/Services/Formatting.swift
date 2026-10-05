@@ -153,6 +153,15 @@ enum Format {
         return "\(monthDay(old)), \(old.year) – \(monthDay(new)), \(new.year)"
     }
 
+    /// How a file's size moved from the version before — "+17 bytes",
+    /// "−1.2 KB" (a minus sign, not a hyphen), or "Same size" — beside a
+    /// version row's size, in the sizes' own spelling (`bytes`).
+    static func sizeChange(from older: Int64, to newer: Int64) -> String {
+        if newer == older { return "Same size" }
+        let magnitude = bytes(abs(newer - older))
+        return newer > older ? "+\(magnitude)" : "−\(magnitude)"
+    }
+
     /// The day an item a chain's newest backup no longer holds was last
     /// backed up, short for its row in a Files tab — "until Oct 2", the year
     /// said only when it is not this one. The row's tooltip carries the

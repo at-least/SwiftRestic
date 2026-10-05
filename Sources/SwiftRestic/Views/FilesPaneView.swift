@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The pane for a folder or file picked in a Files tab's tree: what it is,
-/// where it lives and where it stands in its chain's history, then the item
-/// by version — a folder as any backup holding it held it
+/// The pane for a folder or file picked in a Files tab's tree: what it is
+/// and where it lives — and when it was last backed up, once the newest
+/// backup has dropped it — then the item by version — a folder as any
+/// backup holding it held it
 /// (`FolderVersionsView`), a file as each content it had
 /// (`FileVersionsView`).
 struct FilesPaneView: View {
@@ -28,15 +29,11 @@ struct FilesPaneView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                FilesPaneHeader(
-                    node: node, versions: versions,
-                    versionCount: node.isDirectory ? nil : contentVersions.count,
-                    chainNewest: chainNewest
-                )
+                FilesPaneHeader(node: node, newestHolder: versions.first, chainNewest: chainNewest)
                 if !indexComplete {
                     Label(FilesSearchAnswer.indexStillReading, systemImage: "clock.arrow.circlepath")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 20)
@@ -152,15 +149,14 @@ private struct FilesPaneLoadKey: Equatable {
 }
 
 /// The pane's identity block: the kind's icon, the name, the whole path —
-/// selectable, the one exact identifier — and one line of where it stands
-/// in its chain's history.
+/// selectable, the one exact identifier — and, for an item the chain's
+/// newest backup no longer holds, when it was last backed up: the one fact
+/// of its standing the rows below do not already say. How many backups and
+/// versions hold it are the rows themselves.
 struct FilesPaneHeader: View {
-    @Environment(\.now) private var now
     let node: FileNode
-    /// The backups holding it, newest first.
-    let versions: [IndexVersion]
-    /// A file's number of content versions; nil for a folder.
-    let versionCount: Int?
+    /// The newest backup holding it.
+    let newestHolder: IndexVersion?
     let chainNewest: Snapshot?
 
     var body: some View {
@@ -191,16 +187,10 @@ struct FilesPaneHeader: View {
         }
     }
 
-    /// "In 214 backups · newest 1 hour ago" — for a file, "3 versions in
-    /// 214 backups" — or, for an item the chain's newest backup lacks, when
-    /// it was last backed up.
+    /// For an item the chain's newest backup lacks, when it was last backed
+    /// up — the tree row's tooltip, in the same words.
     private var standing: String? {
-        guard let newest = versions.first else { return nil }
-        if let chainNewest, newest.id != chainNewest.id {
-            return "Not in the newest backup — last backed up \(Format.timestamp(newest.time))"
-        }
-        let held = Format.plural(versions.count, "backup")
-        let span = versionCount.map { "\(Format.plural($0, "version")) in \(held)" } ?? "In \(held)"
-        return "\(span) · newest \(Format.ago(newest.time, now: now))"
+        guard let newestHolder, let chainNewest, newestHolder.id != chainNewest.id else { return nil }
+        return "Not in the newest backup — last backed up \(Format.timestamp(newestHolder.time))"
     }
 }

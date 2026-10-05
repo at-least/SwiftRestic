@@ -533,8 +533,20 @@ struct FilesTreeRow: View {
             }
             .foregroundStyle(entry.isInNewest ? .primary : .secondary)
             .help(Self.help(for: entry))
-            .accessibilityLabel(entry.isInNewest ? title : "\(title), not in the newest backup")
+            .accessibilityLabel(entry.isInNewest
+                ? title
+                : "\(title), not in the newest backup, last backed up \(Format.timestamp(entry.newest.time))")
             Spacer(minLength: 0)
+            // The day it was last backed up, on the row: what made it dim,
+            // without a hover. VoiceOver has it in the label above.
+            if !entry.isInNewest {
+                Text(Format.until(entry.newest.time))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .accessibilityHidden(true)
+            }
         }
     }
 

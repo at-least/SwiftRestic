@@ -46,16 +46,14 @@ struct FileVersionsView: View {
     @ViewBuilder
     private var list: some View {
         if versions.isEmpty {
-            ContentUnavailableView(
-                "No backup holds it yet",
-                systemImage: "clock.arrow.circlepath",
-                description: Text("The index is still reading this repository's backups.")
-            )
+            // Why is the pane's banner's to say, while the index reads.
+            ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
         } else {
             List(versions, selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) { version in
                 FileVersionRow(
                     version: version,
-                    detail: version.snapshots.first.flatMap { details[$0.id] },
+                    detail: detail(of: version),
+                    olderDetail: older(than: version).flatMap(detail(of:)),
                     isReadingDetail: isReadingDetails
                 )
                 // The list's own drag, no gesture on the row (the Restore
@@ -110,6 +108,20 @@ struct FileVersionsView: View {
         .padding(12)
     }
 
+    /// A version's newest backup's node of the file, once the find has
+    /// answered.
+    private func detail(of version: ContentVersion) -> SnapshotNode? {
+        version.snapshots.first.flatMap { details[$0.id] }
+    }
+
+    /// The version below `version` in the list — the one it follows.
+    private func older(than version: ContentVersion) -> ContentVersion? {
+        guard let index = versions.firstIndex(where: { $0.id == version.id }), index + 1 < versions.count else {
+            return nil
+        }
+        return versions[index + 1]
+    }
+
     /// The file as the chosen version's newest backup holds it: the find's
     /// node when it has answered, else the bare path, which restores the
     /// same bytes.
@@ -158,12 +170,15 @@ struct FileVersionsView: View {
     }
 }
 
-/// One version: when the file was modified then and how big it was, the
-/// backups that held it, and how it follows the version before.
+/// One version: when the file was modified then — what picks Tuesday's
+/// copy — how big it was and how that moved from the version below, and,
+/// for a content several backups held, which backups.
 private struct FileVersionRow: View {
     let version: ContentVersion
     /// The newest backup's node of the file, once the find has answered.
     let detail: SnapshotNode?
+    /// The same for the version below, which the size change counts from.
+    let olderDetail: SnapshotNode?
     let isReadingDetail: Bool
 
     var body: some View {
@@ -172,15 +187,20 @@ private struct FileVersionRow: View {
                 Text(modified)
                     .foregroundStyle(detail?.mtime == nil ? .secondary : .primary)
                     .accessibilityLabel(detail?.mtime == nil ? missing("Modified date") : modified)
-                Text(backedUp)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let heldBy {
+                    Text(heldBy)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
-            Text(sinceText)
-                .font(.caption)
-                .foregroundStyle(version.since == .uncertain ? .secondary : .tertiary)
-                .help(sinceHelp)
+            if let changeText {
+                Text(changeText)
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .help(changeHelp)
+            }
             Text(size)
                 .font(.callout)
                 .monospacedDigit()
@@ -210,27 +230,33 @@ private struct FileVersionRow: View {
         isReadingDetail ? "\(value) still being read" : "\(value) not known"
     }
 
-    /// "Backed up Oct 3, 2026 at 9:00 PM" for one backup; for several, the
-    /// newest and oldest and how many.
-    private var backedUp: String {
-        guard let newest = version.snapshots.first, let oldest = version.snapshots.last else { return "" }
-        if version.snapshots.count == 1 { return "Backed up \(Format.timestamp(newest.time))" }
-        return "Backed up \(Format.timestamp(oldest.time)) – \(Format.timestamp(newest.time)) · \(Format.plural(version.snapshots.count, "backup"))"
+    /// "In 4 backups · Oct 2 – Oct 4, 2026" for a content several backups
+    /// held — the span "Tuesday's version" may sit in; nil for one backup's,
+    /// whose moment the restore sheet names.
+    private var heldBy: String? {
+        guard version.snapshots.count > 1, let newest = version.snapshots.first, let oldest = version.snapshots.last
+        else { return nil }
+        let span = Format.historySpan(oldest: oldest.time, newest: newest.time)
+        return "In \(Format.plural(version.snapshots.count, "backup")) · \(span)"
     }
 
-    private var sinceText: String {
-        switch version.since {
-        case .changed: "Changed"
-        case .uncertain: "May have changed"
-        case nil: "Oldest"
+    private var change: FileVersionChange {
+        .between(since: version.since, newerSize: detail?.size, olderSize: olderDetail?.size, isReading: isReadingDetail)
+    }
+
+    private var changeText: String? {
+        switch change {
+        case .none: nil
+        case let .size(text): text
+        case .mayBeIdentical: "May be identical"
         }
     }
 
-    private var sinceHelp: String {
-        switch version.since {
-        case .changed: "restic's diff of this backup with the one before said the file changed"
-        case .uncertain: "No diff compared this backup with the one before, or the file was absent in between: its content may be the same"
-        case nil: "The oldest content of this file in the plan's backups"
-        }
+    /// How the index came to cut here — the provenance the row no longer
+    /// spells.
+    private var changeHelp: String {
+        if version.since == .changed { return "restic's diff of this backup with the one before said the file changed" }
+        let uncompared = "No diff compared this backup with the one before, or the file was absent in between"
+        return change == .mayBeIdentical ? "\(uncompared): its content may be the same" : "\(uncompared); the sizes differ"
     }
 }

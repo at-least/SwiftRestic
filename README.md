@@ -59,23 +59,28 @@ checked in so a normal build does not need it.
   failed; the warning's tooltip names the plan.
 - **Overview | Files** — a plan's page has both, in the window toolbar.
   Overview is its cards; Files lists its folders and files across every
-  backup it made, items its newest backup no longer holds included and
-  dimmed: the tree on the left, starting at the page's edge (drag that edge
+  backup it made, items its newest backup no longer holds included, dimmed
+  and wearing the day they were last backed up (*until Oct 2*), which the
+  pane's header says in full: the tree on the left, starting at the page's edge (drag that edge
   to widen it), the folder or file picked in it on the right. A first visit
   opens at the plan's first folder. The tree comes from the snapshot index;
   while the index is still reading a repository it fills in as it goes, and
   a plan the index holds nothing of yet lists its newest backup. A folder
   lists at most 200 items in the tree, then one row that opens the folder in
-  the pane. Picking a folder lists it as a backup held it — *As backed up*
-  picks which of the backups holding it, newest first — where items select
+  the pane. Picking a folder lists it as a backup held it, each file with its
+  size — *As backed up* picks which of the backups holding it, by its
+  moment, newest first — where items select
   several at a time and restore together, drag to Finder, or open in the
   tree with a double-click, keeping the chosen time when they existed then;
   with nothing selected, *Restore Folder…* restores the whole folder.
-  Picking a file lists its versions — each content it had, with the backups
-  that held it unchanged (“3 versions in 214 backups”), from the index: a
-  version starts where restic's diff said the file changed, or *may have
-  changed* where no diff compared two backups or the file was absent in
-  between. Each row's modification time and size come from one `restic
+  Picking a file lists its versions — each content it had, from the index: a
+  version starts where restic's diff said the file changed, or where no diff
+  compared two backups or the file was absent in between. A row says when
+  the file was modified and how big it was, how that size moved from the
+  version below (*+17 bytes*, *Same size*) — or *May be identical* where no
+  diff split the two and their sizes do not tell them apart — and, for a
+  content several backups held, which (*In 4 backups · Oct 2 – Oct 4,
+  2026*). Each row's modification time and size come from one `restic
   find` of the file's exact path, its glob characters escaped, asked once
   per backup: the index keeps each answer, so going back to a file — after
   a relaunch too — runs no restic — and an opened folder's files are read
