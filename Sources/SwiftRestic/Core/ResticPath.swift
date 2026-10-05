@@ -65,4 +65,11 @@ enum ResticPath {
         guard let last = path.unicodeScalars.lastIndex(of: "/") else { return path }
         return last == path.unicodeScalars.startIndex ? "/" : String(path.unicodeScalars[..<last])
     }
+
+    /// Whether `path` is `folder` or inside it, byte for byte, as the index
+    /// compares paths: "/Data2" is not inside "/Data".
+    static func holds(_ folder: String, _ path: String) -> Bool {
+        if path.utf8.elementsEqual(folder.utf8) { return true }
+        return path.utf8.starts(with: (folder == "/" ? folder : folder + "/").utf8)
+    }
 }

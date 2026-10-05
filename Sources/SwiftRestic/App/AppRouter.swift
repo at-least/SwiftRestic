@@ -161,23 +161,16 @@ final class AppRouter {
     /// holds it, so the tree lists the item's row: Show Versions, and a hit
     /// picked in a Files tab's search. Nothing opens when no top holds it.
     func openFolders(above item: FileNode, from tops: [String]) {
-        guard let top = tops.filter({ Self.holds($0, item.path) }).max(by: { $0.utf8.count < $1.utf8.count })
+        guard let top = tops.filter({ ResticPath.holds($0, item.path) }).max(by: { $0.utf8.count < $1.utf8.count })
         else { return }
         var above = ResticPath.parent(of: item.path)
-        while Self.holds(top, above) {
+        while ResticPath.holds(top, above) {
             openFolders.insert(FileNode(repositoryID: item.repositoryID, chainKey: item.chainKey, path: above, isDirectory: true))
             // The root is its own parent: a whole-disk backup's top ends the
             // walk here.
             if above.utf8.elementsEqual(top.utf8) { break }
             above = ResticPath.parent(of: above)
         }
-    }
-
-    /// Whether `path` is `folder` or inside it, byte for byte, as the
-    /// index compares paths.
-    private static func holds(_ folder: String, _ path: String) -> Bool {
-        if path.utf8.elementsEqual(folder.utf8) { return true }
-        return path.utf8.starts(with: (folder == "/" ? folder : folder + "/").utf8)
     }
 
     /// The toolbar picker's binding for one page.

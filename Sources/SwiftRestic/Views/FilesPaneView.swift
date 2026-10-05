@@ -85,7 +85,12 @@ struct FilesPaneView: View {
         } else if node.isDirectory {
             FolderVersionsView(node: node, versions: versions, chosenID: choice, onOpen: onOpen)
         } else {
-            FileVersionsView(node: node, versions: contentVersions, chosenID: choice)
+            FileVersionsView(
+                node: node, versions: contentVersions, chosenID: choice,
+                diskPath: DiskFile.localPath(
+                    of: node.path, newestBackup: chainNewest, localHostname: model.localHostname
+                )
+            )
         }
     }
 

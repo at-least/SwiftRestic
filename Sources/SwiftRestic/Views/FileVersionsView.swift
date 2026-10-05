@@ -14,13 +14,22 @@ struct FileVersionsView: View {
     let versions: [ContentVersion]
     /// The chosen version, by its newest backup's ID.
     @Binding var chosenID: String?
+    /// Where the file is on this Mac, when the chain backs up this Mac's
+    /// folders by their own paths (`DiskFile.localPath`); nil says nothing
+    /// of the disk.
+    let diskPath: String?
 
     /// Each version's newest backup's node of the file — size and
     /// modification time — by backup ID; empty until the answer lands.
     @State private var details: [String: SnapshotNode] = [:]
     @State private var detailsError: String?
-    @State private var isReadingDetails = false
+    /// True from the start: the find begins as the pane opens, and the
+    /// first frame must not read as one that has finished — the disk line
+    /// would say "matches none" a moment before it matches.
+    @State private var isReadingDetails = true
     @State private var destinationRequest: RestoreDestinationRequest?
+    /// The file as this Mac holds it now, read with the versions' details.
+    @State private var disk: DiskFile?
     @FocusState private var listIsFocused: Bool
 
     private var chosen: ContentVersion? {
@@ -29,6 +38,16 @@ struct FileVersionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let diskLine {
+                Label(diskLine, systemImage: "laptopcomputer")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .help(diskPath ?? "")
+                Divider()
+            }
             list
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
@@ -37,6 +56,10 @@ struct FileVersionsView: View {
         // One find per file shown, again when the versions change under a
         // newer listing or a re-read of the index.
         .task(id: versions.map(\.id)) { await readDetails() }
+        // A restore can put a version back where it came from: the disk is
+        // read again once it ends, as when the pane opens.
+        .task(id: diskPath) { disk = diskPath.map(DiskFile.at) }
+        .onChange(of: model.isRestoring) { disk = diskPath.map(DiskFile.at) }
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)
@@ -106,6 +129,15 @@ struct FileVersionsView: View {
             }
         }
         .padding(12)
+    }
+
+    /// What the pane says of the copy on this Mac, against the versions'
+    /// sizes and dates once the find has read them.
+    private var diskLine: String? {
+        disk?.line(
+            versions: versions.map { version in (detail(of: version)?.size, detail(of: version)?.mtime) },
+            isReading: isReadingDetails
+        )
     }
 
     /// A version's newest backup's node of the file, once the find has

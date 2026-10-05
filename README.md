@@ -85,7 +85,11 @@ checked in so a normal build does not need it.
   version below (*+17 bytes*, *Same size*) — or *May be identical* where no
   diff split the two and their sizes do not tell them apart — and, for a
   content several backups held, which (*In 4 backups · Oct 2 – Oct 4,
-  2026*). Each row's modification time and size come from one `restic
+  2026*). Above them, for a file this Mac backed up by its own path, one
+  line says what the copy here is: *the same as the newest version*, the
+  same as an older one, none of them (with its own date and size), or *Not
+  on this Mac* — one `lstat`, compared by size and modification time to
+  restic's millisecond, read again when a restore ends. Each row's modification time and size come from one `restic
   find` of the file's exact path, its glob characters escaped, asked once
   per backup: the index keeps each answer, so going back to a file — after
   a relaunch too — runs no restic — and an opened folder's files are read
