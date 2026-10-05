@@ -96,6 +96,17 @@ final class AppRouter {
     /// shown again.
     var filesSearchText: [FileNode: String] = [:]
 
+    /// The Files view whose search field takes the keyboard focus next, by
+    /// its chain's roots — ⇧⌘F and the toolbar's magnifier on a plan's or a
+    /// group's page. The field spends it once it has the focus.
+    var filesSearchFocus: FileNode?
+
+    /// ⇧⌘F on a page with a Files tab: the tab, its search field focused.
+    func searchFiles(on page: SidebarItem, roots: FileNode) {
+        pageTabs[page] = .files
+        filesSearchFocus = roots
+    }
+
     /// The backup a folder's listing was read from when one of its items
     /// was opened from it: the item's pane opens at it when the item exists
     /// then, so walking down keeps the era. Transient; the next Files pane

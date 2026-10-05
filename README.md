@@ -201,11 +201,13 @@ checked in so a normal build does not need it.
   the search on in Find Files.
 - **Find files across snapshots** — search every snapshot for a name or glob when
   you do not know which backup still has the file, then restore the match. It
-  opens on the repository you are looking at — a selected plan's, backup
-  record's or group's; the first repository when the selection names none
-  (Activity, the console, nothing) — unless the Restore pane's *Search All
-  Backups…* handed a search over, which names its own repository. The
-  toolbar's magnifier, or ⇧⌘F.
+  opens on the repository you are looking at — a selected repository's or
+  backup record's; the first repository when the selection names none
+  (Activity, the console, nothing) — unless a *Search All Backups…* handed a
+  search over (the Restore pane's, or a Files tab's with no match), which
+  names its own repository. The toolbar's magnifier, or ⇧⌘F — except on a
+  plan's or a group's page, where both turn the page to its Files tab and
+  put the keyboard in its search field, which searches that page's backups.
 - **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
   runs `restic diff` against the previous snapshot of the same folders from the
   same Mac (any earlier one can be chosen) and lists what was added, removed or
@@ -412,10 +414,12 @@ group under Other backups, of the first moved plan's group, or of the first
 untagged lineage, with its sidebar fold open. All three wait for the snapshot
 listing that builds group rows, like `restore` does.
 `SWIFTRESTIC_CAPTURE_TAB=files` puts the page a run selects — a plan's or a
-group's — on its Files tab. `findMoved` opens Find Files on the
-first plan whose repository is not the first, so a shot shows the picker
+group's — on its Files tab. `findMoved` opens Find Files on the page of the
+first plan's repository that is not the first, so a shot shows the picker
 starting on the selection's repository rather than the landing pane's (a
-configuration without such a plan stops the run). `all` instead photographs
+configuration without such a plan stops the run). `filesSearch` asks ⇧⌘F's
+route on the first plan's page: the Files tab with its search field focused
+(`SWIFTRESTIC_CAPTURE_VERBOSE=1` logs each window's first responder). `all` instead photographs
 every pane in one run — `SWIFTRESTIC_CAPTURE` names a directory, each pane
 lands as `pane-<name>.png`, and `SWIFTRESTIC_CAPTURE_DELAY` becomes the settle
 time per pane. The sweep is the whole-window regression check: a defect like macOS 26's

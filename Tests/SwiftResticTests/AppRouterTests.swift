@@ -128,6 +128,18 @@ struct AppRouterTests {
         #expect(router.tab(of: group) == .files)
     }
 
+    @Test("⇧⌘F on a page turns it to its Files tab and asks that tab's field, and no other, for the focus")
+    func searchFilesFocusesThePagesField() {
+        let router = AppRouter()
+        let page = SidebarItem.plan(UUID())
+        let roots = FileNode.roots(repositoryID: UUID(), chainKey: "swiftrestic-plan-aaaa")
+        router.selection = page
+        router.searchFiles(on: page, roots: roots)
+        #expect(router.tab(of: page) == .files)
+        #expect(router.selection == page)
+        #expect(router.filesSearchFocus == roots)
+    }
+
     @Test("a search's hit opens the folders above it down from the deepest top holding it, and a whole-disk top ends the walk")
     func openFoldersAboveAHit() {
         let repositoryID = UUID()

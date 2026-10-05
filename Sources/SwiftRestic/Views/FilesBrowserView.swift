@@ -124,10 +124,15 @@ struct FilesBrowserView: View {
     /// the selection.
     private var navigator: some View {
         VStack(spacing: 0) {
-            SearchField(placeholder: searchPrompt, text: Binding(
-                get: { router.filesSearchText[roots] ?? "" },
-                set: { router.filesSearchText[roots] = $0 }
-            ))
+            SearchField(
+                placeholder: searchPrompt,
+                text: Binding(
+                    get: { router.filesSearchText[roots] ?? "" },
+                    set: { router.filesSearchText[roots] = $0 }
+                ),
+                takesFocus: router.filesSearchFocus == roots,
+                onFocus: { router.filesSearchFocus = nil }
+            )
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             Divider()

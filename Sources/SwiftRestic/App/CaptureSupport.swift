@@ -140,8 +140,12 @@ extension AppDelegate {
         // app was launched without being activated, so check for a sheet first.
         if environmentFlag("SWIFTRESTIC_CAPTURE_VERBOSE") {
             for window in NSApp.windows {
+                // A field being typed in answers through its field editor, a
+                // text view whose delegate is the field: both are named.
+                let responder = window.firstResponder
+                let editing = (responder as? NSTextView)?.delegate.map { " editing \(type(of: $0))" } ?? ""
                 Self.debugLog(
-                    "capture: \(type(of: window)) title=\"\(window.title)\" frame=\(window.frame) sheet=\(window.isSheet) visible=\(window.isVisible) key=\(window.isKeyWindow)"
+                    "capture: \(type(of: window)) title=\"\(window.title)\" frame=\(window.frame) sheet=\(window.isSheet) visible=\(window.isVisible) key=\(window.isKeyWindow) firstResponder=\(responder.map { "\(type(of: $0))" } ?? "nil")\(editing)"
                 )
             }
         }

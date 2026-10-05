@@ -288,6 +288,37 @@ struct CommandStateTests {
         #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: nil) == first.id)
     }
 
+    @Test("⇧⌘F searches the Files tab of a plan's or a group's page, and Find Files everywhere else")
+    func filesSearchRootsFollowThePage() throws {
+        let model = makeModel()
+        let repository = makeRepository()
+        let plan = makePlan(on: repository)
+        let homeless = makePlan("Homeless", on: nil)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan, homeless]
+        let deleted = UUID()
+        let tagged = try IndexTestData.snapshot(
+            IndexTestData.hexID(1), micros: 1_000_000, tags: [ResticService.planTag(deleted)], paths: ["/Data"])
+        let untagged = try IndexTestData.snapshot(IndexTestData.hexID(2), micros: 2_000_000, paths: ["/Music"])
+        model.snapshots[repository.id] = [untagged, tagged]
+
+        #expect(model.filesSearchRoots(for: .plan(plan.id))
+            == FileNode.roots(repositoryID: repository.id, chainKey: ResticService.planTag(plan.id)))
+        // A group's tree hangs from its own chain — the page's summary's.
+        #expect(model.filesSearchRoots(for: .orphanPlan(repositoryID: repository.id, planID: deleted))
+            == FileNode.roots(repositoryID: repository.id, chainKey: SnapshotIndex.chainKey(for: tagged)))
+        #expect(model.filesSearchRoots(for: .lineage(repositoryID: repository.id, key: untagged.lineageKey))
+            == FileNode.roots(repositoryID: repository.id, chainKey: SnapshotIndex.chainKey(for: untagged)))
+        // No tree to search: a plan with nowhere to back up, a group the
+        // listing no longer builds, and every page with no Files tab.
+        for selection: SidebarItem? in [
+            .plan(homeless.id), .orphanPlan(repositoryID: repository.id, planID: UUID()),
+            .repository(repository.id), .restoreSnapshot(repository.id, tagged.id), .activity, .console, nil,
+        ] {
+            #expect(model.filesSearchRoots(for: selection) == nil, "selection \(String(describing: selection))")
+        }
+    }
+
     @Test("a busy repository holds maintenance and retention back, never its removal")
     func busyRepositoryBlocksMaintenanceAndRetentionNotRemoval() {
         let model = makeModel()

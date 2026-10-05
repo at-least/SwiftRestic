@@ -176,8 +176,10 @@ struct RootView: View {
     /// The toolbar's look, its one app-wide button, and the banner
     /// announcements. Each pane carries its own verbs; Find Files is the
     /// exception, because looking for a lost file starts from wherever the
-    /// user is — Arq keeps its search across backups on screen too. The
-    /// console stays in the Repository menu (restic Console…).
+    /// user is — Arq keeps its search across backups on screen too. On a
+    /// plan's or a group's page that search is the Files tab's own field,
+    /// so the button goes there. The console stays in the Repository menu
+    /// (restic Console…).
     private func chrome<V: View>(over content: V) -> some View {
         content
         .toolbar {
@@ -187,7 +189,9 @@ struct RootView: View {
                     router.request(.showFind)
                 }
                 .disabled(!model.repositoryCommands(for: router.selection).canFind)
-                .help("Find files in every backup (⇧⌘F)")
+                .help(model.filesSearchRoots(for: router.selection) == nil
+                    ? "Find files in every backup (⇧⌘F)"
+                    : "Search this page's backups by name, on its Files tab (⇧⌘F)")
             }
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
@@ -324,19 +328,25 @@ struct RootView: View {
         case "activity": router.selection = .activity
         case "find": isShowingFind = true
         // The Find pane on a selection naming a non-first repository — the
-        // first plan whose repository is not the landing pane's. Plain
+        // page of the first plan's repository that is not the landing
+        // pane's (a plan's own page searches its Files tab instead). Plain
         // `find` cannot tell the opening rule from the first-repository
         // fallback: the landing selection IS the first repository, so both
         // read the same there — so a configuration without such a plan
         // stops the run rather than photographing that fallback.
         case "findMoved":
-            guard let plan = model.configuration.plans.first(where: {
-                $0.repositoryID != model.configuration.repositories.first?.id
+            guard let repositoryID = model.configuration.plans.lazy.compactMap(\.repositoryID).first(where: {
+                $0 != model.configuration.repositories.first?.id
             }) else {
                 preconditionFailure("findMoved needs a plan whose repository is not the first")
             }
-            router.selection = .plan(plan.id)
+            router.selection = .repository(repositoryID)
             isShowingFind = true
+        // ⇧⌘F on the first plan's page, through the menu's own route: the
+        // page turns to its Files tab, the search field focused.
+        case "filesSearch":
+            router.selection = model.configuration.plans.first.map { .plan($0.id) }
+            router.request(.showFind)
         // The first plan's page on its Files tab, its first source open and
         // selected — or SWIFTRESTIC_CAPTURE_ITEM, an absolute path under
         // that source (a folder spelled with a trailing slash), with every
@@ -494,7 +504,14 @@ struct RootView: View {
         case .newRepository:
             editingRepository = Repository()
         case .showFind:
-            isShowingFind = true
+            // A plan's or a group's page searches its own history in its
+            // Files tab's field; every other pane, the whole repository in
+            // Find Files.
+            if let page = router.selection, let roots = model.filesSearchRoots(for: page) {
+                router.searchFiles(on: page, roots: roots)
+            } else {
+                isShowingFind = true
+            }
         case .showConcepts:
             isShowingConcepts = true
         case .showConsole:

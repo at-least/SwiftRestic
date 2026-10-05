@@ -12,13 +12,18 @@ import SwiftUI
 struct SearchField: NSViewRepresentable {
     let placeholder: String
     @Binding var text: String
+    /// Asks the field to take the keyboard focus — ⇧⌘F on a Files tab.
+    /// `onFocus` runs once it has, so the asker can spend the ask; a field
+    /// the ask created takes it as soon as it is in the window.
+    var takesFocus = false
+    var onFocus: () -> Void = {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
     }
 
-    func makeNSView(context: Context) -> NSSearchField {
-        let field = NSSearchField()
+    func makeNSView(context: Context) -> FocusableSearchField {
+        let field = FocusableSearchField()
         field.placeholderString = placeholder
         // Without a label VoiceOver has only the placeholder, which it reads
         // as a value hint, not as the field's name.
@@ -29,7 +34,7 @@ struct SearchField: NSViewRepresentable {
         return field
     }
 
-    func updateNSView(_ field: NSSearchField, context: Context) {
+    func updateNSView(_ field: FocusableSearchField, context: Context) {
         context.coordinator.text = $text
         if field.placeholderString != placeholder {
             field.placeholderString = placeholder
@@ -37,6 +42,7 @@ struct SearchField: NSViewRepresentable {
         }
         // How the pane's reset on a record switch reaches the field.
         if field.stringValue != text { field.stringValue = text }
+        if takesFocus { field.focus(then: onFocus) }
     }
 
     @MainActor
@@ -52,5 +58,30 @@ struct SearchField: NSViewRepresentable {
                 text.wrappedValue = sender.stringValue
             }
         }
+    }
+}
+
+/// The field behind `SearchField`, which can be asked for the keyboard
+/// focus before it is in a window: a Files tab that ⇧⌘F opened builds its
+/// field in the same update that asks, so the ask waits for the window.
+final class FocusableSearchField: NSSearchField {
+    private var pendingFocus: (() -> Void)?
+
+    /// Takes the focus — a turn later, out of the update that asked, since
+    /// `done` writes the state that asked — or once the field is in a window.
+    func focus(then done: @escaping () -> Void) {
+        pendingFocus = done
+        Task { @MainActor [weak self] in self?.takePendingFocus() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        Task { @MainActor [weak self] in self?.takePendingFocus() }
+    }
+
+    private func takePendingFocus() {
+        guard let done = pendingFocus, let window, window.makeFirstResponder(self) else { return }
+        pendingFocus = nil
+        done()
     }
 }

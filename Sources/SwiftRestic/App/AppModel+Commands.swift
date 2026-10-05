@@ -154,6 +154,30 @@ extension AppModel {
         prefillRepositoryID ?? commandRepositoryID(for: selection) ?? configuration.repositories.first?.id
     }
 
+    /// The Files tab ⇧⌘F and the toolbar's magnifier search on this
+    /// selection, by the roots its tree hangs from: a plan's with a
+    /// repository set, or a group's under Other backups — the pages whose
+    /// Files tab lists a tree. Nil on every other pane, where they open Find
+    /// Files over the whole repository.
+    func filesSearchRoots(for selection: SidebarItem?) -> FileNode? {
+        func group(_ repositoryID: UUID, _ id: OtherBackupsGroup.ID) -> FileNode? {
+            shelves(for: repositoryID)
+                .otherGroupPage(id, repositories: configuration.repositories, localHost: localHostname)
+                .map { FileNode.roots(repositoryID: repositoryID, chainKey: $0.chainKey) }
+        }
+        switch selection {
+        case let .plan(id):
+            guard let repositoryID = plan(id: id)?.repositoryID else { return nil }
+            return FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(id))
+        case let .orphanPlan(repositoryID, planID):
+            return group(repositoryID, .plan(planID))
+        case let .lineage(repositoryID, key):
+            return group(repositoryID, .lineage(key))
+        case .repository, .restoreSnapshot, .console, .activity, nil:
+            return nil
+        }
+    }
+
     // MARK: - Confirmations
 
     /// A confirmation's title and message, naming its target — the dialog
