@@ -203,7 +203,7 @@ struct FilesBrowserView: View {
                     // Verbatim: a query is no Markdown — its asterisks would
                     // be eaten as emphasis.
                     Text(verbatim: answer.isComplete
-                        ? "Nothing in these backups matches “\(query)”."
+                        ? "No name in these backups has a word starting with “\(query)”."
                         : FilesSearchAnswer.indexStillReading)
                 } actions: {
                     Button("Search All Backups…") { onSearchAllBackups(roots.repositoryID, query) }
@@ -222,7 +222,7 @@ struct FilesBrowserView: View {
                     .onKeyPress(.return, phases: .down) { endSearch($0) }
                     .onKeyPress(.escape, phases: .down) { endSearch($0) }
                     .help("Return or Esc ends the search and shows the selected item in the tree")
-                    if let note = FilesSearchAnswer.note(count: entries.count, isComplete: answer.isComplete) {
+                    if let note = FilesSearchAnswer.note(isTruncated: answer.isTruncated, isComplete: answer.isComplete) {
                         Divider()
                         Text(note)
                             .font(.caption)
@@ -262,16 +262,20 @@ struct FilesBrowserView: View {
             // from.
             let complete = await model.indexIsComplete(repositoryID: roots.repositoryID)
             let outcome: FilesSearchAnswer.Outcome
+            var isTruncated = false
             do {
                 let found = try await model.searchIndex(
                     pattern: query, inChain: roots.chainKey, repositoryID: roots.repositoryID
                 )
-                outcome = .hits(FilesSearchAnswer.entries(found, under: roots))
+                outcome = .hits(FilesSearchAnswer.entries(found.hits, under: roots))
+                isTruncated = found.isTruncated
             } catch {
                 outcome = .failed((error as? ResticError)?.errorDescription ?? error.localizedDescription)
             }
             guard !Task.isCancelled else { return }
-            searchAnswer = FilesSearchAnswer(roots: roots, query: query, outcome: outcome, isComplete: complete)
+            searchAnswer = FilesSearchAnswer(
+                roots: roots, query: query, outcome: outcome, isComplete: complete, isTruncated: isTruncated
+            )
             guard !complete, case .hits = outcome else { return }
             do {
                 try await Task.sleep(for: FilesTree.recheckInterval)

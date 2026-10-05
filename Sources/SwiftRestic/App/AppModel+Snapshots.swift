@@ -214,7 +214,13 @@ extension AppModel {
         return nodes
     }
 
-    /// Searches a repository's snapshots for a path pattern.
+    /// Searches a repository's snapshots for a path pattern. A pattern with
+    /// no glob character is looked for inside names (`*word*`): restic
+    /// matches a pattern against whole names, so a bare word found only an
+    /// item named exactly that — "notes" nothing on the demo repository,
+    /// "*notes*" six files (probed, restic 0.19.1) — and a bare word is
+    /// what a Files tab's "Search All Backups…" hands over, the index's own
+    /// search taking words.
     func findFiles(
         repositoryID: UUID,
         pattern: String,
@@ -222,9 +228,10 @@ extension AppModel {
     ) async throws -> [FindResult] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         let (service, context) = try await resticContext(for: repository)
+        let isGlob = pattern.unicodeScalars.contains { "*?[\\".unicodeScalars.contains($0) }
         return try await service.find(
             context,
-            patterns: [pattern],
+            patterns: [isGlob ? pattern : "*\(pattern)*"],
             ignoreCase: true,
             snapshotIDs: latestOnly ? ["latest"] : []
         )

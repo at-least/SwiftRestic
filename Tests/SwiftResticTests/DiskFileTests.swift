@@ -49,6 +49,8 @@ struct DiskFileTests {
         #expect(disk.line(versions: [(89, older), (nil, nil)], isReading: false) == "On this Mac: \(facts)")
         // While the find runs, nothing.
         #expect(disk.line(versions: [(106, asRestic)], isReading: true) == nil)
+        // No version to compare with is no verdict either.
+        #expect(disk.line(versions: [], isReading: false) == "On this Mac: \(facts)")
     }
 
     @Test("only this Mac's backups of a folder by its own path compare with the disk")

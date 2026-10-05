@@ -72,10 +72,10 @@ enum DiskFile: Equatable {
             case let index?:
                 return "On this Mac: the same as the version modified \(Format.timestamp(versions[index].modified))"
             case nil:
-                // Without every version's size and date, "matches none"
-                // would be a guess.
+                // Without every version's size and date — or with no
+                // version at all — "matches none" would be a guess.
                 let facts = "modified \(Format.timestamp(modified)), \(Format.bytes(size))"
-                return versions.allSatisfy({ $0.size != nil && $0.modified != nil })
+                return !versions.isEmpty && versions.allSatisfy({ $0.size != nil && $0.modified != nil })
                     ? "On this Mac: \(facts) — no version here matches it"
                     : "On this Mac: \(facts)"
             }

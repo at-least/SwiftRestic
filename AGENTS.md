@@ -205,7 +205,7 @@ What was checked live, one capture each, in light mode, against a scratch config
 - the plan page, idle and scheduled;
 - a plan's Files tab, its first folder opened and selected on a first visit;
 - a plan-UUID group's Files tab, an untagged lineage's page and its Files tab;
-- a file pane: "3 versions in 4 backups", with sizes matching the demo files (seen when the pane still sat beside the sidebar's tree; the pane is unchanged);
+- a file pane: "3 versions in 4 backups", with sizes matching the demo files (seen when the pane still sat beside the sidebar's tree; that header line is gone since `0e9923f`);
 - the Files tab on a first launch after the repository gained and lost backups — wrong before `0ede383`, right after;
 - the window not overflowing with a long root path, after the split moved from HSplitView to an HStack (`939fa63`);
 - dark mode of the plan page, a plan's Files tab, a lineage's page and a group's Files tab.
@@ -230,7 +230,7 @@ Checked live later the same day, against scratch copies of that configuration:
 - the Pause arrow, opened through the accessibility API: For 1 Hour, Until Tomorrow, Until I Resume. No length was chosen;
 - through the accessibility API, on a plan page: pressing Files; the Plan menu with Back Up Now, Edit Plan… and Pause Schedule enabled there (Stop Backup grey); the repository page, which has no segment, and back to the plan on Files; an older backup chosen in a folder's pane, then Show in Backups — the Restore pane opened at that backup with the folder selected and open, its plan's fold open — and back to the plan on Files with the folder still selected;
 - a relaunch: the plan page opened on Overview after the last session left it on Files;
-- 1,000 backups (a scratch repository of 2,060 files, three changing per backup; local disk; other work loading the Mac): the index read all of it from empty in 8 min 56 s; the file pane said "100 versions in 1,000 backups" and had every version's Modified and size by the capture, 30 s in. Its `restic find` alone took 6.9–8.5 s, three runs, against 0.6 s at 12 backups.
+- 1,000 backups (a scratch repository of 2,060 files, three changing per backup; local disk; other work loading the Mac): the index read all of it from empty in 8 min 56 s; the file pane said "100 versions in 1,000 backups" (a header line `0e9923f` has since removed) and had every version's Modified and size by the capture, 30 s in. Its `restic find` alone took 6.9–8.5 s, three runs, against 0.6 s at 12 backups.
 
 ### Not verified
 
@@ -247,6 +247,19 @@ Fixed after that run, each checked where it was seen:
 - **The tree brings a selected item into view**, once, when its row or its folder's "more items" row is listed (`FilesTree.row(showing:in:)`, unit-tested). Captured: the 43rd file of an open folder, out of sight before, in view after; a file past the 200-item cap brought the "60 more items…" row into view — the first time that row was seen live.
 - **The file pane's `restic find` names each version's newest backup** (`--snapshot`, up to 2,000, past that every backup), the only rows it reads. A real-restic test pins the narrowing and that a name restic no longer holds is skipped (a stderr warning, exit 0, restic 0.19.1). Timed with the pane's exact arguments, 100 of the 1,000 backups against all: 1.6 s of CPU against 10.9 s (28–33 s and 156 s of wall time that hour, at load averages near 60).
 - **The pane no longer swaps its view for "Reading…" on every re-read** while the index has not reached the item: only the first read shows it. Before, the folder view was made anew each time — four times in one minute of the setup below, once after.
+
+### The search field and the trimmed panes (2026-10-05)
+
+`deaace2`..`a35ee15` put a search over each Files tab's tree, sent ⇧⌘F and the magnifier there on plan and group pages, cut the panes to what picks a copy, and added a folder's changes since the backup before and the file's state on this Mac. Seen live on the demo configuration, light mode:
+- captures: hits for "notes" and "onboarding" (the dropped checklist dimmed, "until Oct 2"), a search with no match and Search All Backups…, the trimmed file and folder panes, "On this Mac: the same as the newest version" and "Not on this Mac", the folder change lines;
+- the ⇧⌘F route (capture pane `filesSearch`): the window's first responder became the field's editor, and on the plain `files` pane it stays the tree;
+- through the accessibility API on a scratch instance: a hit picked, then the field's clear button pressed — the tree came back with the hit's folders open and its row selected; Quarterly at Oct 2 ("2 modified", two rows Modified) and Reports at Oct 3 ("1 removed", the checklist named), both as `restic diff` of the same backups says.
+
+Not verified: Return and Esc in the hits, and the scroll on a list long enough to need it (no key could be posted safely); the hits at scale; a disk line naming an older version or none (unit-tested only); dark mode and VoiceOver over the field, the hits, the change marks and lines, and the disk line.
+
+Facts for the next scripted run:
+- A capture run that stops on a precondition (`findMoved` on a one-repository configuration does) leaves macOS's "reopen windows?" prompt, which then hangs every later run of the app — capture or not — until answered. Launch with `-ApplePersistenceIgnoreState YES`.
+- A popup's menu items carry a narrow no-break space (U+202F) before AM and PM: match titles after flattening it.
 
 ### Not handled
 

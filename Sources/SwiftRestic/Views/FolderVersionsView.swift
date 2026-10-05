@@ -117,7 +117,7 @@ struct FolderVersionsView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
-            .help("Compared with the backup before that holds this folder — what changed inside its folders is theirs to say")
+            .help("Compared with the backup before that holds this folder — what changed inside its folders is theirs to say, and a change of a file's dates or permissions alone is not counted")
         }
     }
 
@@ -178,10 +178,13 @@ struct FolderVersionsView: View {
                 .disabled(chosen == nil)
                 .help("Open this backup at this folder, in the sidebar's list of backups — see what changed, search it, or restore the whole backup")
                 Spacer()
-                Button(selection.isEmpty ? "Restore Folder…" : "Restore…") { restoreSelection() }
+                // By the rows selected in this listing, not the ids kept
+                // across a flip: while a backup's listing is read, or after
+                // its read failed, none are, and the button is the folder's.
+                Button(selectedNodes.isEmpty ? "Restore Folder…" : "Restore…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)
-                    .help(selection.isEmpty
+                    .help(selectedNodes.isEmpty
                         ? "Restore this whole folder as of the chosen backup"
                         : "Restore the selected items as of the chosen backup (Return)")
             }
@@ -233,12 +236,14 @@ struct FolderVersionsView: View {
     }
 
     /// The listing at the chosen backup. Only the newest ask writes: a flip
-    /// while a read is in flight cancels it with the task.
+    /// while a read is in flight cancels it with the task. The last
+    /// backup's rows go as the flip starts: under the new backup's picker
+    /// and its change marks they would read as that backup's, and Return
+    /// would restore them from it. The selection's ids stay, to keep the
+    /// rows the new listing still holds.
     private func fetch() async {
-        guard let version = chosen else {
-            nodes = []
-            return
-        }
+        nodes = []
+        guard let version = chosen else { return }
         isLoading = true
         do {
             let loaded = try await model.children(repositoryID: node.repositoryID, snapshotID: version.id, path: node.path)
@@ -262,7 +267,7 @@ struct FolderVersionsView: View {
         guard let chosen else { return }
         let repositoryID = node.repositoryID
         let shortID = String(chosen.id.prefix(8))
-        let picked = selection.isEmpty
+        let picked = selectedNodes.isEmpty
             ? [SnapshotNode(name: node.name, type: .dir, path: node.path)]
             : selectedNodes
         let items = RestoreBatch.covering(picked)

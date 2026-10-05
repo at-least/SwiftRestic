@@ -73,11 +73,13 @@ struct ContentVersion: Sendable, Equatable, Identifiable {
 
 /// What changed directly under a folder between two indexed snapshots of a
 /// chain, each child by its path, bytewise: one holds it and the other not
-/// — added or removed — or both hold a file whose content a diff between
-/// them said changed (`modified`, a kind change too), or may have — no diff
-/// compared them, or the file was absent in between (`uncertain`). A
-/// subfolder's own contents are its level's: the marks say nothing of them,
-/// and a change of metadata alone is never recorded.
+/// — added or removed — or both hold a file whose content changed, which
+/// one diff between them said and every other step between them agrees
+/// with (`modified`, a kind change too), or may have — a step no diff
+/// compared, a file absent in between, or several changes that may undo
+/// one another (`uncertain`). A subfolder's own contents are its level's:
+/// the marks say nothing of them, and a change of metadata alone is never
+/// recorded.
 struct FolderChanges: Sendable, Equatable {
     var added: [String] = []
     var removed: [String] = []
@@ -840,9 +842,17 @@ final class SnapshotIndex: @unchecked Sendable {
             // arrival order, which a back-dated backup can put the other way
             // round from time.
             let (low, high) = (min(older.seq, newer.seq), max(older.seq, newer.seq))
-            let edited = Set(try String.fetchAll(
+            // How many diffs between the two said each file changed. One
+            // means the content differs: every step between them was diffed
+            // or is a blind, and only that one changed it. Two or more may
+            // be a change undone — across a backup forgotten since, or a
+            // pair of backups not side by side — so they only may have.
+            var edits: [PathKey: Int] = [:]
+            for name in try String.fetchAll(
                 db.cachedStatement(sql: SQL.childEditsBetween), arguments: [chainID, low, high, parent]
-            ).map { PathKey($0) })
+            ) {
+                edits[PathKey(name), default: 0] += 1
+            }
             let blind = try !Int64.fetchAll(
                 db.cachedStatement(sql: SQL.blindSeqs), arguments: [chainKey, low, high]
             ).isEmpty
@@ -866,9 +876,9 @@ final class SnapshotIndex: @unchecked Sendable {
                 } else if was.run != now.run {
                     // Absent in between: nothing compared the two.
                     changes.uncertain.append(child)
-                } else if edited.contains(name) {
+                } else if edits[name] == 1, !blind {
                     changes.modified.append(child)
-                } else if blind {
+                } else if edits[name] != nil || blind {
                     changes.uncertain.append(child)
                 }
             }

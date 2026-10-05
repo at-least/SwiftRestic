@@ -151,7 +151,7 @@ struct FindFilesView: View {
                 TextField(
                     "Pattern",
                     text: $pattern,
-                    prompt: Text(verbatim: indexComplete == true ? "File name, e.g. invoice or keynote" : "File name or pattern, e.g. *.key or invoice*")
+                    prompt: Text(verbatim: indexComplete == true ? "File name, e.g. invoice or keynote" : "File name or pattern, e.g. invoice or *.key")
                 )
                 .textFieldStyle(.roundedBorder)
                 .focused($patternFieldIsFocused)

@@ -236,4 +236,24 @@ struct ResticFilesFallbackTests {
         #expect(model.fileHistoryAnswers.isEmpty)
         await model.shutdown()
     }
+
+    /// Find Files' restic engine — what runs while the index still reads,
+    /// and what a Files tab's "Search All Backups…" hands a bare word to.
+    @MainActor
+    @Test("Find Files' restic search finds a bare word inside names, and a pattern as typed")
+    func findFilesBareWord() async throws {
+        let scene = try await ReadAheadScene()
+        defer { try? FileManager.default.removeItem(at: scene.root) }
+        let model = scene.model
+
+        func names(_ pattern: String) async throws -> Set<String> {
+            let found = try await model.findFiles(repositoryID: scene.repositoryID, pattern: pattern, latestOnly: false)
+            return Set(found.flatMap(\.matches).map(\.name))
+        }
+        // restic matches a pattern against whole names: "b.tx" alone named
+        // nothing, so a word without a glob character is looked for inside.
+        #expect(try await names("b.tx") == ["b.txt"])
+        #expect(try await names("C.*") == ["c.txt"])
+        await model.shutdown()
+    }
 }

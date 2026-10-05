@@ -163,16 +163,19 @@ extension AppModel {
 
     /// A Files tab's search: instant basename hits over what one chain ever
     /// held — items its newest backup no longer has included — each as the
-    /// tree lists it, from one read of the index. Throws when the index
-    /// itself fails, as the other searches do: "the index is broken" must
-    /// never read as "nothing matches".
-    func searchIndex(pattern: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
-        try await indexCoordinator.search(
+    /// tree lists it, from one read of the index: at most `indexSearchLimit`
+    /// of them, and whether the chain holds more — asked of the index as
+    /// one hit past the limit, so a list of exactly the limit is not called
+    /// cut short. Throws when the index itself fails, as the other searches
+    /// do: "the index is broken" must never read as "nothing matches".
+    func searchIndex(pattern: String, inChain chainKey: String, repositoryID: UUID) async throws -> (hits: [IndexChild], isTruncated: Bool) {
+        let found = try await indexCoordinator.search(
             matching: pattern,
             inChain: chainKey,
             repositoryID: repositoryID,
-            limit: AppModel.indexSearchLimit
+            limit: AppModel.indexSearchLimit + 1
         )
+        return (Array(found.prefix(AppModel.indexSearchLimit)), found.count > AppModel.indexSearchLimit)
     }
 
     /// What changed between two snapshots, keyed by normalized path — the

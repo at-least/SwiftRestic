@@ -40,8 +40,12 @@ struct SearchField: NSViewRepresentable {
             field.placeholderString = placeholder
             field.cell?.setAccessibilityLabel(placeholder)
         }
-        // How the pane's reset on a record switch reaches the field.
-        if field.stringValue != text { field.stringValue = text }
+        // How the pane's reset on a record switch reaches the field — never
+        // while it is being typed in: the binding moves only after AppKit's
+        // search delay, and a redraw inside it wrote the older text back,
+        // eating the keys typed since (probed on macOS 27). The resets all
+        // come while the field is not being edited.
+        if field.stringValue != text, field.currentEditor() == nil { field.stringValue = text }
         if takesFocus { field.focus(then: onFocus) }
     }
 

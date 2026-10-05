@@ -214,7 +214,9 @@ checked in so a normal build does not need it.
   says how many matches only other backups hold; *Search All Backups…* carries
   the search on in Find Files.
 - **Find files across snapshots** — search every snapshot for a name or glob when
-  you do not know which backup still has the file, then restore the match. It
+  you do not know which backup still has the file, then restore the match
+  (while the index still reads, a word with no glob character is looked for
+  inside names, as `*word*`). It
   opens on the repository you are looking at — a selected repository's or
   backup record's; the first repository when the selection names none
   (Activity, the console, nothing) — unless a *Search All Backups…* handed a

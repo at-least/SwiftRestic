@@ -174,6 +174,27 @@ struct SnapshotIndexFilesTests {
         #expect(try await changes(index, "/nowhere", from: "s1", to: "s2") == nil)
     }
 
+    @Test("across a backup in between, one change is a change and a change undone may be none")
+    func folderChangesAcrossABackup() async throws {
+        let checked = try CheckedIndex()
+        let index = checked.index
+        try checked.reconcile([try snap("s1", 10), try snap("s2", 20), try snap("s3", 30)])
+        let contents: [String: IndexContent] = [
+            "s1": ["/data": true, "/data/once": false, "/data/back": false],
+            "s2": ["/data": true, "/data/once": false, "/data/back": false],
+            "s3": ["/data": true, "/data/once": false, "/data/back": false],
+        ]
+        try checked.runToDone(contents, revisions: [
+            "s1": ["/data/once": 1, "/data/back": 1],
+            "s2": ["/data/once": 1, "/data/back": 2],
+            // back is as it was in s1 again: s1 and s3 hold the same bytes.
+            "s3": ["/data/once": 2, "/data/back": 1],
+        ])
+        #expect(try await changes(index, from: "s1", to: "s3") == ["M /data/once", "? /data/back"])
+        // Neighbours stay exact.
+        #expect(try await changes(index, from: "s2", to: "s3") == ["M /data/back", "M /data/once"])
+    }
+
     @Test("a file no diff compared, or one absent in between, may have changed")
     func folderChangesUncertain() async throws {
         let checked = try CheckedIndex()
