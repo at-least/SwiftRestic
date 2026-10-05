@@ -32,7 +32,9 @@ struct IndexVersion: Sendable, Hashable {
 
 /// One entry directly under a folder somewhere in a chain's indexed history
 /// — a row of the Files view, which lists what a plan ever backed up, not
-/// only what its newest backup holds.
+/// only what its newest backup holds — or one hit of a search within the
+/// chain (`search(matching:inChain:limit:)`), which the Files view lists
+/// the same way.
 struct IndexChild: Sendable, Equatable {
     var path: String
     /// The kind in `newest`: a path can change kind over its history.
@@ -919,22 +921,45 @@ final class SnapshotIndex: @unchecked Sendable {
         return result
     }
 
+    /// Basename search within one chain — a Files tab's: `searchPaths`'s
+    /// walk and order, keeping only the paths an indexed snapshot of the
+    /// chain holds, so the limit counts the chain's hits alone and a chain
+    /// whose names sort late still gets its own. Each hit is what the tree
+    /// lists for it (`IndexChild`): its kind and newest backup are the
+    /// chain's, and `isInNewest` says whether the chain's newest indexed
+    /// snapshot holds it. An unknown chain answers `[]`.
+    func search(matching query: String, inChain chainKey: String, limit: Int) async throws -> [IndexChild] {
+        let match = Self.ftsQuery(from: query)
+        guard !match.isEmpty, limit > 0 else { return [] }
+        return try await pool.read { db in
+            guard let chain = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByKey), arguments: [chainKey]),
+                  let newestSeq = try Int64.fetchOne(db.cachedStatement(sql: SQL.chainNewestIndexed), arguments: [chainKey])
+            else { return [] }
+            let chainID: Int64 = chain[0]
+            let newestInChain = try db.cachedStatement(sql: SQL.newestInChain)
+            return try Self.walk(db, match: match, limit: limit) { node in
+                try Row.fetchOne(newestInChain, arguments: [node, chainID])
+            }.map { found in
+                let seq: Int64 = found.kept[1]
+                return IndexChild(
+                    path: found.path,
+                    isDirectory: found.kept[0],
+                    newest: IndexVersion(id: found.kept[2], time: Self.date(micros: found.kept[3])),
+                    isInNewest: seq == newestSeq
+                )
+            }
+        }
+    }
+
     /// The search `searchPaths` describes, inside the caller's read: each
     /// hit with its node id, which the caller may use only within this same
     /// transaction (see `SearchWithMembership`).
     private static func search(_ db: Database, match: String, limit: Int) throws -> [(node: Int64, hit: SearchHit)] {
         let aliveRuns = try db.cachedStatement(sql: SQL.aliveRuns)
         let newestCover = try db.cachedStatement(sql: SQL.newestCover)
-        var hits: [(name: String, node: Int64, isDirectory: Bool)] = []
-        var boundary: String?
-        let cursor = try Row.fetchCursor(db.cachedStatement(sql: SQL.searchFTS), arguments: [match])
-        while let row = try cursor.next() {
-            let node: Int64 = row[0]
-            let name: String = row[1]
-            if let boundary, !name.utf8.elementsEqual(boundary.utf8) { break }
-            guard node != Self.rootID else { continue }
+        return try walk(db, match: match, limit: limit) { node -> Bool? in
             let runs = try Row.fetchAll(aliveRuns, arguments: [node])
-            guard let firstRun = runs.first else { continue }
+            guard let firstRun = runs.first else { return nil }
             var isDirectory: Bool = firstRun["is_dir"]
             if runs.contains(where: { ($0["is_dir"] as Bool) != isDirectory }) {
                 // The path changed kind somewhere in its history: the
@@ -953,17 +978,41 @@ final class SnapshotIndex: @unchecked Sendable {
                     isDirectory = run["is_dir"]
                 }
             }
-            hits.append((name, node, isDirectory))
+            return isDirectory
+        }.map { (node: $0.node, hit: SearchHit(path: $0.path, isDirectory: $0.kept)) }
+    }
+
+    /// The walk both searches take, inside the caller's read: the MATCH
+    /// cursor in name order, each candidate kept with what `accept` makes
+    /// of it — nil drops it — until `limit` are kept; after that only names
+    /// equal to the last kept one, so ties are cut by path, not by rowid.
+    /// Ranked by name, then path, bytewise. Node ids are the caller's to use
+    /// within this same transaction only.
+    private static func walk<Kept>(
+        _ db: Database,
+        match: String,
+        limit: Int,
+        accept: (_ node: Int64) throws -> Kept?
+    ) throws -> [(node: Int64, path: String, kept: Kept)] {
+        var hits: [(name: String, node: Int64, kept: Kept)] = []
+        var boundary: String?
+        let cursor = try Row.fetchCursor(db.cachedStatement(sql: SQL.searchFTS), arguments: [match])
+        while let row = try cursor.next() {
+            let node: Int64 = row[0]
+            let name: String = row[1]
+            if let boundary, !name.utf8.elementsEqual(boundary.utf8) { break }
+            guard node != Self.rootID, let kept = try accept(node) else { continue }
+            hits.append((name, node, kept))
             if hits.count == limit { boundary = name }
         }
         var paths: [Int64: String] = [:]
         let ranked = try hits.map { hit in
-            (name: hit.name, node: hit.node, path: try Self.path(db, of: hit.node, memo: &paths), isDirectory: hit.isDirectory)
+            (name: hit.name, node: hit.node, path: try Self.path(db, of: hit.node, memo: &paths), kept: hit.kept)
         }.sorted { a, b in
             if !a.name.utf8.elementsEqual(b.name.utf8) { return Self.bytesLess(a.name, b.name) }
             return Self.bytesLess(a.path, b.path)
         }
-        return ranked.prefix(limit).map { (node: $0.node, hit: SearchHit(path: $0.path, isDirectory: $0.isDirectory)) }
+        return ranked.prefix(limit).map { (node: $0.node, path: $0.path, kept: $0.kept) }
     }
 
     /// True when a listing has been applied and every listed snapshot is

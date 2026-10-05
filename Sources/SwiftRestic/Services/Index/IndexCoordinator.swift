@@ -381,6 +381,17 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.searchWithSummaries(matching: query, limit: limit) }
     }
 
+    /// A Files tab's search: basename hits within one chain, each as the
+    /// tree lists it, from one read of the index.
+    nonisolated func search(
+        matching query: String,
+        inChain chainKey: String,
+        repositoryID: UUID,
+        limit: Int
+    ) async throws -> [IndexChild] {
+        try await read(repositoryID) { try await $0.search(matching: query, inChain: chainKey, limit: limit) }
+    }
+
     /// Whether every listed snapshot has been read — the consumers' "the
     /// index answers exactly" signal.
     nonisolated func isComplete(repositoryID: UUID) async throws -> Bool {

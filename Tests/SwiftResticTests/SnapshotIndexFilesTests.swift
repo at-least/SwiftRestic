@@ -67,6 +67,75 @@ struct SnapshotIndexFilesTests {
         #expect(summary(try await index.children(ofPath: "/data", inChain: planA)) == ["/data/a.txt file s1 now"])
     }
 
+    // MARK: - Search within a chain
+
+    @Test("a chain's search keeps the chain's own paths, gone ones included, each as the tree lists it")
+    func searchWithinAChain() async throws {
+        let checked = try CheckedIndex()
+        let index = checked.index
+        let listing = [try snap("s1", 10), try snap("s2", 20), try snap("b1", 30, plan: planB)]
+        let contents: [String: IndexContent] = [
+            "s1": ["/data": true, "/data/report.txt": false, "/data/old-report.txt": false, "/data/reports": false],
+            "s2": ["/data": true, "/data/report.txt": false, "/data/reports": true],
+            "b1": ["/data": true, "/data/report-b.txt": false],
+        ]
+        try checked.reconcile(listing)
+        try checked.runToDone(contents)
+
+        #expect(summary(try await index.search(matching: "report", inChain: planA, limit: 10)) == [
+            "/data/old-report.txt file s1 gone",
+            "/data/report.txt file s2 now",
+            // A kind change: the chain's newest snapshot holding it decides.
+            "/data/reports dir s2 now",
+        ])
+        // Chains do not mix: another plan's match is no hit here.
+        #expect(summary(try await index.search(matching: "report", inChain: planB, limit: 10)) == [
+            "/data/report-b.txt file b1 now",
+        ])
+        #expect(try await index.search(matching: "report", inChain: "swiftrestic-plan-unknown", limit: 10).isEmpty)
+        #expect(try await index.search(matching: "  ", inChain: planA, limit: 10).isEmpty)
+    }
+
+    @Test("a chain's search fills its limit with the chain's own hits, and equal names are cut by path")
+    func searchLimitWithinAChain() async throws {
+        let checked = try CheckedIndex()
+        let index = checked.index
+        // The other plan's names sort first and outnumber the limit: a cap
+        // on the repository's hits would leave this chain none.
+        let other: IndexContent = ["/data": true, "/data/note1": false, "/data/note2": false, "/data/note3": false]
+        let mine: IndexContent = [
+            "/data": true, "/data/x": true, "/data/y": true, "/data/x/note9": false, "/data/y/note9": false,
+        ]
+        try checked.reconcile([try snap("s1", 10), try snap("b1", 20, plan: planB)])
+        try checked.runToDone(["s1": mine, "b1": other])
+
+        #expect(summary(try await index.search(matching: "note", inChain: planA, limit: 1)) == ["/data/x/note9 file s1 now"])
+        #expect(summary(try await index.search(matching: "note", inChain: planA, limit: 2)) == [
+            "/data/x/note9 file s1 now", "/data/y/note9 file s1 now",
+        ])
+        #expect(summary(try await index.search(matching: "note", inChain: planB, limit: 2)) == [
+            "/data/note1 file b1 now", "/data/note2 file b1 now",
+        ])
+    }
+
+    @Test("a path only a forgotten backup held is no hit, before housekeeping too")
+    func searchAfterADeath() async throws {
+        let checked = try CheckedIndex()
+        let index = checked.index
+        let contents: [String: IndexContent] = [
+            "s1": ["/data": true, "/data/gone.txt": false],
+            "s2": ["/data": true],
+        ]
+        try checked.reconcile([try snap("s1", 10), try snap("s2", 20)])
+        try checked.runToDone(contents)
+        #expect(summary(try await index.search(matching: "gone", inChain: planA, limit: 10)) == ["/data/gone.txt file s1 gone"])
+
+        try checked.reconcile([try snap("s2", 20)])
+        #expect(try await index.search(matching: "gone", inChain: planA, limit: 10).isEmpty)
+        try checked.housekeeping()
+        #expect(try await index.search(matching: "gone", inChain: planA, limit: 10).isEmpty)
+    }
+
     // MARK: - Content versions
 
     /// Each version as its snapshot IDs, newest first, after how it follows

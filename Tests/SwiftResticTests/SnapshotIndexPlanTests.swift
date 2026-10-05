@@ -203,6 +203,14 @@ struct SnapshotIndexPlanTests {
         ]),
         "searchFTS": Rule(
             contains: ["SCAN f VIRTUAL TABLE INDEX 0:M1", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["f"]),
+        // One candidate's runs in the chain and the indexed snapshots they
+        // cover; the one node's group needs no sort.
+        "newestInChain": Rule(
+            contains: [
+                "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=?)",
+                "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
+            ],
+            excludes: ["TEMP B-TREE"]),
         // `listing_applied` holds one row at most (its CHECK), so its scan
         // is one row. The inner EXISTS as pendingChains'.
         "notComplete": Rule(

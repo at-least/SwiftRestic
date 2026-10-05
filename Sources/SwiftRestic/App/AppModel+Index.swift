@@ -146,6 +146,20 @@ extension AppModel {
         )
     }
 
+    /// A Files tab's search: instant basename hits over what one chain ever
+    /// held — items its newest backup no longer has included — each as the
+    /// tree lists it, from one read of the index. Throws when the index
+    /// itself fails, as the other searches do: "the index is broken" must
+    /// never read as "nothing matches".
+    func searchIndex(pattern: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
+        try await indexCoordinator.search(
+            matching: pattern,
+            inChain: chainKey,
+            repositoryID: repositoryID,
+            limit: AppModel.indexSearchLimit
+        )
+    }
+
     /// What changed between two snapshots, keyed by normalized path — the
     /// restore browser's Change column — and, when `restic diff` did not
     /// finish, why. A blank row reads as "unchanged" only when the

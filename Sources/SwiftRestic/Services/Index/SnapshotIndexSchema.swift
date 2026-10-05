@@ -496,6 +496,17 @@ enum SnapshotIndexSchema {
             SELECT n.id, n.name FROM node_fts f JOIN node n ON n.id = f.rowid
             WHERE node_fts MATCH ? ORDER BY n.name
             """
+        /// One search candidate's newest indexed snapshot within one chain —
+        /// its kind, seq and hash there, the bare columns of the `max()` row
+        /// as in `childrenInChain` — or no row when no indexed snapshot of
+        /// the chain holds it: what a chain's search keeps of each name.
+        let newestInChain = """
+            SELECT r.is_dir, s.seq, s.hash, max(s.time) FROM run r
+            JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
+                AND s.seq BETWEEN r.first_seq AND r.last_seq
+            WHERE r.node_id = ? AND r.chain_id = ?
+            GROUP BY r.node_id
+            """
         /// A file no listing has reached knows nothing, so it is incomplete
         /// whatever its (empty) tables say. Past that, chain-driven, one
         /// `snap_cover` probe per chain and state: a snapshot still to read,
