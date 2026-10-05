@@ -221,11 +221,10 @@ extension AppModel {
         // tccd, and nothing on the first screen waits for the answer.
         Task { await self.refreshFullDiskAccess() }
 
-        // Read the repositories before arming the scheduler. `stats` holds a
-        // shared repository lock (`snapshots` runs lock-free) while `forget`
-        // needs an exclusive one, so
-        // starting the scheduler first makes the app race itself on launch: a due
-        // plan's retention step fails against our own refresh.
+        // Read the repositories before arming the scheduler. The order was for
+        // locks — the refresh's `stats` held a shared one, so a due plan's
+        // retention and this refresh failed on each other — and every read the
+        // refresh makes runs lock-free now; the order is kept as it was.
         await refreshAllSnapshots()
         #if DEBUG
         // A capture run must photograph a deterministic state: a live scheduler

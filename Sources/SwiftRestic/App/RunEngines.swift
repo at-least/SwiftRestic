@@ -38,9 +38,8 @@ enum BackupRunEngine {
         /// edited mid-run applies from this ping on.
         func addStartPing(_ event: NotificationEvent)
         /// The closing refresh also feeds the snapshot index, and it must
-        /// stay after retention: its `stats` holds a shared lock (`snapshots`
-        /// and the index's walks run lock-free), and a forget needs the
-        /// exclusive one.
+        /// stay after retention: it reads the listing the forget left, which
+        /// the index then takes.
         func refreshSnapshots(repositoryID: UUID) async
         /// Stores and announces a finished run: its log, run history,
         /// banner, user notification, external channels.

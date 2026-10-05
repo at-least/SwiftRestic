@@ -969,13 +969,15 @@ struct StubResticTests {
         _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: nil)
         // Compare with Previous.
         _ = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe", includeMetadata: false)
+        // The refresh's size, which the default arm's "[]" does not decode as.
+        _ = try? await fixture.service.stats(fixture.context, timeout: nil)
 
         let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
         let starts = trace.split(separator: "\n").map(String.init).filter { $0.hasPrefix("start args=[") }
         // Locked, each paid restic's 200 ms wait after writing its lock, failed
         // with exit 11 under retention's exclusive lock, and made a forget
         // starting meanwhile fail the same way (all probed on restic 0.19.1).
-        for command in ["find", "ls", "snapshots", "diff"] {
+        for command in ["find", "ls", "snapshots", "diff", "stats"] {
             let start = try #require(starts.first { $0.hasPrefix("start args=[\(command) ") }, "trace: \(trace)")
             #expect(start.contains("--no-lock"), "start line: \(start)")
         }

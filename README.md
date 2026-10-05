@@ -497,15 +497,15 @@ restic's locks shape most of the scheduling. `backup` takes a shared lock;
 - A repository with a backup or maintenance job in flight counts as **busy**, and
   a plan targeting it is **held back rather than skipped** — it is still overdue
   on the next tick, so nothing is silently lost.
-- `prune` is ordered ahead of `check` when both fall due, and a launch reads the
-  repositories before arming the scheduler, so the app does not race itself.
+- `prune` is ordered ahead of `check` when both fall due, so the app does not
+  race itself. A launch reads the repositories before arming the scheduler.
 - If retention still loses a lock race, the snapshot already exists: the run is
   recorded as *completed with errors* with the reason, never as a failure.
-- A file's `find`, a folder's `ls`, the snapshot listing, *Compare with
-  Previous*'s `diff` and the index's walks run with `--no-lock`; the refresh's
-  `stats` still locks. Locked, each paid restic's 200 ms wait after writing its
-  lock; while `forget` or `prune` held the exclusive lock it failed at once
-  (exit 11); and a `forget` starting while it held its lock failed the same way.
+- A file's `find`, a folder's `ls`, *Compare with Previous*'s `diff`, the
+  refresh's listing and `stats`, and the index's walks run with `--no-lock`.
+  Locked, each paid restic's 200 ms wait after writing its lock; while `forget`
+  or `prune` held the exclusive lock it failed at once (exit 11); and a
+  `forget` starting while it held its lock failed the same way.
 
 ## Hooks
 

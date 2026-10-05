@@ -207,11 +207,12 @@ struct ResticService: ResticClient {
         )
     }
 
+    /// Lock-free, for `find`'s reasons.
     func stats(_ context: RepositoryContext, timeout: TimeInterval? = nil) async throws -> RepositoryStats {
         let result = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
-                arguments: context.globalArguments + ["stats", "--json", "--mode", "raw-data"],
+                arguments: context.globalArguments + ["stats", "--json", "--mode", "raw-data", "--no-lock"],
                 environment: context.environment,
                 timeout: timeout,
                 retainFullOutput: true
@@ -444,9 +445,9 @@ struct ResticService: ResticClient {
     /// one). A named snapshot the repository no longer holds is skipped with
     /// a warning on stderr; the rest still answer (restic 0.19.1).
     ///
-    /// `--no-lock`, as `listDirectory`, `snapshots` and `diff`: what a click
-    /// in a Files tab or on Compare with Previous… and the snapshot listing
-    /// run. Locked, each paid restic's
+    /// `--no-lock`, as `listDirectory`, `diff`, `snapshots` and `stats`:
+    /// what a click in a Files tab or on Compare with Previous… and a
+    /// refresh run. Locked, each paid restic's
     /// 200 ms wait after writing its lock (0.14–0.32 s of a 0.7–0.9 s
     /// file-pane find on a small local repository); while retention's
     /// `forget` or a `prune` held the exclusive lock it failed at once with

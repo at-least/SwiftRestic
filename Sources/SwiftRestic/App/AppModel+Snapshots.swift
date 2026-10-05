@@ -17,9 +17,8 @@ extension AppModel {
     func refreshAllSnapshots() async {
         // Concurrent, not serial: the scheduler is armed only after this
         // returns, so one slow or unreachable remote repository must not delay
-        // another's backups. The ordering itself is kept — refreshing before the
-        // scheduler starts means a due plan's retention step cannot collide with
-        // our own snapshot listing.
+        // another's backups. (No lock asks for that order any more: the
+        // listing and its stats run lock-free — see `bootstrap`.)
         await withTaskGroup(of: Void.self) { group in
             for repository in configuration.repositories {
                 group.addTask { await self.refreshSnapshots(repositoryID: repository.id) }
