@@ -92,14 +92,30 @@ enum OverviewMetrics {
 
     /// Failures and completed-with-errors runs that finished inside the
     /// window — the one definition of "recent problem". The sidebar's badge
-    /// counts this set, the Recent problems card lists it, and the menu bar's
-    /// problem line leads with its newest entry. Recency counts from when a
+    /// counts this set and the Recent problems card lists it, healed or not:
+    /// they are the week's record. The menu bar's problem line leads with
+    /// its newest entry that `isHealed` has not cleared. Recency counts from when a
     /// run finished: a backup that ran all night and failed at dawn is this
     /// morning's news, not eight days old.
     static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {
         runs.filter {
             $0.finishedAt >= since
                 && ($0.outcome == .failed || $0.outcome == .completedWithErrors)
+        }
+    }
+
+    /// Whether a backup problem no longer stands: a successful backup of the
+    /// same plan finished after it — the next run fixed it. Backups only: a
+    /// check that found damage, a failed prune, forget or restore is not
+    /// fixed by a backup going through, and Apply Retention Now… records its
+    /// forget under the plan's ID, so its success must not heal a backup
+    /// failure either. The sidebar's standing problem and the menu bar's
+    /// face both go by this.
+    static func isHealed(_ problem: RunRecord, in runs: [RunRecord]) -> Bool {
+        guard problem.kind == .backup, let planID = problem.planID else { return false }
+        return runs.contains {
+            $0.kind == .backup && $0.planID == planID && $0.outcome == .succeeded
+                && $0.finishedAt > problem.finishedAt
         }
     }
 

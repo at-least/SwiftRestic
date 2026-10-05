@@ -62,8 +62,8 @@ struct SidebarView: View {
             get: { router.selection },
             set: { router.selection = $0 }
         )) {
-            // The same recent-problem count every surface uses; computed once
-            // per body so the badge and the surfaces it points at agree.
+            // The week's problem count, the Recent problems card's set;
+            // computed once per body so the badge and that card agree.
             let problemCount = OverviewMetrics.problemCount(
                 runs: model.configuration.runs,
                 since: OverviewMetrics.problemWindowStart(from: now)
@@ -90,14 +90,15 @@ struct SidebarView: View {
             // Repository ▸ restic Console….
             Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
-                    // The window's unread badge, wired to the same 7-day
-                    // window the tray dot, a repository page's Recent
-                    // problems and the menu's problem line share: one count,
-                    // so no surface can claim trouble another denies. It also
-                    // yields to the unconfigured state like the tray's
-                    // problem face does — a removed repository's old
-                    // failures must not summon setup-bound attention — and
-                    // stays silent when clean.
+                    // The window's unread badge: the week's problems, as a
+                    // repository page's Recent problems lists them — a
+                    // backup failure its plan's next backup healed included,
+                    // which the tray dot and the menu's problem line drop
+                    // (`OverviewMetrics.isHealed`), in the same 7-day
+                    // window. It also yields to the unconfigured state like
+                    // the tray's problem face does — a removed repository's
+                    // old failures must not summon setup-bound attention —
+                    // and stays silent when clean.
                     .badge(
                         problemCount > 0 && !model.configuration.repositories.isEmpty
                             ? Text(verbatim: "\(problemCount)")

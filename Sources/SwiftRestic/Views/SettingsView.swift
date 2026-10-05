@@ -85,7 +85,7 @@ struct SettingsView: View {
                 )
                 ExpandableCaption(
                     summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing until you quit or log out.",
-                    detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), dims while backups are paused or waiting for power on battery, wears a warning mark while a run from the last seven days failed or finished with errors, and asks with a question mark until a repository is set up."
+                    detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), dims while backups are paused or waiting for power on battery, wears a warning mark while a run from the last seven days failed or finished with errors — a backup's until its plan's next backup succeeds — and asks with a question mark until a repository is set up."
                 )
             }
 

@@ -396,6 +396,102 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.problemLine(runs: [fresh], hasNoRepositories: false) != nil)
     }
 
+    /// A run of `planID` that finished `minutesAgo` minutes ago.
+    private func run(
+        _ outcome: RunRecord.Outcome,
+        minutesAgo: Double,
+        planID: UUID? = nil,
+        kind: RunRecord.Kind = .backup,
+        name: String = "Nightly"
+    ) -> RunRecord {
+        var record = RunRecord(planName: name)
+        record.kind = kind
+        record.planID = planID
+        record.outcome = outcome
+        record.finishedAt = .now.addingTimeInterval(-minutesAgo * 60)
+        record.startedAt = record.finishedAt
+        return record
+    }
+
+    private func face(_ runs: [RunRecord]) -> MenuBarStatus.IconState {
+        MenuBarStatus.iconState(
+            activity: [:],
+            maintenance: [:],
+            isRestoring: false,
+            isConsoleRunning: false,
+            hasNoRepositories: false,
+            runs: runs
+        )
+    }
+
+    @Test("a later successful backup of the same plan clears the face's dot and the problem line")
+    func laterSuccessHeals() {
+        let planID = UUID()
+        for outcome in [RunRecord.Outcome.failed, .completedWithErrors] {
+            let problem = run(outcome, minutesAgo: 60, planID: planID)
+            #expect(face([problem]) == .problem)
+
+            let runs = [problem, run(.succeeded, minutesAgo: 10, planID: planID)]
+            #expect(MenuBarStatus.problemLine(runs: runs, hasNoRepositories: false) == nil)
+            #expect(face(runs) == .idle)
+        }
+    }
+
+    @Test("only a newer successful backup of that same plan heals it")
+    func whatDoesNotHeal() {
+        let planID = UUID()
+        let failed = run(.failed, minutesAgo: 60, planID: planID)
+        // Another plan's success, a success that came before the failure, a
+        // cancelled run, and a successful forget (Apply Retention Now…
+        // records it under the plan's ID) — the sidebar's rule exactly.
+        let leaves: [RunRecord] = [
+            run(.succeeded, minutesAgo: 10, planID: UUID()),
+            run(.succeeded, minutesAgo: 90, planID: planID),
+            run(.cancelled, minutesAgo: 10, planID: planID),
+            run(.succeeded, minutesAgo: 10, planID: planID, kind: .forget),
+        ]
+        for other in leaves {
+            #expect(face([failed, other]) == .problem)
+            #expect(MenuBarStatus.problemLine(runs: [failed, other], hasNoRepositories: false)?.hasPrefix("Nightly ") == true)
+        }
+    }
+
+    @Test("a check, prune, retention or restore problem keeps the seven-day window whatever succeeds after it")
+    func otherKindsKeepTheWindow() {
+        let planID = UUID()
+        for kind in [RunRecord.Kind.check, .prune, .forget, .restore] {
+            let failed = run(.failed, minutesAgo: 60, planID: kind == .forget ? planID : nil, kind: kind)
+            let runs = [
+                failed,
+                run(.succeeded, minutesAgo: 10, planID: planID),
+                run(.succeeded, minutesAgo: 10, planID: kind == .forget ? planID : nil, kind: kind),
+            ]
+            #expect(face(runs) == .problem)
+        }
+    }
+
+    @Test("a healed failure hands the line to the newest problem still standing")
+    func lineFallsBackToStandingProblem() {
+        let documents = UUID()
+        let photos = UUID()
+        let runs = [
+            run(.failed, minutesAgo: 120, planID: documents, name: "Documents"),
+            run(.failed, minutesAgo: 60, planID: photos, name: "Photos"),
+            run(.succeeded, minutesAgo: 10, planID: photos, name: "Photos"),
+        ]
+        #expect(MenuBarStatus.problemLine(runs: runs, hasNoRepositories: false)?.hasPrefix("Documents ") == true)
+        #expect(face(runs) == .problem)
+    }
+
+    @Test("the Activity badge and Recent problems still count a healed failure for the week")
+    func historyCountsHealedProblems() {
+        let planID = UUID()
+        let runs = [run(.failed, minutesAgo: 60, planID: planID), run(.succeeded, minutesAgo: 10, planID: planID)]
+        let since = OverviewMetrics.problemWindowStart(from: .now)
+        #expect(OverviewMetrics.problemCount(runs: runs, since: since) == 1)
+        #expect(face(runs) == .idle)
+    }
+
     @Test("the problem line yields when no repository is configured")
     func problemLineYieldsToUnconfigured() {
         var failed = RunRecord(planName: "Nightly")

@@ -4,17 +4,15 @@ extension AppModel {
     // MARK: - Unseen-problem dots (the Mail grammar)
 
     /// The plan's newest problem run (failed or completed-with-errors) that
-    /// still stands — no successful run has landed after it. Seeing the
+    /// still stands — no successful run has landed after it
+    /// (`OverviewMetrics.isHealed`, the menu bar face's rule too). Seeing the
     /// failure does not heal it, so this, not the dot, is the persistent
     /// surface: the plan page's status row, the sidebar row's subtitle and
     /// a repository page's Plans rows read from it.
     func currentProblem(for planID: UUID) -> RunRecord? {
-        guard let problem = newestRun(for: planID, outcomeIn: [.failed, .completedWithErrors])
+        guard let problem = newestRun(for: planID, outcomeIn: [.failed, .completedWithErrors]),
+              !OverviewMetrics.isHealed(problem, in: configuration.runs)
         else { return nil }
-        if let success = newestRun(for: planID, outcomeIn: [.succeeded]),
-           success.finishedAt > problem.finishedAt {
-            return nil
-        }
         return problem
     }
 
@@ -59,9 +57,9 @@ extension AppModel {
 
     /// Backups only: a plan's health is whether its backups work. Apply
     /// Retention Now… records its forget under the plan's ID, and without
-    /// the kind a successful forget healed a standing backup failure while
-    /// a failed one became the plan's problem. Such runs still count in
-    /// Activity and the 7-day problem count, as check and prune do.
+    /// the kind a failed forget became the plan's problem (`isHealed` keeps
+    /// a successful one from healing a backup failure). Such runs still
+    /// count in Activity and the 7-day problem count, as check and prune do.
     private func newestRun(
         for planID: UUID,
         outcomeIn outcomes: Set<RunRecord.Outcome>

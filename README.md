@@ -604,6 +604,13 @@ stretch.
   ad-hoc signed, so its signature changes each time it is built and macOS treats
   it as a new application. Choose *Always Allow*, or expect the prompt again after
   the next build. A Developer ID signature makes this go away.
+- **The menu bar's dot goes once the next backup works.** A failed or warned
+  backup puts a dot on the menu bar icon and a line naming it in its menu;
+  the same plan's next successful backup clears both, as it clears the plan's
+  own failure row.
+  A failed check, prune, retention run or restore keeps the dot for seven days,
+  since a backup going through fixes none of them. Activity's badge and a
+  repository's Recent problems keep the week's record either way.
 - **A newly added repository is not checked immediately.** Maintenance counts
   from when the repository was added, so adding one does not kick off a long
   prune straight away.

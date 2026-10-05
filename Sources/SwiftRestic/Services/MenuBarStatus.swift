@@ -24,7 +24,8 @@ enum MenuBarStatus {
     /// Which face the icon wears right now. Every kind of restic work counts
     /// as running — the menu bar is the only surface that exists when the
     /// window is closed, so a restore or a prune invisible there is invisible
-    /// everywhere. Problems are the same seven-day window `problemLine` uses.
+    /// everywhere. Problems are `problemLine`'s: the seven-day window, less
+    /// what a later successful backup healed.
     static func iconState(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity],
@@ -95,12 +96,15 @@ enum MenuBarStatus {
         hold != nil && state != .running
     }
 
-    /// The newest problem in the run history as one sentence, or `nil` while
-    /// the window is clean. One definition of recent trouble, shared with the
-    /// dashboard: `OverviewMetrics.problems` supplies the set, so the
-    /// Activity badge, the Recent problems card and this line can never
-    /// disagree on what counts. Leading with a failure forever would read as
-    /// permanent breakage, hence the window.
+    /// The newest problem in the run history that still stands, as one
+    /// sentence, or `nil` while there is none. `OverviewMetrics.problems`
+    /// supplies the week's set, shared with the Activity badge and the
+    /// Recent problems card; this line drops from it the backup failures a
+    /// later successful backup of the same plan healed
+    /// (`OverviewMetrics.isHealed`, the sidebar's rule), since the icon's dot
+    /// asks the user to open a menu this line leads — and those two keep
+    /// counting them as the week's record. Leading with a failure forever
+    /// would read as permanent breakage, hence the window too.
     ///
     /// Yields to `hasNoRepositories`: the `unconfigured` icon face is what
     /// summoned the menu, and the line under it must not answer with a
@@ -119,6 +123,7 @@ enum MenuBarStatus {
     ) -> String? {
         guard !hasNoRepositories else { return nil }
         let problems = OverviewMetrics.problems(in: runs, since: OverviewMetrics.problemWindowStart(from: now))
+            .filter { !OverviewMetrics.isHealed($0, in: runs) }
         guard let newest = problems.max(by: { $0.finishedAt < $1.finishedAt }) else { return nil }
 
         // The subject is the run's display name — the plan with its
