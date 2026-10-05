@@ -163,12 +163,12 @@ checked in so a normal build does not need it.
   retention policy, pointed at one repository. Each plan stamps its snapshots
   with a private tag so retention can only ever touch its own. A plan's page
   is three cards, each with its verb in its corner: *Backups* (its last
-  backup and how many it holds) with *Back Up Now* — *Stop* while it runs —
-  *Schedule* (its schedule and when it runs next) with *Pause Schedule*, its
-  arrow offering the lengths, or *Resume Schedule* while paused (a manual
-  plan has nothing to pause and shows none), and *Configuration* (its
-  folders, exclude patterns, retention and hooks) with *Edit*. Every one of
-  them is in the Plan menu and the plan row's menu too.
+  backup, how many it holds and its retention) with *Back Up Now* — *Stop*
+  while it runs — *Schedule* (its schedule and when it runs next) with *Pause
+  Schedule*, its arrow offering the lengths, or *Resume Schedule* while
+  paused (a manual plan has nothing to pause and shows none), and
+  *Configuration* (its folders, exclude patterns and hooks) with *Edit*.
+  Every one of them is in the Plan menu and the plan row's menu too.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day.

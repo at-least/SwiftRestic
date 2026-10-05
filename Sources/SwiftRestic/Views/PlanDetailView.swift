@@ -249,16 +249,20 @@ struct PlanDetailView: View {
     }
 
     /// The page's answer, in Arq's label/value idiom: did this plan back
-    /// up, and how many backups it holds — with the verb that makes the
-    /// next one now. Its records are the sidebar's, under the plan, and its
-    /// files are this page's Files tab, so the card neither lists them a
-    /// second time nor offers a second way to open them.
+    /// up, how many backups it holds and which of them it keeps — with the
+    /// verb that makes the next one now. Its records are the sidebar's,
+    /// under the plan, and its files are this page's Files tab, so the card
+    /// neither lists them a second time nor offers a second way to open them.
     private func backupsCard(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
         return Card("Backups") {
             DetailGrid {
                 DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
                 DetailRow("Snapshots") { snapshotsValue(plan, snapshots: snapshots) }
+                // Applying it now is Plan ▸ Apply Retention Now… (and the
+                // sidebar row's menu); what it will keep is the editor's
+                // Retention tab.
+                DetailRow("Retention", plan.retention.summary)
             }
         } accessory: {
             backUpControl(plan)
@@ -383,9 +387,10 @@ struct PlanDetailView: View {
     }
 
     /// The plan's defining facts — the folders it backs up and the patterns
-    /// it leaves out, as the editor's Files tab pairs them — then what it
-    /// keeps, with Edit in its corner. When is the Schedule card's; where is
-    /// the sidebar's: the plan sits under its repository.
+    /// it leaves out, as the editor's Files tab pairs them — then its hooks,
+    /// with Edit in its corner. When is the Schedule card's, what it keeps
+    /// the Backups card's; where is the sidebar's: the plan sits under its
+    /// repository.
     private func configurationCard(_ plan: BackupPlan) -> some View {
         Card("Configuration") {
             VStack(alignment: .leading, spacing: 10) {
@@ -434,14 +439,10 @@ struct PlanDetailView: View {
                     }
                 }
 
-                Divider()
+                if !plan.hooks.isEmpty {
+                    Divider()
 
-                DetailGrid {
-                    // Applying it now is Plan ▸ Apply Retention Now… (and the
-                    // sidebar row's menu); what it will keep is the editor's
-                    // Retention tab.
-                    DetailRow("Retention", plan.retention.summary)
-                    if !plan.hooks.isEmpty {
+                    DetailGrid {
                         DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")
                     }
                 }
