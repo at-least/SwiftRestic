@@ -241,11 +241,11 @@ struct SwiftResticApp: App {
         openWindow(id: Self.mainWindowID)
     }
 
-    /// Arq's Backup Plan menu: everything a plan's toolbar and sidebar menu
-    /// offer, acting on the plan selected in the sidebar and greyed out when
-    /// the selection is anything else — an enabled item over an action that
-    /// does nothing is a menu that lies. Titles stay put, so Help-menu search
-    /// and muscle memory find them; only the two state toggles change.
+    /// Arq's Backup Plan menu: everything a plan page's cards and sidebar
+    /// menu offer, acting on the plan selected in the sidebar and greyed out
+    /// when the selection is anything else — an enabled item over an action
+    /// that does nothing is a menu that lies. Titles stay put, so Help-menu
+    /// search and muscle memory find them; only the two state toggles change.
     private var planMenu: some Commands {
         CommandMenu("Plan") {
             let p = model.planCommands(for: router.selection)
@@ -290,7 +290,7 @@ struct SwiftResticApp: App {
                 if let id = p.planID { ask(.editPlan(id)) }
             }
             .disabled(!p.canEdit)
-            // The plan toolbar's pair, lengths and all.
+            // The Schedule card's pair, lengths and all.
             if p.isScheduleActive {
                 lengthsMenu(p.scheduleTitle, isEnabled: p.canToggleSchedule) { length in
                     if let id = p.planID { ask(.pauseSchedule(id, length)) }

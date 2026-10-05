@@ -177,7 +177,7 @@ struct SidebarView: View {
             // an error banner is not a substitute for a disabled item.
             .disabled(!commands.canBackUp)
         Button("Edit…") { onEditPlan(plan) }
-        // The plan toolbar's pair, word for word. The row's caption says the
+        // The Schedule card's pair, word for word. The row's caption says the
         // pause while the schedule is held; manual runs stay possible either
         // way, and a manual plan has no schedule to pause.
         if !plan.isScheduleActive(at: .now) {
