@@ -361,6 +361,20 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }
 
+    /// What changed directly under one folder between two backups of a
+    /// chain — a Files tab's folder against the backup before.
+    nonisolated func changes(
+        underPath path: String,
+        inChain chainKey: String,
+        from olderID: String,
+        to newerID: String,
+        repositoryID: UUID
+    ) async throws -> FolderChanges? {
+        try await read(repositoryID) {
+            try await $0.changes(underPath: path, inChain: chainKey, from: olderID, to: newerID)
+        }
+    }
+
     /// The Restore pane's search: basename hits across every indexed path —
     /// instant, no restic walk — and which of them the open backup holds,
     /// with their kind there, from one read of the index.

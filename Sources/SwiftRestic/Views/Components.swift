@@ -574,6 +574,9 @@ enum BrowserListGrammar {
 /// its own shape.)
 struct SnapshotNodeRow: View {
     let node: SnapshotNode
+    /// How it changed since the backup before — Added, Modified — in the
+    /// Restore pane's Change words; nil for unchanged.
+    var change: String? = nil
 
     var body: some View {
         HStack(spacing: 8) {
@@ -584,6 +587,11 @@ struct SnapshotNodeRow: View {
             Text(node.name)
                 .lineLimit(1)
             Spacer()
+            if let change {
+                Text(change)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
             // No Modified column: a folder as of a backup is chosen by the
             // backup's moment, and a file's dates are its own pane's rows.
             if !node.isDirectory {

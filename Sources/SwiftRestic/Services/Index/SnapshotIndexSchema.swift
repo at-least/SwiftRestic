@@ -484,6 +484,22 @@ enum SnapshotIndexSchema {
             ORDER BY s.time DESC, s.id DESC
             """
         let editSeqs = "SELECT seq FROM edit WHERE node_id = ? AND chain_id = (SELECT id FROM chain WHERE key = ?)"
+        /// A folder's children one indexed snapshot of a chain holds, each
+        /// with the run that claims it there (its `first_seq`, unique per
+        /// node and chain) and its kind: one side of a folder's comparison
+        /// of two backups.
+        let childrenAtSeq = """
+            SELECT n.name, r.first_seq, r.is_dir FROM node n
+            JOIN run r ON r.node_id = n.id AND r.chain_id = ? AND r.first_seq <= ? AND r.last_seq >= ?
+            WHERE n.parent = ?
+            """
+        /// A folder's children whose content a chain's diffs said changed
+        /// in a seq interval `(lower, upper]`.
+        let childEditsBetween = """
+            SELECT n.name FROM node n
+            JOIN edit e ON e.node_id = n.id AND e.chain_id = ? AND e.seq > ? AND e.seq <= ?
+            WHERE n.parent = ?
+            """
         let blindSeqs = """
             SELECT seq FROM blind WHERE chain_id = (SELECT id FROM chain WHERE key = ?) AND seq > ? AND seq <= ?
             """

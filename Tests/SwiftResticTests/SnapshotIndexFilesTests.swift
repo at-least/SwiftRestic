@@ -136,6 +136,64 @@ struct SnapshotIndexFilesTests {
         #expect(try await index.search(matching: "gone", inChain: planA, limit: 10).isEmpty)
     }
 
+    // MARK: - A folder's changes between two backups
+
+    private func changes(_ index: SnapshotIndex, _ path: String = "/data", from older: String, to newer: String) async throws -> [String]? {
+        try await index.changes(underPath: path, inChain: planA, from: older, to: newer).map { changes in
+            changes.added.map { "+ \($0)" } + changes.removed.map { "- \($0)" }
+                + changes.modified.map { "M \($0)" } + changes.uncertain.map { "? \($0)" }
+        }
+    }
+
+    @Test("a folder's changes between two backups: added, removed and modified children; a subfolder's contents are its own")
+    func folderChanges() async throws {
+        let checked = try CheckedIndex()
+        let index = checked.index
+        try checked.reconcile([try snap("s1", 10), try snap("s2", 20), try snap("b1", 30, plan: planB)])
+        try checked.runToDone(
+            [
+                "s1": ["/data": true, "/data/a": false, "/data/b": false, "/data/gone": false, "/data/k": false,
+                       "/data/sub": true, "/data/sub/x": false],
+                "s2": ["/data": true, "/data/a": false, "/data/b": false, "/data/new": false, "/data/k": true,
+                       "/data/sub": true, "/data/sub/x": false],
+                "b1": ["/data": true],
+            ],
+            revisions: ["s1": ["/data/a": 1, "/data/sub/x": 1], "s2": ["/data/a": 2, "/data/sub/x": 2]]
+        )
+
+        // b is unchanged and says nothing; sub's file changed, which is
+        // sub's level to say.
+        #expect(try await changes(index, from: "s1", to: "s2") == ["+ /data/new", "- /data/gone", "M /data/a", "M /data/k"])
+        #expect(try await changes(index, "/data/sub", from: "s1", to: "s2") == ["M /data/sub/x"])
+        // Asked the other way round, what was added was removed.
+        #expect(try await changes(index, from: "s2", to: "s1") == ["+ /data/gone", "- /data/new", "M /data/a", "M /data/k"])
+        // Nothing known is no answer, never "nothing changed": a snapshot
+        // the index does not hold, another chain's, an unknown folder.
+        #expect(try await changes(index, from: "nope", to: "s2") == nil)
+        #expect(try await changes(index, from: "b1", to: "s2") == nil)
+        #expect(try await changes(index, "/nowhere", from: "s1", to: "s2") == nil)
+    }
+
+    @Test("a file no diff compared, or one absent in between, may have changed")
+    func folderChangesUncertain() async throws {
+        let checked = try CheckedIndex()
+        let index = checked.index
+        try checked.reconcile([try snap("s1", 10), try snap("s2", 20), try snap("s3", 30)])
+        try checked.full("s3", IndexTestData.ls(file))
+        // The planner offers a delta from s3; a failed diff reads s2 in full.
+        try checked.full("s2", IndexTestData.ls(file))
+        try checked.runToDone(["s1": ["/data": true], "s2": file, "s3": file])
+
+        #expect(try await changes(index, from: "s2", to: "s3") == ["? /data/f"])
+        #expect(try await changes(index, from: "s1", to: "s2") == ["+ /data/f"])
+
+        let absent = try CheckedIndex()
+        try absent.reconcile([try snap("s1", 10), try snap("s2", 20), try snap("s3", 30)])
+        try absent.runToDone(["s1": file, "s2": ["/data": true], "s3": file])
+        #expect(try await changes(absent.index, from: "s1", to: "s3") == ["? /data/f"])
+        #expect(try await changes(absent.index, from: "s1", to: "s2") == ["- /data/f"])
+    }
+
     // MARK: - Content versions
 
     /// Each version as its snapshot IDs, newest first, after how it follows

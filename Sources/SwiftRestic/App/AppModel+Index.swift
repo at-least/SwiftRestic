@@ -75,6 +75,21 @@ extension AppModel {
         try await indexCoordinator.contentVersions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
+    /// What changed directly under one folder from one backup of its chain
+    /// to another, from the index — no restic. Nil when the index has not
+    /// read both; throws when it fails, as `indexedChildren` does.
+    func indexedChanges(
+        underPath path: String,
+        inChain chainKey: String,
+        from olderID: String,
+        to newerID: String,
+        repositoryID: UUID
+    ) async throws -> FolderChanges? {
+        try await indexCoordinator.changes(
+            underPath: path, inChain: chainKey, from: olderID, to: newerID, repositoryID: repositoryID
+        )
+    }
+
     /// Whether the index has read every listed snapshot of the repository —
     /// the Files view's completeness signal. An index that cannot answer
     /// reads as "not complete", never as a failure. So does one that has not

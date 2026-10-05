@@ -191,6 +191,17 @@ struct SnapshotIndexPlanTests {
             "SEARCH edit USING PRIMARY KEY (node_id=? AND chain_id=?)",
             "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",
         ]),
+        // One folder's children, each child's run at one seq by the run's key.
+        "childrenAtSeq": Rule(contains: [
+            "SEARCH n USING COVERING INDEX sqlite_autoindex_node_1 (parent=?)",
+            "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq<?)",
+        ]),
+        // The chain's edits in the interval — change-sized — each one's
+        // node by its key, kept when under the folder.
+        "childEditsBetween": Rule(contains: [
+            "SEARCH e USING COVERING INDEX edit_chain (chain_id=? AND seq>? AND seq<?)",
+            "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)",
+        ]),
         "blindSeqs": Rule(contains: [
             "SEARCH blind USING PRIMARY KEY (chain_id=? AND seq>? AND seq<?)",
             "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",

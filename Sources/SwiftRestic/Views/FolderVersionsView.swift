@@ -1,9 +1,11 @@
 import SwiftUI
 
 /// A folder of the Files view, by version: the backups that hold it in a
-/// picker — newest first, from the index — and the folder as the chosen one
-/// held it, listed by restic (or the browse cache): the tree walks the
-/// folders, this flips them through time.
+/// picker — newest first, from the index — what changed in it since the
+/// backup before (the index's, no restic), and the folder as the chosen one
+/// held it, listed by restic (or the browse cache), each item marked with
+/// how it changed: the tree walks the folders, this flips them through
+/// time.
 ///
 /// Items select several at a time, as in the Restore pane, and restore
 /// together through the destination sheet, or drag to Finder one by one; a
@@ -24,6 +26,11 @@ struct FolderVersionsView: View {
     @State private var selection = Set<SnapshotNode.ID>()
     @State private var isLoading = false
     @State private var loadError: String?
+    /// What changed in the folder since the backup before the chosen one
+    /// that holds it; nil while unread, when there is no backup before, or
+    /// when the index has not read both.
+    @State private var changes: FolderChanges?
+    @State private var changesError: String?
     /// The restore waiting in the destination sheet.
     @State private var destinationRequest: RestoreDestinationRequest?
     @FocusState private var listIsFocused: Bool
@@ -32,11 +39,21 @@ struct FolderVersionsView: View {
         versions.first { $0.id == chosenID } ?? versions.first
     }
 
+    /// The backup before the chosen one that holds the folder — what its
+    /// changes count from.
+    private var previous: IndexVersion? {
+        guard let chosen, let index = versions.firstIndex(of: chosen), index + 1 < versions.count else { return nil }
+        return versions[index + 1]
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            picker
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
+            VStack(alignment: .leading, spacing: 6) {
+                picker
+                changeSummary
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
             Divider()
             listing
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -45,6 +62,8 @@ struct FolderVersionsView: View {
         }
         // The listing belongs to one backup: a flip reads the folder again.
         .task(id: chosen?.id) { await fetch() }
+        // So do its changes, which a re-read of the holders can also move.
+        .task(id: [chosen?.id, previous?.id]) { await readChanges() }
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)
@@ -75,6 +94,33 @@ struct FolderVersionsView: View {
         }
     }
 
+    /// What changed in the folder itself since the backup before — the gone
+    /// items by name, since the listing below is the chosen backup's — or,
+    /// when the index cannot say, why. Nothing for the oldest backup holding
+    /// it, nor while the index has yet to read both.
+    @ViewBuilder
+    private var changeSummary: some View {
+        if let changesError {
+            Label("Could not compare with the backup before", systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(changesError)
+        } else if let changes, let previous {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: changes.summary(since: previous.time))
+                if let removed = changes.removedNames {
+                    Text(verbatim: removed)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .help(removed)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .help("Compared with the backup before that holds this folder — what changed inside its folders is theirs to say")
+        }
+    }
+
     @ViewBuilder
     private var listing: some View {
         if let loadError {
@@ -95,7 +141,7 @@ struct FolderVersionsView: View {
             // the Restore pane's measured rule — a gesture would claim every
             // click on a name or icon.
             List(nodes, selection: $selection) { child in
-                SnapshotNodeRow(node: child)
+                SnapshotNodeRow(node: child, change: changes?.marks[PathKey(child.path)])
                     .itemProvider { dragProvider(for: child) }
                     .tag(child.id)
             }
@@ -161,6 +207,29 @@ struct FolderVersionsView: View {
     private func dragProvider(for child: SnapshotNode) -> NSItemProvider? {
         guard let chosen, model.repository(id: node.repositoryID) != nil, model.isResticAvailable else { return nil }
         return model.dragRestoreProvider(repositoryID: node.repositoryID, snapshotID: chosen.id, node: child)
+    }
+
+    /// The folder's changes from the backup before to the chosen one, from
+    /// the index — one read, no restic.
+    private func readChanges() async {
+        guard let chosen, let previous else {
+            changes = nil
+            changesError = nil
+            return
+        }
+        do {
+            let read = try await model.indexedChanges(
+                underPath: node.path, inChain: node.chainKey,
+                from: previous.id, to: chosen.id, repositoryID: node.repositoryID
+            )
+            guard !Task.isCancelled else { return }
+            changes = read
+            changesError = nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            changes = nil
+            changesError = error.localizedDescription
+        }
     }
 
     /// The listing at the chosen backup. Only the newest ask writes: a flip

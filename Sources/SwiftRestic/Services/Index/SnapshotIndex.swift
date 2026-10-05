@@ -71,6 +71,20 @@ struct ContentVersion: Sendable, Equatable, Identifiable {
     var id: String { snapshots[0].id }
 }
 
+/// What changed directly under a folder between two indexed snapshots of a
+/// chain, each child by its path, bytewise: one holds it and the other not
+/// — added or removed — or both hold a file whose content a diff between
+/// them said changed (`modified`, a kind change too), or may have — no diff
+/// compared them, or the file was absent in between (`uncertain`). A
+/// subfolder's own contents are its level's: the marks say nothing of them,
+/// and a change of metadata alone is never recorded.
+struct FolderChanges: Sendable, Equatable {
+    var added: [String] = []
+    var removed: [String] = []
+    var modified: [String] = []
+    var uncertain: [String] = []
+}
+
 /// A path's version list reduced to what Find Files shows: how many indexed
 /// snapshots hold it, and the newest of them. Output-light whatever the
 /// version count, which is the point.
@@ -781,6 +795,84 @@ final class SnapshotIndex: @unchecked Sendable {
                 versions[k].since = abs(newer - older) == 1 ? begins[max(newer, older)] : .uncertain
             }
             return versions
+        }
+    }
+
+    /// What changed directly under `path` from `olderID` to `newerID`, two
+    /// indexed snapshots of one chain (`FolderChanges`) — a Files tab's
+    /// folder at one backup against the one before. Nil when either is not
+    /// an indexed snapshot of the chain, or the path is unknown: nothing is
+    /// known, which is not "nothing changed".
+    func changes(underPath path: String, inChain chainKey: String, from olderID: String, to newerID: String) async throws -> FolderChanges? {
+        try await pool.read { db -> FolderChanges? in
+            guard let chain = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByKey), arguments: [chainKey]) else {
+                return nil
+            }
+            let chainID: Int64 = chain[0]
+            guard let older = try Target.fetch(db, olderID), let newer = try Target.fetch(db, newerID),
+                  [older, newer].allSatisfy({ $0.chainID == chainID && $0.state == State.indexed })
+            else { return nil }
+            let parent: Int64
+            if path == "/" {
+                parent = Self.rootID
+            } else {
+                var lookup = try NodeLookup(db)
+                guard let node = try lookup.node(for: path) else { return nil }
+                parent = node
+            }
+            /// Each child the snapshot at `seq` holds: the run claiming it
+            /// there, and its kind. Keyed by the name's bytes: two names that
+            /// differ only in Unicode normalization are two children.
+            func held(at seq: Int64) throws -> [PathKey: (run: Int64, isDirectory: Bool)] {
+                var result: [PathKey: (run: Int64, isDirectory: Bool)] = [:]
+                let rows = try Row.fetchAll(db.cachedStatement(sql: SQL.childrenAtSeq), arguments: [chainID, seq, seq, parent])
+                for row in rows {
+                    let name: String = row[0]
+                    let run: Int64 = row[1]
+                    let isDirectory: Bool = row[2]
+                    result[PathKey(name)] = (run, isDirectory)
+                }
+                return result
+            }
+            let before = try held(at: older.seq)
+            let after = try held(at: newer.seq)
+            // Marks sit at the upper seq of the pair they describe, in
+            // arrival order, which a back-dated backup can put the other way
+            // round from time.
+            let (low, high) = (min(older.seq, newer.seq), max(older.seq, newer.seq))
+            let edited = Set(try String.fetchAll(
+                db.cachedStatement(sql: SQL.childEditsBetween), arguments: [chainID, low, high, parent]
+            ).map { PathKey($0) })
+            let blind = try !Int64.fetchAll(
+                db.cachedStatement(sql: SQL.blindSeqs), arguments: [chainKey, low, high]
+            ).isEmpty
+            let prefix = path == "/" ? "" : path
+            var changes = FolderChanges()
+            for name in Set(before.keys).union(after.keys).sorted(by: { Self.bytesLess($0.path, $1.path) }) {
+                let child = prefix + "/" + name.path
+                guard let was = before[name] else {
+                    changes.added.append(child)
+                    continue
+                }
+                guard let now = after[name] else {
+                    changes.removed.append(child)
+                    continue
+                }
+                if was.isDirectory != now.isDirectory {
+                    changes.modified.append(child)
+                } else if now.isDirectory {
+                    // A folder's own contents are its level's to say.
+                    continue
+                } else if was.run != now.run {
+                    // Absent in between: nothing compared the two.
+                    changes.uncertain.append(child)
+                } else if edited.contains(name) {
+                    changes.modified.append(child)
+                } else if blind {
+                    changes.uncertain.append(child)
+                }
+            }
+            return changes
         }
     }
 
