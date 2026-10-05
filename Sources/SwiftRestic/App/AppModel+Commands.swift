@@ -154,11 +154,10 @@ extension AppModel {
         prefillRepositoryID ?? commandRepositoryID(for: selection) ?? configuration.repositories.first?.id
     }
 
-    /// The Files tab ⇧⌘F and the toolbar's magnifier search on this
-    /// selection, by the roots its tree hangs from: a plan's with a
-    /// repository set, or a group's under Other backups — the pages whose
-    /// Files tab lists a tree. Nil on every other pane, where they open Find
-    /// Files over the whole repository.
+    /// The Files tab ⇧⌘F searches on this selection, by the roots its tree
+    /// hangs from: a plan's with a repository set, or a group's under Other
+    /// backups — the pages whose Files tab lists a tree. Nil on every other
+    /// pane, where it opens Find Files over the whole repository.
     func filesSearchRoots(for selection: SidebarItem?) -> FileNode? {
         func group(_ repositoryID: UUID, _ id: OtherBackupsGroup.ID) -> FileNode? {
             shelves(for: repositoryID)

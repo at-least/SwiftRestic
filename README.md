@@ -147,11 +147,12 @@ checked in so a normal build does not need it.
   backups are held app-wide and a *Resume* button while the hold is your
   own *Pause Backups*; an *Other backups* card listing each adoptable
   group while there is one; the week's problems against it; then where it
-  is, how big it is, and its maintenance. *New Backup Plan…* is in the
-  page's toolbar, and the Protection card carries it as a button while
-  the repository has no plan. The *Snapshots* row splits the backups no
-  plan of the repository made (“11 · 6 from no plan here”, or “all” when
-  none of them is a plan's). A repository whose
+  is, how big it is, and its maintenance. The Protection card carries
+  *New Backup Plan…* as a button while the repository has no plan; after
+  that a plan starts from the sidebar's + or ⌘N, into the repository on
+  screen, or from the repository row's menu. The *Snapshots* row splits the
+  backups no plan of the repository made (“11 · 6 from no plan here”, or
+  “all” when none of them is a plan's). A repository whose
   first listing finds no plans and adoptable history opens its *Other
   backups* shelf so the groups are in view; no modal, no wizard.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob
@@ -221,9 +222,10 @@ checked in so a normal build does not need it.
   backup record's; the first repository when the selection names none
   (Activity, the console, nothing) — unless a *Search All Backups…* handed a
   search over (the Restore pane's, or a Files tab's with no match), which
-  names its own repository. The toolbar's magnifier, or ⇧⌘F — except on a
-  plan's or a group's page, where both turn the page to its Files tab and
-  put the keyboard in its search field, which searches that page's backups.
+  names its own repository. *Repository › Find Files in Snapshots…* (⇧⌘F)
+  opens it — except on a plan's or a group's page, where it turns the page
+  to its Files tab and puts the keyboard in its search field, which
+  searches that page's backups.
 - **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
   runs `restic diff` against the previous snapshot of the same folders from the
   same Mac (any earlier one can be chosen) and lists what was added, removed or

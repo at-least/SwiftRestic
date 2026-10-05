@@ -97,8 +97,8 @@ final class AppRouter {
     var filesSearchText: [FileNode: String] = [:]
 
     /// The Files view whose search field takes the keyboard focus next, by
-    /// its chain's roots — ⇧⌘F and the toolbar's magnifier on a plan's or a
-    /// group's page. The field spends it once it has the focus.
+    /// its chain's roots — ⇧⌘F on a plan's or a group's page. The field
+    /// spends it once it has the focus.
     var filesSearchFocus: FileNode?
 
     /// ⇧⌘F on a page with a Files tab: the tab, its search field focused.

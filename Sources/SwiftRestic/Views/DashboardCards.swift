@@ -14,8 +14,7 @@ import SwiftUI
 /// static text by rule: no hover, no chevron, no destination — the plans
 /// it summarizes sit in the sidebar beside it. It waits for a succeeded
 /// listing (the caveat under Details says why in words); the card and
-/// the plan-less page's prominent button stay, and the toolbar's
-/// New Backup Plan… is there at every state of the page.
+/// the plan-less page's prominent button stay.
 struct ProtectionCard: View {
     @Environment(AppModel.self) private var model
     /// The window's minute clock, as the sidebar's captions read it.
@@ -47,8 +46,8 @@ struct ProtectionCard: View {
                 }
                 // The repository's first plan: the way to it is the whole
                 // point of a plan-less page, in the empty card's prominent
-                // form. The toolbar button is there at every state of the
-                // page; this one leads it while no plan exists yet.
+                // form. Once a plan exists the next one starts from the
+                // sidebar's +, ⌘N or the repository row's menu.
                 if plans.isEmpty {
                     Button("New Backup Plan…", action: onAddPlan)
                         .buttonStyle(.borderedProminent)

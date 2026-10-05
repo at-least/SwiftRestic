@@ -35,21 +35,21 @@ struct RepositoryDetailView: View {
         }
         .navigationTitle(repository?.name ?? "Repository")
         .toolbar {
-            // The page's verbs: read it again, start a plan in it, change
-            // it. Getting files back starts from the sidebar, where the
-            // backups sit under the plans that made them. Check, Prune, the
-            // lock and index repairs and Remove from SwiftRestic… are the
-            // Repository menu's (all of them, acting on this page's
-            // repository) and the sidebar row's (all but the two repairs),
-            // each through the one shared confirmation.
+            // The page's verbs: read it again, change it. A new plan in
+            // this repository starts from the sidebar's + or ⌘N, both into
+            // the repository on screen, or from its sidebar row's menu —
+            // and from the Protection card while it has none. Getting files
+            // back starts from the sidebar, where the backups sit under the
+            // plans that made them. Check, Prune, the lock and index repairs
+            // and Remove from SwiftRestic… are the Repository menu's (all of
+            // them, acting on this page's repository) and the sidebar row's
+            // (all but the two repairs), each through the one shared
+            // confirmation.
             ToolbarItemGroup {
                 Button("Refresh", systemImage: "arrow.clockwise") {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
                 .help("Re-read snapshots and statistics")
-                Button("New Backup Plan…", systemImage: "plus", action: onAddPlan)
-                    .labelStyle(.titleAndIcon)
-                    .help("Create a backup plan that backs up to “\(repository?.name ?? "Repository")”")
                 Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                     .labelStyle(.titleAndIcon)
                     .help("Change this repository's location, credentials and maintenance")

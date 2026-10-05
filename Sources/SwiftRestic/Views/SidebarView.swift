@@ -325,8 +325,8 @@ struct SidebarView: View {
     /// The way to a repository's first plan, where its plans would be. An
     /// action, not a place: no tag, no chevron — its plus fills the fold
     /// column, so its title starts where plan names do. It leaves once a
-    /// plan exists; the page's toolbar and the row's menu keep offering
-    /// the next one.
+    /// plan exists; the footer's + and the row's menu keep offering the
+    /// next one.
     private func addPlanRow(_ repository: Repository) -> some View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
