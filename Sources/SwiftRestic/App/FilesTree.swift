@@ -399,3 +399,54 @@ struct FilesLoadKey: Equatable {
     let indexTaken: [UUID: UInt64]
     let rereads: Int
 }
+
+/// A Files tab's search answer — the chain's hits, or why there are none —
+/// with the search it answers.
+struct FilesSearchAnswer: Equatable {
+    enum Outcome: Equatable {
+        case hits([FilesTree.Entry])
+        case failed(String)
+    }
+
+    let roots: FileNode
+    let query: String
+    let outcome: Outcome
+    /// Whether the index had read every backup of the repository when it
+    /// answered: until then older backups' items may be missing.
+    let isComplete: Bool
+
+    /// The index's words while it has backups still to read — a Files
+    /// pane's banner and a search say them alike.
+    static let indexStillReading = "The index is still reading this repository — older backups may be missing."
+
+    /// The index's hits as the column lists them: by name as Finder sorts
+    /// names, one name's hits by path — the tree's rows, with no folders
+    /// first, since a hit's folder is its caption.
+    static func entries(_ hits: [IndexChild], under roots: FileNode) -> [FilesTree.Entry] {
+        hits.map { hit in
+            FilesTree.Entry(
+                node: FileNode(
+                    repositoryID: roots.repositoryID, chainKey: roots.chainKey,
+                    path: hit.path, isDirectory: hit.isDirectory
+                ),
+                newest: hit.newest,
+                isInNewest: hit.isInNewest
+            )
+        }
+        .sorted { lhs, rhs in
+            switch lhs.node.name.localizedStandardCompare(rhs.node.name) {
+            case .orderedAscending: true
+            case .orderedDescending: false
+            case .orderedSame: SnapshotIndex.bytesLess(lhs.node.path, rhs.node.path)
+            }
+        }
+    }
+
+    /// What the hits' footer says, if anything: that the list stops at the
+    /// search's ceiling (Find Files' words), or that older backups may
+    /// still hold more.
+    @MainActor static func note(count: Int, isComplete: Bool) -> String? {
+        if count >= AppModel.indexSearchLimit { return "Showing the first matches — narrow the search to see more." }
+        return isComplete ? nil : indexStillReading
+    }
+}

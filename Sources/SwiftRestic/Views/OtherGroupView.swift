@@ -23,6 +23,8 @@ struct OtherGroupView: View {
     /// Opens the adopt sheet for a plan-UUID group — the root owns the
     /// presenting state, as it does for every sheet a pane raises.
     let onAdopt: (_ planID: UUID) -> Void
+    /// The Files tab's "Search All Backups…": Find Files, prefilled.
+    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     private var summary: OtherGroupPageSummary? {
         model.shelves(for: repositoryID).otherGroupPage(
@@ -42,7 +44,11 @@ struct OtherGroupView: View {
                 switch router.tab(of: page) {
                 case .overview: content(summary)
                 case .files:
-                    FilesBrowserView(roots: FileNode.roots(repositoryID: repositoryID, chainKey: summary.chainKey))
+                    FilesBrowserView(
+                        roots: FileNode.roots(repositoryID: repositoryID, chainKey: summary.chainKey),
+                        searchPrompt: "Search these backups' files",
+                        onSearchAllBackups: onSearchAllBackups
+                    )
                 }
             } else {
                 // Only while the shelves lag a change that revalidation is

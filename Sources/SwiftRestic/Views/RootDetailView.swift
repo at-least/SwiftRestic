@@ -35,7 +35,8 @@ struct RootDetailView: View {
     /// every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
-    /// The Restore pane's "Search All Backups…": Find Files, prefilled.
+    /// "Search All Backups…" — the Restore pane's, and a Files tab's with no
+    /// match: Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     var body: some View {
@@ -78,7 +79,8 @@ struct RootDetailView: View {
                         PlanDetailView(
                             planID: plan.id,
                             onEdit: { onEditPlan(plan) },
-                            onShowRun: { router.selection = .activity }
+                            onShowRun: { router.selection = .activity },
+                            onSearchAllBackups: onSearchAllBackups
                         )
                     } else {
                         ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
@@ -108,13 +110,15 @@ struct RootDetailView: View {
                     OtherGroupView(
                         repositoryID: repositoryID,
                         groupID: .plan(planID),
-                        onAdopt: { onAdoptGroup(repositoryID, $0) }
+                        onAdopt: { onAdoptGroup(repositoryID, $0) },
+                        onSearchAllBackups: onSearchAllBackups
                     )
                 case let .lineage(repositoryID, key):
                     OtherGroupView(
                         repositoryID: repositoryID,
                         groupID: .lineage(key),
-                        onAdopt: { onAdoptGroup(repositoryID, $0) }
+                        onAdopt: { onAdoptGroup(repositoryID, $0) },
+                        onSearchAllBackups: onSearchAllBackups
                     )
                 case .console:
                     ResticConsoleView()

@@ -7,17 +7,33 @@ import SwiftUI
 /// at the page's edge rather than under a repository and a plan, and its
 /// divider drags: a deep folder keeps its names.
 ///
-/// What is open and selected is the router's, per chain, so leaving the
-/// page — for a backup's record, Activity, another plan — and coming back
-/// finds the tree as it was left.
+/// A search field heads the tree: while it holds a query, the column lists
+/// the chain's items named like it instead — from the index, items the
+/// newest backup no longer holds included — and a hit selects as a tree row
+/// does, so its versions open beside it.
+///
+/// What is open, selected and searched for is the router's, per chain, so
+/// leaving the page — for a backup's record, Activity, another plan — and
+/// coming back finds the tree as it was left.
 struct FilesBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Environment(FilesTree.self) private var filesTree
     /// The chain's roots (`FileNode.roots`).
     let roots: FileNode
+    /// The search field's prompt: what it searches, a plan's files or a
+    /// group's.
+    let searchPrompt: String
+    /// A search with no match offers Find Files over the whole repository,
+    /// prefilled — other plans' backups included. The root presents it.
+    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     @FocusState private var treeIsFocused: Bool
+    @FocusState private var hitsAreFocused: Bool
+    /// The latest answer to a search of this view, with the search it
+    /// answers: one typed on another page, or before the last change to the
+    /// query, is never shown for this one.
+    @State private var searchAnswer: FilesSearchAnswer?
     /// The tree's width, dragged at its edge — the window's, kept across
     /// pages and tabs while it is open.
     @SceneStorage("FilesTreeWidth") private var treeWidth: Double = 280
@@ -32,6 +48,23 @@ struct FilesBrowserView: View {
 
     private var selected: FileNode? {
         router.filesSelection[roots]
+    }
+
+    /// The selection the tree and the search's hits share. A hit picked
+    /// opens the folders above it, so the tree lists it when the search
+    /// ends.
+    private var selection: Binding<FileNode?> {
+        Binding(get: { router.filesSelection[roots] }, set: { item in
+            router.filesSelection[roots] = item
+            if let item, !query.isEmpty {
+                router.openFolders(above: item, from: rootEntries.map(\.path))
+            }
+        })
+    }
+
+    /// The search as typed, trimmed; empty shows the tree.
+    private var query: String {
+        (router.filesSearchText[roots] ?? "").trimmingCharacters(in: .whitespaces)
     }
 
     /// The roots level's folders, once read.
@@ -52,7 +85,7 @@ struct FilesBrowserView: View {
         // window's content past its edges — the sidebar and the pane's
         // buttons clipped (seen live).
         HStack(spacing: 0) {
-            tree
+            navigator
                 .frame(width: min(max(treeWidth, treeWidthBounds.lowerBound), treeWidthBounds.upperBound))
             TreeEdge(width: $treeWidth, bounds: treeWidthBounds)
             pane
@@ -61,9 +94,20 @@ struct FilesBrowserView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         // The levels on screen, read and kept current; keyed by what is
         // open and the listings they were read under, so opening a folder,
-        // a refresh or the index taking it restarts it.
+        // a refresh or the index taking it restarts it. Kept while a search
+        // lists hits: the tree it ends on is read already.
         .task(id: filesTree.loadKey(neededLevels, model: model)) {
             await filesTree.keep(neededLevels, model: model)
+        }
+        // The search, asked again under each listing and each one the index
+        // takes, as the levels are.
+        .task(id: FilesSearchKey(
+            roots: roots,
+            query: query,
+            listedAt: model.snapshotsLoadedAt(for: roots.repositoryID),
+            indexTaken: model.indexTakenGeneration[roots.repositoryID]
+        )) {
+            await search()
         }
         // A first visit opens and selects the first root, so the pane has
         // something to show from the first look — and follows it when a
@@ -75,13 +119,36 @@ struct FilesBrowserView: View {
         }
     }
 
+    /// The leading column: the search field over the tree, or over the
+    /// search's hits while it holds a query — one list at a time, sharing
+    /// the selection.
+    private var navigator: some View {
+        VStack(spacing: 0) {
+            SearchField(placeholder: searchPrompt, text: Binding(
+                get: { router.filesSearchText[roots] ?? "" },
+                set: { router.filesSearchText[roots] = $0 }
+            ))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            Divider()
+            Group {
+                if query.isEmpty {
+                    tree
+                } else {
+                    hits
+                }
+            }
+            // The column's height whatever it shows: an empty state alone
+            // would hug its text, and the field above it would float down to
+            // the middle (seen live).
+            .frame(maxHeight: .infinity)
+        }
+    }
+
     private var tree: some View {
         let rows = filesTree.rows(under: roots, open: router.openFolders)
         return ScrollViewReader { proxy in
-            List(selection: Binding(
-                get: { router.filesSelection[roots] },
-                set: { router.filesSelection[roots] = $0 }
-            )) {
+            List(selection: selection) {
                 ForEach(rows) { row in
                     treeRow(row)
                 }
@@ -96,13 +163,115 @@ struct FilesBrowserView: View {
             // Brought into view once, when its row is first there — the
             // levels above it may still be reading — and never again, so a
             // re-read does not pull the list back from where it was
-            // scrolled. A click's own row is in view already.
+            // scrolled. A click's own row is in view already. The tree a
+            // search ends on is a new list, with the hit picked in the
+            // search already listed: its first look counts as the row
+            // arriving.
             .onChange(of: selected, initial: true) { _, item in unrevealed = item }
-            .onChange(of: unrevealed.flatMap { FilesTree.row(showing: $0, in: rows) }) { _, row in
+            .onChange(of: unrevealed.flatMap { FilesTree.row(showing: $0, in: rows) }, initial: true) { _, row in
                 guard let row else { return }
                 unrevealed = nil
                 // A turn later: the row may join the list in this update.
                 Task { @MainActor in proxy.scrollTo(row) }
+            }
+        }
+    }
+
+    /// The search's answer in the column: the hits, or why there are none.
+    @ViewBuilder
+    private var hits: some View {
+        if let answer = searchAnswer, answer.roots == roots, answer.query == query {
+            switch answer.outcome {
+            case let .failed(message):
+                // A broken index is its own answer: never a "no matches".
+                ContentUnavailableView {
+                    Label("Search failed", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message).textSelection(.enabled)
+                }
+            case let .hits(entries) where entries.isEmpty:
+                // Not a dead end: other plans' backups, and — while the index
+                // reads — the backups it has not reached, are Find Files'.
+                ContentUnavailableView {
+                    Label("No matches", systemImage: "magnifyingglass")
+                } description: {
+                    // Verbatim: a query is no Markdown — its asterisks would
+                    // be eaten as emphasis.
+                    Text(verbatim: answer.isComplete
+                        ? "Nothing in these backups matches “\(query)”."
+                        : FilesSearchAnswer.indexStillReading)
+                } actions: {
+                    Button("Search All Backups…") { onSearchAllBackups(roots.repositoryID, query) }
+                        .help("Search every backup in this repository with Find Files, other plans' included")
+                }
+            case let .hits(entries):
+                VStack(spacing: 0) {
+                    List(selection: selection) {
+                        ForEach(entries) { entry in
+                            FilesSearchRow(entry: entry)
+                                .tag(entry.node)
+                        }
+                    }
+                    .listStyle(.inset)
+                    .focusOnClick($hitsAreFocused)
+                    .onKeyPress(.return, phases: .down) { endSearch($0) }
+                    .onKeyPress(.escape, phases: .down) { endSearch($0) }
+                    .help("Return or Esc ends the search and shows the selected item in the tree")
+                    if let note = FilesSearchAnswer.note(count: entries.count, isComplete: answer.isComplete) {
+                        Divider()
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                    }
+                }
+            }
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Return or Esc in the hits: the search ends, and the tree it gives
+    /// way to shows the selected hit — its folders were opened as it was
+    /// picked.
+    private func endSearch(_ press: KeyPress) -> KeyPress.Result {
+        guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]) else { return .ignored }
+        router.filesSearchText[roots] = nil
+        return .handled
+    }
+
+    /// Answers the query, and again every `recheckInterval` while the index
+    /// is still reading the repository — the tree's own rule — so hits from
+    /// backups it reads meanwhile fill in. One read of the index, no restic.
+    private func search() async {
+        let roots = roots
+        let query = query
+        guard !query.isEmpty else { return }
+        while !Task.isCancelled {
+            // Asked before the search: a backup once read stays read, so an
+            // index complete beforehand has read every backup the hits come
+            // from.
+            let complete = await model.indexIsComplete(repositoryID: roots.repositoryID)
+            let outcome: FilesSearchAnswer.Outcome
+            do {
+                let found = try await model.searchIndex(
+                    pattern: query, inChain: roots.chainKey, repositoryID: roots.repositoryID
+                )
+                outcome = .hits(FilesSearchAnswer.entries(found, under: roots))
+            } catch {
+                outcome = .failed((error as? ResticError)?.errorDescription ?? error.localizedDescription)
+            }
+            guard !Task.isCancelled else { return }
+            searchAnswer = FilesSearchAnswer(roots: roots, query: query, outcome: outcome, isComplete: complete)
+            guard !complete, case .hits = outcome else { return }
+            do {
+                try await Task.sleep(for: FilesTree.recheckInterval)
+            } catch {
+                return
             }
         }
     }
@@ -248,6 +417,50 @@ private struct FilesPaneIdentity: Hashable {
     let opening: Int
 }
 
+/// What a Files tab's search is keyed by: the chain, the query, and the
+/// listing it is read under and the one the index has taken — so a refresh
+/// asks again, as the tree's levels are read again.
+private struct FilesSearchKey: Equatable {
+    let roots: FileNode
+    let query: String
+    let listedAt: Date?
+    let indexTaken: UInt64?
+}
+
+/// One hit of a Files tab's search: the kind's icon and the name, over the
+/// folder that holds it. An item the chain's newest backup no longer holds
+/// is dimmed, with the day it was last backed up — the tree row's facts,
+/// in the tree row's words.
+struct FilesSearchRow: View {
+    let entry: FilesTree.Entry
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: entry.node.isDirectory ? "folder" : "doc")
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.node.name)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text((ResticPath.parent(of: entry.node.path) as NSString).abbreviatingWithTildeInPath)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+            Spacer(minLength: 4)
+            if !entry.isInNewest {
+                Text(Format.until(entry.newest.time))
+                    .font(.caption)
+                    .accessibilityLabel("not in the newest backup, last backed up \(Format.timestamp(entry.newest.time))")
+            }
+        }
+        .foregroundStyle(entry.isInNewest ? .primary : .secondary)
+        .help(FilesTreeRow.help(for: entry))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// The tree's edge: a hairline with a wider grip that drags the tree's width.
 private struct TreeEdge: View {
     @Binding var width: Double
@@ -314,13 +527,16 @@ struct FilesTreeRow: View {
                 Image(systemName: entry.node.isDirectory ? "folder" : "doc")
             }
             .foregroundStyle(entry.isInNewest ? .primary : .secondary)
-            .help(help)
+            .help(Self.help(for: entry))
             .accessibilityLabel(entry.isInNewest ? title : "\(title), not in the newest backup")
             Spacer(minLength: 0)
         }
     }
 
-    private var help: String {
+    /// The row's tooltip — a search's hit row wears it too: the item's
+    /// whole path, or for one the newest backup no longer holds, when it
+    /// was last backed up.
+    static func help(for entry: FilesTree.Entry) -> String {
         entry.isInNewest
             ? entry.node.path
             : "Not in the newest backup — last backed up \(Format.timestamp(entry.newest.time))"

@@ -89,7 +89,8 @@ Debug captures are driven by environment variables on a debug build —
 `SWIFTRESTIC_CAPTURE`, `SWIFTRESTIC_CAPTURE_PANE` (one pane or `all`),
 `SWIFTRESTIC_CAPTURE_DELAY`, `SWIFTRESTIC_APPEARANCE`,
 `SWIFTRESTIC_CAPTURE_SHEET`, `SWIFTRESTIC_CAPTURE_ITEM` (with pane `files`:
-the folder or file to select), `SWIFTRESTIC_CAPTURE_TAB` (`files`: the
+the folder or file to select), `SWIFTRESTIC_CAPTURE_SEARCH` (with pane
+`files`: the query in the tab's search field), `SWIFTRESTIC_CAPTURE_TAB` (`files`: the
 selected plan or group page on its Files tab), `SWIFTRESTIC_REPO_PASSWORD`,
 `SWIFTRESTIC_POWER_SOURCE` (`battery`/`ac`; read at scheduler ticks, so only
 in a normal launch — a capture run never arms the scheduler),

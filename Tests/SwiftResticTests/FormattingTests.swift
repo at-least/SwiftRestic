@@ -149,6 +149,22 @@ struct FormattingTests {
         #expect(nextYear.hasSuffix("9:00 PM"))
     }
 
+    @Test("an item's last backup day reads after until, with the year only when it is another one")
+    func untilDays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+        }
+        let now = date(2026, 10, 5, 10)
+        // 11 PM in New York is the next morning in UTC: the calendar's zone
+        // names the day.
+        #expect(Format.until(date(2026, 10, 2, 23), now: now, calendar: calendar) == "until Oct 2")
+        let lastYear = Format.until(date(2025, 12, 30, 9), now: now, calendar: calendar)
+        #expect(lastYear.hasPrefix("until "))
+        #expect(lastYear.contains("Dec") && lastYear.contains("30") && lastYear.contains("2025"))
+    }
+
     @Test("a pause end reads naturally after until")
     func pauseEndSpelling() {
         var calendar = Calendar(identifier: .gregorian)

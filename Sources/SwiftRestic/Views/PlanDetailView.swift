@@ -10,6 +10,8 @@ struct PlanDetailView: View {
     /// Sends the pane to Activity — the "Last backup" value's destination,
     /// wired by RootView so this view owns no navigation of its own.
     var onShowRun: (() -> Void)? = nil
+    /// The Files tab's "Search All Backups…": Find Files, prefilled.
+    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     private var plan: BackupPlan? { model.plan(id: planID) }
 
@@ -232,7 +234,11 @@ struct PlanDetailView: View {
     @ViewBuilder
     private func files(_ plan: BackupPlan) -> some View {
         if let repositoryID = plan.repositoryID {
-            FilesBrowserView(roots: FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id)))
+            FilesBrowserView(
+                roots: FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id)),
+                searchPrompt: "Search this plan's files",
+                onSearchAllBackups: onSearchAllBackups
+            )
         } else {
             ContentUnavailableView(
                 "No repository set",

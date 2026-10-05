@@ -153,6 +153,18 @@ enum Format {
         return "\(monthDay(old)), \(old.year) – \(monthDay(new)), \(new.year)"
     }
 
+    /// The day an item a chain's newest backup no longer holds was last
+    /// backed up, short for its row in a Files tab — "until Oct 2", the year
+    /// said only when it is not this one. The row's tooltip carries the
+    /// full moment.
+    static func until(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
+        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        let day = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+            ? date.formatted(style.month(.abbreviated).day())
+            : date.formatted(style.year().month(.abbreviated).day())
+        return "until \(day)"
+    }
+
     /// A next-run moment, spelled short for the plan page's Next backup
     /// value (once a stat tile, which truncated `timestamp`'s full "Sep 9,
     /// 2026 at 3:00 AM" right through its AM/PM — the one part that says

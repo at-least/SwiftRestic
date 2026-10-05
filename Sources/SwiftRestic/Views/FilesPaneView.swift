@@ -34,10 +34,7 @@ struct FilesPaneView: View {
                     chainNewest: chainNewest
                 )
                 if !indexComplete {
-                    Label(
-                        "The index is still reading this repository — older backups may be missing.",
-                        systemImage: "clock.arrow.circlepath"
-                    )
+                    Label(FilesSearchAnswer.indexStillReading, systemImage: "clock.arrow.circlepath")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }

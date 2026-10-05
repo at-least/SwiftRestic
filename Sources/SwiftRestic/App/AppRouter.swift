@@ -90,6 +90,12 @@ final class AppRouter {
     /// chain's roots (`FileNode.roots`). Transient.
     var filesSelection: [FileNode: FileNode] = [:]
 
+    /// What each chain's Files view is searching for, by the chain's roots,
+    /// as typed; empty or absent shows the tree. Transient, as the
+    /// selection is: a search left on a page is there when the page is
+    /// shown again.
+    var filesSearchText: [FileNode: String] = [:]
+
     /// The backup a folder's listing was read from when one of its items
     /// was opened from it: the item's pane opens at it when the item exists
     /// then, so walking down keeps the era. Transient; the next Files pane
@@ -130,23 +136,30 @@ final class AppRouter {
     /// opening at `record`.
     func showVersions(path: String, isDirectory: Bool, in record: Snapshot, repositoryID: UUID, page: SidebarItem) {
         let chain = SnapshotIndex.chainKey(for: record)
-        func folder(_ path: String) -> FileNode {
-            FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: true)
-        }
-        if let top = record.paths.flatMap(FilesTree.tails(of:)).filter({ Self.holds($0, path) })
-            .max(by: { $0.utf8.count < $1.utf8.count }) {
-            var above = ResticPath.parent(of: path)
-            while above.utf8.count >= top.utf8.count, Self.holds(top, above) {
-                openFolders.insert(folder(above))
-                above = ResticPath.parent(of: above)
-            }
-        }
-        filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] =
-            FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
+        let item = FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
+        openFolders(above: item, from: record.paths.flatMap(FilesTree.tails(of:)))
+        filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = item
         filesVersionHint = record.id
         filesPaneOpenings += 1
         pageTabs[page] = .files
         selection = page
+    }
+
+    /// Opens every folder above `item` in its chain's tree, down from the
+    /// deepest of `tops` — the backed-up folders the tree hangs from — that
+    /// holds it, so the tree lists the item's row: Show Versions, and a hit
+    /// picked in a Files tab's search. Nothing opens when no top holds it.
+    func openFolders(above item: FileNode, from tops: [String]) {
+        guard let top = tops.filter({ Self.holds($0, item.path) }).max(by: { $0.utf8.count < $1.utf8.count })
+        else { return }
+        var above = ResticPath.parent(of: item.path)
+        while Self.holds(top, above) {
+            openFolders.insert(FileNode(repositoryID: item.repositoryID, chainKey: item.chainKey, path: above, isDirectory: true))
+            // The root is its own parent: a whole-disk backup's top ends the
+            // walk here.
+            if above.utf8.elementsEqual(top.utf8) { break }
+            above = ResticPath.parent(of: above)
+        }
     }
 
     /// Whether `path` is `folder` or inside it, byte for byte, as the

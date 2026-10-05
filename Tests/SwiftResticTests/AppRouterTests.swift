@@ -128,6 +128,31 @@ struct AppRouterTests {
         #expect(router.tab(of: group) == .files)
     }
 
+    @Test("a search's hit opens the folders above it down from the deepest top holding it, and a whole-disk top ends the walk")
+    func openFoldersAboveAHit() {
+        let repositoryID = UUID()
+        let chain = "swiftrestic-plan-aaaa"
+        func node(_ path: String, folder: Bool = true) -> FileNode {
+            FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: folder)
+        }
+        let router = AppRouter()
+        router.openFolders(above: node("/Data/Photos/2026/Trip/beach.jpg", folder: false), from: ["/Data", "/Data/Photos/2026"])
+        #expect(router.openFolders == [node("/Data/Photos/2026"), node("/Data/Photos/2026/Trip")])
+
+        // The root is its own parent: a backup of the whole disk opens down
+        // to it and stops.
+        let disk = AppRouter()
+        disk.openFolders(above: node("/Users/x.txt", folder: false), from: ["/"])
+        #expect(disk.openFolders == [node("/"), node("/Users")])
+
+        // A top itself, and a path no top holds — bytes, not a string
+        // prefix — open nothing.
+        let none = AppRouter()
+        none.openFolders(above: node("/Data"), from: ["/Data"])
+        none.openFolders(above: node("/Data2/x.txt", folder: false), from: ["/Data"])
+        #expect(none.openFolders.isEmpty)
+    }
+
 }
 
 

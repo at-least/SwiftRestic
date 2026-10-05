@@ -251,6 +251,35 @@ struct FilesTreeTests {
         }
         #expect(level.entries == read.entries)
     }
+
+    // MARK: - Search
+
+    @Test("a search's hits list by name as Finder sorts names, one name's by path, each the tree row it selects")
+    func searchHitsOrder() {
+        let roots = FileNode.roots(repositoryID: repositoryID, chainKey: chain)
+        let day = IndexVersion(id: "s1", time: .now)
+        let hits = [
+            IndexChild(path: "/Docs/b/note10", isDirectory: false, newest: day, isInNewest: true),
+            IndexChild(path: "/Docs/a/note2", isDirectory: false, newest: day, isInNewest: false),
+            IndexChild(path: "/Docs/b/note2", isDirectory: false, newest: day, isInNewest: true),
+            IndexChild(path: "/Docs/Notes", isDirectory: true, newest: day, isInNewest: true),
+        ]
+        let entries = FilesSearchAnswer.entries(hits, under: roots)
+        // note2 before note10, numbers as numbers; no folders-first.
+        #expect(entries.map(\.node.path) == ["/Docs/a/note2", "/Docs/b/note2", "/Docs/b/note10", "/Docs/Notes"])
+        // A hit is the very node the tree lists, so picking it selects that
+        // row's item, and the dimming comes with it.
+        #expect(entries[0] == FilesTree.Entry(node: node("/Docs/a/note2", folder: false), newest: day, isInNewest: false))
+        #expect(entries[3].node == node("/Docs/Notes"))
+    }
+
+    @Test("a search's footer says the ceiling first, then the index still reading, else nothing")
+    func searchHitsNote() {
+        #expect(FilesSearchAnswer.note(count: 3, isComplete: true) == nil)
+        #expect(FilesSearchAnswer.note(count: 3, isComplete: false) == FilesSearchAnswer.indexStillReading)
+        #expect(FilesSearchAnswer.note(count: AppModel.indexSearchLimit, isComplete: false)
+            == "Showing the first matches — narrow the search to see more.")
+    }
 }
 
 /// What a test's tree asked to read ahead, one list per level.

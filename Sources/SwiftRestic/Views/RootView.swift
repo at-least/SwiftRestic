@@ -366,6 +366,11 @@ struct RootView: View {
                     repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory
                 )
             }
+            // SWIFTRESTIC_CAPTURE_SEARCH: the tab's search field holding a
+            // query, its hits in the tree's place.
+            if let query = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SEARCH"] {
+                router.filesSearchText[roots] = query
+            }
         case "concepts": isShowingConcepts = true
         case "console": router.selection = .console
         // The restore pane needs a snapshot row to select, and those arrive

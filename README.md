@@ -80,7 +80,16 @@ checked in so a normal build does not need it.
   per backup: the index keeps each answer, so going back to a file — after
   a relaunch too — runs no restic — and an opened folder's files are read
   ahead in one `find` (once the index has read every backup), so a first
-  click on one is answered too. Return or
+  click on one is answered too. A search field heads the tree: typing lists,
+  in the tree's place, the items of this plan's backups (or this group's)
+  whose names have words starting like the query — from the index, instant,
+  items the newest backup dropped included, dimmed with the day they were
+  last backed up (*until Oct 2*) — each under the folder that holds it. A
+  hit selects as a tree row does, so its versions open beside it; Return or
+  Esc ends the search on the tree, the hit's folders opened and its row in
+  view. While the index is still reading the repository the search says
+  older backups may be missing, and one with no match offers *Search All
+  Backups…*, Find Files over the whole repository. Return or
   *Restore…* restores the chosen version, and a row drags to Finder. *Show
   in Backups* opens the chosen backup at that place, under its plan in the
   sidebar. Each page keeps its tab, open folders and selection while the app
@@ -396,7 +405,8 @@ your real one. `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits;
 `activity`, `find`, `console`), plus `files` — the first plan's page on its
 Files tab, its first source open and selected, or the item
 `SWIFTRESTIC_CAPTURE_ITEM` names (an absolute path under that source, a folder
-spelled with a trailing `/`) with every folder above it open — and
+spelled with a trailing `/`) with every folder above it open, and with
+`SWIFTRESTIC_CAPTURE_SEARCH` its search field holding that query — and
 `orphanGroup`, `movedGroup` and `lineage` — the page of the first adoptable
 group under Other backups, of the first moved plan's group, or of the first
 untagged lineage, with its sidebar fold open. All three wait for the snapshot
