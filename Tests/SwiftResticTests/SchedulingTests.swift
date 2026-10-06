@@ -211,8 +211,8 @@ struct SchedulingTests {
         // card's "Due now" case and proves the date comes back unclamped.
         let overdue = makePlan(name: "overdue", enabled: true, sources: ["/tmp"], lastRunAt: date("2026-09-05 10:00:00"))
         let disabled = makePlan(name: "disabled", enabled: false, sources: ["/tmp"], lastRunAt: nil)
-        // The drift the fix closes: an incomplete plan was announced by the
-        // card as due forever while the scheduler will never fire it.
+        // An incomplete plan must not be listed: the card would announce it
+        // as due forever while the scheduler never fires it.
         let incomplete = makePlan(name: "incomplete", enabled: true, sources: [], lastRunAt: nil)
 
         let upcoming = Scheduler.upcomingRuns(
@@ -263,9 +263,9 @@ struct SchedulingTests {
             return plan
         }
         // Two plans on one repository at the same 02:00 slot: started
-        // together, one backup's retention `forget` took the repository's
-        // exclusive lock while the other ran, and the other recorded
-        // "Retention skipped".
+        // together, each backup's retention `forget` takes the repository's
+        // exclusive lock and locks the other out, which records
+        // "Retention skipped" — so a tick starts only one of them.
         let downloads = makePlan("downloads", shared, lastRunAt: "2026-09-04 02:00:00")
         let dotfiles = makePlan("dotfiles", shared, lastRunAt: "2026-09-04 02:00:00")
         let elsewhere = makePlan("elsewhere", other, lastRunAt: "2026-09-04 02:00:00")
@@ -327,10 +327,10 @@ struct PauseSchedulingTests {
 
     @Test("a timed plan pause holds the plan until it ends, then the missed slot runs")
     func timedPlanPauseHoldsThenCatchesUp() throws {
-        // The clamp probe's "daily, slot missed inside pause" scenario. The
-        // scheduler reads the machine's calendar, so the dates are chosen to
-        // hold in any zone: the last run is 25 hours before `now`, so some
-        // 02:00 slot has passed uncovered whatever the offset.
+        // A daily slot missed inside a plan pause. The scheduler reads the
+        // machine's calendar, so the dates are chosen to hold in any zone:
+        // the last run is 25 hours before `now`, so some 02:00 slot has
+        // passed uncovered whatever the offset.
         var plan = dailyPlan(lastRunAt: date("2026-09-24 02:00:00"))
         plan.pausedUntil = date("2026-09-25 09:00:00")
         let existing: Set<UUID> = [repositoryID]
@@ -440,9 +440,8 @@ struct PauseSchedulingTests {
         #expect(PauseLength.untilResumed.end(from: now) == nil)
         #expect(PauseLength.allCases.map(\.menuTitle) == ["For 1 Hour", "Until Tomorrow", "Until I Resume"])
 
-        // The values design-probes/06-global-pause/tomorrow printed, with
-        // numeric offsets: the POSIX locale spells PDT where the probe's
-        // printed GMT-7.
+        // The expected strings carry numeric offsets: the `xxx` format
+        // prints the zone as "-07:00", never "PDT", whatever the locale.
         func check(_ zone: String, _ components: DateComponents, _ expected: String) throws {
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = try #require(TimeZone(identifier: zone))

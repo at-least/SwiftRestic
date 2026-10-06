@@ -3,8 +3,8 @@ import Testing
 
 /// Why restic could not read an item, and what the user can do about it:
 /// macOS's privacy protection (Full Disk Access fixes it) against the file's
-/// own permissions (it does not). The lines are the shapes restic 0.19.1
-/// printed on 2026-09-26, stored as `"<item>: <message>"`.
+/// own permissions (it does not). The fixture lines follow restic's message
+/// shapes, stored as `"<item>: <message>"`.
 @Suite("item error diagnosis")
 struct ItemErrorDiagnosisTests {
     private let mailLine = "/Users/u/Library/Mail: openfile for readdirnames failed: open /Users/u/Library/Mail: operation not permitted"
@@ -13,17 +13,15 @@ struct ItemErrorDiagnosisTests {
     func classification() {
         #expect(ItemErrorDiagnosis.kind(of: mailLine) == .blockedByMacOS)
         #expect(ItemErrorDiagnosis.kind(of: "/x/locked.txt: open /x/locked.txt: permission denied") == .deniedByFilePermissions)
-        // The demo fixture's shape, from before the item was prefixed.
+        // The unprefixed shape — no `<item>: ` prefix — still classifies.
         #expect(ItemErrorDiagnosis.kind(of: "open /x/locked.pdf: permission denied") == .deniedByFilePermissions)
         // The words anywhere but at the end are a path, not an errno.
         #expect(ItemErrorDiagnosis.kind(of: "/x/permission denied/y: open /x/permission denied/y: no such file or directory") == .other)
         #expect(ItemErrorDiagnosis.kind(of: RunRecord.retentionSkippedPrefix + "repository is already locked by PID 4242 on demo-mac") == .other)
         #expect(ItemErrorDiagnosis.kind(of: "1 restic message could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete.") == .other)
         #expect(ItemErrorDiagnosis.kind(of: "/src/gone does not exist, skipping") == .other)
-        // A parent folder's extended attributes, from a real run against
-        // ~/Library/Safari/Bookmarks.plist without the grant (2026-09-27,
-        // restic 0.19.1): restic ends this message with a newline, and the
-        // stored line keeps it.
+        // A parent folder's extended-attribute failure: restic ends this
+        // message with a newline, and the stored line keeps it.
         #expect(ItemErrorDiagnosis.kind(of: "/Users/u/Library/Safari: can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted\n") == .blockedByMacOS)
 
         let tally = ItemErrorDiagnosis.tally([
@@ -42,8 +40,8 @@ struct ItemErrorDiagnosisTests {
         #expect(hints(blocked, .notGranted, .notGranted) == [.grantFullDiskAccess(3)])
         #expect(hints(blocked, .notGranted, .granted) == [.retryNowGranted(3)])
         #expect(hints(blocked, .granted, .granted) == [.protectedEvenWithAccess(3)])
-        // Records from before the stamp read the status now; unknown is
-        // treated as missing, since the probe found nothing to say otherwise.
+        // A record with no stamp reads the status now; an unknown one is
+        // treated as missing.
         #expect(hints(blocked, nil, .notGranted) == [.grantFullDiskAccess(3)])
         #expect(hints(blocked, nil, .unknown) == [.grantFullDiskAccess(3)])
         // Nor is such a record ever told the grant was there at the run —
@@ -71,7 +69,8 @@ struct ItemErrorDiagnosisTests {
         record.itemErrorCount = 1
         #expect(ItemErrorDiagnosis.hints(for: record, accessNow: .notGranted) == [.grantFullDiskAccess(1)])
 
-        // The demo's legacy Sep 24 record: permissions only, no stamp.
+        // No stored tally and no stamp: diagnosed from its items —
+        // permissions only.
         var legacy = RunRecord(kind: .backup, planName: "Documents")
         legacy.itemErrors = ["open /x/Taxes/2025/locked.pdf: permission denied"]
         legacy.itemErrorCount = 1

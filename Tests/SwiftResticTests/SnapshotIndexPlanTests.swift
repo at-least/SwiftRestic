@@ -8,11 +8,11 @@ import Testing
 
 /// The planner route of every statement the snapshot index prepares — what a
 /// green functional test cannot see. Nothing in the app ever ANALYZEs, so
-/// SQLite plans from its default cost model, and every read and write here
-/// was designed against the plans that model gives (FINAL.md 5.3). A plan
-/// that drifts — a new index the planner prefers, a literal turned into a
-/// parameter so `run_closed` stops applying — turns a change-sized statement
-/// into a table scan without failing any answer; these pins fail instead.
+/// SQLite plans from its default cost model, and every pin here is designed
+/// against the plans that model gives. A plan that drifts — a new index the
+/// planner prefers, a literal turned into a parameter so `run_closed` stops
+/// applying — turns a change-sized statement into a table scan without
+/// failing any answer; these pins fail instead.
 ///
 /// Rules: each statement's plan must contain its fragments, and any `SCAN`
 /// must name a table its rule allows. The allowed scans are the documented
@@ -39,10 +39,10 @@ struct SnapshotIndexPlanTests {
         "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
     ]
 
-    /// FINAL.md 5.3's table, one entry per registered statement, keyed by
-    /// the statement's property name in `SnapshotIndexSchema.Statements`. A
-    /// statement with no fragments is a plain insert or a whole-table
-    /// delete: its plan must simply scan nothing.
+    /// One entry per registered statement, keyed by the statement's property
+    /// name in `SnapshotIndexSchema.Statements`. A statement with no
+    /// fragments is a plain insert or a whole-table delete: its plan must
+    /// simply scan nothing.
     static let rules: [String: Rule] = [
         "nodeLookup": Rule(contains: ["SEARCH node USING COVERING INDEX sqlite_autoindex_node_1 (parent=? AND name=?)"]),
         "nodeInsert": Rule(contains: []),

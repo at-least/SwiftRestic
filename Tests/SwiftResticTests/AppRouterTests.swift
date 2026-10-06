@@ -2,10 +2,8 @@ import Foundation
 import Testing
 
 /// The router's intent slot: one ask at a time, cleared the moment it is
-/// seen, replaced while unconsumed. These rules are what let a menu command
-/// fired while the window is closed survive until the window exists — the
-/// property the old `pendingNewRepository` flag had and the notification
-/// seam lacked.
+/// seen, replaced while unconsumed — what lets a menu command fired while
+/// the window is closed survive until the window exists.
 @MainActor
 @Suite("app router")
 struct AppRouterTests {
@@ -65,7 +63,6 @@ struct AppRouterTests {
         // stale ask can never steer a later, unrelated load.
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s2") == nil)
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
-        // Nor does the same snapshot ID under another repository.
         router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
         #expect(router.takeRestoreFocus(repositoryID: UUID(), snapshotID: "s1") == nil)
 
@@ -168,8 +165,8 @@ struct AppRouterTests {
 }
 
 
-/// The documentation links are constant literals — which is exactly why a
-/// typo would hide until clicked. Pin them here so it hides until CI.
+/// The documentation links are constant literals — a typo would hide until
+/// clicked. Pinned here so it hides until CI instead.
 @Suite("app links")
 struct AppLinksTests {
     @Test("every documentation link parses as https")

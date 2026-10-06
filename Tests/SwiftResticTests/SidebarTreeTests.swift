@@ -51,7 +51,7 @@ struct SidebarTreeTests {
     @Test("no two repositories' children share an identity")
     func childrenAreUniqueAcrossRepositories() {
         // The List gives every repository's children one identity space: a
-        // shared Other backups row showed up, empty, under repositories
+        // shared Other backups row would land, empty, under repositories
         // that hold none.
         let nas = UUID()
         let fresh = UUID()
@@ -62,8 +62,7 @@ struct SidebarTreeTests {
 
     @Test("a repository with no plan offers its first one where its plans would be")
     func noPlanOffersOne() {
-        // The dead end the user reported: a new repository and nowhere to
-        // add a plan to it.
+        // The dead end: a new repository and nowhere to add a plan to it.
         let test = UUID()
         #expect(SidebarTree.children(of: test, in: [plan("Elsewhere", in: UUID())], hasOtherBackups: false)
             == [.addPlan(repositoryID: test)])

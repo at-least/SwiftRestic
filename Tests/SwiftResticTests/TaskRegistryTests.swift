@@ -3,11 +3,10 @@ import Testing
 
 /// The run census the quit path drains.
 ///
-/// The registry is the structural replacement for hand-maintained task
-/// dictionaries, and `shutdown` leans on one property: when `drain` returns,
-/// everything it was tracking — including anything that landed while it was
-/// draining — has finished unwinding, so the final save cannot race a run
-/// record into existence.
+/// `shutdown` leans on one property: when `drain` returns, everything it
+/// was tracking — including anything that landed while it was draining —
+/// has finished unwinding, so the final save cannot race a run record into
+/// existence.
 @Suite("Task registry")
 @MainActor
 struct TaskRegistryTests {
@@ -64,8 +63,8 @@ struct TaskRegistryTests {
         }, in: aSlot)
 
         // B lands while drain is suspended on A, and outlives A by a wide
-        // margin — the old single-pass drain returned the moment A finished
-        // and dropped B un-awaited.
+        // margin: a drain that stopped once A finished would drop B
+        // un-awaited.
         Task {
             while !flags.isMarked("a-started") {
                 try? await Task.sleep(for: .milliseconds(5))

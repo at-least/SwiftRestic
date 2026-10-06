@@ -574,10 +574,9 @@ struct StubResticTests {
             return try await service.backup(context, plan: plan)
         }
         // The hang is what guarantees the cancel lands mid-run, so the test
-        // must not assume a fixed delay — a cold first spawn can take a moment,
-        // and under load more than 10 s: 3 of 13 runs on 2026-10-04 found no
-        // stub and no trace by then. The wait ends the moment the hang shows,
-        // so its length costs a healthy run nothing.
+        // must not assume a fixed delay: a cold first spawn can take a
+        // moment, and more under load. The wait ends the moment the hang
+        // shows, so its length costs a healthy run nothing.
         // If the hang never establishes, this fails with the stub's own trace
         // and when the backup's task got a thread, if it ever did.
         let hangEstablished = await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 60)
@@ -626,9 +625,8 @@ struct StubResticTests {
             firstProgress.mark()
             // The handoff: the stub ends only after it sees this flag, so the
             // run is provably still going when the line is delivered. A
-            // wall-clock ratio stood here before — first line before 70% of
-            // a run held open 1.2 s — and load stretched the time before the
-            // first line past it in 4 of 13 runs on 2026-10-04.
+            // handoff rather than a wall-clock ratio: load can stretch the
+            // time before the first line past any fixed share of the run.
             FileManager.default.createFile(atPath: flag.path, contents: nil)
         }
 
@@ -730,7 +728,7 @@ struct StubResticTests {
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
 
         // The run finished and the snapshot is real; what must not happen is
-        // the clean report a silently-downgraded line used to produce.
+        // the clean report a silently-downgraded line would produce.
         #expect(outcome.exitCode == 0)
         #expect(outcome.summary?.snapshotID == "feedface00000000")
         #expect(outcome.completedWithErrors)
@@ -765,7 +763,7 @@ struct StubResticTests {
         #expect(entries.last?.kind == .exit(0))
         #expect(transcript.contents.firstExitCode == 0)
 
-        // Unbound, the same run behaves as before and writes nowhere.
+        // Unbound, the same run writes nowhere and answers the same.
         let before = transcript.contents.entries.count
         let unbound = try await fixture.service.backup(fixture.context, plan: fixture.plan)
         #expect(transcript.contents.entries.count == before)
@@ -973,9 +971,9 @@ struct StubResticTests {
 
         let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
         let starts = trace.split(separator: "\n").map(String.init).filter { $0.hasPrefix("start args=[") }
-        // Locked, each paid restic's 200 ms wait after writing its lock, failed
-        // with exit 11 under retention's exclusive lock, and made a forget
-        // starting meanwhile fail the same way (all probed on restic 0.19.1).
+        // Without it each read pays restic's lock wait — 200 ms when the
+        // repository is locked — and fails with exit 11 under retention's
+        // exclusive lock; a forget starting meanwhile fails the same way.
         for command in ["find", "ls", "snapshots", "diff", "stats"] {
             let start = try #require(starts.first { $0.hasPrefix("start args=[\(command) ") }, "trace: \(trace)")
             #expect(start.contains("--no-lock"), "start line: \(start)")

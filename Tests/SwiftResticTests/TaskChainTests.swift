@@ -4,8 +4,7 @@ import Testing
 /// Ends the test process when an `await` never comes back. A main actor that
 /// spins never returns to the test, so no in-process timeout can fire; this
 /// watchdog runs on its own thread and turns the hang into a crash naming
-/// it, which xcodebuild reports (and `./build.sh test` fails on), instead of
-/// a run that never ends.
+/// it, which xcodebuild reports (and `./build.sh test` fails on).
 final class HangWatchdog: @unchecked Sendable {
     private let done = DispatchSemaphore(value: 0)
 

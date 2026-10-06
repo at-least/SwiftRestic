@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 /// `ResticDiffChange` reading restic's spelling of a directory whose name
-/// ends in a Prepend character. restic 0.19.1 wrote such a directory as
+/// ends in a Prepend character. restic 0.19.1 writes such a directory as
 /// `…/new\u{0600}/` (`restic diff --json`, bytes `6e 65 77 d8 80 2f`); the
 /// prefix is shortened here.
 @Suite("restic diff change spelling")
@@ -31,9 +31,9 @@ struct ResticDiffChangeSpellingTests {
 /// `ResticPath`, the one owner of restic's path spelling.
 @Suite("restic path spelling")
 struct ResticPathTests {
-    /// Scalars that join a following "/" into their own grapheme cluster on
-    /// the OS the probe ran on (Grapheme_Cluster_Break=Prepend). The byte
-    /// rules below do not depend on that; only `premise` names U+0600's.
+    /// Scalars that join a following "/" into their own grapheme cluster
+    /// (Grapheme_Cluster_Break=Prepend). The byte rules below do not depend
+    /// on that; only `premise` names U+0600's.
     static let prepends: [Unicode.Scalar] = ["\u{0600}", "\u{0605}", "\u{06DD}", "\u{070F}", "\u{110BD}", "\u{11A84}"]
 
     @Test("the premise: U+0600 swallows the slash after it, so a Character test misses it")

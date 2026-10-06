@@ -91,9 +91,9 @@ struct SnapshotLineageTests {
         let nightlyTag = ResticService.planTag(nightly.id)
 
         // Two plans backing up the same folders on one host, interleaved —
-        // both since deleted. Naming a group after its plan flipped the
-        // title with whichever ran last and claimed the other's backups;
-        // the plan tag groups them instead, and the folders name each. The
+        // both since deleted. A group named after its plan would flip its
+        // title with whichever ran last and claim the other's backups;
+        // the plan tag groups them, and the folders name each. The
         // group order follows the newest member, whichever plan that is.
         let h1 = try snapshot("h1", time: "2026-09-25T01:00:00Z", paths: ["/Data/Docs"], tags: [hourlyTag])
         let n1 = try snapshot("n1", time: "2026-09-25T02:00:00Z", paths: ["/Data/Docs"], tags: [nightlyTag])

@@ -90,8 +90,8 @@ struct ConfigStoreTests {
         #expect(loaded.repositories.count == 1)
         #expect(loaded.plans.count == 1)
         #expect(loaded.plans.first?.schedule.frequency == .hourly)
-        // "chartIndex" above is a key earlier builds wrote for the dashboard's
-        // charts, since removed; a config carrying it must still load.
+        // The "chartIndex" above is a stored key the model does not
+        // declare; a config carrying it must still load.
 
         // A plan that has never run and is on an interval schedule must be due
         // straight away, which is what makes the app back up shortly after launch.
@@ -161,8 +161,8 @@ struct TolerantDecodingTests {
 
     @Test("a run record from before the exit code was stored never claims a complete snapshot")
     func legacyRunRecordsNeverClaimComplete() throws {
-        // Before the field existed, restic's per-item errors were the only
-        // trace of an exit 3; a record without them proves nothing either way.
+        // Without an exit code, restic's per-item errors are the only trace
+        // of an exit 3, and their absence proves nothing either way.
         let flagged = try decode(RunRecord.self, #"{"kind":"backup","snapshotID":"73d9b51d","itemErrorCount":1}"#)
         #expect(flagged.exitCode == nil)
         #expect(flagged.snapshotCompleteness == .incomplete)
@@ -189,7 +189,8 @@ struct TolerantDecodingTests {
 
     @Test("a run record saved before logs and restore details decodes with safe defaults")
     func runRecordLogAndRestoreFieldsDefault() throws {
-        // The demo's Sep 26 Documents record, as an earlier build wrote it.
+        // A verbatim record from a build that stored none of the log and
+        // restore fields.
         let legacy = try decode(
             RunRecord.self,
             #"{"bytesProcessed":250000,"dataAdded":900,"filesChanged":1,"filesNew":0,"filesUnmodified":16,"finishedAt":"2026-09-25T18:00:10Z","hookMessages":[],"id":"44444444-4444-4444-8444-000000000005","itemErrorCount":0,"itemErrors":[],"kind":"backup","outcome":"succeeded","planID":"22222222-2222-4222-8222-222222222222","planName":"Documents","repositoryID":"11111111-1111-4111-8111-111111111111","snapshotID":"abf728998814d029436dc76f64e5204a4d2336134e43b921a53e52e53144137f","startedAt":"2026-09-25T18:00:00Z"}"#
@@ -229,9 +230,8 @@ struct TolerantDecodingTests {
 
     @Test("a run record saved before the Full Disk Access diagnosis decodes without one")
     func runRecordDiagnosisFieldsDefault() throws {
-        // Records from before the tally fall back to their stored lines, and
-        // those from before the stamp to the access state now — so absent
-        // must stay absent, never a zero tally or a made-up state.
+        // Absent must stay absent: a record without the tally or the stamp
+        // reads nil, never a zero tally or a made-up state.
         let legacy = try decode(RunRecord.self, #"{"kind":"backup","itemErrorCount":1,"itemErrors":["open /x/locked.pdf: permission denied"]}"#)
         #expect(legacy.itemErrorTally == nil)
         #expect(legacy.fullDiskAccessAtRun == nil)
@@ -296,9 +296,9 @@ struct TolerantDecodingTests {
 
     @Test("a run record stored with restic's trailing newline reads without it")
     func runRecordItemErrorsLoseTrailingWhitespace() throws {
-        // Lines stored before the newline was dropped at the source keep it
-        // in config.json; every surface reads them through this decoder.
-        // Only the tail goes: an item's own path at the head is never touched.
+        // config.json can hold item-error lines with their trailing newline;
+        // only the tail goes — an item's own path at the head is never
+        // touched. Every surface reads the lines through this decoder.
         let legacy = try decode(
             RunRecord.self,
             #"{"kind":"backup","itemErrorCount":2,"itemErrors":["/Users/u/Library/Safari: can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted\n"," /odd name : open  /odd name : permission denied\r\n","Retention skipped: repository is already locked \n"]}"#

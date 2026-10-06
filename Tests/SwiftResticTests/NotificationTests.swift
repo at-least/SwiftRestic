@@ -140,7 +140,7 @@ struct NotificationTests {
         let check = NotificationEvent(stage: .failed, planName: "NAS", repositoryName: "NAS", errorMessage: "locked")
         #expect(check.summary == "Backup FAILED: NAS — locked", "summary was \(check.summary)")
         #expect(!check.summary.contains("NAS (NAS)"))
-        // An event with no plan names the repository alone, as before.
+        // An event with no plan names the repository alone.
         let bare = NotificationEvent(stage: .failed, planName: "", repositoryName: "NAS", errorMessage: "locked")
         #expect(bare.summary == "Backup FAILED: NAS — locked", "summary was \(bare.summary)")
     }
@@ -162,8 +162,7 @@ struct NotificationTests {
             title(for: RunRecord(kind: .backup, planID: documents.id, planName: "Documents", repositoryID: home.id))
                 == "Documents (Home Disk)"
         )
-        // A record that names nothing falls back to the app's name, as the
-        // title always did.
+        // A record that names nothing falls back to the app's name.
         #expect(title(for: RunRecord(kind: .backup)) == "SwiftRestic")
     }
 

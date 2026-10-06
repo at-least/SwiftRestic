@@ -30,11 +30,9 @@ struct AppModelStubTests {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticStubModel-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        // Same canonical root the real-restic harness resolves to: paths here
-        // reach the configuration as-is, and `/tmp` is a symlink to
-        // `/private/tmp` — an unresolved root would spell every path
-        // differently from what the model itself resolves, for no reason the
-        // stub needs.
+        // Resolved: `/tmp` is a symlink to `/private/tmp`, and an unresolved
+        // root would spell every path differently from what the model itself
+        // resolves.
         let root = base.resolvingSymlinksInPath()
         let stub = try StubRestic.install(in: root)
 
@@ -171,8 +169,8 @@ struct AppModelStubTests {
     func keepExistingRestoreSaysWhatItKept() async throws {
         let harness = try await makeHarness(mode: "restoreskip")
         defer { try? FileManager.default.removeItem(at: harness.root) }
-        // The stub calls itself 0.0.0, which predates --overwrite (0.17); the
-        // flag under test is the one a current restic gets.
+        // The stub reports 0.0.0, which predates --overwrite (0.17); the flag under
+        // test is the one a current restic gets.
         harness.model.resticVersion = "restic 0.19.1 compiled with go1.26.5 on darwin/arm64"
 
         let node = SnapshotNode(name: "Project", type: .dir, path: "/src/Project")
@@ -236,7 +234,6 @@ struct AppModelStubTests {
         #expect(restores.last?.contains(#"latest:/pictures --target \#(destination.path) --include /a\[1\].jpg"#) == true,
                 "last: \(restores.last ?? "none")")
 
-        // One record per call, newest first, each naming its items.
         let records = harness.model.configuration.runs
         #expect(records.map(\.sourcePaths) == [["/pictures/a[1].jpg"], ["/src/Project", "/src/notes.txt"]])
         #expect(records.map(\.planName) == ["a[1].jpg", "Project and 1 more"])
@@ -272,7 +269,7 @@ struct AppModelStubTests {
         )
         await waitUntilRestoreFinishes(in: harness.model)
 
-        // The second call never ran: one record, failed.
+        // The second call never ran.
         #expect(harness.model.configuration.runs.map(\.outcome) == [.failed])
         let banner = try #require(harness.model.banners.first)
         #expect(banner.title == "Restore from “Stub Repo” failed")
@@ -384,10 +381,9 @@ struct AppModelStubTests {
         await waitUntilRestoreFinishes(in: harness.model)
         #expect(!harness.model.isRestoring)
 
-        // The hop that was in flight when the unwind ran must not resurrect
-        // the strip — a resurrected restoreActivity sticks forever: nothing
-        // else clears it, quit always claims a restore is running, and the
-        // restore buttons stay disabled.
+        // A late hop must not resurrect the strip: nothing else clears a
+        // resurrected restoreActivity, quit always claims a restore is
+        // running, and the restore buttons stay disabled.
         runReporter(OperationProgress())
         let settle = Date.now.addingTimeInterval(1)
         while Date.now < settle { try? await Task.sleep(for: .milliseconds(20)) }
@@ -444,8 +440,8 @@ struct AppModelStubTests {
         // unwinds: the listing answers (the hang is spent) and freshness
         // advances past the bootstrap stamp. The re-run is on the registry's
         // background lane, so the test awaits it, as a quit does, rather
-        // than a 10 s clock a loaded host outran once in 6 runs. Everything
-        // else on this harness's lane is one-shot, so the wait is bounded.
+        // than a wall clock. Everything else on this harness's lane is
+        // one-shot, so the wait is bounded.
         await harness.model.tasks.drain()
         #expect(
             harness.model.snapshotsLoadedAt(for: harness.repository.id) != loadedAtStart,
@@ -544,9 +540,7 @@ struct AppModelStubTests {
 
         // Exit code 10 with nothing listed this session: the launch after
         // the backup disk was unplugged. Saving a new repository creates it
-        // before it is kept, so the app never holds an uninitialised one —
-        // the quiet "nothing here yet" this used to assert was the sidebar
-        // calling an unplugged disk's backups gone.
+        // before it is kept, so the app never holds an uninitialised one.
         let banner = try #require(harness.model.banners.first, "a missing repository must surface a banner")
         #expect(banner.isError)
         #expect(banner.title.contains("Stub Repo"))
@@ -591,9 +585,7 @@ struct AppModelStubTests {
         }
         // The listing answers fast; the hang (detectable only as the live
         // sleep process — the trace line fires for the fast calls too) is
-        // what guarantees the cancel lands inside the stats read, where a
-        // cancel used to surface the "could not read the size" banner and
-        // blank the size.
+        // what guarantees the cancel lands inside the stats read.
         #expect(
             await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
             "the stub never established its stats hang"
@@ -689,9 +681,8 @@ struct AppModelStubTests {
             return
         }
         #expect(message.contains("missing"))
-        // The sidebar shows the first sentence on one line, middle-truncated:
-        // a one-sentence message read "The repository is m…repository
-        // settings." there (captured 2026-10-02).
+        // The sidebar shows the first sentence on one line, middle-truncated,
+        // so it must stand alone.
         #expect(Format.firstSentence(message) == "Repository missing")
         #expect(message.contains("disk"), "a local repository's likeliest cause is an unplugged disk")
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
@@ -817,8 +808,7 @@ struct AppModelStubTests {
         harness.model.runBackup(planID: harness.plan.id)
         #expect(harness.model.isRunning(planID: harness.plan.id))
         #expect(harness.model.quitInterruptions == ["A backup is running"])
-        // Work in flight asks on every quit path, a logout's too, in the
-        // words the alert has always used.
+        // Work in flight asks on every quit path, a logout's too.
         let inFlight = harness.model.quitConfirmation(userChoseQuit: false)
         #expect(inFlight?.interruptsWork == true)
         #expect(inFlight?.message
@@ -857,8 +847,8 @@ struct AppModelStubTests {
         #expect(message.contains("Stub Plan is next due "))
         #expect(!message.contains("is due now"))
 
-        // Why: the quit's cancel stamps the slot as run, so after it the
-        // same sentence names the same next slot.
+        // The quit's cancel stamps the slot as run, so after it the same
+        // sentence names the same next slot.
         harness.model.cancelBackup(planID: harness.plan.id)
         await harness.model.waitForRun(planID: harness.plan.id)
         #expect(harness.model.configuration.plans[0].lastRunAt != nil)
@@ -888,8 +878,8 @@ struct AppModelStubTests {
         }
         #expect(!harness.model.quitInterruptions.isEmpty)
 
-        // Bounded on purpose: a regression here hangs the quit path, and the
-        // test must fail instead of hanging CI.
+        // Bounded: a regression here hangs the quit path, and the test must
+        // fail instead of hanging CI.
         let finished = await withTaskGroup(of: Bool.self) { group -> Bool in
             group.addTask { await harness.model.shutdown(); return true }
             group.addTask { try? await Task.sleep(for: .seconds(30)); return false }
@@ -1022,8 +1012,7 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
             .contains("tccblocked-arm"))
-        // restic's scan and archival events for the one folder are one item
-        // (09's dedupe) — a regression check here, red only at compile time.
+        // restic's scan and archival events for the one folder are one item.
         #expect(record.itemErrors.count == 2, "lines were \(record.itemErrors)")
         #expect(record.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 1, deniedByFilePermissions: 1))
         #expect(record.fullDiskAccessAtRun == .notGranted)
@@ -1742,10 +1731,9 @@ struct AppModelStubTests {
         let body = try #require(bodies.first, "no webhook payload ever arrived")
 
         // The precondition that makes the negative assertions below mean
-        // anything: the hook really ran and its output really was captured
-        // in-process. Without this, a regression that stopped running afterAny
-        // hooks would make the token vanish everywhere and the assertions
-        // would pass vacuously.
+        // anything: the hook really ran, its output captured in-process.
+        // Without it, a regression that stopped running afterAny hooks makes
+        // the token vanish everywhere and the assertions pass vacuously.
         let record = try #require(harness.model.configuration.runs.first)
         #expect(
             record.hookMessages.contains { $0.contains("hook-secret-token") },
@@ -1783,9 +1771,10 @@ struct AppModelStubTests {
 
     // MARK: - Browse caches
 
-    /// AppModel's index coordinator resolves its directory at init through
-    /// `SWIFTRESTIC_CONFIG_DIR`; pinned into scratch space for the test's
-    /// lifetime, browse-cache writes never land in real Application Support.
+    /// The index follows the store directory the harness injects — a
+    /// temporary root — and `SWIFTRESTIC_CONFIG_DIR`, pinned for the test's
+    /// lifetime, covers anything resolving the default; browse-cache writes
+    /// never land in real Application Support.
     private func withScratchIndexDirectory(
         _ body: () async throws -> Void
     ) async rethrows {
@@ -2059,7 +2048,7 @@ struct AppModelStubTests {
                 newerID: "feedface00000000"
             )
             // The change that decoded is still true; the one that did not is
-            // why a blank row can no longer mean unchanged.
+            // why a blank row does not mean unchanged.
             #expect(marks.changes["/src/new.txt"]?.category == .added)
             #expect(marks.failure != nil, "a diff that lost a line read as complete")
 
@@ -2427,10 +2416,10 @@ struct AppModelStubTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         // `isLoaded` is already true while bootstrap assigns the loaded
-        // configuration, so the didSet used to schedule a save 400 ms after
-        // every launch — committing any tolerant-decode substitutions before
-        // the banner naming them could be read. No save task may exist after
-        // bootstrap: loading is not a user edit.
+        // configuration, so the didSet would schedule a save 400 ms after
+        // every launch — `suppressConfigurationSave` silences that one
+        // assignment. No save task may exist after bootstrap: loading is
+        // not a user edit.
         #expect(harness.model.saveTask == nil)
         #expect(harness.model.isConfigurationUnreadable == false)
     }
@@ -2446,7 +2435,7 @@ private final class HTTPCaptureServer: @unchecked Sendable {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "SwiftResticTests.http-capture")
 
-    /// Nil until the listener is ready — poll `port` instead of reading early.
+    /// 0 until the listener is ready — poll it instead of reading early.
     var port: UInt16 { listener.port?.rawValue ?? 0 }
 
     var captured: [String] {

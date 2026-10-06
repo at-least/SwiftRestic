@@ -40,8 +40,7 @@ final class IndexFixture {
 /// coordinator on it, snapshots of two plans, and the scripted
 /// `MockResticClient` standing in for `ls` and `diff`. Shared across the
 /// test files — the coordinator suites, the browse-cache suite, and the
-/// restic suite's drop and reset tests — several of which used to rebuild
-/// the folder-and-coordinator part by hand. The folder exists from `init`
+/// restic suite's drop and reset tests. The folder exists from `init`
 /// on, where a bare coordinator creates it only when its first store opens
 /// (`openStore`); nothing reads the difference.
 struct CoordinatorScene {
@@ -281,13 +280,12 @@ enum IndexTestData {
         return String(repeating: "0", count: 64 - digits.count) + digits
     }
 
-    /// A path as `restic diff` spells it: a directory ends in `/`. The one
-    /// writer of that spelling in the test scaffolding — `diff(from:to:)`,
-    /// the scripted client's `walkDiff` and the scale model's deltas go
-    /// through it; a test that pins a particular spelling writes it
-    /// inline. The
-    /// app only ever reads it (`ResticDiffChange.isDirectory` and
-    /// `IndexedEntry(diffSpelling:)`, both through `ResticPath`), so the
+    /// A path as `restic diff` spells it: a directory ends in `/`. Every
+    /// writer of that spelling in the test scaffolding goes through here —
+    /// `diff(from:to:)`, the scripted client's `walkDiff` and the scale
+    /// model's deltas; a test that pins a particular spelling writes it
+    /// inline. The app only reads the spelling (`ResticDiffChange.isDirectory`
+    /// and `IndexedEntry(diffSpelling:)`, both through `ResticPath`), so the
     /// writing side lives with the tests;
     /// `DeltaCollectorTests.diffSpellingRoundTrips` pins the two together.
     static func diffSpelling(_ path: String, isDirectory: Bool) -> String {
@@ -427,7 +425,7 @@ extension SnapshotIndex {
     /// The stored-state violations that must be absent at this point.
     /// (a)–(c) and (l) are established by housekeeping, so they are checked
     /// only right after it; `excusing` names letters the caller knows to be
-    /// legitimately broken (risk 8's crash leftovers are (i)).
+    /// legitimately broken (a reopen during a stream leaves (i) behind).
     func violations(afterHousekeeping: Bool, excusing: Set<Character> = []) throws -> [String] {
         try invariantViolations().filter { line in
             guard line.count > 1 else { return true }
@@ -547,8 +545,8 @@ extension SnapshotIndex {
 /// check (j).
 final class CheckedIndex {
     let fixture: IndexFixture
-    /// Letters known to be legitimately broken from here on (risk 8: a
-    /// reopen during a stream leaves (i) behind for good).
+    /// Letters known to be legitimately broken from here on (a reopen
+    /// during a stream leaves (i) behind for good).
     var excusing: Set<Character> = []
 
     init() throws {

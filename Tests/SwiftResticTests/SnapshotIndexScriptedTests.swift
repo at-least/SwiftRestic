@@ -3,17 +3,15 @@ import GRDB
 import Testing
 
 /// Scripted interleavings that the unit tests and the property test do not
-/// reach on their own: the correctness judge's S1–S5, the complexity judge's
-/// fault probe and fixtures, closedfinal's X1–X8, the abandoned-stage GC,
-/// the quarantine's release, and the schema check at open. Each names the
-/// harness check it ports (FINAL.md 5.2) and asserts that check's PASS
-/// condition through the public API; every write goes through
+/// reach on their own: the S1–S5 scenarios, the fault probe and its
+/// fixtures, the X1–X8 cases, the abandoned-stage GC, the
+/// quarantine's release, and the schema check at open. Each asserts its
+/// PASS condition through the public API; every write goes through
 /// `CheckedIndex`, so the stored-state invariants are checked after each.
 ///
-/// Reviewer checklist — planted mutants each of these must catch (not run by
-/// `./build.sh test`; plant one, run the five SnapshotIndex suites, and
-/// expect red). Every line was planted and run once; the tests named are
-/// the ones that went red:
+/// Mutation checklist — each line is a mutant these tests must catch (not
+/// run by `./build.sh test`; plant one, run the five SnapshotIndex suites,
+/// and expect red):
 /// - no stream identity check (`target.id == active.snapID`): S2, and the
 ///   property test's mid-stream flaps;
 /// - `snap.id` without AUTOINCREMENT: S2 (the returning row reuses the id);
@@ -68,7 +66,7 @@ struct SnapshotIndexScriptedTests {
         try IndexTestData.snapshot(id, micros: micros, tags: tags ?? [plan], paths: ["/r"])
     }
 
-    // MARK: - N1: the correctness judge's S1–S5
+    // MARK: - S1–S5
 
     @Test("S1: a cancelled first build of a forgotten snapshot leaves no claim on a later snapshot of the plan")
     func s1CancelledFirstBuild() async throws {
@@ -172,7 +170,7 @@ struct SnapshotIndexScriptedTests {
         #expect(try await checked.index.contains(paths: ["/r/k"], inSnapshot: "s2") == ["/r/k": true])
     }
 
-    // MARK: - N1: closed's targeted tests
+    // MARK: - Targeted tests
 
     /// A file<->dir change restic spells as one `T` line — the new kind only,
     /// both subtrees omitted — must be refused atomically; a file<->symlink
@@ -274,11 +272,10 @@ struct SnapshotIndexScriptedTests {
     /// A delta may create a child under a directory an open stream created,
     /// between two of that stream's chunks, so the stream's cached walk
     /// believes that directory childless when it is not. A delta deletes no
-    /// node, so the walk's ids stay good and the delta keeps it (FINAL.md
-    /// 2.2 #14 dropped it there): a delta no longer drops the walk; a
-    /// collection does. What keeps this exact is the skipped lookup's insert
-    /// yielding to the existing child — without it, this failed with a
-    /// UNIQUE error.
+    /// node, so the walk's ids stay good and the delta keeps the walk; a
+    /// collection drops it. What keeps this exact is the skipped lookup's
+    /// insert yielding to the existing child — a plain insert would fail
+    /// with a UNIQUE error.
     @Test("a delta of another plan between two chunks adds a child under a directory the stream created; the stream continues exactly")
     func deltaBetweenChunks() async throws {
         let checked = try CheckedIndex()
@@ -423,7 +420,7 @@ struct SnapshotIndexScriptedTests {
         try index.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM node") ?? 0 }
     }
 
-    // MARK: - N3: the complexity judge's fault probe
+    // MARK: - The fault probe
 
     @Test("N3: a chunk that rolls back after creating nodes leaves no broken node, and a re-read is exact and searchable")
     func faultedChunkLeavesTreeWhole() async throws {
@@ -470,8 +467,8 @@ struct SnapshotIndexScriptedTests {
         try side.close()
     }
 
-    /// A search raced against a deadline: a broken node tree once made the
-    /// path rebuild loop forever, and that must fail this test, not hang the
+    /// A search raced against a deadline: a broken node tree can loop the
+    /// path rebuild forever, and that must fail this test, not hang the
     /// suite. Losing the race cancels the search, which interrupts SQLite.
     static func searchWithin(seconds: Double, _ index: SnapshotIndex, _ query: String) async throws -> [SearchHit] {
         try await withThrowingTaskGroup(of: [SearchHit]?.self) { group in
@@ -490,7 +487,7 @@ struct SnapshotIndexScriptedTests {
         }
     }
 
-    // MARK: - N4: the complexity judge's fixtures
+    // MARK: - Fixtures
 
     @Test("N4 (b): a snapshot that dies and returns with no housekeeping between is pending, then exact after one step")
     func revivalWithoutHousekeeping() async throws {
@@ -510,7 +507,7 @@ struct SnapshotIndexScriptedTests {
         #expect(try await checked.index.isComplete())
     }
 
-    // MARK: - N13: closedfinal's X1–X8 (N9 is X2–X4 plus the release)
+    // MARK: - X1–X8 (the N9-labelled release test among them)
 
     @Test("X1: reconcile adds one pending row per listed ID, deletes a dead one's, re-adds a return as a new row, and writes nothing on a repeat")
     func x1ReconcileRows() async throws {
@@ -537,11 +534,11 @@ struct SnapshotIndexScriptedTests {
         #expect(try await checked.index.isComplete())
     }
 
-    /// N6's guard, in the store: the compare and the write share one writer
-    /// turn, and the number is taken before the statements run. It writes
-    /// through `fixture.index` rather than `CheckedIndex`: the wrapper has no
-    /// numbered reconcile, and the write this test fails on purpose is the
-    /// point, not a state to check.
+    /// The numbered reconcile's guard, in the store: the compare and the
+    /// write share one writer turn, and the number is taken before the
+    /// statements run. It writes through `fixture.index` rather than
+    /// `CheckedIndex`: the wrapper has no numbered reconcile, and the write
+    /// this test fails on purpose is the point, not a state to check.
     @Test("a numbered reconcile drops a listing not newer than the last one taken, keeps the number when its write fails, and a fresh object takes any")
     func numberedReconcileKeepsItsNumber() async throws {
         let fixture = try IndexFixture()
@@ -665,8 +662,8 @@ struct SnapshotIndexScriptedTests {
         try checked.housekeeping()
     }
 
-    /// FINAL.md 3.5: the index never reads complete while a listed snapshot
-    /// is unread. The release runs in its own write, before the launch's
+    /// The index never reads complete while a listed snapshot is unread.
+    /// The release runs in its own write, before the launch's
     /// first reconcile, and a read can land between the two.
     @Test("releaseUnreadable never lets the index read complete while the released snapshot is still listed")
     func releaseKeepsIncompleteUntilReread() async throws {
@@ -808,7 +805,7 @@ struct SnapshotIndexScriptedTests {
         #expect(try await checked.index.isComplete())
     }
 
-    // MARK: - N14: abandoned-stage GC
+    // MARK: - Abandoned-stage GC
 
     @Test("N14: the next beginFull collects a cancelled stream's run-less nodes with their FTS rows")
     func n14CancelledStreamCollected() async throws {
@@ -871,7 +868,7 @@ struct SnapshotIndexScriptedTests {
         #expect(try checked.index.violations(afterHousekeeping: false).isEmpty)
     }
 
-    // MARK: - N10: schema check at open
+    // MARK: - Schema check at open
 
     @Test("N10: a file with another user_version is refused with the pool closed; deleted and reopened, it is empty and complete once a listing lands")
     func n10SchemaMismatch() async throws {

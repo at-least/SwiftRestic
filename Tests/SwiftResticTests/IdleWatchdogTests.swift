@@ -54,9 +54,8 @@ struct IdleWatchdogTests {
         // clock with 20x margin, so the run must outlive the cap and finish
         // on its own. The margin is the point — the clock starts at the
         // spawn, and a loaded test host delays the shell's first line and
-        // stretches its gaps: a 2.5x margin once let two stacked gaps trip
-        // the cap in CI, and ~4x still tripped in 2 of 13 runs at load
-        // averages 7-53 (2026-10-04), and again 2 s into a run that day.
+        // stretches its gaps: smaller margins have tripped the cap under
+        // load.
         let script = try installScript("""
             i=0
             while [ $i -lt 24 ]; do

@@ -2,8 +2,8 @@ import Foundation
 import Testing
 
 /// The Full Disk Access probe. What it answers inside SwiftRestic.app
-/// depends on how the app was launched and what the user granted, so the
-/// real answer is checked live; here, the mapping and that the probe really
+/// depends on how the app was launched and what the user granted, so no test
+/// can pin the real answer; these pin the mapping and that the probe really
 /// opens files instead of guessing from `stat`.
 @Suite("Full Disk Access probe")
 struct FullDiskAccessTests {
@@ -19,17 +19,15 @@ struct FullDiskAccessTests {
 
     @Test("the probe maps real open results and does not trust stat")
     func probeOpensFiles() throws {
-        // The test host's own Full Disk Access is deliberately not asserted:
-        // it answers for whatever process macOS holds responsible — under
-        // xcodebuild that is Xcode, not the terminal, and on the Mac this
-        // was written on Xcode was denied while the terminal was granted.
+        // The test host's own Full Disk Access is not asserted: it answers
+        // for whatever process macOS holds responsible — under xcodebuild
+        // that is Xcode, not the terminal.
         //
         // These files tell `open` from a `stat` guess (the mode-000 file
-        // exists but does not open), not from `access(R_OK)` or
-        // `isReadableFile`, which answer the same for them: the case that
-        // tells those apart is a TCC-protected path, whose answer depends on
-        // the machine, so it is the live check with the app launched on its
-        // own, not a test.
+        // exists but does not open); `access(R_OK)` and `isReadableFile`
+        // answer the same for them. The case that separates them is a
+        // TCC-protected path, whose answer depends on the machine, so it
+        // belongs to the running app, not to a test.
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticFDA-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

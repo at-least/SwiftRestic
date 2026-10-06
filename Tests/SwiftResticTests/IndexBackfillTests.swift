@@ -301,8 +301,8 @@ struct IndexBackfillTests {
         defer { scene.remove() }
         // Fifty folders of two hundred small files each — enough rows for the
         // store side to dominate the decode side, small enough that CI stays
-        // quick. The assertion is the generous bound; the printed rate is the
-        // evidence the million-file projection rests on.
+        // quick. The assertion is the generous bound; the printed rate is
+        // informational.
         for folder in 0..<50 {
             let directory = scene.source.appendingPathComponent("folder\(folder)")
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -775,8 +775,8 @@ struct IndexCoordinatorBackfillTests {
             await scene.reconcile(listing, UInt64(k + 1))
             await scene.backfill(client)
         }
-        // FINAL 8.1: without the quarantine, one bad snapshot blocks its
-        // side of the window forever.
+        // Without the set-aside, one bad snapshot blocks its side of the
+        // window forever.
         let newest = try await scene.versions("/data/a6.txt")
         let common = try await scene.versions("/data/common.txt")
         #expect(newest == ["a6"])
@@ -1121,8 +1121,9 @@ struct IndexCoordinatorBackfillTests {
         try await client.walkSnapshot(RepositoryContext(repository: Repository(), password: "x"), snapshotID: "s1") { node in
             collector.append(node)
         }
-        // Components ["data"] < ["data", "x"] < ["data.bak"]; String order,
-        // the mock's old `keys.sorted()`, puts "/data.bak" second.
+        // Components ["data"] < ["data", "x"] < ["data.bak"] in String
+        // order — the naive sort would put "/data.bak" second; depth-first
+        // streams the folder's files before the next sibling.
         #expect(collector.paths == ["/data", "/data/x", "/data.bak"])
     }
 }

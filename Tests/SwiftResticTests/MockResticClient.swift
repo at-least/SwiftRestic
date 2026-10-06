@@ -1,11 +1,9 @@
 import Foundation
 
 /// A scriptable `ResticClient` for engine-level tests: canned results and
-/// faults, plus a call log. The `ResticClient` seam existed since 680696e but
-/// nothing substituted for it — the stub binary covered everything at the
-/// cost of a process per case. This covers sequencing and outcome mapping
-/// in milliseconds; the stub-shell and real-restic suites stay the
-/// integration layer.
+/// faults, plus a call log. Covers sequencing and outcome mapping in
+/// milliseconds, where the stub binary costs a process per case; the
+/// stub-shell and real-restic suites stay the integration layer.
 final class MockResticClient: ResticClient, @unchecked Sendable {
     private let lock = NSLock()
 

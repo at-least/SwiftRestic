@@ -94,10 +94,9 @@ struct FormattingTests {
 
     @Test("relative time stays truthful for a future timestamp")
     func relativeFuture() {
-        // The old `min(date, now)` clamp fed the formatter a zero delta, so a
-        // run an hour ahead rendered as "in 0 seconds". The exact unit is the
-        // formatter's business (3600 s rounds to 59 minutes); future tense is
-        // ours.
+        // A delta clamped to now would render a run an hour ahead as "in 0
+        // seconds". The exact unit is the formatter's business (3600 s
+        // rounds to 59 minutes); future tense is ours.
         let value = Format.relative(Date.now.addingTimeInterval(3_600))
         #expect(value.hasPrefix("in "))
         #expect(!value.contains("0 seconds"))
@@ -272,9 +271,7 @@ struct FormattingTests {
             "a capital-less continuation after '. ' is an abbreviation, not a boundary"
         )
         // restic is a name spelled lowercase, and it starts the second
-        // sentence of the wrong-password message: uncut, the sidebar's
-        // one-line caption ended "…ord or no key found" (captured
-        // 2026-10-02).
+        // sentence of the wrong-password message.
         let wrongPassword = ResticError.commandFailed(
             exitCode: 12, message: "Fatal: wrong password or no key found"
         )

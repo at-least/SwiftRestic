@@ -510,9 +510,8 @@ struct AppModelTests {
 
     @Test("a run the user cancels is recorded as cancelled, not as an interruption")
     func userCancellationIsRecorded() async throws {
-        // hang-backup, not hang: after the run ends the model refreshes
-        // snapshots and stats, and those must answer instead of burning their
-        // 300 s refresh timeout.
+        // hang-backup, not hang: the post-run refresh must answer instead of
+        // burning its 300 s timeout.
         let harness = try await makeHarness(stubMode: "hang-backup")
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
@@ -552,8 +551,8 @@ struct AppModelTests {
 
         let record = try #require(model.configuration.runs.first, "the scheduler never ran the plan")
         #expect(record.planID == harness.plan.id)
-        // The invariant that matters: once a snapshot exists, the run is never
-        // recorded as a failure, whatever happens during the retention step.
+        // Once a snapshot exists, the run is never recorded as a failure,
+        // whatever happens during the retention step.
         #expect(record.outcome != .failed)
         #expect(model.plan(id: harness.plan.id)?.lastSuccessAt != nil)
         #expect(record.outcome == .succeeded, "unexpected warnings: \(record.itemErrors)")
@@ -920,8 +919,8 @@ struct StartAtLoginSurfaceTests {
     }
 
     /// `Format.relative` reads the real clock, so a notice's date is
-    /// anchored there — a fixed date read "is next due 2 days ago" and
-    /// still passed a prefix check. The daily slot sits twelve hours off
+    /// anchored there: a fixed date would read "is next due 2 days ago" and
+    /// still pass a prefix check. The daily slot sits twelve hours off
     /// that clock, so "due" and "next" cannot tie whenever this runs.
     private func anchorToRealClock(_ model: AppModel) -> Date {
         let now = Date.now
@@ -1176,8 +1175,9 @@ struct ConfigurationSaveTests {
     @Test("overlapping saves all return, and the last state asked for is what lands")
     func overlappingSavesSettle() async throws {
         // A quit's flush landing on the debounced save's, or the repository
-        // editor's flush on either: the calls overlap, and they used to spin
-        // the main actor for good (awaiting a finished task never suspends).
+        // editor's flush on either: the calls overlap, and must all return —
+        // a wait loop here spins the main actor (awaiting an already-finished
+        // task never suspends).
         let watchdog = HangWatchdog(seconds: 10, "three overlapping flushSave calls never returned — the main actor is spinning")
         defer { watchdog.disarm() }
         let root = FileManager.default.temporaryDirectory
@@ -1207,8 +1207,8 @@ struct IndexLocationTests {
     @Test("a model's snapshot indexes live beside its configuration")
     func indexFollowsTheStore() {
         // Every model a test builds points its store at a temporary folder;
-        // an index that ignored it wrote its sqlite files into the real
-        // Application Support folder on every test run.
+        // the index must follow it and never write into the real Application
+        // Support folder.
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticIndexHome-\(UUID().uuidString)")
         let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
@@ -1339,11 +1339,11 @@ struct IndexOrphanSweepLaunchTests {
     }
 }
 
-/// Launch's orphan-plan purge, through `bootstrap`: a plan whose repository
-/// is gone — left by a removal from before plans followed their repository
-/// out — is deleted, and the deletion is saved. Only from a repository list
-/// that read whole, for the index sweep's reason: every other load can miss
-/// a live repository, and its plans would read as orphans.
+/// Launch's orphan-plan purge, through `bootstrap`: a plan naming no
+/// configured repository is deleted, and the deletion is saved. Only from a
+/// repository list that read whole, for the index sweep's reason: every
+/// other load can miss a live repository, and its plans would read as
+/// orphans.
 @Suite("orphan plan purge at launch")
 @MainActor
 struct OrphanPlanPurgeLaunchTests {
@@ -1351,7 +1351,7 @@ struct OrphanPlanPurgeLaunchTests {
         var root: URL
         var config: URL
         var attached: BackupPlan
-        /// No repository at all: what `deleteRepository` used to leave.
+        /// No repository: a plan naming nothing.
         var detached: BackupPlan
         /// A repository id no configured repository has.
         var dangling: BackupPlan
@@ -1596,8 +1596,8 @@ struct RestoreBannerTests {
         #expect(silent.message == "/Users/x/Restored/a.txt")
 
         // A whole backup lands as a folder of recreated paths: the banner
-        // names that folder and reveals it. "Backup", the restore surfaces'
-        // word, now that the Restore pane shows this banner too.
+        // names that folder and reveals it. "Backup" is the restore
+        // surfaces' shared word, the Restore pane included.
         let destination = URL(fileURLWithPath: "/Users/x/Restored")
         let whole = AppModel.restoreBanner(
             itemName: nil, isDirectory: true, landing: destination,
@@ -1611,9 +1611,9 @@ struct RestoreBannerTests {
 
 /// The index answers for the last listing it took. A listing the model
 /// already shows but whose reconcile has not returned is not one of those:
-/// read then, an index complete for the listing before said "complete" for
-/// this one too, and the Files view kept an empty folder — or a backup
-/// already forgotten — without reading again (seen live, 2026-10-04).
+/// read then, an index complete for the listing before answers "complete"
+/// for this one too, and the Files view shows an empty folder — or a backup
+/// already forgotten — without reading again.
 @MainActor
 @Suite("Index completeness")
 struct IndexCompletenessTests {

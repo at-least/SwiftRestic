@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// The randomized differential test (FINAL.md 5.2, N2): a seeded world of
+/// The randomized differential test: a seeded world of
 /// snapshots with known contents drives the index through everything the
 /// backfill can meet — stale listings, forgets at any frontier and in the
 /// middle of a reverse backfill, a whole chain dying and returning, the
@@ -13,14 +13,14 @@ import Testing
 ///
 /// After every write the stored-state checks must hold ((a)–(c) only right
 /// after housekeeping). Check (i) runs by path: the nodes a reopen strands
-/// by dropping an open stream's stage — FINAL.md risk 8, the one allowed
+/// by dropping an open stream's stage — the one allowed
 /// exception — are recorded at that reopen and excused alone, so a node
 /// stranded any other way still fails the run, before or after a crash. At
 /// the end of every round the planner must reach `.done`, and every read
 /// must equal the truth.
 ///
 /// The default scale is modest so `./build.sh test` stays quick: 3 seeds of
-/// 15 rounds per variant. For the scale the harness ran, 40 seeds of 30
+/// 15 rounds per variant. For a heavier run, 40 seeds of 30
 /// rounds, pass `SWIFTRESTIC_INDEX_PROPERTY=40,30` to the test process —
 /// through xcodebuild that is `TEST_RUNNER_SWIFTRESTIC_INDEX_PROPERTY=40,30`,
 /// which it forwards with the prefix stripped. Each variant prints the scale
@@ -139,15 +139,13 @@ private final class PropertyRun {
     let fixture: IndexFixture
     var dice: Dice
     /// Rolls only which files' content changes: a stream of its own, so the
-    /// scenarios `dice` draws are the ones the harness drew before content
-    /// was modelled.
+    /// content draws never shift the scenarios `dice` draws.
     var revisionDice: Dice
     var world = World()
     var stats: [String: Int] = [:]
     var failures: [String] = []
-    /// Paths a reopen stranded (risk 8) that are stranded still: a leftover
-    /// that a re-read adopts leaves the set, so stranding it again is
-    /// caught.
+    /// Paths a reopen stranded that are stranded still: a leftover that a
+    /// re-read adopts leaves the set, so stranding it again is caught.
     var crashLeftovers = Set<String>()
     private let planP = "swiftrestic-plan-00000000-0000-0000-0000-00000000000p"
     private let planQ = "swiftrestic-plan-00000000-0000-0000-0000-00000000000q"
@@ -251,7 +249,7 @@ private final class PropertyRun {
         return revisions
     }
 
-    /// The harness's content generator: a small universe with a directory
+    /// The content generator: a small universe with a directory
     /// `/r/k` that flips kind, gains and loses a child, and an empty
     /// directory that comes and goes.
     func randomContent(from base: IndexContent?) -> IndexContent {
@@ -351,7 +349,7 @@ private final class PropertyRun {
 
     /// A relaunch: the TEMP stage and the session go with the connection,
     /// and whatever the open stream had created that no run holds is
-    /// stranded (risk 8). Those paths, and only those, become excusable.
+    /// stranded. Those paths, and only those, become excusable.
     private func reopenAfterCrash() throws {
         try fixture.reopen()
         let stranded = try index.strandedPaths()

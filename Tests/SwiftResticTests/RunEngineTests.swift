@@ -3,8 +3,8 @@ import Testing
 
 /// The run engines' sequencing and outcome mapping, driven through a mock
 /// client and a recording sink — no process, no binary, milliseconds per
-/// case. The stub-shell and real-restic suites still own everything below
-/// the `ResticClient` seam.
+/// case. The stub-shell and real-restic suites own everything below the
+/// `ResticClient` seam.
 @MainActor
 @Suite("backup run engine")
 struct BackupRunEngineTests {
@@ -161,7 +161,8 @@ struct BackupRunEngineTests {
             await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
         }
         // The hang is what guarantees the cancel lands inside the hook, the
-        // window where a cancel used to be mislabelled.
+        // window where a cancel must read as a cancellation, not a hook
+        // failure.
         let deadline = Date.now.addingTimeInterval(10)
         while Date.now < deadline, !FileManager.default.fileExists(atPath: hookStarted.path) {
             try await Task.sleep(for: .milliseconds(50))
@@ -410,7 +411,7 @@ struct BackupRunEngineTests {
     @Test("the record's exit code is the first restic exit the transcript saw")
     func recordKeepsTheFirstExitCode() async throws {
         // A partial backup, then a clean forget: the run's code is the
-        // backup's own (09's success path agrees; this pins the pair).
+        // backup's own, the first restic exit the transcript saw.
         let partial = RecordingSink()
         var outcome = successOutcome()
         outcome.exitCode = 3

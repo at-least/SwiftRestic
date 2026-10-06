@@ -3,11 +3,11 @@ import Testing
 
 /// The grandchild-pipe hang: a shell hook that backgrounds a long-lived
 /// command (`curl ... &`) leaves the command holding the pipes' write end
-/// after the shell itself is gone, and no signal of ours reaches it. Before
-/// the reaper, `run` blocked on the reader's EOF for the grandchild's whole
-/// lifetime — the hook's timeout never answered, a cancel never returned, and
-/// quit's `terminateAll` hung the drain. Raw scripts rather than `StubRestic`
-/// — the pipe inheritance is the behaviour under test.
+/// after the shell itself is gone, and no signal of ours reaches it — so
+/// `run` must answer on the child's own death, never wait on the reader's
+/// EOF for the grandchild's whole lifetime (the hook's timeout, a cancel
+/// and quit's `terminateAll` all hang without that). Raw scripts rather
+/// than `StubRestic` — the pipe inheritance is the behaviour under test.
 @Suite("restic runner grandchild pipes", .serialized)
 struct GrandchildPipeTests {
     /// Each case gets its own sleep duration so the deferred cleanup kills
@@ -52,10 +52,8 @@ struct GrandchildPipeTests {
         let start = Date()
         // A cap this test never means to fire: it only keeps a broken reaper
         // from riding the grandchild's 291 s, failing as `timedOut` instead.
-        // At 1 s it fired on the shell itself under load (2 of 13 runs on
-        // 2026-10-04, load averages 7-53): a second after the spawn the
-        // shell had not exited, or the starved host had not yet seen it
-        // exit. 20 s leaves that room and stays inside the bound below.
+        // A loaded host can take over a second to observe the shell's exit,
+        // so the cap is 20 s and the bound below stays wider.
         let result = try await ResticRunner().run(
             binary: script,
             invocation: ResticInvocation(arguments: [], timeout: 20)

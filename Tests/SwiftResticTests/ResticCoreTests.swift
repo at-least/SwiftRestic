@@ -124,9 +124,9 @@ struct ResticBinaryTests {
     @Test("a tilde in the override is expanded, not taken literally")
     func tildeOverrideIsExpanded() {
         // Pinning, not fixing: URL(fileURLWithPath:) itself expands "~" on
-        // this Foundation, so a home-relative override resolves — verified by
-        // probe after a review pass claimed otherwise. If a Foundation update
-        // ever stops expanding, this fails before anyone files the bug.
+        // this Foundation, so a home-relative override resolves. If a
+        // Foundation update ever stops expanding, this fails before anyone
+        // files the bug.
         do {
             _ = try ResticBinary.locate(userOverride: "~/definitely-not-here")
             Issue.record("a missing override must not be accepted")
@@ -224,8 +224,8 @@ struct RawLineStreamingTests {
     @Test("every raw line of stdout and stderr arrives, including non-JSON ones")
     func rawLinesArriveFromBothStreams() async throws {
         // /bin/sh with builtins only: no restic needed to exercise the pipes.
-        // The JSON-looking line must pass through undecoded-decision intact —
-        // raw delivery is independent of whether the line decodes.
+        // The JSON-looking line must pass through intact — raw delivery is
+        // independent of whether the line decodes.
         let runner = ResticRunner()
         let collector = LineCollector()
         let result = try await runner.run(
@@ -456,8 +456,8 @@ struct StdoutFileDumpTests {
     func noReplaceCommitWithoutExclusiveRename() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        // exFAT on macOS 26 answers ENOTSUP to RENAME_EXCL even for a free
-        // name (probed on a mounted image); the injected rename says the same.
+        // exFAT answers ENOTSUP to RENAME_EXCL even for a free name; the
+        // injected rename returns just that.
         let refusesFlag: (String, String) -> Int32 = { _, _ in ENOTSUP }
 
         let free = directory.appendingPathComponent("a.txt")
@@ -483,8 +483,7 @@ struct StdoutFileDumpTests {
 
 /// What a backup's unreadable-item lines are built from: restic's error
 /// events plus its plain-text skipped-source warnings, one line per item.
-/// The inputs are restic 0.19.1's own output, recorded from a probe run
-/// against a throwaway repository.
+/// The input lines follow restic 0.19.1's own output.
 @Suite("Unreadable items")
 struct UnreadableItemsTests {
     private func errors(_ lines: [String]) throws -> [ResticErrorMessage] {
@@ -553,11 +552,9 @@ struct UnreadableItemsTests {
 
     @Test("restic's trailing newline stays out of the stored line, and a copy without it is still the same item")
     func unreadableItemsDropTrailingWhitespace() throws {
-        // restic 0.19.1 ends its extended-attribute errors with a newline:
-        // the first two events are a real run's on ~/Library/Safari without
-        // Full Disk Access (2026-09-27), home folder renamed. The stored line
-        // lands in the banner, the plan row, the drawer and Copy Details,
-        // where the newline broke the sentence.
+        // restic 0.19.1 ends its extended-attribute errors with a newline,
+        // and the stored line lands in the banner, the plan row, the drawer
+        // and Copy Details, where a newline breaks the sentence.
         let events = try errors([
             #"{"message_type":"error","error":{"message":"can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted\n"},"during":"archival","item":"/Users/u/Library/Safari"}"#,
             #"{"message_type":"error","error":{"message":"can not obtain extended attribute com.apple.quarantine for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.quarantine: operation not permitted\n"},"during":"archival","item":"/Users/u/Library/Safari"}"#,

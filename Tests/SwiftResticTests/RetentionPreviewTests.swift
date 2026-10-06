@@ -3,8 +3,7 @@ import Testing
 
 /// Apply Retention Now…'s preview: restic's `forget --dry-run --json` answer
 /// read into what would go and what would stay, and the sheet's and the
-/// record's words for it. The fixtures are trimmed from restic 0.19.1's own
-/// output (design-probes/13-main-menu, r4.out and r1.out).
+/// record's words for it.
 @Suite("retention preview")
 struct RetentionPreviewTests {
     private static let tag = "swiftrestic-plan-11111111-2222-3333-4444-555555555555"
@@ -20,8 +19,8 @@ struct RetentionPreviewTests {
         try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(snapshotJSON(id, time).utf8))
     }
 
-    /// Two path lineages under one tag, the probe's `--keep-last 1`: restic
-    /// groups by host and paths, so each keeps its own newest.
+    /// Two path lineages under one tag, `--keep-last 1`: restic groups by
+    /// host and paths, so each keeps its own newest.
     private static let twoGroups = """
     [{"tags":null,"host":"probe-mac","paths":["/probe/src2"],\
     "keep":[\(snapshotJSON("c924460006e441cee9c4590122ae070aa70be5dc913a8166a4672e47e5647ce4", "2026-09-20T09:30:00+08:00", folder: "src2"))],\
@@ -49,7 +48,7 @@ struct RetentionPreviewTests {
 
     @Test("a null or absent list reads as empty, and so does no output at all")
     func nullOrAbsentListsAndEmptyOutputReadAsEmpty() throws {
-        // The probe's --keep-last 10: nothing to remove came back as null.
+        // Nothing to remove: restic answers a null list.
         let keeps = (1 ... 5).map {
             Self.snapshotJSON(String(repeating: "\($0)", count: 64), "2026-09-2\($0)T10:00:00+08:00")
         }
@@ -123,7 +122,7 @@ struct RetentionPreviewTests {
         // A dry run must never prune: restic would prune for real.
         #expect(!preview.contains("--prune"))
         #expect(apply.contains("--prune"))
-        // restic refuses --no-lock on a real forget (exit 1, probed).
+        // restic refuses --no-lock on a real forget (exit 1).
         #expect(!apply.contains("--no-lock"))
         #expect(!apply.contains("--dry-run"))
 

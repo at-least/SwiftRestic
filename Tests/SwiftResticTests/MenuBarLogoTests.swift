@@ -34,10 +34,10 @@ struct MenuBarLogoTests {
     func reducedMotionFace() {
         // Held: it is literally frame 0 of the pulse, not a new construction.
         #expect(MenuBarLogo.stillRunningImage === MenuBarLogo.image(phase: 0))
-        // Distinct: the old fallback handed Reduce Motion users the resting
-        // mark, indistinguishable from idle on the only always-visible surface.
-        // TIFF bytes are the cheapest honest comparison of two template
-        // bitmaps — the alphas differ in both plates.
+        // Distinct: a fallback of the resting mark would be indistinguishable
+        // from idle on the only always-visible surface. TIFF bytes are the
+        // cheapest honest comparison of two template bitmaps — the alphas
+        // differ in both plates.
         #expect(MenuBarLogo.stillRunningImage.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
     }
 

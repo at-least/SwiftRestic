@@ -619,8 +619,8 @@ struct MenuBarStatusTests {
     func holdLeadsAndHeadlineStepsAside() throws {
         let future = Date.now.addingTimeInterval(3600)
         let nightly = plan(name: "Nightly")
-        // On battery with the setting on, the "Next:" headline was the
-        // lie: the scheduler would not fire it.
+        // On battery with the setting on, a "Next:" headline would lie: the
+        // scheduler will not fire it.
         #expect(MenuBarStatus.headline(activity: [:], hold: .onBattery, repositories: [], nextRun: (nightly, future)) == nil)
         #expect(MenuBarStatus.headline(activity: [:], hold: .paused(until: nil), repositories: [], nextRun: (nightly, future)) == nil)
         #expect(

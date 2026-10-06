@@ -96,8 +96,7 @@ struct OverviewMetricsTests {
         // 1 h 43 min ago: Date.RelativeFormatStyle rounds this to "2 hours
         // ago" while the sidebar's Format.relative (RelativeDateTimeFormatter)
         // says "1 hour ago" — the dashboard's Protection card and the
-        // sidebar disagreed about the same backup, side by side (captured
-        // 2026-10-02).
+        // sidebar sit side by side and must agree.
         let repository = UUID()
         let time = Date.now.addingTimeInterval(-103 * 60)
         let rows = OverviewMetrics.protectionRows(
@@ -114,10 +113,10 @@ struct OverviewMetricsTests {
 
     @Test("a protected row counts from the moment the sidebar counts from")
     func protectedRowCountsFromTheRun() {
-        // Photos waits 45 s in a before-backup hook, and restic stamps its
-        // snapshot after it: the sidebar read "Last backup 3 minutes ago"
-        // (the run's start, lastSuccessAt) beside the card's "2 minutes ago"
-        // (the snapshot's time), same backup, same tick (captured 2026-10-02).
+        // Photos waits in a before-backup hook and restic stamps its snapshot
+        // after it, so the sidebar (the run's start, lastSuccessAt) and the
+        // card (the snapshot's time) must count the same backup from the same
+        // moment.
         let repository = UUID()
         var photos = plan("Photos", repository: repository)
         photos.lastSuccessAt = Date.now.addingTimeInterval(-207)
@@ -148,12 +147,8 @@ struct OverviewMetricsTests {
         // The surfaces that say when a plan last backed up — the sidebar
         // caption, the repository page's Protection line, the plan page's
         // Last backup value — all read PlanStatus.lastBackupAt, spelled by
-        // one formatter as of one tick. Before that was one derivation, a
-        // plan whose history arrived with the repository (adopted, or a
-        // repository added with its snapshots already in it) read three
-        // ways at once: the line "Last backup 2 days ago", the plan page
-        // "Never", the sidebar "Daily at 02:00" (probe, 2026-10-03). The
-        // tray and Settings say no last backup at all.
+        // one formatter as of one tick. The tray and Settings say no last
+        // backup at all.
         let repository = UUID()
         let tick = Date.now
         let ago = { Format.ago($0, now: tick) }
@@ -188,11 +183,10 @@ struct OverviewMetricsTests {
         // own, the newest snapshot two days old — that snapshot is the
         // moment everywhere, never "Never" or the schedule beside it. An
         // hour past the day boundary: `RelativeDateTimeFormatter` reads
-        // 48 h flat as "2 days ago" but a hair under it as "1 day ago"
-        // (probed: 172800 s → "2 days ago", 172799.999999881 s → "1 day
-        // ago"), and `snapshot(_:, at:)`'s JSON round-trip can take an
-        // exact two-day delta that hair under — a tick every few runs read
-        // "1 day ago" in the surfaces and "2 days ago" here.
+        // 48 h flat as "2 days ago" but a hair under it as "1 day ago",
+        // and `snapshot(_:, at:)`'s JSON round-trip can land that hair
+        // under an exact two-day delta — every surface must spell the same
+        // moment, or a tick flips one of them.
         var adopted = plan("Docs", repository: repository)
         adopted.sources = ["/Users/someone/Documents"]
         adopted.schedule.frequency = .daily
@@ -281,9 +275,8 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { $0 == docs.id ? failed : nil }
         )
-        // One derivation of the words: the dashboard printed "Last backup
-        // 4 hours ago" beside the sidebar's "Failed — Just now" (captured
-        // 2026-10-02), and "2 of 2 protected" above it.
+        // One derivation of the words: the dashboard's row must say the
+        // sidebar's caption, not a "Last backup" beside a standing failure.
         let sidebar = PlanStatus.sidebarCaption(
             for: docs, activity: nil, problem: failed, existingRepositoryIDs: [repository]
         )
@@ -506,9 +499,9 @@ struct OverviewMetricsTests {
 
         let since = date("2026-09-05 00:00:00")
         // Started before the window, failed inside it: this morning's news,
-        // not eight days old. A start-time basis would have dropped it — the
-        // old tile disagreed with the tray's line exactly here, on an
-        // overnight run that failed at dawn.
+        // not eight days old. A start-time basis would drop it, and the
+        // tray's line counts it — the two must agree on an overnight run
+        // that failed at dawn.
         #expect(OverviewMetrics.problemCount(runs: [overnight], since: since) == 1)
     }
 }

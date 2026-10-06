@@ -132,10 +132,10 @@ struct RetentionProjectionTests {
 
     @Test("the projection key covers exactly the inputs project reads")
     func projectionKeyCoversProjectInputs() {
-        // The projection runs off the render path now, keyed by its inputs:
-        // anything it does not read must not move the key, or editing the
-        // schedule's wall-clock fields (or the prune toggle) on another tab
-        // would re-pay a simulation the answer cannot have changed.
+        // The projection is keyed by its inputs: anything it does not read
+        // must not move the key, or editing the schedule's wall-clock fields
+        // (or the prune toggle) on another tab would re-pay a simulation the
+        // answer cannot have changed.
         var morning = hourlySchedule
         morning.hour = 9
         morning.minute = 30

@@ -89,10 +89,10 @@ struct RestorePaneSearchTests {
         #expect(atCeiling.note == hedge)
     }
 
-    /// FINAL.md risk 12. The NFC and NFD spellings of a name are one String
-    /// to Swift and two paths to restic: an older backup holds the NFD file,
-    /// the open one the NFC folder. The pane must list only the folder, as a
-    /// folder — the file is elsewhere — and the two hits must be two rows.
+    /// The NFC and NFD spellings of a name are one String to Swift and two
+    /// paths to restic: an older backup holds the NFD file, the open one the
+    /// NFC folder. The pane must list only the folder, as a folder — the
+    /// file is elsewhere — and the two hits must be two rows.
     @Test("a hit only canonically equal to a path the open backup holds is not listed in it")
     func byteDistinctSpellingsSplitByBytes() {
         let nfc = "/data/caf\u{e9}"       // … 66 C3 A9

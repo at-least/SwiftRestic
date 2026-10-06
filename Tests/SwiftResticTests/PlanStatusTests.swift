@@ -38,8 +38,8 @@ struct PlanStatusTests {
 
     @Test("a paused manual plan's tile promises no schedule to resume")
     func pausedManualPlanTile() {
-        // Removing a repository pauses all of its plans — manual ones too —
-        // and the editor's "Run on schedule" switch is on every plan.
+        // The editor's "Run on schedule" switch is on every plan, manual
+        // ones included.
         var plan = completeDailyPlan()
         plan.schedule.frequency = .manual
         plan.isEnabled = false
@@ -53,12 +53,12 @@ struct PlanStatusTests {
 
     @Test("an enabled plan the scheduler skips reads Not scheduled, never a date")
     func skippedPlanTile() {
-        // The state removing a repository leaves behind (the plan paused,
-        // its repository cleared), after Resume Schedule.
+        // A plan whose repository is gone, still enabled: the scheduler
+        // skips it.
         var orphaned = completeDailyPlan()
         orphaned.repositoryID = nil
-        // The old rule had a date to show for it — the one the scheduler
-        // never fires.
+        // The schedule still computes a date for it — the one the scheduler
+        // never fires; the tile must override it.
         #expect(orphaned.schedule.nextRunDate(after: orphaned.lastRunAt, now: now) != nil)
         #expect(
             PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).value
@@ -115,9 +115,8 @@ struct PlanStatusTests {
         plan.lastRunAt = now.addingTimeInterval(-2 * 86_400)
 
         // The scheduler started the due run, and until it ends nothing
-        // stamps the slot: "Due now" stood over every scheduled backup for
-        // as long as it ran, beside the sidebar's spinner (captured
-        // 2026-10-02).
+        // stamps the slot: the tile must read Running now over it, not Due
+        // now beside the sidebar's spinner.
         let running = PlanStatus.nextBackupTile(
             for: plan, existingRepositoryIDs: [repositoryID], isBackingUp: true, now: now
         )
@@ -201,7 +200,7 @@ struct PlanStatusTests {
         let later = now.addingTimeInterval(7200)
 
         // The plan's own pause outlasts the app-wide one and sets the date;
-        // "Backups paused until …" beside it read as the same pause twice.
+        // the help must not name the same pause twice.
         plan.pausedUntil = later
         let own = PlanStatus.nextBackupTile(
             for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: sooner), now: now
@@ -233,9 +232,8 @@ struct PlanStatusTests {
 
     @Test("a paused manual plan's caption names no schedule, as its tile does")
     func pausedManualPlanCaption() {
-        // Removing a repository switches off every plan of it, manual ones
-        // too, and the editor's "Run on schedule" switch is on every plan:
-        // "Paused — Manually" named a schedule a manual plan does not have.
+        // A switched-off manual plan must not read "Paused — Manually": a
+        // schedule it does not have.
         var plan = completeDailyPlan()
         plan.schedule.frequency = .manual
         plan.isEnabled = false

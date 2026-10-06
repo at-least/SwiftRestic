@@ -271,7 +271,7 @@ struct RunRecordPresentationTests {
             $0.bytesProcessed = 14
         }) == "2 restored · 1 kept as it was · \(Format.bytes(14))")
 
-        // Records from before restores kept their counts.
+        // A restore record with no stored counts falls back to its outcome.
         #expect(detail(restore()) == "Succeeded")
 
         #expect(detail(RunRecord(kind: .check, planName: "Home NAS")) == "Succeeded")
@@ -343,8 +343,8 @@ struct RunRecordPresentationTests {
         failed.failureMessage = "The repository is already locked"
         #expect(RunRecordPresentation.detail(for: failed) == "The repository is already locked")
 
-        // A forget recorded before a count was kept (a stopped one, say)
-        // falls back to its outcome.
+        // A forget with no stored count (a stopped one, say) falls back to
+        // its outcome.
         var bare = RunRecord(kind: .forget, planName: "Documents")
         bare.outcome = .succeeded
         #expect(RunRecordPresentation.detail(for: bare) == "Succeeded")

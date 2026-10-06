@@ -3,8 +3,8 @@ import Testing
 
 /// Adopting a plan-UUID group: the draft the sheet edits, every sentence the
 /// sheet shows around it, and the write itself — one plan whose id is the
-/// group's UUID, nothing else. The collision rows of the design's table each
-/// get their pin, so classification and the words can never drift apart.
+/// group's UUID, nothing else. Every collision case has its own pin, so its
+/// classification and the sheet's words cannot drift apart.
 @MainActor
 @Suite("Adopt")
 struct AdoptTests {
@@ -416,8 +416,7 @@ struct AdoptTests {
 
         // Two backups under it: the landing is named, with the way back. Docs
         // is the repository's only plan, so the shelf the snapshots move to
-        // reads "Backups" once it is gone — the sidebar's own title for a
-        // repository with no plan, said here at the title it will have.
+        // reads "Backups" once it is gone.
         let listing = try [
             snapshot("d1", time: "2026-10-02T02:00:00Z", tags: [ResticService.planTag(plan.id)]),
             snapshot("d2", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(plan.id)]),

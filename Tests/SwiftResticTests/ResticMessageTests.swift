@@ -1,9 +1,9 @@
 import Foundation
 import Testing
 
-/// Every literal in this file is real output captured from restic 0.19.1.
-/// This is the layer that breaks silently when restic changes its JSON, so the
-/// fixtures are kept verbatim rather than hand-written.
+/// Every literal in this file is verbatim restic 0.19.1 output. This is the
+/// layer that breaks silently when restic changes its JSON, so the fixtures
+/// are never hand-written.
 @Suite("restic JSON decoding")
 struct ResticMessageTests {
     @Test("backup status line")
@@ -36,7 +36,6 @@ struct ResticMessageTests {
 
     @Test("backup --verbose reports each file as a verbose_status line")
     func backupVerboseStatus() throws {
-        // Captured verbatim from restic 0.19.1 (`backup --verbose --json`).
         // The struct keeps the fields the app shows; the extra `_in_repo` and
         // `total_files` keys must simply be tolerated.
         let line = #"{"message_type":"verbose_status","action":"new","item":"/restic-capture/src/a.txt","duration":0.004700167,"data_size":12,"data_size_in_repo":94,"metadata_size":0,"metadata_size_in_repo":0,"total_files":0}"#
@@ -52,7 +51,6 @@ struct ResticMessageTests {
 
     @Test("restore --verbose=2 spells the size `size`, not `data_size`")
     func restoreVerboseStatus() throws {
-        // Captured verbatim from restic 0.19.1 (`restore --json --verbose=2`).
         // The two commands disagree on the field name; decoding only the backup
         // spelling would leave every restore line without a size.
         let line = #"{"message_type":"verbose_status","action":"restored","item":"/restic-capture/src/sub/b.txt","size":7}"#
@@ -81,7 +79,6 @@ struct ResticMessageTests {
 
     @Test("restore summary carries the restored counters, not backup's")
     func restoreSummary() throws {
-        // Captured verbatim from restic 0.19.1 (`restore --json`).
         let line = #"{"message_type":"summary","total_files":6,"files_restored":6,"total_bytes":307219,"bytes_restored":307219}"#
         guard case let .summary(summary)? = ResticMessageDecoder.decode(line: line) else {
             Issue.record("expected a summary message")
@@ -118,8 +115,9 @@ struct ResticMessageTests {
         #expect(nested.message == "permission denied")
         #expect(nested.item == "/private/etc/x")
 
-        // `check` emits a flat `message`. Before this was handled, every check
-        // error decoded as .unknown and vanished from the run record.
+        // `check` emits a flat `message`, not the nested `error` object; it
+        // must still decode as an error and reach the run record, not
+        // surface as `.unknown`.
         let checkError = #"{"message_type":"error","message":"pack 1234 is damaged"}"#
         guard case let .error(flat)? = ResticMessageDecoder.decode(line: checkError) else {
             Issue.record("expected an error message")
@@ -191,9 +189,8 @@ struct ResticMessageTests {
         // restic prints however many digits Go's time package produced: 5 here,
         // 6 and 9 elsewhere in the same stream. Parsing must land on the right
         // instant — run records derive from these — but
-        // ISO8601DateFormatter keeps only the first three fraction digits
-        // (verified: .22662 parses back out as .226), so the pin is to the
-        // millisecond the formatter actually preserves.
+        // ISO8601DateFormatter keeps only the first three fraction digits,
+        // so the pin is to the millisecond the formatter actually preserves.
         func instant(
             _ year: Int, _ month: Int, _ day: Int,
             _ hour: Int, _ minute: Int, _ second: Int,
@@ -246,15 +243,15 @@ struct ResticMessageTests {
 
     @Test("a snapshot records the exclude patterns its backup ran with")
     func excludesDecoded() throws {
-        // Verbatim from restic 0.19.1 (probed 2026-10-03, paths shortened):
-        // a backup with --exclude patterns carries them beside the paths —
-        // the group page's Excludes row reads them, and the adopt sheet
-        // prefills from them.
+        // Verbatim restic 0.19.1 output, paths shortened: a backup with
+        // --exclude patterns carries them beside the paths — the group
+        // page's Excludes row reads them, and the adopt sheet prefills
+        // from them.
         let withPatterns = #"[{"time":"2026-10-03T00:35:06.329044+08:00","tree":"0cc37688","paths":["/tmp/src/alpha","/tmp/src/zeta"],"hostname":"newlixs-MacBook-Air.local","username":"newlix","uid":501,"gid":20,"excludes":["*/junk"],"tags":["swiftrestic-plan-3f2a1b0c-0000-4000-8000-abcdefabcdef","travel"],"program_version":"restic 0.19.1","id":"37c99198ae40bec5e31c123b16d829a55cfc0007578b550da1a79346ed97d1df","short_id":"37c99198"}]"#
         let patterned = try ResticMessageDecoder.jsonDecoder.decode([Snapshot].self, from: Data(withPatterns.utf8))
         #expect(patterned[0].excludes == ["*/junk"])
-        // A backup with no pattern omits the key entirely (restic 0.19.1,
-        // probed), like tags: absent must read as none, not as a failure.
+        // A backup with no pattern omits the key entirely, like tags:
+        // absent must read as none, not as a failure.
         let without = #"{"time":"2026-09-05T00:53:25.22662+08:00","paths":["/tmp/data"],"hostname":"mac","id":"6ed59088467b1e0388a3bb3b63f3cee920b9de2b69e082544441e1e7d5c56443"}"#
         let bare = try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(without.utf8))
         #expect(bare.excludes == [])
@@ -321,7 +318,7 @@ struct ResticMessageTests {
 struct FindDecodingTests {
     @Test("find --json returns matches grouped by snapshot")
     func decodesFindOutput() throws {
-        // Captured verbatim from restic 0.19.1.
+        // Verbatim restic 0.19.1 output.
         let json = #"[{"matches":[{"path":"/tmp/data/a.txt","permissions":"-rw-r--r--","type":"file","mode":420,"mtime":"2026-09-05T00:53:22.569070751+08:00","atime":"2026-09-05T00:53:22.569070751+08:00","ctime":"2026-09-05T00:53:22.569070751+08:00","uid":501,"gid":0,"user":"newlix","group":"wheel","inode":25178103,"device_id":16777229,"size":12,"links":1}],"hits":1,"snapshot":"6ed59088467b1e0388a3bb3b63f3cee920b9de2b69e082544441e1e7d5c56443"}]"#
         let results = try ResticMessageDecoder.jsonDecoder.decode([FindResult].self, from: Data(json.utf8))
         #expect(results.count == 1)

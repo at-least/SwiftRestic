@@ -1,9 +1,9 @@
 import Foundation
 import Testing
 
-/// The per-repository resolved-context cache: a restic call no longer
-/// re-reads the secret store every time, and every input a context actually
-/// depends on invalidates by comparison — no save-site hooks to keep honest.
+/// The per-repository resolved-context cache: a restic call does not re-read
+/// the secret store every time, and every input a context actually depends
+/// on invalidates by comparison — no save-site hooks to keep honest.
 @MainActor
 @Suite("resolved context cache")
 struct ContextCacheTests {

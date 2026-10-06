@@ -4,8 +4,8 @@ import Testing
 /// Drives the real restic binary against a throwaway local repository.
 ///
 /// These are the tests that would catch a change in restic's actual behaviour
-/// rather than only in the JSON we recorded. They are skipped when restic is not
-/// installed so the suite still runs on a bare machine.
+/// rather than only in the JSON lines the unit suites quote. They are skipped
+/// when restic is not installed so the suite still runs on a bare machine.
 enum ResticAvailability {
     static let isInstalled = (try? ResticBinary.locate(userOverride: nil)) != nil
 }
@@ -113,7 +113,7 @@ struct ResticIntegrationTests {
             path: fixture.sourceDirectory.path
         )
         // The combining-mark name sorts after the plain letters — the order
-        // localizedStandardCompare actually produces, captured here so a
+        // localizedStandardCompare actually produces, pinned here so a
         // collation change is seen, not silently absorbed.
         #expect(children.map(\.name) == ["sub", "a.txt", "big.bin", "\u{0301}leading.txt"])
         #expect(children.first { $0.name == "\u{0301}leading.txt" } != nil)
@@ -466,9 +466,8 @@ struct ResticIntegrationTests {
     }
 
     /// Polls rather than `waitUntilExit()`: from this suite's async tests
-    /// that call never returned — twice, 3 and 9 minutes, the terminated
-    /// restic long gone from the process table, the waiting thread parked
-    /// in its run loop — while `isRunning` turned false within 0.21 s.
+    /// that call can hang for minutes after the process is gone, while
+    /// `isRunning` turns false promptly.
     private static func waitForExit(_ process: Process, within seconds: TimeInterval = 30) async {
         let deadline = Date.now.addingTimeInterval(seconds)
         while process.isRunning, Date.now < deadline {
@@ -510,11 +509,11 @@ struct ResticIntegrationTests {
 
     @Test("a hostile RESTIC_PASSWORD in the environment cannot override the stored one")
     func hostileEnvironmentPassword() async throws {
-        // backrest issue #1139: a RESTIC_PASSWORD inherited from the environment
-        // must never beat the password the app stores for the repository, or a
-        // stale shell variable quietly breaks every backup. The runner does
-        // inherit the parent environment, so the context's own value is the only
-        // thing standing between restic and whatever is in it.
+        // A RESTIC_PASSWORD inherited from the environment must never beat
+        // the password the app stores for the repository, or a stale shell
+        // variable quietly breaks every backup. The runner does inherit the
+        // parent environment, so the context's own value is the only thing
+        // standing between restic and whatever is in it.
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)

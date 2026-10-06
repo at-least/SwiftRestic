@@ -2,25 +2,23 @@ import Foundation
 import GRDB
 import Testing
 
-/// The scale gates (FINAL.md 5.4): at a snapshot count well past what the
-/// unit tests reach, every write the index makes must cost its own change,
-/// never the population's. A regression there fails no answer — it only
-/// makes each backup slower as the history grows — so these tests assert
-/// cost directly, in units that do not depend on the machine: rows changed
-/// and bytes appended to the `-wal`, read from the writer's own counters
+/// The scale gates: at a snapshot count well past what the unit tests
+/// reach, every write the index makes must cost its own change, never the
+/// population's. A regression there fails no answer — it only makes each
+/// backup slower as the history grows — so these tests assert cost
+/// directly, in units that do not depend on the machine: rows changed and
+/// bytes appended to the `-wal`, read from the writer's own counters
 /// (`WriteCounters`). Wall time is only printed, and only under the bench
 /// flag below.
 ///
-/// FINAL.md states its bounds per write; here each applies to the mean over
-/// a phase's writes instead — a deviation, because FTS5 merges its segments
-/// incrementally, so a write that happens to cross a merge threshold pays a
-/// burst (measured while calibrating: 14 of 200 five-add, five-remove deltas
-/// changed 63–73 rows instead of 31, and the largest wrote 37 pages where
-/// its own bound allowed 36). A mean alone would hide one population-sized
-/// write among many cheap ones, so every write's rows also stay under a
-/// ceiling of a fifth of a chain's paths — far above any burst, far below a
-/// rewrite of the chain. The WAL has no such ceiling yet: at the default
-/// shape a merge burst writes about as much as the whole population does.
+/// The bounds are per write, applied to the mean over a phase's writes:
+/// FTS5 merges its segments incrementally, so a write that crosses a merge
+/// threshold pays a burst far above its own bound. A mean alone would hide
+/// one population-sized write among many cheap ones, so every write's rows
+/// also stay under a ceiling of a fifth of a chain's paths — far above any
+/// burst, far below a rewrite of the chain. The WAL has no such ceiling
+/// yet: at the default shape a merge burst writes about as much as the
+/// whole population does.
 ///
 /// The default shape keeps `./build.sh test` quick: three plan chains over
 /// disjoint folders of one home, about 20k paths, 600 hourly history ticks
@@ -29,13 +27,13 @@ import Testing
 /// about 1,050 stay, with an interior seq gap at every thinned tick. Pass
 /// `SWIFTRESTIC_INDEX_BENCH=1` to the test process — through xcodebuild,
 /// `TEST_RUNNER_SWIFTRESTIC_INDEX_BENCH=1`, which it forwards with the prefix
-/// stripped — for the target shape nobody measured before: 2M paths in five
-/// chains and about 10k retained snapshots (18,500 read). The bench asserts
-/// the same bounds and prints the timings (means): per backup, housekeeping,
-/// a one-letter search, the summaries against full version lists, the
-/// planner and `isComplete` as the indexed count grows, and four rare
-/// events — a head death, a failed diff, a mass omission and its recovery,
-/// and a whole chain's death.
+/// stripped — for the bench shape: 2M paths in five chains and about 10k
+/// retained snapshots (18,500 read). The bench asserts the same bounds and
+/// prints the timings (means): per backup, housekeeping, a one-letter
+/// search, the summaries against full version lists, the planner and
+/// `isComplete` as the indexed count grows, and four rare events — a head
+/// death, a failed diff, a mass omission and its recovery, and a whole
+/// chain's death.
 @Suite("snapshot index scale")
 struct SnapshotIndexScaleTests {
     @Test("the write counters see what a write costs, and a population-sized write breaks the bounds")
@@ -51,7 +49,7 @@ struct SnapshotIndexScaleTests {
         _ = try index.reconcile(listing: [first])
         try index.ingestWhole(first.id, IndexTestData.ls(content))
 
-        // 500 new paths in one delta, measured against a WAL truncated just
+        // 500 new paths in one delta, against a WAL truncated just
         // before it: the counted bytes must be exactly the frames the file
         // grew by, after its 32-byte header.
         var grown = content
@@ -73,8 +71,8 @@ struct SnapshotIndexScaleTests {
         #expect(big.rows >= 2 * 500)
         // The negative control: the bounds the scale test applies, taken
         // for a one-and-one delta, must fail on this one. (Not ten and ten:
-        // new nodes append densely, so 500 of them wrote only 38 pages,
-        // under the 224 KiB a ten-and-ten delta may write.)
+        // new nodes append densely, and 500 of them can land under the WAL
+        // a ten-and-ten bound allows.)
         #expect(Double(big.rows) > ScaleBounds.rows(added: 1, removed: 1))
         #expect(Double(big.walBytes) > ScaleBounds.wal(added: 1, removed: 1))
 
@@ -100,20 +98,13 @@ struct SnapshotIndexScaleTests {
 /// Rows: an added path costs at most four rows — its node, the two rows
 /// FTS5 writes for the node's name (the virtual table's own and its
 /// `docsize` shadow row), and its run — and a removed path one, the close of
-/// its run. Calibrated on the production configuration: 500 new paths
-/// changed 2,007 rows (the first test prints it), ten re-added known paths
-/// plus ten removed 22, a zero-change delta 2. The constant is per write:
-/// 16 for the window, the snapshot's state and the transaction's FTS segment
-/// flush, and 16 for FTS5's incremental merges, which every write that adds
-/// names pays for in bursts. That share grows with the number of names (more
-/// merge levels): above the per-path accounting, deltas averaged 9 rows at
-/// 30k names and 14 at 2.7M (the bench's 18,495 reverse deltas: 221.0 rows
-/// for 41.5 added and 40.9 removed). FINAL.md 5.4 wrote `4·k + 16` for k
-/// added and k removed, an estimate from a run whose diffs were mostly
-/// content changes; existence changes of new paths cost `5·k` plus the
-/// constant.
+/// its run. The constant is per write: 16 for the window, the snapshot's
+/// state and the transaction's FTS segment flush, and 16 for FTS5's
+/// incremental merges, which every write that adds names pays for in
+/// bursts. That share grows with the number of names (more merge levels),
+/// so the constant holds for the shapes below, not for every size.
 ///
-/// WAL: FINAL.md's `k × 16 KiB + 64 KiB`, with k the larger side: four
+/// WAL: `k × 16 KiB + 64 KiB`, with k the larger side: four
 /// pages per added-and-removed pair — a removal dirties its run's leaf, an
 /// addition its node's `(parent, name)` leaf, the rest land on pages the
 /// transaction shares — plus sixteen for the pages every write touches.
@@ -136,20 +127,15 @@ enum ScaleBounds {
         Double(4 * churn + 8)
     }
 
-    /// FINAL.md 5.4 S-2; a zero-change delta writes the window and the state.
+    /// S-2; a zero-change delta writes the window and the state.
     static let zeroChangeRows = 4
 
     /// A full read into a populated chain commits one transaction per
     /// chunk, and each chunk that creates nodes pays what a delta's constant
     /// pays for its names — the FTS segment flush and the merge share, 4 and
     /// 16 rows above — plus the node table's tail page: a delta's accounting
-    /// plus, per such chunk, 20 rows and eight pages. Measured at 2M paths
-    /// before these terms existed: the head deaths of the bench's first run
-    /// wrote 1,487 KiB with 39 of 100 chunks carrying adds, where the delta
-    /// bound alone allowed 1,056 KiB — about six pages per such chunk — and
-    /// the second run's full reads changed 519.5 durable rows for 48.0
-    /// added, 42.5 removed and 34.5 such chunks, about eight rows each.
-    /// Still change-sized: every such chunk carries at least one added path.
+    /// plus, per such chunk, 20 rows and eight pages. Still change-sized:
+    /// every such chunk carries at least one added path.
     static func fullRows(added: Int, removed: Int, chunksWithAdds: Int) -> Double {
         rows(added: added, removed: removed) + Double(20 * chunksWithAdds)
     }
@@ -977,7 +963,7 @@ private final class ScaleRun {
         }
         if shape.bench {
             // The compare's population read scans every chain's runs
-            // (`fullForwardClose`, FINAL.md option P6): its size here.
+            // (`fullForwardClose`): its size here.
             let runs = try await index.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM run") ?? 0 }
             bench("S-6 the compare read \(runs) runs across \(shape.chains) chains")
         }
@@ -985,10 +971,10 @@ private final class ScaleRun {
         try await expectExact("after the full routes")
     }
 
-    /// FINAL.md risk 6 and S-4's bulk case: a listing that omits half of
-    /// every chain's snapshots (not the newest), one housekeeping pass that
-    /// must leave nothing queued, then the next listing bringing them all
-    /// back, each read again.
+    /// S-4's bulk case: a listing that omits half of every chain's
+    /// snapshots (not the newest), one housekeeping pass that must leave
+    /// nothing queued, then the next listing bringing them all back, each
+    /// read again.
     func massOmission() async throws {
         var omitted: [[Int]] = []
         for c in 0 ..< shape.chains {

@@ -403,12 +403,12 @@ struct SnapshotIndexTests {
         }
     }
 
-    /// FINAL.md risk 12, the consumer side. Two byte-distinct, canonically
-    /// equivalent paths are two nodes with their own answers. Keyed by
-    /// `String`, whose keys compare canonically, one entry would stand for
-    /// both, so a Restore pane reading `inRecord[hit.path]` would miss one hit
-    /// and invent the other; the keyed reads therefore return `PathKey`s,
-    /// which compare bytes. This pins that they keep the two apart.
+    /// Two byte-distinct, canonically equivalent paths are two nodes with
+    /// their own answers. Keyed by `String`, whose keys compare canonically,
+    /// one entry would stand for both, so a Restore pane reading
+    /// `inRecord[hit.path]` would miss one hit and invent the other; the
+    /// keyed reads therefore return `PathKey`s, which compare bytes. This
+    /// pins that they keep the two apart.
     @Test("canonically equivalent, byte-distinct paths keep their own answers in the keyed reads")
     func keyedReadsKeepByteDistinctSpellings() async throws {
         let fixture = try IndexFixture()
@@ -427,8 +427,8 @@ struct SnapshotIndexTests {
         let inS1 = try await index.contains(paths: paths, inSnapshot: "s1")
         let inS2 = try await index.contains(paths: paths, inSnapshot: "s2")
         let summaries = try await index.versionSummaries(ofPaths: paths)
-        // The Restore pane's reading (FINAL.md 4.3): a hit is in the open
-        // backup iff inRecord[hit.path] != nil.
+        // The Restore pane's reading: a hit is in the open backup iff
+        // inRecord[hit.path] != nil.
         #expect(hits.filter { inS1[PathKey($0.path)] != nil }.map { Array($0.path.utf8) } == [Array(nfc.utf8)])
         #expect(hits.filter { inS2[PathKey($0.path)] != nil }.map { Array($0.path.utf8) } == [Array(nfd.utf8)])
         #expect(summaries[PathKey(nfc)]?.newest.id == "s1")
@@ -867,10 +867,9 @@ struct SnapshotIndexTests {
         #expect(try await index.isComplete())
     }
 
-    /// A preservation pin: the store read a diff path's kind bytewise before
-    /// the path owner moved to Core, so through the old string API this
-    /// would have passed too. A Character test would read this directory as
-    /// a file.
+    /// The store reads a diff path's kind bytewise; a Character test would
+    /// read this directory as a file, its slash hidden inside the last
+    /// cluster.
     @Test("a directory whose name ends in a Prepend character keeps its kind through a delta")
     func deltaKeepsPrependDirectoryKind() async throws {
         let fixture = try IndexFixture()

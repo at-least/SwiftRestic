@@ -154,8 +154,8 @@ struct RestoreDestinationTests {
     @Test("the two overwrite modes map to restic's never and always")
     func policyMapping() {
         // Replace is `always`, never `if-changed`: if-changed trusts size and
-        // modification time and kept a same-size, same-time corrupted file in
-        // the probe, which is exactly what a restore exists to undo.
+        // modification time, and a same-size, same-time corrupted file is
+        // exactly what a restore exists to undo.
         #expect(RestoreOverwritePolicy.keepExisting.resticValue == "never")
         #expect(RestoreOverwritePolicy.replaceExisting.resticValue == "always")
     }

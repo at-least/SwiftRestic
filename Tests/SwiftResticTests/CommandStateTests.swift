@@ -309,8 +309,8 @@ struct CommandStateTests {
             == FileNode.roots(repositoryID: repository.id, chainKey: SnapshotIndex.chainKey(for: tagged)))
         #expect(model.filesSearchRoots(for: .lineage(repositoryID: repository.id, key: untagged.lineageKey))
             == FileNode.roots(repositoryID: repository.id, chainKey: SnapshotIndex.chainKey(for: untagged)))
-        // No tree to search: a plan with nowhere to back up, a group the
-        // listing no longer builds, and every page with no Files tab.
+        // No tree to search: a plan with nowhere to back up, a group whose
+        // chain the listing does not hold, and every page with no Files tab.
         for selection: SidebarItem? in [
             .plan(homeless.id), .orphanPlan(repositoryID: repository.id, planID: UUID()),
             .repository(repository.id), .restoreSnapshot(repository.id, tagged.id), .activity, .console, nil,
