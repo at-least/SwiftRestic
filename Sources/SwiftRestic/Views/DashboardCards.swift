@@ -185,17 +185,23 @@ struct RecentProblemsCard: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(failures)) { run in
+                        let title = RunRecordPresentation.problemRowTitle(for: run, plans: model.configuration.plans)
+                        let caption = RunRecordPresentation.problemRowCaption(for: run)
                         Button { showInActivity(run) } label: {
                             HStack(spacing: 6) {
                                 // This card lists only problems, so the
                                 // outcome is said in words right under the
-                                // name — a glyph would only repeat it.
+                                // name — a glyph would only repeat it — with
+                                // why, as Activity's Detail column says it.
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(run.planName.isEmpty ? run.kind.rawValue : run.planName)
+                                    Text(title)
                                         .lineLimit(1)
-                                    Text(run.outcome.displayName)
+                                    Text(caption)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .help(caption)
                                 }
                                 Spacer()
                                 Text(Format.ago(run.finishedAt, now: now))
@@ -205,7 +211,7 @@ struct RecentProblemsCard: View {
                             }
                         }
                         .buttonStyle(HoverableButtonStyle())
-                        .accessibilityLabel("\(run.planName.isEmpty ? run.kind.rawValue : run.planName): \(run.outcome.displayName). Show in Activity")
+                        .accessibilityLabel("\(title): \(caption). Show in Activity")
                     }
                 }
             }

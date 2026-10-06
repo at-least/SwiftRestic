@@ -133,7 +133,7 @@ struct ActivityView: View {
                     TableColumn("Kind") { run in
                         Text(run.kind.displayName)
                     }
-                    .width(min: 52, ideal: 56, max: 56)
+                    .width(min: 64, ideal: 72, max: 72)
 
                     TableColumn("Detail") { run in
                         let detail = RunRecordPresentation.detail(for: run)

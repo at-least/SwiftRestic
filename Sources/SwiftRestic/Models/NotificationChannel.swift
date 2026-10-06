@@ -129,7 +129,7 @@ struct NotificationEvent: Sendable, Equatable {
                 + " in \(Format.duration(duration))"
         case .warned:
             let count = warningCount ?? warnings.count
-            return "\(operation) finished with \(count) warning(s): \(subject)"
+            return "\(operation) finished with \(Format.plural(count, "warning")): \(subject)"
                 + (warnings.first.map { " — \($0)" } ?? "")
                 + (hint.map { "\n" + $0 } ?? "")
         case .failed:

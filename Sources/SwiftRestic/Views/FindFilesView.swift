@@ -175,7 +175,7 @@ struct FindFilesView: View {
 
             ExpandableCaption(
                 summary: indexComplete == true
-                    ? "Matching is case-insensitive; whole words match from anywhere in the name."
+                    ? FilesSearchAnswer.matchRule
                     : "Matching is case-insensitive and supports shell globs.",
                 detail: indexComplete == true
                     ? "This repository's index has finished reading, so the search runs locally against every snapshot at once — instant, however deep the history."

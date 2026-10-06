@@ -159,7 +159,7 @@ struct RunRecordPresentationTests {
         )
     }
 
-    @Test("Settings' Next run line says the plan with its repository, then when")
+    @Test("Settings' Next backup line says the plan with its repository, then when")
     func nextRunLine() {
         let home = repository(name: "Home Disk")
         let documents = plan(name: "Documents", repositoryID: home.id)
@@ -176,6 +176,36 @@ struct RunRecordPresentationTests {
         )
     }
 
+    @Test("a Recent problems row names the run as it is called now and says why in the Detail column's words")
+    func problemRowWording() {
+        var plan = BackupPlan()
+        plan.name = "Documents"
+        var renamed = backup {
+            $0.planID = plan.id
+            $0.planName = "Old name"
+            $0.outcome = .failed
+            $0.failureMessage = "restic reported a fatal error — Fatal: wrong password\nmore"
+        }
+        #expect(RunRecordPresentation.problemRowTitle(for: renamed, plans: [plan]) == "Documents")
+        #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Failed · restic reported a fatal error — Fatal: wrong password")
+        // A plan that is gone keeps the name it ran under.
+        #expect(RunRecordPresentation.problemRowTitle(for: renamed, plans: []) == "Old name")
+
+        // A check or prune is named by its kind: the page already names the
+        // repository its planName stores.
+        var check = RunRecord(kind: .check, planName: "Home NAS")
+        check.outcome = .failed
+        #expect(RunRecordPresentation.problemRowTitle(for: check, plans: [plan]) == "Check")
+        // Nothing more to say than the outcome: said once.
+        #expect(RunRecordPresentation.problemRowCaption(for: check) == "Failed")
+
+        renamed.failureMessage = nil
+        renamed.outcome = .completedWithErrors
+        renamed.itemErrors = ["/a: permission denied", "/b: permission denied"]
+        renamed.itemErrorCount = 2
+        #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Completed with errors · 2 unreadable items")
+    }
+
     @Test("the Detail column's wording for each kind of run")
     func detailWording() {
         let detail = RunRecordPresentation.detail(for:)
@@ -184,6 +214,13 @@ struct RunRecordPresentationTests {
             $0.outcome = .failed
             $0.failureMessage = "The repository does not exist — Fatal: …"
         }) == "The repository does not exist — Fatal: …")
+
+        // restic's multi-line tail stays in the drawer; the scan line keeps
+        // the first sentence.
+        #expect(detail(backup {
+            $0.outcome = .failed
+            $0.failureMessage = "restic reported a fatal error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory\nIs there a repository at the following location?"
+        }) == "restic reported a fatal error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory")
 
         #expect(detail(backup {
             $0.outcome = .completedWithErrors
@@ -419,7 +456,7 @@ struct RunRecordPresentationTests {
             versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1")
         )
         let lines = text.components(separatedBy: "\n")
-        #expect(lines.first == "Forget of “Documents” — Succeeded")
+        #expect(lines.first == "Retention of “Documents” — Succeeded")
         #expect(lines.contains("Result: Removed 2 snapshots. Their data stays until the next prune."), "details were \(lines)")
     }
 

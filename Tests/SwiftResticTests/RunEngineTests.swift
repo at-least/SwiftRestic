@@ -596,7 +596,7 @@ struct MaintenanceRunEngineTests {
             sink: StubMaintenanceServiceSink(client: client, base: sink)
         )
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
-        #expect(sink.deliveredRecords[0].detailText?.contains("2 error(s)") == true)
+        #expect(sink.deliveredRecords[0].detailText?.contains("2 errors") == true)
         #expect(sink.deliveredRecords[0].detailText?.contains("suggests running prune") == true)
     }
 

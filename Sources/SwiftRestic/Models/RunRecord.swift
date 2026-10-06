@@ -6,7 +6,14 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         case backup, forget, check, prune, restore
 
         /// The operation's word in titles and rows: "Backup", "Check", …
-        var displayName: String { rawValue.capitalized }
+        /// A forget is "Retention", the word every other surface uses for it
+        /// (the plan page's row, Apply Retention Now…, "Retention skipped").
+        var displayName: String {
+            switch self {
+            case .forget: "Retention"
+            default: rawValue.capitalized
+            }
+        }
     }
 
     enum Outcome: String, Codable, Sendable {

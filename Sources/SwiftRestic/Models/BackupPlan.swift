@@ -8,7 +8,7 @@ struct Schedule: Codable, Sendable, Hashable {
         var displayName: String {
             switch self {
             case .manual: "Manually"
-            case .hourly: "Every N hours"
+            case .hourly: "Hourly"
             case .daily: "Daily"
             case .weekly: "Weekly"
             }

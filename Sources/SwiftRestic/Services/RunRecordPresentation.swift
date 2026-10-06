@@ -15,7 +15,7 @@ enum RunRecordPresentation {
 
     /// "Documents (Home Disk)" — the one way a plan and its repository are
     /// said in a single string, wherever a surface must name both (the run
-    /// surfaces below, the tray's "Next:" headline, Settings' Next run
+    /// surfaces below, the tray's "Next:" headline, Settings' Next backup
     /// line). A repository named exactly like the plan is not said twice —
     /// one fact, one hearing, the rule Activity's Subject and Repository
     /// columns also follow.
@@ -63,6 +63,28 @@ enum RunRecordPresentation {
         }
     }
 
+    /// A repository page's Recent problems row title: the plan as it is
+    /// called now — the repository is the page's own — or, for a check or
+    /// prune, its kind, since the stored planName of those is the
+    /// repository the page already names.
+    static func problemRowTitle(for run: RunRecord, plans: [BackupPlan]) -> String {
+        switch run.kind {
+        case .backup, .forget, .restore:
+            let name = run.planID.flatMap { id in plans.first { $0.id == id }?.name } ?? run.planName
+            return name.isEmpty ? run.kind.displayName : name
+        case .check, .prune:
+            return run.kind.displayName
+        }
+    }
+
+    /// A Recent problems row's caption: the outcome, then why in the Detail
+    /// column's words — the outcome alone when the detail would only repeat it.
+    static func problemRowCaption(for run: RunRecord) -> String {
+        let outcome = run.outcome.displayName
+        let why = detail(for: run)
+        return why == outcome ? outcome : "\(outcome) · \(why)"
+    }
+
     /// The run log sheet's header: "Backup log — Documents (Home Disk)",
     /// "Check log — Home Disk". A derivation rather than view text so the
     /// header's words are pinned with the naming rule they follow.
@@ -74,7 +96,7 @@ enum RunRecordPresentation {
         "\(run.kind.displayName) log — \(displayName(for: run, plans: plans, repositories: repositories))"
     }
 
-    /// Settings ▸ General ▸ Scheduling's "Next run" line, in the tray
+    /// Settings ▸ General ▸ Scheduling's "Next backup" line, in the tray
     /// headline's words: the plan with its repository, then when.
     static func nextRunLine(plan: BackupPlan, date: Date, repositories: [Repository]) -> String {
         let name = planWithRepository(plan, repositories: repositories)
@@ -85,7 +107,9 @@ enum RunRecordPresentation {
     /// the plan page counts them ("1 unreadable item · Retention skipped" —
     /// restic's count, never the stored lines), else what it did.
     static func detail(for run: RunRecord) -> String {
-        if let failure = run.failureMessage { return failure }
+        // The first sentence: restic's multi-line tail stays in the drawer,
+        // the plan card and Copy Details, which show the whole message.
+        if let failure = run.failureMessage { return Format.firstSentence(failure) }
         // An unnamed exit 3 is among the facts, so the plan row says it too.
         let facts = PlanStatus.facts(for: run)
         if !facts.isEmpty { return facts.joined(separator: " · ") }

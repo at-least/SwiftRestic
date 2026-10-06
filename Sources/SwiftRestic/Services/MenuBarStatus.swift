@@ -131,8 +131,11 @@ enum MenuBarStatus {
                 subject = "\(newest.kind.displayName) on \(name)"
             }
         }
-        let verb = newest.outcome == .failed ? "failed" : "finished with errors"
-        return "\(subject) \(verb) \(relative(newest.finishedAt))"
+        // The outcome's own words, as the sidebar, the plan card and Activity
+        // say it. Notification bodies keep their count-bearing prose
+        // ("Finished with 2 unreadable items.") — a sentence about the run,
+        // not its label.
+        return "\(subject) \(newest.outcome.displayName.lowercased()) \(relative(newest.finishedAt))"
     }
 
     /// The single line above the plan buttons. `nil` while anything runs —

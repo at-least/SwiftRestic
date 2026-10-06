@@ -427,6 +427,10 @@ struct FilesSearchAnswer: Equatable {
     /// pane's banner and a search say them alike.
     static let indexStillReading = "The index is still reading this repository — older backups may be missing."
 
+    /// How the index matches what is typed, said once for every surface that
+    /// states it. `SnapshotIndex.ftsQuery` makes each word a prefix term.
+    static let matchRule = "Matching is case-insensitive; each word you type matches the start of a word in the name — “note” also finds “notes.txt”."
+
     /// The index's hits as the column lists them: by name as Finder sorts
     /// names, one name's hits by path — the tree's rows, with no folders
     /// first, since a hit's folder is its caption.

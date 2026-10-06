@@ -120,12 +120,12 @@ extension AppModel {
             return "Backed up \(Format.bytes(record.dataAdded)) of new data in \(Format.duration(record.duration))."
         case .completedWithErrors where record.itemErrorCount > 0:
             let hint = ItemErrorDiagnosis.headline(for: record).map { " " + $0 } ?? ""
-            return "Finished with \(record.itemErrorCount) unreadable item(s).\(hint)"
+            return "Finished with \(Format.plural(record.itemErrorCount, "unreadable item")).\(hint)"
         case .completedWithErrors:
             let detail = RunRecordPresentation.detail(for: record)
             return "Finished with warnings: \(detail)\(detail.hasSuffix(".") ? "" : ".")"
         case .failed:
-            return record.failureMessage ?? "The backup failed."
+            return record.failureMessage.map(Format.firstSentence) ?? "The backup failed."
         case .cancelled:
             return "Cancelled."
         }

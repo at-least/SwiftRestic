@@ -124,7 +124,7 @@ extension AppModel {
                 repositories: configuration.repositories
             )
             post(Banner(
-                title: "Could not send \(failures.count) notification(s)",
+                title: "Could not send \(Format.plural(failures.count, "notification"))",
                 message: (subject.isEmpty ? failures : ["About \(subject)"] + failures)
                     .joined(separator: "\n"),
                 isError: true

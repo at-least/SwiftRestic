@@ -222,7 +222,7 @@ struct NotificationTests {
         record.itemErrorTally = ItemErrorDiagnosis.Tally(blockedByMacOS: 1, deniedByFilePermissions: 1)
         record.fullDiskAccessAtRun = .notGranted
         #expect(AppModel.notificationBody(for: record)
-            == "Finished with 2 unreadable item(s). macOS blocked 1 item: SwiftRestic needs Full Disk Access.")
+            == "Finished with 2 unreadable items. macOS blocked 1 item: SwiftRestic needs Full Disk Access.")
     }
 
     @MainActor
@@ -234,7 +234,7 @@ struct NotificationTests {
         record.outcome = .completedWithErrors
         record.itemErrors = ["/a: open /a: permission denied", RunRecord.retentionSkippedPrefix + "locked"]
         record.itemErrorCount = 1
-        #expect(AppModel.notificationBody(for: record).hasPrefix("Finished with 1 unreadable item(s)."))
+        #expect(AppModel.notificationBody(for: record).hasPrefix("Finished with 1 unreadable item."))
 
         // A retention skip alone is not an unreadable item — not one, not zero.
         var retentionOnly = RunRecord(kind: .backup, planName: "Documents")
@@ -244,6 +244,18 @@ struct NotificationTests {
         let body = AppModel.notificationBody(for: retentionOnly)
         #expect(!body.contains("unreadable"), "body was \(body)")
         #expect(body == "Finished with warnings: Retention skipped.")
+    }
+
+    @MainActor
+    @Test("a failed run's notification says the first sentence, not restic's whole tail")
+    func failedNotificationBodyIsOneSentence() {
+        var record = RunRecord(kind: .backup, planName: "Code")
+        record.outcome = .failed
+        record.failureMessage = "restic reported a fatal error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory\nIs there a repository at the following location?"
+        #expect(AppModel.notificationBody(for: record)
+            == "restic reported a fatal error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory")
+        record.failureMessage = nil
+        #expect(AppModel.notificationBody(for: record) == "The backup failed.")
     }
 }
 
@@ -325,18 +337,18 @@ struct WarningCountTests {
         )
         event.warnings = ["warning 1", "warning 2", "warning 3", "warning 4", "warning 5"]
         event.warningCount = 500
-        #expect(event.summary.contains("500 warning(s)"), "summary was: \(event.summary)")
-        #expect(!event.summary.contains("5 warning(s)"), "summary was: \(event.summary)")
+        #expect(event.summary.contains("500 warnings"), "summary was: \(event.summary)")
+        #expect(!event.summary.contains("5 warnings"), "summary was: \(event.summary)")
 
         // Without a count (hand-built events, or a run with none), the
         // sample's own length is the answer.
         var bare = event
         bare.warningCount = nil
-        #expect(bare.summary.contains("5 warning(s)"), "summary was: \(bare.summary)")
+        #expect(bare.summary.contains("5 warnings"), "summary was: \(bare.summary)")
 
         var two = event
         two.warnings = ["one", "two"]
         two.warningCount = nil
-        #expect(two.summary.contains("2 warning(s)"), "summary was: \(two.summary)")
+        #expect(two.summary.contains("2 warnings"), "summary was: \(two.summary)")
     }
 }

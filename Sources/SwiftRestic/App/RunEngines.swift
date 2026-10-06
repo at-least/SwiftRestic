@@ -359,7 +359,7 @@ enum MaintenanceRunEngine {
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors
                 record.detailText = errors == 0
                     ? "No errors found."
-                    : "\(errors) error(s). `restic repair` can recover some damage."
+                    : "\(Format.plural(errors, "error")). `restic repair` can recover some damage."
                 if summary?.suggestPrune == true {
                     record.detailText? += " restic suggests running prune."
                 }

@@ -440,8 +440,9 @@ struct PlanEditorSheet: View {
                         .foregroundStyle(.secondary)
                 }
             case .hourly:
+                // The summary's own words: "Every hour", "Every 4 hours".
                 Stepper(
-                    "Every \(draft.schedule.intervalHours) hour(s)",
+                    draft.schedule.summary,
                     value: $draft.schedule.intervalHours,
                     in: 1 ... 24
                 )

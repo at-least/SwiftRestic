@@ -74,7 +74,10 @@ extension AppModel {
             "is due now"
         }
         let held = hold.map { "\($0.summary(now: now)). " } ?? ""
-        return "\(held)\(next.plan.name) \(when). Scheduled backups run only while SwiftRestic is open, "
+        // The plan with its repository, the tray headline's spelling of the
+        // same run.
+        let name = RunRecordPresentation.planWithRepository(next.plan, repositories: configuration.repositories)
+        return "\(held)\(name) \(when). Scheduled backups run only while SwiftRestic is open, "
             + "and it isn't set to start at login — nothing will run until you open it again."
     }
 

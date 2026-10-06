@@ -466,7 +466,7 @@ struct AppModelStubTests {
         #expect(event.stage == .warned)
         #expect(event.warningCount == 500)
         #expect(event.warnings.count == 5, "the sample stays for the excerpt")
-        #expect(event.summary.contains("500 warning(s)"), "summary was: \(event.summary)")
+        #expect(event.summary.contains("500 warnings"), "summary was: \(event.summary)")
 
         await harness.model.shutdown()
     }
@@ -844,7 +844,7 @@ struct AppModelStubTests {
         #expect(message.hasPrefix(
             "A backup is running\nQuitting stops the work in progress; the run history records the interruption.\n"
         ))
-        #expect(message.contains("Stub Plan is next due "))
+        #expect(message.contains("Stub Plan (Stub Repo) is next due "))
         #expect(!message.contains("is due now"))
 
         // The quit's cancel stamps the slot as run, so after it the same
@@ -853,7 +853,7 @@ struct AppModelStubTests {
         await harness.model.waitForRun(planID: harness.plan.id)
         #expect(harness.model.configuration.plans[0].lastRunAt != nil)
         let after = try #require(harness.model.quitScheduleNotice())
-        #expect(after.hasPrefix("Stub Plan is next due "))
+        #expect(after.hasPrefix("Stub Plan (Stub Repo) is next due "))
 
         await harness.model.shutdown()
     }
@@ -1500,7 +1500,7 @@ struct AppModelStubTests {
         harness.model.configuration.plans[0].lastRunAt = nil
         let now = Date.now
         let idle = try #require(harness.model.quitScheduleNotice(now: now))
-        #expect(idle.hasPrefix("Stub Plan is due now. "))
+        #expect(idle.hasPrefix("Stub Plan (Stub Repo) is due now. "))
         harness.model.applyRetention(planID: planID)
         #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
 

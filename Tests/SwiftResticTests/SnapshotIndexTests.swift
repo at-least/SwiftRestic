@@ -495,6 +495,8 @@ struct SnapshotIndexTests {
         #expect(try await index.searchPaths(matching: "invoice", limit: 10).map(\.path) == ["/Users/x/Documents/Invoice-2026.pdf"])
         #expect(try await index.searchPaths(matching: "inv", limit: 10).count == 1)
         #expect(try await index.searchPaths(matching: "INVOICE", limit: 10).count == 1)
+        // The start of a word, never its middle: Find Files' caption says so.
+        #expect(try await index.searchPaths(matching: "voice", limit: 10).isEmpty)
         let documents = try await index.searchPaths(matching: "documents", limit: 10)
         #expect(documents.map(\.path) == ["/Users/x/Documents"])
         #expect(documents.first?.isDirectory == true)

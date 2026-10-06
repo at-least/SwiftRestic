@@ -934,11 +934,11 @@ struct StartAtLoginSurfaceTests {
         let now = anchorToRealClock(model)
         // Never run: the slot that passed is due, and the pick clamps to now.
         let overdue = try #require(model.quitScheduleNotice(now: now))
-        #expect(overdue.hasPrefix("Documents is due now."))
+        #expect(overdue.hasPrefix("Documents (NAS) is due now."))
         model.configuration.plans[0].lastRunAt = now
         let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: now, now: now))
         let upcoming = try #require(model.quitScheduleNotice(now: now))
-        #expect(upcoming.hasPrefix("Documents is next due \(Format.relative(next))."))
+        #expect(upcoming.hasPrefix("Documents (NAS) is next due \(Format.relative(next))."))
         #expect(!upcoming.contains(" ago"))
         // Seconds away is due now too: the relative phrase for it is
         // "Just now", and "is next due Just now" is no sentence.
@@ -946,7 +946,11 @@ struct StartAtLoginSurfaceTests {
         model.configuration.plans[0].schedule.intervalHours = 1
         model.configuration.plans[0].lastRunAt = now.addingTimeInterval(-3600 + 30)
         let imminent = try #require(model.quitScheduleNotice(now: now))
-        #expect(imminent.hasPrefix("Documents is due now."))
+        #expect(imminent.hasPrefix("Documents (NAS) is due now."))
+        // A repository named like the plan is not said twice — the tray's rule.
+        model.configuration.repositories[0].name = "Documents"
+        let sameName = try #require(model.quitScheduleNotice(now: now))
+        #expect(sameName.hasPrefix("Documents is due now."))
     }
 
     @Test("under a hold the quit sentence names it first, as the tray's line does")
@@ -959,7 +963,7 @@ struct StartAtLoginSurfaceTests {
         let end = try #require(model.configuration.settings.schedulePause?.until)
         let timed = try #require(model.quitScheduleNotice(now: now))
         #expect(timed.hasPrefix(
-            "\(ScheduleHold.paused(until: end).summary(now: now)). Documents is next due \(Format.relative(end))."
+            "\(ScheduleHold.paused(until: end).summary(now: now)). Documents (NAS) is next due \(Format.relative(end))."
         ))
         #expect(!timed.contains(" ago"))
 
@@ -970,11 +974,11 @@ struct StartAtLoginSurfaceTests {
         model.configuration.plans[0].lastRunAt = now
         let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: now, now: now))
         let paused = try #require(model.quitScheduleNotice(now: now))
-        #expect(paused.hasPrefix("Backups paused until you resume. Documents is next due \(Format.relative(next))."))
+        #expect(paused.hasPrefix("Backups paused until you resume. Documents (NAS) is next due \(Format.relative(next))."))
         // … and a due run waits, never "due now".
         model.configuration.plans[0].lastRunAt = nil
         let pausedDue = try #require(model.quitScheduleNotice(now: now))
-        #expect(pausedDue.hasPrefix("Backups paused until you resume. Documents is waiting to run."))
+        #expect(pausedDue.hasPrefix("Backups paused until you resume. Documents (NAS) is waiting to run."))
 
         model.resumeBackups()
         model.configuration.settings.pauseOnBattery = true
@@ -982,16 +986,16 @@ struct StartAtLoginSurfaceTests {
         model.configuration.plans[0].lastRunAt = now
         let battery = try #require(model.quitScheduleNotice(now: now))
         #expect(battery.hasPrefix(
-            "Backups wait for power — this Mac is on battery. Documents is next due \(Format.relative(next))."
+            "Backups wait for power — this Mac is on battery. Documents (NAS) is next due \(Format.relative(next))."
         ))
         model.configuration.plans[0].lastRunAt = nil
         let batteryDue = try #require(model.quitScheduleNotice(now: now))
-        #expect(batteryDue.hasPrefix("Backups wait for power — this Mac is on battery. Documents is waiting to run."))
+        #expect(batteryDue.hasPrefix("Backups wait for power — this Mac is on battery. Documents (NAS) is waiting to run."))
 
         // Only a hold in force at `now` counts.
         model.isOnBattery = false
         let clear = try #require(model.quitScheduleNotice(now: now))
-        #expect(clear.hasPrefix("Documents is due now."))
+        #expect(clear.hasPrefix("Documents (NAS) is due now."))
     }
 
     @Test("a backup the quit stops has its slot counted as run, as the stop will stamp it — unless Pause and Stop ended it")
@@ -1004,7 +1008,7 @@ struct StartAtLoginSurfaceTests {
         model.activity[plan.id] = PlanActivity(phase: .backingUp, startedAt: startedAt)
         let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: startedAt, now: now))
         let running = try #require(model.quitScheduleNotice(now: now))
-        #expect(running.hasPrefix("Documents is next due \(Format.relative(next))."))
+        #expect(running.hasPrefix("Documents (NAS) is next due \(Format.relative(next))."))
 
         // Pause and Stop leaves the slot unstamped, so it runs again when
         // the pause ends: that end is the date.
@@ -1012,7 +1016,7 @@ struct StartAtLoginSurfaceTests {
         model.pauseStoppedPlanIDs.insert(plan.id)
         let end = try #require(model.configuration.settings.schedulePause?.until)
         let stopped = try #require(model.quitScheduleNotice(now: now))
-        #expect(stopped.contains("Documents is next due \(Format.relative(end))."))
+        #expect(stopped.contains("Documents (NAS) is next due \(Format.relative(end))."))
     }
 }
 
