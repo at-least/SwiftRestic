@@ -4,14 +4,13 @@ import Foundation
 ///
 /// The live implementation is `ResticService` over the real binary. The model
 /// and the views hold `any ResticClient`, never the concrete type, so the
-/// engine can be swapped whole — another platform's client reusing this
-/// protocol, an in-process engine — without touching anything above it.
-/// (Nothing substitutes for it today: `AppModel.service()` is the one place
-/// the concrete type is chosen, and that is where a replacement would plug
-/// in.) Requirements carry no default arguments (a protocol cannot), so calls
-/// through the existential spell every parameter; the pure statics (`planTag`,
-/// `expandTilde`, `countRemoved`) stay on `ResticService`, with no state to
-/// abstract behind a protocol.
+/// engine can be swapped whole without touching anything above it. (The
+/// engine tests substitute `MockResticClient`; `AppModel.service()` is the
+/// one place production picks the concrete type.) Requirements carry no
+/// default arguments (a protocol cannot), so calls through the existential
+/// spell every parameter; the pure statics (`planTag`, `expandTilde`,
+/// `countRemoved`) stay on `ResticService` — no state to abstract behind
+/// a protocol.
 protocol ResticClient: Sendable {
     // MARK: - Repository lifecycle
 
@@ -56,8 +55,8 @@ protocol ResticClient: Sendable {
     /// `restic ls <id>`. One callback per node as it arrives, off the main
     /// actor; callers must consume incrementally, never retain wholesale.
     /// Throws `ResticError.malformedOutput` after the stream when any line
-    /// restic wrote did not decode: such a stream is not the whole
-    /// snapshot, whatever the exit code said.
+    /// did not decode: such a stream is not the whole snapshot, whatever
+    /// the exit code said.
     func walkSnapshot(
         _ context: RepositoryContext,
         snapshotID: String,
@@ -80,9 +79,9 @@ protocol ResticClient: Sendable {
 
     /// Streams every `message_type: change` line of a `restic diff` — the
     /// uncapped variant of `diff`: the index needs all changed paths, so
-    /// there is no change limit and nothing is retained. Throws on lines
-    /// that did not decode, as `walkSnapshot` does: a change the decoder
-    /// dropped is a change the caller never saw.
+    /// nothing is limited or retained. Throws on lines that did not decode,
+    /// as `walkSnapshot` does: a change the decoder dropped is one the
+    /// caller never saw.
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,

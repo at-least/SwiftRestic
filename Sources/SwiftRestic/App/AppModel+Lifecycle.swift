@@ -11,9 +11,9 @@ extension AppModel {
     // MARK: - Lifecycle
 
     /// Why quitting right now would interrupt restic work in flight — one
-    /// full clause per kind of work, empty when the process is idle. The quit
-    /// confirmation is worded from here so the rule and its phrasing stay
-    /// testable at the model level instead of living inside the alert.
+    /// full clause per kind of work, empty when the process is idle. The
+    /// quit confirmation words itself from here, so the rule and its
+    /// phrasing stay testable at the model level.
     var quitInterruptions: [String] {
         var reasons: [String] = []
         let backups = activity.count
@@ -32,16 +32,16 @@ extension AppModel {
     /// starts at login — a missed slot is due at once then, at the next
     /// login — or when nothing is scheduled.
     ///
-    /// It passes the hold, like every display of what will actually fire,
-    /// and names it first, as the tray's line leads with it: a timed
-    /// hold moves the date to its end; an open-ended one sets no date, so a
-    /// slot still ahead keeps its own, and a due run is waiting, not due
-    /// now. The hold is read at `now`, so the date and the hold agree.
+    /// Passes the hold, like every display of what will actually fire, and
+    /// names it first, as the tray's line does: a timed hold moves the date
+    /// to its end; an open-ended one sets no date, so a slot still ahead
+    /// keeps its own and a due run is waiting, not due now. The hold is
+    /// read at `now`, so the date and the hold agree.
     ///
     /// A backup in flight is not the run missed: the quit cancels it, and
     /// the cancel stamps its slot as run (`markPlanRun`, at the run's
     /// start), so the plan's next slot is. Pause and Stop's runs keep their
-    /// slot due, as that stamp skips them, and so does Apply Retention
+    /// slot due — that stamp skips them — and so does Apply Retention
     /// Now…'s forget, which stamps nothing however it ends.
     func quitScheduleNotice(now: Date = .now) -> String? {
         guard !startsAtLogin else { return nil }
@@ -79,11 +79,11 @@ extension AppModel {
     }
 
     /// The quit alert's words, or `nil` when quitting needs no question.
-    /// Work in flight asks on every path, exactly as it always has. The
-    /// schedule is mentioned only when the user chose to quit here — the
-    /// app menu, ⌘Q, the tray: a logout, restart or shutdown must never
-    /// wait on a question about a schedule, and those arrive the way the
-    /// Dock's and AppleScript's quits do, so none of them gets it.
+    /// Work in flight asks on every path. The schedule is mentioned only
+    /// when the user chose to quit — the app menu, ⌘Q, the tray: a logout,
+    /// restart or shutdown must never wait on a schedule question, and
+    /// those arrive the way the Dock's and AppleScript's quits do, so none
+    /// of them gets it.
     func quitConfirmation(userChoseQuit: Bool, now: Date = .now) -> QuitConfirmation? {
         let interruptions = quitInterruptions
         var lines = interruptions
@@ -128,10 +128,10 @@ extension AppModel {
             suppressConfigurationSave = true
             configuration = loaded.configuration
             suppressConfigurationSave = false
-            // A recovered load is not a clean one: the user is reading a copy,
-            // and the next save replaces whatever was wrong with the live
-            // file. Saying nothing would trade a file-system accident for a
-            // silent one.
+            // A recovered load is not a clean one: the user is reading a
+            // copy, and the next save replaces whatever was wrong with the
+            // live file. Saying nothing would trade a file-system accident
+            // for a silent one.
             if let recovered = loaded.recoveredFrom {
                 post(Banner(
                     title: "Your configuration was restored from a backup copy",
@@ -168,12 +168,12 @@ extension AppModel {
         // Logs whose records are gone — a crash between a log's write and
         // the save that would have kept its record, a trim the quit never
         // drained. Only from a history that read whole: an unreadable
-        // configuration, or a `runs` array tolerant decoding dropped,
-        // reads as an empty history, which would sweep every log while the
-        // records still sit in config.json for the user to fix. Only files
-        // older than this launch: a run finishing mid-sweep has written its
-        // log, not yet its record. On the background lane, so quitting
-        // waits for it.
+        // configuration, or a `runs` array tolerant decoding dropped, reads
+        // as an empty history that would sweep every log while the records
+        // still sit in config.json for the user to fix. Only files older
+        // than this launch: a run finishing mid-sweep has written its log,
+        // not yet its record. On the background lane, so quitting waits for
+        // it.
         if historyIsWhole {
             let logs = runLogs
             let recorded = Set(configuration.runs.map(\.id))
@@ -192,13 +192,13 @@ extension AppModel {
             tasks.addBackground(Task { [indexCoordinator] in
                 await indexCoordinator.sweepOrphanFiles(configured: configured)
             })
-            // Plans whose repository is gone — left by removals from before a
-            // plan followed its repository out, or by a repository deleted
-            // from config.json by hand — are deleted, under the same gate and
-            // for the same reason: a recovered or substituted list can miss a
-            // live repository, whose plans would then read as orphans. Before
-            // the refresh and the scheduler, which would otherwise see them;
-            // the configuration's own save writes the deletion back once.
+            // Plans whose repository is gone — a removal whose plan
+            // deletion never ran, or a repository deleted from config.json
+            // by hand — are deleted, under the same gate and for the same
+            // reason: a recovered or substituted list can miss a live
+            // repository, whose plans would then read as orphans. Before
+            // the refresh and the scheduler, which would otherwise see
+            // them; the configuration's own save writes the deletion back.
             for plan in configuration.plans where plan.repositoryID.map(configured.contains) != true {
                 deletePlan(id: plan.id)
             }
@@ -221,10 +221,6 @@ extension AppModel {
         // tccd, and nothing on the first screen waits for the answer.
         Task { await self.refreshFullDiskAccess() }
 
-        // Read the repositories before arming the scheduler. The order was for
-        // locks — the refresh's `stats` held a shared one, so a due plan's
-        // retention and this refresh failed on each other — and every read the
-        // refresh makes runs lock-free now; the order is kept as it was.
         await refreshAllSnapshots()
         #if DEBUG
         // A capture run must photograph a deterministic state: a live scheduler
@@ -247,11 +243,11 @@ extension AppModel {
         // Slotted runs only: a start ping in flight is awaited below, never
         // aborted — its monitor must hear that the run started.
         tasks.cancelSlots()
-        // A confirmed-destructive console command must not outlive the app
-        // either — as a sheet it was cancelled on dismissal; quitting cancels.
-        // Awaited, not merely cancelled: the console's unwind persists the
-        // command history through `persistHistory`, and a command that lands
-        // during the final flushSave below would race the process exit.
+        // A confirmed-destructive console command must not outlive the app:
+        // quitting cancels it as its sheet's dismissal would. Awaited, not
+        // merely cancelled — the console's unwind persists the command
+        // history through `persistHistory`, and a command landing during
+        // the final flushSave below would race the process exit.
         console.cancelRunningCommand()
         await console.waitForCommand()
         // The index backfill before the sweep below: cancelled, its walk
@@ -308,11 +304,10 @@ extension AppModel {
     /// The `SMAppService` calls are synchronous XPC round-trips to the
     /// background-task-management daemon, so each runs detached — a wedged
     /// daemon stalls a background task, not the main actor. Changes
-    /// serialize through a chain: a second toggle runs after the first, so
-    /// the daemon's final state is the last click's, not whichever XPC
-    /// happened to finish last. The generation moves at the click, so a
-    /// change still ahead in the chain already knows a newer one owns the
-    /// switch.
+    /// serialize through a chain, so the daemon's final state is the last
+    /// click's, not whichever XPC happened to finish last; the generation
+    /// moves at the click, so a change still ahead in the chain already
+    /// knows a newer one owns the switch.
     func setStartsAtLogin(_ enabled: Bool) async {
         loginItemGeneration += 1
         let generation = loginItemGeneration

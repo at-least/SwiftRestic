@@ -3,9 +3,9 @@ import ScreenCaptureKit
 
 /// The debug-capture machinery (`SWIFTRESTIC_CAPTURE*`, see README "Looking
 /// at the app"): ScreenCaptureKit with a `cacheDisplay` fallback, the
-/// all-panes sweep, and the display wake. Kept out of the app-entry file —
-/// this is test scaffolding that happens to ship in debug builds, and the
-/// entry file reads as app logic again.
+/// all-panes sweep, and the display wake. Kept out of the app-entry file:
+/// test scaffolding that ships in debug builds, so the entry file stays app
+/// logic.
 
 #if DEBUG
 extension AppDelegate {
@@ -66,9 +66,7 @@ extension AppDelegate {
     /// (and the initial wait for launch/bootstrap).
     ///
     /// The per-pane sweep exists because whole-window regressions show up on
-    /// panes nobody was just then looking at — the macOS 26 displaced
-    /// title-bar material floated over every pane but was only ever checked
-    /// where a change had been made.
+    /// panes nobody was just then looking at.
     private func captureAllPanes(into directory: URL, settlingFor settle: Duration) async {
         guard let model, let router else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -130,11 +128,11 @@ extension AppDelegate {
     }
 
     private func captureMainWindow(to url: URL) async {
-        // Known artifact, verified live 2026-09: a sheet's tab picker (the
+        // Known cacheDisplay artifact: a sheet's tab picker (the
         // Repository/Hooks segmented control) can render as a black pill with
-        // an invisible label in these captures. The vibrant control draws
-        // fine in a real window; `cacheDisplay` is what drops it. Check the
-        // running app before treating it as a product defect.
+        // an invisible label in these captures; the control draws fine in a
+        // real window. Check the running app before treating it as a product
+        // defect.
         // A presented sheet is its own window, and is what should be captured
         // rather than the dimmed window behind it. `keyWindow` is nil when the
         // app was launched without being activated, so check for a sheet first.
@@ -163,13 +161,12 @@ extension AppDelegate {
 
     /// ScreenCaptureKit renders Tahoe's glass materials correctly;
     /// `cacheDisplay` draws them black on macOS 26 (the whole detail column
-    /// photographs as black). SC is therefore preferred, but it needs Screen
-    /// Recording authorisation — which a fresh checkout, an SSH session or a
-    /// CI runner does not have, and a prompt nobody answers must not hang the
-    /// sweep. The SC task is therefore polled on a real leash: once the leash
-    /// runs out the task is cancelled and left behind, and the permission-free
-    /// fallback photographs the pane — logged, so a black shot names its
-    /// backend.
+    /// photographs as black), so SC is preferred. SC needs Screen Recording
+    /// authorisation — which a fresh checkout, an SSH session or a CI runner
+    /// does not have — and a prompt nobody answers must not hang the sweep:
+    /// the SC task is polled on a leash, and once it runs out the task is
+    /// cancelled and left behind while the permission-free fallback
+    /// photographs the pane — logged, so a black shot names its backend.
     private func bestEffortPNG(of window: NSWindow) async -> Data? {
         let windowID = CGWindowID(window.windowNumber)
         let scale = window.backingScaleFactor
@@ -243,10 +240,9 @@ extension AppDelegate {
         init(_ content: SCShareableContent) { self.content = content }
     }
 
-    /// Nonisolated like its only caller: the fetch and the boxing stay in
-    /// the same domain as the class method, so the non-Sendable snapshot
-    /// never crosses isolation — which older SDKs (macOS 15) reject as a
-    /// compile error. Only the Sendable box travels back.
+    /// Nonisolated like its only caller: fetch and boxing stay in the same
+    /// domain, and only the Sendable box travels back (see
+    /// `ShareableContentBox`).
     private nonisolated static func shareableContentBox() async throws -> ShareableContentBox {
         ShareableContentBox(try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true))
     }
@@ -257,9 +253,8 @@ extension AppDelegate {
     /// interactive runs) and the caller falls back to `cacheDisplay`.
     ///
     /// Nonisolated: the ScreenCaptureKit objects (`SCShareableContent`,
-    /// `SCContentFilter`) are non-Sendable snapshots, and older SDKs reject
-    /// sending them across the MainActor boundary at every await. Working
-    /// in the nonisolated domain keeps fetch, filter and screenshot in one
+    /// `SCContentFilter`) are non-Sendable snapshots that older SDKs reject
+    /// sending across isolation, so fetch, filter and screenshot stay in one
     /// place; only the `Data` — plain bytes — travels back.
     @available(macOS 14.0, *)
     private nonisolated static func screenCaptureKitPNG(windowID: CGWindowID, scale: CGFloat) async throws -> Data? {

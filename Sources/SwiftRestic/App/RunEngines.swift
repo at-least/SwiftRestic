@@ -15,14 +15,12 @@ private func note(
 }
 
 /// The after-hooks loop both engines' `finish` shares. A cancel landing
-/// mid-after-hooks stops the remaining events: the user asked the app to
-/// stop, not this hook to fail. A failing hook is worth surfacing, but never
-/// undoes what the run did — a successful backup, check or prune whose hook
-/// failed reads as completed-with-errors, which is what arms the problem dot
-/// and notifyOnFailure — and `finishedAt` is re-stamped so the record
-/// includes the hooks. A cancelled run runs none of this: the user asked for
-/// it to stop, and firing an "after failure" script at that point would be a
-/// surprise.
+/// mid-after-hooks stops the remaining events, and a cancelled run runs
+/// none of them — firing an "after failure" script then would surprise the
+/// user who asked for the stop. A failing hook never undoes the run:
+/// success whose hook failed reads as completed-with-errors, which arms the
+/// problem dot and notifyOnFailure, and `finishedAt` is re-stamped so the
+/// record includes the hooks.
 private func runAfterHooks(
     _ allHooks: [BackupHook],
     events: [BackupHook.Event],
@@ -43,12 +41,11 @@ private func runAfterHooks(
     record.finishedAt = .now
 }
 
-/// One backup run's lifecycle, extracted from `AppModel` so the sequencing —
-/// hooks → start ping → backup → retention → closing refresh → record — is
-/// unit-testable against a mock engine (a `ResticClient` in the test bundle)
-/// instead of only through the stub-binary and real-restic suites.
+/// One backup run's lifecycle, so the sequencing — hooks → start ping →
+/// backup → retention → closing refresh → record — is unit-testable against
+/// a mock engine.
 ///
-/// The engine owns *what happens in what order*; everything observable
+/// The engine owns what happens in what order; everything observable
 /// (activity phases, run stamps, banners, records, notifications) is written
 /// through the sink, which `AppModel` implements. `AppModel.runBackup` and
 /// friends remain the facade the views and the scheduler call — this type is
@@ -69,10 +66,8 @@ enum BackupRunEngine {
         func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID)
         /// The run's progress reporter, hopping to the sink's own actor —
         /// built by the sink because only it knows its concrete isolation.
-        /// (Sink-built is load-bearing: the toolchain accepts @Sendable
-        /// capture of a concrete main-actor class, not of an existential or
-        /// a generic parameter — compiler probes recorded with commit
-        /// 6635470. A future language mode may loosen this.)
+        /// Sink-built is load-bearing: @Sendable captures a concrete
+        /// main-actor class, not an existential or a generic parameter.
         func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void
         func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool)
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
@@ -198,19 +193,18 @@ enum BackupRunEngine {
                     }
                     transcript.note("Retention removed \(Format.plural(removed, "snapshot"))")
                 } catch where ResticError.isCancellation(error) {
-                    // Stopped here — "Stop Applying Retention" in the Plan
-                    // menu or the tray, Pause and Stop, or a quit: the
-                    // user's stop, recorded as every stop is, never as the
-                    // lock failure below. The snapshot stands and is
-                    // already stamped, so nothing stamps the run again.
+                    // The user's stop — "Stop Applying Retention" in the Plan
+                    // menu or the tray, Pause and Stop, or a quit — recorded
+                    // as every stop is, never as the lock failure below. The
+                    // snapshot stands and is already stamped, so nothing
+                    // stamps the run again.
                     record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
                     transcript.note("Retention stopped")
                 } catch {
                     // `forget` needs an exclusive repository lock while `backup`
-                    // only takes a shared one, so a second plan backing up to the
-                    // same repository makes this fail with exit code 11. The data
-                    // is already safe; degrade to a warning instead of reporting
-                    // the whole backup as failed.
+                    // takes a shared one, so a second plan backing up to the
+                    // same repository fails this with exit code 11. The data
+                    // is safe; warn instead of failing the whole backup.
                     record.outcome = .completedWithErrors
                     let line = RunRecord.retentionSkippedPrefix + error.localizedDescription
                     record.itemErrors.append(line)
@@ -373,9 +367,8 @@ enum MaintenanceRunEngine {
                 // Prune narrates its progress line by line; surfacing the
                 // newest line is the difference between "working" and "hung"
                 // across a prune that can run for hours. (Restic's lines are
-                // \n-terminated when stdout is a pipe — progress lines like
-                // "[0:00] 100.00%  2 / 2 packs processed" arrive as they
-                // print, no \r in-place updates to split around.)
+                // \n-terminated when stdout is a pipe, arriving as they
+                // print — no \r in-place updates to split around.)
                 record.detailText = try await RunTranscript.$current.withValue(transcript) {
                     try await service.prune(
                         context,
@@ -441,9 +434,8 @@ enum MaintenanceRunEngine {
         await sink.deliver(record: record, repository: repository, transcript: contents)
         // Scheduled by the sink, not awaited here: a cancelled run leaves
         // this task cancelled, and an inherited cancel would kill the refresh
-        // mid-call and leave the listing stale after every cancelled check or
-        // prune. (A cancel landing inside the refresh itself is answered
-        // quietly by the sink.)
+        // mid-call and leave the listing stale. (A cancel landing inside the
+        // refresh itself is answered quietly by the sink.)
         sink.scheduleSnapshotRefresh(repositoryID: repository.id)
     }
 }

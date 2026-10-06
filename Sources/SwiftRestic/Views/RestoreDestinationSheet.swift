@@ -8,7 +8,7 @@ import SwiftUI
 struct RestoreDestinationRequest: Identifiable {
     let id = UUID()
     let subject: RestoreSubject
-    /// The backup's one name (02b's `SnapshotLineage.displayName`), which a
+    /// The backup's one name (`SnapshotLineage.displayName`), which a
     /// whole-backup restore's header needs; an item restore names the item.
     var backupName: String?
     /// A line under the headline about how the selection became the
@@ -276,8 +276,8 @@ struct RestoreDestinationSheet: View {
                 } else if let items {
                     pathCaption("Will restore the \(Format.plural(items.count, "item")) into \(Self.abbreviated(folder))", fullPath: folder.path)
                 } else {
-                    // The path truncates and the layout sentence wraps: on
-                    // one line at this width, both were cut to fragments.
+                    // The path truncates and the sentence wraps: one line at
+                    // this width cuts both to fragments.
                     VStack(alignment: .leading, spacing: 2) {
                         pathCaption("Will restore into \(Self.abbreviated(folder))", fullPath: folder.path)
                         caption("Each backed-up folder is recreated under its full original path inside it.")
@@ -309,10 +309,9 @@ struct RestoreDestinationSheet: View {
         }
     }
 
-    /// A sentence, which wraps. Height-pinned, because the Form sizes its
-    /// rows from a one-line measure and otherwise cut the whole-backup
-    /// sentence to one line (a probe of this Form: 1 line at 265 pt, 2
-    /// pinned). Safe in this sheet, unlike in the window's detail column:
+    /// A sentence, which wraps. Height-pinned: the Form sizes its rows from
+    /// a one-line measure and otherwise cuts the whole-backup sentence to
+    /// one line. Safe in this sheet, unlike in the window's detail column:
     /// the sheet's fixed 460-pt width is the only width it is ever asked at.
     private func caption(_ text: String) -> some View {
         Text(text)

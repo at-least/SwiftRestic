@@ -12,16 +12,14 @@ struct PlanEditorSheet: View {
     @State private var isConfirmingDiscard = false
     /// Files first: what to back up is the first question a plan answers,
     /// and the header above the tabs already holds the name and the
-    /// repository the old General tab was spent on.
+    /// repository.
     @State private var tab: Tab = .files
     @FocusState private var isNameFocused: Bool
     /// The retention tab's projection, computed off the render path under
-    /// `RetentionProjection.key` — the simulation walks up to 30,000
-    /// synthetic runs with Calendar decomposition, which is tens of
-    /// milliseconds at the stepper maxima. As body state it was re-paid on
-    /// every sheet re-render (every keystroke in any field, every stepper
-    /// click); now only a change to the inputs project actually reads can
-    /// re-run it.
+    /// `RetentionProjection.key`: the simulation walks up to 30,000
+    /// synthetic runs with Calendar decomposition — tens of milliseconds at
+    /// the stepper maxima, too slow to re-run as body state on every sheet
+    /// re-render (every keystroke, every stepper click).
     @State private var projection: RetentionProjection.Outcome?
     /// Set by the footer's Start at Login, so the line confirms the click
     /// where the offer stood. It follows the optimistic flip, as the
@@ -35,9 +33,8 @@ struct PlanEditorSheet: View {
     /// true words.
     @State private var isConfirmingAdopt = false
     @State private var armedAdoptConfirmation: ConfirmationCopy?
-    /// Which kind of editing this sheet is for. Inferred today from the
-    /// plan's emptiness, and still defaulted that way — but an adopt draft
-    /// is prefilled, so it would read as an edit; adoption says so. The
+    /// Which kind of editing this sheet is for. An adopt draft is prefilled,
+    /// so emptiness alone would read it as an edit; adoption says so — the
     /// presenting root names `.adopt` when it raises the sheet.
     enum Mode {
         /// A fresh plan, nothing prefilled.
@@ -207,15 +204,12 @@ struct PlanEditorSheet: View {
         }
         // Resizable, not fixed: forty pasted exclude patterns do not fit the
         // default frame, and a fixed sheet turns its list into a mailbox slot
-        // at exactly the moment the user has the most to paste. The repository
-        // editor already works this way. Tall enough that the Hooks tab's
-        // Command field clears the fixed hook list band without scrolling.
-        // Adopt's header strip and footer warnings fit the same frame because
-        // the Files tab's lists give way first (PathListEditor's floor).
-        // Content that outgrows the sheet is centred in it: measured
-        // 2026-10-03, the adopt header sat 34 pt above the sheet's top edge
-        // over "projects" and 47 pt over "movies", and the tab bar drew its
-        // four labels stacked in one 34-pt blob. Fitted, both render.
+        // at exactly the moment the user has the most to paste. Tall enough
+        // that the Hooks tab's Command field clears the fixed hook list band
+        // without scrolling. Adopt's header strip and footer warnings fit the
+        // same frame because the Files tab's lists give way first
+        // (PathListEditor's floor); content that outgrows the sheet is
+        // centred in it.
         .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 620)
         .onAppear {
             if draft.repositoryID == nil {
@@ -487,8 +481,7 @@ struct PlanEditorSheet: View {
     }
 
     /// "At 02 : 05" on one line, in the 24-hour form every schedule summary
-    /// uses. The field's own "Minute" label wrapped to "Min / ute" in its
-    /// 56-pt frame beside a bare "0"; the labels now reach VoiceOver only.
+    /// uses; the pickers' hidden labels reach VoiceOver only.
     private var timeOfDayPickers: some View {
         LabeledContent("At") {
             HStack(spacing: 4) {
@@ -501,9 +494,8 @@ struct PlanEditorSheet: View {
                 .fixedSize()
                 Text(verbatim: ":")
                     .accessibilityHidden(true)
-                // Any minute, not a hidden 15-minute grid: a typed :05 or :20
-                // failed invisibly before, and "every 6 hours at :20" was
-                // inexpressible. Bordered, so "00" reads as a field and not
+                // Any minute, not a hidden 15-minute grid: a typed :05 or
+                // :20 must work. Bordered, so "00" reads as a field and not
                 // as a label beside the popup.
                 TextField(
                     "Minute",

@@ -9,7 +9,7 @@ import Foundation
 /// plan's own, tagged ones group by their plan instead — see
 /// `OtherBackupsGroup`), and both the restore pane's Change column and the
 /// Compare sheet default to the previous snapshot in it. Retention is
-/// narrower on purpose: `forget` runs per plan (`--tag <plan>`), and restic
+/// narrower: `forget` runs per plan (`--tag <plan>`), and restic
 /// groups that plan's snapshots by host+paths — so a lineage two plans share
 /// is thinned as two separate groups, and snapshots without a plan tag are
 /// never thinned by the app. The consequence the rule accepts: a plan whose
@@ -19,9 +19,9 @@ import Foundation
 struct SnapshotLineage: Identifiable, Sendable, Equatable {
     struct Key: Hashable, Sendable {
         var hostname: String?
-        /// Sorted, as restic's grouping compares them. restic already stores
-        /// a snapshot's paths sorted (0.19.1: `backup zeta alpha` records
-        /// [alpha, zeta]); sorting again keeps other writers' snapshots in step.
+        /// Sorted, as restic's grouping compares them. restic stores a
+        /// snapshot's own paths sorted; sorting again keeps other writers'
+        /// snapshots in step.
         var paths: [String]
     }
 
@@ -95,9 +95,7 @@ extension SnapshotLineage {
 
         /// A group row's second line in the pieces the row lays out: the
         /// count and the kind always read whole, and the qualifiers between
-        /// them — a 25-character hostname, a folder list — give way first.
-        /// Cut as one string, a long hostname took the kind word with it
-        /// ("newlixs…utside SwiftRestic").
+        /// them — a long hostname, a folder list — give way first.
         struct Caption: Equatable, Sendable {
             /// "2 backups".
             var count: String
@@ -287,8 +285,8 @@ extension OtherBackupsGroup {
             let host = newest.hostname ?? "Unknown host"
             var qualifiers: [String] = []
             // Another Mac's backups are what a name here must warn about;
-            // this Mac's own name said nothing, and at 25 characters (the
-            // Mac these rows were measured on) it crowded the line.
+            // this Mac's own name said nothing, and a long hostname crowds
+            // the line.
             if newest.hostname != localHost { qualifiers.append(host) }
             if titleCounts[title, default: 0] > 1 { qualifiers.append(folders) }
             var caption = SnapshotLineage.Label.Caption(

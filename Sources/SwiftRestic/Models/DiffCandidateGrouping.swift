@@ -4,10 +4,10 @@ import Foundation
 /// pin — the tests compile no views, so the bucketing the picker renders
 /// lives here with the model.
 ///
-/// Built for repositories with thousands of snapshots: each function touches
-/// the candidate list once, and the date formatters run once per distinct
-/// bucket, not once per candidate per render — the sheet rebuilds this on
-/// every keystroke in its filter field.
+/// Built for thousands of snapshots: each function touches the candidate
+/// list once and the date formatters run once per distinct bucket, not once
+/// per candidate — the sheet rebuilds this on every keystroke in its filter
+/// field.
 enum DiffCandidateGrouping {
     struct Month: Equatable {
         let label: String
@@ -25,9 +25,9 @@ enum DiffCandidateGrouping {
             let key = calendar.dateComponents([.year, .month], from: snapshot.time)
             if grouped[key] == nil {
                 order.append(key)
-                // The label answers to the same calendar that bucketed the
-                // snapshot — a caller handing in a fixed-zone calendar (the
-                // tests) must get labels cut along its month boundaries.
+                // The label uses the same calendar that bucketed the
+                // snapshot — a fixed-zone calendar (the tests) must get
+                // labels cut along its month boundaries.
                 labels[key] = snapshot.time.formatted(
                     Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
                         .month(.wide).year()

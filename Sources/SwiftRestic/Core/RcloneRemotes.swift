@@ -4,8 +4,8 @@ import Foundation
 struct RcloneRemote: Sendable, Hashable {
     /// The name as it appears in `rclone listremotes` — without the trailing colon.
     var name: String
-    /// The backend type (`drive`, `sftp`, …), empty when the lister fell back to
-    /// plain `listremotes` output, which names remotes only.
+    /// The backend type (`drive`, `sftp`, …), empty when a line carries a
+    /// colon but nothing after it.
     var type: String
 
     var menuTitle: String { type.isEmpty ? name : "\(name) — \(type)" }
@@ -37,11 +37,12 @@ struct RcloneRemoteLister: Sendable {
         return Self.parse(result.stdout)
     }
 
-    /// `-l` prints one `name: type` per line; plain `listremotes` names only.
-    /// Both split at the first colon — remote names may not contain colons,
-    /// which is exactly what makes `remote:path` unambiguous. Lines split on
-    /// any newline character: Swift reads `\r\n` as one grapheme, so a literal
-    /// `"\n"` split would leave the `\r` glued to the previous line.
+    /// `-l` prints one `name: type` per line; a line without a colon is
+    /// dropped. Splitting at the first colon is safe because remote names
+    /// may not contain colons — which is exactly what makes `remote:path`
+    /// unambiguous. Lines split on any newline character: Swift reads `\r\n`
+    /// as one grapheme, so a literal `"\n"` split would leave the `\r`
+    /// glued to the previous line.
     static func parse(_ output: String) -> [RcloneRemote] {
         output.split(whereSeparator: \.isNewline).compactMap { rawLine in
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)

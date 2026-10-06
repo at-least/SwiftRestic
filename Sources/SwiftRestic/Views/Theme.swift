@@ -3,9 +3,9 @@ import SwiftUI
 /// SwiftRestic's design tokens — the single place that owns colour, spacing and
 /// corner radii, so views never repeat literal values.
 ///
-/// Colour is deliberately native: the app follows the user's system accent and
-/// Apple's semantic status colours, which adapt to appearance and Increase
-/// Contrast on their own. Only geometry (spacing, radii, type) is custom.
+/// Colour is native: the app follows the user's system accent and Apple's
+/// semantic status colours, which adapt to appearance and Increase Contrast
+/// on their own. Only geometry (spacing, radii, type) is custom.
 enum Theme {
     // MARK: Colour
 

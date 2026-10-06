@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// A folder of the Files view, by version: the backups that hold it in a
+/// A folder of the Files view, by version: the backups holding it in a
 /// picker — newest first, from the index — what changed in it since the
-/// backup before (the index's, no restic), and the folder as the chosen one
-/// held it, listed by restic (or the browse cache), each item marked with
-/// how it changed: the tree walks the folders, this flips them through
-/// time.
+/// backup before (from the index, no restic), and the folder as the chosen
+/// backup held it, listed by restic or the browse cache, each item marked
+/// with how it changed. The tree walks the folders; this flips them
+/// through time.
 ///
 /// Items select several at a time, as in the Restore pane, and restore
 /// together through the destination sheet, or drag to Finder one by one; a
@@ -132,13 +132,13 @@ struct FolderVersionsView: View {
         } else if isLoading, nodes.isEmpty {
             ProgressView("Reading…")
         } else if chosen == nil {
-            // Why is the pane's banner's to say, while the index reads.
+            // Saying why is the pane's banner's job, while the index reads.
             ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
         } else if nodes.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
         } else {
-            // No gesture on the row: the list's own drag and double-click,
-            // the Restore pane's measured rule — a gesture would claim every
+            // No gesture on the row — the list's own drag and double-click
+            // handle it, the Restore pane's rule: a gesture would claim every
             // click on a name or icon.
             List(nodes, selection: $selection) { child in
                 SnapshotNodeRow(node: child, change: changes?.marks[PathKey(child.path)])

@@ -2,7 +2,7 @@ import Foundation
 
 /// The disabled-Save reasons the editor sheets show beside their buttons.
 ///
-/// Pure and view-free so both test targets compile them: the caption is the
+/// Pure and view-free so the test target compiles them: the caption is the
 /// same chain the disabled state checks, spelled in field order, and a test
 /// pins the ordering — a reordering that makes the footer name a later gap
 /// while an earlier one exists is a regression.

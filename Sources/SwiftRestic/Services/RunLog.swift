@@ -18,7 +18,7 @@ struct RunLogVersions: Sendable, Equatable {
         var app = "SwiftRestic"
         if let short = info?["CFBundleShortVersionString"] as? String { app += " \(short)" }
         if let build = info?["CFBundleVersion"] as? String { app += " (\(build))" }
-        // "Version 26.6.2 (Build 25G83)" (probe) — the prefix is Foundation's.
+        // "Version 26.6.2 (Build 25G83)" — the prefix is Foundation's.
         let system = ProcessInfo.processInfo.operatingSystemVersionString
         let macOS = "macOS " + (system.hasPrefix("Version ") ? String(system.dropFirst("Version ".count)) : system)
         let restic = resticVersion
@@ -34,8 +34,7 @@ struct RunLogVersions: Sendable, Equatable {
 /// diagnostic record of what restic printed, and exactness beats
 /// prettiness. The header names the repository by name and kind only, never
 /// by location, which can carry a host, a bucket or a user name — restic's
-/// own error lines may still name it, with a URL's password masked as `***`
-/// (probed against a `rest:` URL on 0.19.1).
+/// own error lines may still name it, with a URL's password masked as `***`.
 enum RunLog {
     static func render(
         record: RunRecord,
@@ -152,8 +151,8 @@ struct RunLogStore: Sendable {
         try? String(contentsOf: url(for: id), encoding: .utf8)
     }
 
-    /// The logs of runs leaving the history. A missing file is fine — a
-    /// record from before logs, or one whose write failed, has none.
+    /// The logs of runs leaving the history. A missing file is fine — not
+    /// every record has one.
     func remove(_ ids: some Sequence<UUID>) {
         for id in ids {
             try? FileManager.default.removeItem(at: url(for: id))

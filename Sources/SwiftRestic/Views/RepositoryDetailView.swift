@@ -97,8 +97,8 @@ struct RepositoryDetailView: View {
         .detailPane()
         // On the pane itself, not the strip: the strip renders nothing until
         // a capacity exists, and a lifecycle modifier on a view that renders
-        // nothing never fires — the load would never start. Also off-main on
-        // purpose (see `volumeCapacity`): nil first, then a cancelled-check
+        // nothing never fires — the load would never start. Off the main
+        // actor (see `volumeCapacity`): nil first, then a cancelled-check
         // after the await, so a slow answer from the old disk can neither
         // render under the new one's caption nor overwrite its numbers.
         .task(id: repository.id) {

@@ -124,9 +124,9 @@ extension AppModel {
         overwrite: RestoreOverwritePolicy
     ) {
         let reporter = restoreProgressReporter()
-        // The strip over every pane, the Restore pane's included, names the
-        // backup as the sheet that started it did (SnapshotLineage's one
-        // naming rule); the record keeps the ID, the drawer's vocabulary.
+        // The strip names the backup by SnapshotLineage's one naming rule,
+        // as the sheet that started it did; the record keeps the ID, the
+        // drawer's vocabulary.
         let backup = snapshots(for: repositoryID).first { $0.id == snapshotID || $0.shortID == snapshotID }
         let name = backup.map { SnapshotLineage.displayName(of: $0, label: recordLabel(of: $0, repositoryID: repositoryID)) }
         beginRestore(
@@ -158,10 +158,9 @@ extension AppModel {
     /// The banner a finished restore posts: where it landed — the item
     /// itself, which Reveal in Finder selects, or the folder a whole backup
     /// went into — and, under Keep, what restic left as it was. restic's
-    /// files_restored counts directories too (a repeat whole-backup restore
-    /// "restored" 12 while all 4 files were kept), so only files_skipped
-    /// means kept. Under Replace a skipped file already matched the backup,
-    /// which is not worth a line. "Backup", the restore surfaces' word: the
+    /// files_restored counts directories too, so only files_skipped means
+    /// kept. Under Replace a skipped file already matched the backup, which
+    /// is not worth a line. "Backup", the restore surfaces' word: the
     /// Restore pane shows this banner too.
     nonisolated static func restoreBanner(
         itemName: String?,
@@ -263,15 +262,15 @@ extension AppModel {
 
     /// Shared bookkeeping for every restore shape: one run at a time,
     /// progress published, and each step's outcome written to the run
-    /// history either way — with the backup it read (`snapshotID` as asked
-    /// for), the items (`sourcePath`, `sourcePaths`, neither for a whole
-    /// backup) and where they land (`destinationPath`: the restored item
-    /// itself, or the folder several items or a whole backup go into), plus
-    /// the step's log. A step's `label` is its record's subject in Activity,
-    /// its `description` the progress strip's title. The steps run in order
-    /// and the first that fails or is cancelled ends the run: its banner
-    /// says how many items the steps before it restored, and `onSuccess`
-    /// (handed every step's summary) runs only when all of them succeeded.
+    /// history either way — with the backup it read (`snapshotID`), the
+    /// items (`sourcePath`, `sourcePaths`, neither for a whole backup) and
+    /// where they land (`destinationPath`: the restored item itself, or the
+    /// folder several items or a whole backup go into), plus the step's
+    /// log. A step's `label` is its record's subject in Activity, its
+    /// `description` the progress strip's title. The steps run in order and
+    /// the first that fails or is cancelled ends the run: its banner says
+    /// how many items the steps before it restored, and `onSuccess` (handed
+    /// every step's summary) runs only when all of them succeeded.
     private func beginRestore(
         repositoryID: UUID,
         snapshotID: String,
@@ -419,13 +418,10 @@ extension AppModel {
     /// when the drop asks for the contents. The drop location is the
     /// destination.
     ///
-    /// The load handler must not touch the main actor: it runs while the
-    /// drag session holds the main thread synchronously waiting on this
-    /// promise (`loadURLSynchronously` → semaphore, under
-    /// `_dragUntilMouseUp` — measured deadlock), so everything model-derived
-    /// is captured here, *before* the session starts, and the restore runs
-    /// entirely in the background. Only the failure banner hops to main,
-    /// after the promise resolves and the drag has ended.
+    /// The load handler must not touch the main actor: the drag session
+    /// blocks the main thread waiting on this promise, so a hop there
+    /// deadlocks. Everything model-derived is captured before the session
+    /// starts; only the failure banner hops to main, after the drag ends.
     func dragRestoreProvider(repositoryID: UUID, snapshotID: String, node: SnapshotNode) -> NSItemProvider {
         let provider = NSItemProvider()
         provider.suggestedName = node.name
@@ -443,12 +439,12 @@ extension AppModel {
         let secrets = self.secrets
         let settings = configuration.settings
 
-        // The promise is typed by *content*, not as a file URL: `public.file-url`
-        // declares the file's contents are a URL bookmark (what a .webloc is),
-        // and Finder answers that with the prohibited cursor (measured live —
-        // the drag offered, the drop refused). A content-typed promise is the
-        // shape Finder's drop sites accept. `public.data` is the root physical
-        // type every file conforms to; a directory's content type is `folder`.
+        // The promise is typed by *content*, not as a file URL:
+        // `public.file-url` declares the file's contents are a URL bookmark
+        // (what a .webloc is), and Finder answers that with the prohibited
+        // cursor — a content-typed promise is the shape Finder's drop sites
+        // accept. `public.data` is the root physical type every file
+        // conforms to; a directory's content type is `folder`.
         let contentType: UTType = node.isDirectory ? .folder : .data
         provider.registerFileRepresentation(
             forTypeIdentifier: contentType.identifier,
@@ -491,22 +487,20 @@ extension AppModel {
         post(Banner(title: "Cannot drag to restore", message: message, isError: true))
     }
 
-    /// The Arq-style drag restore: restores one node into a fresh throwaway
-    /// directory and returns the restored item's URL, which the drag's
-    /// promised-file provider hands to Finder.
+    /// The drag restore: restores one node into a fresh throwaway directory
+    /// and returns the restored item's URL, which the drag's promised-file
+    /// provider hands to Finder.
     ///
     /// `nonisolated`, and handed everything it needs as values, because the
-    /// promise's load handler runs *during* the drag session — while the
-    /// main thread is synchronously waiting on it (measured:
-    /// `NSItemProvider.loadURLSynchronously` → semaphore, under
-    /// `_dragUntilMouseUp`). Any hop to the main actor from there is a
-    /// self-deadlock; the caller captures the model-derived inputs before
-    /// the session starts. Deliberately outside `beginRestore`: that path
-    /// owns the progress strip, the run history and the "Restored…" banner,
-    /// none of which describe a drop whose destination the drag itself
-    /// chose. A failed drag posts its banner from the caller, which hops to
-    /// main only after the promise resolves — by then the drag has ended
-    /// and the main actor drains again.
+    /// promise's load handler runs *during* the drag session, while the
+    /// main thread synchronously waits on it — any hop to the main actor
+    /// from there is a self-deadlock. The caller captures the model-derived
+    /// inputs before the session starts. Outside `beginRestore`: that path
+    /// owns the progress strip, the run history and the "Restored…"
+    /// banner, none of which describe a drop whose destination the drag
+    /// itself chose. A failed drag posts its banner from the caller, which
+    /// hops to main only after the promise resolves — the drag has ended by
+    /// then, and the main actor drains again.
     nonisolated static func restoredFileForDrag(
         service: any ResticClient,
         secrets: SecretStore,

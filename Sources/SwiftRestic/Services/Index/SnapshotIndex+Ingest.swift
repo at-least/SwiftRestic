@@ -22,7 +22,7 @@ extension SnapshotIndex {
     /// over. The walk caches node ids across transactions, so it is replaced
     /// only after its chunk commits, and dropped where node ids go stale:
     /// `collectNodes`, the one path that deletes nodes, drops it whichever
-    /// write collects; a throw poisons the stream and its walk with it (that
+    /// write collects. A throw poisons the stream and its walk with it (that
     /// chunk's new ids rolled back); the next `beginFull` replaces the
     /// session. A delta between chunks may give a directory the walk
     /// believes new a child, which the walk's `created` hint tolerates (see

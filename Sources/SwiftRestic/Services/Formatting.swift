@@ -105,9 +105,8 @@ enum Format {
         // Something that just happened must not be described in the future
         // tense, which is what a timestamp a fraction of a second old
         // produces. Beyond that window the formatter gets the real date in
-        // whichever direction it lies: clamping a future timestamp down to
-        // now fed it a zero delta, and a run an hour ahead rendered as the
-        // nonsense "in 0 seconds".
+        // whichever direction it lies: clamping a future date down to now
+        // renders a run an hour ahead as the nonsense "in 0 seconds".
         if abs(date.timeIntervalSince(now)) < 45 { return "Just now" }
         relativeLock.lock()
         defer { relativeLock.unlock() }
@@ -175,11 +174,10 @@ enum Format {
     }
 
     /// A next-run moment, spelled short for the plan page's Next backup
-    /// value (once a stat tile, which truncated `timestamp`'s full "Sep 9,
-    /// 2026 at 3:00 AM" right through its AM/PM — the one part that says
-    /// morning or evening): near days lead with the day name, and the
-    /// value's tooltip carries `timestamp` for the full form. A moment at
-    /// or before now reads "Due now".
+    /// value — truncating `timestamp`'s full form loses its AM/PM, the one
+    /// part that says morning or evening. Near days lead with the day name,
+    /// and the value's tooltip carries `timestamp` for the full form. A
+    /// moment at or before now reads "Due now".
     static func tileTimestamp(
         _ date: Date,
         now: Date = .now,
@@ -204,12 +202,11 @@ enum Format {
     /// When a pause ends, spelled to follow "until": the time alone today,
     /// "tomorrow" for Until Tomorrow's own end (the day, not a midnight
     /// time), "tomorrow 9:00 AM" for another time tomorrow, and further out
-    /// the tile's weekday or dated form. An end less than 12 hours ahead is
-    /// the time alone even past midnight — "until 12:30 AM" at 11:30 PM is
-    /// plain, and nothing redraws the menu bar's VoiceOver label at
-    /// midnight, where "tomorrow 12:30 AM" would go on naming a day too
-    /// late until the pause ends. (The window's captions are respelled each
-    /// minute by its clock, MinuteClock.swift.)
+    /// the tile's weekday or dated form. Under 12 hours ahead the time
+    /// alone, even past midnight: nothing respells the menu bar's VoiceOver
+    /// label at midnight, so "tomorrow 12:30 AM" would go on naming the
+    /// wrong day until the pause ends. (The window's captions are respelled
+    /// each minute by its clock, MinuteClock.swift.)
     static func pauseEnd(
         _ date: Date,
         now: Date = .now,

@@ -110,11 +110,10 @@ private struct LogTextView: NSViewRepresentable {
 }
 
 /// The sheet's way to the text view's find bar. `usesFindBar` alone never
-/// shows it here: AppKit opens the bar only for a find action whose sender's
-/// tag names it, which a standard Edit ▸ Find menu item sends on ⌘F — and
-/// this app's Edit menu has no Find items, while the standard key bindings
-/// bind nothing to ⌘F. Measured: ⌘F with the log focused left the sheet's
-/// AX tree unchanged.
+/// shows it here: AppKit opens the bar only for a find action whose
+/// sender's tag names it, which a standard Edit ▸ Find menu item sends on
+/// ⌘F — and this app's Edit menu has no Find items, while the standard
+/// key bindings bind nothing to ⌘F.
 @MainActor
 private final class LogFinder {
     weak var textView: NSTextView?

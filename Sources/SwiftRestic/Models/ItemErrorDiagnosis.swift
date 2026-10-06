@@ -1,11 +1,9 @@
 import Foundation
 
 /// Whether SwiftRestic holds Full Disk Access — and so the restic it runs:
-/// macOS attributes the child to the app that spawned it. Measured
-/// 2026-09-26 on macOS 26.6.2: a probe app without the grant spawned restic,
-/// and restic got the same "operation not permitted" the app did, while the
-/// same restic from a shell holding the grant read the file. `unknown` is
-/// the probe finding none of its files, and the state before it has run.
+/// macOS attributes the child process to the app that spawned it, so restic
+/// inherits the app's grant or its lack. `unknown` is the probe finding
+/// none of its files, and the state before it has run.
 enum FullDiskAccessStatus: String, Codable, Sendable, Hashable {
     case granted, notGranted, unknown
 
@@ -24,11 +22,11 @@ enum FullDiskAccessStatus: String, Codable, Sendable, Hashable {
 /// text for the errno, so the suffix is the diagnosis:
 ///
 /// - EPERM, "operation not permitted": macOS's privacy protection said no
-///   (a TCC denial reached restic exactly so, measured). Full Disk Access
-///   fixes it, unless the item is protected by macOS itself.
+///   (a TCC denial reaches restic exactly so). Full Disk Access fixes it,
+///   unless the item is protected by macOS itself.
 /// - EACCES, "permission denied": the file's own permissions keep the
-///   user's account out (a `chmod 000` file, measured). Full Disk Access
-///   changes nothing.
+///   user's account out (a `chmod 000` file). Full Disk Access changes
+///   nothing.
 ///
 /// No list of protected paths: Full Disk Access covers every TCC file
 /// category, Documents, Desktop and Downloads included, so a list would miss
@@ -39,10 +37,8 @@ enum ItemErrorDiagnosis {
     }
 
     /// Trailing whitespace is not part of the verdict: restic ends its
-    /// extended-attribute errors with a newline ("xattr.get …/Safari
-    /// com.apple.macl: operation not permitted\n", a real run without the
-    /// grant, 2026-09-27). `RunRecord.storedItemError` now drops it from
-    /// stored lines; the verdict does not rely on that.
+    /// extended-attribute errors with a newline, and the verdict holds
+    /// whether or not `RunRecord.storedItemError` still carries it.
     static func kind(of line: String) -> Kind {
         let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if line.hasSuffix(": operation not permitted") { return .blockedByMacOS }
@@ -97,12 +93,10 @@ enum ItemErrorDiagnosis {
     /// permissions. The access state at the run decides between "grant it"
     /// and "macOS protects these anyway": without it, a run that hit EPERM
     /// with the grant already on would be told to back up again for nothing.
-    /// Only a stamp says the grant was there: a record from before the stamp
-    /// reads the state now as "grant it" or "back up again", never as
-    /// "protected anyway" — a wrong "back up again" corrects itself on the
-    /// next, stamped run, while a wrong "exclude them" would drop what that
-    /// run could read. `unknown` counts as missing: the probe found nothing
-    /// to say it is there.
+    /// An unstamped record reads as missing — a wrong "back up again"
+    /// corrects itself on the next, stamped run, while a wrong "protected
+    /// anyway" would drop what that run could read — and `unknown` too: the
+    /// probe found nothing to say the grant is there.
     static func hints(tally: Tally, accessAtRun: FullDiskAccessStatus?, accessNow: FullDiskAccessStatus) -> [Hint] {
         var hints: [Hint] = []
         let blocked = tally.blockedByMacOS
@@ -172,13 +166,11 @@ enum ItemErrorDiagnosis {
 /// Where a plan's sources reach data macOS keeps behind Full Disk Access,
 /// for the plan editor's warning before a backup finds out the hard way.
 ///
-/// The list is what one Mac showed on one day — every subtree below
-/// answered `open` with EPERM from an app without the grant (2026-09-26,
-/// macOS 26.6.2), while `~/Library/Preferences` read fine and stays out. It
-/// is not Apple's list and not exhaustive: the Photos library, Group
-/// Containers and other apps' containers were not probed, since they belong
-/// to categories that can put a prompt on screen. A source only under those
-/// gets no warning here; the run's own hint still names the fix afterwards.
+/// The list is not Apple's and not exhaustive: the Photos library, Group
+/// Containers and other apps' containers are left out because their
+/// categories can put a permission prompt on screen. A source only under
+/// those gets no warning here; the run's own hint still names the fix
+/// afterwards.
 enum ProtectedLocations {
     private static let homeSubtrees = [
         "Library/Mail",

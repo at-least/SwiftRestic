@@ -75,8 +75,7 @@ enum RunRecordPresentation {
     }
 
     /// Settings ▸ General ▸ Scheduling's "Next run" line, in the tray
-    /// headline's words: the plan with its repository, then when — the
-    /// timestamp clock, as Settings has always said the date.
+    /// headline's words: the plan with its repository, then when.
     static func nextRunLine(plan: BackupPlan, date: Date, repositories: [Repository]) -> String {
         let name = planWithRepository(plan, repositories: repositories)
         return "\(name) — \(Format.timestamp(date))"
@@ -127,8 +126,8 @@ enum RunRecordPresentation {
         return ([PlanStatus.unnamedUnreadFact + "."] + [explanation].compactMap { $0 }).joined(separator: " ")
     }
 
-    /// Nil for a restore that says nothing countable — the records from
-    /// before restores kept their counts read "Succeeded", as they did.
+    /// Nil for a restore that says nothing countable — a record without
+    /// counts reads "Succeeded".
     private static func restoreDetail(_ run: RunRecord) -> String? {
         guard run.outcome == .succeeded else { return nil }
         if run.filesRestored == 0, run.filesSkipped > 0 {
@@ -202,9 +201,10 @@ enum RunRecordPresentation {
                     + " · added \(Format.bytes(run.dataAdded))"
             )
         case .restore:
-            // Records from before restores kept these have no destination;
-            // "Entire snapshot" would be a guess about them. The drawer's
-            // word, beside its Snapshot row — "backup" is the Restore pane's.
+            // A record with no stored destination says nothing: "Entire
+            // snapshot" would be a guess about it. That word is the
+            // drawer's, beside its Snapshot row — "backup" is the Restore
+            // pane's.
             if let destination = run.destinationPath {
                 if let paths = run.sourcePaths {
                     lines.append("Items: \(paths.joined(separator: ", "))")

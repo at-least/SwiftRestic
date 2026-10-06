@@ -69,7 +69,7 @@ struct FileVersionsView: View {
     @ViewBuilder
     private var list: some View {
         if versions.isEmpty {
-            // Why is the pane's banner's to say, while the index reads.
+            // The empty state says why, while the index reads.
             ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
         } else {
             List(versions, selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) { version in
@@ -80,7 +80,7 @@ struct FileVersionsView: View {
                     isReadingDetail: isReadingDetails
                 )
                 // The list's own drag, no gesture on the row (the Restore
-                // pane's measured rule).
+                // pane's rule).
                 .itemProvider { dragProvider(for: version) }
             }
             .listStyle(.inset)
@@ -246,7 +246,7 @@ private struct FileVersionRow: View {
 
     /// Filled in quietly while the find runs, as the size column is — the
     /// backups and the change mark beside it are the index's, already
-    /// shown — never a "Reading…" that every click put on every row.
+    /// shown; never a per-row "Reading…".
     private var modified: String {
         if let mtime = detail?.mtime { return "Modified \(Format.timestamp(mtime))" }
         return isReadingDetail ? "Modified …" : "Modified —"
@@ -284,8 +284,8 @@ private struct FileVersionRow: View {
         }
     }
 
-    /// How the index came to cut here — the provenance the row no longer
-    /// spells.
+    /// How the index came to cut here — the provenance the row's change
+    /// text does not spell.
     private var changeHelp: String {
         if version.since == .changed { return "restic's diff of this backup with the one before said the file changed" }
         let uncompared = "No diff compared this backup with the one before, or the file was absent in between"

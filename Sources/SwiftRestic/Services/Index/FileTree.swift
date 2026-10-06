@@ -47,13 +47,13 @@ struct FileTree: Equatable {
         return path
     }
 
-    /// Installs a directory's children directly under it, at one level
-    /// deeper. Replacing is idempotent: any stale descendant rows (a fetch
-    /// landing twice after a double-click race, or an earlier deeper walk)
-    /// go away with the level they belong to. A folder the user collapsed
-    /// while its fetch was in flight refuses the late listing — the rows
-    /// would appear under a folder showing as closed — and stays unloaded so
-    /// re-expanding asks again.
+    /// Installs a directory's children directly under it, one level deeper.
+    /// Replacing is idempotent: any stale descendant rows — a fetch landing
+    /// twice after a double-click race, or an earlier deeper walk — go away
+    /// with the level they belong to. A folder collapsed while its fetch was
+    /// in flight refuses the late listing — the rows would appear under a
+    /// folder showing as closed — and stays unloaded so re-expanding asks
+    /// again.
     mutating func replaceChildren(of path: String, nodes: [SnapshotNode]) {
         guard let index = rows.firstIndex(where: { $0.node.path == path }),
               rows[index].expanded
@@ -85,10 +85,9 @@ struct FileTree: Equatable {
     }
 
     /// Closes a directory row if it is open; a closed one stays closed. A
-    /// failed listing closes its folder through this, not a toggle: the
-    /// user may have closed it — by ← or its chevron — while the listing
-    /// was in flight, and a toggle would reopen it, empty, with no listing
-    /// coming.
+    /// failed listing closes its folder through this, not a toggle: the user
+    /// may have closed it — by ← or its chevron — while the listing was in
+    /// flight, and a toggle would reopen it, empty, with no listing coming.
     mutating func collapse(path: String) {
         guard rows.first(where: { $0.node.path == path })?.expanded == true else { return }
         _ = toggleExpanded(path: path)
@@ -105,11 +104,11 @@ extension FileTree {
     enum HorizontalArrow: Sendable { case left, right }
 
     /// What a Left or Right arrow does to the selected row — NSOutlineView's
-    /// own grammar, probed on macOS 26: Right opens a closed folder and
-    /// otherwise does nothing; Left closes an open folder, otherwise selects
-    /// the folder the row sits in, and does nothing on a top-level row.
-    /// Option-Right's expand-everything is left out on purpose: every folder
-    /// is a `restic ls` round trip.
+    /// own grammar: Right opens a closed folder and otherwise does nothing;
+    /// Left closes an open folder, otherwise selects the folder the row sits
+    /// in, and does nothing on a top-level row. Option-Right's
+    /// expand-everything is left out: every folder is a `restic ls` round
+    /// trip.
     enum ArrowStep: Equatable, Sendable {
         case expand(String)
         case collapse(String)

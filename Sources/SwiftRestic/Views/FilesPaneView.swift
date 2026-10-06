@@ -78,9 +78,8 @@ struct FilesPaneView: View {
             }
         } else if !didOpen {
             // The first read only: a re-read while the index has not
-            // reached the item yet keeps "No backup holds it yet" up rather
-            // than swapping it for this every recheck — which made the
-            // version view anew each time.
+            // reached the item yet keeps the empty state up rather than
+            // swapping it for this every recheck.
             ProgressView("Reading…")
         } else if node.isDirectory {
             FolderVersionsView(node: node, versions: versions, chosenID: choice, onOpen: onOpen)

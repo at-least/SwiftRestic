@@ -6,9 +6,8 @@ import Foundation
 ///
 /// Each value is unique across the whole sidebar — the repository-wide
 /// rows carry their repository's ID — because the List gives every
-/// repository's children one identity space: with a bare `otherBackups`,
-/// the node one repository gained showed up, empty, under the others too
-/// (captured 2026-10-02).
+/// repository's children one identity space: a bare `otherBackups` case
+/// makes one repository's node show up, empty, under the others too.
 enum SidebarChild: Hashable {
     /// A plan, which folds open to the backups it made here.
     case plan(UUID)

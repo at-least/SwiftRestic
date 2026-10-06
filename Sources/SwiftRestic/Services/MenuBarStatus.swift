@@ -2,17 +2,13 @@ import Foundation
 
 /// The menu bar's headline, derived from observable state.
 ///
-/// Pure and view-free so the idle → running → finished transitions can be
-/// tested by handing it snapshots of the model's state, the way backrest tests
-/// its tray icon by appending operations one at a time.
+/// Pure and view-free, so the idle → running → finished transitions can be
+/// tested by handing it snapshots of the state.
 enum MenuBarStatus {
     /// The four faces the menu bar icon can wear. Running beats everything
-    /// else: while work is in flight the icon says so, and the menu's running
-    /// lines carry the news — an animated-then-badged glyph would flicker
-    /// between faces on every run. Unconfigured beats problem: the run
-    /// history outlives the repositories that produced it — removing a
-    /// repository keeps its runs — so both channels yield to the setup
-    /// question explicitly, or the icon could ask for setup over a menu line
+    /// else: an animated-then-badged glyph would flicker between faces on
+    /// every run. Unconfigured beats problem: run history outlives removed
+    /// repositories, so the icon must not ask for setup over a line
     /// announcing an old failure.
     enum IconState: Equatable {
         case unconfigured
@@ -23,9 +19,9 @@ enum MenuBarStatus {
 
     /// Which face the icon wears right now. Every kind of restic work counts
     /// as running — the menu bar is the only surface that exists when the
-    /// window is closed, so a restore or a prune invisible there is invisible
-    /// everywhere. Problems are `newestStandingProblem`'s: the seven-day
-    /// window, less what a later successful backup healed.
+    /// window is closed, so work invisible there is invisible everywhere.
+    /// A problem is `newestStandingProblem`'s: the seven-day window, less
+    /// what a later successful backup healed.
     static func iconState(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity],
@@ -41,17 +37,11 @@ enum MenuBarStatus {
         return newestStandingProblem(runs: runs, now: now) == nil ? .idle : .problem
     }
 
-    /// What the icon draws for a state. The mark is the app's own line
-    /// drawing (see `MenuBarLogo`) and never changes silhouette: idle wears
-    /// it at rest — the quiet, nothing-to-see face every backup menu extra
-    /// shares — running wears it with the snapshot stack pulsing, and both
-    /// intervention states wear it with one small companion dot. That follows
-    /// the unread-badge grammar Mail's own Dock icon uses: the dot's whole
-    /// job is "open me", and it says so without shouting — the menu's first
-    /// line is what names the reason, so unconfigured and problem can share
-    /// one face. (They replaced an earlier full-swap design — a bare `!` or
-    /// `?` symbol — which made the tray wear a stranger's glyph precisely
-    /// when the app needed to be recognizable.)
+    /// What the icon draws for a state: the app's own line drawing (see
+    /// `MenuBarLogo`), pulsing while running, and one small companion dot for
+    /// both intervention states — the dot's job is "open me", and the menu's
+    /// first line names the reason, so unconfigured and problem share one
+    /// face.
     enum Glyph: Equatable {
         case logo
         case badgedLogo
@@ -103,21 +93,16 @@ enum MenuBarStatus {
     }
 
     /// The newest problem in the run history that still stands, as one
-    /// sentence, or `nil` while there is none. `OverviewMetrics.problems`
-    /// supplies the week's set, shared with the Activity badge and the
-    /// Recent problems card; this line drops from it the backup failures a
-    /// later successful backup of the same plan healed
-    /// (`OverviewMetrics.isHealed`, the sidebar's rule), since the icon's dot
-    /// asks the user to open a menu this line leads — and those two keep
-    /// counting them as the week's record. Leading with a failure forever
-    /// would read as permanent breakage, hence the window too.
+    /// sentence, or `nil` while there is none. From `OverviewMetrics.problems`'s
+    /// week it drops the backup failures a later successful backup of the same
+    /// plan healed (`OverviewMetrics.isHealed`, the sidebar's rule): the dot
+    /// and this line lead the user in, and leading with a failure forever
+    /// would read as permanent breakage.
     ///
-    /// Yields to `hasNoRepositories`: the `unconfigured` icon face is what
-    /// summoned the menu, and the line under it must not answer with a
-    /// failure belonging to a since-removed repository's runs.
+    /// Yields to `hasNoRepositories`: it must not answer the `unconfigured`
+    /// face with a failure of a removed repository's runs.
     ///
-    /// The tray passes `plans` and `repositories` so the subject is named by
-    /// the one run-naming rule.
+    /// `plans` and `repositories` name the subject by the one run-naming rule.
     static func problemLine(
         runs: [RunRecord],
         hasNoRepositories: Bool,
@@ -130,9 +115,8 @@ enum MenuBarStatus {
         guard let newest = newestStandingProblem(runs: runs, now: now) else { return nil }
 
         // The subject is the run's display name — the plan with its
-        // repository for a backup, the repository alone for a check or prune
-        // ("NAS failed" would read as the NAS failing) — so the line says
-        // which repository's problem it is.
+        // repository for a backup, the repository alone for a check or
+        // prune ("NAS failed" would read as the NAS failing).
         let name = RunRecordPresentation.displayName(for: newest, plans: plans, repositories: repositories)
         let subject: String
         if name.isEmpty {
@@ -151,19 +135,15 @@ enum MenuBarStatus {
         return "\(subject) \(verb) \(relative(newest.finishedAt))"
     }
 
-    /// The single line above the plan buttons. `nil` while anything is running:
-    /// the running lines replace it rather than sitting underneath. Restores
-    /// and repository upkeep count as running — a next-run headline
-    /// over a running restore reads as if the restore is not happening.
-    /// `hasNoRepositories` answers the question the `unconfigured` icon face
-    /// asks: the plan list below this line is empty either way, but "no
-    /// repository set up yet" tells a first-time user what to do next, where
-    /// the plain empty-schedule copy would not. `nil` under a hold too: the
-    /// hold's own line leads the menu, and a next-run headline on
-    /// battery announced a run the scheduler would not fire.
+    /// The single line above the plan buttons. `nil` while anything runs —
+    /// restores and repository upkeep included: the running lines replace it
+    /// rather than sitting underneath. `nil` under a hold too: the hold's own
+    /// line leads the menu, and a next-run headline would announce a run the
+    /// scheduler will not fire. `hasNoRepositories` answers the
+    /// `unconfigured` icon face: it tells a first-time user what to do next.
     ///
-    /// The plan is named with its repository — the tray's one answer to two
-    /// repositories holding same-named plans.
+    /// The plan is named with its repository — two repositories can hold
+    /// same-named plans.
     static func headline(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity] = [:],
@@ -180,15 +160,15 @@ enum MenuBarStatus {
         guard let nextRun else { return "No backups scheduled" }
         let name = RunRecordPresentation.planWithRepository(nextRun.plan, repositories: repositories)
         // The plan page's Next backup tile spells the same moment in these
-        // words; the scheduler clamps its date to now, so the tile clock's
-        // "Due now" case here is a run coming due.
+        // words; the scheduler clamps the date to now, so a due run reads
+        // "Due now".
         return "Next: \(name) — \(Format.tileTimestamp(nextRun.date))"
     }
 
     /// One tray row per plan, in configuration order: Back Up Now while the
-    /// plan is idle, Stop while it runs — the tray is the only surface left
-    /// once the window is closed, and a disabled row there left nothing to
-    /// stop a running backup with.
+    /// plan is idle, Stop while it runs — the tray is the only surface once
+    /// the window is closed, so a running backup must keep a working Stop
+    /// there.
     struct PlanRow: Equatable {
         enum Action: Equatable {
             case backUp
@@ -211,8 +191,8 @@ enum MenuBarStatus {
             let name = plan.displayName
             switch activity[plan.id]?.phase {
             case nil:
-                // Enabled only where the plan could run — complete, idle and
-                // with restic to run it, the rule every Back Up Now follows.
+                // The rule every Back Up Now follows: enabled only where the
+                // plan could run.
                 return PlanRow(
                     planID: plan.id,
                     title: "Back Up “\(name)” Now",
@@ -222,10 +202,9 @@ enum MenuBarStatus {
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
             case let phase?:
-                // No percentage: restic's measures reading, not uploading —
-                // a throttled probe run read 100% at 327 s and uploaded until
-                // 819 s — and "Stop (100%)" would make stopping look free.
-                // The running line above keeps restic's figure.
+                // No percentage: restic's measure is reading, not uploading,
+                // and "Stop (100%)" would make stopping look free. The
+                // running line above keeps restic's figure.
                 let title = stopsRetention(phase) ? "Stop Applying Retention to “\(name)”" : "Stop “\(name)” Backup"
                 return PlanRow(planID: plan.id, title: title, action: .stop, isEnabled: true)
             }
@@ -240,14 +219,12 @@ enum MenuBarStatus {
         phase == .applyingRetention
     }
 
-    /// One tray submenu per repository: its plans' rows under the
+    /// One tray submenu per repository, its plans' rows under the
     /// repository's own name, repositories in configuration order and plans
-    /// in theirs — the flat list could not tell two repositories'
-    /// same-named plans apart. A single repository still gets its submenu:
-    /// the shape never changes when a second repository arrives, and the
-    /// rule stays one rule. Every plan lives under a repository that exists
-    /// (removing a repository removes its plans), so grouping by repository
-    /// leaves no plan without a group.
+    /// in theirs — the flat list could not tell two repositories' same-named
+    /// plans apart. A single repository still gets its submenu, so the shape
+    /// never changes when a second arrives. Removing a repository removes its
+    /// plans, so no plan is left without a group.
     struct PlanGroup: Equatable {
         var repositoryID: UUID
         var title: String
@@ -317,9 +294,9 @@ enum MenuBarStatus {
         return RunningLine(id: "restore", text: "Restoring — \(percent)")
     }
 
-    /// A console command in flight. Short commands never render it long enough
-    /// to matter; a long `prune` typed there deserves the same visibility as
-    /// any other restic work.
+    /// A console command in flight: short commands never render it long
+    /// enough to matter, but a long `prune` typed there deserves the same
+    /// visibility as any other restic work.
     static func consoleLine(isRunning: Bool) -> RunningLine? {
         guard isRunning else { return nil }
         return RunningLine(id: "console", text: "Console — command running")
@@ -327,8 +304,8 @@ enum MenuBarStatus {
 
     /// Progress as the menu bar shows it: a percentage once restic is
     /// streaming status, the phase's name before that. Progress arrives
-    /// beside the activity, not inside it — the menu is built on open, from
-    /// whatever the pair says then.
+    /// beside the activity, not inside it — the menu is built from the pair
+    /// when it opens.
     static func progressText(activity: PlanActivity?, progress: OperationProgress?) -> String {
         guard let activity else { return "…" }
         guard activity.phase == .backingUp else { return activity.phase.displayName }

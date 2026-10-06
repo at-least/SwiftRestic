@@ -6,13 +6,12 @@ import Foundation
 /// path can be exercised in tests without a Keychain prompt, and so a test never
 /// writes to the developer's own login keychain.
 struct SecretStore: Sendable {
-    /// Throwing on purpose: a Keychain failure (an authorisation prompt the
-    /// user declined, `errSecInteractionNotAllowed` while the Mac is still
-    /// locked) must surface as itself. Read as `nil`, it would wear the
-    /// "no password stored" costume — the app would say "add a password in
-    /// the repository settings" about a password that is sitting right
-    /// there, and a scheduled backup would fail with a diagnosis pointing
-    /// nowhere near the truth.
+    /// Failures throw rather than read as `nil`: a Keychain failure (an
+    /// authorisation prompt the user declined, `errSecInteractionNotAllowed`
+    /// while the Mac is still locked) must not wear the "no password stored"
+    /// costume — the app would say "add a password in the repository
+    /// settings" about a password that is sitting right there, and a
+    /// scheduled backup's diagnosis would point nowhere near the truth.
     var load: @Sendable (UUID) async throws -> (password: String?, providerSecret: String?)
     var save: @Sendable (UUID, String?, String?) async throws -> Void
     var remove: @Sendable (UUID) async -> Void
@@ -49,7 +48,7 @@ struct SecretStore: Sendable {
     static func inMemory(_ initial: [UUID: (password: String, providerSecret: String?)] = [:]) -> SecretStore {
         let box = InMemorySecrets(initial)
         return SecretStore(
-            // Non-throwing on purpose: an in-memory read cannot fail, and a
+            // Non-throwing: an in-memory read cannot fail, and a
             // non-throwing closure satisfies the throwing requirement.
             load: { await box.load($0) },
             save: { await box.save($0, $1, $2) },

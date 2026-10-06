@@ -10,18 +10,17 @@ struct PendingCommand {
 
 /// State of the restic console pane.
 ///
-/// Owned by `AppModel` rather than the view. The console used to be a sheet
-/// that kept its state in the view, so switching panes would have cancelled a
-/// running restic process and thrown its output away; as a first-class pane
-/// it must survive both. Only quitting cancels, via `AppModel.shutdown`.
+/// Owned by `AppModel` rather than the view: as a first-class pane it must
+/// survive pane switches — navigation cancels nothing; a running command
+/// ends by its Stop button, its repository's deletion, or quitting
+/// (`AppModel.shutdown`).
 ///
 /// The two things it needs from the world — running a command and persisting
 /// history — arrive as closures injected by `AppModel` at wiring, so the
-/// console carries no back-reference to its owner: it held one for every
-/// method once, and every method read the whole model for two lines of it.
-/// They cannot be init parameters — the closures capture the owner, and the
-/// owner owns this — so an unwired console says so in the output pane
-/// instead of dropping a confirmed command on the floor in silence.
+/// console carries no back-reference to its owner. They cannot be init
+/// parameters — the closures capture the owner, and the owner owns this —
+/// so an unwired console says so in the output pane instead of dropping a
+/// confirmed command on the floor in silence.
 @MainActor
 @Observable
 final class ConsoleModel {
@@ -172,7 +171,9 @@ final class ConsoleModel {
         output = ""
     }
 
-    /// Waits for an in-flight command, so tests can observe settled state.
+    /// Waits for an in-flight command: the quit path awaits the unwind so
+    /// its history persist lands (`AppModel.shutdown`); tests settle on it
+    /// too.
     func waitForCommand() async {
         await runTask?.value
     }

@@ -2,9 +2,9 @@ import Foundation
 
 extension AppModel {
     /// Hands a freshly loaded listing to the index and keeps its backfill
-    /// moving. Everything here is best-effort: the index is a cache whose
-    /// failure never fails the refresh that fed it — the coordinator records
-    /// the error and the app reads snapshots through restic as before.
+    /// moving. Everything here is best-effort: the index is a cache, and its
+    /// failure never fails the refresh that fed it — the coordinator
+    /// records the error and the app keeps reading snapshots through restic.
     ///
     /// This is also how a fresh backup reaches the index: the backup flow's
     /// closing refresh lands here, after retention has released the
@@ -13,8 +13,8 @@ extension AppModel {
     ///
     /// `generation` is the listing's number from `nextListingGeneration`;
     /// the repository's index drops a listing older than one it already
-    /// took — numbers are compared within one repository only.
-    /// On the background lane, so a quit waits for the reconcile instead of
+    /// took — numbers are compared within one repository only. On the
+    /// background lane, so a quit waits for the reconcile instead of
     /// exiting under it.
     func indexReconcile(repositoryID: UUID, listing: [Snapshot], generation: UInt64) {
         tasks.addBackground(Task {
@@ -27,28 +27,27 @@ extension AppModel {
                   let context = try? await context(for: repository)
             else { return }
             // Not what keeps a backfill from outliving the quit: the
-            // coordinator refuses one once its `shutdown()` has run, and
-            // cancels and awaits any started before, all ahead of
-            // `terminateAll`. This check covers the stretch before that call,
-            // while the quit waits for the console, which the coordinator
-            // cannot see: a backfill started there would spawn restic only to
-            // be cancelled moments later. It runs on the main actor, where
-            // `isShuttingDown` is set, so every reconcile that finishes after
-            // the quit began stops here; one whose `startBackfill` hop was
-            // already under way is the coordinator's to cancel. The next
-            // launch resumes the backfill.
+            // coordinator refuses one once its `shutdown()` has run and
+            // cancels and awaits any started before, ahead of
+            // `terminateAll`. This check covers the stretch before that
+            // call, while the quit waits for the console, which the
+            // coordinator cannot see — a backfill started there would spawn
+            // restic only to be cancelled moments later. Runs on the main
+            // actor, where `isShuttingDown` is set; a hop already under way
+            // is the coordinator's to cancel. The next launch resumes the
+            // backfill.
             guard !isShuttingDown else { return }
             await indexCoordinator.startBackfill(repositoryID: repositoryID, service: service, context: context)
         })
     }
 
     /// Numbers the listing a refresh is about to read. Taken before restic
-    /// is asked: refreshes of one repository run one at a time, so these
+    /// is asked: a repository's refreshes run one at a time, so these
     /// numbers order the listings by when they were read — the order the
     /// index must apply them in, which their reconcile hops do not promise.
     /// One counter serves every repository: the index compares a listing's
     /// number only with its own repository's, and each number is newer than
-    /// every one handed out before it, whichever repository took them.
+    /// every one handed out before it.
     func nextListingGeneration() -> UInt64 {
         listingGeneration += 1
         return listingGeneration
@@ -92,24 +91,21 @@ extension AppModel {
 
     /// Whether the index has read every listed snapshot of the repository —
     /// the Files view's completeness signal. An index that cannot answer
-    /// reads as "not complete", never as a failure. So does one that has not
-    /// taken the listing on screen yet: its reconcile runs after the listing
-    /// lands, and until it returns the index answers for the listing before —
-    /// complete for that one, perhaps, but blind to what this one added or
-    /// forgot.
+    /// reads as "not complete", never as a failure; so does one that has
+    /// not taken the listing on screen yet, whose answers still describe
+    /// the listing before — blind to what this one added or forgot.
     func indexIsComplete(repositoryID: UUID) async -> Bool {
         guard indexTakenGeneration[repositoryID] == snapshotsGeneration[repositoryID] else { return false }
         return (try? await indexCoordinator.isComplete(repositoryID: repositoryID)) ?? false
     }
 
     /// Throws the index away and rebuilds it from the listing the model
-    /// already holds. The recovery hatch for an index the user no longer
-    /// trusts — same path a corrupt file takes, just user-invoked. A reset,
-    /// not a drop: the repository still exists, so the reconcile below must
-    /// land even though it runs through the same coordinator. The listing
-    /// goes in under the generation it was read with: the fresh store the
-    /// reset leaves has taken no number, and a refresh newer than it still
-    /// wins.
+    /// already holds — the recovery hatch for an index the user no longer
+    /// trusts. A reset, not a drop: the repository still exists, so the
+    /// reconcile must land even though it runs through the same
+    /// coordinator. The listing goes in under the generation it was read
+    /// with: the fresh store has taken no number, and a refresh newer than
+    /// it still wins.
     func rebuildIndex(repositoryID: UUID) {
         let listing = snapshots[repositoryID] ?? []
         let generation = snapshotsGeneration[repositoryID] ?? 0
@@ -163,11 +159,10 @@ extension AppModel {
 
     /// A Files tab's search: instant basename hits over what one chain ever
     /// held — items its newest backup no longer has included — each as the
-    /// tree lists it, from one read of the index: at most `indexSearchLimit`
-    /// of them, and whether the chain holds more — asked of the index as
-    /// one hit past the limit, so a list of exactly the limit is not called
-    /// cut short. Throws when the index itself fails, as the other searches
-    /// do: "the index is broken" must never read as "nothing matches".
+    /// tree lists it, at most `indexSearchLimit` of them plus whether the
+    /// chain holds more, asked as one hit past the limit so a full page is
+    /// not called cut short. Throws when the index itself fails, as the
+    /// other searches do.
     func searchIndex(pattern: String, inChain chainKey: String, repositoryID: UUID) async throws -> (hits: [IndexChild], isTruncated: Bool) {
         let found = try await indexCoordinator.search(
             matching: pattern,
@@ -185,10 +180,9 @@ extension AppModel {
     ///
     /// A diff between two content-addressed snapshots is an immutable fact,
     /// so completed walks are cached and a repeat record switch skips the
-    /// walk entirely. Only a completed walk is cached: a stream that died
-    /// partway, or one with lines that did not decode, keeps its partial map
-    /// on screen, flagged as a failure, and never presents itself as the
-    /// whole answer on the next switch.
+    /// walk. Only a completed walk is cached: a partial one keeps its map
+    /// on screen, flagged as a failure, and never poses as the whole answer
+    /// on the next switch.
     func snapshotChanges(
         repositoryID: UUID,
         olderID: String,

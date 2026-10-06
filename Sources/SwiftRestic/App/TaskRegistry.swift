@@ -5,11 +5,9 @@ import Foundation
 /// single restore) and an unnamed lane for fire-and-forget sends (the start
 /// pings) that quitting must still drain.
 ///
-/// This replaces the hand-maintained task dictionaries whose every entry
-/// `shutdown()` had to enumerate by hand — the census is now structural:
-/// cancel everything, await everything, and no future run kind can be
-/// forgotten from the quit path by omission. All access is main-actor, like
-/// the tasks it tracks.
+/// The census is structural: cancel everything, await everything, and no run
+/// kind can be forgotten from the quit path by omission. All access is
+/// main-actor, like the tasks it tracks.
 @MainActor
 final class TaskRegistry {
     enum Slot: Hashable {
@@ -45,8 +43,8 @@ final class TaskRegistry {
         slots[slot]?.cancel()
     }
 
-    /// Frees a finished run's slot. Only the run's own completion path calls
-    /// this — the same owner who nils it today.
+    /// Frees a finished run's slot; only the run's own completion path calls
+    /// this.
     func clear(_ slot: Slot) {
         slots[slot] = nil
     }
@@ -57,9 +55,8 @@ final class TaskRegistry {
     /// monitor's timer), but which nothing cancels individually.
     ///
     /// Keyed by token rather than appended to an array: entries reap
-    /// themselves when their task completes (`Task.isCancelled` is false for
-    /// a *finished* task, so an isCancelled sweep prunes nothing — the leak
-    /// the old `pendingPings` array had).
+    /// themselves when their task completes. (`Task.isCancelled` is false
+    /// for a *finished* task, so an isCancelled sweep would prune nothing.)
     private var background: [UUID: Task<Void, Never>] = [:]
 
     func addBackground(_ task: Task<Void, Never>) {
@@ -74,9 +71,9 @@ final class TaskRegistry {
     // MARK: - Census
 
     /// Cancels every slotted run. Used by `shutdown`; the runs themselves
-    /// unwind and write their own records. Deliberately not the background
-    /// lane: a start ping already in flight is awaited, never aborted — its
-    /// monitor must hear that the run started, even one that quit stopped.
+    /// unwind and write their own records. Not the background lane: a start
+    /// ping already in flight is awaited, never aborted — its monitor must
+    /// hear that the run started, even one that quit stopped.
     func cancelSlots() {
         for task in slots.values { task.cancel() }
     }
@@ -87,7 +84,7 @@ final class TaskRegistry {
     ///
     /// A loop, not one pass: a task installed while the awaits are suspended
     /// is caught by the next pass instead of being dropped un-awaited, so no
-    /// ordering above the registry is load-bearing any more. Each pass
+    /// ordering above the registry is load-bearing. Each pass
     /// awaits a snapshot of the entries present when it began, then removes
     /// exactly those entries — a completion that lands mid-pass has already
     /// cleared its own slot, and a fresh install survives to the next pass.

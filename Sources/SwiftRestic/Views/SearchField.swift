@@ -7,8 +7,8 @@ import SwiftUI
 /// pane whose contents it searches.
 ///
 /// The binding moves when the field sends its action — typing, Esc and the
-/// clear button all reach it (probed on macOS 26), with AppKit's brief
-/// search delay rather than on every keystroke.
+/// clear button all reach it — with AppKit's brief search delay rather
+/// than on every keystroke.
 struct SearchField: NSViewRepresentable {
     let placeholder: String
     @Binding var text: String
@@ -42,9 +42,8 @@ struct SearchField: NSViewRepresentable {
         }
         // How the pane's reset on a record switch reaches the field — never
         // while it is being typed in: the binding moves only after AppKit's
-        // search delay, and a redraw inside it wrote the older text back,
-        // eating the keys typed since (probed on macOS 27). The resets all
-        // come while the field is not being edited.
+        // search delay, and a redraw inside it would write the older text
+        // back, eating the keys typed since.
         if field.stringValue != text, field.currentEditor() == nil { field.stringValue = text }
         if takesFocus { field.focus(then: onFocus) }
     }

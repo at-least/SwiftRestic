@@ -3,11 +3,11 @@
 /// snapshot index and its browse cache re-derive from a path.
 ///
 /// `restic diff` ends a directory's path with `/` (`/src/sub/`); `restic
-/// ls` never does, and neither lists the root itself (restic 0.19.1, with
-/// and without `diff --metadata`). The browser's tree, the Change column's
-/// marks, the browse cache and the snapshot index all key a path without
-/// the marker, and strip it here rather than each carrying a copy that can
-/// drift. Other readers still cut at the last separator their own way —
+/// ls` never does, and neither lists the root itself. The browser's tree,
+/// the Change column's marks, the browse cache and the snapshot index all
+/// key a path without the marker, and strip it here rather than each
+/// carrying a copy that can drift. Other readers still cut at the last
+/// separator their own way —
 /// `FindMatch.name`, `SnapshotNode.directory(path:)` and the restore pane's
 /// search rows through NSString.
 ///

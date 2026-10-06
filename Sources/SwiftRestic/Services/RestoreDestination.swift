@@ -3,13 +3,13 @@ import Foundation
 /// What a restore does with a file that is already where the backed-up one
 /// would land. Chosen in the destination sheet for every restore, never
 /// remembered, and required at every API on the way down: a defaulted
-/// destructive mode is the silent overwrite this replaced.
+/// destructive mode would be a silent overwrite.
 ///
 /// Two modes, not restic's four. `if-changed` trusts size and modification
-/// time — a probe on 0.19.1 kept a same-size, same-time file with different
-/// bytes that `always` restored — so it loses exactly the damage a restore
-/// exists to undo. `always` already skips files whose content matches, and
-/// `if-newer` gave the same outcome as `never` on edited files.
+/// time, so it keeps a same-size, same-time file with different bytes — the
+/// damage a restore exists to undo. `always` already skips files whose
+/// content matches, and `if-newer` does not differ from `never` on edited
+/// files.
 enum RestoreOverwritePolicy: String, Sendable, CaseIterable {
     case keepExisting
     case replaceExisting
@@ -73,7 +73,7 @@ enum RestoreDestinationRules {
     /// The path must be absolute and already in normal form, checked on its
     /// Unicode scalars: no empty, `.` or `..` component (a Character-level
     /// split would fold a combining mark after the separator into the `/`),
-    /// and no file-system normalisation either — `standardizingPath` answers
+    /// and no file-system normalisation — `standardizingPath` answers
     /// `/tmp` for an existing `/private/tmp` and would fail an honest path.
     /// Its last component must survive the landing rule unchanged, or the
     /// item would land beside itself. The parent must exist and be writable.
@@ -140,8 +140,9 @@ enum RestoreDestinationRules {
 
     /// Where a restore into `directories` (one per item, as
     /// `RestoreSubject.directoryCount` counts them) writes: each item under
-    /// 05's one landing rule, or each backed-up folder under its full
-    /// original path (`restic restore <id> --target` recreates them).
+    /// the one landing rule (`ResticService.restoredItemURL(named:in:)`),
+    /// or each backed-up folder under its full original path (`restic
+    /// restore <id> --target` recreates them).
     static func landings(for subject: RestoreSubject, into directories: [URL]) -> [URL] {
         switch subject {
         case let .item(name, _, _):

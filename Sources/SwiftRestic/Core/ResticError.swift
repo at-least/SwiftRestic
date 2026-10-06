@@ -37,8 +37,8 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// Refused before restic runs.
     case keepNeedsNewerRestic(path: String)
     /// A folder stands where a Replace restore of several items would put a
-    /// file. restic fails on it — after taking away the folder's permissions
-    /// (0.19.1, probed) — so it is refused before restic runs.
+    /// file. restic fails on it — after taking away the folder's permissions —
+    /// so it is refused before restic runs.
     case folderInTheWay(path: String)
 
     var errorDescription: String? {

@@ -9,11 +9,10 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var paths: [String]
     var hostname: String?
     var tags: [String]
-    /// The `--exclude` patterns the backup ran with, which restic 0.19.1
-    /// records beside the paths (`excludes` in `snapshots --json`, probed
-    /// 2026-10-03: a backup with patterns carries them, one without omits
-    /// the key entirely) — what a plan-UUID group's page shows, and what
-    /// the adopt sheet prefills from.
+    /// The `--exclude` patterns the backup ran with, which restic records
+    /// beside the paths (`excludes` in `snapshots --json`; a backup without
+    /// patterns omits the key) — what a plan-UUID group's page shows and
+    /// what the adopt sheet prefills from.
     var excludes: [String]
     var summary: ResticSummary?
 

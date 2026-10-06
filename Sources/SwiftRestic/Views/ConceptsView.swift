@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The restic vocabulary the app assumes, in one place: the terms the
-/// critiques kept flagging as unexplained (prune vs forget, blobs, locks)
-/// with the app's own framing, plus the way out to the real documentation.
+/// The restic vocabulary the app assumes, in one place: prune vs forget,
+/// blobs, locks and the rest, with the app's own framing and a link out to
+/// the real documentation.
 struct ConceptsView: View {
     @Environment(\.dismiss) private var dismiss
 

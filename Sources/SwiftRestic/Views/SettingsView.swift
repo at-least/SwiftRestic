@@ -2,9 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
-    /// Arming the "you can strand the app" confirmation: turning the menu bar
-    /// item off and closing the window leaves the scheduler running with no
-    /// visible way back, so that exact toggle gets named before it lands.
+    /// Arms the "you can strand the app" confirmation: menu bar item off and
+    /// window closed leaves the scheduler running with no visible way back.
     @State private var isConfirmingMenuBarOff = false
 
     var body: some View {
@@ -39,8 +38,7 @@ struct SettingsView: View {
         @Bindable var model = model
         return Form {
             // First, and on General rather than the restic tab: it is the
-            // app's permission, and restic inherits it. Below the fold at the
-            // bottom of the restic tab, it went unseen.
+            // app's permission, and restic inherits it.
             Section("Full Disk Access") {
                 LabeledContent("Status") {
                     FullDiskAccessStatusLabel(status: model.fullDiskAccess)
@@ -54,7 +52,7 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     // Unknown is treated as missing, as the run hints do:
-                    // the probe found nothing to say the grant is there.
+                    // nothing observable says the grant is there.
                     Text("Without it, macOS keeps Mail, Messages, Safari and other apps' data away from SwiftRestic and the restic it runs. Backups that include them finish with warnings.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -90,11 +88,10 @@ struct SettingsView: View {
             Section("Notifications") {
                 Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
                 Toggle("Notify when a backup fails", isOn: $model.configuration.settings.notifyOnFailure)
-                // The relationship between the two toggle layers, stated where
-                // both are visible: these gate this Mac's notification centre,
-                // the Alerts tab's channels carry their own per-event switches
-                // — and neither gates the other. One line, the rest on demand,
-                // like the two captions above.
+                // The relationship between the two toggle layers, stated
+                // where both are visible: these gate this Mac's notification
+                // centre; the Alerts tab's channels carry their own
+                // per-event switches, and neither gates the other.
                 ExpandableCaption(
                     summary: "These switches control this Mac's notifications.",
                     detail: "Webhook and chat channels on the Alerts tab have their own per-event switches and don't follow them."
@@ -104,9 +101,9 @@ struct SettingsView: View {
             Section("Scheduling") {
                 Toggle("Start SwiftRestic at login", isOn: Binding(
                     get: { model.startsAtLogin },
-                    // Optimistic flip, shared with the plan editor's
-                    // Start at Login: the model var moves now,
-                    // and the daemon's answer confirms or corrects it.
+                    // Optimistic flip, as the plan editor's Start at Login:
+                    // the model var moves now, and the daemon's answer
+                    // confirms or corrects it.
                     set: { value in model.requestStartsAtLogin(value) }
                 ))
                 .disabled(!LoginItem.isInInstallableLocation && !model.startsAtLogin)
@@ -179,10 +176,9 @@ struct SettingsView: View {
             }
 
             Section("Bandwidth") {
-                // Typeable, not steppers: a step-256 stepper made "50000"
-                // a roughly two-hundred-click affair. Values are clamped on
-                // commit; the assignment itself refreshes the field even when
-                // the clamp lands on the value it already held.
+                // Typeable, not steppers. Values are clamped on commit; the
+                // assignment itself refreshes the field even when the clamp
+                // lands on the value it already held.
                 TextField(
                     "Upload limit (KiB/s, 0 for unlimited)",
                     value: clampedLimit($model.configuration.settings.uploadLimitKiBps),
@@ -209,8 +205,9 @@ struct SettingsView: View {
 }
 
 /// "Granted", "Not granted" or "Unknown", beside the glyph that says how it
-/// stands. Colour on the glyph only — orange words read 2.16:1 on the light
-/// background — and the glyph hidden, since the word says it.
+/// stands. Colour on the glyph only — coloured caption text falls short of
+/// the contrast small text needs — and the glyph hidden, since the word
+/// says it.
 private struct FullDiskAccessStatusLabel: View {
     let status: FullDiskAccessStatus
 

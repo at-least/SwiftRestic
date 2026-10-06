@@ -21,11 +21,10 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             }
         }
 
-        /// The marker a run row wears in lists. Success wears nothing — a
-        /// clean run is the quiet default, and only trouble asks to be seen
-        /// (the unread-dot rule Mail's message list follows). Cancelled keeps
-        /// a quiet monochrome outline so it can never be misread as success;
-        /// the two problem outcomes keep their alarm glyphs.
+        /// The marker a run row wears in lists. Success wears nothing — only
+        /// trouble asks to be seen. Cancelled keeps a quiet monochrome
+        /// outline so it can never be misread as success; the problem
+        /// outcomes keep their alarm glyphs.
         var symbolName: String? {
             switch self {
             case .succeeded: nil
@@ -50,12 +49,11 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var filesUnmodified: Int = 0
     var bytesProcessed: Int64 = 0
     var dataAdded: Int64 = 0
-    /// Per-item errors reported by restic (unreadable files and the like).
-    ///
-    /// These are restic's own words about the user's files, and are the only
-    /// warnings sent to external notification channels. Capped at
-    /// `storedItemErrorLimit` entries so a pathological run cannot bloat
-    /// `config.json`; `itemErrorCount` keeps the real total.
+    /// Per-item errors reported by restic (unreadable files and the like) —
+    /// restic's own words about the user's files, and the only warnings sent
+    /// to external notification channels. Capped at `storedItemErrorLimit`
+    /// entries so a pathological run cannot bloat `config.json`;
+    /// `itemErrorCount` keeps the real total.
     ///
     /// Ordered, and the order is load-bearing (`unreadableItems` slices it):
     /// the unreadable items first — sources restic skipped, then its error
@@ -63,10 +61,9 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// "Retention skipped: …" line. Only the first group is counted.
     var itemErrors: [String] = []
     /// How many distinct unreadable items the run produced, which can exceed
-    /// the capped `itemErrors` list. Records written before the dedupe
-    /// counted restic's events instead (a folder it could not list twice) and
-    /// the decoding-gap line with them; the lines stored after the unreadable
-    /// items are never counted.
+    /// the capped `itemErrors` list. The lines stored after the unreadable
+    /// items — the decoding-gap warning, the "Retention skipped" line — are
+    /// never counted.
     var itemErrorCount: Int = 0
     /// restic's exit code for the run's own command — the `backup` (0, or 3
     /// when some source data could not be read), else the first exit the
@@ -87,10 +84,10 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var fullDiskAccessAtRun: FullDiskAccessStatus?
     /// Results of failing hooks.
     ///
-    /// Kept apart from `itemErrors` on purpose: a hook is an arbitrary user
-    /// script and its output can contain anything it happened to print — a
-    /// verbose `curl` echoes its own `Authorization` header. These stay local and
-    /// are never sent to a webhook or chat channel.
+    /// Kept apart from `itemErrors`: a hook is an arbitrary user script and
+    /// its output can contain anything it printed — a verbose `curl` echoes
+    /// its own `Authorization` header. These stay local and are never sent
+    /// to a webhook or chat channel.
     var hookMessages: [String] = []
     /// Fatal error text, when `outcome == .failed`.
     var failureMessage: String?
@@ -162,8 +159,8 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         filesUnmodified = c.value(.filesUnmodified, default: 0)
         bytesProcessed = c.value(.bytesProcessed, default: 0)
         dataAdded = c.value(.dataAdded, default: 0)
-        // Lines stored before the source dropped restic's trailing newline
-        // keep it in config.json; read here, every surface gets them clean.
+        // Stored lines can still carry restic's trailing newline; mapping
+        // through `storedItemError` here keeps every surface clean.
         itemErrors = c.value(.itemErrors, default: [String]()).map(Self.storedItemError)
         itemErrorCount = c.value(.itemErrorCount, default: 0)
         exitCode = c.optional(.exitCode)
@@ -191,11 +188,9 @@ extension RunRecord {
     static let storedItemErrorLimit = 50
 
     /// An item-error line as stored and shown: without trailing whitespace.
-    /// restic 0.19.1 ends its extended-attribute errors with a newline
-    /// ("…com.apple.macl: operation not permitted\n", a real run on
-    /// ~/Library/Safari without Full Disk Access), which broke the banner's,
-    /// the plan row's, the drawer's and Copy Details' sentences. Only the
-    /// tail goes: a line starts with the item's own path, never touched.
+    /// restic ends its extended-attribute errors with a newline, which would
+    /// break every sentence these lines are spliced into. Only the tail
+    /// goes: a line starts with the item's own path, never touched.
     static func storedItemError(_ line: String) -> String {
         var line = line
         while line.last?.isWhitespace == true { line.removeLast() }
@@ -203,10 +198,10 @@ extension RunRecord {
     }
 
     /// The start of the line the backup engine stores after the unreadable
-    /// items when retention could not run behind a written snapshot. Shared
-    /// because the plan page recognises the line by it: a spelling changed
-    /// in the engine alone would silently drop the "Retention skipped" fact.
-    /// Records already in history carry these exact bytes.
+    /// items when retention could not run behind a written snapshot. The
+    /// plan page recognises the line by this prefix, so the engine's
+    /// spelling must stay in sync — and records already in history carry
+    /// these exact bytes.
     static let retentionSkippedPrefix = "Retention skipped: "
 
     /// What a completed-with-errors backup says when nothing more specific

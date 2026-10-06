@@ -55,7 +55,7 @@ struct CommandPresentations: ViewModifier {
             Button("Check + Read All Data") { check(id, readDataPercent: 100) }
             // Three plain choices and no cancel of their own: SwiftUI then
             // adds its dismiss button titled "OK", which under "Check the
-            // integrity of …?" reads as a yes (seen in the AX tree).
+            // integrity of …?" reads as a yes.
             Button("Cancel", role: .cancel) {}
         case let .prune(id):
             Button("Prune", role: .destructive) {

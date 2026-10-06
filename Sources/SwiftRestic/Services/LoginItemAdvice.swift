@@ -1,9 +1,9 @@
 import Foundation
 
-/// What to say about starting at login, and where. The scheduler lives in
-/// the app's process, so a schedule stops at the first restart or logout
-/// unless the app comes back by itself; the plan editor says so, from
-/// these rules.
+/// What to say about starting at login, and where: the plan editor's
+/// captions, composed from these rules. The scheduler lives in this process,
+/// so a schedule does not survive a restart or logout by itself
+/// (`LoginItem`).
 enum LoginItemAdvice {
     enum Offer: Equatable, Sendable {
         /// Registering would work: one click.
@@ -14,13 +14,13 @@ enum LoginItemAdvice {
         case moveToApplications
     }
 
-    /// Confirms a click on the editor's Start at Login — the words the
-    /// Settings caption uses for the same state.
+    /// The confirmation after the editor's Start at Login — the same words
+    /// the Settings caption uses for the same state.
     static let enabledConfirmation = "SwiftRestic will start at login."
 
-    /// Nothing once the app starts at login. Otherwise the one step left:
-    /// approving a registration that already exists comes before where the
-    /// copy lives, since approving is all that registration still needs.
+    /// Nil once the app starts at login. Otherwise approval comes before
+    /// location: an existing registration needs only approving, wherever the
+    /// copy lives.
     static func offer(startsAtLogin: Bool, needsApproval: Bool, isInstallable: Bool) -> Offer? {
         if startsAtLogin { return nil }
         if needsApproval { return .awaitingApproval }

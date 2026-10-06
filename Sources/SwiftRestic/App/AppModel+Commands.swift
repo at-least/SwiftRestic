@@ -2,8 +2,8 @@ import Foundation
 
 /// What the Plan menu can do for the sidebar's selection. Derived on every
 /// read, never stored: the menu bar, the sidebar's plan menu and the plan
-/// page read the same answers, so an item cannot be enabled on one surface
-/// over an action another refuses.
+/// page read the same answers, so one surface cannot enable what another
+/// refuses.
 struct PlanCommandState: Equatable {
     /// The selected plan, when the selection is one that still exists.
     var planID: UUID?
@@ -125,13 +125,12 @@ extension AppModel {
     }
 
     /// The repository the Repository menu acts on: the selected one, the
-    /// one a selected Restore record belongs to, the selected
-    /// plan's — Arq's Backup Plan menu acts through the plan the same way —
-    /// or the one a selected Other-backups group sits under (which is where that
-    /// menu acts even for a moved plan's group: the plan's own repository
-    /// is the other one). Nil for a target that no longer exists and for
-    /// every other pane. A group is no plan, so the Plan menu stays grey
-    /// over its selection.
+    /// one a selected Restore record belongs to, the selected plan's, or
+    /// the one a selected Other-backups group sits under (which is where
+    /// that menu acts even for a moved plan's group: the plan's own
+    /// repository is the other one). Nil for a target that no longer exists
+    /// and for every other pane. A group is no plan, so the Plan menu stays
+    /// grey over its selection.
     func commandRepositoryID(for selection: SidebarItem?) -> UUID? {
         let id: UUID? = switch selection {
         case let .repository(id): id
@@ -148,8 +147,8 @@ extension AppModel {
     /// Backups…" hand-off wins; otherwise the window's selection by the
     /// Repository menu's own rule — and the first repository only when that
     /// names none to look at (Activity, the console, nothing). The root
-    /// reads this beside the prefill — the read that provably reaches the
-    /// sheet — and hands the answer over, so FindFilesView needs no router.
+    /// reads this beside the prefill and hands the answer over, so
+    /// FindFilesView needs no router.
     func findFilesRepositoryID(prefillRepositoryID: UUID?, selection: SidebarItem?) -> UUID? {
         prefillRepositoryID ?? commandRepositoryID(for: selection) ?? configuration.repositories.first?.id
     }
@@ -180,8 +179,8 @@ extension AppModel {
     // MARK: - Confirmations
 
     /// A confirmation's title and message, naming its target — the dialog
-    /// can now be raised from the plan page or the menu bar, where "this
-    /// repository" named nothing. Nil once the target is gone.
+    /// is raised from the sidebar's row menus and the menu bar, where an
+    /// unnamed "this" would say nothing. Nil once the target is gone.
     func confirmationCopy(for confirmation: CommandConfirmation) -> ConfirmationCopy? {
         switch confirmation {
         case let .deletePlan(id):
@@ -203,8 +202,6 @@ extension AppModel {
             }
             return ConfirmationCopy(
                 title: "Delete “\(name)”?",
-                // The plan page's words: it could see a run in flight, and
-                // now every surface can.
                 message: isRunning(planID: id)
                     ? "The running backup will be stopped and recorded as cancelled. \(landing)"
                     : "The plan and its schedule are removed. \(landing)"
@@ -213,14 +210,14 @@ extension AppModel {
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Remove “\(repository.name)” from SwiftRestic?",
-                // From the model, so the disclosed consequences can never
-                // drift from what removal actually does.
+                // From the model, so the disclosed consequences cannot drift
+                // from what removal does.
                 message: removalConsequences(for: id)
             )
         case let .check(id):
             guard let repository = repository(id: id) else { return nil }
-            // "Slow" is a different unit of slow on a 4 TB repository than on
-            // a memory stick, so the dialog says which one the user holds.
+            // The cost scales with the repository's size, so the dialog
+            // names the size the user holds.
             var message = "Structure checks are fast; reading data finds more problems at the cost of time. The repository is locked while the check runs, so backups to it are held back until it finishes."
             if let size = repositoryStats[id]?.totalSize {
                 message += " This repository currently holds \(Format.bytes(size))."

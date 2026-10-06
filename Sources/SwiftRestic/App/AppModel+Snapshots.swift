@@ -3,22 +3,21 @@ import Foundation
 extension AppModel {
     // MARK: - Snapshots
 
-    /// Generous ceiling on one repository's `snapshots`/`stats` refresh. A
-    /// black-holed SFTP host or S3 endpoint would otherwise hang the refresh —
-    /// and, at launch, the scheduler that is armed once it finishes — forever.
+    /// Generous ceiling on one repository's `snapshots`/`stats` refresh: a
+    /// black-holed SFTP host or S3 endpoint would otherwise hang the
+    /// refresh — and, at launch, the scheduler that is armed once it
+    /// finishes — forever.
     static let refreshTimeout: TimeInterval = 300
 
-    /// The most backups `fileHistory` names to restic, 92 bytes each on the
-    /// command line (`--snapshot` and a 64-character ID, with their argv
-    /// pointers): 2,000 is ~184 KB of the 1 MiB `ARG_MAX` macOS allows for
-    /// arguments and environment together.
+    /// The most backups `fileHistory` names to restic: `--snapshot` plus a
+    /// 64-character ID is 92 bytes a backup on the command line, and macOS
+    /// caps arguments and environment together at 1 MiB (`ARG_MAX`).
     static let fileHistoryNamedLimit = 2_000
 
     func refreshAllSnapshots() async {
         // Concurrent, not serial: the scheduler is armed only after this
-        // returns, so one slow or unreachable remote repository must not delay
-        // another's backups. (No lock asks for that order any more: the
-        // listing and its stats run lock-free — see `bootstrap`.)
+        // returns, and one slow or unreachable remote repository must not
+        // delay another's backups.
         await withTaskGroup(of: Void.self) { group in
             for repository in configuration.repositories {
                 group.addTask { await self.refreshSnapshots(repositoryID: repository.id) }
@@ -32,7 +31,6 @@ extension AppModel {
             // A second refresh while one runs (a backup's closing refresh
             // racing the launch refresh, say) must not be dropped: the first
             // one's listing predates whatever the second one needs to see.
-            // Remember it; the in-flight refresh re-runs it when it lands.
             pendingSnapshotRefreshes.insert(repositoryID)
             return
         }
@@ -40,10 +38,10 @@ extension AppModel {
         defer {
             loadingSnapshots.remove(repositoryID)
             if pendingSnapshotRefreshes.remove(repositoryID) != nil, !isShuttingDown {
-                // Registered on the background lane like the maintenance
-                // engine's closing refresh: that lane is what a quit drains,
-                // and the guard keeps a shutdown-time unwind from spawning
-                // restic work past `terminateAll`.
+                // On the background lane, like the maintenance engine's
+                // closing refresh: that lane is what a quit drains, and the
+                // guard keeps a shutdown-time unwind from spawning restic
+                // work past `terminateAll`.
                 tasks.addBackground(Task { [weak self] in
                     await self?.refreshSnapshots(repositoryID: repositoryID)
                 })
@@ -60,15 +58,13 @@ extension AppModel {
             // A stats failure must not fail the listing (the rows are the
             // news; the size is decoration), but it must not be invisible
             // either — the banner says what is missing while the rows stay.
-            // Announced once per failing stretch, not once per refresh.
             let stats: RepositoryStats?
             do {
                 stats = try await service.stats(context, timeout: Self.refreshTimeout)
                 statsFailureNoted.remove(repositoryID)
             } catch ResticError.cancelled {
-                // The refresh was stopped mid-read: not a stats failure to
-                // announce, and not a reason to blank a size an earlier read
-                // already established.
+                // Stopped mid-read: not a stats failure to announce, and not
+                // a reason to blank a size an earlier read established.
                 stats = repositoryStats[repositoryID]
             } catch {
                 stats = nil
@@ -94,14 +90,12 @@ extension AppModel {
         } catch ResticError.cancelled {
             // A cancelled refresh is the user (or shutdown) stopping the app's
             // own work, not a repository that could not be read: no banner,
-            // no failed outcome. Both a cancelled maintenance run's closing
-            // refresh and a window close during launch's refresh land here;
-            // the next refresh reports the truth.
+            // no failed outcome — the next refresh reports the truth.
             return
         } catch ResticError.passwordMissing {
-            // Expected before the user has entered a password; not worth a banner.
-            // The listing surfaces stay honest through the outcome: "waiting for
-            // a password" is a state a user can fix, "no snapshots" is not.
+            // Expected before the user has entered a password; not worth a
+            // banner. The outcome keeps the surfaces honest: "waiting for a
+            // password" is a state a user can fix, "no snapshots" is not.
             guard configuration.repository(id: repositoryID) != nil else { return }
             repositoriesMissingPassword.insert(repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(
@@ -110,12 +104,11 @@ extension AppModel {
         } catch let ResticError.commandFailed(code, _) where code == 10 {
             // restic's "does not exist": the repository is not where it was
             // saved — an unplugged volume, a moved folder. Never "empty": the
-            // app creates a new repository before keeping it (the editor's
-            // save), so it holds no uninitialised one, and at launch nothing
-            // has been listed yet to tell the two apart — "0 backups" there
-            // read as the history being gone. Earlier rows stay, as for any
-            // failed read. Two sentences, because the sidebar shows only the
-            // first on one line.
+            // app creates a new repository before keeping it, so it holds no
+            // uninitialised one, and at launch nothing has been listed yet to
+            // tell the two apart — "0 backups" would read as the history
+            // being gone. Earlier rows stay, as for any failed read. Two
+            // sentences, because the sidebar shows only the first on one line.
             guard configuration.repository(id: repositoryID) != nil else { return }
             let advice = repository.kind == .local
                 ? "Is its disk connected? If it moved, update its path in the repository settings."
@@ -127,9 +120,9 @@ extension AppModel {
                 isError: true
             ))
         } catch {
-            // Keep whatever an earlier successful listing produced — stale rows
-            // beside an error are worth more to a backup user than a blank card
-            // that reads as "nothing backed up".
+            // Keep whatever an earlier successful listing produced — stale
+            // rows beside an error beat a blank card that reads as "nothing
+            // backed up".
             guard configuration.repository(id: repositoryID) != nil else { return }
             noteAuthFailure(error, repositoryID: repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(error.localizedDescription)
@@ -161,10 +154,10 @@ extension AppModel {
             ?? BackupShelves(listing: [], plans: plans(in: repositoryID), allPlans: configuration.plans)
     }
 
-    /// A plan's backups that would stay behind if it left `repositoryID`,
-    /// and the shelf's title as it will read once it has — the sidebar's
-    /// own derivation, so a dialog never names a section by a title it
-    /// will not have. Nil when the plan holds no backups there.
+    /// A plan's backups that would stay behind if it left `repositoryID`, and
+    /// the shelf's title as it will read once it has — the sidebar's own
+    /// derivation, so a dialog never names a section by a title it will not
+    /// have. Nil when the plan holds no backups there.
     func backupsLeftBehind(planID: UUID, in repositoryID: UUID) -> (count: Int, shelfTitle: String)? {
         guard let count = shelves(for: repositoryID).byPlan[planID]?.count, count > 0
         else { return nil }
@@ -174,8 +167,8 @@ extension AppModel {
         )
     }
 
-    /// How the sidebar names the place `record` sits — its plan, or its
-    /// group under Other backups — for surfaces that name one backup (with
+    /// How the sidebar names the place `record` sits — its plan, or its group
+    /// under Other backups — for surfaces that name one backup (with
     /// `SnapshotLineage.displayName(of:label:)`) instead of a second rule of
     /// their own.
     func recordLabel(of record: Snapshot, repositoryID: UUID) -> SnapshotLineage.Label? {
@@ -199,10 +192,9 @@ extension AppModel {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         // The browse cache first. A snapshot is content-addressed and
         // immutable, so its directory listings are facts that never go stale:
-        // a hit answers without the restic round trip — the difference
-        // between an instant expand and a fresh process reopening the whole
-        // repository on every chevron click. The coordinator hands the hit
-        // back already in browser order, so the main actor does no sorting.
+        // a hit answers without a restic process on every chevron click. The
+        // coordinator hands the hit back already in browser order, so the
+        // main actor does no sorting.
         if let cached = await indexCoordinator.cachedBrowserListing(
             snapshotID: snapshotID,
             directory: path,
@@ -212,12 +204,10 @@ extension AppModel {
         }
         let (service, context) = try await resticContext(for: repository)
         let nodes = try await service.listDirectory(context, snapshotID: snapshotID, path: path)
-        // Write-through, so the next visit to this directory — the record
-        // switch that re-walks this spine, the collapse and re-expand — is
-        // instant. Best-effort by the coordinator's contract, which also
-        // hands the write to a task of its own and returns: the folder never
-        // waits on the index's writer, and a quit drains the write in the
-        // coordinator's shutdown rather than exiting under it.
+        // Write-through, so the next visit to this directory is instant.
+        // Best-effort by the coordinator's contract: the write runs in a task
+        // of its own and the folder never waits on the index's writer; the
+        // coordinator's shutdown drains it.
         indexCoordinator.cacheListing(
             snapshotID: snapshotID,
             directory: path,
@@ -227,13 +217,11 @@ extension AppModel {
         return nodes
     }
 
-    /// Searches a repository's snapshots for a path pattern. A pattern with
-    /// no glob character is looked for inside names (`*word*`): restic
-    /// matches a pattern against whole names, so a bare word found only an
-    /// item named exactly that — "notes" nothing on the demo repository,
-    /// "*notes*" six files (probed, restic 0.19.1) — and a bare word is
-    /// what a Files tab's "Search All Backups…" hands over, the index's own
-    /// search taking words.
+    /// Searches a repository's snapshots for a path pattern. restic matches a
+    /// pattern against whole names, so a pattern with no glob character is
+    /// wrapped in `*…*` — a bare word would find only an item named exactly
+    /// that. A bare word is what a Files tab's "Search All Backups…" hands
+    /// over; the index's own search takes words.
     func findFiles(
         repositoryID: UUID,
         pattern: String,
@@ -256,19 +244,15 @@ extension AppModel {
     /// backup. Case-exact, as a path is, and matched by bytes, as the index
     /// keys paths.
     ///
-    /// Naming the backups is what keeps it quick: at 1,000 backups of a
-    /// 2,060-file tree, every backup took restic 6.9–8.5 s, the 100 its
-    /// versions needed 1.9–2.2 s. Past `fileHistoryNamedLimit` the find
-    /// searches every backup instead, so the command line stays far inside
-    /// the system's argument limit.
+    /// Naming the backups is what keeps it quick — an unnamed find makes
+    /// restic walk every backup of the repository. Past
+    /// `fileHistoryNamedLimit` the find names none instead, so the command
+    /// line stays inside the system's argument limit.
     ///
-    /// Each answer is kept — for the session (`fileHistoryAnswers`) and in
+    /// Each answer is kept — in `fileHistoryAnswers` for the session and in
     /// the index, across launches — and only backups without one are asked:
-    /// the pane is made anew for every click, and every find costs a restic
-    /// process — 0.5–2 s even on a five-backup local repository, most of it
-    /// restic deriving the key — so going back to a file asks nothing, even
-    /// after a relaunch, and a version list a new backup grew asks only for
-    /// that one.
+    /// every find costs a restic process, so going back to a file asks
+    /// nothing, and a version list a new backup grew asks only for that one.
     func fileHistory(repositoryID: UUID, path: String, backupIDs: [String]) async throws -> [String: SnapshotNode] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         let pathKey = PathKey(path)
@@ -316,14 +300,11 @@ extension AppModel {
     /// Reads ahead what a click on each of `files` — one open folder's, all
     /// in one chain — will ask `fileHistory` for: each version's newest
     /// backup, from the index, then whatever neither the session nor the
-    /// index has kept, from one `restic find` for all of them. One walk per
-    /// backup named serves every file — at five backups, 200 files took
-    /// restic 0.61 s against 0.53 s for one — but each backup costs more
-    /// with 200 paths to match (at 60 backups, 2.1 s against 1.0 s), so a
-    /// click never waits for it: one meanwhile runs its own find, as
-    /// before. A folder whose files need more than
-    /// `fileHistoryNamedLimit` backups is not read ahead: restic would walk
-    /// every backup of the repository. Returned for tests to await.
+    /// index has kept, from one `restic find` for all of them. A click never
+    /// waits for it — one find matching every path gets slower per backup —
+    /// so a click meanwhile runs its own. A folder whose files need more
+    /// than `fileHistoryNamedLimit` backups is not read ahead: restic would
+    /// walk every backup of the repository. Returned for tests to await.
     ///
     /// A failure — the index's or restic's — keeps what the index had kept
     /// and reads nothing more: each click then asks for its file, and

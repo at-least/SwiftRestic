@@ -83,8 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Whether the user chose this quit here — the app menu, ⌘Q, the
         // tray. Those call terminate: directly and arrive with no Apple
         // event; the Dock's, AppleScript's and loginwindow's quit arrives as
-        // a quit Apple event, current while this runs (probed: design-probes/
-        // 08-start-at-login, quitprobe and swiftuiquit). The event's reason
+        // a quit Apple event, current while this runs. The event's reason
         // is not trusted to tell a logout from the Dock: AppleEvents.h says
         // only that a quit "may include" kAEQuitReason, and a wrong guess
         // would put a question in front of a logout. So every quit event
@@ -141,11 +140,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// The menus used to reach RootView through posted `Notification.Name`s;
-// those asks are typed intents on `AppRouter` now (`router.request(_:)`), so
-// the stringly seam is gone entirely.
-
-
 @main
 struct SwiftResticApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -170,8 +164,8 @@ struct SwiftResticApp: App {
             .environment(router)
             .frame(minWidth: 940, minHeight: 600)
             .task {
-                // Where the sidebar's Backups | Files control kept its
-                // choice; the control is gone (0ec4f00), so is the key.
+                // Removes the leftover key of the sidebar's removed
+                // Backups | Files control.
                 UserDefaults.standard.removeObject(forKey: "SidebarMode")
                 appDelegate.wireAppSurface(model: model, router: router)
                 await model.bootstrap()
@@ -179,9 +173,8 @@ struct SwiftResticApp: App {
         }
         .defaultSize(width: 1100, height: 720)
         .commands {
-            // ⌘N is macOS's reflex for "new thing" — an emptied group here
-            // meant adding a repository was always a mouse trip to the
-            // sidebar footer.
+            // ⌘N is macOS's reflex for "new thing" — an emptied group would
+            // make adding a repository a mouse trip to the sidebar footer.
             CommandGroup(replacing: .newItem) {
                 Button("New Backup Plan…") { ask(.newPlan) }
                     .keyboardShortcut("n", modifiers: .command)
@@ -226,11 +219,11 @@ struct SwiftResticApp: App {
         openWindow(id: Self.mainWindowID)
     }
 
-    /// Arq's Backup Plan menu: everything a plan page's cards and sidebar
-    /// menu offer, acting on the plan selected in the sidebar and greyed out
-    /// when the selection is anything else — an enabled item over an action
-    /// that does nothing is a menu that lies. Titles stay put, so Help-menu
-    /// search and muscle memory find them; only the two state toggles change.
+    /// Everything a plan page's cards and the sidebar row's menu offer,
+    /// acting on the plan selected in the sidebar and greyed out when the
+    /// selection is anything else — an enabled item over an action that does
+    /// nothing is a menu that lies. Titles stay put, so Help-menu search and
+    /// muscle memory find them; only the two state toggles change.
     private var planMenu: some Commands {
         CommandMenu("Plan") {
             let p = model.planCommands(for: router.selection)
@@ -254,9 +247,9 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            // The tray's app-wide pause, here too: with the menu bar item
-            // hidden it was the only way in. Direct calls, as the tray's:
-            // no editor holds a draft of these settings.
+            // The tray's app-wide pause, here too: the menu bar item can be
+            // hidden. Direct calls, as the tray's: no editor holds a draft
+            // of these settings.
             if p.backupsPaused {
                 Button("Resume Backups") { model.resumeBackups() }
             } else {
@@ -300,13 +293,10 @@ struct SwiftResticApp: App {
         }
     }
 
-    /// A submenu of the three pause lengths. `.disabled` on a Menu in the
-    /// menu bar greys only its items: the submenu's own row stays enabled
-    /// (measured via Accessibility — "Pause Schedule" read enabled over
-    /// three greyed lengths with a non-plan pane, the since-removed
-    /// Overview, selected), an item that opens onto
-    /// nothing it can do. So a submenu that cannot act is a plain disabled
-    /// item of the same title.
+    /// A submenu of the pause lengths. `.disabled` on a Menu in the menu
+    /// bar greys only its items: the submenu's own row stays enabled — an
+    /// item that opens onto nothing it can do — so a submenu that cannot
+    /// act is a plain disabled item of the same title.
     @ViewBuilder
     private func lengthsMenu(
         _ title: String,

@@ -97,9 +97,10 @@ struct RepositoryEditorSheet: View {
             }
             .padding(12)
         }
-        // Resizable, not fixed: the SFTP notes pushed a fixed 600x660 sheet
-        // into scrolling at default font sizes and buried the maintenance
-        // section. A minimum keeps it usable; the user can grow it.
+        // Resizable, not fixed: the SFTP notes do not fit a fixed 600x660
+        // sheet at default font sizes without scrolling, which buries the
+        // maintenance section. A minimum keeps it usable; the user can grow
+        // it.
         .frame(minWidth: 600, idealWidth: 660, minHeight: 560, idealHeight: 660)
         .task {
             // Snapshot before the keychain await: an edit typed during the

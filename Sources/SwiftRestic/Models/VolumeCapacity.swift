@@ -1,9 +1,9 @@
 import Foundation
 
 /// A local volume's capacity — the numbers behind the repository page's
-/// used/free strip, Arq's "Used Space / Free Space" pattern. A repository's
-/// size only means something against the disk it lives on, and restic cannot
-/// report that disk: only the filesystem can.
+/// used/free strip. A repository's size only means something against the
+/// disk it lives on, and restic cannot report that disk: only the
+/// filesystem can.
 struct VolumeCapacity: Equatable {
     let totalBytes: Int64
     let freeBytes: Int64

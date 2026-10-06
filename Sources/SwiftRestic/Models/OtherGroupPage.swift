@@ -4,15 +4,14 @@ import Foundation
 /// group's or an untagged lineage's: the explanation card's sentence and
 /// the Backups card's rows, derived once here so the page and the sidebar's
 /// words for the same group (`OtherBackupsGroup.labels`, which names it)
-/// can never disagree — and so what the adopt sheet prefills from reads the
-/// same facts.
+/// can never disagree, and the adopt sheet reads the same facts.
 ///
 /// The group's kind decides the explanation: a UUID no configuration sets
-/// up is adoptable — the sentence says what could have happened (deleted
-/// here, still running on another Mac) and asserts neither, the labels'
-/// own rule — a UUID that names a configured plan is that plan's earlier
-/// history here, said with where the plan went, and backups with no plan
-/// tag were made outside SwiftRestic and cannot be adopted.
+/// up is adoptable — the sentence offers both causes (deleted here, still
+/// running on another Mac) and asserts neither; a UUID naming a configured
+/// plan is that plan's earlier history here, said with where the plan went;
+/// backups with no plan tag were made outside SwiftRestic and cannot be
+/// adopted.
 struct OtherGroupPageSummary: Equatable {
     /// The group's label title — the page's name is the sidebar row's.
     var title: String

@@ -8,11 +8,9 @@ import SwiftUI
 ///
 /// The four per-concern chains below (`presented`, `observed`, `chrome`,
 /// `revalidate`) are each one modifier stack over the split view. They stay
-/// apart because one expression carrying the whole chain crossed the
-/// compiler's type-check time limit (deterministic on clean builds, and only
-/// after unrelated one-line edits elsewhere — the chain sat right at the
-/// limit). The sidebar and detail column live in `SidebarView` and
-/// `RootDetailView`, each type-checking on its own.
+/// apart because one expression carrying the whole chain crosses the
+/// compiler's type-check time limit. The sidebar and detail column live
+/// in `SidebarView` and `RootDetailView`, each type-checking on its own.
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -100,16 +98,14 @@ struct RootView: View {
     }
 
     /// The sheets and confirmation dialogs that ride on the root split view.
-    /// Split out of `body`: one expression carrying the whole chain crossed
-    /// the compiler's type-check time limit (deterministic on clean builds,
-    /// and only after unrelated one-line edits elsewhere — the chain sat
-    /// right at the limit).
+    /// Its own chain for the type-check limit, like the others — see the
+    /// type doc.
     private func presented<V: View>(over content: V) -> some View {
         // Read here, not inside the sheet's closure: read only there, the
-        // prefill set together with `isShowingFind` never reached the sheet
-        // — Find Files opened with an empty pattern (seen live). The opening
-        // repository is read the same way: derived here beside the prefill,
-        // out of `router.selection`, and handed to the sheet as a parameter.
+        // prefill set together with `isShowingFind` never reaches the sheet,
+        // and Find Files opens with an empty pattern. The opening repository
+        // is derived the same way, beside the prefill, and handed over as a
+        // parameter.
         let prefill = findPrefill
         let findFilesRepositoryID = model.findFilesRepositoryID(
             prefillRepositoryID: prefill?.repositoryID,
@@ -123,7 +119,7 @@ struct RootView: View {
         .sheet(item: $editingRepository) { repository in
             // A new repository lands on its own page, where "New Backup
             // Plan…" is the first thing it offers — the next step after
-            // adding one, which the user once could not find.
+            // adding one.
             RepositoryEditorSheet(repository: repository, onCreated: { id in
                 router.selection = .repository(id)
             })
@@ -162,9 +158,8 @@ struct RootView: View {
     /// The intents from the menu bar and the tray. The menu commands and the
     /// tray have no direct way to reach this view, so they ask the router;
     /// this is the consumption half, on the same appear-or-change rule that
-    /// keeps an ask alive while the window is closed. Kept apart from
-    /// `presented` for the same reason that function exists: the full chain
-    /// in one expression does not type-check.
+    /// keeps an ask alive while the window is closed. Its own chain for the
+    /// type-check limit.
     private func observed<V: View>(over content: V) -> some View {
         content
         .onChange(of: router.pendingIntent) {
@@ -228,7 +223,7 @@ struct RootView: View {
         }
         // The load finishing is what selects the landing pane: onAppear runs
         // before `bootstrap` has read anything, so without this a configured
-        // app sat on the Welcome screen until the user clicked somewhere.
+        // app would sit on Welcome.
         .onChange(of: model.isBootstrapping) {
             guard !model.isBootstrapping else { return }
             selectSomething()
@@ -241,10 +236,8 @@ struct RootView: View {
     /// The VoiceOver channel for transient messages: announced once, here at
     /// the root, when the message lands — never per rendering pane, so
     /// switching panes cannot re-speak a banner still on screen, and the
-    /// queue's dismissals say nothing.
-    ///
-    /// Extracted from the root modifier chain: the two-parameter onChange
-    /// closure was the expression that pushed the whole chain past the
+    /// queue's dismissals say nothing. A method, not an inline two-parameter
+    /// `onChange` closure: that expression pushes the chain past the
     /// compiler's type-check time limit.
     private func announceBanner(from old: [Banner], to new: [Banner]) {
         guard new.count > old.count, let banner = new.first else { return }
@@ -271,12 +264,11 @@ struct RootView: View {
     /// The add-with-history landing: a repository whose first completed
     /// listing holds no plan of its own and at least one adoptable group
     /// opens the shelf that history sits on — Other backups, and the first
-    /// group's fold — so the groups are in view without hunting; the
-    /// repository page's card offers Adopt… anyway, and no modal or wizard
-    /// interrupts. A repository whose first listing arrives beside plans
-    /// never lands here, and each repository is considered once however the
-    /// listing answers — the mark lives in the model, so a closed and
-    /// reopened window cannot re-arm the reveal.
+    /// group's fold — so the groups are in view without hunting. A
+    /// repository whose first listing arrives beside plans never lands
+    /// here, and each repository is considered once however the listing
+    /// answers — the mark lives in the model, so a closed and reopened
+    /// window cannot re-arm the reveal.
     private func considerAdoptionLandings() {
         for repository in model.configuration.repositories {
             guard model.snapshotsLoadedAt(for: repository.id) != nil,
@@ -314,13 +306,12 @@ struct RootView: View {
         case "repository": router.selection = model.configuration.repositories.first.map { .repository($0.id) }
         case "activity": router.selection = .activity
         case "find": isShowingFind = true
-        // The Find pane on a selection naming a non-first repository — the
-        // page of the first plan's repository that is not the landing
-        // pane's (a plan's own page searches its Files tab instead). Plain
-        // `find` cannot tell the opening rule from the first-repository
-        // fallback: the landing selection IS the first repository, so both
-        // read the same there — so a configuration without such a plan
-        // stops the run rather than photographing that fallback.
+        // The Find pane over a non-first repository: the first plan whose
+        // repository is not the landing pane's (a plan's own page searches
+        // its Files tab instead). Plain `find` cannot tell the opening rule
+        // from the first-repository fallback — the landing selection IS the
+        // first repository — so a configuration without such a plan stops
+        // the run rather than photographing that fallback.
         case "findMoved":
             guard let repositoryID = model.configuration.plans.lazy.compactMap(\.repositoryID).first(where: {
                 $0 != model.configuration.repositories.first?.id
@@ -371,13 +362,14 @@ struct RootView: View {
         case "concepts": isShowingConcepts = true
         case "console": router.selection = .console
         // The restore pane needs a snapshot row to select, and those arrive
-        // only after the launch refresh — see the snapshots onChange below.
+        // only after the launch refresh — the selection happens in
+        // `RootDetailView`'s snapshots onChange.
         case "restore":
             pendingCaptureRestore = true
         // The group pages need group rows, which the listing builds: the
         // ask parks and the backupShelves onChange consumes it — the same
-        // wait. The adoptable group is the redesign's landing flow, so it
-        // gets its own value; the moved plan's page is the other variant.
+        // wait as the restore pane's. The adoptable group is the adopt
+        // flow's landing, so it gets its own value.
         case "orphanGroup":
             pendingCaptureGroupPane = .adoptable
         case "movedGroup":
@@ -469,11 +461,11 @@ struct RootView: View {
     /// a Pause Schedule under the plan editor would be undone by its save
     /// (`merging(draft:)` keeps the draft's `isEnabled`), a Remove from
     /// SwiftRestic… would leave the editor saving against a repository
-    /// that is gone. The panes' own sheets (Compare, a restore's destination) are
-    /// invisible from here, so AppKit is asked: SwiftUI presents every
-    /// sheet as the window's attached sheet (seen in the AX tree as an
-    /// AXSheet). Each ask is checked again against the model — it may
-    /// have waited for a window while the plan changed.
+    /// that is gone. The panes' own sheets (Compare, a restore's
+    /// destination) are invisible from here, so AppKit is asked: SwiftUI
+    /// presents every sheet as the window's attached sheet. Each ask is
+    /// checked again against the model — it may have waited for a window
+    /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
         let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFind || isShowingConcepts
@@ -569,8 +561,8 @@ struct RootView: View {
                 ? landing
                 : .repository(repositoryID)
         case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable:
-            // Repository ▸ restic Console… is now disabled; a selection
-            // parked on the pane would be one the menu no longer offers.
+            // The console menu item is disabled here; a selection parked on
+            // the pane must not outlive the menu item that opens it.
             router.selection = nil
         default:
             break

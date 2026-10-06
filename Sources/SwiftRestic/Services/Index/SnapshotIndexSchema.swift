@@ -188,11 +188,6 @@ enum SnapshotIndexSchema {
     /// FROM and WHERE, and the fill built from one) are pieces of
     /// statements, not statements: nothing runs them alone, and each
     /// statement built from them is a stored `let` the pins see whole.
-    /// (FINAL.md's plan table predates this and spells the names dotted, and
-    /// a name here is not always its dotted one without the dot: its
-    /// `chain.byID` is `chainByID` here, but its `plan.lowestAbove` is
-    /// `lowestPendingAbove`, its `fwd.close` `forwardClose` and its
-    /// `q.summaryCounts` `summaryCounts`.)
     ///
     /// Parameters are plain `?` throughout, so a statement's argument count
     /// is its number of question marks — the plan tests bind that many
@@ -353,26 +348,20 @@ enum SnapshotIndexSchema {
         /// `RETURNING` stays on the three range deletes though nothing reads
         /// its rows: it makes SQLite collect the keys before deleting (two
         /// passes — an `OpenEphemeral` in EXPLAIN) instead of deleting under
-        /// its `run_closed` cursor, and SQLite 3.43.2, the floor, runs that
-        /// about twice as fast: 86 against 175 ms for one 77.6k-run gap
-        /// (3.51.0 is the other way round, 107 against 47, but with the fill
-        /// in front neither library is slower than when Swift carried the
-        /// ids: 105 against 114 ms on 3.43.2, 131 against 147 on 3.51.0).
+        /// its `run_closed` cursor — about twice as fast on the floor
+        /// SQLite, the other way round on a newer one, but with the fill
+        /// queued in SQL neither library is slower overall than carrying the
+        /// ids through Swift.
         let hkBottom = "DELETE FROM " + Self.bottomRuns + "\nRETURNING node_id"
         let hkGap = "DELETE FROM " + Self.gapRuns + "\nRETURNING node_id"
         let hkTop = "DELETE FROM " + Self.topRuns + "\nRETURNING node_id"
         /// A whole chain's runs, found by the ids its fill just queued —
-        /// every run of the chain has its node there, and ids another fill
-        /// of the same pass queued fail `chain_id` — so the delete searches
-        /// `run` by key and only the fill scans it. Deleting by `chain_id`
-        /// alone would scan `run` a second time: the same cost as the fill
-        /// again when the chain holds few runs (80 against 40 ms at 2.4M
-        /// runs, 0 or 50 of them the chain's), where by key a runless
-        /// chain's death costs what it did when the delete returned the ids
-        /// to Swift (40 ms, the fill's scan). A large chain's pays per id
-        /// queued: 348 against the old 480 ms for 400k runs on 3.51.0 (324
-        /// against 512 on 3.43.2); one plain second scan would have been
-        /// 198 (188).
+        /// every run of the chain has its node there, and other fills' ids
+        /// fail the `chain_id` test — so the delete searches `run` by key
+        /// and only the fill scans it. Deleting by `chain_id` alone would
+        /// scan `run` a second time, paying the fill's price again whenever
+        /// the chain holds few of the table's runs; by key, a large chain
+        /// instead pays per id queued.
         let hkOrphanChainRuns =
             "DELETE FROM " + Self.orphanChainRuns + " AND node_id IN (SELECT id FROM temp.gc)"
 
@@ -563,21 +552,18 @@ enum SnapshotIndexSchema {
     /// `SQL.summaryCounts(placeholders:)`. A struct rather than a bare
     /// closure property because the registry reads it through `Mirror`, and
     /// a function value taken out of a `Mirror` child and called crashes the
-    /// process (Swift 6.4, both optimisation levels), while a struct that
-    /// holds the function casts and calls cleanly.
+    /// process, while a struct that holds the function casts and calls
+    /// cleanly.
     ///
     /// Its callers prepare it per call (`Row.fetchAll(db, sql:)`), never
     /// through `cachedStatement`: GRDB's statement cache is per connection
     /// and never evicts, and each list length is its own text, so caching
-    /// would keep a statement per length on every reader — measured at
-    /// about 30 MB of SQLite heap on one connection for both IN-list
-    /// statements at every length up to 200 — to save 25–80 µs a call.
-    /// Caching only the length a capped search repeats (its 200 ids) would
-    /// keep one statement per shape, but it would save 60–80 µs a capped call
-    /// and tie the store to the app's result cap. Padding every list to one
-    /// length with NULLs would keep one text, but it made a one-id call four
-    /// times slower, and a NULL pad in a `NOT IN` list would make that list
-    /// match nothing.
+    /// would keep a statement per length on every reader — tens of megabytes
+    /// of SQLite heap — to save tens of microseconds a call. Caching only
+    /// the length a capped search repeats would tie the store to the app's
+    /// result cap. Padding every list to one length with NULLs would keep
+    /// one text, but it runs a one-id call several times slower, and a NULL
+    /// pad in a `NOT IN` list would make that list match nothing.
     struct InList: Sendable {
         private let build: @Sendable (_ placeholders: String) -> String
 

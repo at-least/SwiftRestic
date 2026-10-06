@@ -3,11 +3,6 @@ import Foundation
 extension AppModel {
     // MARK: - Console
 
-    /// Runs an arbitrary restic command against a repository and returns what it
-    /// printed.
-    ///
-    /// No `--json` is added: the console exists to show restic's own output, and
-    /// the human-readable form is what the user came for.
     /// The console pane's appear moment: the default repository and the
     /// persisted history come from the configuration the model owns.
     func consoleDidAppear() {
@@ -17,6 +12,11 @@ extension AppModel {
         )
     }
 
+    /// Runs an arbitrary restic command against a repository and returns
+    /// what it printed.
+    ///
+    /// No `--json` is added: the console exists to show restic's own output,
+    /// and the human-readable form is what the user came for.
     func runConsoleCommand(repositoryID: UUID, arguments: [String]) async -> String {
         guard let repository = repository(id: repositoryID) else {
             return "No such repository."

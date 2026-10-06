@@ -13,12 +13,10 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     let didFail: Bool
     /// A run of the plan is in flight, and the line says its phase.
     let isRunning: Bool
-    /// The moment the plan's "Last backup" counts from — the run's stamp
-    /// when the app ran it, else its newest snapshot's own time, both from
-    /// `PlanStatus.lastBackupAt`, the one derivation every surface reads.
-    /// Nil in every state that spells no moment (no snapshot yet,
-    /// unreadable, still loading); the Protection line reads the newest of
-    /// these across a repository's plans.
+    /// The moment the plan's "Last backup" counts from, from
+    /// `PlanStatus.lastBackupAt` — the one derivation every surface reads.
+    /// Nil in every state that spells no moment; the Protection line reads
+    /// the newest of these across a repository's plans.
     let lastBackupAt: Date?
     var id: UUID { planID }
 
@@ -57,8 +55,8 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     }
 }
 
-/// The repository page's Protection line: its whole text, and whether it
-/// ends with the hold's Resume. Data only — `OverviewMetrics.protectionSummary`
+/// The repository page's Protection line: its text, and whether it ends
+/// with the hold's Resume. Data only — `OverviewMetrics.protectionSummary`
 /// derives it, so the counts and the words are pinned beside the rows they
 /// come from.
 struct ProtectionSummary: Equatable, Sendable {
@@ -75,10 +73,10 @@ struct ProtectionSummary: Equatable, Sendable {
 ///
 /// Pure and separate from the view so it can be tested.
 enum OverviewMetrics {
-    /// The window a "recent problem" counts over. The overview's Recent
-    /// problems card, the sidebar's Activity badge and the menu bar's problem
-    /// line all read the same week, so a problem cannot age out of one
-    /// surface before another — one owner, not three spellings of `-7 days`.
+    /// The window a "recent problem" counts over: the Recent problems card,
+    /// the sidebar's Activity badge and the menu bar's problem line all read
+    /// the same week, so a problem cannot age out of one surface before
+    /// another.
     static func problemWindowStart(from now: Date) -> Date {
         now.addingTimeInterval(-7 * 86_400)
     }
@@ -92,11 +90,11 @@ enum OverviewMetrics {
 
     /// Failures and completed-with-errors runs that finished inside the
     /// window — the one definition of "recent problem". The sidebar's badge
-    /// counts this set and the Recent problems card lists it, healed or not:
-    /// they are the week's record. The menu bar's problem line leads with
-    /// its newest entry that `isHealed` has not cleared. Recency counts from when a
-    /// run finished: a backup that ran all night and failed at dawn is this
-    /// morning's news, not eight days old.
+    /// counts this set and the Recent problems card lists it, healed or not;
+    /// the menu bar's problem line leads with its newest entry `isHealed`
+    /// has not cleared. Recency counts from when a run finished: a backup
+    /// that ran all night and failed at dawn is this morning's news, not
+    /// eight days old.
     static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {
         runs.filter {
             $0.finishedAt >= since
@@ -106,11 +104,10 @@ enum OverviewMetrics {
 
     /// Whether a backup problem no longer stands: a successful backup of the
     /// same plan finished after it — the next run fixed it. Backups only: a
-    /// check that found damage, a failed prune, forget or restore is not
-    /// fixed by a backup going through, and Apply Retention Now… records its
-    /// forget under the plan's ID, so its success must not heal a backup
-    /// failure either. The sidebar's standing problem and the menu bar's
-    /// face both go by this.
+    /// failed check, prune, forget or restore is not fixed by a backup going
+    /// through, and Apply Retention Now… records its forget under the plan's
+    /// ID, so its success heals nothing. The sidebar's standing problem and
+    /// the menu bar's face both go by this.
     static func isHealed(_ problem: RunRecord, in runs: [RunRecord]) -> Bool {
         guard problem.kind == .backup, let planID = problem.planID else { return false }
         return runs.contains {
@@ -119,27 +116,26 @@ enum OverviewMetrics {
         }
     }
 
-    /// One repository's share of that set: every kind of run against it. A
-    /// check or a prune has no plan, so the repository's page is the only
-    /// place near the repository its failure can be read.
+    /// One repository's share of that set, every kind of run: a check or
+    /// prune has no plan, so the repository's page is the only place near it
+    /// its failure can be read.
     static func problems(in runs: [RunRecord], since: Date, repositoryID: UUID) -> [RunRecord] {
         problems(in: runs, since: since).filter { $0.repositoryID == repositoryID }
     }
 
     /// The rows whose plan is not protected and should be: an unreadable
     /// listing, a plan known to have no backup, or one whose last backup
-    /// failed — never one still being read or one whose backup is in flight. A repository's sidebar row
-    /// wears a warning for these, since the badge and the menu bar count
-    /// failed runs only, and an unreadable repository has none.
+    /// failed. A repository's sidebar row wears a warning for these, since
+    /// the badge and the menu bar count failed runs only, and an unreadable
+    /// repository has none.
     static func needingAttention(_ rows: [ProtectionRow]) -> [ProtectionRow] {
         rows.filter { $0.severityRank <= 1 }
     }
 
-    /// The protection rows, one per plan. The lookups arrive as
-    /// closures so the derivation stays pure — and testable — while the view
-    /// keeps its observation on the model state behind them. `relative`
-    /// spells a past moment; the view passes the window's minute clock, as
-    /// the sidebar's captions do.
+    /// The protection rows, one per plan. The lookups arrive as closures so
+    /// the derivation stays pure while the view keeps its observation on the
+    /// model behind them. `relative` spells a past moment; the view passes
+    /// the window's minute clock, as the sidebar's captions do.
     static func protectionRows(
         plans: [BackupPlan],
         latestSnapshot: (_ repositoryID: UUID, _ planID: UUID) -> Snapshot?,
@@ -164,12 +160,9 @@ enum OverviewMetrics {
                 )
                 // The sidebar caption's top ranks, in its words
                 // (PlanStatus.sidebarCaption): a run in flight says its
-                // phase, then a standing problem says what went wrong and
-                // when — the Plans card once read "Last backup 4 hours
-                // ago" beside the sidebar's "Failed — Just now". An
-                // unreadable listing still outranks the problem. The pause
-                // rank stays out of the rows; the sidebar caption says it.
-                // Whether the plan counts as protected is the listing's,
+                // phase, then a standing problem; an unreadable listing
+                // still outranks the problem. The pause stays out of the
+                // rows — the caption says it. Protected is the listing's,
                 // except that a standing failure takes it away below.
                 if let activity = activity(plan.id) {
                     return ProtectionRow(
@@ -220,27 +213,23 @@ enum OverviewMetrics {
         switch listingOutcome(repositoryID) {
         case .loaded:
             let line: String
-            // The moment the line above counts from, when it counts one —
-            // the Protection line's "Last backup" reads the newest of these
-            // across a repository's plans.
+            // The moment the line above counts from, when it counts one.
             var moment: Date?
             if let latest, let stamped = PlanStatus.lastBackupAt(plan: plan, latestSnapshot: latest) {
                 // The sidebar's words and formatter, and the one moment
                 // every surface's "Last backup" counts from
-                // (`PlanStatus.lastBackupAt`: the run's stamp, else the
-                // snapshot's own time for history the plan arrived with) —
-                // Date.RelativeFormatStyle rounds 1 h 43 min up to
-                // "2 hours ago", where Format.relative says "1 hour ago".
+                // (`PlanStatus.lastBackupAt`). Date.RelativeFormatStyle
+                // rounds 1 h 43 min up to "2 hours ago", where
+                // Format.relative says "1 hour ago".
                 moment = stamped
                 line = "Last backup \(relative(stamped))"
             } else if !repositoryHasSnapshots(repositoryID) {
                 line = "No snapshots yet"
             } else {
-                // The repository has snapshots, but none tagged from
-                // this plan — the same distinction Plan Detail draws.
-                // A bare "No snapshots yet" reads as a false statement
-                // about a repository the user adopted with snapshots
-                // already in it.
+                // The repository has snapshots but none from this plan —
+                // the same distinction the plan page's Snapshots row draws;
+                // a bare "No snapshots yet" would be false about a
+                // repository adopted with snapshots already in it.
                 line = "The repository has snapshots, but none from this plan yet."
             }
             return ProtectionRow(
@@ -264,17 +253,13 @@ enum OverviewMetrics {
     }
 
     /// The repository page's Protection line: how many of the repository's
-    /// plans are protected, when its newest backup landed — the Plans
-    /// card's one non-redundant fact, now the page's whole first line —
-    /// and, while one is on, the app-wide hold's own words. Nil unless the
-    /// listing has succeeded: no count is honest before it lands or after
-    /// it fails, and the caveat under the Details card is the surface that
-    /// says why.
+    /// plans are protected, when its newest backup landed, and, while one is
+    /// on, the app-wide hold's own words. Nil unless the listing has
+    /// succeeded: no count is honest before it lands or after it fails.
     ///
     /// With no plans, the line names the repository's adoptable side — the
-    /// same count the sidebar's Other backups node carries — because that
-    /// is what "no plans" means on a page whose repository may hold
-    /// history.
+    /// same count the sidebar's Other backups node carries — what "no plans"
+    /// means on a page whose repository may hold history.
     static func protectionSummary(
         rows: [ProtectionRow],
         listingLoaded: Bool,
@@ -310,10 +295,9 @@ enum OverviewMetrics {
     }
 
     /// The repository page's Snapshots value: the whole count, split when
-    /// some of the repository's backups belong to no plan of it — the same
-    /// count the sidebar's Other backups node and the Protection line
-    /// carry. When none of them is a plan's, "all" says so: "11 · 11 from
-    /// no plan here" repeated the count (seen live 2026-10-03).
+    /// some backups belong to no plan of it — the same count the sidebar's
+    /// Other backups node and the Protection line carry. When none is a
+    /// plan's, "all" says so instead of repeating the count.
     static func snapshotsLine(total: Int, otherBackups: Int) -> String {
         if otherBackups == 0 { return Format.count(total) }
         if otherBackups == total { return "\(Format.count(total)) · all from no plan here" }

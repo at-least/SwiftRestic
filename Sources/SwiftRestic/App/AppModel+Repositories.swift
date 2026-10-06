@@ -114,10 +114,8 @@ extension AppModel {
     /// cooperative, so a backup already past restic (in retention or the
     /// closing refresh) still settles as a success — its snapshot is real.
     ///
-    /// The removal dialog discloses all of it through `removalConsequences`,
-    /// which enumerates every kind of work in flight; cancelled runs land in
-    /// the run history either way, so the record of what stopped survives the
-    /// dialog.
+    /// The removal dialog discloses the work in flight through
+    /// `removalConsequences`.
     func deleteRepository(id: UUID) {
         for plan in configuration.plans where plan.repositoryID == id {
             tasks.cancel(.plan(plan.id))
@@ -150,8 +148,8 @@ extension AppModel {
     /// The per-repository runtime state, dropped in one place — so a new
     /// dictionary keyed by repository id joins this list instead of hoping
     /// its removal path remembers. UUIDs are never reused, so an entry
-    /// missed here is never cleared again. (`loadingSnapshots` is absent on
-    /// purpose: it is cleared by the in-flight refresh's own `defer`.)
+    /// missed here is never cleared again. (`loadingSnapshots` is not here:
+    /// it is cleared by the in-flight refresh's own `defer`.)
     private func clearRuntimeState(repositoryID id: UUID) {
         maintenance[id] = nil
         maintenanceRunTokens[id] = nil
@@ -199,9 +197,9 @@ extension AppModel {
     }
 
     /// The read path's opener: the engine plus the repository's decrypted
-    /// context, assembled together — the same pair every restic read used to
-    /// put together by hand. Callers keep their own missing-repository guard,
-    /// because each surface phrases that answer its own way.
+    /// context, assembled together. Callers keep their own
+    /// missing-repository guard, because each surface phrases that answer
+    /// its own way.
     func resticContext(
         for repository: Repository
     ) async throws -> (service: any ResticClient, context: RepositoryContext) {
@@ -244,9 +242,9 @@ extension AppModel {
 
 /// Everything a cached `RepositoryContext` depends on, carried beside it so
 /// any relevant edit invalidates by comparison — see `AppModel.context(for:)`.
-/// Deliberately not the whole `AppSettings`: only the rate limits reach a
-/// context, and settings like the console history change far more often than
-/// the limits do.
+/// Not the whole `AppSettings`: only the rate limits reach a context, and
+/// settings like the console history change far more often than the limits
+/// do.
 struct ResolvedContextKey: Equatable, Sendable {
     var repository: Repository
     var uploadLimitKiBps: Int

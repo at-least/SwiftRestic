@@ -431,11 +431,9 @@ actor ResticRunner {
             return .keptExisting
         case ENOTSUP:
             // A volume without VOL_CAP_INT_RENAME_EXCL refuses the flag even
-            // for a free name: exFAT on macOS 26 does (probed on a mounted
-            // image, where it still answers EEXIST for a taken one). Look,
-            // then rename — lstat, so a dangling symlink counts as taken.
-            // The gap between the two is the one non-atomic window, and it
-            // exists only on such volumes.
+            // for a free name (exFAT does). Look, then rename — lstat, so a
+            // dangling symlink counts as taken. The gap between the two is
+            // the one non-atomic window, and it exists only on such volumes.
             if (try? FileManager.default.attributesOfItem(atPath: target.path)) != nil {
                 return .keptExisting
             }
@@ -503,7 +501,7 @@ actor ResticRunner {
     /// restic's own repository and password variables are stripped from whatever
     /// we inherited: they would win over the per-repository values restic is
     /// handed (restic ranks PASSWORD_COMMAND and PASSWORD_FILE above PASSWORD),
-    /// and the app always supplies them explicitly — backrest issue #1139.
+    /// and the app always supplies them explicitly.
     private static func baseEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         for key in Self.protectedEnvironmentKeys {
@@ -538,9 +536,8 @@ actor ResticRunner {
 // MARK: - Sendable shims
 
 /// `Process` is safe to `terminate()` from another thread but is not annotated
-/// `Sendable`. One of the few lock-guarded `@unchecked Sendable` shims in the
-/// codebase (with `ExitWaiter`, `FileHandleBox` and `ResticService`'s
-/// `DiffCollector`); keep each of them small.
+/// `Sendable`. A lock-guarded `@unchecked Sendable` shim — one of several
+/// across the codebase; keep it small.
 private final class ProcessBox: @unchecked Sendable {
     private let process: Process
     private let lock = NSLock()
@@ -680,8 +677,8 @@ private final class ExitWaiter: @unchecked Sendable {
 /// blocking read: closing a descriptor another thread is blocked reading does
 /// not wake it on macOS, so abandonment could not be delivered any other way.
 /// The read itself stays raw `read(2)` — Foundation's read buffers on pipes,
-/// which turned restic's progress stream into one lump at process exit
-/// (measured; see `FileHandleBox`).
+/// which would turn restic's progress stream into one lump at process exit
+/// (see `FileHandleBox`).
 private final class StreamReader: @unchecked Sendable {
     struct Outcome: Sendable {
         var messages: [ResticMessage] = []
@@ -865,11 +862,10 @@ private final class FileHandleBox: @unchecked Sendable {
     /// the abandonment wakeup, then reads it raw below.
     var fileDescriptor: Int32 { handle.fileDescriptor }
 
-    /// Raw `read(2)` on the descriptor, not `FileHandle.read(upToCount:)`.
-    /// Foundation's read buffers on pipes: measured against an identical
-    /// invocation, `FileHandle.read` delivered restic's status lines only at
-    /// process exit while `read(2)` returned each line as it was written — the
-    /// difference between a progress bar that moves and one stuck at 0%.
+    /// Raw `read(2)` on the descriptor, not `FileHandle.read(upToCount:)`:
+    /// Foundation's read buffers on pipes, so `FileHandle.read` would deliver
+    /// restic's status lines only at process exit — a progress bar stuck at
+    /// 0% instead of one that moves.
     func read(upToCount count: Int) -> Data {
         var storage = [UInt8](repeating: 0, count: count)
         let bytesRead = storage.withUnsafeMutableBufferPointer { buffer -> Int in

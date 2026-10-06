@@ -10,10 +10,10 @@ struct RetentionPreview: Sendable, Equatable {
     /// Newest first, like every other snapshot list.
     var removed: [Snapshot]
 
-    /// One group of `forget --json`'s answer. restic 0.19.1 writes `remove`
-    /// as `null` when nothing goes (probed with `--keep-last 10`); `keep`
-    /// is read the same way, defensively. `reasons`, `host`, `paths` and
-    /// `tags` are not needed: the plan's tag already scoped the command.
+    /// One group of `forget --json`'s answer. restic writes `remove` as
+    /// `null` when nothing goes; `keep` is read the same way, defensively.
+    /// `reasons`, `host`, `paths` and `tags` are not needed: the plan's tag
+    /// already scoped the command.
     private struct Group: Decodable {
         var keep: [Snapshot]?
         var remove: [Snapshot]?

@@ -2,10 +2,9 @@ import SwiftUI
 
 /// Runs restic commands directly, for the things the UI does not cover.
 ///
-/// A first-class pane with its own history sidebar, not a sheet: the console
-/// is the product's escape hatch, and its output and running commands
-/// survive switching panes because the state lives in `ConsoleModel` on the
-/// model, not here.
+/// A first-class pane with its own history sidebar, not a sheet: its output
+/// and running commands survive switching panes because the state lives in
+/// `ConsoleModel` on the model, not here.
 struct ResticConsoleView: View {
     @Environment(AppModel.self) private var model
 
@@ -14,9 +13,9 @@ struct ResticConsoleView: View {
             historySidebar
             Divider()
             VStack(spacing: 0) {
-                // The shared banner queue, like every other pane: the console
-                // is a first-class pane, so a repository failure while it is
-                // open must not be the one message with nowhere to land.
+                // The shared banner queue, like every other pane: a
+                // repository failure while the console is open must not be
+                // the one message with nowhere to land.
                 if !model.banners.isEmpty {
                     VStack(spacing: 8) {
                         ForEach(model.banners) { banner in

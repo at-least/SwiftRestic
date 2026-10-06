@@ -6,7 +6,7 @@ import Foundation
 /// — never a re-derivation that could disagree with them.
 enum ChangeComparison: Equatable, Sendable {
     /// No earlier backup of these folders from this host: no diff runs, and
-    /// the Change column stays blank by design.
+    /// the Change column stays blank.
     case firstBackup
     /// `restic diff` against the baseline is running.
     case comparing(baseline: Snapshot)

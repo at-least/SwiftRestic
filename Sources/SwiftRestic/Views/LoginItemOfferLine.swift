@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The start-at-login caveat and its one step, as the plan editor's footer
-/// shows it. The rules for when it shows are
-/// `LoginItemAdvice`'s; this reads only model state, never the daemon.
+/// shows it. The rules for when it shows are `LoginItemAdvice`'s; this
+/// reads only model state, never the daemon.
 struct LoginItemOfferLine: View {
     @Environment(AppModel.self) private var model
     let offer: LoginItemAdvice.Offer

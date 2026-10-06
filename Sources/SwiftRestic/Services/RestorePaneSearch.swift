@@ -1,24 +1,24 @@
 import Foundation
 
 /// What the Restore pane's search found, split by the backup that is open.
-/// The pane lists only the hits the open backup contains; the index already
-/// says which other backups hold the rest, and that answer used to be
-/// thrown away — leaving "No matches in this backup" a dead end when the
-/// file was one backup away.
+/// The pane lists only the hits the open backup contains; the index also
+/// says which other backups hold the rest, and dropping that answer would
+/// leave "No matches in this backup" a dead end when the file is one
+/// backup away.
 struct RestorePaneSearch: Equatable, Sendable {
     /// Hits the open backup contains: the rows the pane lists, in index
-    /// order, each carrying its kind in the open backup. The search's own
-    /// kind is the path's kind in the newest backup holding it, and a path
-    /// that is a file there may be a folder here. The pane restores from the
-    /// open backup, and the restore picks `restic dump` for a file and
-    /// `restic restore` for a folder by this kind.
+    /// order, each carrying its kind in the open backup — not the search's
+    /// own kind, the path's kind in the newest backup holding it; a path
+    /// that is a file there may be a folder here. The pane restores from
+    /// the open backup, picking `restic dump` for a file and `restic
+    /// restore` for a folder by the row's kind.
     let inThisBackup: [SearchHit]
     /// Matching paths the index holds only in other backups of the
     /// repository: the hits the open backup lacks. The search returns only
-    /// paths some indexed backup holds, so no second read is needed to
-    /// place them — a path whose every version was pruned is never a hit.
-    /// The search and the membership are one read of the index, so the
-    /// count is exact for the index as that read saw it.
+    /// paths some indexed backup holds, so no second read places them — a
+    /// path whose every version was pruned is never a hit. The search and
+    /// the membership are one read of the index, so the count is exact as
+    /// of that read.
     let elsewhereCount: Int
     /// The index stopped at its hit ceiling, so both parts may be short.
     let isTruncated: Bool

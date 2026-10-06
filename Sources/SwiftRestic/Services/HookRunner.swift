@@ -5,9 +5,8 @@ import Foundation
 /// Commands go through `/bin/sh -c` with the surrounding run's facts exported as
 /// `SWIFTRESTIC_*` variables. They run with the home directory as their working
 /// directory — a GUI app's inherited cwd is `/`, and a hook's relative paths
-/// should never depend on how the app happened to be launched. They inherit the
-/// app's own privileges, which are not sandboxed — the plan editor says so next
-/// to the command field.
+/// should never depend on how the app was launched. They inherit the app's own
+/// privileges, which are not sandboxed — the plan editor's hook field says so.
 struct HookRunner: Sendable {
     /// What a hook is told about the run that triggered it.
     struct Context: Sendable {
@@ -54,23 +53,21 @@ struct HookRunner: Sendable {
         var exitCode: Int32
         var output: String
         var timedOut: Bool
-        /// The surrounding run was cancelled while this hook ran. Not a
-        /// verdict on the hook — it never got to finish — and never a reason
-        /// to abort anything or fail a run.
+        /// The surrounding run was cancelled while this hook ran: not a
+        /// verdict on the hook, which never finished, and never a reason to
+        /// abort anything or fail a run.
         var cancelled: Bool = false
 
         var succeeded: Bool { exitCode == 0 && !timedOut }
 
         /// One line for the run record: the verdict plus the hook's first
-        /// output line — only the first, briefly, because this string is
-        /// persisted to disk and a script's later output is where a verbose
-        /// HTTP client prints its headers.
+        /// output line only — this string is persisted, and a script's later
+        /// output is where a verbose HTTP client prints its headers.
         var summary: String { verdict(withDetail: true) }
 
         /// The hook's verdict for the run's log — the same sentence as
-        /// `summary` and never any of its output. The log is what a user
-        /// copies whole into a forum post, and a script's output is where a
-        /// verbose HTTP client prints its `Authorization` header.
+        /// `summary`, never any of its output: the log is what a user copies
+        /// whole to ask for help.
         var logLine: String { verdict(withDetail: false) }
 
         /// The verdict both strings spell, `withDetail` adding the hook's
@@ -97,10 +94,10 @@ struct HookRunner: Sendable {
     /// Runs one hook to completion. Never throws for a non-zero exit: the caller
     /// decides what a failing hook means.
     ///
-    /// Shielded from the run's transcript: the runner would otherwise record
-    /// the hook's command line and every line it printed into the run's log,
-    /// which a user copies whole to ask for help. The engines note the verdict
-    /// (`Outcome.logLine`) instead.
+    /// Shielded from the run's transcript, which would otherwise record the
+    /// hook's command line and every line it printed into a log a user copies
+    /// whole to ask for help; the engines note the verdict (`Outcome.logLine`)
+    /// instead.
     func run(_ hook: BackupHook, context: Context) async -> Outcome {
         await RunTranscript.$current.withValue(nil) {
             await runUnrecorded(hook, context: context)

@@ -5,8 +5,8 @@ import Foundation
 /// restic calls, apart from restic so they can be tested.
 ///
 /// Paths are compared by their bytes (`PathKey`), never as Swift strings:
-/// `String`'s `==` and `hasPrefix` are canonical equivalence, under which two
-/// backed-up names that differ only in normalization would be one item.
+/// `String`'s `==` and `hasPrefix` are canonical equivalence, under which
+/// two names differing only in normalization would be one item.
 enum RestoreBatch {
     /// One restic call: the items that share a folder of the backup, restored
     /// into one directory on this Mac (`ResticService.restoreItems`).
@@ -20,9 +20,7 @@ enum RestoreBatch {
 
     /// The items a selection restores, in its order. A folder brings
     /// everything in it, so an item selected inside a selected folder would
-    /// be restored twice — it is dropped, as Finder's own copy drops it
-    /// (`duplicate` of a folder, a file in it and another file gave the
-    /// folder and the other file; probed).
+    /// be restored twice — it is dropped, as Finder's own copy drops it.
     static func covering(_ nodes: [SnapshotNode]) -> [SnapshotNode] {
         let folders = nodes.filter(\.isDirectory)
         var seen: Set<PathKey> = []
@@ -131,8 +129,7 @@ enum RestoreBatch {
     /// The `--include` that restores one item of its group: anchored at the
     /// group's folder, with every character restic's patterns treat as
     /// special escaped, so a name matches only itself. Unescaped, "a[1].txt"
-    /// restored nothing and "star*.txt" would match "starfish.txt" too;
-    /// escaped, each matched exactly itself (restic 0.19.1, probed).
+    /// matches nothing and "star*.txt" matches "starfish.txt" too.
     static func includePattern(forName name: String) -> String {
         var pattern = String.UnicodeScalarView(["/"])
         for scalar in name.unicodeScalars {

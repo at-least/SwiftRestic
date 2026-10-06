@@ -5,10 +5,10 @@ import SwiftUI
 /// the pane switch over the sidebar selection, and the selection-revalidation
 /// `onChange`s that must fire in every pane state.
 ///
-/// Split out of `RootView` as a real child view so this stack type-checks on
-/// its own — the root's modifier chain sat at the compiler's type-check
-/// budget. The sheet intents the panes raise are passed back as closures;
-/// the presenting state stays in `RootView`.
+/// A real child view, split out of `RootView` so this stack type-checks on
+/// its own — the root's modifier chain sits at the compiler's type-check
+/// time limit. The sheet intents the panes raise are passed back as
+/// closures; the presenting state stays in `RootView`.
 struct RootDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -140,9 +140,8 @@ struct RootDetailView: View {
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }
-        // A restore record picked from anywhere (a run's Browse, a group's
-        // Restore Files…) must find its fold open: its plan's, or its
-        // repository's Other backups and the group under it that holds it.
+        // A record picked from anywhere (a run's Browse, a group's Restore
+        // Files…) must find its fold open — see `folds`.
         .onChange(of: router.selection) {
             guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
                   let record = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
@@ -216,10 +215,10 @@ struct WelcomeView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                     Button("New Backup Plan…") {
-                        // The plan's first requirement is where backups go.
-                        // With no repository yet, this button starts there —
-                        // a disabled button with an invisible reason was a
-                        // dead end at the exact moment adoption is decided.
+                        // The plan's first requirement is where backups go:
+                        // with no repository yet, this button starts there
+                        // rather than sitting disabled with an invisible
+                        // reason.
                         if model.configuration.repositories.isEmpty {
                             onAddRepository()
                         } else {

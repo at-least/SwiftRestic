@@ -5,16 +5,13 @@ import Observation
 
 /// The tray, as a first-party AppKit status item.
 ///
-/// Why not SwiftUI's `MenuBarExtra`: measured on this app's own builds, a
-/// `.menu`-style label's image is pushed to the status item by exactly one
-/// mechanism — a `TimelineView` in the label — and *any* `TimelineView` in
-/// the label's structure, even in a branch that is not being rendered, pegs
-/// the main thread at 100% forever in a SwiftUI-internal
-/// requestUpdate → setImage loop. Remove the timeline and the icon freezes
-/// on its launch frame; label-side `@State`, `onReceive` timers, observed
-/// model writes and subview identity changes were each measured to never
-/// reach the button. AppKit's own `NSStatusItem` has no such trade: the
-/// image is set directly, the menu is rebuilt on open, and nothing spins.
+/// Not SwiftUI's `MenuBarExtra`: a `.menu`-style label updates its image only
+/// through a `TimelineView`, and any `TimelineView` in its structure — even
+/// one in a branch that is not rendered — pegs the main thread at 100%
+/// forever in a SwiftUI-internal requestUpdate → setImage loop, while
+/// label-side state, timers, observed writes and identity changes never
+/// reach the button. `NSStatusItem` has no such trade: the image is set
+/// directly, the menu is rebuilt on open, nothing spins.
 ///
 /// Faces, lines and pulse math all stay in `MenuBarStatus`/`MenuBarLogo`,
 /// the pure, tested core this controller merely renders.
@@ -223,10 +220,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             add.target = self
             menu.addItem(add)
         } else {
-            // One submenu per repository, in configuration order — the tray
-            // is the only plan list that never showed which repository a
-            // plan belongs to. App-wide items stay outside: they act on
-            // every repository at once.
+            // One submenu per repository, in configuration order, so the
+            // tray names each plan's repository. App-wide items stay
+            // outside: they act on every repository at once.
             for group in MenuBarStatus.planGroups(
                 plans: model.configuration.plans,
                 repositories: model.configuration.repositories,
@@ -350,8 +346,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// Brings the window back, or recreates it after it was closed — the
     /// tray is the only way in once the window is gone. Three bridges in
     /// order of reliability: the `openWindow` action the main window's root
-    /// view parked on the router (captured once, still callable after the
-    /// view it came from is gone), an existing window made key, and the
+    /// view parked on the router, an existing window made key, and the
     /// reopen Apple event — the path a Dock click takes, which SwiftUI's
     /// own delegate answers by rebuilding the `Window` scene.
     @objc private func openMainWindow() {
@@ -374,8 +369,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         if let aeDesc = event.aeDesc {
             var desc = aeDesc.pointee
             // The copied descriptor's storage belongs to `event`; the send
-            // must finish before that storage can go away. No-reply: the
-            // status is deliberately dropped.
+            // must finish before that storage can go away. No reply is
+            // requested, so nothing reads the send's status.
             _ = withExtendedLifetime(event) {
                 AESendMessage(&desc, nil, AESendMode(kAENoReply), kAEDefaultTimeout)
             }

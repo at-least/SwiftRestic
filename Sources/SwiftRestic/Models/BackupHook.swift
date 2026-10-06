@@ -7,8 +7,8 @@ import Foundation
 /// template language: it is the native idiom for shell scripts, needs no parser,
 /// and quoting stays the shell's problem rather than ours.
 ///
-/// The type name predates repository hooks; the stored shape is identical for
-/// both, so it was kept rather than migrating every config on disk.
+/// The name predates repository hooks, which share this type and its
+/// stored shape.
 struct BackupHook: Identifiable, Codable, Sendable, Hashable {
     enum Event: String, Codable, Sendable, CaseIterable, Identifiable {
         // Plan events.

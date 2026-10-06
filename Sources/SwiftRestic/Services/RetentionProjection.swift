@@ -2,13 +2,12 @@ import Foundation
 
 /// Approximates what `restic forget` keeps for a plan running on a schedule.
 ///
-/// The retention editor asks the user to decide what gets deleted; six
-/// steppers with overlapping hour/day/week/month/year buckets are impossible
-/// to eyeball, so this simulates a cadence of snapshots and applies the
-/// policy the way restic documents it: for each non-zero keep rule, the
-/// newest snapshot in each of the rule's most recent buckets survives; the
-/// newest `keepLast` survive regardless; a snapshot that satisfies several
-/// rules still survives once.
+/// Six steppers with overlapping hour/day/week/month/year buckets are
+/// impossible to eyeball, so this simulates a cadence of snapshots and
+/// applies the policy the way restic documents it: for each non-zero keep
+/// rule, the newest snapshot in each of the rule's most recent buckets
+/// survives; the newest `keepLast` survive regardless; a snapshot that
+/// satisfies several rules still survives once.
 enum RetentionProjection {
     struct Outcome: Equatable {
         /// Snapshots the policy would keep.
@@ -17,9 +16,9 @@ enum RetentionProjection {
         var historyDays: Int
     }
 
-    /// The editor's identity for a projection's inputs. `project` reads the
-    /// policy's enabled flag and keep rules plus the schedule's cadence — and
-    /// nothing else — so exactly those fields feed the key: an edit that
+    /// The editor's identity for a projection's inputs: `project` reads the
+    /// policy's enabled flag and keep rules plus the schedule's cadence and
+    /// nothing else, so exactly those fields feed the key — an edit that
     /// cannot change the answer must not re-pay the simulation.
     struct Key: Equatable, Sendable {
         var isEnabled: Bool
@@ -33,8 +32,6 @@ enum RetentionProjection {
         var intervalHours: Int
     }
 
-    /// The key for one policy-and-schedule pair — the identity the editor
-    /// recomputes the projection under.
     static func key(policy: RetentionPolicy, schedule: Schedule) -> Key {
         Key(
             isEnabled: policy.isEnabled,

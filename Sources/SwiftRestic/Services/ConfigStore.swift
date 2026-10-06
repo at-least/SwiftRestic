@@ -19,9 +19,8 @@ struct AppSettings: Codable, Sendable, Hashable {
     var schedulePause: SchedulePause?
     /// Webhook, chat and dead-man's-switch destinations.
     var notificationChannels: [NotificationChannel] = []
-    /// The console's last commands, newest first. Persisted so a command that
-    /// worked survives closing the sheet — the console is a power user's home,
-    /// and retyping from memory is the tax it exists to remove.
+    /// The console's last commands, newest first. Persisted so a command
+    /// that worked survives closing the sheet.
     var consoleHistory: [String] = []
 
     init() {}
@@ -86,11 +85,10 @@ struct LoadedConfiguration: Sendable {
 /// Writes are atomic and serialised through the actor, so a crash mid-save
 /// cannot leave a half-written configuration behind. The two previous
 /// generations are kept alongside (`config.json.1`, `config.json.2`): the
-/// configuration is rewritten wholesale on every edit, so a bad write — or an
-/// edit that silently decoded to defaults — would otherwise be one save away
-/// from unrecoverable. `load` walks those generations when the live file
-/// will not read, so the insurance is something the app does, not something
-/// it merely keeps.
+/// configuration is rewritten wholesale on every edit, so a bad write — or
+/// an edit that silently decoded to defaults — would otherwise be one save
+/// away from unrecoverable. `load` walks those generations when the live
+/// file will not read.
 actor ConfigStore {
     let directory: URL
     private let fileURL: URL
@@ -158,12 +156,10 @@ actor ConfigStore {
 
     /// Best effort: insurance must never keep the live write from happening.
     ///
-    /// The current file is *copied* into `.1`, not moved: every step here runs
-    /// before the atomic overwrite of the live file, so a crash between the
-    /// rotation and the write leaves both the old live file and its copy
-    /// behind instead of nothing at all. (Moving first had a window where a
-    /// crash — or a failed encode — left no live file, and the next launch
-    /// read an empty configuration.)
+    /// The current file is *copied* into `.1`, not moved: every step here
+    /// runs before the atomic overwrite of the live file, so a crash between
+    /// the rotation and the write leaves a readable live file and its copy,
+    /// never the empty configuration a move could strand.
     private func rotateBackups() {
         let firstBackup = directory.appendingPathComponent("config.json.1")
         let secondBackup = directory.appendingPathComponent("config.json.2")

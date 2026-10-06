@@ -32,8 +32,8 @@ enum ScheduleHold: Equatable, Sendable {
 
 /// Decides which plans are due to run.
 ///
-/// Deliberately pure: the wall-clock timer lives in `AppModel`, so this logic can
-/// be tested by handing it a fixed `now`.
+/// Pure: the wall-clock timer lives in `AppModel`, so tests hand it a fixed
+/// `now`.
 enum Scheduler {
     /// The app-wide hold in force at `now`: a live pause wins, then the
     /// battery — only while the setting asks for it. A pause whose end has
@@ -54,15 +54,15 @@ enum Scheduler {
     /// pause ends. (The app-wide hold is the tick's own early return.)
     ///
     /// - Parameters:
-    ///   - existingRepositoryIDs: repositories currently in the configuration. A
-    ///     plan whose repository has vanished can never run — starting it would
-    ///     only raise "Plan is incomplete" once a minute, forever — so it is
-    ///     filtered here instead of being reported as overdue.
+    ///   - existingRepositoryIDs: repositories in the configuration. A plan
+    ///     whose repository has vanished can never run — starting it would
+    ///     raise "Plan is incomplete" every tick, forever — so it is filtered
+    ///     here instead of being reported as overdue.
     ///   - busyPlanIDs: plans already running.
     ///   - busyRepositoryIDs: repositories with a backup or maintenance job in
-    ///     flight. A plan targeting one is held back rather than dropped — it is
-    ///     still overdue on the next tick, so nothing is silently skipped, and it
-    ///     cannot collide with a `prune` holding an exclusive lock.
+    ///     flight. A plan targeting one is held back rather than dropped — it
+    ///     is still overdue on the next tick, so nothing is silently skipped,
+    ///     and it cannot collide with a `prune` holding an exclusive lock.
     ///
     /// At most one plan per repository, the most overdue: plans due in the
     /// same tick would otherwise start together, and each backup ends with
@@ -145,8 +145,7 @@ enum Scheduler {
     /// Every enabled, complete plan's next run date, in plan order — the one
     /// enumeration the scheduler's pick and the plan page's Next backup
     /// value both derive from, so no surface can announce a run the
-    /// scheduler will never fire (an incomplete plan used to sit on the
-    /// dashboard as due forever). Dates are raw: the surfaces label a past
+    /// scheduler will never fire. Dates are raw: the surfaces label a past
     /// one "Due now" — "Waiting" under a hold, "Running now" while its
     /// backup is in flight; only `nextScheduledRun` clamps to `now`.
     ///
@@ -168,8 +167,8 @@ enum Scheduler {
                       existingRepositoryIDs.contains(repositoryID)
                 else { return nil }
                 guard let date = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now) else { return nil }
-                // The clamp probe (design-probes/06-global-pause/clamp) matched
-                // this to the scheduler's first firing within one 60 s tick.
+                // The clamp matches the scheduler's first firing within one
+                // 60 s tick.
                 return (plan, max(date, plan.activePauseEnd(at: now) ?? .distantPast, heldUntil ?? .distantPast))
             }
     }

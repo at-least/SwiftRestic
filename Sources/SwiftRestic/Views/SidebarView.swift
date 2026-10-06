@@ -19,11 +19,11 @@ import SwiftUI
 /// unique; a plan's or a group's chevron and the Other backups node are
 /// folds, and "New Backup Plan…" is an action.
 ///
-/// Split out of `RootView` as a real child view so the sidebar's list
-/// type-checks on its own: the root's modifier chain sat at the compiler's
-/// type-check budget, and the sheet/deletion intents the sidebar raises are
-/// passed back as closures — the presenting state stays in `RootView`. For
-/// the same budget each row kind is its own function.
+/// The sidebar's list is its own view so it type-checks on its own: the
+/// root's modifier chain sits at the compiler's type-check budget. The
+/// sheet and deletion intents the sidebar raises are passed back as
+/// closures — the presenting state stays in `RootView` — and, for the same
+/// budget, each row kind is its own function.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -104,10 +104,10 @@ struct SidebarView: View {
                             ? Text(verbatim: "\(problemCount)")
                             : nil
                     )
-                    // The tag must come after the badge. With .tag inside
+                    // The tag must come after the badge: with .tag inside
                     // .badge — a nil badge too — neither a click nor
-                    // Accessibility could select the row (probed on macOS 26);
-                    // .disabled and .contextMenu after .tag do no such harm.
+                    // Accessibility can select the row. .disabled and
+                    // .contextMenu after .tag do no such harm.
                     .tag(SidebarItem.activity)
             }
         }
@@ -710,7 +710,7 @@ private enum Indent {
     static let child: CGFloat = 12
     /// The chevron / plus column those children share. plus.circle's
     /// canvas is a point wider; only its empty margin overhangs — the
-    /// drawn circle (13 pt of ink, measured) fits.
+    /// drawn circle fits.
     static let fold: CGFloat = 14
     /// A group under Other backups, of either kind: its chevron column
     /// starts where the plan family's titles do, putting its title one
@@ -766,10 +766,9 @@ private struct RestoreRecordRow: View {
             .help("Browse this backup's files and restore from it")
             .frame(maxWidth: .infinity, alignment: .leading)
             // State trails identity, PlanSidebarRow's rule: the mark sits at
-            // the row's right end, and only a visible one claims room there.
-            // A slot held on every row cost each date its width, and group
-            // records' dates truncated at the default sidebar width (seen
-            // live, 2026-10-03).
+            // the row's right end, and only a visible one claims room there —
+            // a reserved slot on every row would truncate group records'
+            // dates at the default sidebar width.
             .padding(.trailing, run?.snapshotCompleteness == .incomplete ? Self.markWidth + 6 : 0)
             // An overlay, so the clear "Complete" text and the hidden
             // slot-holder stay in the row — VoiceOver keeps its
@@ -846,7 +845,7 @@ private struct PlanSidebarRow: View {
                     // (restic exit 1, no snapshot), orange for one that
                     // completed with errors (exit 3, an incomplete snapshot)
                     // — and the words stay in the secondary colour: orange
-                    // caption text measured 2.16:1 on the light sidebar.
+                    // caption text is too low-contrast on the light sidebar.
                     // Beside words that say it, the glyph is decoration to
                     // VoiceOver. The words, and which state wins the line,
                     // come from `PlanStatus.sidebarCaption`.
@@ -879,9 +878,8 @@ private struct PlanSidebarRow: View {
                 }
             }
             // State trails identity, the sidebar's one reading rule —
-            // Activity's badge already follows it. A trailing marker takes
-            // only leftover space, so it can never push the title: the
-            // failure the leading slot it replaces was reserved to prevent.
+            // Activity's badge follows it too. A trailing marker takes only
+            // leftover space, so it can never push the title.
             Spacer(minLength: 0)
             marker
         }

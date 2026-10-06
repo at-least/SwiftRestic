@@ -33,9 +33,8 @@ final class AppModel {
     }
     /// The backup run that wrote each snapshot, derived once per history
     /// write rather than by every row that shows a snapshot (the sidebar's
-    /// backups, Activity's run drawer): 0.3 ms to build over 2,000 records
-    /// (swiftc probe, 2026-09-26). A snapshot whose run was trimmed from the
-    /// history, or never recorded here, is simply absent — unknown, never
+    /// backups, Activity's run drawer). A snapshot whose run was trimmed from
+    /// the history, or never recorded here, is simply absent — unknown, never
     /// complete.
     private(set) var backupRunsBySnapshot: [String: RunRecord] = [:]
 
@@ -69,12 +68,8 @@ final class AppModel {
         }
     }
     /// `snapshots` sorted to where the sidebar shows them, derived once per
-    /// listing or plan write. The sidebar's body re-runs on every selection
-    /// and configuration change for every repository, folded ones included,
-    /// and grouping by lineage there cost 12–18 ms per sidebar update at two
-    /// repositories of ~8.7k snapshots against ~3 ms without it (measured in
-    /// a SwiftUI harness mirroring the sidebar, 2026-09-26 — not in the
-    /// running app).
+    /// listing or plan write: the sidebar's body re-runs on every selection
+    /// change, and grouping thousands of snapshots there is too slow.
     private(set) var backupShelves: [UUID: BackupShelves] = [:]
     var repositoryStats: [UUID: RepositoryStats] = [:]
     var loadingSnapshots: Set<UUID> = []
@@ -84,16 +79,15 @@ final class AppModel {
     /// refresh happened along.
     @ObservationIgnored var pendingSnapshotRefreshes: Set<UUID> = []
     /// The last settled listing outcome per repository. Kept apart from the
-    /// rows themselves: a failed refresh must read as "unknown", never as the
-    /// empty list it used to be folded into.
+    /// rows themselves: a failed refresh must read as "unknown", never as an
+    /// empty list.
     var snapshotListingOutcomes: [UUID: SnapshotListingOutcome] = [:]
     /// When the listing last succeeded. A freshness stamp the surfaces show
     /// so a number can always be traced to the moment it was read.
     var snapshotsLoadedAt: [UUID: Date] = [:]
     /// Repositories whose first completed listing the add-with-history
     /// landing has already been considered for — model state, not window
-    /// state, so a closed and reopened main window cannot re-arm the
-    /// reveal. Dropped with the repository's other runtime state.
+    /// state, so a closed and reopened main window cannot re-arm the reveal.
     @ObservationIgnored var adoptionLandingsConsidered: Set<UUID> = []
     /// The last listing generation handed out, one counter for every
     /// repository — see `nextListingGeneration`. Only the index reads these
@@ -105,8 +99,8 @@ final class AppModel {
     /// The newest generation the index has taken, per repository — set as
     /// its reconcile returns, whatever it decided. Until it is the
     /// generation `snapshots` was read under, the index answers for an
-    /// older listing (`indexIsComplete`). Observed: the Files views read
-    /// again the moment it moves, rather than at their next recheck.
+    /// older listing (`indexIsComplete`). Observed by the Files views, which
+    /// read again the moment it moves, rather than at their next recheck.
     var indexTakenGeneration: [UUID: UInt64] = [:]
     /// Repositories with no password in the Keychain yet. Upkeep is not scheduled
     /// for these: there is nothing to run, and stamping a "last checked" time for
@@ -127,16 +121,15 @@ final class AppModel {
     /// Whether this copy could be registered as a login item, read once at
     /// launch so the plan editor's start-at-login offer does not resolve
     /// symlinks on every render. It feeds only what the surfaces offer:
-    /// registering keeps its own live check (`performSetStartsAtLogin`).
+    /// registering keeps its own live check.
     @ObservationIgnored let loginItemInstallable: Bool
     /// Whether SwiftRestic — and so its restic — may read what Full Disk
     /// Access guards. Probed, not asked: see `refreshFullDiskAccess()`.
     var fullDiskAccess: FullDiskAccessStatus = .unknown
     /// The probe behind `fullDiskAccess`. Injectable because the real one
     /// answers for whatever process macOS holds responsible — under
-    /// xcodebuild that is Xcode, not the terminal, and on the Mac this was
-    /// written on Xcode was denied while the terminal was granted — so a
-    /// test that asserted on it would pass or fail by machine.
+    /// xcodebuild that is Xcode, not the terminal — so a test asserting on
+    /// it would pass or fail by machine.
     @ObservationIgnored var fullDiskAccessProbe: @Sendable () -> FullDiskAccessStatus = { FullDiskAccess.probe() }
     /// Whether the Mac ran on battery at the last scheduler tick — sampled
     /// every tick whether or not the battery setting is on, so the hold's
@@ -178,8 +171,7 @@ final class AppModel {
     /// run-identity rule as `restoreRunToken`, for the plan strips: a hop
     /// still in flight when run N unwinds must drop instead of writing into
     /// run N+1's strip. Rotated by `installPlanActivity`. (Maintenance keeps
-    /// its own map — `maintenanceRunTokens` — the key spaces merely look
-    /// alike.)
+    /// its own map — `maintenanceRunTokens`.)
     @ObservationIgnored var backupRunTokens: [UUID: UUID] = [:]
     /// The maintenance mirror of `backupRunTokens`, keyed by repository.
     @ObservationIgnored var maintenanceRunTokens: [UUID: UUID] = [:]
@@ -187,12 +179,12 @@ final class AppModel {
     let store: ConfigStore
     let secrets: SecretStore
     /// Resolved restic contexts per repository (repo string + credentials +
-    /// settings), so a restic call does not re-read the Keychain every time —
-    /// a refresh alone used to pay the read twice. Entries are rebuilt when
-    /// the repository value or rate limits change (`AppModel.context(for:)`'s
-    /// key), and dropped on secret edits (`upsert`), repository removal, and
-    /// auth-class failures (`noteAuthFailure`). Holds secrets no longer than
-    /// the app already holds them in each child's environment.
+    /// settings), so a restic call does not re-read the Keychain. Entries are
+    /// rebuilt when the repository value or rate limits change
+    /// (`AppModel.context(for:)`'s key), and dropped on secret edits
+    /// (`upsert`), repository removal, and auth-class failures
+    /// (`noteAuthFailure`). Holds secrets no longer than the app already
+    /// holds them in each child's environment.
     @ObservationIgnored var resolvedContexts:
         [UUID: (key: ResolvedContextKey, context: RepositoryContext)] = [:]
     /// What `fileHistory` has read of a file in a backup — its node, with
@@ -212,19 +204,16 @@ final class AppModel {
     let runner = ResticRunner()
     /// The per-repository snapshot indexes and their upkeep. A cache with a
     /// rebuild path: its failures are its own, never the refresh's or the
-    /// backup's. See `IndexCoordinator`. In the configuration's folder, under
-    /// `index/`, as the run logs are under `Logs/`: for the app the folder it
-    /// always used (`ConfigStore.defaultDirectory()`,
-    /// `SWIFTRESTIC_CONFIG_DIR` included), and a test's own folder when the
-    /// test points the store elsewhere.
+    /// backup's. See `IndexCoordinator`. Lives in the configuration's folder
+    /// under `index/` (`ConfigStore.defaultDirectory()`,
+    /// `SWIFTRESTIC_CONFIG_DIR` included); a test pointing the store
+    /// elsewhere gets its own folder.
     let indexCoordinator: IndexCoordinator
     /// State of the restic console pane (see `ConsoleModel`); its two
     /// injected closures are set below, at the end of `init`.
     let console = ConsoleModel()
     var binary: ResticBinary?
-    /// In-flight runs and the sends quitting must drain — the structural
-    /// replacement for the per-kind task dictionaries `shutdown` used to
-    /// enumerate by hand. See `TaskRegistry`.
+    /// In-flight runs and the sends quitting must drain. See `TaskRegistry`.
     @ObservationIgnored let tasks = TaskRegistry()
     var schedulerTask: Task<Void, Never>?
     var saveTask: Task<Void, Never>?
@@ -256,9 +245,8 @@ final class AppModel {
     /// backup copy is gone. The user's way out is fixing the file externally
     /// and restarting; the banner tells them so.
     @ObservationIgnored var isConfigurationUnreadable = false
-    /// Set while `shutdown` is unwinding. A run cancelled this way was not
-    /// stopped by the user, and the run record should say so: "Cancelled" sends
-    /// someone hunting for a cancel click that never happened.
+    /// Set while `shutdown` is unwinding, so a run it cancels is recorded as
+    /// interrupted by quitting rather than "Cancelled".
     var isShuttingDown = false
     /// Silences the debounced save for one assignment — bootstrap writing back
     /// what it just loaded. `isLoaded` is already true during the load, so the
@@ -302,9 +290,8 @@ final class AppModel {
         self.loginItemInstallable = LoginItem.isInInstallableLocation
         #endif
         // The console's whole view of its owner: run a command, persist the
-        // history. Two closures instead of the back-reference every method
-        // used to take. The fallback matches ResticError.cancelled's words —
-        // a gone owner is the quit unwinding, and the pane should say what
+        // history. The fallback matches ResticError.cancelled's words — a
+        // gone owner is the quit unwinding, and the pane should say what
         // happened the way the rest of the app does.
         console.runCommand = { [weak self] repositoryID, arguments in
             await self?.runConsoleCommand(repositoryID: repositoryID, arguments: arguments)

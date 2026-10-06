@@ -5,14 +5,9 @@ import Foundation
 /// has. The model's configuration writes and its login-item changes each go
 /// through one.
 ///
-/// A chain rather than a wait loop. The loop both used —
-/// `while let inFlight = handle { await inFlight.value }`, the owner clearing
-/// the handle after its own await — spun the main actor at full CPU for
-/// good once two calls overlapped: the waiter queued last was woken first,
-/// found the handle still set, and awaited a task that had already
-/// finished, which returns without suspending, so the owner never ran again
-/// to clear it (the final review's probes: two overlapping `flushSave` or
-/// `setStartsAtLogin` calls never settled, 99.7% CPU).
+/// A chain, not a wait loop on a shared handle: with two overlapping
+/// calls, such a loop awaits an already-finished task, which returns
+/// without suspending, and spins the main actor forever.
 @MainActor
 final class TaskChain {
     /// The newest call's task while it runs or waits; nil once the chain is

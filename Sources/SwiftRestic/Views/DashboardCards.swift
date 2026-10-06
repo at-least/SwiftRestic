@@ -31,10 +31,8 @@ struct ProtectionCard: View {
                 if let summary {
                     HStack(spacing: 8) {
                         Text(summary.text)
-                        // The deleted Next runs card's hold line and its
-                        // control, moved: this is the one in-window Resume,
-                        // and only the user's own pause has one — the
-                        // battery's ends by plugging in.
+                        // The one in-window Resume, and only the user's own
+                        // pause has one — the battery's ends by plugging in.
                         if summary.showsResume {
                             Spacer(minLength: 8)
                             Button("Resume") { model.resumeBackups() }
@@ -63,12 +61,12 @@ struct ProtectionCard: View {
 /// The repository page's Other backups card — the adopt flow's landing
 /// place, for a repository added with history already in it: one row per
 /// adoptable plan-UUID group, with the group's own Adopt… beside it. An
-/// accepted, deliberate exception to "the sidebar lists them": the rows
-/// carry a verb, the card exists only while something can be adopted, and
-/// the groups it leaves out — a moved plan's, an untagged lineage's — stay
-/// visible in the sidebar beside it, counted by the Details split rather
-/// than restated here. It hides while the listing has not succeeded, and
-/// adopting the last group empties it away.
+/// exception to "the sidebar lists them": the rows carry a verb, the card
+/// exists only while something can be adopted, and the groups it leaves
+/// out — a moved plan's, an untagged lineage's — stay visible in the
+/// sidebar beside it, counted by the Details split rather than restated
+/// here. It hides while the listing has not succeeded, and adopting the
+/// last group empties it away.
 struct OtherBackupsCard: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -170,9 +168,7 @@ struct RecentProblemsCard: View {
     var body: some View {
         Card("Recent problems") {
             VStack(alignment: .leading, spacing: 7) {
-                // The same window the sidebar's badge counts. The card's
-                // "recent" used to mean "all of history, latest five", which
-                // let a count read zero above a nine-day-old failure.
+                // The same window the sidebar's badge counts.
                 let since = OverviewMetrics.problemWindowStart(from: now)
                 let failures = OverviewMetrics.problems(
                     in: model.configuration.runs,

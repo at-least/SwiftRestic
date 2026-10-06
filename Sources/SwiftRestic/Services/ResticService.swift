@@ -84,7 +84,8 @@ struct BackupOutcome: Sendable {
     /// must not read clean either.
     var decodingWarning: String? = nil
 
-    /// Exit code 3 means restic finished but skipped files it could not read.
+    /// True for restic exit 3 — finished but skipped files it could not
+    /// read — or when the outcome records unreadable items or a decoding gap.
     var completedWithErrors: Bool {
         exitCode == ResticError.backupPartialSuccessCode || !itemErrors.isEmpty || decodingWarning != nil
     }
@@ -103,9 +104,8 @@ struct ResticService: ResticClient {
     /// Whether the located restic streams `restore --json` progress (0.16+):
     /// the restore commands' idle stall cap applies only when it does — an
     /// older, legitimately silent restore must not be killed as hung.
-    /// Defaults on: an unreadable version is more likely a transient than an
-    /// ancient binary, and the app's decoding is pinned to modern restic
-    /// output anyway.
+    /// Defaults on: an unreadable version is likelier a transient than an
+    /// ancient binary, and decoding is pinned to modern output anyway.
     var streamsRestoreProgress = true
     /// Whether the located restic takes `restore --overwrite` (0.17+).
     /// Defaults on, for the same reason as the stall cap.
@@ -123,9 +123,9 @@ struct ResticService: ResticClient {
     static let planTagPrefix = "swiftrestic-plan-"
 
     /// The plan a `swiftrestic-plan-` tag names — the inverse of
-    /// `planTag(_:)`: the tag it accepts is exactly the tag that writes, so
-    /// a UUID in upper case or a mangled tail names no plan and the backup
-    /// reads as untagged. Nil for anything else.
+    /// `planTag(_:)`: it accepts exactly the tags `planTag` writes, so an
+    /// upper-case UUID or a mangled tail reads as untagged. Nil for
+    /// anything else.
     static func planUUID(fromTag tag: String) -> UUID? {
         guard tag.hasPrefix(Self.planTagPrefix),
               let planID = UUID(uuidString: String(tag.dropFirst(Self.planTagPrefix.count))),
@@ -135,11 +135,9 @@ struct ResticService: ResticClient {
     }
 
     /// The hostname restic records for a backup made on this Mac — the app
-    /// never passes `--host`, so restic takes gethostname(3), the
-    /// `kern.hostname` Go's os.Hostname reads. Not ProcessInfo's hostName,
-    /// which lowercases it: probed with restic 0.19.1, a backup recorded
-    /// exactly gethostname's mixed-case name, and hostName differed from
-    /// it in case alone. Read once per launch.
+    /// never passes `--host`, so restic takes gethostname(3). Not
+    /// ProcessInfo's hostName, which lowercases it: a backup records
+    /// gethostname's mixed-case name. Read once per launch.
     static let localHostname: String = {
         var name = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
         precondition(gethostname(&name, name.count) == 0, "gethostname failed: errno \(errno)")
@@ -247,10 +245,11 @@ struct ResticService: ResticClient {
 
     /// Reclaims the space that `forget` freed.
     ///
-    /// `prune` is one of the commands `--json` does not cover in restic 0.19.1 —
-    /// it prints human-readable progress — so its output is captured as text and
-    /// kept on the run record rather than parsed. `onRawLine` receives each line
-    /// as it arrives so a UI can show that the prune is still moving.
+    /// `prune` is one of the commands `--json` does not cover (restic
+    /// 0.19.1): it prints human-readable progress, so its output is captured
+    /// as text and kept on the run record rather than parsed. `onRawLine`
+    /// receives each line as it arrives, so a UI can show the prune is
+    /// still moving.
     func prune(
         _ context: RepositoryContext,
         dryRun: Bool = false,
@@ -360,11 +359,10 @@ struct ResticService: ResticClient {
 
     /// The full-tree `ls` behind the index backfill. `retainMessages: false`
     /// keeps the runner from accumulating a snapshot's worth of nodes in
-    /// memory — the callback is the only delivery. `--no-lock` because a
-    /// history walk is long and read-only: holding even a shared lock
-    /// throughout would collide with retention's exclusive `forget`, and a
-    /// read that trips over a concurrently pruned pack fails and stays
-    /// pending for a later pass instead.
+    /// memory — the callback is the only delivery. `--no-lock`: a history
+    /// walk is long and read-only, and even a shared lock would collide
+    /// with retention's exclusive `forget`; a read that trips over a
+    /// concurrently pruned pack fails and stays pending for a later pass.
     func walkSnapshot(
         _ context: RepositoryContext,
         snapshotID: String,
@@ -386,12 +384,10 @@ struct ResticService: ResticClient {
     }
 
     /// `path` as a `restic find` pattern that matches that path alone: the
-    /// glob's metacharacters `*`, `?`, `[` and the escape `\` itself, each
-    /// escaped with a backslash. Unescaped, `a[1].txt` matched `a1.txt` and
-    /// not itself, and `b*c.txt` matched `bXc.txt` too (restic 0.19.1,
-    /// probed). A full path also keeps restic's walk to that path's folders:
-    /// 0.6 s against 5.3 s for a name pattern over 20,000 files and 12
-    /// snapshots (probed).
+    /// metacharacters `*`, `?`, `[` and the escape `\` itself, each escaped
+    /// with a backslash. Unescaped, `a[1].txt` matches `a1.txt` and not
+    /// itself. A full path also keeps restic's walk to that path's folders,
+    /// where a name pattern walks whole trees.
     /// Scalar by scalar, as `ResticPath` cuts paths: a combining mark after
     /// a `[` makes one Character of the two, which a Character scan would
     /// pass unescaped.
@@ -406,23 +402,19 @@ struct ResticService: ResticClient {
 
     /// Searches every snapshot for paths matching any of some globs — one
     /// walk per snapshot however many there are, so a folder's files cost
-    /// about what one does (200 exact paths over five backups took restic
-    /// 0.61 s, one path 0.53 s).
+    /// about what one does.
     ///
-    /// `restic find` walks the trees, so this is a real search rather than an
-    /// index lookup — it gets slower the more snapshots a repository holds, which
-    /// is why the caller can narrow it to some snapshots (none named: every
-    /// one). A named snapshot the repository no longer holds is skipped with
-    /// a warning on stderr; the rest still answer (restic 0.19.1).
+    /// `restic find` walks the trees: a real search rather than an index
+    /// lookup, slower the more snapshots a repository holds, which is why
+    /// the caller can narrow it (none named: every one). A named snapshot
+    /// the repository no longer holds is skipped with a warning on stderr;
+    /// the rest still answer (restic 0.19.1).
     ///
     /// `--no-lock`, as `listDirectory`, `diff`, `snapshots` and `stats`:
     /// what a click in a Files tab or on Compare with Previous… and a
-    /// refresh run. Locked, each paid restic's
-    /// 200 ms wait after writing its lock (0.14–0.32 s of a 0.7–0.9 s
-    /// file-pane find on a small local repository); while retention's
-    /// `forget` or a `prune` held the exclusive lock it failed at once with
-    /// exit 11; and a `forget` starting while it held its lock failed the
-    /// same way (probed on restic 0.19.1).
+    /// refresh run. Locked, each would pay restic's 200 ms lock wait, fail
+    /// at once with exit 11 while retention's `forget` or a `prune` held
+    /// the exclusive lock, and lock a starting `forget` out the same way.
     func find(
         _ context: RepositoryContext,
         patterns: [String],
@@ -476,10 +468,9 @@ struct ResticService: ResticClient {
         return result
     }
 
-    /// The uncapped, retention-free diff the index applies after each backup.
-    /// Everything the capped `diff` says about its change limit applies
-    /// doubly here: the stream is unbounded, so the callback must consume
-    /// incrementally. `--no-lock` for the same reason `walkSnapshot` wears it.
+    /// The uncapped diff the index applies after each backup. The stream is
+    /// unbounded, so the callback must consume incrementally. `--no-lock`
+    /// for the same reason `walkSnapshot` wears it.
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,
@@ -563,19 +554,18 @@ struct ResticService: ResticClient {
     /// skipped, verbatim, then its error events deduplicated by item (the
     /// first message wins; an event without an item is keyed by its message).
     ///
-    /// Both halves exist because restic 0.19.1 reports them differently. A
-    /// folder it cannot list arrives twice — once `during: scan`, once
-    /// `during: archival`, with the identical item — so counting events said
-    /// "5 items" for three. A missing or inaccessible source arrives as no
-    /// event at all, only plain text (`cmd_backup.go`'s filterExisting warns
-    /// "%v does not exist, skipping" / "%v cannot be accessed, skipping")
-    /// before it exits 3 — the case that drops a whole top-level folder, and
-    /// the only unreadable item restic names outside JSON. Those lines are
-    /// written before archival starts, so they always fall inside the
-    /// runner's retained head of stderr. The wording is pinned to 0.19.1 like
-    /// the rest of the decoding; a reworded restic degrades to an unnamed
-    /// exit 3, never to a complete snapshot, because the exit code alone
-    /// decides that.
+    /// restic reports the halves differently (0.19.1). A folder it cannot
+    /// list arrives twice — once `during: scan`, once `during: archival`,
+    /// with the identical item — so events are deduplicated, not counted. A
+    /// missing or inaccessible source arrives as no event at all, only plain
+    /// stderr text ("… does not exist, skipping" / "… cannot be accessed,
+    /// skipping") before it exits 3 — the case that drops a whole top-level
+    /// folder, and the only unreadable item restic names outside JSON. Those
+    /// lines are written before archival starts, so they always fall inside
+    /// the runner's retained head of stderr. The wording is pinned to 0.19.1
+    /// like the rest of the decoding; a reworded restic degrades to an
+    /// unnamed exit 3, never to a complete snapshot, because the exit code
+    /// alone decides that.
     static func unreadableItems(errors: [ResticErrorMessage], stderr: String) -> [String] {
         var seen: Set<String> = []
         var lines: [String] = []
@@ -594,11 +584,10 @@ struct ResticService: ResticClient {
 
     /// The one argument list for a plan's retention, dry or real, so the
     /// preview can never evaluate different rules from the forget it
-    /// previews. The dry run adds `--no-lock`: without it a dry run needs
-    /// the exclusive lock (exit 11 while a backup holds its shared one, and
-    /// a scheduled backup starting meanwhile would fail), and restic refuses
-    /// `--no-lock` on a real forget (exit 1) — probed on 0.19.1. A dry run
-    /// never prunes: `--prune` would prune for real.
+    /// previews. The dry run adds `--no-lock`: without it a dry forget
+    /// needs the exclusive lock (exit 11 while a backup holds its shared
+    /// one), and restic refuses `--no-lock` on a real forget (exit 1). A
+    /// dry run never prunes: `--prune` would prune for real.
     static func forgetArguments(plan: BackupPlan, dryRun: Bool) -> [String] {
         var args = ["forget", "--json", "--tag", planTag(plan.id)] + plan.retention.forgetArguments
         if dryRun {
@@ -672,23 +661,22 @@ struct ResticService: ResticClient {
     /// Restores one node into `destinationDirectory`, without recreating the
     /// original absolute path above it.
     ///
-    /// Directories go through `restic restore <id>:<path>`, which makes the given
-    /// subtree the root of the output. Single files go through `restic dump`,
-    /// which writes exactly one file and nothing else.
+    /// Directories go through `restic restore <id>:<path>`, which makes the
+    /// given subtree the root of the output. Single files go through
+    /// `restic dump`, which writes exactly one file and nothing else.
     ///
-    /// From restic 0.17 on, `overwrite` always reaches restic explicitly,
-    /// even for Replace, whose `always` is restic's default: the command
-    /// line in the run's log then says what was asked (older restic: see
-    /// `overwriteArguments`). Replace is `always`, never `if-changed`, which
-    /// trusts size and modification time. Keep is `never`, which is not an
-    /// absolute keep (restic 0.19.1, probed): it still deletes a file that
-    /// stands where the backup has a folder of the same name, and gives a
-    /// folder that already exists the backed-up permissions and dates. The
-    /// landing itself is safe — `createDirectory` below fails on a file
-    /// there before restic runs. `restic dump` has no overwrite option, so
-    /// the file branch keeps in-app: an existing landing skips the dump
-    /// entirely, and the runner's commit refuses a name that appeared while
-    /// it ran.
+    /// `overwrite` always reaches restic explicitly, even for Replace, whose
+    /// `always` is restic's default (0.17+): the command line in the run's
+    /// log then says what was asked (older restic: `overwriteArguments`).
+    /// Replace is `always`, never `if-changed`, which trusts size and
+    /// modification time. Keep is `never`, and not an absolute keep: it
+    /// deletes a file that stands where the backup has a folder of the same
+    /// name, and gives a folder that already exists the backed-up
+    /// permissions and dates. The landing itself is safe —
+    /// `createDirectory` below fails on a file there before restic runs.
+    /// `restic dump` has no overwrite option, so the file branch keeps
+    /// in-app: an existing landing skips the dump entirely, and the
+    /// runner's commit refuses a name that appeared while it ran.
     @discardableResult
     func restore(
         _ context: RepositoryContext,
@@ -753,20 +741,19 @@ struct ResticService: ResticClient {
     /// Restores several items that share one folder of the backup into
     /// `destinationDirectory`, each landing directly inside it where
     /// `restore(node:)` would put it alone — in one `restic restore
-    /// <id>:<parent> --include …` call. One restic process for the lot is the
-    /// point: each process reloads the repository's index, and 20 files took
-    /// 15.9 s as one `restic dump` each against 0.8 s as one call, from a
-    /// local repository (restic 0.19.1, probed); a remote index costs more.
-    /// The target directory keeps its own permissions and dates (probed):
-    /// restic gives `<parent>`'s to nothing.
+    /// <id>:<parent> --include …` call. One restic process for the lot is
+    /// the point: each process reloads the repository's index, so per-item
+    /// processes are far slower — a remote index most of all. The target
+    /// directory keeps its own permissions and dates: restic gives
+    /// `<parent>`'s to nothing.
     ///
     /// The landings are checked before restic runs, as `restore(node:)`'s
     /// are. restic deletes a file standing where a restored folder goes,
     /// under Keep too, so each folder's landing is created first, which
     /// fails on a file there. Under Replace it fails on a folder standing
-    /// where a restored file goes, after taking that folder's permissions
-    /// away (both probed), so that is refused; under Keep it leaves the
-    /// folder and counts the file kept, as `restore(node:)` does.
+    /// where a restored file goes — after taking that folder's permissions
+    /// away — so that is refused; under Keep it leaves the folder and counts
+    /// the file kept, as `restore(node:)` does.
     @discardableResult
     func restoreItems(
         _ context: RepositoryContext,
@@ -805,12 +792,12 @@ struct ResticService: ResticClient {
     }
 
     /// The `--overwrite` arguments for a restore into `landings`. A restic
-    /// older than 0.17 rejects the flag and always replaces, so Replace
-    /// needs nothing there, and Keep is honest only where there is nothing
-    /// to keep — folders that do not exist yet or are empty, as a drag's
-    /// fresh UUID directory is. Anything else is refused before restic
-    /// runs, not replaced; something appearing in the moment between this
-    /// look and restic's start is the one gap.
+    /// older than 0.17 rejects the flag and always replaces: Replace needs
+    /// nothing there, and Keep is honest only where there is nothing to
+    /// keep — folders that do not exist yet or are empty, as a drag's fresh
+    /// UUID directory is. Anything else is refused before restic runs, not
+    /// replaced; something appearing between this look and restic's start
+    /// is the one gap.
     private func overwriteArguments(_ policy: RestoreOverwritePolicy, landings: [URL]) throws -> [String] {
         if supportsRestoreOverwrite { return ["--overwrite", policy.resticValue] }
         guard policy == .keepExisting, let held = landings.first(where: Self.holdsAnything) else { return [] }
@@ -827,8 +814,8 @@ struct ResticService: ResticClient {
 
     /// A single file Keep left alone, with the counters a restore summary
     /// carries (one file seen, none restored, one skipped). The callers also
-    /// note it in the run's log, which otherwise would hold no command at
-    /// all when the dump never ran.
+    /// note it in the run's log, which would otherwise hold no command at
+    /// all.
     private static func keptFileSummary(node: SnapshotNode) -> ResticSummary {
         var summary = ResticSummary()
         summary.totalFiles = 1
@@ -928,12 +915,12 @@ struct ResticService: ResticClient {
         restoredItemURL(named: node.name, in: directory)
     }
 
-    /// A snapshot node's name as a local file name to create. restic's trees
-    /// are restored into a directory the user chose, and the names come from
-    /// the snapshot — which a hostile writer to a shared repository can fill
-    /// with anything. `appendingPathComponent` would happily walk out of that
-    /// directory on `/` or `..`, so the name is never trusted: reduced to its
-    /// last component, with the traversal spellings replaced.
+    /// A snapshot node's name as a local file name to create. The names
+    /// come from the snapshot — which a hostile writer to a shared
+    /// repository can fill with anything — and `appendingPathComponent`
+    /// would walk out of the destination on `/` or `..`, so the name is
+    /// never trusted: reduced to its last component, with the traversal
+    /// spellings replaced.
     static func sanitizedRestoreName(_ name: String) -> String {
         var component = (name as NSString).lastPathComponent
         // Foundation answers "/" for "/" — a name that would aim the write at

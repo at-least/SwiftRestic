@@ -2,9 +2,8 @@ import Foundation
 
 /// What the adopt sheet says around the draft it edits: the header strip's
 /// two lines, the warnings that hold of the group, and whether Adopt asks
-/// again. Derived here from the shelves' own facts, so the page that offers
-/// the verb, the sheet that performs it and the tests that pin them read one
-/// derivation and cannot disagree.
+/// again. Derived once here, so the offering page, the sheet and the tests
+/// that pin them cannot disagree.
 struct AdoptBriefing: Equatable {
     /// "These 2 backups become this plan's history."
     var historyLine: String
@@ -39,9 +38,9 @@ extension AppModel {
         guard repository(id: repositoryID) != nil,
               plan(id: planID) == nil,
               let group = shelves(for: repositoryID).orphanPlanGroup(planID),
-              // The label derivation that names the sidebar row and the page
-              // names the draft too, so the sheet's title never argues with
-              // the row the user clicked.
+              // Uses the same label derivation that names the sidebar row
+              // and the page, so the sheet's title never argues with the
+              // row clicked.
               let title = shelves(for: repositoryID).otherLabels(
                   repositories: configuration.repositories,
                   localHost: localHostname
@@ -56,8 +55,8 @@ extension AppModel {
         draft.excludePatterns = prefill.excludes
         // Plan tags are the group's plumbing; what the user tagged is everything else.
         draft.tags = prefill.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
-        // Daily — a new plan's own default — only when every prefilled folder
-        // is here to back up. Otherwise the folders are likely another Mac's,
+        // Daily — a new plan's default — only when every prefilled folder is
+        // here to back up. Otherwise the folders are likely another Mac's,
         // and a plan that cannot run here must not start on a schedule.
         draft.schedule.frequency = Self.allSourcesExist(draft.sources) ? .daily : .manual
         // The history is the point of adopting: nothing thins it until a
@@ -75,41 +74,37 @@ extension AppModel {
               let group = shelves(for: repositoryID).orphanPlanGroup(draft.id),
               let prefill = Self.prefillSnapshot(among: group.snapshots, localHost: localHostname)
         else { return nil }
-        // The group's own order, newest first — a group exists only around
+        // The group's snapshots, newest first — a group exists only around
         // backups, so both ends are always there.
         let snapshots = group.snapshots
         let newest = snapshots[0]
 
-        // The page's "Made from" row reads the same list — one derivation of
-        // which Macs made the history, so it cannot count them differently.
+        // The page's "Made from" row reads the same list, so the two cannot
+        // count the Macs differently.
         let hosts = Snapshot.distinctHosts(of: snapshots)
         let madeFrom = hosts.count == 1 ? hosts[0] : "\(hosts.count) Macs"
 
-        // The host rule every "this Mac / another Mac" decision in the sheet
+        // The host every "this Mac / another Mac" decision in the sheet
         // reads: `localHostname`, which restic itself records for this Mac.
         let hasForeignHost = snapshots.contains { $0.hostname != localHostname }
         let isRecent = now.timeIntervalSince(newest.time) < 48 * 3600
 
         var warnings: [String] = []
         if let foreign = snapshots.first(where: { $0.hostname != localHostname }) {
-            // The overall newest when it is the newest at all; precise, never
-            // claiming that title for an older one, when this Mac made the
-            // newest backup.
             let lead = foreign == newest ? "The newest backup" : "The newest backup from another Mac"
             warnings.append("\(lead) was made on “\(foreign.hostname ?? "Unknown host")” on \(Format.timestamp(foreign.time)).")
         }
-        // Both lines speak about the folders the sheet shows: the
-        // another-Mac one only while the prefilled set is still untouched —
-        // folders the user replaced with their own are neither Mac's
-        // prefill — and the missing one about whichever set is in the box.
+        // The another-Mac line only while the draft still holds the prefilled
+        // folders — replaced folders are neither Mac's prefill — and the
+        // missing line about whichever set is in the box.
         if prefill.hostname != localHostname, draft.sources == prefill.paths {
             warnings.append("The folders come from another Mac and may not exist here.")
         } else if !Self.allSourcesExist(draft.sources) {
             warnings.append("Not all of these folders still exist on this Mac.")
         }
-        // Host-aware on purpose: yesterday's deletion on this Mac is not
-        // another Mac still writing, and this Mac's fresh backup is not the
-        // warning's business — the confirmation below catches that one.
+        // Both conditions: a stale foreign host is not another Mac still
+        // writing, and a fresh backup this Mac made is the confirmation's
+        // business below, not the warning's.
         if hasForeignHost && isRecent {
             warnings.append("These backups are recent — a plan on another Mac may still be writing them.")
         }
@@ -138,8 +133,8 @@ extension AppModel {
             madeLine: madeLine,
             repositoryLine: "\(repository.name) — the backups live here",
             warnings: warnings,
-            // Broader than the recent warning on purpose: a fresh backup this
-            // Mac itself made is still worth one deliberate look.
+            // Broader than the recent warning: a fresh backup this Mac made
+            // gets the confirmation too.
             needsConfirmation: hasForeignHost || isRecent,
             confirmation: ConfirmationCopy(
                 title: "Adopt “\(name)”?",
@@ -156,20 +151,17 @@ extension AppModel {
     /// call, no index change, no run record. Reshelve is tag-driven, so the
     /// records move under the new plan on their own.
     func adopt(draft: BackupPlan) {
-        // The classification that offered Adopt scanned every configured
-        // plan; a UUID that names one is a moved plan's group, which never
-        // offered the verb. `upsert` is keyed by id alone, so a draft that
-        // slipped past classification would silently *replace* that plan —
-        // fail loudly if the two ever disagree.
+        // `upsert` is keyed by id alone, so a draft whose UUID already names
+        // a plan would silently *replace* it — fail loudly if the two ever
+        // disagree.
         precondition(plan(id: draft.id) == nil, "adopting a UUID that already names a plan")
         guard let repositoryID = draft.repositoryID else {
             preconditionFailure("an adopt draft always names its repository")
         }
         let count = shelves(for: repositoryID).orphanPlanGroup(draft.id)?.snapshots.count ?? 0
         upsert(plan: draft)
-        // A group exists only around backups, so a count of zero is not "no
-        // history yet" — the group left while the sheet was open (a refresh
-        // dropped it), and the banner says that instead of counting zero.
+        // A group exists only around backups, so count zero means the group
+        // left while the sheet was open — the banner says that, not a count.
         post(Banner(
             title: "Adopted “\(draft.displayName)”",
             message: count == 0
@@ -200,9 +192,9 @@ extension AppModel {
 
     /// What saving an existing plan against a different repository does to
     /// the backups it already made — said while the picker is being moved,
-    /// not after. Nil while the draft keeps its saved repository, when
-    /// nothing stays behind, and for a plan that is not saved yet (an adopt
-    /// draft's repository is locked, so it never moves either).
+    /// not after. Nil while the draft keeps its saved repository, and for a
+    /// plan that is not saved yet (an adopt draft's repository is locked,
+    /// so it never moves either).
     func moveConsequence(for draft: BackupPlan) -> String? {
         guard let saved = plan(id: draft.id),
               let oldRepositoryID = saved.repositoryID,

@@ -50,7 +50,7 @@ struct FindFilesView: View {
     /// takes focus on arrival — typing starts immediately.
     @FocusState private var patternFieldIsFocused: Bool
     /// Taken by a click in the results (`focusOnClick`): left in the
-    /// pattern field, Return searched again — clearing the selection —
+    /// pattern field, Return would search again — clearing the selection —
     /// instead of reaching Restore Selected….
     @FocusState private var resultsAreFocused: Bool
     /// The restore waiting in the destination sheet, over this one.
@@ -108,9 +108,9 @@ struct FindFilesView: View {
             // A handed-over search runs at once; `search` picks the engine.
             if prefill != nil, canSearch { search() }
         }
-        // The index-state check re-runs when the repository changes and
-        // cancels itself when the sheet leaves — a plain `Task` here used to
-        // answer after dismissal and write into detached state storage.
+        // The index-state check re-runs when the repository changes and is
+        // cancelled when the sheet leaves, so a late answer cannot write
+        // into state the sheet no longer owns.
         .task(id: repositoryID) {
             guard let repositoryID else { indexComplete = nil; return }
             let ready = await model.indexIsComplete(repositoryID: repositoryID)
@@ -249,8 +249,8 @@ struct FindFilesView: View {
             }
             .focusOnClick($resultsAreFocused)
             // An explicit right-click route to the restore the footer button
-            // offers. Double-click deliberately does nothing: an accidental
-            // double-tap must not start moving bytes.
+            // offers. Double-click does nothing: an accidental double-tap
+            // must not start moving bytes.
             .contextMenu(forSelectionType: Row.ID.self) { ids in
                 if let id = ids.first, ids.count == 1,
                    let row = rows.first(where: { $0.id == id }) {

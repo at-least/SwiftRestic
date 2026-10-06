@@ -145,13 +145,11 @@ extension IndexedEntry {
 /// A path as restic spells it, compared and hashed by its UTF-8 bytes.
 ///
 /// Swift's `==` on String is canonical equivalence: the NFC and NFD
-/// spellings of one name are one String to Swift and two paths to restic —
-/// two nodes in the index, and two files a Linux folder can hold side by
-/// side. A dictionary keyed by String keeps one entry for both, so a keyed
-/// read would answer one path's question with the other's facts: which
-/// backup holds it, of what kind. The keyed reads are keyed by this
-/// instead. A string literal is one, so a path spelled inline reads as
-/// itself.
+/// spellings of one name are one String to Swift and two paths to restic.
+/// A dictionary keyed by String keeps one entry for both, so a keyed read
+/// would answer one path's question with the other's facts. The keyed
+/// reads key on this instead. A string literal is one, so a path spelled
+/// inline reads as itself.
 struct PathKey: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConvertible {
     let path: String
 
@@ -341,8 +339,7 @@ enum IndexError: Error, Equatable {
 /// that leaves the listing loses its row: runs over its seq then claim nothing
 /// there, and deaths write no runs at all.
 ///
-/// The invariants every write keeps (FINAL.md 2.2, checked by
-/// `invariantViolations()`):
+/// The invariants every write keeps (checked by `invariantViolations()`):
 /// - seqs are never reused (`next_seq` only grows); `snap.id` is
 ///   AUTOINCREMENT, so a snapshot that dies and returns is a new row — the
 ///   stream identity and the equal-time arrival tiebreak both rest on it;
@@ -368,8 +365,7 @@ enum IndexError: Error, Equatable {
 final class SnapshotIndex: @unchecked Sendable {
     /// 3: version 2 had no `edit` or `blind`, and a file without them knows
     /// nothing of content changes, so it is rebuilt rather than read as if
-    /// no file had ever changed. (2, not 1, because development builds wrote
-    /// the schema as 1 before `listing_applied` existed.)
+    /// no file had ever changed. (1 is taken too: development builds wrote it.)
     static let schemaVersion: Int32 = 3
     /// Node ids per batched read: under SQLite's pre-3.32 variable limit of
     /// 999, whatever the system library.
@@ -896,7 +892,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// bytes asked for (`PathKey`), so canonically equal spellings keep
     /// their own answers. Find Files reads the summaries inside its search
     /// (`searchWithSummaries`); this path-keyed form is what the tests hold
-    /// that read to, as `versions(ofPath:)` is for the Files view.
+    /// that read to, as `versions(ofPath:inChain:)` is the Files view's read.
     func versionSummaries(ofPaths paths: [String]) async throws -> [PathKey: VersionSummary] {
         try await pool.read { db in
             var lookup = try NodeLookup(db)
@@ -989,9 +985,9 @@ final class SnapshotIndex: @unchecked Sendable {
     ///
     /// Two statements, the counts per chunk and then the newest hash at
     /// each node's newest time, rather than one with window functions
-    /// (`count(*) OVER` and `row_number()` by node): that form answered the
-    /// same, ties included, but measured about three times slower on SQLite
-    /// 3.51.0 and 3.43.2 alike, because it sorts every version of the chunk.
+    /// (`count(*) OVER` and `row_number()` by node): that form answers the
+    /// same, ties included, but sorts every version of the chunk and runs
+    /// about three times slower.
     private static func summaries(_ db: Database, of nodes: [Int64]) throws -> [Int64: VersionSummary] {
         let newest = try db.cachedStatement(sql: SQL.summaryNewest)
         var result: [Int64: VersionSummary] = [:]
@@ -1468,7 +1464,7 @@ final class SnapshotIndex: @unchecked Sendable {
         return (statements, others)
     }
 
-    /// The stored-state checks of FINAL.md 2.2, each violation a line that
+    /// The index's stored-state checks, each violation a line that
     /// starts with its letter, plus (j), the premise `stageOwner` rests on,
     /// and (k), that every collection leaves `temp.gc` empty, so the next
     /// one starts from exactly what its own write queued, (l), that every

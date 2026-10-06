@@ -12,7 +12,7 @@ import Foundation
 /// snapshot refresh or the index walks, which run restic too but are not
 /// part of the run. Any `Task {}` started inside a bound scope inherits the
 /// binding and could append after the run has ended; `Task.detached` does
-/// not (probed). `HookRunner` shields itself with `withValue(nil)`, so a
+/// not. `HookRunner` shields itself with `withValue(nil)`, so a
 /// hook's command and output — which can carry secrets — never land here.
 ///
 /// Memory is capped rather than streamed to disk: the first `headByteLimit`

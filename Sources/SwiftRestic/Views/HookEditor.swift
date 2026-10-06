@@ -15,9 +15,9 @@ struct HookEditor: View {
     private var isForMaintenance: Bool { events.allSatisfy(\.isMaintenanceEvent) }
 
     var body: some View {
-        // A fixed-height band for the list, the form for the rest. This was a
-        // VSplitView, but its divider has no visible affordance in a sheet and
-        // its initial split gave the list — usually one or two rows — most of
+        // A fixed-height band for the list, the form for the rest: a split
+        // view's divider has no visible affordance in a sheet, and its
+        // initial split gives the list — usually one or two rows — most of
         // the height, pushing the Command field the user has to fill out of
         // view.
         VStack(spacing: 0) {
@@ -69,9 +69,9 @@ struct HookEditor: View {
                 }
             }
             .listStyle(.inset)
-            // The stock white list background read as a broken empty pane in
+            // The stock white list background reads as a broken empty pane in
             // the sheet; rows straight on the sheet background match the
-            // grouped forms everywhere else in these editors.
+            // grouped forms in these editors.
             .scrollContentBackground(.hidden)
 
             HStack {
@@ -116,9 +116,7 @@ struct HookEditor: View {
                     TextEditor(text: $hooks[index].command)
                         .font(.system(.callout, design: .monospaced))
                         .frame(minHeight: 70)
-                        // The same hairline chip the path lists wear — the
-                        // dated `.border` read against the card language
-                        // everywhere else.
+                        // The same hairline chip the path lists wear.
                         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)

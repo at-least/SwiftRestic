@@ -24,7 +24,7 @@ struct Schedule: Codable, Sendable, Hashable {
     var weekday: Int = 2
 
     /// The editor's minute field: two digits, as every summary states the
-    /// time ("Daily at 02:05") — a bare "0" beside the hour read as a count.
+    /// time ("Daily at 02:05") — a bare "0" beside the hour reads as a count.
     static let minuteStyle: IntegerFormatStyle<Int> = .number.grouping(.never).precision(.integerLength(2...))
 
     init() {}
@@ -32,19 +32,19 @@ struct Schedule: Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         frequency = c.value(.frequency, default: .daily)
-        // The editor's own range (1...24): a value beyond it cannot come from
-        // the stepper, only a hand-edited config — where a huge one would
-        // overflow the scheduler's `intervalHours * 3600` on its next tick.
+        // The editor's own range (1...24): only a hand-edited config exceeds
+        // it, and a huge value would overflow `intervalHours * 3600` on the
+        // scheduler's next tick.
         intervalHours = Self.clamped(c.value(.intervalHours, default: 4), 1...24, "schedule.intervalHours")
         hour = Self.clamped(c.value(.hour, default: 2), 0...23, "schedule.hour")
         minute = Self.clamped(c.value(.minute, default: 0), 0...59, "schedule.minute")
         weekday = Self.clamped(c.value(.weekday, default: 2), 1...7, "schedule.weekday")
     }
 
-    /// A type-valid but out-of-range value ("hour": 25 from a hand-edited
-    /// config) decodes cleanly and then matches no wall-clock time — the plan
-    /// would silently never run. Clamping to the nearest valid time keeps it
-    /// alive, and the substitution is reported like every other one.
+    /// A type-valid but out-of-range value ("hour": 25) decodes cleanly and
+    /// then matches no wall-clock time — the plan would silently never run.
+    /// Clamp to the nearest valid value; the substitution is reported like
+    /// every other one.
     private static func clamped(_ value: Int, _ range: ClosedRange<Int>, _ field: String) -> Int {
         guard !range.contains(value) else { return value }
         let nearest = value < range.lowerBound ? range.lowerBound : range.upperBound
@@ -124,8 +124,9 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     /// Run `--prune` as part of `forget`. Slow, so off by default.
     var runPrune: Bool = false
 
-    /// The all-defaults memberwise initializer below also serves `init()`,
-    /// so no second default initializer is declared alongside it.
+    /// The all-defaults initializer — by hand, since `init(from:)`
+    /// suppresses the memberwise one — also serves `init()`, so no second
+    /// default initializer is declared alongside it.
 
     init(
         isEnabled: Bool = true,
@@ -174,8 +175,8 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         return args
     }
 
-    /// restic refuses to run `forget` with no `--keep-*` rule, which would delete
-    /// every snapshot. Guard against that here rather than at the call site.
+    /// restic refuses `forget` with no `--keep-*` rule (it would delete every
+    /// snapshot). Guarded here rather than at each call site.
     var isSafeToRun: Bool { isEnabled && !forgetArguments.isEmpty }
 
     var summary: String {
@@ -193,10 +194,9 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
 
     /// The plain-language answer to "how far back do you want to reach?" —
     /// the editor's primary control — and the bucket set each answer writes.
-    /// Matching and writing live on the model so both stay testable and the
-    /// picker can never disagree with the policy it claims to describe.
-    /// Deliberately not Codable: it is a derived view of the buckets, never
-    /// a persisted fact.
+    /// Matching and writing live on the model so the picker can never
+    /// disagree with the policy it describes. Not Codable: a derived view of
+    /// the buckets, never a persisted fact.
     enum Reach: String, Sendable, CaseIterable, Identifiable {
         /// The default bucket set: 24h, 7d, 4w, 12m, 3y.
         case standard
@@ -232,10 +232,10 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
             }
         }
 
-        /// Writes exactly the window the name promises: every other bucket is
+        /// Writes exactly the window the name promises: every other bucket
         /// zeroed, and the toggles the answer does not name — prune, enabled —
-        /// survive the rewrite untouched. Custom names a hand-edited policy;
-        /// it has nothing to write.
+        /// survive untouched. Custom names a hand-edited policy; it has
+        /// nothing to write.
         func apply(to policy: inout RetentionPolicy) {
             guard self != .custom else { return }
             let isEnabled = policy.isEnabled
@@ -275,8 +275,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var tags: [String] = []
     var schedule = Schedule()
     var retention = RetentionPolicy()
-    /// The schedule's switch: off is Pause Schedule's "Until I Resume", the
-    /// editor's "Run on schedule" and what removing the repository leaves.
+    /// The schedule's switch: off is Pause Schedule's "Until I Resume" and
+    /// the editor's "Run on schedule" switch.
     var isEnabled: Bool = true
     /// A timed Pause Schedule's end. The schedule holds while it lies ahead
     /// and resumes by itself once it passes — `isScheduleActive(at:)` reads
@@ -294,10 +294,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         id = c.value(.id, default: UUID())
         name = c.value(.name, default: "")
         repositoryID = c.optional(.repositoryID)
-        // Deduplicated because the string-list editors dedupe their own
-        // writes, so a duplicate reaching the rows means a hand-edited
-        // config — and duplicate values would give the path lists' rows
-        // colliding identities. First occurrence wins, order preserved.
+        // The string-list editors dedupe their own writes, so a duplicate
+        // here means a hand-edited config — and duplicates would give the
+        // path lists' rows colliding identities. First occurrence wins,
+        // order preserved.
         sources = Self.withoutDuplicates(c.value(.sources, default: []))
         excludePatterns = Self.withoutDuplicates(c.value(.excludePatterns, default: BackupPlan.defaultExcludes))
         excludeCaches = c.value(.excludeCaches, default: true)
@@ -312,12 +312,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         lastSuccessAt = c.optional(.lastSuccessAt)
     }
 
-    /// Noise that is never worth storing: files the Finder, package managers
-    /// and caches regenerate on their own. Nothing here may be the only copy
-    /// of anything — `**/.git/objects` once was, and a restored Git working
-    /// copy without its object store is "not a git repository": history,
-    /// unpushed commits and stashes gone. Plans saved before its removal
-    /// keep the pattern in their own list.
+    /// Noise the Finder, package managers and caches regenerate on their own.
+    /// Nothing here may be the only copy of anything — a restored Git working
+    /// copy without its object store is "not a git repository". Plans keep
+    /// the list they were saved with; the defaults reach new plans only.
     static let defaultExcludes = [
         ".DS_Store",
         "**/node_modules",
@@ -354,16 +352,14 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         isEnabled && activePauseEnd(at: now) == nil
     }
 
-    /// The stored plan wins over an editor's draft for what the model writes
-    /// while the editor holds its older copy: the run stamps (`markPlanRun`)
-    /// and a timed pause's end, which the scheduler's tick clears once it
-    /// passes, sheet or no sheet. A draft carrying stale or absent values
-    /// must not erase the plan's own last success or bring back a pause
-    /// that has ended.
-    /// Everything else comes from the draft. A new model-written field joins
-    /// this list — one left out here reverts to the draft on the next save.
-    /// (`isEnabled` stays the draft's: it is the editor's own "Run on
-    /// schedule" switch.)
+    /// The stored plan wins over the editor's draft for the model-written
+    /// fields the draft may hold stale: the run stamps (`markPlanRun`) and a
+    /// timed pause's end, which the scheduler's tick clears once it passes —
+    /// a stale draft must not erase the plan's last success or bring back a
+    /// pause that has ended.
+    /// Everything else comes from the draft; a new model-written field joins
+    /// this list, or the next save reverts it to the draft. (`isEnabled`
+    /// stays the draft's: it is the editor's own "Run on schedule" switch.)
     func merging(draft: BackupPlan) -> BackupPlan {
         var merged = draft
         merged.lastRunAt = lastRunAt

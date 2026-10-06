@@ -46,7 +46,8 @@ extension AppModel {
                 )
             }
             self?.tasks.clear(.maintenance(repositoryID))
-            // Retire the token with the strip — see `runBackup`'s unwind.
+            // Retire the token with the strip, so a late hop from this job
+            // drops — `unwindPlanRun(_:)`'s rule.
             self?.maintenanceRunTokens[repositoryID] = nil
             self?.maintenance[repositoryID] = nil
         }, in: .maintenance(repositoryID))

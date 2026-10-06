@@ -35,8 +35,8 @@ extension AppModel {
     /// `tasks.drain()` would no longer wait for its record.
     func unwindPlanRun(_ planID: UUID) {
         tasks.clear(.plan(planID))
-        // The unwind retires the token as well as the strip, so a hop
-        // from this run drops from here on — restore's own rule.
+        // The token retires with the strip, so a hop from this run drops
+        // from here on — the same rule as restore's unwind.
         backupRunTokens[planID] = nil
         // Pause and Stop's mark belongs to this run alone: left behind,
         // a later plain Stop of the plan would skip its stamp too.
@@ -46,13 +46,12 @@ extension AppModel {
     }
 
     /// Installs a fresh run strip — activity for the phase, a zeroed
-    /// progress entry for the numbers — plus a new run token with them, so
-    /// any progress hop still in flight from the previous run of this plan
-    /// drops instead of writing into this one. The engine's own writes
-    /// (`setActivityPhase`) need no token: they run inside `perform`,
-    /// sequenced on the main actor before the unwind clears the strip —
-    /// only the runner-invoked reporter executes on a background thread and
-    /// hops over unsequenced.
+    /// progress entry — plus a new run token, so a progress hop still in
+    /// flight from the plan's previous run drops instead of writing into
+    /// this one. The engine's own writes (`setActivityPhase`) need no token:
+    /// they run inside `perform`, sequenced on the main actor before the
+    /// unwind clears the strip — only the runner-invoked reporter runs on a
+    /// background thread and hops over unsequenced.
     func installPlanActivity(planID: UUID) {
         backupRunTokens[planID] = UUID()
         activity[planID] = PlanActivity()
@@ -114,15 +113,12 @@ extension AppModel: BackupRunEngine.Sink {
     }
 
     /// Stores and announces a finished run: its log, history, the in-app
-    /// banner (successes auto-dismiss — success that outlives its moment
-    /// reads as stale — while warnings and failures stay until dismissed),
-    /// the user notification, and the external channels.
+    /// banner, the user notification, and the external channels.
     func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
         var record = record
-        // Probed as the run ends: whether the grant was there decides, for
-        // good, whether the drawer says "grant it", "it has it now, back up
-        // again" or "macOS protects these anyway". The probe's own answer,
-        // not `fullDiskAccess`, which an older probe may still overwrite.
+        // Probed as the run ends and recorded: the drawer's wording reads
+        // this stored answer, not `fullDiskAccess`, which an older probe
+        // may still overwrite afterwards.
         record.fullDiskAccessAtRun = await refreshFullDiskAccess()
         await seal(&record, transcript: transcript)
         append(record: record)
@@ -136,10 +132,9 @@ extension AppModel: BackupRunEngine.Sink {
     }
 
     /// The in-app counterpart to `notify`: a finished backup lands in the
-    /// banner queue so "did it work?" is answered in the pane the user is
-    /// looking at, without a trip to Activity. The queue is global, so the
-    /// title names the plan with its repository — a banner arriving while
-    /// another repository's page is open says whose backup it was.
+    /// banner queue, so "did it work?" is answered in the pane the user is
+    /// looking at. The queue is global, so the title names the plan with
+    /// its repository.
     private func announceInApp(record: RunRecord) {
         let name = RunRecordPresentation.displayName(
             for: record,
@@ -148,8 +143,8 @@ extension AppModel: BackupRunEngine.Sink {
         )
         switch record.outcome {
         case .cancelled:
-            // The user asked for this stop — or confirmed the quit that caused
-            // it — and a banner nagging about it adds nothing.
+            // The user asked for this stop, or confirmed the quit that
+            // caused it — a banner would add nothing.
             return
         case .succeeded:
             post(Banner(
@@ -158,11 +153,9 @@ extension AppModel: BackupRunEngine.Sink {
                 isError: false
             ))
         case .completedWithErrors:
-            // restic's partial success: a snapshot exists, so this is not a
-            // failure — but the unreadable items are exactly what the banner
-            // queue exists to keep visible. The words are the plan row's
-            // (RunRecordPresentation); the fix, when the app knows one,
-            // follows.
+            // restic's partial success: a snapshot exists, so not a failure
+            // — but the unreadable items are what the banner queue exists to
+            // keep visible.
             var message = RunRecordPresentation.warningBannerMessage(for: record)
             if let hint = ItemErrorDiagnosis.headline(for: record) { message += " " + hint }
             post(Banner(title: "“\(name)” finished with warnings", message: message, isError: true))

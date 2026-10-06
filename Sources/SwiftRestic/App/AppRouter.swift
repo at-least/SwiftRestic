@@ -5,22 +5,16 @@ import SwiftUI
 /// which sheet a menu command asked for, where Activity should land, and the
 /// main-window action the AppKit tray needs.
 ///
-/// Split out of `AppModel` deliberately: none of this is domain state — it
-/// is the navigation surface the views and the menu bar share — and keeping
-/// it on the model meant every pane-switch wrote through the same object the
-/// domains mutate. It also replaces the stringly `NotificationCenter` seam:
-/// menu commands and the tray request typed intents here, and the root view
-/// consumes them on the same appear-or-change rule the old
-/// `pendingNewRepository` flag used, so an intent asked while the window is
-/// closed survives until the window exists.
+/// Split out of `AppModel`: none of this is domain state — it is the
+/// navigation surface the views and the menu bar share, and pane switches
+/// would otherwise write through the same object the domains mutate. Intents
+/// asked while the window is closed survive until the window exists.
 @MainActor
 @Observable
 final class AppRouter {
     /// What the user asked for, from a menu command or the tray. Consumed by
     /// the root view: cleared the moment it is seen, then applied only when
-    /// no sheet is already up — refused with a beep otherwise, where the old
-    /// notification guards dropped it silently — minus the race on whether
-    /// a window existed to receive it.
+    /// no sheet is already up — refused with a beep otherwise.
     enum Intent: Equatable {
         case newPlan
         case newRepository
@@ -30,9 +24,12 @@ final class AppRouter {
         /// waits out an open sheet like every other menu ask.
         case showConsole
         case runSelectedPlan
-        // The Plan and Repository menus. They carry their target rather
-        // than read the selection when consumed: the ask may wait for a
-        // window, and the selection may move meanwhile.
+        // The Plan and Repository menus' targeted asks carry their target
+        // rather than read the selection when consumed: the ask may wait for
+        // a window, and the selection may move meanwhile. runSelectedPlan is
+        // the exception — its item enables against the live selection, and
+        // the consume re-checks planCommands(for: router.selection) the same
+        // way.
         case stopPlan(UUID)
         case pauseSchedule(UUID, PauseLength)
         case resumeSchedule(UUID)
@@ -51,9 +48,8 @@ final class AppRouter {
     private(set) var pendingIntent: Intent?
 
     /// The run a detail surface asked Activity to land selected — the plan
-    /// page's "Last backup" value, Arq's "View Latest Backup Record…" pattern:
-    /// the timestamp is the handle to its own record. Transient, never
-    /// persisted; Activity consumes and clears it.
+    /// page's "Last backup" value: the timestamp is the handle to its own
+    /// record. Transient, never persisted; Activity consumes and clears it.
     var activityFocusRunID: RunRecord.ID?
 
     /// Transient, never persisted: whether Activity shows every run or only
@@ -230,9 +226,8 @@ final class AppRouter {
 }
 
 /// A page's two views — the toolbar's Overview | Files on a plan's page and
-/// on a group's under Other backups:
-/// its overview, and its folders and files across every backup, each by
-/// version.
+/// on a group's under Other backups: its overview, and its folders and
+/// files across every backup, each by version.
 enum PageTab: Hashable {
     case overview
     case files

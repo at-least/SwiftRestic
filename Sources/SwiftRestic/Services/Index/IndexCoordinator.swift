@@ -6,8 +6,8 @@ import Foundation
 ///
 /// The index is a cache with a rebuild path — the repository is the truth —
 /// so nothing here may turn a good refresh or backup into an app-level
-/// failure. A write that fails is dropped, and the app degrades to what it
-/// did before the index existed: restic `ls` per browse.
+/// failure. A write that fails is dropped, and the app degrades to restic
+/// `ls` per browse.
 ///
 /// Three kinds of work, three homes:
 /// - Reads are `nonisolated`. They take the store from `StoreRegistry` and
@@ -29,8 +29,8 @@ actor IndexCoordinator {
     let directory: URL
     /// Where the `<repository>.sqlite` files live: a folder of their own
     /// inside the configuration's, so the orphan sweep can own everything in
-    /// it. The configuration folder's own `<uuid>.sqlite` files are the
-    /// index's earlier home; nothing here opens, sweeps or deletes them.
+    /// it. The configuration folder's own files are never touched (see
+    /// `sweepOrphanFiles`).
     nonisolated var indexDirectory: URL {
         directory.appendingPathComponent("index", isDirectory: true)
     }
@@ -44,14 +44,14 @@ actor IndexCoordinator {
     /// Passes whose full read of one snapshot must fail before the snapshot
     /// is set aside as unreadable. Every failure counts, whatever else the
     /// pass did: each pass follows a refresh whose `restic snapshots` just
-    /// succeeded, so the repository was reachable, and no rule can tell a
-    /// bad snapshot from a bad connection in a pass with nothing else to
-    /// read — a repository's only chain, blocked by its own forward
-    /// candidate, is exactly that pass, every time. Counting only failures
-    /// in passes where other work landed left such a snapshot blocking
-    /// every later backup for good. The cost of a wrong guess is one
-    /// snapshot left out until the next launch releases it. The number
-    /// itself is a guess: nobody has measured how real repositories fail.
+    /// succeeded, so the repository was reachable, yet in a pass with
+    /// nothing else to read — a repository's only chain, blocked by its own
+    /// forward candidate — a bad snapshot is indistinguishable from a bad
+    /// connection. A rule counting only failures in passes where other work
+    /// landed would never set such a snapshot aside, leaving it to block
+    /// every later backup. The cost of a wrong guess is one snapshot left
+    /// out until the next launch releases it. The number itself is a guess:
+    /// nobody has measured how real repositories fail.
     static let unreadableAfter = 2
 
     /// The open stores, with the tombstones and in-flight counts that let
@@ -96,35 +96,30 @@ actor IndexCoordinator {
     /// snapshot, taken between the two reads, among them. The store compares
     /// under its writer (`reconcile(listing:generation:)`), where the writes
     /// are ordered, so concurrent reconciles need no queue here: whichever
-    /// reaches the writer second is compared with the first. FINAL.md 3.12
-    /// put the check on this actor, which took a queue of reconciles to keep
-    /// the check and the write in one order.
+    /// reaches the writer second is compared with the first.
     func reconcile(repositoryID: UUID, snapshots listing: [Snapshot], generation: UInt64) async {
         guard let store = try? await lease(repositoryID) else { return }
         defer { registry.release(repositoryID) }
         do {
             // Marked before the release is awaited, so a reconcile arriving
-            // meanwhile does not release again — a second release would also
-            // hand back anything a backfill had set aside in between. That
-            // reconcile goes on to its own listing, which may land before the
-            // release does; either order leaves a whole index, since the
-            // release puts each snapshot above whatever its chain has used so
-            // far. A backfill that reconcile starts may take the failure
-            // counts before the release presets them below, which costs a
-            // released snapshot that is still unreadable one more failed
-            // pass. A failed release unmarks, and the next reconcile retries;
-            // its listing is dropped before the store sees its number, so an
-            // older listing arriving later can still land — harmless, since
+            // meanwhile does not release again — a second release would hand
+            // back anything a backfill set aside in between. Either order of
+            // release and the next listing leaves a whole index: the release
+            // puts each snapshot above whatever its chain has used so far. A
+            // backfill started here may read the failure counts before the
+            // presets below land, which costs a still-unreadable released
+            // snapshot one extra failed pass. A failed release unmarks for
+            // the next reconcile to retry; its own listing is dropped with
+            // it, so an older listing arriving later still lands — harmless,
             // nothing newer has.
             if released.insert(repositoryID).inserted {
                 do {
                     let retried = try await Self.offActor { try store.releaseUnreadable() }
                     // Each of these failed `unreadableAfter` passes in an
-                    // earlier launch, and the release puts it above its
-                    // chain's window — the forward candidate, ahead of every
-                    // new backup. Still unreadable, it must not block them for
-                    // another count from zero: one more failure sets it aside
-                    // again.
+                    // earlier launch, and now sits above its chain's window —
+                    // the forward candidate, ahead of every new backup. Still
+                    // unreadable, it must not block them for another count
+                    // from zero: one more failure sets it aside again.
                     for snapshotID in retried {
                         readFailures[repositoryID, default: [:]][snapshotID] = Self.unreadableAfter - 1
                     }
@@ -222,8 +217,8 @@ actor IndexCoordinator {
     }
 
     /// What the last finished backfill pass of the repository did, route by
-    /// route. The app has no log to write it to; it waits here for a future
-    /// surface, and the tests read it to see which route a step took.
+    /// route: the tests' view of which route each step took; the app never
+    /// reads it.
     func lastBackfillReport(repositoryID: UUID) -> BackfillReport? {
         reports[repositoryID]
     }
@@ -601,8 +596,8 @@ actor IndexCoordinator {
     ///
     /// Only `indexDirectory` is swept, and in it only `<UUID>.sqlite` and its
     /// `-wal` and `-shm` sidecars; any other name is left alone. The
-    /// configuration folder's own `<uuid>.sqlite` files, the index's earlier
-    /// home, are never touched: removing them is the user's call.
+    /// configuration folder's own `<uuid>.sqlite` files are never touched:
+    /// removing them is the user's call.
     ///
     /// `configured` must come from a configuration that read whole: an empty
     /// or substituted list would make every live repository's index read as

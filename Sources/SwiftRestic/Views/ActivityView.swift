@@ -29,8 +29,7 @@ struct ActivityView: View {
         @Bindable var router = router
         // One filter+sort per render: the empty-state check, the table and
         // the detail lookup all need the same list, and the computed property
-        // would re-run the history's sort at every access (the hoist
-        // SnapshotDiffView documents for its own candidates).
+        // would re-run the history's sort at every access.
         let runs = visibleRuns
         return VStack(alignment: .leading, spacing: 0) {
             // Activity is where failures get read, so it carries the banner
@@ -63,9 +62,7 @@ struct ActivityView: View {
                         // invisible text keeps the verdict in VoiceOver. It
                         // is clear ink: `hidden()` would silence it, and so
                         // does `opacity(0)` on macOS 26, which drops the text
-                        // from the accessibility tree — a clean run's cell
-                        // read as an empty group (SnapshotCompletenessMark
-                        // measured the same).
+                        // from the accessibility tree.
                         if let symbolName = run.outcome.symbolName {
                             Image(systemName: symbolName)
                                 .foregroundStyle(StatusPalette.status(run.outcome))
@@ -80,25 +77,14 @@ struct ActivityView: View {
                     }
                     .width(24)
 
-                    // Five columns after the glyph, Arq's one-line row with
-                    // the kind and the verdict beside it: how long a run
-                    // took and what it added are in the drawer below and in
-                    // Copy Details. Widths: the caps on the fixed-length
-                    // columns send the spare width to Detail, the one column
-                    // whose text runs long. Measured on macOS 26, a table
-                    // created in a window, or narrowed to it, puts every
-                    // capped column at its minimum and the rest into Detail,
-                    // while widening shares the growth out evenly up to the
-                    // caps. So each minimum is what its column shows on
-                    // arrival — Started's is the widest timestamp, "May 31,
-                    // 2026 at 10:00 AM" (161.6 pt), Subject's holds a plan
-                    // name like "Photos Library" (88.1 pt), Repository's a
-                    // repository name of the same length. A row is 16 + the
-                    // column widths + 5 × 17 + 16 pt wide, and the 940-pt
-                    // window with the sidebar at its default 260 plus the
-                    // split's 8 pt leaves the table 672, so the minimums may
-                    // add up to 555 (they are 510) — room for a legacy
-                    // scroller's 17 without a sideways scroll.
+                    // Five columns after the glyph, one line per row: how
+                    // long a run took and what it added are in the drawer
+                    // below and in Copy Details. A SwiftUI table gives every
+                    // capped column its minimum and sends the spare width to
+                    // the one uncapped column, Detail — the one whose text
+                    // runs long — so each minimum is what its column shows
+                    // on arrival. The minimums together still leave room for
+                    // a legacy scroller without a sideways scroll.
                     TableColumn("Started", value: \.startedAt) { run in
                         Text(Format.timestamp(run.startedAt))
                             .monospacedDigit()
@@ -108,9 +94,9 @@ struct ActivityView: View {
                     // Backups and restores name their plan or item, the Kind
                     // column names the operation. A check or prune has no
                     // plan to name — its subject is the repository, which
-                    // the Repository column beside this one now says, and
+                    // the Repository column beside this one says, and
                     // saying it here too would state one fact twice in
-                    // adjacent columns. Display-only for the same reason:
+                    // adjacent columns. No sort value for the same reason:
                     // those rows' stored name is the repository's, so a sort
                     // on this header would order their "—" cells by a value
                     // on screen nowhere.
@@ -127,13 +113,12 @@ struct ActivityView: View {
                     }
                     .width(min: 96, ideal: 112, max: 120)
 
-                    // The repository a run belongs to, by ID at render time
-                    // — check and prune runs recorded it in `planName` alone,
-                    // which could not survive a repository rename. A "—" is
-                    // either a run recorded before runs carried a repository
-                    // or a repository since removed; the data cannot tell the
-                    // two apart, so the tooltip says both and asserts
-                    // neither.
+                    // The repository a run belongs to, looked up by ID at
+                    // render time, so a rename survives: check and prune runs
+                    // carry it nowhere else. A "—" is either a run recorded
+                    // before runs carried a repository or a repository since
+                    // removed; the data cannot tell the two apart, so the
+                    // tooltip says both and asserts neither.
                     TableColumn("Repository") { run in
                         if let name = model.repository(id: run.repositoryID)?.name {
                             Text(name)
@@ -154,29 +139,27 @@ struct ActivityView: View {
                         let detail = RunRecordPresentation.detail(for: run)
                         Text(detail)
                             .foregroundStyle(run.outcome == .failed ? Theme.danger : .secondary)
-                            // One line on every row. A second line for
-                            // failures kept its height only in rows the table
-                            // was created with: a failed run inserted while
-                            // Activity was open stayed 24 pt tall and cut its
-                            // two lines in half. The whole sentence is the
-                            // tooltip, and the drawer leads a problem run
-                            // with it.
+                            // One line on every row: AppKit sizes a row only
+                            // when the table is created, so a second line on
+                            // a row added later would be cut in half. The
+                            // whole sentence is the tooltip, and the drawer
+                            // leads a problem run with it.
                             .lineLimit(1)
-                            // Failure messages lead with the subject ("which
-                            // repository") and end with the verdict ("why").
-                            // Tail truncation removed exactly the verdict, so
-                            // a long path sacrifices its middle instead.
+                            // Failure messages lead with the subject and end
+                            // with the verdict; tail truncation would cut
+                            // exactly the verdict, so a long path sacrifices
+                            // its middle instead.
                             .truncationMode(run.failureMessage != nil ? .middle : .tail)
                             .help(detail)
                     }
                     .width(min: 80, ideal: 200)
                 }
                 // A full-height table that outlives its records paints striped
-                // phantom rows under the last one — an uncanny loading
-                // skeleton that never resolves. The stripes are the table's
-                // alternating-row background, not its content background, so
-                // it is the alternating behavior that gets disabled; the
-                // outcome glyphs and the Detail column keep rows scannable.
+                // phantom rows under the last one. The stripes are the
+                // table's alternating-row background, not its content
+                // background, so it is the alternating behavior that gets
+                // disabled; the outcome glyphs and the Detail column keep
+                // rows scannable.
                 .alternatingRowBackgrounds(.disabled)
                 .focusOnClick($tableIsFocused)
                 // Wiping the history is rare and final, so it is not chrome:

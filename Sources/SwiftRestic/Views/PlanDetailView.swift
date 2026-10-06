@@ -28,15 +28,13 @@ struct PlanDetailView: View {
         }
         .navigationTitle(plan?.name ?? "Plan")
         .pageTabPicker(router.tabBinding(for: .plan(planID)))
-        // Opening the page is the Mail "read": whatever failure the sidebar's
-        // dot was announcing is seen now — honestly, because the problem row
-        // under the Backups card shows that failure for as long as it stands. The
-        // dot for a run that fails while the page is already open stays,
-        // like a message arriving into the mailbox you are reading — opening
-        // the page again clears it. Keyed on the plan, not on appearing:
-        // going from one plan's page straight to another's keeps this view
+        // Opening the page marks the plan's problem seen — honestly, since
+        // the problem row under the Backups card shows the failure for as
+        // long as it stands. Keyed on the plan, not on appearing: moving
+        // from one plan's page straight to another's keeps this view
         // (RootDetailView gives it no per-plan identity), so onAppear never
-        // fired for the second plan and its dot outlived the visit.
+        // fires for the second plan. A failure arriving while the page is
+        // already open stays unseen until the page is opened again.
         .onChange(of: planID, initial: true) { model.markProblemSeen(planID: planID) }
     }
 
@@ -65,8 +63,7 @@ struct PlanDetailView: View {
     /// Pause Schedule and Resume Schedule, the Schedule card's verb. A
     /// click on Pause keeps its one-click open-ended pause; the arrow offers
     /// the timed lengths. A manual plan has no schedule to pause and shows
-    /// none: its Schedule row already says "Manually", and a card's corner,
-    /// unlike the toolbar it replaced, has no row of neighbours to shift.
+    /// none: its Schedule row already says "Manually".
     @ViewBuilder
     private func scheduleControl(_ plan: BackupPlan) -> some View {
         let now = Date.now
@@ -91,9 +88,9 @@ struct PlanDetailView: View {
         }
     }
 
-    /// A manual plan switched off — removing its repository does that, and
-    /// so does the editor's switch — has no schedule for Resume to bring
-    /// back, as its Next backup value says; the help must not promise one.
+    /// A manual plan switched off — the editor's "Run on schedule" switch —
+    /// has no schedule for Resume to bring back, as its Next backup value
+    /// says; the help must not promise one.
     private func resumeHelp(_ plan: BackupPlan, now: Date) -> String {
         if let end = plan.activePauseEnd(at: now) {
             return "Paused until \(Format.pauseEnd(end)) — run this plan on its schedule again now"
@@ -104,13 +101,10 @@ struct PlanDetailView: View {
         return "Run this plan on its schedule again"
     }
 
-    /// The running-operation strip, as its own view. It reads only this
-    /// plan's activity and progress — both inside this body, so a restic
-    /// progress tick (~1/sec) re-renders the strip instead of the whole
-    /// pane (progress lives in its own observable storage precisely so
-    /// phase-reading views — the strip's title, the sidebar's and the
-    /// Protection line's rows — stay
-    /// untouched by it), and `content`'s cards never rerun per tick.
+    /// The running-operation strip, as its own view: it reads this plan's
+    /// activity and progress here, so a restic progress tick re-renders the
+    /// strip instead of the whole pane — `content`'s cards never rerun per
+    /// tick.
     private struct OperationStrip: View {
         @Environment(AppModel.self) private var model
         let planID: UUID

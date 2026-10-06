@@ -3,8 +3,8 @@ import Foundation
 /// A backed-up file as this Mac holds it now, beside its versions in a Files
 /// pane — the last fact a restore decision needs: is the copy here one of
 /// these, or none, or gone? One `lstat` (FileManager's attributes, which do
-/// not follow a link), no restic; it reads where Full Disk Access is not
-/// granted too, since it opens nothing (FullDiskAccess.swift's probe).
+/// not follow a link), no restic. It answers where Full Disk Access is not
+/// granted too — macOS checks `open`, not `lstat` (see `FullDiskAccess`).
 enum DiskFile: Equatable {
     case missing
     /// A folder, a link or anything else that is not a regular file: no
@@ -43,8 +43,7 @@ enum DiskFile: Equatable {
 
     /// How close a modification time must be to restic's to be the same
     /// one: restic's is read to the millisecond (`ResticDateFormat`), the
-    /// disk's to the nanosecond — 0.81 ms apart for one untouched file,
-    /// measured.
+    /// disk's to the nanosecond.
     static let mtimeTolerance: TimeInterval = 0.002
 
     /// The pane's line about it, given its versions newest first — each

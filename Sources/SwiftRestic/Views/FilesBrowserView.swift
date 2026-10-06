@@ -81,9 +81,9 @@ struct FilesBrowserView: View {
 
     var body: some View {
         // An HStack, not HSplitView: the split would not narrow the pane
-        // below the width it first laid out at, so a wider tree pushed the
+        // below the width it first laid out at, so a wider tree pushes the
         // window's content past its edges — the sidebar and the pane's
-        // buttons clipped (seen live).
+        // buttons clip.
         HStack(spacing: 0) {
             navigator
                 .frame(width: min(max(treeWidth, treeWidthBounds.lowerBound), treeWidthBounds.upperBound))
@@ -145,7 +145,7 @@ struct FilesBrowserView: View {
             }
             // The column's height whatever it shows: an empty state alone
             // would hug its text, and the field above it would float down to
-            // the middle (seen live).
+            // the middle.
             .frame(maxHeight: .infinity)
         }
     }
@@ -384,8 +384,8 @@ struct FilesBrowserView: View {
         router.filesSelection[roots] = item
     }
 
-    /// Spoken when it folds, as a disclosure row was: the fold is a button,
-    /// whose changed value VoiceOver does not read out by itself.
+    /// Spoken when it folds: the fold is a button, whose changed value
+    /// VoiceOver does not read out by itself.
     private func toggle(_ node: FileNode) {
         let opened = router.openFolders.remove(node) == nil
         if opened { router.openFolders.insert(node) }

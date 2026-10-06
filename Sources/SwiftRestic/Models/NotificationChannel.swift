@@ -59,9 +59,8 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
         case .succeeded: notifyOnSuccess
         case .warned: notifyOnWarning
         case .failed: notifyOnFailure
-        // A cancelled backup is a backup that did not happen. Only a dead-man's
-        // switch needs to hear about it; announcing it in a chat channel would
-        // be noise, since the person who cancelled it already knows.
+        // A cancelled backup did not happen: only a dead-man's switch needs
+        // to hear of it, and whoever cancelled it already knows.
         case .cancelled: kind.usesStartPing && notifyOnFailure
         }
     }

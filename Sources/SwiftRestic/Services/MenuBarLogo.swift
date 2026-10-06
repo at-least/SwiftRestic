@@ -11,21 +11,16 @@ import Foundation
 /// the unread-badge grammar Mail's Dock icon follows: the mark never
 /// changes silhouette, the dot alone says "open me".
 ///
-/// The plate stack is the app icon's own two-plate construction —
-/// `Tools/GenerateAppIcon.swift` draws the same numbers (0.190 wide, 0.160
-/// apart, alphas 0.60/1.0) at every size, so the tray and the Dock icon read
-/// as one mark. The ring radius (0.260) and the head's 36°
-/// hang mirror the generator's small-size construction, clearing the top
-/// plate. The stroke (0.068, between the generator's 0.082 small and 0.051
-/// large) and arrowhead proportions are tuned separately for this canvas: an
-/// 18pt status item reads a tighter arrowhead better than the icon's own
-/// weight does. Keep the plate geometry in sync when the icon changes; the
-/// stroke and arrowhead are allowed to diverge on purpose.
+/// The plate stack, ring and head mirror the app icon's construction in
+/// `Tools/GenerateAppIcon.swift`, so the tray and the Dock icon read as one
+/// mark — keep the plate geometry in sync when the icon changes. The stroke
+/// and arrowhead proportions are tuned for the 18pt status item and may
+/// diverge from the generator's weights.
 ///
-/// MainActor-isolated because the caches are AppKit bitmaps drawn once and
-/// consumed only by menu bar and welcome-screen UI — CI's Swift flags the
-/// unisolated statics as shared mutable non-Sendable state, and the
-/// annotation turns that real constraint into a compiler-enforced one.
+/// MainActor-isolated: the caches are AppKit bitmaps drawn once and consumed
+/// only by menu bar and welcome-screen UI. CI's Swift flags the unisolated
+/// statics as shared mutable non-Sendable state; the annotation turns that
+/// real constraint into a compiler-enforced one.
 @MainActor
 enum MenuBarLogo {
     /// A standard status item's canvas.
@@ -34,17 +29,16 @@ enum MenuBarLogo {
     /// the dot's transparent halo stays inside the bitmap. The construction
     /// is drawn at the same absolute size (`impliedSize` is resolved against
     /// this canvas), so the mark itself never changes size between faces —
-    /// only the item's width moves, which the old symbol faces did too.
+    /// only the item's width moves.
     private static let badgedCanvasSize: CGFloat = 20
     /// The welcome screen's hero mark, same construction at display size.
     private static let heroCanvasSize: CGFloat = 96
-    /// The generator's proportions are fractions of the full icon tile, where
-    /// the glyph fills about sixty percent. The menu bar has no tile, so the
-    /// glyph is drawn against a larger implied size — measured next to a
-    /// neighboring status item's icon, the mark read noticeably smaller until
-    /// pushed this far. The tightest fit is not the ring (`radius + stroke /
-    /// 2`, `0.294 * s`) but the arrowhead's base corner: the ink stays inside
-    /// the 18pt canvas with roughly 0.7–0.9pt of margin on every side.
+    /// The generator's proportions are fractions of the full icon tile; the
+    /// menu bar has no tile, so the glyph is drawn against a larger implied
+    /// size, or the mark reads noticeably small next to neighboring status
+    /// items. The tightest fit is not the ring (`radius + stroke / 2`) but
+    /// the arrowhead's base corner: the ink stays inside the 18pt canvas with
+    /// roughly 0.7–0.9pt of margin on every side.
     private static let impliedSize: CGFloat = 28
 
     /// At rest, both plates sit at their own settled alpha — no motion, just
@@ -52,12 +46,11 @@ enum MenuBarLogo {
     /// one — the brightness reads as climbing from the bottom plate to the
     /// top and back, in step with data moving up into the newest snapshot.
     private static let restingAlphas: [CGFloat] = [0.60, 1.0]
-    /// Not a literal mirror pair: resting already pins the top plate at 1.0,
-    /// so a running frame that also tops out at 1.0 there is pixel-identical
-    /// to rest on that plate — measured, this made one of the two running
-    /// frames read as no change from idle at all. The top plate's bright
-    /// value is capped at 0.80 instead, short of resting's ceiling, so every
-    /// running frame differs from rest in *both* plates, not just one.
+    /// Not a literal mirror pair: resting pins the top plate at 1.0, so a
+    /// running frame topping out at 1.0 there would differ from rest in one
+    /// plate only — and read as no change from idle. The top plate's bright
+    /// value is capped at 0.80, short of resting's ceiling, so every running
+    /// frame differs from rest in *both* plates.
     private static let runningAlphaFrames: [[CGFloat]] = [
         [1.0, 0.35],
         [0.35, 0.80],
@@ -73,10 +66,9 @@ enum MenuBarLogo {
         return ((step % runningAlphaFrames.count) + runningAlphaFrames.count) % runningAlphaFrames.count
     }
 
-    /// Built once, not per call: the status item's label re-evaluates this on
-    /// every `TimelineView` tick while a run is in flight, and a fresh
-    /// `NSImage` on every 0.6s tick was the actual pre-fix behavior — this
-    /// restores the pre-animation caching for all three faces.
+    /// Built once, not per call: while a run is in flight the tray's pulse
+    /// timer sets a running frame every `frameInterval`, so every face is
+    /// cached and its accessor allocation-free.
     private static let restingImage: NSImage = makeImage { rect, context in
         draw(in: rect, into: context, content: .resting)
     }
@@ -102,15 +94,13 @@ enum MenuBarLogo {
     /// the dot in systemBlue, Mail's unread-dot colour. Returns one of the
     /// two cached variants, matched to `appearance`.
     ///
-    /// This face leaves the template law on purpose. Verified live against a
-    /// real status item: the menu bar flattens its whole label and tints it,
-    /// so blue painted anywhere in SwiftUI view layer dies — the colour has
-    /// to be baked into the bitmap, and a baked bitmap cannot also be a
-    /// template image. The cost is contained: idle and running keep their
-    /// template faces and adapt for free; only this face swaps images on
-    /// appearance change (both variants cached; the label re-evaluates on
-    /// every model tick while a run is in flight, so both accessors must
-    /// stay allocation-free).
+    /// This face leaves the template rule: the menu bar flattens its whole
+    /// label and tints it, so blue painted in the SwiftUI view layer dies —
+    /// the colour has to be baked into the bitmap, and a baked bitmap cannot
+    /// also be a template image. The cost is contained: idle and running keep
+    /// their template faces and adapt for free; only this face swaps cached
+    /// variants on appearance change, and both accessors must stay
+    /// allocation-free.
     static func badgedImage(for appearance: NSAppearance) -> NSImage {
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? badgedDarkImage : badgedLightImage
     }
@@ -178,9 +168,9 @@ enum MenuBarLogo {
     ///
     /// `scaleBasis` is the canvas the construction proportionally fills. The
     /// full-bleed faces (resting, running, hero) take the default, so the
-    /// mark scales with its canvas as it always has. The badged face passes
-    /// its own canvas instead: one-to-one with `impliedSize`, the mark keeps
-    /// the idle construction's absolute size and the wider canvas buys real
+    /// mark scales with its canvas. The badged face passes its own canvas
+    /// instead: one-to-one with `impliedSize`, the mark keeps the idle
+    /// construction's absolute size and the wider canvas buys real
     /// halo margin — the tray glyph must never change size with its state.
     /// `inkComponents` recolours the construction for the non-template faces
     /// (white on the dark menu bar); `dotColor` recolours the attention dot.

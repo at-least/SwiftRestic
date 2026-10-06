@@ -3,10 +3,10 @@ import SwiftUI
 
 // MARK: - Card
 
-/// Titled card container, the visual unit of the redesigned dashboard and
-/// detail panes: an opaque control-coloured plate with a hairline border and a
-/// headline row, optionally carrying a trailing accessory (segmented pickers,
-/// refresh buttons).
+/// Titled card container, the visual unit of the dashboard and detail
+/// panes: an opaque control-coloured plate with a hairline border and a
+/// headline row, optionally carrying a trailing accessory (segmented
+/// pickers, refresh buttons).
 struct Card<Accessory: View, Content: View>: View {
     var title: LocalizedStringKey
     @ViewBuilder var accessory: () -> Accessory
@@ -141,8 +141,7 @@ struct BannerView: View {
 // MARK: - Stat tile
 
 /// One figure: a caption above a large rounded numeral, on its own card
-/// plate. The compare sheet's statistics are its one use since the
-/// dashboard and the repository page moved to label/value cards.
+/// plate. The compare sheet's statistics are its one use.
 struct StatTile: View {
     let title: String
     let value: String
@@ -250,10 +249,9 @@ struct DetailGrid<Content: View>: View {
 
 // MARK: - Expandable caption
 
-/// A form caption that keeps its teaching text but stops charging for it on
-/// every render: the summary line is always visible, and the rest sits
-/// behind the info button for whoever wants it — the same on-demand depth
-/// the app already gives hook variables and diff metadata.
+/// A form caption whose teaching text sits behind an info button: the
+/// summary line is always visible, the rest for whoever wants it — the
+/// same on-demand depth the app gives hook variables and diff metadata.
 struct ExpandableCaption: View {
     /// The always-visible line.
     let summary: String
@@ -272,7 +270,7 @@ struct ExpandableCaption: View {
                 // caption line: the square hangs 4 pt past its layout box
                 // above and below. The padding sits outside the Button —
                 // inside the label, the Button hit-tests only the 20×12 box
-                // (measured with HID-level clicks, macOS 26).
+                // (macOS 26).
                 Button {
                     isExpanded.toggle()
                 } label: {
@@ -411,7 +409,8 @@ struct SnapshotListingCaveat: View {
         switch outcome {
         case let .failed(message):
             // The glyph carries the alarm and the words stay secondary:
-            // the sentence in orange measured 2.33:1 on the repository page.
+            // a warning-coloured sentence at caption size is too
+            // low-contrast to read.
             Label {
                 Text("Snapshots could not be read — \(Format.firstSentence(message))")
                     .foregroundStyle(.secondary)
@@ -462,7 +461,7 @@ struct SnapshotFreshnessLabel: View {
 /// macOS 26 a zero-opacity Text or Image is dropped from the accessibility
 /// tree in both a List row and a Table cell, and in a sidebar row it
 /// folds into the timestamp beside it, label lost. A clear Text survives
-/// as its own static text in both (AX probe harness, 2026-09-26).
+/// as its own static text in both.
 struct SnapshotCompletenessMark: View {
     let run: RunRecord?
 
@@ -494,8 +493,7 @@ struct SnapshotCompletenessMark: View {
 // MARK: - Snapshot browser chrome
 
 /// The chrome the snapshot browsers share — one icon map, one keyboard
-/// grammar, one ascent step, one row. These used to live as private per-view
-/// clones that could only drift.
+/// grammar, one ascent step, one row.
 extension SnapshotNode {
     /// The list glyph for a node's kind.
     var browserIconName: String {
@@ -524,8 +522,7 @@ extension SnapshotNode {
 enum BrowserListGrammar {
     /// The ⌫ key as `onKeyPress` delivers it: U+007F, what AppKit's Delete
     /// key types. SwiftUI's `KeyEquivalent.delete` is U+0008, which ⌫ never
-    /// matched — a probe list's handler received 127 for it on macOS 26 —
-    /// so ⌫ went up nowhere.
+    /// produces, so only this constant matches the key.
     static let deleteKey = KeyEquivalent("\u{7F}")
 
     /// The lists' keyboard grammar. Everything unrecognised returns
@@ -613,8 +610,8 @@ struct SnapshotNodeRow: View {
 /// efficiency tax.
 struct PathListEditor: View {
     let title: String
-    /// Names the list's meaning in the row: sources and excludes are not the
-    /// same thing, so they no longer wear the same icon.
+    /// Names the list's meaning in the row: sources and excludes do not
+    /// wear the same icon.
     var systemImage = "folder.badge.gearshape"
     @Binding var paths: [String]
     var allowsBrowsing = true
@@ -796,8 +793,9 @@ struct FullDiskAccessButton: View {
 /// with the grant's button while it is still missing, then the files' own
 /// permissions, which the grant does not change. Nothing for a run whose
 /// items say neither. The words are `ItemErrorDiagnosis`'s, the same the
-/// banner, the notification and the channels carry; the access state now
-/// is read here, so granting it turns "grant it" into "back up again".
+/// banner, the notification and the channels carry; the hints take the
+/// current access state, so a fresh grant turns "grant it" into "back up
+/// again".
 struct ItemErrorHintsView: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord

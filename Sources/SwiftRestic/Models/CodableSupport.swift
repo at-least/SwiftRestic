@@ -2,20 +2,18 @@ import Foundation
 
 /// Tolerant accessors for decoding the stored configuration.
 ///
-/// The synthesized `Decodable` conformance requires every key to be present, so
-/// a `config.json` written before a field existed fails to decode outright — and
-/// for a backup app that means silently losing every schedule and repository the
-/// user had set up. Every persisted model decodes through these instead, so an
-/// unknown, missing or malformed field falls back to its default rather than
-/// taking the whole document down with it.
+/// The synthesized `Decodable` conformance requires every key to be present,
+/// so a `config.json` written before a field existed would fail to decode —
+/// taking every schedule and repository down with it. Every persisted model
+/// decodes through these instead: an unknown, missing or malformed field
+/// falls back to its default.
 ///
 /// Tolerance is not silence: a field that is *present* but unreadable is a
-/// reporting gap, not a missing key. When a `DecodeNoteBox` is bound around
-/// the decoding pass (`DecodeNotes.$current.withValue`, as the config store
-/// does), every such fallback is recorded there so the app can say what was
+/// reporting gap, not a missing key. With a `DecodeNoteBox` bound around the
+/// decoding pass (`DecodeNotes.$current.withValue`, as the config store
+/// does), every such fallback is recorded there, so the app can say what was
 /// substituted — an unknown enum value silently becoming `.local` would
-/// otherwise repoint a repository without a word, and the next save would
-/// persist the substitution.
+/// repoint a repository without a word, and the next save would persist it.
 extension KeyedDecodingContainer {
     func value<T: Decodable>(_ key: Key, default fallback: T) -> T {
         guard contains(key) else { return fallback }
@@ -75,10 +73,10 @@ extension KeyedDecodingContainer {
     }
 }
 
-/// The tolerant fallbacks of one decoding pass. Decoding is synchronous
-/// inside the `withValue` closure that binds the box, so it never crosses an
-/// isolation boundary; the lock exists so the type can honestly claim
-/// `Sendable`, which binding a task-local value requires.
+/// The tolerant fallbacks of one decoding pass. Decoding runs synchronously
+/// inside the `withValue` closure, so it never crosses an isolation
+/// boundary; the lock exists only so the box can claim `Sendable`, which
+/// binding a task-local value requires.
 enum DecodeNotes {
     /// Bound around a decoding pass; tolerant fallbacks record themselves here.
     @TaskLocal static var current: DecodeNoteBox?

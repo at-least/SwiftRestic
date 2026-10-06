@@ -4,16 +4,14 @@ import SwiftUI
 extension View {
     /// A click anywhere in this list gives it the keyboard, as a click in an
     /// AppKit table does. A SwiftUI List on macOS 26 takes a click's
-    /// selection but not keyboard focus: in a probe with a bare sidebar and
-    /// detail List, focus stayed on the window after clicks in either and
-    /// → or ↓ reached neither list. Here the sidebar holds focus from the
-    /// window's opening, so the restore tree's →, ← and Return went to the
-    /// sidebar after a click on a row.
+    /// selection but not keyboard focus: keys keep going to whatever held
+    /// focus before the click — here the sidebar, which holds it from the
+    /// window's opening.
     ///
     /// The click itself, not a selection change: the List's selection
-    /// binding is not set by a click on a row already selected (probed), and
-    /// a row stays selected across a backup switch — back from the sidebar,
-    /// the click on it would leave the keyboard there.
+    /// binding is not set by a click on a row already selected, and a row
+    /// stays selected across a backup switch — back from the sidebar, the
+    /// click on it would leave the keyboard there.
     func focusOnClick(_ isFocused: FocusState<Bool>.Binding) -> some View {
         focused(isFocused)
             .background(ClickMonitor { isFocused.wrappedValue = true })

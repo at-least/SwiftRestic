@@ -30,8 +30,8 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             case .s3: "cloud"
             case .b2: "flame"
             case .azure: "cube"
-            // A distinct glyph, not `cloud.fill`: two clouds one weight apart
-            // collided in the sidebar at caption size.
+            // Not `cloud.fill`: two clouds one weight apart collide at
+            // caption size in the sidebar.
             case .gcs: "hexagon"
             case .rest: "network"
             case .rclone: "shippingbox"
@@ -133,10 +133,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var resticRepositoryString: String {
         switch kind {
         case .local:
-            // restic is spawned without a shell, so `~` would reach it
-            // literally and resolve against `/` — the expansion the shell
-            // would normally do happens here, as it already does for plan
-            // sources and exclude patterns.
+            // restic is spawned without a shell, so a literal `~` would
+            // resolve against `/`; the shell's expansion happens here, as
+            // for plan sources and exclude patterns.
             return resolvedLocalPath
         case .sftp:
             let user = sftpUser.isEmpty ? "" : "\(sftpUser)@"

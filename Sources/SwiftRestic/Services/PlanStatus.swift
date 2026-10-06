@@ -44,18 +44,17 @@ enum PlanStatus {
     /// restic's items, taken before the engine stores its decoding and
     /// retention lines — never the stored line count, which would call a
     /// lock-contention retention skip (`restic forget` exit 11) "1
-    /// unreadable item". Meant as the one source of these facts, so any
-    /// other surface that summarises a run (Activity's Detail column) can
-    /// read the same words.
+    /// unreadable item". The one source of these facts, so every surface
+    /// that summarises a run reads the same words.
     static func facts(for run: RunRecord) -> [String] {
         var facts: [String] = []
         if run.itemErrorCount > 0 {
             facts.append(Format.plural(run.itemErrorCount, "unreadable item"))
         } else if run.kind == .backup, run.exitCode == ResticError.backupPartialSuccessCode {
-            // restic exited 3 and named nothing — a file count would pass
-            // for a clean run, and a skipped retention step or a failing
-            // hook beside it would pass for the whole story. The log keeps
-            // restic's own words.
+            // restic exited 3 and named nothing: a file count would pass for
+            // a clean run, and a skipped retention step or a failing hook
+            // would pass for the whole story. The log keeps restic's own
+            // words.
             facts.append(unnamedUnreadFact)
         }
         if retentionLine(of: run) != nil {
@@ -68,8 +67,8 @@ enum PlanStatus {
     }
 
     /// The row for a failed or completed-with-errors backup. It always says
-    /// something: a failure leads with why it failed; a warning leads with
-    /// the first unreadable item, else the line that explains the warning
+    /// something: a failure leads with why it failed; a warning with the
+    /// first unreadable item, else the line that explains the warning
     /// (a decoding gap or a skipped retention step — never presented as an
     /// unreadable file), else a hook's complaint, else the banner's words
     /// for a bare exit 3.
@@ -85,9 +84,9 @@ enum PlanStatus {
         }
 
         var facts = facts(for: run)
-        // A retention-only warning already says so in its message. Beside
+        // A retention-only warning already says so in its message; beside
         // any other fact the line stays, so the facts read as Activity's
-        // Detail column does, word for word.
+        // Detail column does.
         if let message, message == retentionLine(of: run), facts == [retentionSkippedFact] {
             facts = []
         }
@@ -104,12 +103,12 @@ enum PlanStatus {
     }
 
     /// The moment a plan's "Last backup" says — the run's stamp when the
-    /// app ran it, else its newest snapshot's own time: history a plan can
-    /// arrive with (adopted, or a repository added with its snapshots
-    /// already in it) is still the plan's last backup. The sidebar caption,
-    /// the repository page's Protection line and the plan page's Last
-    /// backup row all read this one moment, so the same backup cannot read
-    /// three ways side by side.
+    /// app ran it, else its newest snapshot's own time: history a plan
+    /// arrives with (adopted, or a repository added with its snapshots
+    /// already in it) is still its last backup. The sidebar caption, the
+    /// repository page's Protection line and the plan page's Last backup
+    /// row all read this one moment, so the same backup cannot read three
+    /// ways side by side.
     static func lastBackupAt(plan: BackupPlan, latestSnapshot: Snapshot?) -> Date? {
         plan.lastSuccessAt ?? latestSnapshot?.time
     }
@@ -117,13 +116,12 @@ enum PlanStatus {
     /// The run the plan page's Last backup value lands on: the newest
     /// backup that stamped `lastSuccessAt` — the moment `lastBackupAt`
     /// names while the plan's history is runs of its own; history that
-    /// arrived with the repository names the newest snapshot's time and
-    /// has no run to land on. `markPlanRun`'s predicate: the stamp lands
-    /// as soon as the snapshot is written, so a run whose after-hooks
-    /// then failed counts (`.completedWithErrors`), and so does one whose
-    /// retention was stopped afterwards (`.cancelled`, its snapshot
-    /// written); a failed run, or one stopped before its snapshot, never
-    /// stamped.
+    /// arrived with the repository has no run to land on. The predicate
+    /// follows `markPlanRun`'s: the stamp lands once the snapshot is
+    /// written, so a run whose after-hooks then failed counts
+    /// (`.completedWithErrors`), and so does one whose retention was
+    /// stopped afterwards (`.cancelled`, snapshot written); a failed run,
+    /// or one stopped before its snapshot, never stamped.
     static func lastBackupRun(planID: UUID, in runs: [RunRecord]) -> RunRecord? {
         runs
             .filter {
@@ -133,17 +131,15 @@ enum PlanStatus {
             .max { $0.startedAt < $1.startedAt }
     }
 
-    /// The plan page's Next backup value (named for the tile it once was),
-    /// from the same enumeration the scheduler and the tray read, so the
-    /// page cannot show a date nothing will
-    /// fire at. A paused plan says so instead of
-    /// "Manually" — a paused manual one without promising a schedule to
-    /// resume; an enabled plan the scheduler skips — no folders, or a
-    /// repository it cannot find — says it is not scheduled.
-    /// A timed pause, the plan's own or the app-wide `hold`, moves the date
-    /// to its end; under an open-ended hold a run already due reads
-    /// "Waiting", never "Due now". A due slot
-    /// whose backup is in flight (`isBackingUp`) reads "Running now".
+    /// The plan page's Next backup value, from the same enumeration the
+    /// scheduler and the tray read, so the page cannot show a date nothing
+    /// will fire at. A paused plan says so instead of "Manually" — a paused
+    /// manual one without promising a schedule to resume; an enabled plan
+    /// the scheduler skips — no folders, or a repository it cannot find —
+    /// says it is not scheduled. A timed pause, the plan's own or the
+    /// app-wide `hold`, moves the date to its end; under an open-ended hold
+    /// a due run reads "Waiting", never "Due now". A due slot whose backup
+    /// is in flight reads "Running now".
     static func nextBackupTile(
         for plan: BackupPlan,
         existingRepositoryIDs: Set<UUID>,
@@ -152,9 +148,7 @@ enum PlanStatus {
         now: Date = .now
     ) -> TileFace {
         guard plan.isEnabled else {
-            // Removing a repository pauses all of its plans, manual ones
-            // too, but a manual plan has no schedule for Resume to bring
-            // back.
+            // A manual plan has no schedule for Resume to bring back.
             if plan.schedule.frequency == .manual {
                 return TileFace(
                     value: "Paused",
@@ -180,10 +174,9 @@ enum PlanStatus {
                 help: "The scheduler skips this plan until its setup is complete — see Configuration below."
             )
         }
-        // A due slot with a backup in flight is being run: nothing stamps
-        // the slot until the run ends, and "Due now" stood over every
-        // scheduled backup for as long as it ran. A Back Up Now under a
-        // hold runs and stamps it too, so this comes before Waiting.
+        // Nothing stamps the slot until the run ends, so "Running now"
+        // must beat "Waiting" and the "Due now" below — a Back Up Now
+        // under a hold runs and stamps the slot too.
         if isBackingUp, next <= now {
             return TileFace(value: "Running now", help: "This plan is backing up now.")
         }
@@ -198,11 +191,12 @@ enum PlanStatus {
         var namesPlanPause = pauseEnd != nil
         var namesHold = hold != nil
         if let pauseEnd, let holdEnd = hold?.resumesAt {
-            // Both timed, and both read "paused until": naming both said one
-            // pause twice with two times. The later end is the date, so that
-            // pause is the one named — on a tie the app-wide one, which
-            // covers the plan's. A hold with no end (the battery, Until I
-            // Resume) sets no date and stays named beside the plan's.
+            // Both timed, and both read "paused until": naming both would
+            // say one pause twice with two times. The later end is the
+            // date, so that pause is the one named — on a tie the app-wide
+            // one, which covers the plan's. A hold with no end (the
+            // battery, Until I Resume) sets no date and stays named beside
+            // the plan's.
             namesPlanPause = pauseEnd > holdEnd
             namesHold = !namesPlanPause
         }
@@ -231,10 +225,10 @@ enum PlanStatus {
     }
 
     /// The plan page's Configuration row: the sidebar's pause words, with
-    /// the schedule named under either pause — the row is where the
-    /// schedule is stated, so it never drops it. An open-ended pause's
-    /// caption already names it (a manual plan's has none to name); a timed
-    /// one's names only its end, so the schedule it resumes follows.
+    /// the schedule named under a pause — the row is where the schedule is
+    /// stated, so it never drops it. An open-ended pause's caption already
+    /// names it (a manual plan's has none); a timed one's names only its
+    /// end, so the schedule it resumes follows.
     static func scheduleRow(for plan: BackupPlan, now: Date = .now, calendar: Calendar = .current) -> String {
         guard let pause = pauseCaption(for: plan, now: now, calendar: calendar) else {
             return plan.schedule.summary
@@ -243,17 +237,15 @@ enum PlanStatus {
         return "\(pause) — \(plan.schedule.summary)"
     }
 
-    /// A plan's sidebar caption. In rank: the phase of a run in flight; a
+    /// A plan's sidebar caption. In rank: a run in flight's phase; a
     /// standing problem, named for as long as it stands, seen or not; the
     /// pause; the last backup; the schedule. A problem and a pause are both
     /// news, so a paused plan with a standing problem gets both — the
-    /// problem first, beside its glyph, and the pause on a line of its own
-    /// (before, the pause took the line and an unseen problem showed only
-    /// as the dot). The last backup is `lastBackupAt`'s one moment — what
-    /// the Protection line and the plan page read too — so history a plan
-    /// arrived with counts here as well. A plan with no backup at all that
-    /// the scheduler skips — no folders, or a repository it cannot find —
-    /// reads "Not scheduled", as its Next backup value does, rather than a
+    /// problem first, beside its glyph, the pause on a line of its own. The
+    /// last backup is `lastBackupAt`'s one moment, so history a plan
+    /// arrived with counts here as well. A plan with no backup that the
+    /// scheduler skips — no folders, or a repository it cannot find — reads
+    /// "Not scheduled", as its Next backup value does, rather than a
     /// schedule it will not keep.
     ///
     /// The caption carries no next run: the sidebar says only the last

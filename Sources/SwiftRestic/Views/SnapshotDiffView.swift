@@ -78,9 +78,9 @@ struct SnapshotDiffView: View {
         .onAppear {
             // The previous backup of the same folders from the same host, or
             // nothing: a lineage's first backup has no natural baseline, and
-            // falling back to whatever is older — usually another plan's
-            // tree — listed every file as added. The picker still reaches
-            // any snapshot on purpose.
+            // any older snapshot — usually another plan's tree — diffs as
+            // every file added or removed. The picker still reaches any
+            // snapshot.
             if olderID == nil {
                 olderID = newer.previousComparable(in: model.snapshots(for: target.repositoryID))?.id
             }
@@ -134,9 +134,9 @@ struct SnapshotDiffView: View {
                     if olderID == nil {
                         Text("Choose a snapshot").tag(String?.none)
                     }
-                    // Grouped by month: with a year of hourly snapshots the
-                    // flat list was a thousand-row scroll, and a header to
-                    // park the eye on is the cheapest jump a menu can offer.
+                    // Grouped by month: a year of hourly snapshots is a
+                    // thousand-row flat scroll, and a header to park the eye
+                    // on is the cheapest jump a menu can offer.
                     ForEach(grouped, id: \.label) { group in
                         Section(group.label) {
                             ForEach(group.snapshots) { snapshot in
@@ -348,13 +348,11 @@ struct SnapshotDiffView: View {
     }
 
     /// The change rows the current kind filter and path search admit,
-    /// computed off the render path. As a body local this pass ran on every
-    /// re-render — every keystroke re-renders the sheet, and the debounce
-    /// only settles the needle, it never gated the scan — at a cost linear
-    /// in the change list (44 ms at the 20,000-change cap, measured), all
-    /// on the main actor. Keyed by `RowFilterKey` it now runs once per
-    /// settled query in a detached task; the cancellation guard drops a
-    /// scan whose inputs were replaced mid-flight.
+    /// computed off the render path: every keystroke re-renders the sheet,
+    /// and the scan costs linearly in the change list (44 ms at the
+    /// 20,000-change cap), all on the main actor. Keyed by `RowFilterKey`
+    /// it runs once per settled query in a detached task; the cancellation
+    /// guard drops a scan whose inputs were replaced mid-flight.
     private func computeRows() async {
         guard diff != nil else {
             filteredRows = nil
@@ -384,9 +382,6 @@ struct SnapshotDiffView: View {
     /// cannot tell snapshots inside the same minute apart.
     private func comparisonLabel(_ snapshot: Snapshot, sharedMinutes: Set<String>) -> String {
         let when = DiffCandidateGrouping.displayedMinute(snapshot.time)
-        // The abbreviated time cannot tell snapshots inside the same minute
-        // apart; when another candidate shares the displayed minute, a
-        // relative stamp says which one came first.
         let sharesDisplayedMinute = sharedMinutes.contains(when)
         return sharesDisplayedMinute
             ? "\(when) · \(Format.ago(snapshot.time, now: now)) · \(snapshot.shortID)"

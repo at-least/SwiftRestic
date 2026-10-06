@@ -3,7 +3,7 @@ import Foundation
 /// Turns an event into the HTTP request a channel expects.
 ///
 /// Kept separate from the sending so it can be tested without a network: the
-/// shape of each provider's payload is the part that is easy to get wrong.
+/// payload shapes are the part easy to get wrong.
 enum NotificationPayload {
     struct Request: Sendable, Equatable {
         var url: URL
@@ -19,9 +19,9 @@ enum NotificationPayload {
 
         switch channel.kind {
         case .healthchecks:
-            // The ping URL itself means "still alive"; the suffixes mean "starting"
-            // and "this run failed". Anything else and the dead-man's switch
-            // stops meaning anything.
+            // The bare ping URL means "still alive"; the suffixes mean
+            // "starting" and "this run failed" — anything else and the
+            // dead-man's switch stops meaning anything.
             switch event.stage {
             case .started: url.append(path: "start")
             case .failed, .cancelled: url.append(path: "fail")
@@ -69,8 +69,8 @@ enum NotificationPayload {
     }
 }
 
-/// Sends the requests. Deliberately best-effort: a notification that does not
-/// arrive must never change what the run record says happened.
+/// Sends the requests. Best-effort: a notification that does not arrive
+/// must never change what the run record says happened.
 enum NotificationPoster {
     static let timeout: TimeInterval = 15
 

@@ -7,14 +7,14 @@ import GRDB
 /// closed runs that claim no indexed snapshot, of content marks with no
 /// indexed snapshot left on one side, of a snapshot-less chain's runs, marks
 /// and row, of queue rows, and of nodes nothing holds, with their FTS rows
-/// through FTS5's delete-by-INSERT and their edits; the only other inserts go to the
-/// TEMP scratch list `gc`, which names nodes to consider, never a claim.
-/// None writes `snap`, a window or `next_seq`, and a claim is a run joined
-/// to an indexed snap row, so housekeeping can remove claims but never add
-/// one. That is the property that makes it safe to skip (a crash between
-/// reconcile and housekeeping costs space, not answers) and makes its bugs
-/// conservative: deleting too much loses a claim, deleting too little leaves
-/// garbage that `invariantViolations()` (b) reports.
+/// through FTS5's delete-by-INSERT and their edits. The only other inserts
+/// go to the TEMP scratch list `gc`, which names nodes to consider, never a
+/// claim. None writes `snap`, a window or `next_seq`, and a claim is a run
+/// joined to an indexed snap row, so housekeeping can remove claims but
+/// never add one. That is what makes it safe to skip (a crash between
+/// reconcile and housekeeping costs space, not answers) and keeps its bugs
+/// conservative: deleting too much loses a claim, deleting too little
+/// leaves garbage that `invariantViolations()` (b) reports.
 extension SnapshotIndex {
     /// Where a queued seq sits between the chain's indexed seqs: the nearest
     /// indexed seq below and above it, either possibly absent.
@@ -28,8 +28,8 @@ extension SnapshotIndex {
     /// snapshot count. The coordinator runs it after every applied reconcile;
     /// with an empty queue it costs one probe of an empty table.
     ///
-    /// A chain with no snapshot rows left had its whole history forgotten:
-    /// its runs and its row go. Otherwise each distinct gap loses the closed
+    /// A chain with no snapshot rows left has lost its whole history: its
+    /// runs and its row go. Otherwise each distinct gap loses the closed
     /// runs lying wholly inside it. TOP runs are never touched here: they
     /// describe `hi` for the next full compare, even after `hi` died. A
     /// BOTTOM run always reaches `lo`, and `first_seq > below ≥ 1` keeps it
@@ -165,8 +165,8 @@ extension SnapshotIndex {
         let insert = try db.cachedStatement(sql: SQL.gcInsert)
         while true {
             try db.cachedStatement(sql: SQL.gcKeepCollectable).execute()
-            // Deduplicated here: a DISTINCT in the statement made the planner
-            // walk the whole (parent, name) index.
+            // Deduplicated in Swift: a DISTINCT here makes the planner walk
+            // the whole (parent, name) index.
             let parents = Set(try Int64.fetchAll(db.cachedStatement(sql: SQL.gcParents)))
             try db.cachedStatement(sql: SQL.gcDeleteFTS).execute()
             try db.cachedStatement(sql: SQL.gcDeleteEdits).execute()

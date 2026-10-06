@@ -3,17 +3,15 @@ import SwiftUI
 /// The page of one group under a repository's Other backups — a plan's
 /// history in this repository that none of its plans owns, or the backups
 /// of one Mac's folders that no plan made. Overview | Files in the toolbar,
-/// as a plan's page has: the overview says what the history is, in one
-/// sentence, and the facts that identify it (when, from which Mac, which
-/// folders, which patterns, its plan tag), with its newest backup one click
-/// away; Files is its folders and files across every backup. The records
-/// themselves are the sidebar's, under the group — the plan page's own rule
-/// — so the page does not list them a second time.
+/// as a plan's page has: the overview says what the history is and the
+/// facts that identify it, with its newest backup one click away; Files is
+/// its folders and files across every backup. The records themselves are
+/// the sidebar's, under the group — the plan page's own rule — so the page
+/// does not list them a second time.
 ///
 /// Every fact comes from `OtherGroupPageSummary`, the one derivation the
 /// sidebar's labels already feed. No verbs in the toolbar: there is nothing
-/// to edit before a group is adopted (the explanation card's verb, raised
-/// through the root as the sidebar's is) and nothing to refresh that the
+/// to edit before a group is adopted and nothing to refresh that the
 /// repository's page does not already offer.
 struct OtherGroupView: View {
     @Environment(AppModel.self) private var model
@@ -92,8 +90,7 @@ struct OtherGroupView: View {
                 .controlSize(.small)
                 .help("Show this plan's page, where it backs up now")
             } else if case let .plan(planID) = groupID {
-                // The flow's main entry: the group selected, adopt beside
-                // what it adopts — the group's context menu carries the
+                // The flow's main entry; the group's context menu carries the
                 // same verb.
                 Button("Adopt as a Backup Plan…") { onAdopt(planID) }
                     .controlSize(.small)
@@ -105,10 +102,10 @@ struct OtherGroupView: View {
     }
 
     /// The history's identifying facts. Newest and Oldest bracket it; Made
-    /// from, Folders, Excludes and Tags say what it holds — a folder set
-    /// per line when the plan's folders changed, rows omitted when there
-    /// is nothing to say — and Plan tag is the identifier itself, the one
-    /// line a copy can carry elsewhere, for a group that has one.
+    /// from, Folders, Excludes and Tags say what it holds — rows omitted
+    /// when there is nothing to say — and Plan tag is the identifier
+    /// itself, the one line a copy can carry elsewhere, for a group that
+    /// has one.
     private func backupsCard(_ summary: OtherGroupPageSummary) -> some View {
         Card("Backups") {
             DetailGrid {

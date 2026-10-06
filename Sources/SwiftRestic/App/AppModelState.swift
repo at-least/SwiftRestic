@@ -4,10 +4,10 @@ import Foundation
 
 /// Live state of one plan that is currently running.
 ///
-/// Progress is deliberately not here: it lives in `AppModel.planProgress`,
-/// its own observable storage, so a once-a-second status tick invalidates
-/// only the views that show the numbers — not every view that reads which
-/// phase a plan is in.
+/// Progress is not here: it lives in `AppModel.planProgress`, its own
+/// observable storage, so a once-a-second status tick invalidates only the
+/// views that show the numbers — not every view that reads which phase a
+/// plan is in.
 struct PlanActivity: Sendable, Equatable {
     enum Phase: Sendable, Equatable {
         case starting
@@ -82,8 +82,7 @@ enum SidebarItem: Hashable {
     /// selection revalidates to the repository's page once it is gone.
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     /// A backup record picked under its plan, or under a repository's Other
-    /// backups — the pane browses that record's file tree directly,
-    /// Arq-style.
+    /// backups — the pane browses that record's file tree directly.
     case restoreSnapshot(UUID, String)
     case console
     case activity
@@ -132,10 +131,10 @@ struct FileNode: Hashable, Sendable {
 
 /// The last settled outcome of a repository's snapshot listing.
 ///
-/// Deliberately not the in-flight state — `loadingSnapshots` owns that. A
-/// refresh that starts while a repository is in `failed` keeps the failure
-/// visible until it settles, so a background refresh cycle cannot make the
-/// error row flicker to a spinner and back every five minutes.
+/// Not the in-flight state — `loadingSnapshots` owns that. A refresh that
+/// starts while a repository is in `failed` keeps the failure visible until
+/// it settles, so a background refresh cycle cannot make the error row
+/// flicker to a spinner and back every five minutes.
 enum SnapshotListingOutcome: Equatable {
     /// Never loaded: the app is still bootstrapping, or the refresh has not
     /// been attempted for this repository.

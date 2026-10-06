@@ -3,8 +3,8 @@ import Security
 
 /// Stores repository passwords and provider secret keys in the login Keychain.
 ///
-/// Secrets never touch `config.json`; only the repository UUID is written there,
-/// and it is used as the Keychain account name.
+/// Secrets never touch `config.json`; the repository UUID stored there is the
+/// base of the Keychain account name.
 enum KeychainStore {
     static let service = "com.newlix.SwiftRestic"
 

@@ -5,13 +5,12 @@ import SwiftUI
 /// numbers, restic's exit code, the messages it left, and the log. Shown
 /// for every selected run, clean ones included: the plan page's Last backup
 /// value lands on exactly such a run, and an empty pane under the selection
-/// read as "nothing to see".
+/// reads as "nothing to see".
 ///
-/// A fixed 220 pt, scrolling inside, with the buttons pinned under the
-/// scroll view so Show Log… stays in reach below fifty unreadable items.
-/// The fixed frame is also what keeps this drawer honest in Activity's
-/// non-scrolling host: its answer to the split view's zero-width minimum
-/// query is 220, whatever the text inside would wrap to.
+/// A fixed 220 pt, scrolling inside, buttons pinned under the scroll view
+/// so Show Log… stays in reach whatever the messages list. The fixed frame
+/// also answers Activity's non-scrolling host: its reply to the split
+/// view's zero-width minimum query is 220, whatever the text wraps to.
 struct RunDetailPanel: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -24,10 +23,9 @@ struct RunDetailPanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     header
-                    // A problem run leads with what went wrong, as this
-                    // drawer always has: below the grid, the first item line
-                    // of an exit-3 backup sat half under the fold. A clean
-                    // run leads with what it made.
+                    // A problem run leads with what went wrong, a clean run
+                    // with what it made: the failure is not pushed under the
+                    // fold below the grid.
                     if run.outcome == .succeeded {
                         DetailGrid { rows }
                         messages
@@ -88,8 +86,8 @@ struct RunDetailPanel: View {
             if run.snapshotID != nil {
                 DetailRow("Snapshot") { RunSnapshotRow(run: run, onCompare: onCompare) }
             }
-            // Records from before restores kept these have no destination;
-            // their rows are left out rather than guessed.
+            // Records that predate destination tracking have none; their
+            // rows are left out rather than guessed.
             if let destination = run.destinationPath {
                 // "Snapshot" beside the Snapshot row, as Copy Details says it;
                 // "backup" is the Restore pane's word.
@@ -144,7 +142,7 @@ struct RunDetailPanel: View {
 
     // MARK: - Messages
 
-    /// What the run left in words, as before: the failure in red, prune's
+    /// What the run left in words: the failure in red, prune's
     /// output tail, what to do about the unreadable items, restic's item
     /// lines, and the hooks' own lines — which stay here, on this Mac, and
     /// never reach Copy Details. The unreadable items come under restic's
@@ -222,10 +220,9 @@ struct RunDetailPanel: View {
                 // record's next step is not a pointless re-run.
                 if run.kind == .backup, run.outcome != .succeeded, plan.isConfigurationComplete {
                     // The Plan menu's predicate, as the plan page's and the
-                    // sidebar's buttons read it: disabled while running or
-                    // restic-less — a clickable button that quietly does
-                    // nothing is a lie the model's no-op guard should never
-                    // have to tell.
+                    // sidebar's buttons read it — without it the button is
+                    // clickable while running or restic-less and quietly
+                    // does nothing.
                     Button("Back Up Now") { model.runBackup(planID: planID) }
                         .disabled(!model.planCommands(for: .plan(planID)).canBackUp)
                         .help(
@@ -324,8 +321,8 @@ private struct RunSnapshotRow: View {
         }
     }
 
-    /// 09's mark: the run itself for a backup, the backup that wrote it for
-    /// a restore. A fixed slot.
+    /// The run itself for a backup; the backup that wrote the snapshot,
+    /// for a restore.
     private func completenessMark(for snapshotID: String) -> some View {
         SnapshotCompletenessMark(run: run.kind == .backup ? run : model.backupRun(forSnapshot: snapshotID))
             .font(.caption)

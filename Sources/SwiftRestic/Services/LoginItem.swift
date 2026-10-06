@@ -9,9 +9,9 @@ enum LoginItemState: Sendable, Equatable {
 
 /// Starting SwiftRestic at login.
 ///
-/// The scheduler only runs while the app is running, so for a plan to fire
-/// reliably the app has to come back after a restart. `SMAppService` is the
-/// modern way to ask for that — no LaunchAgent plist and no helper tool.
+/// The scheduler only runs while the app is running, so a plan fires reliably
+/// only if the app comes back after a restart. `SMAppService` registers that
+/// without a LaunchAgent plist or helper tool.
 enum LoginItem {
     static var status: SMAppService.Status { SMAppService.mainApp.status }
 
@@ -42,9 +42,9 @@ enum LoginItem {
 
     /// Whether this copy of the app is somewhere a login item can point at.
     ///
-    /// A build running out of DerivedData gets a fresh bundle on every compile,
-    /// so a login item registered from there ends up pointing at a binary that no
-    /// longer exists — and that stale entry outlives the build it came from.
+    /// A build folder's bundle changes every compile, so a login item
+    /// registered from there ends up pointing at a binary that no longer
+    /// exists — and the stale entry outlives the build.
     static func isInstallableLocation(_ path: String) -> Bool {
         guard !path.contains("/DerivedData/"), !path.contains("/Build/Products/") else {
             return false

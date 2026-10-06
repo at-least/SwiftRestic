@@ -21,10 +21,10 @@ enum ResticMessage: Sendable, Equatable {
     /// A line we could recognise as JSON but not map to a known `message_type`.
     case unknown(type: String)
     /// A line carrying a `message_type` we know whose payload failed to
-    /// decode — restic's schema moved under us. Deliberately not folded into
-    /// `unknown`: an unrecognised type is restic growing (fine to ignore), a
-    /// malformed known type is a reporting gap, and callers count these to
-    /// say so instead of dropping the line silently.
+    /// decode — restic's schema moved under us. Kept apart from `unknown`:
+    /// an unrecognised type is restic growing (fine to ignore), a malformed
+    /// known type is a reporting gap, and callers count these to say so
+    /// instead of dropping the line silently.
     case malformed(type: String, reason: String)
 }
 
