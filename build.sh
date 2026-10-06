@@ -31,6 +31,35 @@ if grep -rnE "import (AppKit|SwiftUI|Cocoa)" "${portable[@]}"; then
     exit 1
 fi
 
+# SwiftUI recurses without end when an accessibility client reads a Text
+# that has both .textSelection(.enabled) and .accessibilityLabel: the app
+# dies of a stack overflow the moment VoiceOver (or any AX client) reaches
+# it — seen on macOS 27.0.1 with the Activity drawer's snapshot ID. A
+# selectable text says its own words; put a label on the row around it
+# instead. A modifier chain is the run of lines starting with "." around
+# the .textSelection line.
+if ! perl -e '
+    my $bad = 0;
+    for my $file (@ARGV) {
+        open(my $fh, "<", $file) or die "$file: $!";
+        my @lines = <$fh>;
+        for my $i (0 .. $#lines) {
+            next unless $lines[$i] =~ /\.textSelection\(\.enabled\)/;
+            my ($lo, $hi) = ($i, $i);
+            $lo-- while $lo > 0 && $lines[$lo] =~ /^\s*\./;
+            $hi++ while $hi < $#lines && $lines[$hi + 1] =~ /^\s*\./;
+            for my $j ($lo .. $hi) {
+                next unless $lines[$j] =~ /\.accessibilityLabel\(/;
+                print STDERR "$file:" . ($j + 1) . ": error: .accessibilityLabel on a selectable Text crashes accessibility clients\n";
+                $bad = 1;
+            }
+        }
+    }
+    exit $bad;
+' $(find Sources -name "*.swift"); then
+    exit 1
+fi
+
 ACTION="${1:-build}"
 
 # Two xcodebuild test sessions on one machine stomp each other's testmanagerd

@@ -321,7 +321,6 @@ private struct RunSnapshotRow: View {
                     .monospaced()
                     .textSelection(.enabled)
                     .help("Removed after this run — by retention, a prune, or another restic client.")
-                    .accessibilityLabel("Snapshot \(short), no longer in the repository")
             case .unavailable?:
                 let help = "This repository's snapshot list isn't loaded right now."
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
@@ -347,7 +346,6 @@ private struct RunSnapshotRow: View {
             Text(short)
                 .monospaced()
                 .textSelection(.enabled)
-                .accessibilityLabel("Snapshot \(short)")
             if let made {
                 Text("· \(Format.timestamp(made))")
             }
