@@ -110,9 +110,11 @@ struct FindFilesView: View {
         }
         // The index-state check re-runs when the repository changes and is
         // cancelled when the sheet leaves, so a late answer cannot write
-        // into state the sheet no longer owns.
+        // into state the sheet no longer owns. The previous repository's
+        // answer goes first: it is not this one's.
         .task(id: repositoryID) {
-            guard let repositoryID else { indexComplete = nil; return }
+            indexComplete = nil
+            guard let repositoryID else { return }
             let ready = await model.indexIsComplete(repositoryID: repositoryID)
             guard !Task.isCancelled else { return }
             indexComplete = ready
@@ -153,8 +155,10 @@ struct FindFilesView: View {
                 .focused($patternFieldIsFocused)
                 .onSubmit(search)
                 // Meaningless against the index engine, which always searches
-                // every version.
-                if indexComplete != true {
+                // every version — so not offered until the engine is known:
+                // ticked while the answer is pending, it would silently stop
+                // applying when the answer is the index.
+                if indexComplete == false {
                     Toggle("Latest snapshot only", isOn: $latestOnly)
                         .toggleStyle(.checkbox)
                 }
@@ -232,12 +236,29 @@ struct FindFilesView: View {
                 .width(min: 130, ideal: 160)
 
                 TableColumn("Versions") { row in
-                    // The index engine knows how many snapshots hold the path
-                    // (older ones reachable through the Files view); the restic
-                    // engine walked exactly what it lists.
-                    Text(row.versionsCount.map { "of \($0)" } ?? "this one")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                    // The index engine knows how many snapshots hold the path,
+                    // and the count is the way to them: Show Versions, as in
+                    // the row's context menu. The restic engine walked
+                    // exactly what it lists.
+                    if let count = row.versionsCount, let open = showVersions(of: row) {
+                        Button(action: open) {
+                            HStack(spacing: 4) {
+                                Text("of \(count)")
+                                    .monospacedDigit()
+                                Image(systemName: "chevron.forward")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .buttonStyle(HoverableButtonStyle())
+                        .help("Show every backup that holds this path, on the Files tab")
+                        .accessibilityLabel("Show versions: of \(count)")
+                    } else {
+                        Text(row.versionsCount.map { "of \($0)" } ?? "this one")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .width(min: 60, ideal: 70)
 
@@ -259,19 +280,8 @@ struct FindFilesView: View {
                     Button("Restore “\(row.match.name)”…") {
                         restoreSelection(row)
                     }
-                    if let repositoryID, let record = model.snapshots(for: repositoryID).first(where: { $0.id == row.snapshotID }) {
-                        // Out of the sheet, onto the Files tab that holds
-                        // the match's history, at this match's backup.
-                        Button("Show Versions") {
-                            router.showVersions(
-                                path: row.match.path,
-                                isDirectory: row.match.isDirectory,
-                                in: record,
-                                repositoryID: repositoryID,
-                                page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
-                            )
-                            dismiss()
-                        }
+                    if let open = showVersions(of: row) {
+                        Button("Show Versions", action: open)
                     }
                 }
             }
@@ -324,6 +334,26 @@ struct FindFilesView: View {
     }
 
     // MARK: - Data
+
+    /// Show Versions for a row — out of the sheet, onto the Files tab that
+    /// holds the match's history, at this match's backup — or nil when the
+    /// row's backup is no longer listed. The row is passed directly: a click
+    /// on an unselected row must not depend on selection state.
+    private func showVersions(of row: Row) -> (() -> Void)? {
+        guard let repositoryID,
+              let record = model.snapshots(for: repositoryID).first(where: { $0.id == row.snapshotID })
+        else { return nil }
+        return {
+            router.showVersions(
+                path: row.match.path,
+                isDirectory: row.match.isDirectory,
+                in: record,
+                repositoryID: repositoryID,
+                page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
+            )
+            dismiss()
+        }
+    }
 
     private func selectedRow(in rows: [Row]) -> Row? {
         guard let selection else { return nil }

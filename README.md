@@ -205,15 +205,19 @@ checked in so a normal build does not need it.
   same folders from the same Mac — not merely the row below it, which for a
   plan whose folders changed is a backup of other folders; the pane's header
   names the open backup and says what its Change column is compared with, or
-  that it is the first of its folders. The Files view (above) walks one
+  that it is the first of its folders. A removed item has no row to mark, so
+  under a finished comparison the header names what the previous backup held
+  and this one does not ("Removed: old.txt, sub" — a removed folder once, not
+  everything in it), the full paths in its tooltip. The Files view (above) walks one
   folder or file through every backup that holds it: *Show Versions*, in an
   item's right-click menu here and on Find Files' results, opens the item
   there — on the Files tab of the plan or group the backup belongs to, at
-  that backup. The file
+  that backup; on Find Files' index results the version count ("of 12 ›") is
+  a button to the same place. The file
   list answers Finder's outline keys: → opens a folder, ← closes it or steps to
   the folder that holds the selection. Its search covers the open backup and
   says how many matches only other backups hold; *Search All Backups…* carries
-  the search on in Find Files.
+  the search on in Find Files. A hit drags to Finder as a tree row does.
 - **Find files across snapshots** — search every snapshot for a name or glob when
   you do not know which backup still has the file, then restore the match
   (while the index still reads, a word with no glob character is looked for
@@ -658,7 +662,9 @@ stretch.
   Comparing snapshots of different folders or hosts is allowed but mostly shows
   everything as added and removed; the sheet says so when you pick one.
 - *Find files* with **Latest snapshot only** means the newest snapshot in the
-  repository, not the newest per plan. If two Macs write to one repository the
+  repository, not the newest per plan. The box shows only once the sheet knows
+  the search will walk snapshots with restic, never while it is still asking
+  the index, whose search covers every snapshot anyway. If two Macs write to one repository the
   latest snapshot may belong to the other one — search all snapshots there.
 - The UI is English only. Two strings (the find-pattern placeholder and the
   /bin/sh note that mentions `SWIFTRESTIC_*`) are `Text(verbatim:)` because

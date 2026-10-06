@@ -263,10 +263,8 @@ struct RestorePaneView: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
                     if rowContentWidth.value != width { rowContentWidth.value = width }
                 }
-                // Drag straight out of the tree into Finder. Tree rows only —
-                // the search list's rows offer Restore… but no drag; not a
-                // safety cut (a hit carries its kind in the open backup),
-                // simply unwired.
+                // Drag straight out of the tree into Finder, as from the
+                // search's hits below.
                 //
                 // The list's own drag, not `.onDrag`, and no gesture on the
                 // row: a SwiftUI gesture claims every click inside what it
@@ -347,6 +345,10 @@ struct RestorePaneView: View {
                     .truncationMode(.head)
             }
             .contentShape(Rectangle())
+            // A hit drags out like a tree row, through the same gate, as
+            // the node a restore of it would get (`node(for:)`): a hit
+            // carries its kind in the open backup.
+            .itemProvider { listDragProvider(for: node(for: hit)) }
             // The hit's byte-exact id, not its path: a path's `==` is
             // canonical equivalence, so two hits whose names differ only
             // in Unicode normalization would share one selection.
@@ -381,10 +383,10 @@ struct RestorePaneView: View {
 
     /// The pane's three ways out of a record, in one row: the primary
     /// Restore… for the selection, the whole backup on the left, and the
-    /// drag named in between. The hint shows only over the tree, the one
-    /// list whose rows drag; while a search lists hits and other backups
-    /// hold more, the middle says so and offers the way there — never
-    /// both. The keep/replace decision lives in the destination sheet, not
+    /// drag named in between. The hint shows over a list whose rows drag
+    /// — the tree, or a search's hits; while a search lists hits and other
+    /// backups hold more, the middle says so and offers the way there —
+    /// never both. The keep/replace decision lives in the destination sheet, not
     /// as a permanent caption under every browse.
     private func footer(record: Snapshot?) -> some View {
         HStack(spacing: 12) {
@@ -404,7 +406,7 @@ struct RestorePaneView: View {
                 searchAllButton
                     .controlSize(.small)
                     .fixedSize()
-            } else if treeIsShowing {
+            } else if dragListIsShowing {
                 Text("Drag an item to Finder to restore it there.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -419,10 +421,13 @@ struct RestorePaneView: View {
         .padding(12)
     }
 
-    /// The browser's final branch — the tree list, and nothing standing in
-    /// for it (spinner, error, search results, missing folder, empty folder).
-    private var treeIsShowing: Bool {
-        !isLoadingTree && loadError == nil && searchResult == nil && !folderMissing && !tree.rows.isEmpty
+    /// The browser shows a list whose rows drag: the search's hits in this
+    /// backup, or the tree — not a spinner, an error, an empty answer, a
+    /// missing folder or an empty one standing in for them.
+    private var dragListIsShowing: Bool {
+        guard !isLoadingTree, loadError == nil else { return false }
+        if let searchResult { return !searchResult.inThisBackup.isEmpty }
+        return !folderMissing && !tree.rows.isEmpty
     }
 
     /// One title, help and guard wherever the pane offers it: Find Files
@@ -440,22 +445,26 @@ struct RestorePaneView: View {
     /// The nodes behind the current selection, in the list's order: tree
     /// rows while browsing, synthesized hits while searching. Only rows on
     /// screen count — a row whose folder is folded away is not restored
-    /// unseen. Hits are already filtered to paths the selected backup
-    /// contains and carry their kind, so the synthesized node goes
-    /// straight to the restore, whose file and folder routes differ.
+    /// unseen.
     private var selectedNodes: [SnapshotNode] {
         guard !selection.isEmpty else { return [] }
         if let hits = searchResult?.inThisBackup {
-            return hits.filter { selection.contains($0.id) }.map { hit in
-                let name = (hit.path as NSString).lastPathComponent
-                return SnapshotNode(
-                    name: name.isEmpty ? hit.path : name,
-                    type: hit.isDirectory ? .dir : .file,
-                    path: hit.path
-                )
-            }
+            return hits.filter { selection.contains($0.id) }.map(node(for:))
         }
         return tree.rows.filter { selection.contains($0.id) }.map(\.node)
+    }
+
+    /// A hit as the node its restore and its drag both get, made in one
+    /// place so the two cannot disagree. Hits are already filtered to paths
+    /// the selected backup contains and carry their kind, so the node goes
+    /// straight to the restore, whose file and folder routes differ.
+    private func node(for hit: SearchHit) -> SnapshotNode {
+        let name = (hit.path as NSString).lastPathComponent
+        return SnapshotNode(
+            name: name.isEmpty ? hit.path : name,
+            type: hit.isDirectory ? .dir : .file,
+            path: hit.path
+        )
     }
 
     /// The one selected node, when exactly one row is selected.
@@ -629,7 +638,11 @@ struct RestorePaneView: View {
             guard !Task.isCancelled else { return }
             changes = marks.changes
             comparison = marks.failure.map { .failed(baseline: predecessor, reason: $0) }
-                ?? .compared(baseline: predecessor, changeCount: marks.changes.count)
+                ?? .compared(
+                    baseline: predecessor,
+                    changeCount: marks.changes.count,
+                    removed: ChangeComparison.removals(in: marks.changes)
+                )
         } else {
             changes = [:]
             comparison = .firstBackup
@@ -880,6 +893,7 @@ private struct RestoreRecordHeader: View {
             .font(.subheadline.weight(.semibold))
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
+            .help(heading.detail)
             HStack(spacing: 4) {
                 // Orange only on the glyph, beside words that already say
                 // it: the caption stays secondary for contrast.
@@ -894,8 +908,18 @@ private struct RestoreRecordHeader: View {
                     .truncationMode(.tail)
             }
             .font(.caption)
+            .help(heading.detail)
+            // Its own tooltip: a `.help` on the stack would cover this
+            // line's too.
+            if let removed = heading.removed {
+                Text(removed.line)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(removed.detail)
+            }
         }
-        .help(heading.detail)
     }
 }
 
