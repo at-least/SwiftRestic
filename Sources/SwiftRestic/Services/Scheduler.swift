@@ -63,6 +63,12 @@ enum Scheduler {
     ///     flight. A plan targeting one is held back rather than dropped — it is
     ///     still overdue on the next tick, so nothing is silently skipped, and it
     ///     cannot collide with a `prune` holding an exclusive lock.
+    ///
+    /// At most one plan per repository, the most overdue: plans due in the
+    /// same tick would otherwise start together, and each backup ends with
+    /// its retention `forget`, whose exclusive lock the other run then
+    /// loses ("Retention skipped"). The rest are held back as a busy
+    /// repository's plans are, and start on a tick after the first has run.
     static func duePlans(
         in plans: [BackupPlan],
         now: Date = .now,
@@ -70,7 +76,8 @@ enum Scheduler {
         busyPlanIDs: Set<UUID> = [],
         busyRepositoryIDs: Set<UUID> = []
     ) -> [BackupPlan] {
-        plans
+        var startingRepositoryIDs = Set<UUID>()
+        return plans
             .filter { plan in
                 guard plan.isScheduleActive(at: now), plan.isConfigurationComplete else { return false }
                 guard let repositoryID = plan.repositoryID,
@@ -87,6 +94,8 @@ enum Scheduler {
                 let rhsDue = rhs.schedule.nextRunDate(after: rhs.lastRunAt, now: now) ?? now
                 return lhsDue < rhsDue
             }
+            // The first filter kept only plans with a repository.
+            .filter { startingRepositoryIDs.insert($0.repositoryID!).inserted }
     }
 
     /// Repository upkeep that has fallen due.

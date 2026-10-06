@@ -246,6 +246,57 @@ struct SchedulingTests {
         // … and because nothing was recorded as run, it is still due afterwards.
         #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map(\.name) == ["waiting"])
     }
+
+    @Test("plans due on one repository in the same tick start one at a time, the most overdue first")
+    func oneBackupPerRepositoryPerTick() {
+        let shared = UUID()
+        let other = UUID()
+        func makePlan(_ name: String, _ repositoryID: UUID, lastRunAt: String) -> BackupPlan {
+            var plan = BackupPlan()
+            plan.name = name
+            plan.repositoryID = repositoryID
+            plan.sources = ["/tmp"]
+            plan.schedule.frequency = .daily
+            plan.schedule.hour = 2
+            plan.schedule.minute = 0
+            plan.lastRunAt = date(lastRunAt)
+            return plan
+        }
+        // Two plans on one repository at the same 02:00 slot: started
+        // together, one backup's retention `forget` took the repository's
+        // exclusive lock while the other ran, and the other recorded
+        // "Retention skipped".
+        let downloads = makePlan("downloads", shared, lastRunAt: "2026-09-04 02:00:00")
+        let dotfiles = makePlan("dotfiles", shared, lastRunAt: "2026-09-04 02:00:00")
+        let elsewhere = makePlan("elsewhere", other, lastRunAt: "2026-09-04 02:00:00")
+        let existing: Set<UUID> = [shared, other]
+        let now = date("2026-09-05 02:00:30")
+
+        #expect(Scheduler.duePlans(
+            in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing
+        ).map(\.name) == ["downloads", "elsewhere"])
+
+        // Held back, not dropped: while the first runs its repository is busy,
+        // and once it has run, the other is due on the next tick.
+        #expect(Scheduler.duePlans(
+            in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing,
+            busyPlanIDs: [downloads.id, elsewhere.id], busyRepositoryIDs: [shared, other]
+        ).isEmpty)
+        var ran = downloads
+        ran.lastRunAt = date("2026-09-05 02:00:40")
+        #expect(Scheduler.duePlans(
+            in: [ran, dotfiles], now: date("2026-09-05 02:01:30"), existingRepositoryIDs: existing
+        ).map(\.name) == ["dotfiles"])
+
+        // The plan whose slot passed longer ago goes first, whatever the
+        // order: a daily plan's due date is its latest missed slot, so 01:00
+        // beats 02:00.
+        var early = makePlan("early", shared, lastRunAt: "2026-09-04 01:00:00")
+        early.schedule.hour = 1
+        #expect(Scheduler.duePlans(
+            in: [downloads, early], now: now, existingRepositoryIDs: existing
+        ).map(\.name) == ["early"])
+    }
 }
 
 /// The two pause levels — a plan's own timed pause and the app-wide hold —

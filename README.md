@@ -528,7 +528,9 @@ restic's locks shape most of the scheduling. `backup` takes a shared lock;
 
 - A repository with a backup or maintenance job in flight counts as **busy**, and
   a plan targeting it is **held back rather than skipped** — it is still overdue
-  on the next tick, so nothing is silently lost.
+  on the next tick, so nothing is silently lost. Plans due on one repository
+  in the same minute start one at a time, the most overdue first: started
+  together, one's retention lost the lock to the other's.
 - `prune` is ordered ahead of `check` when both fall due, so the app does not
   race itself. A launch reads the repositories before arming the scheduler.
 - If retention still loses a lock race, the snapshot already exists: the run is
