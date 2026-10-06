@@ -191,6 +191,13 @@ final class AppRouter {
         pendingIntent = intent
     }
 
+    /// Activity, landing on one run: the tray's problem line, a clicked
+    /// notification and the problem rows all take this route.
+    func focusRun(_ id: RunRecord.ID) {
+        activityFocusRunID = id
+        selection = .activity
+    }
+
     /// The root view's consumption half: returns and clears whatever was
     /// asked for.
     func takePendingIntent() -> Intent? {

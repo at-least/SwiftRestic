@@ -34,6 +34,15 @@ extension AppModel {
         return reasons
     }
 
+    /// The fix a failed run offers here and now (`RunRecordPresentation.fix`).
+    func fix(for run: RunRecord) -> RunFix? {
+        RunRecordPresentation.fix(
+            for: run,
+            repositoryExists: repository(id: run.repositoryID) != nil,
+            repositoryBusy: run.repositoryID.map { busyRepositoryIDs.contains($0) } ?? false
+        )
+    }
+
     /// Why `plan`'s Back Up Now waits, or nil when it may start.
     func backupLockReason(for plan: BackupPlan) -> String? {
         plan.repositoryID.flatMap { lockedRepositories[$0] }

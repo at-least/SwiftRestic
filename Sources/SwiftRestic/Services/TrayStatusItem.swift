@@ -351,8 +351,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// Opens the window on Activity with the run the problem line names.
     @objc private func showProblem(_ sender: NSMenuItem) {
         guard let runID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
-        router.activityFocusRunID = runID
-        router.selection = .activity
+        router.focusRun(runID)
         openMainWindow()
     }
 
@@ -376,7 +375,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// view parked on the router, an existing window made key, and the
     /// reopen Apple event — the path a Dock click takes, which SwiftUI's
     /// own delegate answers by rebuilding the `Window` scene.
-    @objc private func openMainWindow() {
+    @objc func openMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
         if let open = router.openMainWindowAction {
             open(id: "main")

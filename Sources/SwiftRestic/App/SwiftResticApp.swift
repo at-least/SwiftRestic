@@ -1,5 +1,21 @@
 import AppKit
 import SwiftUI
+import UserNotifications
+
+/// A notification's identifier is its run's ID (`AppModel.notify`): the
+/// click lands Activity on that run, the tray's problem line's route.
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard let runID = UUID(uuidString: response.notification.request.identifier) else { return }
+        await MainActor.run {
+            router?.focusRun(runID)
+            tray?.openMainWindow()
+        }
+    }
+}
 
 /// The app stays resident behind its menu bar item, so quitting is the only
 /// moment we are guaranteed to get — pending saves must be flushed and any
@@ -17,6 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.model = model
         self.router = router
         tray = TrayStatusItem(model: model, router: router)
+        // A clicked notification opens its run; without a delegate the
+        // click only brings the app forward.
+        if AppModel.supportsNotifications {
+            UNUserNotificationCenter.current().delegate = self
+        }
     }
 
     private var tray: TrayStatusItem?

@@ -206,6 +206,46 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Completed with errors · 2 unreadable items")
     }
 
+    @Test("a failure whose cause the app knows offers its fix: the password's editor, or Remove Stale Locks… while nobody here holds the lock")
+    func failureFixes() {
+        let repository = UUID()
+        var wrongPassword = backup {
+            $0.repositoryID = repository
+            $0.outcome = .failed
+            $0.exitCode = 12
+        }
+        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == .editRepository(repository))
+        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: false, repositoryBusy: false) == nil)
+
+        var locked = backup {
+            $0.repositoryID = repository
+            $0.outcome = .failed
+            $0.exitCode = 11
+        }
+        #expect(RunRecordPresentation.fix(for: locked, repositoryExists: true, repositoryBusy: false) == .removeStaleLocks(repository))
+        // Our own run holds a lock right now: it is not stale.
+        #expect(RunRecordPresentation.fix(for: locked, repositoryExists: true, repositoryBusy: true) == nil)
+        // The message says it when the code was not kept.
+        locked.exitCode = 1
+        locked.failureMessage = "unable to create lock in backend: repository is already locked by PID 7"
+        #expect(RunRecordPresentation.fix(for: locked, repositoryExists: true, repositoryBusy: false) == .removeStaleLocks(repository))
+
+        // No known cause, or no failure: nothing to offer.
+        var other = backup {
+            $0.repositoryID = repository
+            $0.outcome = .failed
+            $0.exitCode = 1
+        }
+        #expect(RunRecordPresentation.fix(for: other, repositoryExists: true, repositoryBusy: false) == nil)
+        other.outcome = .completedWithErrors
+        other.exitCode = 12
+        #expect(RunRecordPresentation.fix(for: other, repositoryExists: true, repositoryBusy: false) == nil)
+        wrongPassword.repositoryID = nil
+        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == nil)
+        #expect(RunFix.editRepository(repository).title == "Edit Repository…")
+        #expect(RunFix.removeStaleLocks(repository).title == "Remove Stale Locks…")
+    }
+
     @Test("the Detail column's wording for each kind of run")
     func detailWording() {
         let detail = RunRecordPresentation.detail(for:)

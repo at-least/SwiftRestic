@@ -5,7 +5,35 @@ import Foundation
 /// The one place a run's one-line summary is worded, built on the plan
 /// page's facts (`PlanStatus.facts(for:)`) so Activity and the plan row
 /// cannot disagree.
+/// The one action that fixes a failure whose cause the app knows, offered
+/// where the failure is read — the Activity drawer and the plan's problem
+/// card. Each is a Repository menu item, under the menu's own word.
+enum RunFix: Equatable {
+    /// restic exit 12: the stored password does not open the repository.
+    case editRepository(UUID)
+    /// restic exit 11: a lock this app does not hold is in the way.
+    case removeStaleLocks(UUID)
+
+    var title: String {
+        switch self {
+        case .editRepository: "Edit Repository…"
+        case .removeStaleLocks: "Remove Stale Locks…"
+        }
+    }
+}
+
 enum RunRecordPresentation {
+    /// The fix for a failed run, or nil when its cause has none the app can
+    /// perform. Only while the repository is still set up; Remove Stale
+    /// Locks… only while no run here holds a lock on it, so "stale" means
+    /// nobody here is using it.
+    static func fix(for run: RunRecord, repositoryExists: Bool, repositoryBusy: Bool) -> RunFix? {
+        guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
+        if run.exitCode == 12 { return .editRepository(repositoryID) }
+        let locked = run.exitCode == 11 || run.failureMessage?.contains("already locked") == true
+        return locked && !repositoryBusy ? .removeStaleLocks(repositoryID) : nil
+    }
+
     /// "Backup of “Documents”", "Restore of “Budget.numbers”", "Check of
     /// “Home NAS”" — the subject line the log and Copy Details open with.
     static func subject(of run: RunRecord) -> String {

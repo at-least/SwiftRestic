@@ -17,6 +17,16 @@ struct AppRouterTests {
         #expect(router.takePendingIntent() == nil)
     }
 
+    @Test("focusing a run lands Activity on it: the tray, a notification and a problem row share one route")
+    func focusRunLandsActivity() {
+        let router = AppRouter()
+        let run = UUID()
+        router.selection = .plan(UUID())
+        router.focusRun(run)
+        #expect(router.selection == .activity)
+        #expect(router.activityFocusRunID == run)
+    }
+
     @Test("a second unconsumed ask replaces the first")
     func lastAskWins() {
         let router = AppRouter()

@@ -235,8 +235,7 @@ struct RecentProblemsCard: View {
     /// Activity's filters, so the user's filter stays as it was — the plan
     /// row's and the incomplete strip's rule.
     private func showInActivity(_ run: RunRecord) {
-        router.activityFocusRunID = run.id
-        router.selection = .activity
+        router.focusRun(run.id)
     }
 }
 

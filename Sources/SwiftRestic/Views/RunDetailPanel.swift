@@ -7,10 +7,13 @@ import SwiftUI
 /// value lands on exactly such a run, and an empty pane under the selection
 /// reads as "nothing to see".
 ///
-/// A fixed 220 pt, scrolling inside, buttons pinned under the scroll view
-/// so Show Log… stays in reach whatever the messages list. The fixed frame
-/// also answers Activity's non-scrolling host: its reply to the split
-/// view's zero-width minimum query is 220, whatever the text wraps to.
+/// A fixed height, scrolling inside, buttons pinned under the scroll view
+/// so Show Log… stays in reach whatever the messages list: 220 pt for a run
+/// with nothing to say, 320 for one with messages, so a failure's diagnosis
+/// does not push the facts under the fold. A constant per selected run,
+/// never a measurement, also answers Activity's non-scrolling host: its
+/// reply to the split view's zero-width minimum query is that number,
+/// whatever the text wraps to.
 struct RunDetailPanel: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -42,7 +45,7 @@ struct RunDetailPanel: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
         }
-        .frame(height: 220)
+        .frame(height: hasMessages ? 320 : 220)
     }
 
     // MARK: - Header
@@ -148,10 +151,13 @@ struct RunDetailPanel: View {
     /// never reach Copy Details. The unreadable items come under restic's
     /// count and end with how many were not stored, the way Copy Details
     /// and the Restore strip say it.
+    private var hasMessages: Bool {
+        run.failureMessage != nil || (run.kind == .prune && run.detailText != nil)
+            || !run.itemErrors.isEmpty || !run.hookMessages.isEmpty
+    }
+
     @ViewBuilder
     private var messages: some View {
-        let hasMessages = run.failureMessage != nil || (run.kind == .prune && run.detailText != nil)
-            || !run.itemErrors.isEmpty || !run.hookMessages.isEmpty
         let unreadable = run.unreadableItems
         let unlisted = run.itemErrorCount - unreadable.count
         if hasMessages {
@@ -215,6 +221,9 @@ struct RunDetailPanel: View {
             if let repositoryID = run.repositoryID, repositoryName != nil {
                 Button("Open Repository") { router.selection = .repository(repositoryID) }
             }
+            if let fix = model.fix(for: run) {
+                RunFixButton(fix: fix)
+            }
             if let planID = run.planID, let plan = model.plan(id: planID) {
                 // A retry only where there is something to retry: a clean
                 // record's next step is not a pointless re-run.
@@ -252,6 +261,30 @@ struct RunDetailPanel: View {
             .help("Copy this run's details as plain text")
         }
         .controlSize(.small)
+    }
+}
+
+/// A failure's one known fix, through the Repository menu's own path: the
+/// editor sheet, or the confirmed Remove Stale Locks.
+struct RunFixButton: View {
+    @Environment(AppRouter.self) private var router
+    let fix: RunFix
+
+    var body: some View {
+        Button(fix.title) {
+            switch fix {
+            case let .editRepository(id): router.request(.editRepository(id))
+            case let .removeStaleLocks(id): router.request(.confirm(.unlock(id)))
+            }
+        }
+        .help(help)
+    }
+
+    private var help: String {
+        switch fix {
+        case .editRepository: "The password doesn't open this repository — check it in the repository settings"
+        case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
+        }
     }
 }
 

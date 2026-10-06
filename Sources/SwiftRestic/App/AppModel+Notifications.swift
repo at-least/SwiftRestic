@@ -32,7 +32,7 @@ extension AppModel {
 
     /// `UNUserNotificationCenter.current()` traps when the running binary is not
     /// an application bundle, which is exactly the case under a test runner.
-    private static var supportsNotifications: Bool {
+    static var supportsNotifications: Bool {
         Bundle.main.bundleURL.pathExtension == "app" && Bundle.main.bundleIdentifier != nil
     }
 

@@ -126,6 +126,7 @@ struct PlanDetailView: View {
     /// record. No dismiss button — it lasts exactly as long as the problem,
     /// and a retry is the Backups card's Back Up Now just above it.
     private struct PlanProblemRow: View {
+        @Environment(AppModel.self) private var model
         @Environment(\.now) private var now
         let summary: PlanProblemSummary
         /// The run the summary describes, for the fix its items need.
@@ -175,6 +176,11 @@ struct PlanDetailView: View {
                     ItemErrorHintsView(run: run)
                 }
                 Spacer(minLength: 12)
+                // The failure's one known fix, left of the way to its record.
+                if let fix = model.fix(for: run) {
+                    RunFixButton(fix: fix)
+                        .controlSize(.small)
+                }
                 if let onShowInActivity {
                     // The visible title is the accessible name, as on the
                     // Restore pane's incomplete-backup strip: a longer label
