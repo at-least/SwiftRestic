@@ -238,7 +238,10 @@ struct SwiftResticApp: App {
             .keyboardShortcut(".", modifiers: .command)
             .disabled(!p.canStop)
             Button("Back Up All Plans Now") {
-                for plan in model.configuration.plans where plan.isConfigurationComplete {
+                // A plan whose repository is locked exclusively is left
+                // out: restic would refuse its lock at once.
+                for plan in model.configuration.plans
+                where plan.isConfigurationComplete && model.backupLockReason(for: plan) == nil {
                     model.runBackup(planID: plan.id)
                 }
             }

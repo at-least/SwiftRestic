@@ -227,7 +227,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 plans: model.configuration.plans,
                 repositories: model.configuration.repositories,
                 activity: model.activity,
-                isResticAvailable: model.isResticAvailable
+                isResticAvailable: model.isResticAvailable,
+                lockedRepositories: model.lockedRepositories
             ) {
                 let submenu = NSMenu(title: group.title)
                 submenu.autoenablesItems = false
@@ -242,6 +243,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                     // Explicit, not auto-enabled: see `autoenablesItems`
                     // above.
                     item.isEnabled = row.isEnabled
+                    item.toolTip = row.disabledReason
                     item.representedObject = row.planID.uuidString
                     submenu.addItem(item)
                 }

@@ -9,12 +9,13 @@ import SwiftUI
 // MARK: - Protection
 
 /// The repository page's Protection card: one line — how many of the
-/// repository's plans are protected, when its newest backup landed, and,
-/// while one is on, the app-wide hold's words with a Resume. The line is
+/// repository's plans are protected, a run in flight, when its newest
+/// backup landed, and, while one is on, the app-wide hold's words with a
+/// Resume — then one line per plan that is not protected. The lines are
 /// static text by rule: no hover, no chevron, no destination — the plans
-/// it summarizes sit in the sidebar beside it. It waits for a succeeded
-/// listing (the caveat under Details says why in words); the card and
-/// the plan-less page's prominent button stay.
+/// they name sit in the sidebar beside it. Until the listing succeeds the
+/// card says why in the caveat's words instead; the plan-less page's
+/// prominent button stays either way.
 struct ProtectionCard: View {
     @Environment(AppModel.self) private var model
     /// The window's minute clock, as the sidebar's captions read it.
@@ -41,6 +42,20 @@ struct ProtectionCard: View {
                                 .help("Resume scheduled backups, checks and prunes")
                         }
                     }
+                    ForEach(summary.attentionLines, id: \.self) { line in
+                        // The sidebar triangle's glyph; the words stay
+                        // secondary, as the caveat's do.
+                        Label {
+                            Text(line).foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Theme.warning)
+                        }
+                        .font(.caption)
+                    }
+                } else {
+                    // No count is honest yet: the card's first glance says why.
+                    SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: repositoryID))
                 }
                 // The repository's first plan: the way to it is the whole
                 // point of a plan-less page, in the empty card's prominent
@@ -84,9 +99,10 @@ struct OtherBackupsCard: View {
         // failed read promise action on stale facts. The sidebar keeps its
         // old groups beside the failure sentence, under its own rule.
         if !groups.isEmpty, !listingFailed {
-            // The node's own name — "Other" only beside plans — and its
-            // total, both the sidebar's derivations, so the card and the
-            // tree it sits beside cannot disagree.
+            // The node's own name — "Other" only beside plans — the sidebar's
+            // derivation. No count: the card lists the adoptable groups only,
+            // and the shelf's total is the sidebar node's and the Details
+            // split's to say.
             Card(LocalizedStringKey(SidebarTree.otherBackupsTitle(repositoryHasPlans: !shelves.plans.isEmpty))) {
                 VStack(alignment: .leading, spacing: 7) {
                     // otherLabels names every group it is given, and these
@@ -102,10 +118,6 @@ struct OtherBackupsCard: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            } accessory: {
-                Text(Format.plural(shelves.otherBackupsCount, "backup"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
     }

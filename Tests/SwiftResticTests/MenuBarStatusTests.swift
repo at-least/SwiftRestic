@@ -331,6 +331,27 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.problemLine(runs: [cancelled], hasNoRepositories: false) == nil)
     }
 
+    @Test("Back Up Now waits while its repository is locked exclusively, and says why")
+    func backUpWaitsForAnExclusiveLock() {
+        var repository = Repository()
+        repository.name = "Home NAS"
+        var plan = BackupPlan()
+        plan.name = "Documents"
+        plan.repositoryID = repository.id
+        plan.sources = ["/tmp"]
+        let reason = "Home NAS is running a prune — backups wait until it finishes."
+        let locked = MenuBarStatus.planRows(
+            plans: [plan], activity: [:], isResticAvailable: true,
+            lockedRepositories: [repository.id: reason]
+        )
+        #expect(locked.first?.action == .backUp)
+        #expect(locked.first?.isEnabled == false)
+        #expect(locked.first?.disabledReason == reason)
+        let free = MenuBarStatus.planRows(plans: [plan], activity: [:], isResticAvailable: true)
+        #expect(free.first?.isEnabled == true)
+        #expect(free.first?.disabledReason == nil)
+    }
+
     @Test("a recent failure and a recent warning both lead, newest first")
     func recentProblemsSurface() {
         var failed = RunRecord(planName: "Documents to NAS")

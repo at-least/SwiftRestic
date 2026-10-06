@@ -43,6 +43,34 @@ struct CommandStateTests {
         return plan
     }
 
+    @Test("Back Up Now waits for a prune, a check or another plan's retention on its repository — restic would refuse its lock")
+    func backUpWaitsForExclusiveWork() {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        let photos = makePlan("Photos", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents, photos]
+        #expect(model.planCommands(for: .plan(documents.id)).canBackUp)
+        #expect(model.backupLockReason(for: documents) == nil)
+
+        model.maintenance[repository.id] = MaintenanceActivity(task: .prune)
+        #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
+        #expect(!model.planCommands(for: nil).canBackUpAll)
+        #expect(model.backupLockReason(for: documents) == "Home NAS is running a prune — backups wait until it finishes.")
+        model.maintenance[repository.id] = MaintenanceActivity(task: .check)
+        #expect(model.backupLockReason(for: documents) == "Home NAS is running a check — backups wait until it finishes.")
+        model.maintenance = [:]
+
+        // Another plan's backup shares the lock; its retention step does not.
+        model.activity[photos.id] = PlanActivity(phase: .backingUp)
+        #expect(model.planCommands(for: .plan(documents.id)).canBackUp)
+        model.activity[photos.id] = PlanActivity(phase: .applyingRetention)
+        #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
+        #expect(model.backupLockReason(for: documents)
+            == "Home NAS is applying retention for “Photos” — backups wait until it finishes.")
+    }
+
     @Test("the Plan menu acts on the selected plan, and on nothing else")
     func planCommandsFollowTheSelection() {
         let model = makeModel()

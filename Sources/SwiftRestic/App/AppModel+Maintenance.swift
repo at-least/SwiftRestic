@@ -16,6 +16,29 @@ extension AppModel {
         return ids
     }
 
+    /// Repositories restic holds exclusively right now — a check or prune,
+    /// or a plan's retention step — with the sentence a disabled Back Up Now
+    /// gives. A backup's shared lock would fail at once against them (exit
+    /// 11), so the verb waits instead of writing a failed run.
+    var lockedRepositories: [UUID: String] {
+        var reasons: [UUID: String] = [:]
+        for (repositoryID, work) in maintenance {
+            let name = repository(id: repositoryID)?.name ?? "The repository"
+            reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
+        }
+        for (planID, run) in activity where run.phase == .applyingRetention {
+            guard let plan = plan(id: planID), let repositoryID = plan.repositoryID, reasons[repositoryID] == nil else { continue }
+            let name = repository(id: repositoryID)?.name ?? "The repository"
+            reasons[repositoryID] = "\(name) is applying retention for “\(plan.displayName)” — backups wait until it finishes."
+        }
+        return reasons
+    }
+
+    /// Why `plan`'s Back Up Now waits, or nil when it may start.
+    func backupLockReason(for plan: BackupPlan) -> String? {
+        plan.repositoryID.flatMap { lockedRepositories[$0] }
+    }
+
     /// Starts a `check` or `prune`. `readDataPercent` lets the UI run a
     /// deeper check than the repository's own policy asks for.
     func runMaintenance(

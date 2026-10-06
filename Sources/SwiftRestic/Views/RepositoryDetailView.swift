@@ -89,9 +89,6 @@ struct RepositoryDetailView: View {
                 }
             }
 
-            // Why Snapshots may read "—", in words, directly under it.
-            SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: repositoryID))
-
             maintenanceCard(repository)
         }
         .detailPane()
@@ -115,7 +112,7 @@ struct RepositoryDetailView: View {
 
     /// A count only once the listing it derives from has succeeded; before
     /// that, or after a failure, "—" with the reason as its tooltip — the
-    /// caveat under the card says it in words. Loaded, the count splits
+    /// Protection card says it in words. Loaded, the count splits
     /// when some of the repository's backups belong to no plan of it, by
     /// the same count the sidebar's Other backups node carries.
     @ViewBuilder

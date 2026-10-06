@@ -398,8 +398,8 @@ struct RestoreProgressStrip: View {
 
 // MARK: - Snapshot listing outcome
 
-/// Why a Snapshots value may read "—", in visible text, under the card that
-/// shows it (the plan and repository pages). The tooltips carry the same
+/// Why a Snapshots value may read "—", in visible text: under the plan page's
+/// Backups card, and as the repository page's Protection card body. The tooltips carry the same
 /// lines, but a reason only a hovering mouse user can reach is no reason at
 /// all for a keyboard or VoiceOver user.
 struct SnapshotListingCaveat: View {
@@ -412,7 +412,7 @@ struct SnapshotListingCaveat: View {
             // a warning-coloured sentence at caption size is too
             // low-contrast to read.
             Label {
-                Text("Snapshots could not be read — \(Format.firstSentence(message))")
+                Text(OverviewMetrics.listingFailureText(message))
                     .foregroundStyle(.secondary)
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill")

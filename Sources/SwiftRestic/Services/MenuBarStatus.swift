@@ -183,24 +183,29 @@ enum MenuBarStatus {
         var title: String
         var action: Action
         var isEnabled: Bool
+        var disabledReason: String?
     }
 
     static func planRows(
         plans: [BackupPlan],
         activity: [UUID: PlanActivity],
-        isResticAvailable: Bool
+        isResticAvailable: Bool,
+        lockedRepositories: [UUID: String] = [:]
     ) -> [PlanRow] {
         plans.map { plan in
             let name = plan.displayName
             switch activity[plan.id]?.phase {
             case nil:
                 // The rule every Back Up Now follows: enabled only where the
-                // plan could run.
+                // plan could run — not while its repository is locked
+                // exclusively, which restic would refuse at once.
+                let lockReason = plan.repositoryID.flatMap { lockedRepositories[$0] }
                 return PlanRow(
                     planID: plan.id,
                     title: "Back Up “\(name)” Now",
                     action: .backUp,
-                    isEnabled: plan.isConfigurationComplete && isResticAvailable
+                    isEnabled: plan.isConfigurationComplete && isResticAvailable && lockReason == nil,
+                    disabledReason: lockReason
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
@@ -238,13 +243,15 @@ enum MenuBarStatus {
         plans: [BackupPlan],
         repositories: [Repository],
         activity: [UUID: PlanActivity],
-        isResticAvailable: Bool
+        isResticAvailable: Bool,
+        lockedRepositories: [UUID: String] = [:]
     ) -> [PlanGroup] {
         repositories.compactMap { repository in
             let rows = planRows(
                 plans: plans.filter { $0.repositoryID == repository.id },
                 activity: activity,
-                isResticAvailable: isResticAvailable
+                isResticAvailable: isResticAvailable,
+                lockedRepositories: lockedRepositories
             )
             return rows.isEmpty ? nil : PlanGroup(repositoryID: repository.id, title: repository.name, rows: rows)
         }

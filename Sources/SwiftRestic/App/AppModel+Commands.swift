@@ -8,6 +8,9 @@ struct PlanCommandState: Equatable {
     /// The selected plan, when the selection is one that still exists.
     var planID: UUID?
     var canBackUp = false
+    /// Why Back Up Now waits, when an exclusive lock on the plan's
+    /// repository is the reason.
+    var backUpDisabledReason: String?
     var canStop = false
     /// "Stop Backup", or "Stop Applying Retention" while that phase runs —
     /// a backup's own retention step included; the tray's row words itself
@@ -65,7 +68,8 @@ extension AppModel {
         let rows = MenuBarStatus.planRows(
             plans: configuration.plans,
             activity: activity,
-            isResticAvailable: isResticAvailable
+            isResticAvailable: isResticAvailable,
+            lockedRepositories: lockedRepositories
         )
         state.canBackUpAll = rows.contains { $0.action == .backUp && $0.isEnabled }
         if case .paused = scheduleHold {
@@ -79,6 +83,7 @@ extension AppModel {
         state.planID = id
         if let row = rows.first(where: { $0.planID == id }) {
             state.canBackUp = row.action == .backUp && row.isEnabled
+            state.backUpDisabledReason = row.disabledReason
             state.canStop = row.action == .stop
         }
         if MenuBarStatus.stopsRetention(activity[id]?.phase) {

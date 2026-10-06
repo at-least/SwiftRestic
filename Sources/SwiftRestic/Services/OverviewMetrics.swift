@@ -66,6 +66,10 @@ struct ProtectionSummary: Equatable, Sendable {
     /// The hold is the user's own Pause Backups, so the line ends with a
     /// Resume; the battery's ends by plugging in, and has no button.
     var showsResume: Bool
+    /// One line per plan that is not protected, in the sidebar warning's
+    /// words ("Code: Failed — 3 hours ago"), so the count names its subject.
+    /// Empty when every plan is protected.
+    var attentionLines: [String] = []
 }
 
 /// Derives the protection rows and the recent problems from the
@@ -239,7 +243,7 @@ enum OverviewMetrics {
         case let .failed(message):
             return ProtectionRow(
                 plan: plan,
-                stateText: "Can't read snapshots — \(Format.firstSentence(message))",
+                stateText: listingFailureText(message),
                 isKnown: false, isProtected: false, didFail: true
             )
         case .idle:
@@ -250,6 +254,12 @@ enum OverviewMetrics {
                 isKnown: false, isProtected: false, didFail: false
             )
         }
+    }
+
+    /// An unreadable snapshot listing in one sentence — the rows behind the
+    /// sidebar's warning and the caveat under a card say it alike.
+    static func listingFailureText(_ message: String) -> String {
+        "Can't read snapshots — \(Format.firstSentence(message))"
     }
 
     /// The repository page's Protection line: how many of the repository's
@@ -282,6 +292,10 @@ enum OverviewMetrics {
             segments = [
                 "\(known.filter(\.isProtected).count) of \(Format.plural(known.count, "plan")) protected"
             ]
+            // A run in flight, in the sidebar caption's phase words: during a
+            // first backup "0 of 1 plan protected" alone would read as an
+            // alarm while the remedy is under way.
+            segments += rows.filter(\.isRunning).map { "\($0.planName) — \($0.stateText)" }
             if let newest = rows.compactMap(\.lastBackupAt).max() {
                 segments.append("Last backup \(relative(newest))")
             }
@@ -291,7 +305,18 @@ enum OverviewMetrics {
         }
         var showsResume = false
         if case .paused = hold { showsResume = true }
-        return ProtectionSummary(text: segments.joined(separator: " · "), showsResume: showsResume)
+        // The sidebar warning's own join of the same rows (attentionMark), so
+        // the card and the triangle beside it cannot disagree.
+        var attention: [String] = []
+        for row in rows where row.isKnown && !row.isProtected && !row.isRunning {
+            let line = "\(row.planName): \(row.stateText)"
+            if !attention.contains(line) { attention.append(line) }
+        }
+        return ProtectionSummary(
+            text: segments.joined(separator: " · "),
+            showsResume: showsResume,
+            attentionLines: attention
+        )
     }
 
     /// The repository page's Snapshots value: the whole count, split when

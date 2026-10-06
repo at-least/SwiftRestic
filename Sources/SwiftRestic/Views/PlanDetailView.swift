@@ -56,7 +56,7 @@ struct PlanDetailView: View {
                 model.runBackup(planID: plan.id)
             }
             .disabled(!commands.canBackUp)
-            .help("Run this plan's backup now (⌘B)")
+            .help(commands.backUpDisabledReason ?? "Run this plan's backup now (⌘B)")
         }
     }
 

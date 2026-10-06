@@ -405,6 +405,57 @@ struct OverviewMetricsTests {
         #expect(neverRan?.text == "0 of 2 plans protected")
     }
 
+    @Test("the Protection card names each plan that is not protected in the sidebar warning's words, and a run in flight")
+    func protectionNamesItsSubjects() {
+        let repository = UUID()
+        let now = date("2026-09-05 11:00:00")
+        let documents = ProtectionRow(
+            plan: plan("Documents", repository: repository), stateText: "Last backup 1 hour ago",
+            isKnown: true, isProtected: true, didFail: false, lastBackupAt: date("2026-09-05 10:00:00")
+        )
+        let code = ProtectionRow(
+            plan: plan("Code", repository: repository), stateText: "Failed — 3 hours ago",
+            isKnown: true, isProtected: false, didFail: false
+        )
+        let summary = OverviewMetrics.protectionSummary(
+            rows: [code, documents], listingLoaded: true, otherBackupsCount: 0,
+            hold: nil, now: now, relative: { _ in "1 hour ago" }
+        )
+        // The count line stays as it was; the lines under it name the subject.
+        #expect(summary?.text == "1 of 2 plans protected · Last backup 1 hour ago")
+        #expect(summary?.attentionLines == ["Code: Failed — 3 hours ago"])
+        // All protected: nothing to name.
+        #expect(OverviewMetrics.protectionSummary(
+            rows: [documents], listingLoaded: true, otherBackupsCount: 0,
+            hold: nil, now: now, relative: { _ in "1 hour ago" }
+        )?.attentionLines == [])
+
+        // A first backup in flight is news, not an alarm: the line says the
+        // run in the sidebar's words, and names no exposed plan.
+        let photos = ProtectionRow(
+            plan: plan("Photos", repository: repository), stateText: "Backing up",
+            isKnown: true, isProtected: false, didFail: false, isRunning: true
+        )
+        let running = OverviewMetrics.protectionSummary(
+            rows: [photos], listingLoaded: true, otherBackupsCount: 0,
+            hold: nil, now: now, relative: { _ in "1 hour ago" }
+        )
+        #expect(running?.text == "0 of 1 plan protected · Photos — Backing up")
+        #expect(running?.attentionLines == [])
+        // Beside a last backup, the run comes before it.
+        let both = OverviewMetrics.protectionSummary(
+            rows: [photos, documents], listingLoaded: true, otherBackupsCount: 0,
+            hold: nil, now: now, relative: { _ in "1 hour ago" }
+        )
+        #expect(both?.text == "1 of 2 plans protected · Photos — Backing up · Last backup 1 hour ago")
+    }
+
+    @Test("an unreadable listing is said in one sentence by the rows and the caveat alike")
+    func listingFailureHasOneSentence() {
+        #expect(OverviewMetrics.listingFailureText("Repository /nas is not reachable. More detail.")
+            == "Can't read snapshots — Repository /nas is not reachable")
+    }
+
     @Test("the Protection line waits for a succeeded listing")
     func protectionLineWaitsForTheListing() {
         let rows = [protectionRow("Fine", isKnown: true, isProtected: true, lastBackupAt: date("2026-09-05 10:00:00"))]
