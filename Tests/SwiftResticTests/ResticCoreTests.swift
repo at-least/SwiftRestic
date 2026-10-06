@@ -548,6 +548,16 @@ struct UnreadableItemsTests {
             "/x/does-not-exist does not exist, skipping",
             "/y cannot be accessed, skipping",
         ])
+        // Each line's path, as restic named it — the item of an event, the
+        // source a skip line names — so a fix never parses free text.
+        #expect(ResticService.unreadableItemPaths(errors: events, stderr: stderr) == [
+            "/x/does-not-exist does not exist, skipping": "/x/does-not-exist",
+            "/y cannot be accessed, skipping": "/y",
+            "/src/a.pdf: open /src/a.pdf: permission denied": "/src/a.pdf",
+        ])
+        // An event without an item names no path.
+        let itemless = try errors([#"{"message_type":"error","error":{"message":"walk failed"}}"#])
+        #expect(ResticService.unreadableItemPaths(errors: itemless, stderr: "") == [:])
     }
 
     @Test("restic's trailing newline stays out of the stored line, and a copy without it is still the same item")

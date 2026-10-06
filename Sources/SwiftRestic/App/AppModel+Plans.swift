@@ -60,6 +60,17 @@ extension AppModel {
         )
     }
 
+    /// Exclude, from an unreadable item's line: the item's exact path, its
+    /// glob characters escaped so it matches itself alone, added to the
+    /// plan's patterns once. Mutates only that list, as the pause does —
+    /// a whole-plan upsert from a captured copy could undo a run's stamps.
+    func exclude(path: String, fromPlan planID: UUID) {
+        guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
+        let pattern = ResticService.globEscaped(path)
+        guard !configuration.plans[index].excludePatterns.contains(pattern) else { return }
+        configuration.plans[index].excludePatterns.append(pattern)
+    }
+
     func upsert(plan: BackupPlan) {
         if let index = configuration.plans.firstIndex(where: { $0.id == plan.id }) {
             configuration.plans[index] = configuration.plans[index].merging(draft: plan)

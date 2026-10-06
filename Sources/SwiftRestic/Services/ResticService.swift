@@ -83,6 +83,9 @@ struct BackupOutcome: Sendable {
     /// from `itemErrors` because nothing restic read was lost — but the run
     /// must not read clean either.
     var decodingWarning: String? = nil
+    /// The path each unreadable line names, keyed by the line — where restic
+    /// named one. See `ResticService.unreadableItemPaths(errors:stderr:)`.
+    var itemPaths: [String: String] = [:]
 
     /// True for restic exit 3 — finished but skipped files it could not
     /// read — or when the outcome records unreadable items or a decoding gap.
@@ -546,7 +549,8 @@ struct ResticService: ResticClient {
             summary: result.summary,
             itemErrors: Self.unreadableItems(errors: result.itemErrors, stderr: result.stderr),
             exitCode: result.exitCode,
-            decodingWarning: decodingWarning
+            decodingWarning: decodingWarning,
+            itemPaths: Self.unreadableItemPaths(errors: result.itemErrors, stderr: result.stderr)
         )
     }
 
@@ -567,19 +571,38 @@ struct ResticService: ResticClient {
     /// unnamed exit 3, never to a complete snapshot, because the exit code
     /// alone decides that.
     static func unreadableItems(errors: [ResticErrorMessage], stderr: String) -> [String] {
+        unreadableEntries(errors: errors, stderr: stderr).map(\.line)
+    }
+
+    /// The path each of `unreadableItems`' lines names, keyed by the line:
+    /// an event's item, or the source a skip line names. A line naming
+    /// none — an event without an item — is absent. Stored on the run so
+    /// the fixes that act on an item (Reveal in Finder, Exclude) never
+    /// parse restic's free text.
+    static func unreadableItemPaths(errors: [ResticErrorMessage], stderr: String) -> [String: String] {
+        var paths: [String: String] = [:]
+        for entry in unreadableEntries(errors: errors, stderr: stderr) {
+            if let path = entry.path { paths[entry.line] = path }
+        }
+        return paths
+    }
+
+    private static let skipSuffixes = [" does not exist, skipping", " cannot be accessed, skipping"]
+
+    private static func unreadableEntries(errors: [ResticErrorMessage], stderr: String) -> [(line: String, path: String?)] {
         var seen: Set<String> = []
-        var lines: [String] = []
-        for line in stderr.split(whereSeparator: \.isNewline).map(String.init)
-        where line.hasSuffix(" does not exist, skipping") || line.hasSuffix(" cannot be accessed, skipping") {
-            if seen.insert(line).inserted { lines.append(line) }
+        var entries: [(line: String, path: String?)] = []
+        for line in stderr.split(whereSeparator: \.isNewline).map(String.init) {
+            guard let suffix = skipSuffixes.first(where: { line.hasSuffix($0) }) else { continue }
+            if seen.insert(line).inserted { entries.append((line, String(line.dropLast(suffix.count)))) }
         }
         for error in errors {
             // Without restic's trailing newline, and keyed by the same text,
             // so an item-less message with and without one is one line.
             let line = RunRecord.storedItemError(error.item.map { "\($0): \(error.message)" } ?? error.message)
-            if seen.insert(error.item ?? line).inserted { lines.append(line) }
+            if seen.insert(error.item ?? line).inserted { entries.append((line, error.item)) }
         }
-        return lines
+        return entries
     }
 
     /// The one argument list for a plan's retention, dry or real, so the

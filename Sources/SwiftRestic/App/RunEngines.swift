@@ -170,6 +170,9 @@ enum BackupRunEngine {
             // would under-count a home folder macOS blocked in bulk.
             record.itemErrorTally = ItemErrorDiagnosis.tally(outcome.itemErrors)
             record.itemErrors.append(contentsOf: outcome.itemErrors.prefix(RunRecord.storedItemErrorLimit))
+            // The stored lines' paths only, keyed as stored.
+            let storedLines = Set(record.itemErrors.map(RunRecord.storedItemError))
+            record.unreadableItemPaths = outcome.itemPaths.filter { storedLines.contains(RunRecord.storedItemError($0.key)) }
             if let decodingWarning = outcome.decodingWarning {
                 record.itemErrors.append(decodingWarning)
             }

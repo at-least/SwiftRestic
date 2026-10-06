@@ -284,6 +284,25 @@ struct BackupRunEngineTests {
         #expect(Array(record.unreadableItems) == outcome.itemErrors)
     }
 
+    @Test("the unreadable items' paths are stored beside their lines, for the fixes that act on them")
+    func unreadablePathsAreStored() async throws {
+        let sink = RecordingSink()
+        var outcome = successOutcome()
+        outcome.itemErrors = ["/src/a.pdf: permission denied", "walk failed"]
+        outcome.itemPaths = ["/src/a.pdf: permission denied": "/src/a.pdf"]
+        outcome.exitCode = 3
+        let client = MockResticClient().onBackup(.success(outcome))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.unreadableItemPaths == ["/src/a.pdf: permission denied": "/src/a.pdf"])
+        // A record written before the field existed has no paths, not empty ones.
+        let old = try JSONDecoder().decode(RunRecord.self, from: Data(#"{"kind":"backup","itemErrors":["/x: permission denied"],"itemErrorCount":1}"#.utf8))
+        #expect(old.unreadableItemPaths == nil)
+        let roundTrip = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(record))
+        #expect(roundTrip.unreadableItemPaths == record.unreadableItemPaths)
+    }
+
     @Test("warnings that leave every file in the snapshot never mark it incomplete")
     func completeSnapshotsStayCompleteThroughWarnings() async throws {
         // A skipped retention step: the snapshot is whole, only the forget

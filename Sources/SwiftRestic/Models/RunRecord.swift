@@ -72,6 +72,10 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// items — the decoding-gap warning, the "Retention skipped" line — are
     /// never counted.
     var itemErrorCount: Int = 0
+    /// The path each stored unreadable line names, keyed by the line, where
+    /// restic named one (`ResticService.unreadableItemPaths`). Nil on records
+    /// written before it was kept: their lines get no per-item actions.
+    var unreadableItemPaths: [String: String]?
     /// restic's exit code for the run's own command — the `backup` (0, or 3
     /// when some source data could not be read), else the first exit the
     /// run's transcript saw: a failed backup's, a check's, a prune's, a
@@ -170,6 +174,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         // through `storedItemError` here keeps every surface clean.
         itemErrors = c.value(.itemErrors, default: [String]()).map(Self.storedItemError)
         itemErrorCount = c.value(.itemErrorCount, default: 0)
+        unreadableItemPaths = c.optional(.unreadableItemPaths)
         exitCode = c.optional(.exitCode)
         itemErrorTally = c.optional(.itemErrorTally)
         fullDiskAccessAtRun = c.optional(.fullDiskAccessAtRun)

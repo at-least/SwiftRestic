@@ -910,7 +910,8 @@ final class SnapshotIndex: @unchecked Sendable {
     /// or not indexed: nothing about it is known. Keyed by the bytes asked
     /// for (`PathKey`), as the summaries are. The Restore pane reads the
     /// membership inside its search (`searchWithMembership`); this
-    /// path-keyed form is what the tests hold that read to.
+    /// path-keyed form is what its incomplete strip asks of the backup
+    /// before, and what the tests hold that read to.
     func contains(paths: [String], inSnapshot snapshotID: String) async throws -> [PathKey: Bool] {
         try await pool.read { db in
             guard let target = try Target.fetch(db, snapshotID), target.state == State.indexed else { return [:] }

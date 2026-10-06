@@ -89,6 +89,11 @@ extension AppModel {
         )
     }
 
+    /// Which of `paths` the snapshot holds, each with its kind there.
+    func kinds(of paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
+        try await indexCoordinator.kinds(of: paths, inSnapshot: snapshotID, repositoryID: repositoryID)
+    }
+
     /// Whether the index has read every listed snapshot of the repository —
     /// the Files view's completeness signal. An index that cannot answer
     /// reads as "not complete", never as a failure; so does one that has

@@ -124,7 +124,7 @@ struct RestorePaneView: View {
             Divider()
             // Its own view, reading the run history itself: a new run
             // record re-renders the strip, never the tree below it.
-            IncompleteSnapshotStrip(snapshotID: snapshotID)
+            IncompleteSnapshotStrip(snapshotID: snapshotID, repositoryID: repositoryID)
             // Filling, whatever stands in for the tree: a
             // ContentUnavailableView answers its own height, and without
             // this the pane floats mid-window.
@@ -909,10 +909,16 @@ private struct IncompleteSnapshotStrip: View {
     @Environment(AppRouter.self) private var router
 
     let snapshotID: String
+    let repositoryID: UUID
 
     /// Enough to answer the question for the usual one or two items without
     /// growing into a second scrolling list above the tree.
     private static let shownItems = 3
+
+    /// The shown items the backup before this one holds, each with its kind
+    /// there: those lines are routes to that good copy's versions. Empty
+    /// until the index answers, and for items no earlier backup has.
+    @State private var heldBefore: [PathKey: Bool] = [:]
 
     var body: some View {
         if let run = model.backupRun(forSnapshot: snapshotID), run.snapshotCompleteness == .incomplete {
@@ -924,6 +930,8 @@ private struct IncompleteSnapshotStrip: View {
     private func strip(_ run: RunRecord) -> some View {
         let unreadable = run.itemErrorCount
         let lines = Array(run.unreadableItems.prefix(Self.shownItems))
+        let baseline = SnapshotLineage.changeBaseline(for: snapshotID, in: model.snapshots(for: repositoryID))
+        let paths = lines.compactMap { run.unreadableItemPaths?[$0] }
         return HStack(alignment: .top, spacing: 8) {
             // Beside words that say the same thing: decoration to VoiceOver.
             Image(systemName: RunRecord.Outcome.completedWithErrors.symbolName ?? "exclamationmark.triangle.fill")
@@ -939,13 +947,42 @@ private struct IncompleteSnapshotStrip: View {
                     // view's zero-width sizing query a character per line.
                     // Only the pane's minimum width keeps this one safe.
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    Text(line)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(line)
-                        .textSelection(.enabled)
+                    if let baseline, let path = run.unreadableItemPaths?[line],
+                       let isDirectory = heldBefore[PathKey(path)] {
+                        // A row that goes somewhere: the item's versions,
+                        // opening at the backup before, which has it.
+                        Button {
+                            router.showVersions(
+                                path: path,
+                                isDirectory: isDirectory,
+                                in: baseline,
+                                repositoryID: repositoryID,
+                                page: model.shelves(for: repositoryID).page(of: baseline, repositoryID: repositoryID)
+                            )
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(line)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Image(systemName: "chevron.forward")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                                    .accessibilityHidden(true)
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(HoverableButtonStyle())
+                        .help("Not in this backup — the backup of \(Format.timestamp(baseline.time)) has it. Show its versions.")
+                    } else {
+                        Text(line)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(line)
+                            .textSelection(.enabled)
+                    }
                 }
                 if unreadable > lines.count, !lines.isEmpty {
                     Text("and \(Format.count(unreadable - lines.count)) more")
@@ -957,14 +994,22 @@ private struct IncompleteSnapshotStrip: View {
             Button("Show in Activity") {
                 // A problem run, so the problems filter already shows it;
                 // the landing leaves that filter as the user set it.
-                router.activityFocusRunID = run.id
-                router.selection = .activity
+                router.focusRun(run.id)
             }
             .controlSize(.small)
             .help("Select the run that made this backup in Activity")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+        .task(id: [snapshotID, baseline?.id ?? ""] + paths) {
+            heldBefore = [:]
+            guard let baseline, !paths.isEmpty else { return }
+            // A failed read leaves the lines plain text: the route is extra,
+            // and nothing shown depends on it.
+            let kinds = (try? await model.kinds(of: paths, inSnapshot: baseline.id, repositoryID: repositoryID)) ?? [:]
+            guard !Task.isCancelled else { return }
+            heldBefore = kinds
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.warning.opacity(0.08))
         .accessibilityElement(children: .contain)

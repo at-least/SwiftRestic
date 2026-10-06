@@ -401,6 +401,12 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.search(matching: query, inChain: chainKey, limit: limit) }
     }
 
+    /// Which of `paths` a snapshot holds, each with its kind there — the
+    /// Restore pane's incomplete strip asks it of the backup before.
+    nonisolated func kinds(of paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
+        try await read(repositoryID) { try await $0.contains(paths: paths, inSnapshot: snapshotID) }
+    }
+
     /// Whether every listed snapshot has been read — the consumers' "the
     /// index answers exactly" signal.
     nonisolated func isComplete(repositoryID: UUID) async throws -> Bool {

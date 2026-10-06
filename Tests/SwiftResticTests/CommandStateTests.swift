@@ -71,6 +71,24 @@ struct CommandStateTests {
             == "Home NAS is applying retention for “Photos” — backups wait until it finishes.")
     }
 
+    @Test("excluding an unreadable item adds its exact path to the plan once, glob characters escaped")
+    func excludeItemAddsItsPath() {
+        let model = makeModel()
+        let repository = makeRepository()
+        var plan = makePlan(on: repository)
+        plan.excludePatterns = [".DS_Store"]
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan]
+
+        model.exclude(path: "/Users/u/Taxes/a[1].pdf", fromPlan: plan.id)
+        #expect(model.plan(id: plan.id)?.excludePatterns == [".DS_Store", "/Users/u/Taxes/a\\[1].pdf"])
+        // Twice is once.
+        model.exclude(path: "/Users/u/Taxes/a[1].pdf", fromPlan: plan.id)
+        #expect(model.plan(id: plan.id)?.excludePatterns.count == 2)
+        // Nothing else of the plan moves.
+        #expect(model.plan(id: plan.id)?.sources == plan.sources)
+    }
+
     @Test("the Plan menu acts on the selected plan, and on nothing else")
     func planCommandsFollowTheSelection() {
         let model = makeModel()
