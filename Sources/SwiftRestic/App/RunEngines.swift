@@ -1,5 +1,48 @@
 import Foundation
 
+/// Records one hook run's verdicts: failed, non-cancelled hooks surface in
+/// the record's hook messages, and every hook's log line goes to the
+/// transcript.
+private func note(
+    _ outcomes: [HookRunner.Outcome],
+    into record: inout RunRecord,
+    transcript: RunTranscript
+) {
+    record.hookMessages.append(
+        contentsOf: outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
+    )
+    for outcome in outcomes { transcript.note(outcome.logLine) }
+}
+
+/// The after-hooks loop both engines' `finish` shares. A cancel landing
+/// mid-after-hooks stops the remaining events: the user asked the app to
+/// stop, not this hook to fail. A failing hook is worth surfacing, but never
+/// undoes what the run did — a successful backup, check or prune whose hook
+/// failed reads as completed-with-errors, which is what arms the problem dot
+/// and notifyOnFailure — and `finishedAt` is re-stamped so the record
+/// includes the hooks. A cancelled run runs none of this: the user asked for
+/// it to stop, and firing an "after failure" script at that point would be a
+/// surprise.
+private func runAfterHooks(
+    _ allHooks: [BackupHook],
+    events: [BackupHook.Event],
+    context: HookRunner.Context,
+    hooks: HookRunner,
+    record: inout RunRecord,
+    transcript: RunTranscript
+) async {
+    guard record.outcome != .cancelled, allHooks.contains(where: \.isRunnable) else { return }
+    for event in events {
+        let result = await hooks.runHooks(allHooks, event: event, context: context)
+        note(result.outcomes, into: &record, transcript: transcript)
+        if result.cancelled { break }
+    }
+    if !record.hookMessages.isEmpty, record.outcome == .succeeded {
+        record.outcome = .completedWithErrors
+    }
+    record.finishedAt = .now
+}
+
 /// One backup run's lifecycle, extracted from `AppModel` so the sequencing —
 /// hooks → start ping → backup → retention → closing refresh → record — is
 /// unit-testable against a mock engine (a `ResticClient` in the test bundle)
@@ -78,10 +121,7 @@ enum BackupRunEngine {
             if plan.hooks.contains(where: { $0.event == .beforeBackup && $0.isRunnable }) {
                 sink.setActivityPhase(.runningHooks, for: plan.id)
                 let result = await hooks.runHooks(plan.hooks, event: .beforeBackup, context: hookContext)
-                record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
-                )
-                for outcome in result.outcomes { transcript.note(outcome.logLine) }
+                note(result.outcomes, into: &record, transcript: transcript)
                 if result.cancelled {
                     // The user stopped the run while a hook was still going:
                     // a cancellation, never a hook verdict, so the aborted-run
@@ -197,11 +237,8 @@ enum BackupRunEngine {
         )
     }
 
-    /// Runs the after-backup hooks, then hands the finished run to the sink
-    /// for storage and announcement.
-    ///
-    /// A cancelled run runs no hooks: the user asked for it to stop, and firing
-    /// an "after failure" script at that point would be a surprise.
+    /// Runs the after-backup hooks (`runAfterHooks`), then hands the finished
+    /// run to the sink for storage and announcement.
     private static func finish(
         record: inout RunRecord,
         plan: BackupPlan,
@@ -212,35 +249,20 @@ enum BackupRunEngine {
     ) async {
         record.finishedAt = .now
 
-        if record.outcome != .cancelled, plan.hooks.contains(where: \.isRunnable) {
-            var hookContext = context
-            hookContext.outcome = record.outcome.rawValue
-            hookContext.errorMessage = record.failureMessage
-            hookContext.durationSeconds = record.duration
-
-            let events: [BackupHook.Event] = switch record.outcome {
-            case .succeeded: [.afterSuccess, .afterAny]
-            case .completedWithErrors: [.afterWarning, .afterAny]
-            case .failed: [.afterFailure, .afterAny]
-            case .cancelled: []
-            }
-            for event in events {
-                let result = await hooks.runHooks(plan.hooks, event: event, context: hookContext)
-                record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
-                )
-                for outcome in result.outcomes { transcript.note(outcome.logLine) }
-                // A cancel landing mid-after-hooks stops the remaining events:
-                // the user asked the app to stop, not this hook to fail.
-                if result.cancelled { break }
-            }
-            // A failing hook is worth surfacing, but never turns a written
-            // snapshot into a failed run.
-            if !record.hookMessages.isEmpty, record.outcome == .succeeded {
-                record.outcome = .completedWithErrors
-            }
-            record.finishedAt = .now
+        var hookContext = context
+        hookContext.outcome = record.outcome.rawValue
+        hookContext.errorMessage = record.failureMessage
+        hookContext.durationSeconds = record.duration
+        let events: [BackupHook.Event] = switch record.outcome {
+        case .succeeded: [.afterSuccess, .afterAny]
+        case .completedWithErrors: [.afterWarning, .afterAny]
+        case .failed: [.afterFailure, .afterAny]
+        case .cancelled: []
         }
+        await runAfterHooks(
+            plan.hooks, events: events, context: hookContext,
+            hooks: hooks, record: &record, transcript: transcript
+        )
 
         // The success path took the backup's own code; anything that threw
         // gets the first exit restic reached, and nil when it reached none.
@@ -312,10 +334,7 @@ enum MaintenanceRunEngine {
                     event: .beforeMaintenance,
                     context: hookContext
                 )
-                record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
-                )
-                for outcome in result.outcomes { transcript.note(outcome.logLine) }
+                note(result.outcomes, into: &record, transcript: transcript)
                 if result.cancelled {
                     // Same rule as the backup engine: the user's cancel is a
                     // cancellation, never a hook verdict.
@@ -387,11 +406,11 @@ enum MaintenanceRunEngine {
         )
     }
 
-    /// Runs the after-maintenance hooks, then hands the finished run to the
-    /// sink.
+    /// Runs the after-maintenance hooks (`runAfterHooks`), then hands the
+    /// finished run to the sink.
     ///
     /// A check that found errors counts as a failure here: that is the outcome
-    /// a repository hook exists to report. A cancelled run fires no hooks.
+    /// a repository hook exists to report.
     private static func finish(
         record: inout RunRecord,
         repository: Repository,
@@ -401,37 +420,21 @@ enum MaintenanceRunEngine {
         sink: Sink
     ) async {
         record.finishedAt = .now
-        if record.outcome != .cancelled, repository.hooks.contains(where: \.isRunnable) {
-            var hookContext = context
-            hookContext.outcome = record.outcome.rawValue
-            hookContext.errorMessage = record.failureMessage ?? record.detailText.flatMap {
-                record.outcome == .completedWithErrors ? $0 : nil
-            }
-            hookContext.durationSeconds = record.duration
-
-            let events: [BackupHook.Event] = switch record.outcome {
-            case .succeeded: [.afterMaintenanceSuccess, .afterAnyMaintenance]
-            case .completedWithErrors, .failed: [.afterMaintenanceFailure, .afterAnyMaintenance]
-            case .cancelled: []
-            }
-            for event in events {
-                let result = await hooks.runHooks(repository.hooks, event: event, context: hookContext)
-                record.hookMessages.append(
-                    contentsOf: result.outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
-                )
-                for outcome in result.outcomes { transcript.note(outcome.logLine) }
-                // A cancel landing mid-after-hooks stops the remaining events.
-                if result.cancelled { break }
-            }
-            // Same rule as the backup engine: a failing hook is worth
-            // surfacing, but never undoes what the run did — so a successful
-            // check or prune whose hook failed reads as completed-with-errors,
-            // which is what arms the problem dot and notifyOnFailure.
-            if !record.hookMessages.isEmpty, record.outcome == .succeeded {
-                record.outcome = .completedWithErrors
-            }
-            record.finishedAt = .now
+        var hookContext = context
+        hookContext.outcome = record.outcome.rawValue
+        hookContext.errorMessage = record.failureMessage ?? record.detailText.flatMap {
+            record.outcome == .completedWithErrors ? $0 : nil
         }
+        hookContext.durationSeconds = record.duration
+        let events: [BackupHook.Event] = switch record.outcome {
+        case .succeeded: [.afterMaintenanceSuccess, .afterAnyMaintenance]
+        case .completedWithErrors, .failed: [.afterMaintenanceFailure, .afterAnyMaintenance]
+        case .cancelled: []
+        }
+        await runAfterHooks(
+            repository.hooks, events: events, context: hookContext,
+            hooks: hooks, record: &record, transcript: transcript
+        )
 
         let contents = transcript.contents
         if record.exitCode == nil { record.exitCode = contents.firstExitCode }

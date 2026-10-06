@@ -352,16 +352,7 @@ final class FilesTree {
             ofPath: node.path, inChain: node.chainKey, repositoryID: node.repositoryID
         )
         if !children.isEmpty || complete {
-            let entries = children.map { child in
-                Entry(
-                    node: FileNode(
-                        repositoryID: node.repositoryID, chainKey: node.chainKey,
-                        path: child.path, isDirectory: child.isDirectory
-                    ),
-                    newest: child.newest,
-                    isInNewest: child.isInNewest
-                )
-            }
+            let entries = Self.entries(children, repositoryID: node.repositoryID, chainKey: node.chainKey)
             return Level(entries: sorted(entries), isFallback: false, isComplete: complete)
         }
         guard let newest = backups(of: node, model: model).first else {
@@ -379,6 +370,21 @@ final class FilesTree {
             )
         }
         return Level(entries: sorted(entries), isFallback: true, isComplete: false)
+    }
+
+    /// The index's children as the tree's rows, under the chain they came
+    /// from — unsorted; each caller applies its own order.
+    nonisolated static func entries(_ children: [IndexChild], repositoryID: UUID, chainKey: String) -> [Entry] {
+        children.map { child in
+            Entry(
+                node: FileNode(
+                    repositoryID: repositoryID, chainKey: chainKey,
+                    path: child.path, isDirectory: child.isDirectory
+                ),
+                newest: child.newest,
+                isInNewest: child.isInNewest
+            )
+        }
     }
 
     /// The browser's order (`ResticService.sortedForBrowser`): folders
@@ -425,23 +431,14 @@ struct FilesSearchAnswer: Equatable {
     /// names, one name's hits by path — the tree's rows, with no folders
     /// first, since a hit's folder is its caption.
     static func entries(_ hits: [IndexChild], under roots: FileNode) -> [FilesTree.Entry] {
-        hits.map { hit in
-            FilesTree.Entry(
-                node: FileNode(
-                    repositoryID: roots.repositoryID, chainKey: roots.chainKey,
-                    path: hit.path, isDirectory: hit.isDirectory
-                ),
-                newest: hit.newest,
-                isInNewest: hit.isInNewest
-            )
-        }
-        .sorted { lhs, rhs in
-            switch lhs.node.name.localizedStandardCompare(rhs.node.name) {
-            case .orderedAscending: true
-            case .orderedDescending: false
-            case .orderedSame: SnapshotIndex.bytesLess(lhs.node.path, rhs.node.path)
+        FilesTree.entries(hits, repositoryID: roots.repositoryID, chainKey: roots.chainKey)
+            .sorted { lhs, rhs in
+                switch lhs.node.name.localizedStandardCompare(rhs.node.name) {
+                case .orderedAscending: true
+                case .orderedDescending: false
+                case .orderedSame: SnapshotIndex.bytesLess(lhs.node.path, rhs.node.path)
+                }
             }
-        }
     }
 
     /// What the hits' footer says, if anything: that the chain holds more

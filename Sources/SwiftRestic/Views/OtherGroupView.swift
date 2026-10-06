@@ -86,7 +86,7 @@ struct OtherGroupView: View {
                 .textSelection(.enabled)
             Spacer(minLength: 12)
             if let plan = summary.formerPlan {
-                Button("Open the “\(plan.name.isEmpty ? "Untitled Plan" : plan.name)” Plan") {
+                Button("Open the “\(plan.displayName)” Plan") {
                     router.selection = .plan(plan.id)
                 }
                 .controlSize(.small)

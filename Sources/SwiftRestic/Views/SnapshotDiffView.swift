@@ -374,9 +374,9 @@ struct SnapshotDiffView: View {
     /// counts a new folder as a change but not as a file.
     private func countText(_ counts: ResticDiffStatistics.Counts?) -> String {
         guard let counts else { return "—" }
-        let files = "\(Format.count(counts.files)) file\(counts.files == 1 ? "" : "s")"
+        let files = Format.plural(counts.files, "file")
         guard counts.dirs > 0 else { return files }
-        return "\(files), \(Format.count(counts.dirs)) folder\(counts.dirs == 1 ? "" : "s")"
+        return "\(files), \(Format.plural(counts.dirs, "folder"))"
     }
 
     /// One picker row: the displayed minute, plus a relative stamp when
@@ -453,7 +453,6 @@ struct SnapshotDiffView: View {
             // a stale run must not write over the live one.
             guard !Task.isCancelled else { return }
             installDiff(result)
-            loadError = nil
             if filter == .metadataOnly, !includeMetadata { filter = nil }
         } catch is CancellationError {
             return

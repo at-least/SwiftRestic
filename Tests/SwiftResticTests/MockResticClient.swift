@@ -254,7 +254,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         }
         if unreadable { throw Self.unreadableError(snapshotID) }
         for node in nodes { onNode(node) }
-        try Self.requireWhole(malformed, command: "ls")
+        try Self.requireWhole(malformed)
     }
 
     func find(
@@ -300,7 +300,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         if let unreadable { throw Self.unreadableError(unreadable) }
         if let scripted {
             for change in scripted { onChange(change) }
-            try Self.requireWhole(malformed, command: "diff")
+            try Self.requireWhole(malformed)
             return
         }
         func spelled(_ node: SnapshotNode) -> String { IndexTestData.diffSpelling(node.path, isDirectory: node.isDirectory) }
@@ -318,16 +318,16 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
                 onChange(ResticDiffChange(path: spelled(node), modifier: "+"))
             }
         }
-        try Self.requireWhole(malformed, command: "diff")
+        try Self.requireWhole(malformed)
     }
 
-    private static func requireWhole(_ malformed: Int, command: String) throws {
+    private static func requireWhole(_ malformed: Int) throws {
         guard malformed > 0 else { return }
-        throw ResticError.malformedOutput(command: command, detail: "scripted: \(malformed) line(s) did not decode")
+        throw ResticError.malformedOutput(detail: "scripted: \(malformed) line(s) did not decode")
     }
 
     private static func unreadableError(_ snapshotID: String) -> ResticError {
-        .commandFailed(exitCode: 1, message: "scripted: cannot read \(snapshotID)", command: "restic")
+        .commandFailed(exitCode: 1, message: "scripted: cannot read \(snapshotID)")
     }
 
     func backup(

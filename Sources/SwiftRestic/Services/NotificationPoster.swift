@@ -7,7 +7,6 @@ import Foundation
 enum NotificationPayload {
     struct Request: Sendable, Equatable {
         var url: URL
-        var method: String = "POST"
         var body: Data?
         var contentType: String?
 
@@ -79,7 +78,7 @@ enum NotificationPoster {
     @discardableResult
     static func send(_ payload: NotificationPayload.Request) async -> String? {
         var request = URLRequest(url: payload.url, timeoutInterval: timeout)
-        request.httpMethod = payload.method
+        request.httpMethod = "POST"
         request.httpBody = payload.body
         if let contentType = payload.contentType {
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")

@@ -200,9 +200,8 @@ extension AppModel {
             repositoryID: repositoryID
         ) {
             var map: [String: ResticDiffChange] = [:]
-            for change in cached {
-                // Keyed as `ChangeMap.insert` keys a streamed change.
-                map[ResticPath.normalized(change.path)] = change.resticDiffChange
+            for change in cached.map(\.resticDiffChange) {
+                map[ChangeMap.key(change)] = change
             }
             return ChangeMarks(changes: map)
         }
@@ -261,8 +260,12 @@ private final class ChangeMap: @unchecked Sendable {
         // paths without one. Bytewise (`ResticPath`): a Character test
         // misses the slash after a Prepend character, and that row's mark
         // would never be found.
-        storage[ResticPath.normalized(change.path)] = change
+        storage[Self.key(change)] = change
     }
+
+    /// The key a change's row is stored under: bytewise-normalized path,
+    /// directories' trailing slash included (see `insert`).
+    static func key(_ change: ResticDiffChange) -> String { ResticPath.normalized(change.path) }
 
     var map: [String: ResticDiffChange] {
         lock.lock()

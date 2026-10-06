@@ -21,22 +21,20 @@ struct ResticErrorTests {
         // the discriminating detail — Retry can never succeed here.
         let wrongPassword = ResticError.commandFailed(
             exitCode: 12,
-            message: "Fatal: wrong password",
-            command: "restic snapshots"
+            message: "Fatal: wrong password"
         ).errorDescription ?? ""
         #expect(wrongPassword.contains("doesn't open this repository"))
         #expect(wrongPassword.contains("check it in the repository settings"))
         #expect(wrongPassword.contains("Fatal: wrong password"))
         #expect(
-            ResticError.commandFailed(exitCode: 12, message: "", command: "x")
+            ResticError.commandFailed(exitCode: 12, message: "")
                 .errorDescription?.contains("check it in the repository settings") == true
         )
 
         // Other known codes: explanation and restic's words, both there.
         let known = ResticError.commandFailed(
             exitCode: 11,
-            message: "Fatal: repository is locked",
-            command: "restic prune"
+            message: "Fatal: repository is locked"
         ).errorDescription ?? ""
         #expect(known.contains("already locked"))
         #expect(known.contains("Fatal: repository is locked"))
@@ -44,18 +42,17 @@ struct ResticErrorTests {
         // Known code, no JSON message: the explanation is all there is.
         let bare = ResticError.commandFailed(
             exitCode: 10,
-            message: "",
-            command: "restic snapshots"
+            message: ""
         ).errorDescription ?? ""
         #expect(bare.contains("does not exist"))
 
         // Unknown code: restic's words verbatim, no invented explanation.
         #expect(
-            ResticError.commandFailed(exitCode: 99, message: "disk on fire", command: "x")
+            ResticError.commandFailed(exitCode: 99, message: "disk on fire")
                 .errorDescription == "disk on fire"
         )
         #expect(
-            ResticError.commandFailed(exitCode: 99, message: "", command: "x")
+            ResticError.commandFailed(exitCode: 99, message: "")
                 .errorDescription == "restic exited with code 99."
         )
     }
@@ -66,7 +63,7 @@ struct ResticErrorTests {
             ResticError.passwordMissing(repositoryName: "NAS").errorDescription?.contains("NAS") == true
         )
         #expect(
-            ResticError.timedOut(seconds: 90, command: "restic backup").errorDescription?
+            ResticError.timedOut(seconds: 90).errorDescription?
                 .contains("90") == true
         )
         let notFound = ResticError.binaryNotFound(searched: ["/opt/homebrew/bin", "/usr/bin"])
@@ -493,7 +490,7 @@ struct UnreadableItemsTests {
     private func errors(_ lines: [String]) throws -> [ResticErrorMessage] {
         try lines.map { line in
             guard case let .error(error) = try #require(ResticMessageDecoder.decode(line: line)) else {
-                throw ResticError.malformedOutput(command: "test", detail: "not an error event: \(line)")
+                throw ResticError.malformedOutput(detail: "not an error event: \(line)")
             }
             return error
         }

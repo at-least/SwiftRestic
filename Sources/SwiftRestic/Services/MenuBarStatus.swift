@@ -24,8 +24,8 @@ enum MenuBarStatus {
     /// Which face the icon wears right now. Every kind of restic work counts
     /// as running — the menu bar is the only surface that exists when the
     /// window is closed, so a restore or a prune invisible there is invisible
-    /// everywhere. Problems are `problemLine`'s: the seven-day window, less
-    /// what a later successful backup healed.
+    /// everywhere. Problems are `newestStandingProblem`'s: the seven-day
+    /// window, less what a later successful backup healed.
     static func iconState(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity],
@@ -38,9 +38,7 @@ enum MenuBarStatus {
         let isRunning = !activity.isEmpty || !maintenance.isEmpty || isRestoring || isConsoleRunning
         if isRunning { return .running }
         if hasNoRepositories { return .unconfigured }
-        // `hasNoRepositories` already returned above; the problem line's own
-        // yield to it is the menu channel's rule, not this one's.
-        return problemLine(runs: runs, hasNoRepositories: false, now: now) == nil ? .idle : .problem
+        return newestStandingProblem(runs: runs, now: now) == nil ? .idle : .problem
     }
 
     /// What the icon draws for a state. The mark is the app's own line
@@ -96,6 +94,14 @@ enum MenuBarStatus {
         hold != nil && state != .running
     }
 
+    /// The newest problem of the week's set that no later success has healed,
+    /// or nil — what `iconState` asks for and `problemLine` words.
+    static func newestStandingProblem(runs: [RunRecord], now: Date = .now) -> RunRecord? {
+        OverviewMetrics.problems(in: runs, since: OverviewMetrics.problemWindowStart(from: now))
+            .filter { !OverviewMetrics.isHealed($0, in: runs) }
+            .max { $0.finishedAt < $1.finishedAt }
+    }
+
     /// The newest problem in the run history that still stands, as one
     /// sentence, or `nil` while there is none. `OverviewMetrics.problems`
     /// supplies the week's set, shared with the Activity badge and the
@@ -110,9 +116,8 @@ enum MenuBarStatus {
     /// summoned the menu, and the line under it must not answer with a
     /// failure belonging to a since-removed repository's runs.
     ///
-    /// Plans and repositories default empty: `iconState` asks only whether a
-    /// problem exists, and no name can change that answer; the tray passes
-    /// both so the subject is named by the one run-naming rule.
+    /// The tray passes `plans` and `repositories` so the subject is named by
+    /// the one run-naming rule.
     static func problemLine(
         runs: [RunRecord],
         hasNoRepositories: Bool,
@@ -122,9 +127,7 @@ enum MenuBarStatus {
         relative: (Date) -> String = { Format.relative($0) }
     ) -> String? {
         guard !hasNoRepositories else { return nil }
-        let problems = OverviewMetrics.problems(in: runs, since: OverviewMetrics.problemWindowStart(from: now))
-            .filter { !OverviewMetrics.isHealed($0, in: runs) }
-        guard let newest = problems.max(by: { $0.finishedAt < $1.finishedAt }) else { return nil }
+        guard let newest = newestStandingProblem(runs: runs, now: now) else { return nil }
 
         // The subject is the run's display name — the plan with its
         // repository for a backup, the repository alone for a check or prune
@@ -133,15 +136,15 @@ enum MenuBarStatus {
         let name = RunRecordPresentation.displayName(for: newest, plans: plans, repositories: repositories)
         let subject: String
         if name.isEmpty {
-            subject = newest.kind.rawValue.capitalized
+            subject = newest.kind.displayName
         } else {
             switch newest.kind {
             case .backup:
                 subject = name
             case .restore:
                 subject = "Restore of \(name)"
-            case .check, .prune, .forget, .initialize:
-                subject = "\(newest.kind.rawValue.capitalized) on \(name)"
+            case .check, .prune, .forget:
+                subject = "\(newest.kind.displayName) on \(name)"
             }
         }
         let verb = newest.outcome == .failed ? "failed" : "finished with errors"
@@ -175,10 +178,7 @@ enum MenuBarStatus {
         guard hold == nil else { return nil }
         if hasNoRepositories { return "No repository set up yet" }
         guard let nextRun else { return "No backups scheduled" }
-        let name = RunRecordPresentation.planWithRepository(
-            nextRun.plan.name,
-            repositoryName: repositories.first { $0.id == nextRun.plan.repositoryID }?.name
-        )
+        let name = RunRecordPresentation.planWithRepository(nextRun.plan, repositories: repositories)
         // The plan page's Next backup tile spells the same moment in these
         // words; the scheduler clamps its date to now, so the tile clock's
         // "Due now" case here is a run coming due.
@@ -208,7 +208,7 @@ enum MenuBarStatus {
         isResticAvailable: Bool
     ) -> [PlanRow] {
         plans.map { plan in
-            let name = plan.name.isEmpty ? "Untitled Plan" : plan.name
+            let name = plan.displayName
             switch activity[plan.id]?.phase {
             case nil:
                 // Enabled only where the plan could run — complete, idle and
@@ -288,10 +288,7 @@ enum MenuBarStatus {
         plans.filter { activity[$0.id] != nil }.map { plan in
             // The plan with its repository, like the idle headline — two
             // same-named plans can run at once.
-            let name = RunRecordPresentation.planWithRepository(
-                plan.name,
-                repositoryName: repositories.first { $0.id == plan.repositoryID }?.name
-            )
+            let name = RunRecordPresentation.planWithRepository(plan, repositories: repositories)
             return RunningLine(
                 id: plan.id.uuidString,
                 text: "\(name) — \(progressText(activity: activity[plan.id], progress: progress[plan.id]))"

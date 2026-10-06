@@ -425,7 +425,7 @@ struct AppModelTests {
         repository.hooks = [hook]
         await model.upsert(repository: repository, password: nil, providerSecret: nil)
 
-        model.runMaintenance(id: repository.id, task: .check, readDataPercent: 0)
+        model.runMaintenance(repositoryID: repository.id, task: .check, readDataPercent: 0)
         await model.waitForMaintenance(repositoryID: repository.id)
 
         let record = try #require(model.configuration.runs.first)
@@ -459,7 +459,7 @@ struct AppModelTests {
         repository.hooks = [gate, onFailure]
         await model.upsert(repository: repository, password: nil, providerSecret: nil)
 
-        model.runMaintenance(id: repository.id, task: .check, readDataPercent: 0)
+        model.runMaintenance(repositoryID: repository.id, task: .check, readDataPercent: 0)
         await model.waitForMaintenance(repositoryID: repository.id)
 
         let record = try #require(model.configuration.runs.first)

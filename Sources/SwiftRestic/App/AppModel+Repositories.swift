@@ -58,13 +58,12 @@ extension AppModel {
     /// clause, so the dialog's word of what will be interrupted can never
     /// trail what removal actually does.
     func removalConsequences(for repositoryID: UUID) -> String {
-        let names = { (plan: BackupPlan) in plan.name.isEmpty ? "Untitled Plan" : plan.name }
-        return Self.removalConsequences(
-            removedPlanNames: plans(in: repositoryID).map(names),
+        Self.removalConsequences(
+            removedPlanNames: plans(in: repositoryID).map(\.displayName),
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: configuration.plans
                 .filter { $0.repositoryID == repositoryID && activity[$0.id] != nil }
-                .map(names),
+                .map(\.displayName),
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID
         )
@@ -220,7 +219,7 @@ extension AppModel {
     /// one extra Keychain read after any fatal error, which no run frequency
     /// makes expensive.
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-        guard case let ResticError.commandFailed(code, _, _) = error, code == 12 || code == 1 else { return }
+        guard case let ResticError.commandFailed(code, _) = error, code == 12 || code == 1 else { return }
         resolvedContexts[repositoryID] = nil
     }
 

@@ -50,12 +50,11 @@ struct RestorePaneView: View {
     /// lands after a record switch must not install itself into the new
     /// record's tree.
     @State private var loadedSnapshotID: String?
-    /// Directories with a fetch already running — a double-click racing
-    /// itself must not spawn duplicate listings.
-    @State private var inFlightFetches: Set<String> = []
     /// The fetch tasks themselves, so the pane's departure can stop them:
     /// an expand that outlives the pane keeps a restic listing running and
-    /// writes into state nobody reads any more.
+    /// writes into state nobody reads any more. A key present is a fetch
+    /// already running — a double-click racing itself must not spawn
+    /// duplicate listings.
     @State private var fetchTasks: [String: Task<Void, Never>] = [:]
     /// The query in flight, so the next keystroke cancels it: a slower older
     /// search finishing last must not overwrite the newer one's answers.
@@ -723,17 +722,13 @@ struct RestorePaneView: View {
         // One fetch per directory at a time: a double-click racing itself
         // must not land two listings (the tree is replace-idempotent, but
         // skipping the duplicate spares a restic round trip).
-        guard !inFlightFetches.contains(needed) else { return }
-        inFlightFetches.insert(needed)
+        guard fetchTasks[needed] == nil else { return }
         // A focus change that keeps the row selected, as NSOutlineView's
         // does — not `navigate(to:)`, whose deselect would send the next ↓
         // back to the top of the list.
         currentPath = path
         fetchTasks[needed] = Task {
-            defer {
-                inFlightFetches.remove(needed)
-                fetchTasks[needed] = nil
-            }
+            defer { fetchTasks[needed] = nil }
             do {
                 let nodes = try await model.children(
                     repositoryID: repositoryID,
@@ -833,45 +828,20 @@ struct RestorePaneView: View {
         }
     }
 
-    /// One item goes the way a single item always has; several go together,
-    /// less any inside another selected folder, which brings them anyway —
-    /// and the sheet says so, or three selected rows would read as two.
+    /// The picked rows through the shared factory
+    /// (`RestoreDestinationRequest.picked`): the covering rule and the
+    /// sheet's wording live there, one rule for this pane and the Files
+    /// view's folder versions.
     private func restoreSelection() {
-        let selected = selectedNodes
-        let nodes = RestoreBatch.covering(selected)
-        let note = RestoreBatch.coveredNote(RestoreBatch.covered(selected))
-        guard let record, let first = nodes.first else { return }
-        let repositoryID = repositoryID
-        guard nodes.count > 1 else {
-            destinationRequest = RestoreDestinationRequest(
-                subject: .item(name: first.name, path: first.path, isDirectory: first.isDirectory),
-                selectionNote: note,
-                backupTime: record.time,
-                snapshotShortID: record.shortID
-            ) { directories, overwrite in
-                model.restore(
-                    repositoryID: repositoryID,
-                    snapshotID: record.id,
-                    node: first,
-                    to: directories[0],
-                    overwrite: overwrite
-                )
-            }
-            return
-        }
-        destinationRequest = RestoreDestinationRequest(
-            subject: .items(nodes.map { RestoreItem(name: $0.name, path: $0.path, isDirectory: $0.isDirectory) }),
-            selectionNote: note,
+        guard let record else { return }
+        destinationRequest = RestoreDestinationRequest.picked(
+            selectedNodes,
+            repositoryID: repositoryID,
+            snapshotID: record.id,
+            snapshotShortID: record.shortID,
             backupTime: record.time,
-            snapshotShortID: record.shortID
-        ) { directories, overwrite in
-            model.restore(
-                repositoryID: repositoryID,
-                snapshotID: record.id,
-                items: zip(nodes, directories).map { (node: $0, directory: $1) },
-                overwrite: overwrite
-            )
-        }
+            model: model
+        )
     }
 
     /// The whole record, named the way the header and the sidebar name it

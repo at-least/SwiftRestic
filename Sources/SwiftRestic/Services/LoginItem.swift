@@ -15,11 +15,8 @@ enum LoginItemState: Sendable, Equatable {
 enum LoginItem {
     static var status: SMAppService.Status { SMAppService.mainApp.status }
 
-    static var isEnabled: Bool { status == .enabled }
-
-    /// `status` in the model's terms — one XPC round trip, so a caller that
-    /// needs both mirrors reads this once instead of `isEnabled` and
-    /// `needsApproval` back to back.
+    /// `status` in the model's terms — one XPC round trip for both mirrors,
+    /// where a caller would otherwise read `status` twice.
     static var state: LoginItemState {
         switch status {
         case .enabled: .enabled

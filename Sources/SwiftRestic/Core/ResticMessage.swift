@@ -37,14 +37,8 @@ struct ResticStatus: Sendable, Equatable {
     var filesDone: Int?
     var totalBytes: Int64?
     var bytesDone: Int64?
-    var secondsElapsed: Int?
     var secondsRemaining: Int?
-    var errorCount: Int?
     var currentFiles: [String]
-    // restore only
-    var filesSkipped: Int?
-    var filesDeleted: Int?
-    var bytesSkipped: Int64?
 
     var fractionComplete: Double { min(max(percentDone, 0), 1) }
 }
@@ -58,13 +52,8 @@ extension ResticStatus: Decodable {
         case totalBytes = "total_bytes"
         case bytesDone = "bytes_done"
         case bytesRestored = "bytes_restored"
-        case secondsElapsed = "seconds_elapsed"
         case secondsRemaining = "seconds_remaining"
-        case errorCount = "error_count"
         case currentFiles = "current_files"
-        case filesSkipped = "files_skipped"
-        case filesDeleted = "files_deleted"
-        case bytesSkipped = "bytes_skipped"
     }
 
     init(from decoder: any Decoder) throws {
@@ -76,13 +65,8 @@ extension ResticStatus: Decodable {
         totalBytes = try c.decodeIfPresent(Int64.self, forKey: .totalBytes)
         bytesDone = try c.decodeIfPresent(Int64.self, forKey: .bytesDone)
             ?? c.decodeIfPresent(Int64.self, forKey: .bytesRestored)
-        secondsElapsed = try c.decodeIfPresent(Int.self, forKey: .secondsElapsed)
         secondsRemaining = try c.decodeIfPresent(Int.self, forKey: .secondsRemaining)
-        errorCount = try c.decodeIfPresent(Int.self, forKey: .errorCount)
         currentFiles = try c.decodeIfPresent([String].self, forKey: .currentFiles) ?? []
-        filesSkipped = try c.decodeIfPresent(Int.self, forKey: .filesSkipped)
-        filesDeleted = try c.decodeIfPresent(Int.self, forKey: .filesDeleted)
-        bytesSkipped = try c.decodeIfPresent(Int64.self, forKey: .bytesSkipped)
     }
 }
 
@@ -93,62 +77,32 @@ struct ResticSummary: Sendable, Equatable, Decodable {
     var filesNew: Int?
     var filesChanged: Int?
     var filesUnmodified: Int?
-    var dirsNew: Int?
-    var dirsChanged: Int?
-    var dirsUnmodified: Int?
     var dataAdded: Int64?
-    var dataAddedPacked: Int64?
     var totalFilesProcessed: Int?
     var totalBytesProcessed: Int64?
-    var totalDuration: Double?
     var snapshotID: String?
-    var dryRun: Bool?
-    var dataBlobs: Int?
-    var treeBlobs: Int?
-    var backupStart: Date?
-    var backupEnd: Date?
     // restore
     var totalFiles: Int?
     var filesRestored: Int?
-    var totalBytes: Int64?
     var bytesRestored: Int64?
     var filesSkipped: Int?
-    var filesDeleted: Int?
-    var bytesSkipped: Int64?
-    var secondsElapsed: Int?
     // check
     var numErrors: Int?
-    var suggestRepairIndex: Bool?
     var suggestPrune: Bool?
 
     private enum CodingKeys: String, CodingKey {
         case filesNew = "files_new"
         case filesChanged = "files_changed"
         case filesUnmodified = "files_unmodified"
-        case dirsNew = "dirs_new"
-        case dirsChanged = "dirs_changed"
-        case dirsUnmodified = "dirs_unmodified"
         case dataAdded = "data_added"
-        case dataAddedPacked = "data_added_packed"
         case totalFilesProcessed = "total_files_processed"
         case totalBytesProcessed = "total_bytes_processed"
-        case totalDuration = "total_duration"
         case snapshotID = "snapshot_id"
-        case dryRun = "dry_run"
-        case dataBlobs = "data_blobs"
-        case treeBlobs = "tree_blobs"
-        case backupStart = "backup_start"
-        case backupEnd = "backup_end"
         case totalFiles = "total_files"
         case filesRestored = "files_restored"
-        case totalBytes = "total_bytes"
         case bytesRestored = "bytes_restored"
         case filesSkipped = "files_skipped"
-        case filesDeleted = "files_deleted"
-        case bytesSkipped = "bytes_skipped"
-        case secondsElapsed = "seconds_elapsed"
         case numErrors = "num_errors"
-        case suggestRepairIndex = "suggest_repair_index"
         case suggestPrune = "suggest_prune"
     }
 }

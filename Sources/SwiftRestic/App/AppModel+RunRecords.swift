@@ -147,7 +147,7 @@ extension AppModel {
             stage: stage,
             planName: record.planName,
             repositoryName: repositoryName,
-            operation: record.kind.rawValue.capitalized,
+            operation: record.kind.displayName,
             snapshotID: record.snapshotID,
             errorMessage: record.failureMessage,
             // restic's own warnings only. `hookMessages` deliberately does not

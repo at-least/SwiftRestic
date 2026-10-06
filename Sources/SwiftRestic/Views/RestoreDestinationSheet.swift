@@ -22,6 +22,53 @@ struct RestoreDestinationRequest: Identifiable {
     /// all, or for Original location each item's own parent — and one for
     /// an item or a whole backup.
     let perform: @MainActor ([URL], RestoreOverwritePolicy) -> Void
+
+    /// The picked rows' restore — the Restore pane's and the folder-versions
+    /// pane's, the same rule both: `RestoreBatch.covering` drops items inside
+    /// a selected folder, which the folder brings anyway, and `coveredNote`
+    /// says so, or three selected rows would read as two. One item goes the
+    /// way a single item always has; nil when the picked rows cover nothing.
+    static func picked(
+        _ picked: [SnapshotNode],
+        repositoryID: UUID,
+        snapshotID: String,
+        snapshotShortID: String,
+        backupTime: Date,
+        model: AppModel
+    ) -> RestoreDestinationRequest? {
+        let nodes = RestoreBatch.covering(picked)
+        let note = RestoreBatch.coveredNote(RestoreBatch.covered(picked))
+        guard let first = nodes.first else { return nil }
+        guard nodes.count > 1 else {
+            return RestoreDestinationRequest(
+                subject: .item(name: first.name, path: first.path, isDirectory: first.isDirectory),
+                selectionNote: note,
+                backupTime: backupTime,
+                snapshotShortID: snapshotShortID
+            ) { directories, overwrite in
+                model.restore(
+                    repositoryID: repositoryID,
+                    snapshotID: snapshotID,
+                    node: first,
+                    to: directories[0],
+                    overwrite: overwrite
+                )
+            }
+        }
+        return RestoreDestinationRequest(
+            subject: .items(nodes.map { RestoreItem(name: $0.name, path: $0.path, isDirectory: $0.isDirectory) }),
+            selectionNote: note,
+            backupTime: backupTime,
+            snapshotShortID: snapshotShortID
+        ) { directories, overwrite in
+            model.restore(
+                repositoryID: repositoryID,
+                snapshotID: snapshotID,
+                items: zip(nodes, directories).map { (node: $0, directory: $1) },
+                overwrite: overwrite
+            )
+        }
+    }
 }
 
 /// Arq's "Restore to:" window, with our item-and-backup wording kept:
@@ -324,7 +371,6 @@ struct RestoreDestinationSheet: View {
     private func chooseFolder() {
         guard let url = FilePicker.chooseDirectory(
             message: "Choose where to restore \(subjectName)",
-            prompt: "Choose",
             directoryURL: otherFolder ?? Self.desktop
         ) else { return }
         otherFolder = url

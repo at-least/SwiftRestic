@@ -107,7 +107,7 @@ extension AppModel {
             snapshotListingOutcomes[repositoryID] = .failed(
                 "Waiting for a repository password — add it in the repository settings to read this repository."
             )
-        } catch let ResticError.commandFailed(code, _, _) where code == 10 {
+        } catch let ResticError.commandFailed(code, _) where code == 10 {
             // restic's "does not exist": the repository is not where it was
             // saved — an unplugged volume, a moved folder. Never "empty": the
             // app creates a new repository before keeping it (the editor's
@@ -159,6 +159,19 @@ extension AppModel {
     func shelves(for repositoryID: UUID) -> BackupShelves {
         backupShelves[repositoryID]
             ?? BackupShelves(listing: [], plans: plans(in: repositoryID), allPlans: configuration.plans)
+    }
+
+    /// A plan's backups that would stay behind if it left `repositoryID`,
+    /// and the shelf's title as it will read once it has — the sidebar's
+    /// own derivation, so a dialog never names a section by a title it
+    /// will not have. Nil when the plan holds no backups there.
+    func backupsLeftBehind(planID: UUID, in repositoryID: UUID) -> (count: Int, shelfTitle: String)? {
+        guard let count = shelves(for: repositoryID).byPlan[planID]?.count, count > 0
+        else { return nil }
+        return (
+            count,
+            SidebarTree.otherBackupsTitle(repositoryHasPlans: plans(in: repositoryID).count > 1)
+        )
     }
 
     /// How the sidebar names the place `record` sits — its plan, or its
@@ -263,11 +276,7 @@ extension AppModel {
             FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: pathKey)
         }
         var unanswered = backupIDs.filter { fileHistoryAnswers[key($0)] == nil }
-        if !unanswered.isEmpty {
-            let kept = await indexCoordinator.cachedFileNodes(path: path, snapshotIDs: unanswered, repositoryID: repositoryID)
-            for (backupID, node) in kept { fileHistoryAnswers[key(backupID)] = node }
-            unanswered.removeAll { kept[$0] != nil }
-        }
+        unanswered = await answersFromIndexCache(path: path, backupIDs: unanswered, repositoryID: repositoryID)
         if !unanswered.isEmpty {
             let (service, context) = try await resticContext(for: repository)
             let results = try await service.find(
@@ -290,6 +299,18 @@ extension AppModel {
             history[backupID] = fileHistoryAnswers[key(backupID)]
         }
         return history
+    }
+
+    /// Fills `fileHistoryAnswers` for one path from the index's cached
+    /// nodes; returns the backups it could not answer.
+    private func answersFromIndexCache(path: String, backupIDs: [String], repositoryID: UUID) async -> [String] {
+        guard !backupIDs.isEmpty else { return [] }
+        let pathKey = PathKey(path)
+        let kept = await indexCoordinator.cachedFileNodes(path: path, snapshotIDs: backupIDs, repositoryID: repositoryID)
+        for (backupID, node) in kept {
+            fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: pathKey)] = node
+        }
+        return backupIDs.filter { kept[$0] == nil }
     }
 
     /// Reads ahead what a click on each of `files` — one open folder's, all
@@ -328,9 +349,7 @@ extension AppModel {
             ) else { return }
             let unanswered = versions.compactMap { $0.snapshots.first?.id }.filter { fileHistoryAnswers[key($0, file.path)] == nil }
             guard !unanswered.isEmpty else { continue }
-            let kept = await indexCoordinator.cachedFileNodes(path: file.path, snapshotIDs: unanswered, repositoryID: repositoryID)
-            for (backupID, node) in kept { fileHistoryAnswers[key(backupID, file.path)] = node }
-            let rest = unanswered.filter { kept[$0] == nil }
+            let rest = await answersFromIndexCache(path: file.path, backupIDs: unanswered, repositoryID: repositoryID)
             if !rest.isEmpty { missing[file.path] = rest }
         }
         // A click answered some meanwhile, or another read-ahead took them.

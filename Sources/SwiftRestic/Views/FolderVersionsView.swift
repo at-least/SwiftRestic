@@ -260,42 +260,20 @@ struct FolderVersionsView: View {
     }
 
     /// The selected items, or with nothing selected the folder itself, as
-    /// of the chosen backup: one item the way one always goes, several
-    /// together less any inside another selected folder (the Restore pane's
-    /// rule and wording).
+    /// of the chosen backup (`RestoreDestinationRequest.picked`'s rule —
+    /// the Restore pane's).
     private func restoreSelection() {
         guard let chosen else { return }
-        let repositoryID = node.repositoryID
-        let shortID = String(chosen.id.prefix(8))
         let picked = selectedNodes.isEmpty
             ? [SnapshotNode(name: node.name, type: .dir, path: node.path)]
             : selectedNodes
-        let items = RestoreBatch.covering(picked)
-        let note = RestoreBatch.coveredNote(RestoreBatch.covered(picked))
-        guard let first = items.first else { return }
-        guard items.count > 1 else {
-            destinationRequest = RestoreDestinationRequest(
-                subject: .item(name: first.name, path: first.path, isDirectory: first.isDirectory),
-                selectionNote: note,
-                backupTime: chosen.time,
-                snapshotShortID: shortID
-            ) { directories, overwrite in
-                model.restore(repositoryID: repositoryID, snapshotID: chosen.id, node: first, to: directories[0], overwrite: overwrite)
-            }
-            return
-        }
-        destinationRequest = RestoreDestinationRequest(
-            subject: .items(items.map { RestoreItem(name: $0.name, path: $0.path, isDirectory: $0.isDirectory) }),
-            selectionNote: note,
+        destinationRequest = RestoreDestinationRequest.picked(
+            picked,
+            repositoryID: node.repositoryID,
+            snapshotID: chosen.id,
+            snapshotShortID: String(chosen.id.prefix(8)),
             backupTime: chosen.time,
-            snapshotShortID: shortID
-        ) { directories, overwrite in
-            model.restore(
-                repositoryID: repositoryID,
-                snapshotID: chosen.id,
-                items: zip(items, directories).map { (node: $0, directory: $1) },
-                overwrite: overwrite
-            )
-        }
+            model: model
+        )
     }
 }

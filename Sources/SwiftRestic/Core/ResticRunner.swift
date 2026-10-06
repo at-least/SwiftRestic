@@ -43,22 +43,11 @@ struct ResticInvocation: Sendable {
     /// stops keeping them at some cap of its own.
     var retainMessages: Bool = true
 
-    /// A redacted rendering for logs and error messages. Arguments are
-    /// quoted shell-style, so a path with spaces stays one word on screen
-    /// instead of reading as two arguments the run never received.
+    /// A redacted rendering for logs and error messages, through the console
+    /// tokenizer's shell-style quoting, so a path with spaces stays one word
+    /// on screen instead of reading as two arguments the run never received.
     var displayCommand: String {
-        (["restic"] + arguments.map(Self.displayQuoted)).joined(separator: " ")
-    }
-
-    /// Single-quote what whitespace or quoting would split or mangle. This
-    /// is not the tokenizer's exact inverse — it renders for a human reading
-    /// a failure, not for re-parsing.
-    private static func displayQuoted(_ argument: String) -> String {
-        let needsQuoting = argument.isEmpty || argument.contains {
-            $0.isWhitespace || $0 == "'" || $0 == "\"" || $0 == "\\"
-        }
-        guard needsQuoting else { return argument }
-        return "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        CommandLineTokenizer.render(["restic"] + arguments)
     }
 }
 
@@ -81,6 +70,12 @@ struct ResticRunResult: Sendable {
             if case let .exitError(error) = message { return error }
         }
         return nil
+    }
+
+    /// restic's fatal-error line when it wrote one as JSON, else the tail of
+    /// stderr — what a failed command's error carries.
+    var failureMessage: String {
+        exitError?.message ?? ResticRunner.tail(of: stderr, limit: 2000)
     }
 
     /// Non-fatal per-item errors, in order.
@@ -315,13 +310,11 @@ actor ResticRunner {
                 // only reach the result if stderr is decoded too. The decoder drops
                 // every non-JSON line, so human-readable stderr noise is unaffected.
                 async let stderrOutcome = stderrReader.readAll(
-                    decodeMessages: true,
                     onMessage: onMessage,
                     onRawLine: onRawLine,
                     onLine: stderrLine
                 )
                 let stdoutOutcome = await stdoutReader.readAll(
-                    decodeMessages: true,
                     onMessage: onMessage,
                     onRawLine: onRawLine,
                     onLine: stdoutLine
@@ -349,31 +342,33 @@ actor ResticRunner {
         }
 
         let captured = takeCaptured(handle: handle)
+        var result = ResticRunResult(
+            exitCode: exitCode,
+            messages: captured.messages,
+            stdout: captured.stdout,
+            stderr: captured.stderr,
+            malformedCount: captured.malformedCount
+        )
 
         if box.idleTimedOut {
             let seconds = invocation.idleTimeout ?? 0
             transcript?.note("Stopped: no output for \(Int(seconds)) s")
-            throw ResticError.idleStalled(seconds: seconds, command: invocation.displayCommand)
+            throw ResticError.idleStalled(seconds: seconds)
         }
 
         if box.timedOut {
             let seconds = invocation.timeout ?? 0
             transcript?.note("Stopped: timed out after \(Int(seconds)) s")
-            throw ResticError.timedOut(seconds: seconds, command: invocation.displayCommand)
+            throw ResticError.timedOut(seconds: seconds)
         }
 
         // Before the verdict below, so a failing exit is logged too.
         transcript?.exited(exitCode)
 
         if let allowed = invocation.allowedExitCodes, !allowed.contains(exitCode) {
-            let message = captured.messages.compactMap { message -> String? in
-                if case let .exitError(error) = message { return error.message }
-                return nil
-            }.last ?? Self.tail(of: captured.stderr, limit: 2000)
             throw ResticError.commandFailed(
                 exitCode: exitCode,
-                message: message,
-                command: invocation.displayCommand
+                message: result.failureMessage
             )
         }
 
@@ -384,7 +379,6 @@ actor ResticRunner {
         // it, RENAME_EXCL refuses an occupied name in the same atomic step,
         // so a file that appeared during a minutes-long dump (a user's copy,
         // an iCloud re-download) is kept too, not only one a pre-check saw.
-        var keptExisting = false
         if let staging = dumpStagingURL, let target = invocation.stdoutFile {
             switch try Self.commitStagedDump(
                 staging,
@@ -395,18 +389,11 @@ actor ResticRunner {
                 dumpCommitted = true
             case .keptExisting:
                 // The staging file goes with the defer above, uncommitted.
-                keptExisting = true
+                result.keptExistingStdoutFile = true
             }
         }
 
-        return ResticRunResult(
-            exitCode: exitCode,
-            messages: captured.messages,
-            stdout: captured.stdout,
-            stderr: captured.stderr,
-            malformedCount: captured.malformedCount,
-            keptExistingStdoutFile: keptExisting
-        )
+        return result
     }
 
     /// How a finished dump's staged output was placed.
@@ -499,6 +486,17 @@ actor ResticRunner {
 
     // MARK: - Environment
 
+    /// Keys the app itself owns: the repository location and every form of the
+    /// password restic can read. Letting the environment override these would
+    /// silently point restic at another repository or break authentication —
+    /// the class of bug behind backrest's issue #1139 — so they are stripped
+    /// from every child's inheritance here, and
+    /// `RepositoryContext.protectedEnvironmentKeys` reads the same set to
+    /// flag the settings that can have no effect.
+    static let protectedEnvironmentKeys: Set<String> = [
+        "RESTIC_REPOSITORY", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE", "RESTIC_PASSWORD_COMMAND",
+    ]
+
     /// A predictable environment for the child. A GUI app's inherited environment
     /// is nearly empty, so we rebuild the parts restic actually reads.
     ///
@@ -508,7 +506,7 @@ actor ResticRunner {
     /// and the app always supplies them explicitly — backrest issue #1139.
     private static func baseEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
-        for key in ["RESTIC_REPOSITORY", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE", "RESTIC_PASSWORD_COMMAND"] {
+        for key in Self.protectedEnvironmentKeys {
             env.removeValue(forKey: key)
         }
         let extraPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
@@ -717,7 +715,7 @@ private final class StreamReader: @unchecked Sendable {
         active: Bool,
         textLimit: Int,
         retainMessages: Bool,
-        onActivity: (@Sendable () -> Void)? = nil
+        onActivity: (@Sendable () -> Void)?
     ) {
         self.handle = FileHandleBox(handle)
         self.active = active
@@ -744,12 +742,6 @@ private final class StreamReader: @unchecked Sendable {
         _ = write(wakeup.fileHandleForWriting.fileDescriptor, &byte, 1)
     }
 
-    private var abandonRequested: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return abandonSignalled
-    }
-
     /// Marks the loop as over, so a later `abandon` cannot resurrect anything.
     private func markFinished() {
         lock.lock()
@@ -760,7 +752,6 @@ private final class StreamReader: @unchecked Sendable {
     /// - Parameter onLine: every line with what it decoded to (nil for a
     ///   line that is not restic JSON) — the run transcript's feed.
     func readAll(
-        decodeMessages: Bool,
         onMessage: (@Sendable (ResticMessage) -> Void)?,
         onRawLine: (@Sendable (String) -> Void)? = nil,
         onLine: (@Sendable (String, ResticMessage?) -> Void)? = nil
@@ -780,7 +771,7 @@ private final class StreamReader: @unchecked Sendable {
                     // utf8.count, not count: grapheme counting is O(n) and this
                     // runs once per line for the whole stream.
                     if retained.utf8.count < limit { retained += line + "\n" }
-                    let decoded = decodeMessages ? ResticMessageDecoder.decode(line: line) : nil
+                    let decoded = ResticMessageDecoder.decode(line: line)
                     onLine?(line, decoded)
                     guard let message = decoded else { return }
                     if case .malformed = message { outcome.malformedCount += 1 }

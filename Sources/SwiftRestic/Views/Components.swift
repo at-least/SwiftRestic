@@ -728,14 +728,14 @@ enum FilePicker {
     /// `directoryURL` is where the panel opens; nil leaves it to AppKit's
     /// own memory of the last folder.
     @MainActor
-    static func chooseDirectory(message: String, prompt: String = "Choose", directoryURL: URL? = nil) -> URL? {
+    static func chooseDirectory(message: String, directoryURL: URL? = nil) -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.message = message
-        panel.prompt = prompt
+        panel.prompt = "Choose"
         if let directoryURL { panel.directoryURL = directoryURL }
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
@@ -772,48 +772,6 @@ extension View {
                 self
             }
             .padding(Theme.Space.pane)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-}
-
-// MARK: - Path breadcrumb
-
-/// A path rendered as clickable crumbs, walking down from the deepest root
-/// that contains it. The crumb for the current path renders as plain text —
-/// it is where you are, not where you can go. An empty path renders nothing:
-/// callers show their own pseudo-root face instead.
-struct PathBreadcrumb: View {
-    let path: String
-    let roots: [String]
-    let onJump: (String) -> Void
-
-    var body: some View {
-        let crumbs = Format.crumbs(of: path, roots: roots)
-        if !crumbs.isEmpty {
-            HStack(spacing: 4) {
-                ForEach(Array(crumbs.enumerated()), id: \.offset) { index, crumb in
-                    if index > 0 {
-                        // A separator, not a control: its SF label is
-                        // "Forward", between crumbs VoiceOver already reads
-                        // in order.
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .accessibilityHidden(true)
-                    }
-                    if crumb.target == path {
-                        Text(crumb.label)
-                            .font(.caption.weight(.medium))
-                            .lineLimit(1)
-                    } else {
-                        Button(crumb.label) { onJump(crumb.target) }
-                            .buttonStyle(.link)
-                            .font(.caption)
-                            .lineLimit(1)
-                    }
-                }
-            }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

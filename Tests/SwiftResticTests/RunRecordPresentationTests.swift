@@ -89,8 +89,8 @@ struct RunRecordPresentationTests {
                 repositories: [home]
             ) == "Budget.numbers (Home Disk)"
         )
-        // Check, prune and initialize: the repository from its ID.
-        for kind in [RunRecord.Kind.check, .prune, .initialize] {
+        // Check and prune: the repository from its ID.
+        for kind in [RunRecord.Kind.check, .prune] {
             #expect(
                 RunRecordPresentation.displayName(
                     for: run(kind, planName: "Whatever was stored", repositoryID: home.id),

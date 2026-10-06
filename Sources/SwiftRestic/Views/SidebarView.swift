@@ -126,19 +126,18 @@ struct SidebarView: View {
             isPlain(press) ? foldSelection(open: false) : .ignored
         }
         .onChange(of: router.selection) {
-            // Only a record under Other backups sits in a group: a plan's
-            // record of the same folders must not reopen one. A tagged
-            // record's group is a plan fold (closed until opened); an
-            // untagged one's is a lineage the user may have folded shut.
+            // A lineage's fold is the sidebar's own view state, so an
+            // unowned record with no plan tag reopens it here; plan-UUID
+            // groups reopen through RootDetailView's SidebarFolds.reveal on
+            // the same change (a plan's record must not reopen a lineage,
+            // and a tagged record's group is a plan fold, closed until
+            // opened).
             guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
                   let snapshot = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }),
+                  snapshot.planID == nil,
                   BackupShelves.owner(of: snapshot, among: model.plans(in: repositoryID)) == nil
             else { return }
-            if let planID = snapshot.planID {
-                folds.otherGroups.insert(OtherGroupFoldID(repositoryID: repositoryID, planID: planID))
-            } else {
-                collapsedLineages.remove(LineageFoldID(repositoryID: repositoryID, key: snapshot.lineageKey))
-            }
+            collapsedLineages.remove(LineageFoldID(repositoryID: repositoryID, key: snapshot.lineageKey))
         }
     }
 
@@ -385,7 +384,7 @@ struct SidebarView: View {
     /// Named for its plan: every plan has a fold, and as flat rows they
     /// have no outline parent to tell them apart.
     private func planFoldName(_ plan: BackupPlan) -> String {
-        "Backups of “\(plan.name.isEmpty ? "Untitled Plan" : plan.name)”"
+        "Backups of “\(plan.displayName)”"
     }
 
     private func isPlain(_ press: KeyPress) -> Bool {
@@ -627,7 +626,7 @@ struct SidebarView: View {
             }
         }
         if let formerPlan {
-            Button("Open the “\(formerPlan.name.isEmpty ? "Untitled Plan" : formerPlan.name)” Plan") {
+            Button("Open the “\(formerPlan.displayName)” Plan") {
                 router.selection = .plan(formerPlan.id)
             }
         }
@@ -840,7 +839,7 @@ private struct PlanSidebarRow: View {
         )
         HStack(spacing: 4) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(plan.name.isEmpty ? "Untitled Plan" : plan.name)
+                Text(plan.displayName)
                     .lineLimit(1)
                 HStack(spacing: 3) {
                     // The glyph carries the severity — red for a failed run

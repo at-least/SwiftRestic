@@ -124,7 +124,7 @@ struct BackupRunEngineTests {
     func failedRun() async throws {
         let sink = RecordingSink()
         let client = MockResticClient().onBackup(
-            .failure(ResticError.commandFailed(exitCode: 12, message: "wrong password", command: "restic backup"))
+            .failure(ResticError.commandFailed(exitCode: 12, message: "wrong password"))
         )
         let plan = makePlan()
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
@@ -187,7 +187,7 @@ struct BackupRunEngineTests {
         let sink = RecordingSink()
         let client = MockResticClient()
             .onBackup(.success(successOutcome()))
-            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget")))
+            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
         let plan = makePlan()
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
 
@@ -227,7 +227,7 @@ struct BackupRunEngineTests {
         let sink = RecordingSink()
         let client = MockResticClient()
             .onBackup(.success(successOutcome()))
-            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget")))
+            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
         await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
 
         let record = try #require(sink.deliveredRecords.first)
@@ -294,7 +294,7 @@ struct BackupRunEngineTests {
             sink: StubServiceSink(
                 client: MockResticClient()
                     .onBackup(.success(successOutcome()))
-                    .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget"))),
+                    .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked"))),
                 base: retention
             )
         )
@@ -352,7 +352,7 @@ struct BackupRunEngineTests {
         outcome.exitCode = 3
         let client = MockResticClient()
             .onBackup(.success(outcome))
-            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget")))
+            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
         await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
 
         let record = try #require(sink.deliveredRecords.first)
@@ -400,7 +400,7 @@ struct BackupRunEngineTests {
         let sink = RecordingSink()
         let client = MockResticClient()
             .onBackup(.success(successOutcome()))
-            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked", command: "restic forget")))
+            .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
         await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
 
         #expect(sink.deliveredRecords.first?.outcome == .completedWithErrors)
@@ -433,7 +433,7 @@ struct BackupRunEngineTests {
             repository: Repository(),
             sink: StubServiceSink(
                 client: MockResticClient()
-                    .onBackup(.failure(ResticError.commandFailed(exitCode: 12, message: "wrong password", command: "restic backup")))
+                    .onBackup(.failure(ResticError.commandFailed(exitCode: 12, message: "wrong password")))
                     .onExit("backup", 12),
                 base: failed
             )
@@ -720,7 +720,7 @@ struct RetentionRunEngineTests {
     @Test("a locked repository fails the run, and a stop reads cancelled")
     func lockedRepositoryFailsAndCancelReadsCancelled() async throws {
         let locked = MockResticClient().onForget(.failure(
-            ResticError.commandFailed(exitCode: 11, message: "repository is already locked", command: "forget")
+            ResticError.commandFailed(exitCode: 11, message: "repository is already locked")
         ))
         let lockedSink = RecordingSink(client: locked)
         let plan = makePlan()

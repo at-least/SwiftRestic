@@ -3,7 +3,10 @@ import Foundation
 /// The stored outcome of one backup, check, prune or restore run.
 struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable {
-        case backup, forget, check, prune, restore, initialize
+        case backup, forget, check, prune, restore
+
+        /// The operation's word in titles and rows: "Backup", "Check", …
+        var displayName: String { rawValue.capitalized }
     }
 
     enum Outcome: String, Codable, Sendable {

@@ -335,7 +335,7 @@ struct ResticIntegrationTests {
             try await fixture.service.forget(fixture.context, plan: plan)
             Issue.record("forget ran while a backup held the repository")
         } catch let error as ResticError {
-            guard case let .commandFailed(code, _, _) = error, code == 11 else {
+            guard case let .commandFailed(code, _) = error, code == 11 else {
                 Issue.record("expected commandFailed(11), got \(error)")
                 return
             }
@@ -457,7 +457,7 @@ struct ResticIntegrationTests {
             isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
             keepWeekly: 0, keepMonthly: 0, keepYearly: 0, runPrune: false
         )
-        let preview = try await model.previewRetention(draft: draft)
+        let preview = try await model.previewRetention(plan: draft)
         #expect(preview.kept.count == 1)
         #expect(preview.removed.count == 1)
         #expect(preview.adoptionLine == "With this policy, 2 backups would become 1.")
@@ -490,7 +490,7 @@ struct ResticIntegrationTests {
         }
         do {
             _ = try await fixture.service.snapshots(badContext)
-        } catch let ResticError.commandFailed(code, message, _) {
+        } catch let ResticError.commandFailed(code, message) {
             #expect(code == 12)
             #expect(message.localizedCaseInsensitiveContains("password"))
         }
@@ -503,7 +503,7 @@ struct ResticIntegrationTests {
         do {
             _ = try await fixture.service.snapshots(fixture.context)
             Issue.record("expected the command to fail")
-        } catch let ResticError.commandFailed(code, _, _) {
+        } catch let ResticError.commandFailed(code, _) {
             #expect(code == 10)
         }
     }

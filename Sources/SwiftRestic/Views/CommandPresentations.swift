@@ -59,7 +59,7 @@ struct CommandPresentations: ViewModifier {
             Button("Cancel", role: .cancel) {}
         case let .prune(id):
             Button("Prune", role: .destructive) {
-                model.runMaintenance(id: id, task: .prune)
+                model.runMaintenance(repositoryID: id, task: .prune)
                 showMaintenance(of: id)
             }
         case let .unlock(id):
@@ -70,7 +70,7 @@ struct CommandPresentations: ViewModifier {
     }
 
     private func check(_ id: UUID, readDataPercent: Int) {
-        model.runMaintenance(id: id, task: .check, readDataPercent: readDataPercent)
+        model.runMaintenance(repositoryID: id, task: .check, readDataPercent: readDataPercent)
         showMaintenance(of: id)
     }
 

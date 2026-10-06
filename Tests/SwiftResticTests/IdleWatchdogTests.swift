@@ -40,7 +40,7 @@ struct IdleWatchdogTests {
             )
             Issue.record("the silent child should have been stopped by the stall cap")
         } catch let error as ResticError {
-            guard case let .idleStalled(seconds, _) = error else {
+            guard case let .idleStalled(seconds) = error else {
                 Issue.record("expected idleStalled, got \(error)")
                 return
             }

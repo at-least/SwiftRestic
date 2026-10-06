@@ -24,10 +24,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     private let router: AppRouter
     private let statusItem: NSStatusItem
     private var pulseTimer: Timer?
-    /// The per-plan rows' tag → plan mapping, rebuilt with the menu — the
-    /// Back Up and Stop rows alike.
-    private var planIDsByTag: [Int: UUID] = [:]
-    private var nextPlanTag = 1
 
     init(model: AppModel, router: AppRouter) {
         self.model = model
@@ -61,14 +57,10 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
 
     // MARK: - Faces
 
-    /// The observed inputs are exactly the ones `iconState` and the hold
-    /// read — reading more would re-fire this loop on every run-record
-    /// append. The hold's pause and battery setting live in the
-    /// configuration, observed here as a whole; the battery reading is
-    /// written only when it changes; a pause running out is cleared by the
-    /// scheduler's tick, and that write is what brings the face back.
-    private func refresh() {
-        let state = MenuBarStatus.iconState(
+    /// The model state `iconState` reads, so `refresh` and `reapplyFace` keep
+    /// the same six arguments by construction.
+    private func currentState() -> MenuBarStatus.IconState {
+        MenuBarStatus.iconState(
             activity: model.activity,
             maintenance: model.maintenance,
             isRestoring: model.isRestoring,
@@ -76,6 +68,16 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             hasNoRepositories: model.configuration.repositories.isEmpty,
             runs: model.configuration.runs
         )
+    }
+
+    /// The observed inputs are exactly the ones `iconState` and the hold
+    /// read — reading more would re-fire this loop on every run-record
+    /// append. The hold's pause and battery setting live in the
+    /// configuration, observed here as a whole; the battery reading is
+    /// written only when it changes; a pause running out is cleared by the
+    /// scheduler's tick, and that write is what brings the face back.
+    private func refresh() {
+        let state = currentState()
         statusItem.isVisible = model.configuration.settings.showMenuBarExtra
         applyFace(for: state, hold: model.scheduleHold)
         armPulse(for: state)
@@ -97,14 +99,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// Re-renders the face for the current state without touching the
     /// observation registration — the theme-changed path's entry point.
     private func reapplyFace() {
-        applyFace(for: MenuBarStatus.iconState(
-            activity: model.activity,
-            maintenance: model.maintenance,
-            isRestoring: model.isRestoring,
-            isConsoleRunning: model.console.isRunning,
-            hasNoRepositories: model.configuration.repositories.isEmpty,
-            runs: model.configuration.runs
-        ), hold: model.scheduleHold)
+        applyFace(for: currentState(), hold: model.scheduleHold)
     }
 
     private func applyFace(for state: MenuBarStatus.IconState, hold: ScheduleHold?) {
@@ -115,8 +110,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         case .badgedLogo:
             // The baked badge variants are keyed on the *item's* appearance,
             // which follows the menu bar and can differ from the app's.
-            let isDark = button?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            button?.image = isDark ? MenuBarLogo.badgedDarkImage : MenuBarLogo.badgedLightImage
+            if let button {
+                button.image = MenuBarLogo.badgedImage(for: button.effectiveAppearance)
+            }
         case .animatedLogo:
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 button?.image = MenuBarLogo.stillRunningImage
@@ -160,8 +156,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// no background menu maintenance at all.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        planIDsByTag.removeAll()
-        nextPlanTag = 1
 
         let hasNoRepositories = model.configuration.repositories.isEmpty
         let hold = model.scheduleHold
@@ -252,9 +246,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                     // Explicit, not auto-enabled: see `autoenablesItems`
                     // above.
                     item.isEnabled = row.isEnabled
-                    item.tag = nextPlanTag
-                    planIDsByTag[nextPlanTag] = row.planID
-                    nextPlanTag += 1
+                    item.representedObject = row.planID.uuidString
                     submenu.addItem(item)
                 }
                 let item = NSMenuItem(title: group.title, action: nil, keyEquivalent: "")
@@ -331,13 +323,13 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     // MARK: - Actions
 
     @objc private func backUpNow(_ sender: NSMenuItem) {
-        guard let planID = planIDsByTag[sender.tag] else { return }
+        guard let planID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
         model.runBackup(planID: planID)
     }
 
     /// A plain Stop: recorded as cancelled and stamped, like the plan page's.
     @objc private func stopBackup(_ sender: NSMenuItem) {
-        guard let planID = planIDsByTag[sender.tag] else { return }
+        guard let planID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
         model.cancelBackup(planID: planID)
     }
 

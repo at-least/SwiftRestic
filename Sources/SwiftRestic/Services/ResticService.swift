@@ -8,14 +8,9 @@ struct RepositoryContext: Sendable {
     var providerSecret: String?
     var settings = AppSettings()
 
-    /// Keys the app itself owns: the repository location and every form of the
-    /// password restic can read. Letting `extraEnvironment` override these would
-    /// silently point restic at another repository or break authentication — the
-    /// class of bug behind backrest's issue #1139 — so they are applied last,
-    /// whatever the user added.
-    static let protectedEnvironmentKeys: Set<String> = [
-        "RESTIC_REPOSITORY", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE", "RESTIC_PASSWORD_COMMAND",
-    ]
+    /// Keys the app itself owns — see `ResticRunner.protectedEnvironmentKeys`,
+    /// which strips the same set from every child's inherited environment.
+    static let protectedEnvironmentKeys = ResticRunner.protectedEnvironmentKeys
 
     var environment: [String: String] {
         var env = repository.credentialEnvironment(secret: providerSecret)
@@ -62,7 +57,6 @@ struct OperationProgress: Sendable, Equatable {
     var totalBytes: Int64 = 0
     var currentFile: String?
     var secondsRemaining: Int?
-    var errorCount: Int = 0
 
     init() {}
 
@@ -74,7 +68,6 @@ struct OperationProgress: Sendable, Equatable {
         totalBytes = status.totalBytes ?? 0
         currentFile = status.currentFiles.first
         secondsRemaining = status.secondsRemaining
-        errorCount = status.errorCount ?? 0
     }
 }
 
@@ -192,7 +185,7 @@ struct ResticService: ResticClient {
                 )
             )
             return true
-        } catch let ResticError.commandFailed(exitCode, _, _) where exitCode == 10 {
+        } catch let ResticError.commandFailed(exitCode, _) where exitCode == 10 {
             return false
         }
     }
@@ -219,7 +212,7 @@ struct ResticService: ResticClient {
             )
         )
         guard let data = result.stdout.data(using: .utf8) else {
-            throw ResticError.commandFailed(exitCode: 0, message: "stats produced no output", command: "stats")
+            throw ResticError.commandFailed(exitCode: 0, message: "stats produced no output")
         }
         return try ResticMessageDecoder.jsonDecoder.decode(RepositoryStats.self, from: data)
     }
@@ -243,14 +236,10 @@ struct ResticService: ResticClient {
         )
         let summary = result.summary
         if result.exitCode == 1, (summary?.numErrors ?? 0) == 0 {
-            let message = result.messages.compactMap { message -> String? in
-                if case let .exitError(error) = message { return error.message }
-                return nil
-            }.last ?? ResticRunner.tail(of: result.stderr, limit: 2000)
+            let message = result.failureMessage
             throw ResticError.commandFailed(
                 exitCode: result.exitCode,
-                message: message,
-                command: "check"
+                message: message
             )
         }
         return summary
@@ -353,7 +342,7 @@ struct ResticService: ResticClient {
             guard case let .node(node) = message else { continue }
             let nodePath = ResticPath.normalized(node.path)
             guard nodePath != normalized else { continue }
-            guard Self.parent(of: nodePath) == normalized else { continue }
+            guard ResticPath.parent(of: nodePath) == normalized else { continue }
             nodes.append(node)
         }
         return Self.sortedForBrowser(nodes)
@@ -393,26 +382,7 @@ struct ResticService: ResticClient {
                 if case let .node(node) = message { onNode(node) }
             }
         )
-        try Self.requireWhole(outcome, command: "ls", item: "node")
-    }
-
-    /// The directory containing `path`, in pure String arithmetic rather
-    /// than NSString's `deletingLastPathComponent`, so the tree-filtering
-    /// here spells the same on any Foundation. The scan is over unicode
-    /// scalars, not Characters: a name beginning with a combining mark
-    /// merges the separator into one grapheme ("/a/´x"), and a Character
-    /// scan would miss it and drop the node from the listing. The cut
-    /// stays inside the scalars view too — a String subscript re-aligns
-    /// to grapheme boundaries, and a Prepend character (U+0600 and
-    /// friends) puts the slash mid-cluster, so slicing through the
-    /// Character view would round down and shed the character. Paths are
-    /// absolute and already trailing-slash-stripped by
-    /// `ResticPath.normalized`, so slicing at the last separator is the
-    /// whole rule. (`expandTilde` below remains the one NSString use:
-    /// `~user` semantics have no pure-Swift spelling.)
-    private static func parent(of path: String) -> String {
-        guard let separator = path.unicodeScalars.lastIndex(of: "/") else { return path }
-        return separator == path.unicodeScalars.startIndex ? "/" : String(path.unicodeScalars[..<separator])
+        try Self.requireWhole(outcome, item: "node")
     }
 
     /// `path` as a `restic find` pattern that matches that path alone: the
@@ -528,19 +498,18 @@ struct ResticService: ResticClient {
                 if case let .change(change) = message { onChange(change) }
             }
         )
-        try Self.requireWhole(outcome, command: "diff", item: "change")
+        try Self.requireWhole(outcome, item: "change")
     }
 
     /// A streamed walk is the whole answer only when every line restic
     /// wrote decoded: a dropped line is an item the callback never saw,
     /// whatever the exit code said. Thrown after the stream, so what did
     /// decode has already been delivered.
-    private static func requireWhole(_ outcome: ResticRunResult, command: String, item: String) throws {
+    private static func requireWhole(_ outcome: ResticRunResult, item: String) throws {
         let malformed = outcome.malformedCount
         guard malformed > 0 else { return }
         throw ResticError.malformedOutput(
-            command: command,
-            detail: "\(malformed) \(item) \(malformed == 1 ? "line" : "lines") did not decode"
+                        detail: "\(malformed) \(item) \(malformed == 1 ? "line" : "lines") did not decode"
         )
     }
 
@@ -690,8 +659,7 @@ struct ResticService: ResticClient {
               let groups = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else {
             throw ResticError.malformedOutput(
-                command: "forget",
-                detail: "could not read the removal count from restic's answer"
+                                detail: "could not read the removal count from restic's answer"
             )
         }
         return groups.reduce(0) { total, group in
@@ -778,7 +746,6 @@ struct ResticService: ResticClient {
         var summary = ResticSummary()
         summary.totalFiles = 1
         summary.filesRestored = 1
-        summary.totalBytes = written
         summary.bytesRestored = written
         return summary
     }
@@ -858,17 +825,15 @@ struct ResticService: ResticClient {
         return !entries.isEmpty
     }
 
-    /// A single file Keep left alone, in the shape restic's own summary
-    /// gives a directory restore's kept files. The callers also note it in
-    /// the run's log, which otherwise would hold no command at all when the
-    /// dump never ran.
+    /// A single file Keep left alone, with the counters a restore summary
+    /// carries (one file seen, none restored, one skipped). The callers also
+    /// note it in the run's log, which otherwise would hold no command at
+    /// all when the dump never ran.
     private static func keptFileSummary(node: SnapshotNode) -> ResticSummary {
         var summary = ResticSummary()
         summary.totalFiles = 1
         summary.filesRestored = 0
         summary.filesSkipped = 1
-        summary.totalBytes = node.size
-        summary.bytesSkipped = node.size
         return summary
     }
 
@@ -979,7 +944,8 @@ struct ResticService: ResticClient {
         return component
     }
 
-    /// restic does not expand `~`; the shell normally would.
+    /// restic does not expand `~`; the shell normally would. NSString, not
+    /// pure Swift: `~user` semantics have no pure-Swift spelling.
     static func expandTilde(_ path: String) -> String {
         guard path.hasPrefix("~") else { return path }
         return (path as NSString).expandingTildeInPath

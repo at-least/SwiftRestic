@@ -376,10 +376,10 @@ final class SnapshotIndex: @unchecked Sendable {
     static let lookupChunk = 400
     /// BackfillBuffer's chunk: the largest transaction a full read commits.
     static let chunkSize = 4_000
-    /// `last_seq` sentinel "through hi"; `first_seq` `bottom` is "from lo".
-    /// Real seqs start at 1, so neither sentinel is ever a snapshot's seq.
+    /// `last_seq`'s sentinel "through hi". Real seqs start at 1, so no
+    /// snapshot's seq equals it; the `first_seq` sentinel "from lo" is the
+    /// literal `0` in the schema's SQL.
     static let top: Int64 = 2_147_483_647
-    static let bottom: Int64 = 0
     /// The node for "/" (parent 0). Never searchable, never collected.
     static let rootID: Int64 = 1
 
@@ -535,14 +535,17 @@ final class SnapshotIndex: @unchecked Sendable {
             let insert = try db.cachedStatement(sql: SQL.snapInsert)
             for (snapshot, micros) in arrivals {
                 let key = Self.chainKey(for: snapshot)
-                if chains[key] == nil {
+                let chain: (id: Int64, next: Int64)
+                if let known = chains[key] {
+                    chain = known
+                } else {
                     try db.cachedStatement(sql: SQL.chainInsert).execute(arguments: [key])
-                    guard let chain = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByKey), arguments: [key]) else {
+                    guard let row = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByKey), arguments: [key]) else {
                         throw DatabaseError(message: "chain row for \(key) vanished inside its own transaction")
                     }
-                    chains[key] = (chain["id"], chain["next_seq"])
+                    chain = (row["id"], row["next_seq"])
+                    chains[key] = chain
                 }
-                guard let chain = chains[key] else { continue }
                 try insert.execute(arguments: [snapshot.id, chain.id, chain.next, micros])
                 chains[key] = (chain.id, chain.next + 1)
             }

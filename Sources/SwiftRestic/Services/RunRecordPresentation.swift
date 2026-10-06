@@ -9,7 +9,7 @@ enum RunRecordPresentation {
     /// "Backup of “Documents”", "Restore of “Budget.numbers”", "Check of
     /// “Home NAS”" — the subject line the log and Copy Details open with.
     static func subject(of run: RunRecord) -> String {
-        let kind = run.kind.rawValue.capitalized
+        let kind = run.kind.displayName
         return run.planName.isEmpty ? kind : "\(kind) of “\(run.planName)”"
     }
 
@@ -25,6 +25,12 @@ enum RunRecordPresentation {
             return planName
         }
         return "\(planName) (\(repositoryName))"
+    }
+
+    /// `planWithRepository` for a plan, its repository looked up among
+    /// `repositories`.
+    static func planWithRepository(_ plan: BackupPlan, repositories: [Repository]) -> String {
+        planWithRepository(plan.name, repositoryName: repositories.first { $0.id == plan.repositoryID }?.name)
     }
 
     /// What a run is called by the surfaces that have one string for it:
@@ -50,7 +56,7 @@ enum RunRecordPresentation {
             // its subject.
             let planName = run.planID.flatMap { id in plans.first { $0.id == id }?.name } ?? run.planName
             return planWithRepository(planName, repositoryName: repositoryName)
-        case .check, .prune, .initialize:
+        case .check, .prune:
             // The repository is the subject; the stored planName already
             // holds it when the repository is gone.
             return repositoryName ?? run.planName
@@ -65,17 +71,14 @@ enum RunRecordPresentation {
         plans: [BackupPlan],
         repositories: [Repository]
     ) -> String {
-        "\(run.kind.rawValue.capitalized) log — \(displayName(for: run, plans: plans, repositories: repositories))"
+        "\(run.kind.displayName) log — \(displayName(for: run, plans: plans, repositories: repositories))"
     }
 
     /// Settings ▸ General ▸ Scheduling's "Next run" line, in the tray
     /// headline's words: the plan with its repository, then when — the
     /// timestamp clock, as Settings has always said the date.
     static func nextRunLine(plan: BackupPlan, date: Date, repositories: [Repository]) -> String {
-        let name = planWithRepository(
-            plan.name,
-            repositoryName: repositories.first { $0.id == plan.repositoryID }?.name
-        )
+        let name = planWithRepository(plan, repositories: repositories)
         return "\(name) — \(Format.timestamp(date))"
     }
 

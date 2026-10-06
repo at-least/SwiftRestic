@@ -156,8 +156,6 @@ actor ConfigStore {
         try data.write(to: fileURL, options: [.atomic])
     }
 
-    var configurationFileURL: URL { fileURL }
-
     /// Best effort: insurance must never keep the live write from happening.
     ///
     /// The current file is *copied* into `.1`, not moved: every step here runs

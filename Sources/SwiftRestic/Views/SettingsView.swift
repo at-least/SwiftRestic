@@ -8,8 +8,6 @@ struct SettingsView: View {
     @State private var isConfirmingMenuBarOff = false
 
     var body: some View {
-        @Bindable var model = model
-
         TabView {
             generalTab(model: model)
                 .tabItem { Label("General", systemImage: "gearshape") }

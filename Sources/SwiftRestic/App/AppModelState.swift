@@ -15,7 +15,6 @@ struct PlanActivity: Sendable, Equatable {
         case applyingRetention
         case runningHooks
         case notifying
-        case checking
         case cancelling
 
         var displayName: String {
@@ -25,7 +24,6 @@ struct PlanActivity: Sendable, Equatable {
             case .applyingRetention: "Applying retention"
             case .runningHooks: "Running hooks"
             case .notifying: "Sending notifications"
-            case .checking: "Checking repository"
             case .cancelling: "Cancelling…"
             }
         }

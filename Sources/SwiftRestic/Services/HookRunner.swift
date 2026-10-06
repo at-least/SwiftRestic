@@ -61,32 +61,32 @@ struct HookRunner: Sendable {
 
         var succeeded: Bool { exitCode == 0 && !timedOut }
 
-        /// One line for the run record.
-        ///
-        /// Only the first line of output is kept, and only briefly: a script's
-        /// later output is where a verbose HTTP client prints its headers, and
-        /// this string is persisted to disk.
-        var summary: String {
-            if cancelled { return "Hook “\(hookName)” was cancelled before it finished." }
-            if timedOut { return "Hook “\(hookName)” timed out and was stopped." }
-            if exitCode == 0 { return "Hook “\(hookName)” succeeded." }
+        /// One line for the run record: the verdict plus the hook's first
+        /// output line — only the first, briefly, because this string is
+        /// persisted to disk and a script's later output is where a verbose
+        /// HTTP client prints its headers.
+        var summary: String { verdict(withDetail: true) }
+
+        /// The hook's verdict for the run's log — the same sentence as
+        /// `summary` and never any of its output. The log is what a user
+        /// copies whole into a forum post, and a script's output is where a
+        /// verbose HTTP client prints its `Authorization` header.
+        var logLine: String { verdict(withDetail: false) }
+
+        /// The verdict both strings spell, `withDetail` adding the hook's
+        /// first output line for the persisted summary.
+        private func verdict(withDetail: Bool) -> String {
+            let base = "Hook “\(hookName)”"
+            if cancelled { return "\(base) was cancelled before it finished." }
+            if timedOut { return "\(base) timed out and was stopped." }
+            if exitCode == 0 { return "\(base) succeeded." }
+            if !withDetail { return "\(base) exited \(exitCode)." }
             let firstLine = output
                 .split(separator: "\n", omittingEmptySubsequences: true)
                 .first
                 .map { String($0.prefix(160)) } ?? ""
             let detail = firstLine.isEmpty ? "" : " — \(firstLine)"
             return "Hook “\(hookName)” exited \(exitCode)\(detail)"
-        }
-
-        /// The hook's verdict for the run's log — never any of its output.
-        /// The log is what a user copies whole into a forum post, and a
-        /// script's output is where a verbose HTTP client prints its
-        /// `Authorization` header.
-        var logLine: String {
-            if cancelled { return "Hook “\(hookName)” was cancelled before it finished." }
-            if timedOut { return "Hook “\(hookName)” timed out and was stopped." }
-            if exitCode == 0 { return "Hook “\(hookName)” succeeded." }
-            return "Hook “\(hookName)” exited \(exitCode)."
         }
     }
 

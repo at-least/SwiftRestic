@@ -14,9 +14,8 @@ import SwiftUI
 /// query is 220, whatever the text inside would wrap to.
 struct RunDetailPanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     let run: RunRecord
-    var onOpenPlan: ((UUID) -> Void)?
-    var onOpenRepository: ((UUID) -> Void)?
     var onCompare: (SnapshotDiffTarget) -> Void
     var onShowLog: (RunRecord) -> Void
 
@@ -210,13 +209,13 @@ struct RunDetailPanel: View {
     private var buttons: some View {
         HStack(spacing: 10) {
             if let planID = run.planID, model.plan(id: planID) != nil {
-                Button("Open Plan") { onOpenPlan?(planID) }
+                Button("Open Plan") { router.selection = .plan(planID) }
             }
             // The run's other home, beside Open Plan. Only where the
             // repository still resolves — a removed one has no page to open,
             // and the Repository row above already says it is gone.
             if let repositoryID = run.repositoryID, repositoryName != nil {
-                Button("Open Repository") { onOpenRepository?(repositoryID) }
+                Button("Open Repository") { router.selection = .repository(repositoryID) }
             }
             if let planID = run.planID, let plan = model.plan(id: planID) {
                 // A retry only where there is something to retry: a clean

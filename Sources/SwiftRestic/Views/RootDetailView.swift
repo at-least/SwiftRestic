@@ -123,14 +123,7 @@ struct RootDetailView: View {
                 case .console:
                     ResticConsoleView()
                 case .activity:
-                    ActivityView(
-                        onOpenPlan: { planID in
-                            router.selection = .plan(planID)
-                        },
-                        onOpenRepository: { repositoryID in
-                            router.selection = .repository(repositoryID)
-                        }
-                    )
+                    ActivityView()
                 case .none:
                     WelcomeView(
                         onAddRepository: onAddRepository,

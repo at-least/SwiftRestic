@@ -198,13 +198,7 @@ enum Format {
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
            calendar.isDate(date, inSameDayAs: tomorrow)
         { return "Tomorrow \(time)" }
-        if date.timeIntervalSince(now) < 7 * 86_400 {
-            return "\(date.formatted(style().weekday(.abbreviated))) \(time)"
-        }
-        if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            return date.formatted(style().month(.abbreviated).day().hour().minute())
-        }
-        return date.formatted(style().year().month().day().hour().minute())
+        return datedForm(date, now: now, calendar: calendar, time: time)
     }
 
     /// When a pause ends, spelled to follow "until": the time alone today,
@@ -233,13 +227,26 @@ enum Format {
             if date == calendar.startOfDay(for: tomorrow) { return "tomorrow" }
             return date.timeIntervalSince(now) < 12 * 3600 ? time : "tomorrow \(time)"
         }
+        return datedForm(date, now: now, calendar: calendar, time: time)
+    }
+
+    /// The far end both next-run and pause-end spellings share: weekday and
+    /// time within a week of `now`, month-day and time within the year, the
+    /// full date past it.
+    private static func datedForm(
+        _ date: Date,
+        now: Date,
+        calendar: Calendar,
+        time: String
+    ) -> String {
+        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
         if date.timeIntervalSince(now) < 7 * 86_400 {
-            return "\(date.formatted(style().weekday(.abbreviated))) \(time)"
+            return "\(date.formatted(style.weekday(.abbreviated))) \(time)"
         }
         if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            return date.formatted(style().month(.abbreviated).day().hour().minute())
+            return date.formatted(style.month(.abbreviated).day().hour().minute())
         }
-        return date.formatted(style().year().month().day().hour().minute())
+        return date.formatted(style.year().month().day().hour().minute())
     }
 
     /// What a snapshot's mark says, as its tooltip and its VoiceOver label.
@@ -296,18 +303,6 @@ enum Format {
             chain.append(walked)
         }
         return chain
-    }
-
-    /// Splits an absolute path into clickable crumbs, walking down from the
-    /// deepest root that contains it — `/tmp/src/Documents` under root
-    /// `/tmp/src` becomes [(src, /tmp/src), (Documents, /tmp/src/Documents)].
-    /// Paths outside every root yield no crumbs: navigation never reaches
-    /// above the backed-up scope. Root labels are the root's own basename.
-    static func crumbs(of path: String, roots: [String]) -> [(label: String, target: String)] {
-        pathChain(of: path, roots: roots).map { step in
-            let label = step.split(separator: "/").last.map(String.init) ?? step
-            return (label, step)
-        }
     }
 
 }

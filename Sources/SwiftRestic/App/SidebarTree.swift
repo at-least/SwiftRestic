@@ -155,7 +155,7 @@ struct BackupShelves: Equatable {
         else { return otherLabels(repositories: repositories, localHost: localHost)[record.otherGroupID] }
         let lineages = SnapshotLineage.grouping(byPlan[planID] ?? [])
         var label = SnapshotLineage.labels(for: lineages, plans: [plan])[record.lineageKey]
-        label?.title = plan.name.isEmpty ? "Untitled Plan" : plan.name
+        label?.title = plan.displayName
         return label
     }
 

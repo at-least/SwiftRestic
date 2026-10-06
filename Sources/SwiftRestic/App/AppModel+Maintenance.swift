@@ -3,29 +3,25 @@ import Foundation
 extension AppModel {
     // MARK: - Maintenance
 
-    var runningMaintenanceRepositoryIDs: Set<UUID> { Set(maintenance.keys) }
-
     /// Repositories that must not be given more work right now.
     ///
     /// `prune` takes an exclusive lock and `backup` a shared one, so anything
     /// already touching a repository — a plan or an upkeep job — makes the whole
     /// repository off limits, not just that one plan.
     var busyRepositoryIDs: Set<UUID> {
-        var ids = runningMaintenanceRepositoryIDs
+        var ids = Set(maintenance.keys)
         for planID in activity.keys {
             if let repositoryID = plan(id: planID)?.repositoryID { ids.insert(repositoryID) }
         }
         return ids
     }
 
-    func isMaintenanceRunning(repositoryID: UUID) -> Bool { maintenance[repositoryID] != nil }
-
-    /// Starts a `check` or `prune`. `readDataPercentOverride` lets the UI run a
+    /// Starts a `check` or `prune`. `readDataPercent` lets the UI run a
     /// deeper check than the repository's own policy asks for.
     func runMaintenance(
         repositoryID: UUID,
         task: MaintenanceTask,
-        readDataPercentOverride: Int? = nil
+        readDataPercent: Int? = nil
     ) {
         guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.maintenance(repositoryID)) else { return }
@@ -45,7 +41,7 @@ extension AppModel {
                 await MaintenanceRunEngine.perform(
                     repository: repository,
                     task: task,
-                    readDataPercentOverride: readDataPercentOverride,
+                    readDataPercentOverride: readDataPercent,
                     sink: self
                 )
             }
@@ -62,11 +58,6 @@ extension AppModel {
     func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask) {
         maintenanceRunTokens[repositoryID] = UUID()
         maintenance[repositoryID] = MaintenanceActivity(task: task)
-    }
-
-    /// Convenience for the menu, which always passes an explicit depth.
-    func runMaintenance(id repositoryID: UUID, task: MaintenanceTask, readDataPercent: Int? = nil) {
-        runMaintenance(repositoryID: repositoryID, task: task, readDataPercentOverride: readDataPercent)
     }
 
     func cancelMaintenance(repositoryID: UUID) {
@@ -142,7 +133,7 @@ extension AppModel: MaintenanceRunEngine.Sink {
         append(record: record)
         if record.outcome == .failed {
             post(Banner(
-                title: "\(record.kind.rawValue.capitalized) failed on “\(repository.name)”",
+                title: "\(record.kind.displayName) failed on “\(repository.name)”",
                 message: record.failureMessage ?? "",
                 isError: true
             ))

@@ -39,8 +39,7 @@ struct RetentionPreview: Sendable, Equatable {
             groups = try ResticMessageDecoder.jsonDecoder.decode([Group]?.self, from: Data(trimmed.utf8)) ?? []
         } catch {
             throw ResticError.malformedOutput(
-                command: "forget",
-                detail: "could not read which snapshots the retention rules would remove"
+                                detail: "could not read which snapshots the retention rules would remove"
             )
         }
         self.init(

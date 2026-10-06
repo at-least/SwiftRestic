@@ -59,10 +59,7 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
                     hasSnapshotsWithoutPlan: withoutPlan
                 )
             }
-            .sorted { lhs, rhs in
-                let (left, right) = (lhs.snapshots[0], rhs.snapshots[0])
-                return left.time != right.time ? left.time > right.time : left.id < right.id
-            }
+            .sorted { SnapshotLineage.newestFirst($0.snapshots[0], $1.snapshots[0]) }
     }
 
     /// The backup the restore pane's Change column compares `snapshotID`
@@ -72,7 +69,7 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
         listing.first { $0.id == snapshotID }?.previousComparable(in: listing)
     }
 
-    private static func newestFirst(_ lhs: Snapshot, _ rhs: Snapshot) -> Bool {
+    static func newestFirst(_ lhs: Snapshot, _ rhs: Snapshot) -> Bool {
         lhs.time != rhs.time ? lhs.time > rhs.time : lhs.id < rhs.id
     }
 }
@@ -245,18 +242,13 @@ enum OtherBackupsGroup: Identifiable, Sendable, Equatable {
             }
         }
         let planGroups = byPlan.map {
-            OtherBackupsGroup.plan(id: $0.key, snapshots: $0.value.sorted(by: newestFirst))
+            OtherBackupsGroup.plan(id: $0.key, snapshots: $0.value.sorted(by: SnapshotLineage.newestFirst))
         }
         // The untagged half through the one lineage builder.
         let lineageGroups = SnapshotLineage.grouping(rest).map(OtherBackupsGroup.lineage)
-        return (planGroups + lineageGroups).sorted { lhs, rhs in
-            let (left, right) = (lhs.snapshots[0], rhs.snapshots[0])
-            return left.time != right.time ? left.time > right.time : left.id < right.id
+        return (planGroups + lineageGroups).sorted {
+            SnapshotLineage.newestFirst($0.snapshots[0], $1.snapshots[0])
         }
-    }
-
-    private static func newestFirst(_ lhs: Snapshot, _ rhs: Snapshot) -> Bool {
-        lhs.time != rhs.time ? lhs.time > rhs.time : lhs.id < rhs.id
     }
 }
 
@@ -335,12 +327,20 @@ extension OtherBackupsGroup {
             )
         }
 
-        // A caption another group still matches gets the tag's last four hex
-        // digits. Only plan groups can get this far: two untagged groups with
-        // the same folders from the same host would be one lineage, and the
-        // kind word always tells an untagged group from a plan one. Two UUIDs
-        // that share their last four digits would still read alike — the one
-        // collision the rule accepts.
+        disambiguateCollidingCaptions(&labels, groups: groups)
+        return labels
+    }
+
+    /// A caption another group still matches gets the tag's last four hex
+    /// digits. Only plan groups can get this far: two untagged groups with
+    /// the same folders from the same host would be one lineage, and the
+    /// kind word always tells an untagged group from a plan one. Two UUIDs
+    /// that share their last four digits would still read alike — the one
+    /// collision the rule accepts.
+    private static func disambiguateCollidingCaptions(
+        _ labels: inout [ID: SnapshotLineage.Label],
+        groups: [OtherBackupsGroup]
+    ) {
         var captionCounts: [String: Int] = [:]
         for label in labels.values {
             captionCounts[label.title + "\n" + label.caption!.text, default: 0] += 1
@@ -355,7 +355,6 @@ extension OtherBackupsGroup {
             label.caption?.kind.append(hex)
             labels[group.id] = label
         }
-        return labels
     }
 
     /// The plan's name when the group is a configured plan's, the newest

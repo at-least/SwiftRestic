@@ -128,7 +128,7 @@ extension AppModel {
         let madeLine = "Made \(Format.historySpan(oldest: snapshots[snapshots.count - 1].time, newest: newest.time))"
             + " from \(madeFrom). Nothing in “\(repository.name)” changes."
 
-        let name = draft.name.isEmpty ? "Untitled Plan" : draft.name
+        let name = draft.displayName
         let becomes = snapshots.count == 1
             ? "This backup becomes the plan's history."
             : "These \(Format.plural(snapshots.count, "backup")) become the plan's history."
@@ -171,7 +171,7 @@ extension AppModel {
         // history yet" — the group left while the sheet was open (a refresh
         // dropped it), and the banner says that instead of counting zero.
         post(Banner(
-            title: "Adopted “\(draft.name.isEmpty ? "Untitled Plan" : draft.name)”",
+            title: "Adopted “\(draft.displayName)”",
             message: count == 0
                 ? "Its backups are no longer in the repository."
                 : count == 1
@@ -209,15 +209,8 @@ extension AppModel {
               draft.repositoryID != oldRepositoryID,
               let oldRepository = repository(id: oldRepositoryID)
         else { return nil }
-        let count = shelves(for: oldRepositoryID).byPlan[draft.id]?.count ?? 0
-        guard count > 0 else { return nil }
-        // The shelf's title as it will read once the plan has left — the
-        // sidebar's own derivation, so the line never names a section by a
-        // title it will not have ("Backups" beside no plan).
-        let shelf = SidebarTree.otherBackupsTitle(
-            repositoryHasPlans: plans(in: oldRepositoryID).count > 1
-        )
-        return "Moving this plan leaves its \(Format.plural(count, "backup")) in “\(oldRepository.name)”"
-            + " under \(shelf) — they are never thinned; retention runs against the plan's current repository only."
+        guard let left = backupsLeftBehind(planID: draft.id, in: oldRepositoryID) else { return nil }
+        return "Moving this plan leaves its \(Format.plural(left.count, "backup")) in “\(oldRepository.name)”"
+            + " under \(left.shelfTitle) — they are never thinned; retention runs against the plan's current repository only."
     }
 }

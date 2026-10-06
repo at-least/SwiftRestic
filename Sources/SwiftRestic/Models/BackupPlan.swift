@@ -265,6 +265,8 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var id: UUID = UUID()
     var name: String = ""
+    /// The name every surface shows: "Untitled Plan" when none was given.
+    var displayName: String { name.isEmpty ? "Untitled Plan" : name }
     var repositoryID: UUID?
     var sources: [String] = []
     var excludePatterns: [String] = BackupPlan.defaultExcludes
@@ -326,7 +328,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     ]
 
     /// First-occurrence-wins deduplication, order preserved.
-    private static func withoutDuplicates(_ values: [String]) -> [String] {
+    static func withoutDuplicates(_ values: [String]) -> [String] {
         var seen = Set<String>()
         return values.filter { seen.insert($0).inserted }
     }

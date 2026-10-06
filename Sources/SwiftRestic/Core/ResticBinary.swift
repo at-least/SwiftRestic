@@ -122,7 +122,10 @@ struct ResticVersion: Equatable, Sendable {
         let patchDigits = components[2]
             .split(whereSeparator: { $0 == "-" || $0 == "+" })
             .first.map(String.init) ?? ""
-        guard let patch = Int(patchDigits), patchDigits.allSatisfy(\.isNumber) else { return nil }
+        // No isNumber check beside Int: the split above removed every sign,
+        // and Int accepts only ASCII digits, so Int alone rejects exactly
+        // what the extra clause would.
+        guard let patch = Int(patchDigits) else { return nil }
         self.major = major
         self.minor = minor
         self.patch = patch

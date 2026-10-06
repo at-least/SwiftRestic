@@ -74,7 +74,7 @@ struct OtherGroupPageSummary: Equatable {
                 ? "This backup carries no plan ID — it was made outside SwiftRestic — so it can't be adopted as a plan."
                 : "These \(Format.plural(snapshots.count, "backup")) carry no plan ID — they were made outside SwiftRestic — so they can't be adopted as a plan."
         } else if let formerPlan {
-            let name = formerPlan.name.isEmpty ? "Untitled Plan" : formerPlan.name
+            let name = formerPlan.displayName
             // Where it went: the destination the sidebar's caption names,
             // read the same way. A plan that names no reachable repository
             // — its own page says "No repository set" — still left, which
@@ -110,15 +110,10 @@ struct OtherGroupPageSummary: Equatable {
         }
         folders = folderSets
 
-        excludes = Self.collect(snapshots.flatMap(\.excludes))
-        userTags = Self.collect(snapshots.flatMap { $0.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) } })
-    }
-
-    /// In first-seen order, once each.
-    private static func collect(_ items: [String]) -> [String] {
-        var collected: [String] = []
-        for item in items where !collected.contains(item) { collected.append(item) }
-        return collected
+        excludes = BackupPlan.withoutDuplicates(snapshots.flatMap(\.excludes))
+        userTags = BackupPlan.withoutDuplicates(
+            snapshots.flatMap { $0.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) } }
+        )
     }
 }
 

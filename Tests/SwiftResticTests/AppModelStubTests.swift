@@ -1136,7 +1136,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "default", password: nil)
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        harness.model.runMaintenance(id: harness.repository.id, task: .check, readDataPercent: 0)
+        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
         await harness.model.waitForMaintenance(repositoryID: harness.repository.id)
 
         // Not finished being set up: no run record and no "last checked" stamp.
@@ -1156,7 +1156,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "hang-check")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        harness.model.runMaintenance(id: harness.repository.id, task: .check, readDataPercent: 0)
+        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
         #expect(
             await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
             "the stub never established its hang"
@@ -1202,7 +1202,7 @@ struct AppModelStubTests {
         }
         let answersBeforeCancel = answerCount()
 
-        harness.model.runMaintenance(id: harness.repository.id, task: .check, readDataPercent: 0)
+        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
         #expect(
             await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
             "the stub never established its hang"
@@ -1236,7 +1236,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "hang-check")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        harness.model.runMaintenance(id: harness.repository.id, task: .check, readDataPercent: 0)
+        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
         #expect(
             await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
             "the stub never established its hang"

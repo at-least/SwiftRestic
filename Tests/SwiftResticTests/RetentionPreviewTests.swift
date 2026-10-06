@@ -80,7 +80,7 @@ struct RetentionPreviewTests {
         #expect {
             try RetentionPreview(forgetOutput: "not json")
         } throws: { error in
-            if case .malformedOutput(command: "forget", _) = error as? ResticError { return true }
+            if case .malformedOutput = error as? ResticError { return true }
             return false
         }
     }

@@ -23,16 +23,26 @@ extension AppModel {
             if let self {
                 await BackupRunEngine.perform(plan: plan, repository: repository, sink: self)
             }
-            self?.tasks.clear(.plan(planID))
-            // The unwind retires the token as well as the strip, so a hop
-            // from this run drops from here on — restore's own rule.
-            self?.backupRunTokens[planID] = nil
-            // Pause and Stop's mark belongs to this run alone: left behind,
-            // a later plain Stop of the plan would skip its stamp too.
-            self?.pauseStoppedPlanIDs.remove(planID)
-            self?.activity[planID] = nil
-            self?.planProgress[planID] = nil
+            self?.unwindPlanRun(planID)
         }, in: .plan(planID))
+    }
+
+    /// Retires a plan's run — its registry slot, run token, Pause-and-Stop
+    /// mark and strip. The unwind of every run in the plan's slot (backup
+    /// and Apply Retention Now… alike) calls this, so the copies cannot
+    /// drift. Call only from the run's own task: `clear` while a cancelled
+    /// run is still unwinding would remove its slot, and quit's
+    /// `tasks.drain()` would no longer wait for its record.
+    func unwindPlanRun(_ planID: UUID) {
+        tasks.clear(.plan(planID))
+        // The unwind retires the token as well as the strip, so a hop
+        // from this run drops from here on — restore's own rule.
+        backupRunTokens[planID] = nil
+        // Pause and Stop's mark belongs to this run alone: left behind,
+        // a later plain Stop of the plan would skip its stamp too.
+        pauseStoppedPlanIDs.remove(planID)
+        activity[planID] = nil
+        planProgress[planID] = nil
     }
 
     /// Installs a fresh run strip — activity for the phase, a zeroed

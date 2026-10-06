@@ -77,8 +77,6 @@ struct ResticMessageTests {
         #expect(summary.dataAdded == 304_224)
         #expect(summary.totalBytesProcessed == 300_019)
         #expect(summary.snapshotID?.hasPrefix("6ed59088") == true)
-        #expect(summary.backupStart != nil)
-        #expect(summary.backupEnd != nil)
     }
 
     @Test("restore summary carries the restored counters, not backup's")
@@ -244,7 +242,6 @@ struct ResticMessageTests {
         )
         #expect(snapshots.count == 1)
         #expect(snapshots[0].dataAdded == 304_224)
-        #expect(snapshots[0].totalFilesProcessed == 3)
     }
 
     @Test("a snapshot records the exclude patterns its backup ran with")

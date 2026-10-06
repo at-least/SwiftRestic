@@ -572,13 +572,6 @@ struct FilesStatusRow: View {
 
     var body: some View {
         switch filesTree.state(of: node) {
-        case nil, .loading:
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Reading…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         case let .failed(message):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
@@ -599,11 +592,11 @@ struct FilesStatusRow: View {
             Text("Empty folder")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        case .loaded:
-            // The index holds nothing under it yet, and the newest backup's
-            // listing had nothing at this path either — a relative backup
-            // before the index has read it, say. The next read may fill it,
-            // so it is not called empty.
+        case nil, .loading, .loaded:
+            // Still reading, or a fallback level: the index holds nothing
+            // under it yet and the newest backup's listing had nothing at
+            // this path either (a relative backup before the index has read
+            // it, say). The next read may fill it, so it is not called empty.
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
                 Text("Reading…")

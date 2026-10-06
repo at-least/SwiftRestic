@@ -94,14 +94,13 @@ enum MenuBarLogo {
     /// The ring at rest, the plate stack settled rather than pulsing.
     static func image() -> NSImage { restingImage }
 
-    /// The two cached variants, for callers that already know which
-    /// appearance they are drawing — the tray label reads its colorScheme.
-    static var badgedLightImage: NSImage { badgedLightImageCache }
-    static var badgedDarkImage: NSImage { badgedDarkImageCache }
+    private static var badgedLightImage: NSImage { badgedLightImageCache }
+    private static var badgedDarkImage: NSImage { badgedDarkImageCache }
 
     /// The attention face: the resting mark plus the companion dot, drawn in
     /// fixed colour — the mark in the menu bar's label ink for `appearance`,
-    /// the dot in systemBlue, Mail's unread-dot colour.
+    /// the dot in systemBlue, Mail's unread-dot colour. Returns one of the
+    /// two cached variants, matched to `appearance`.
     ///
     /// This face leaves the template law on purpose. Verified live against a
     /// real status item: the menu bar flattens its whole label and tints it,

@@ -9,7 +9,7 @@
 /// the marker, and strip it here rather than each carrying a copy that can
 /// drift. Other readers still cut at the last separator their own way —
 /// `FindMatch.name`, `SnapshotNode.directory(path:)` and the restore pane's
-/// search rows through NSString, `ResticService.parent(of:)` by scalar.
+/// search rows through NSString.
 ///
 /// The rules read UTF-8 bytes — unicode scalars for a cut — never
 /// Characters. `/` is one byte that no other scalar's encoding contains, so

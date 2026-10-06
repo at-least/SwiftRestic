@@ -3,36 +3,24 @@ import Foundation
 extension AppModel {
     // MARK: - Apply Retention Now
 
-    /// What the plan's retention would remove right now — the sheet's
-    /// preview. A plain await, not a run: it takes no slot and marks nothing
-    /// busy, because `--no-lock` lets it read beside a backup, and it is
-    /// cancelled with the sheet's task.
+    /// The retention sheet's preview, for a saved plan.
     func previewRetention(planID: UUID) async throws -> RetentionPreview {
-        guard let plan = plan(id: planID),
-              let repository = repository(id: plan.repositoryID)
+        guard let plan = plan(id: planID) else { throw ResticError.repositoryMissing }
+        return try await previewRetention(plan: plan)
+    }
+
+    /// What `plan`'s retention would remove right now — the forget preview,
+    /// a plain await: no slot, nothing marked busy (`--no-lock` reads beside
+    /// a backup), cancelled with the caller's task. Takes a plan value
+    /// rather than an ID, so a draft that is not saved yet travels too —
+    /// the adopt sheet's dry run.
+    func previewRetention(plan: BackupPlan) async throws -> RetentionPreview {
+        guard let repository = repository(id: plan.repositoryID)
         else { throw ResticError.repositoryMissing }
         do {
             let service = try service()
             let context = try await context(for: repository)
             return try await service.forgetPreview(context, plan: plan)
-        } catch {
-            noteAuthFailure(error, repositoryID: repository.id)
-            throw error
-        }
-    }
-
-    /// The adopt sheet's dry run: what the draft's rules would leave of the
-    /// history being adopted. The draft is not saved yet, so it cannot be
-    /// looked up the way `previewRetention(planID:)` looks a plan up — the
-    /// draft itself travels to restic, which is all the preview ever needed
-    /// from the plan.
-    func previewRetention(draft: BackupPlan) async throws -> RetentionPreview {
-        guard let repository = repository(id: draft.repositoryID)
-        else { throw ResticError.repositoryMissing }
-        do {
-            let service = try service()
-            let context = try await context(for: repository)
-            return try await service.forgetPreview(context, plan: draft)
         } catch {
             noteAuthFailure(error, repositoryID: repository.id)
             throw error
@@ -66,13 +54,7 @@ extension AppModel {
             if let self {
                 await RetentionRunEngine.perform(plan: plan, repository: repository, sink: self)
             }
-            // `runBackup`'s unwind, step for step: the same slot, token and
-            // strip — and Pause and Stop's mark, which stops this run too.
-            self?.tasks.clear(.plan(planID))
-            self?.backupRunTokens[planID] = nil
-            self?.pauseStoppedPlanIDs.remove(planID)
-            self?.activity[planID] = nil
-            self?.planProgress[planID] = nil
+            self?.unwindPlanRun(planID)
         }, in: .plan(planID))
     }
 }

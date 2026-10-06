@@ -24,8 +24,6 @@ enum Theme {
     // MARK: Spacing (points)
 
     enum Space {
-        /// Gap between KPI tiles in a row.
-        static let tile: CGFloat = 12
         /// Gap between cards in a detail pane.
         static let section: CGFloat = 16
         /// Inner padding of a card.
@@ -50,23 +48,21 @@ enum Theme {
 /// Surface treatment shared by cards and KPI tiles: an opaque control-coloured
 /// plate lifted off the window background by a hairline border.
 struct CardSurface: ViewModifier {
-    var cornerRadius: CGFloat = Theme.Radius.card
-
     func body(content: Content) -> some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                     .fill(Color(nsColor: .controlBackgroundColor))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
             )
     }
 }
 
 extension View {
-    func cardSurface(cornerRadius: CGFloat = Theme.Radius.card) -> some View {
-        modifier(CardSurface(cornerRadius: cornerRadius))
+    func cardSurface() -> some View {
+        modifier(CardSurface())
     }
 }

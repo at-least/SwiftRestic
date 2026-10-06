@@ -23,9 +23,7 @@ struct FileTree: Equatable {
     private(set) var rows: [FileTreeRow] = []
 
     init(roots: [SnapshotNode]) {
-        rows = roots.map {
-            FileTreeRow(node: $0, depth: 0, expanded: false, childrenLoaded: !$0.isDirectory)
-        }
+        reset(to: roots)
     }
 
     /// Flips expansion of a directory row. Collapsing removes its descendant
@@ -41,10 +39,7 @@ struct FileTree: Equatable {
             // The children come out with the subtree; re-expanding asks for
             // them again — listings are per-snapshot and may have changed.
             rows[index].childrenLoaded = false
-            let depth = rows[index].depth
-            var end = index + 1
-            while end < rows.count, rows[end].depth > depth { end += 1 }
-            rows.removeSubrange(index + 1 ..< end)
+            rows.removeSubrange(index + 1 ..< subtreeEnd(after: index))
             return nil
         }
         rows[index].expanded = true
@@ -65,12 +60,20 @@ struct FileTree: Equatable {
         else { return }
         rows[index].childrenLoaded = true
         let depth = rows[index].depth
-        var staleEnd = index + 1
-        while staleEnd < rows.count, rows[staleEnd].depth > depth { staleEnd += 1 }
+        let staleEnd = subtreeEnd(after: index)
         let children = nodes.map {
             FileTreeRow(node: $0, depth: depth + 1, expanded: false, childrenLoaded: !$0.isDirectory)
         }
         rows.replaceSubrange(index + 1 ..< staleEnd, with: children)
+    }
+
+    /// One past the last row inside the subtree at `index` — the next row at
+    /// its depth or shallower.
+    private func subtreeEnd(after index: Int) -> Int {
+        let depth = rows[index].depth
+        var end = index + 1
+        while end < rows.count, rows[end].depth > depth { end += 1 }
+        return end
     }
 
     /// Marks every row unloaded and collapsed, keeping only the root level —

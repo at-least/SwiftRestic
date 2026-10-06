@@ -656,9 +656,8 @@ struct StubResticTests {
         do {
             _ = try await fixture.service.snapshots(fixture.context, timeout: 1)
             Issue.record("snapshots against a hung stub should have timed out")
-        } catch let ResticError.timedOut(seconds, command) {
+        } catch let ResticError.timedOut(seconds) {
             #expect(seconds == 1)
-            #expect(command.contains("snapshots"))
         }
         #expect(
             await StubRestic.processVanishes(matching: fixture.stub.sleepMarker, within: 10),
@@ -682,7 +681,7 @@ struct StubResticTests {
                 )
             )
             Issue.record("a command that ignores SIGTERM must be stopped as timed out")
-        } catch let ResticError.timedOut(seconds, _) {
+        } catch let ResticError.timedOut(seconds) {
             #expect(seconds == 1)
             // The kill grace is measured from the SIGTERM, not the start, so
             // the whole stop takes at least the grace — and its arrival at
@@ -701,7 +700,7 @@ struct StubResticTests {
         do {
             _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
             Issue.record("expected the torn run to fail")
-        } catch let ResticError.commandFailed(code, message, _) {
+        } catch let ResticError.commandFailed(code, message) {
             #expect(code == 1)
             // The well-formed exit_error must win; the torn tail line and the
             // invalid-UTF-8 line must have been dropped without breaking it.
@@ -717,7 +716,7 @@ struct StubResticTests {
         do {
             _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
             Issue.record("expected the exit-17 run to fail")
-        } catch let ResticError.commandFailed(code, message, _) {
+        } catch let ResticError.commandFailed(code, message) {
             #expect(code == 17)
             #expect(message.contains("unable to open config file"))
         }
@@ -785,7 +784,7 @@ struct StubResticTests {
                 try await fixture.service.backup(fixture.context, plan: fixture.plan)
             }
             Issue.record("expected the exit-17 run to fail")
-        } catch let ResticError.commandFailed(code, _, _) {
+        } catch let ResticError.commandFailed(code, _) {
             #expect(code == 17)
         }
         let entries = transcript.contents.entries
@@ -995,7 +994,7 @@ struct StubResticTests {
             _ = try await fixture.service.check(fixture.context, readDataSubsetPercent: nil)
             Issue.record("expected exit 1 without a summary to fail the check")
         } catch let error as ResticError {
-            guard case let .commandFailed(code, _, _) = error, code == 1 else {
+            guard case let .commandFailed(code, _) = error, code == 1 else {
                 Issue.record("expected commandFailed(1), got \(error)")
                 return
             }
@@ -1010,7 +1009,7 @@ struct StubResticTests {
         defer { cleanUp(fixture.root) }
 
         let collector = NodeCollector()
-        await #expect(throws: ResticError.malformedOutput(command: "ls", detail: "1 node line did not decode")) {
+        await #expect(throws: ResticError.malformedOutput(detail: "1 node line did not decode")) {
             try await fixture.service.walkSnapshot(fixture.context, snapshotID: "feedface00000000") { node in
                 collector.append(node)
             }

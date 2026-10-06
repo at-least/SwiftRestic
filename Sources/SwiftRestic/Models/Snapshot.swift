@@ -6,10 +6,8 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var id: String
     var shortID: String
     var time: Date
-    var tree: String?
     var paths: [String]
     var hostname: String?
-    var username: String?
     var tags: [String]
     /// The `--exclude` patterns the backup ran with, which restic 0.19.1
     /// records beside the paths (`excludes` in `snapshots --json`, probed
@@ -17,13 +15,11 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     /// the key entirely) — what a plan-UUID group's page shows, and what
     /// the adopt sheet prefills from.
     var excludes: [String]
-    var programVersion: String?
     var summary: ResticSummary?
 
     private enum CodingKeys: String, CodingKey {
-        case id, time, tree, paths, hostname, username, tags, excludes, summary
+        case id, time, paths, hostname, tags, excludes, summary
         case shortID = "short_id"
-        case programVersion = "program_version"
     }
 
     init(from decoder: any Decoder) throws {
@@ -31,21 +27,16 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
         id = try c.decode(String.self, forKey: .id)
         shortID = try c.decodeIfPresent(String.self, forKey: .shortID) ?? String(id.prefix(8))
         time = try c.decode(Date.self, forKey: .time)
-        tree = try c.decodeIfPresent(String.self, forKey: .tree)
         paths = try c.decodeIfPresent([String].self, forKey: .paths) ?? []
         hostname = try c.decodeIfPresent(String.self, forKey: .hostname)
-        username = try c.decodeIfPresent(String.self, forKey: .username)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         excludes = try c.decodeIfPresent([String].self, forKey: .excludes) ?? []
-        programVersion = try c.decodeIfPresent(String.self, forKey: .programVersion)
         summary = try c.decodeIfPresent(ResticSummary.self, forKey: .summary)
     }
 
     /// Bytes actually written to the repository by the backup that made this
     /// snapshot — the number worth showing next to a snapshot in a list.
     var dataAdded: Int64? { summary?.dataAdded }
-    var totalBytesProcessed: Int64? { summary?.totalBytesProcessed }
-    var totalFilesProcessed: Int? { summary?.totalFilesProcessed }
 
     static func == (lhs: Snapshot, rhs: Snapshot) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -68,21 +59,13 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var type: Kind
     var path: String
     var size: Int64?
-    var mode: UInt32?
-    var permissions: String?
-    var uid: UInt32?
-    var gid: UInt32?
     var mtime: Date?
-    var atime: Date?
-    var ctime: Date?
-    var linkTarget: String?
 
     var id: String { path }
     var isDirectory: Bool { type == .dir }
 
     private enum CodingKeys: String, CodingKey {
-        case name, type, path, size, mode, permissions, uid, gid, mtime, atime, ctime
-        case linkTarget = "linktarget"
+        case name, type, path, size, mtime
     }
 
     /// The optional members all default to `nil`, so a node can be built from
@@ -103,14 +86,7 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
         type = (try? c.decode(Kind.self, forKey: .type)) ?? .irregular
         path = try c.decode(String.self, forKey: .path)
         size = try c.decodeIfPresent(Int64.self, forKey: .size)
-        mode = try c.decodeIfPresent(UInt32.self, forKey: .mode)
-        permissions = try c.decodeIfPresent(String.self, forKey: .permissions)
-        uid = try c.decodeIfPresent(UInt32.self, forKey: .uid)
-        gid = try c.decodeIfPresent(UInt32.self, forKey: .gid)
         mtime = try c.decodeIfPresent(Date.self, forKey: .mtime)
-        atime = try c.decodeIfPresent(Date.self, forKey: .atime)
-        ctime = try c.decodeIfPresent(Date.self, forKey: .ctime)
-        linkTarget = try c.decodeIfPresent(String.self, forKey: .linkTarget)
     }
 }
 
@@ -128,7 +104,6 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var path: String
     var type: String
     var size: Int64?
-    var permissions: String?
     var mtime: Date?
 
     var id: String { path }
@@ -172,21 +147,13 @@ struct FindResult: Sendable, Equatable, Decodable {
 /// `restic stats --json`.
 struct RepositoryStats: Sendable, Equatable, Decodable {
     var totalSize: Int64
-    var totalFileCount: Int?
     var totalBlobCount: Int?
     var snapshotsCount: Int?
-    var totalUncompressedSize: Int64?
-    var compressionRatio: Double?
-    var compressionSpaceSaving: Double?
 
     private enum CodingKeys: String, CodingKey {
         case totalSize = "total_size"
-        case totalFileCount = "total_file_count"
         case totalBlobCount = "total_blob_count"
         case snapshotsCount = "snapshots_count"
-        case totalUncompressedSize = "total_uncompressed_size"
-        case compressionRatio = "compression_ratio"
-        case compressionSpaceSaving = "compression_space_saving"
     }
 }
 

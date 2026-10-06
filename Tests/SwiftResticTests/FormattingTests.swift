@@ -276,7 +276,7 @@ struct FormattingTests {
         // one-line caption ended "…ord or no key found" (captured
         // 2026-10-02).
         let wrongPassword = ResticError.commandFailed(
-            exitCode: 12, message: "Fatal: wrong password or no key found", command: "snapshots"
+            exitCode: 12, message: "Fatal: wrong password or no key found"
         )
         #expect(
             Format.firstSentence(wrongPassword.localizedDescription)
@@ -288,33 +288,28 @@ struct FormattingTests {
         #expect(Format.firstSentence("") == "", "empty in, empty out")
     }
 
-    @Test("breadcrumb crumbs walk down from the deepest containing root")
-    func breadcrumbCrumbs() {
+    @Test("pathChain walks down from the deepest containing root")
+    func pathChainWalksDown() {
         let roots = ["/tmp/src", "/other"]
 
-        // A deep path: root crumb plus one per level below it.
-        let crumbs = Format.crumbs(of: "/tmp/src/Documents/Reports", roots: roots)
-        #expect(crumbs.map(\.label) == ["src", "Documents", "Reports"])
-        #expect(crumbs.map(\.target) == ["/tmp/src", "/tmp/src/Documents", "/tmp/src/Documents/Reports"])
+        // A deep path: the root plus one step per level below it.
+        #expect(Format.pathChain(of: "/tmp/src/Documents/Reports", roots: roots)
+            == ["/tmp/src", "/tmp/src/Documents", "/tmp/src/Documents/Reports"])
 
-        // The root itself is a single crumb.
-        #expect(Format.crumbs(of: "/tmp/src", roots: roots).map(\.target) == ["/tmp/src"])
+        // The root itself is a single step.
+        #expect(Format.pathChain(of: "/tmp/src", roots: roots) == ["/tmp/src"])
 
-        // A path outside every root yields nothing to click.
-        #expect(Format.crumbs(of: "/elsewhere/thing", roots: roots).isEmpty)
+        // A path outside every root yields nothing to walk.
+        #expect(Format.pathChain(of: "/elsewhere/thing", roots: roots).isEmpty)
 
         // A root that is a prefix of another root's name must not match it.
-        #expect(Format.crumbs(of: "/other/file", roots: ["/other Extended", "/other"]).map(\.target) == ["/other", "/other/file"])
+        #expect(Format.pathChain(of: "/other/file", roots: ["/other Extended", "/other"]) == ["/other", "/other/file"])
     }
 
-    @Test("a whole-disk root breadcrumbs and chains every absolute path")
+    @Test("a whole-disk root chains every absolute path")
     func rootSlashMatchesEverything() {
         // "/" contains every absolute path: the naive prefix check
         // (`path.hasPrefix(root + "/")` → "//") matches nothing at all.
-        #expect(Format.crumbs(of: "/Users/x/Report.pdf", roots: ["/"]).map(\.target)
-            == ["/", "/Users", "/Users/x", "/Users/x/Report.pdf"])
-        #expect(Format.crumbs(of: "/Users/x/Report.pdf", roots: ["/"]).map(\.label)
-            == ["/", "Users", "x", "Report.pdf"])
 
         // The ancestor chain the restore browser re-opens walks from "/" too.
         #expect(Format.pathChain(of: "/etc/hosts", roots: ["/"]) == ["/", "/etc", "/etc/hosts"])
@@ -324,9 +319,7 @@ struct FormattingTests {
     @Test("the containing root is the longest match, not the first")
     func longestRootWins() {
         // A whole-disk plan may coexist with narrower roots (a second plan on
-        // the same repository): "/Users/x" is the honest crumb root there.
-        #expect(Format.crumbs(of: "/Users/x/f.txt", roots: ["/", "/Users/x"]).map(\.target)
-            == ["/Users/x", "/Users/x/f.txt"])
+        // the same repository): "/Users/x" is the honest root there.
         #expect(Format.pathChain(of: "/Users/x/f.txt", roots: ["/", "/Users/x"])
             == ["/Users/x", "/Users/x/f.txt"])
 

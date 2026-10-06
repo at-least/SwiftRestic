@@ -7,7 +7,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// The configured restic path exists but is not executable.
     case binaryNotExecutable(path: String)
     /// The process exited non-zero. `message` is restic's own text when it gave one.
-    case commandFailed(exitCode: Int32, message: String, command: String)
+    case commandFailed(exitCode: Int32, message: String)
     /// The run was cancelled by the user.
     case cancelled
     /// A repository referenced by a plan is missing from the config.
@@ -16,18 +16,18 @@ enum ResticError: Error, LocalizedError, Equatable {
     case passwordMissing(repositoryName: String)
     case processLaunchFailed(String)
     /// The child outlived its timeout and was terminated.
-    case timedOut(seconds: TimeInterval, command: String)
+    case timedOut(seconds: TimeInterval)
     /// The child produced no output at all for `seconds` and was terminated
     /// as hung. The distinction from `timedOut` matters to the reader: a
     /// total-runtime cap kills work that was merely slow, an idle cap only
     /// kills work that had stopped reporting — so the message can promise
     /// more than "timed out".
-    case idleStalled(seconds: TimeInterval, command: String)
+    case idleStalled(seconds: TimeInterval)
     /// restic exited successfully but its output was not the JSON the command
     /// promises — a schema change, not a command failure. Reported rather
     /// than papered over: a backup app's numbers must be right or absent,
     /// never silently zero.
-    case malformedOutput(command: String, detail: String)
+    case malformedOutput(detail: String)
     /// A `restic dump` ran to completion but its output could not be moved
     /// into place at the destination. The staged copy is gone; whatever the
     /// destination held before is untouched.
@@ -48,7 +48,7 @@ enum ResticError: Error, LocalizedError, Equatable {
                 + "Install it with `brew install restic`, or set the path in Settings."
         case let .binaryNotExecutable(path):
             return "The file at \(path) is not executable."
-        case let .commandFailed(code, message, _):
+        case let .commandFailed(code, message):
             if code == 12 {
                 // The trust-critical failure carries its fix: restic's own
                 // diagnosis leaves Retry as the only next step, and Retry can
@@ -70,11 +70,11 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "No password is stored for the repository “\(name)”."
         case let .processLaunchFailed(reason):
             return "Could not start restic: \(reason)"
-        case let .timedOut(seconds, _):
+        case let .timedOut(seconds):
             return "Timed out after \(Int(seconds))s and was stopped."
-        case let .idleStalled(seconds, _):
+        case let .idleStalled(seconds):
             return "Stopped reporting any progress for \(Int(seconds))s and was stopped as hung — check the repository's connection and try again."
-        case let .malformedOutput(_, detail):
+        case let .malformedOutput(detail):
             return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output — none of its numbers were guessed at."
         case let .dumpMoveFailed(path, reason):
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."

@@ -164,8 +164,8 @@ struct RecentProblemsCard: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.now) private var now
 
-    /// Every run against this repository, of every kind; nil for all runs.
-    let repositoryID: UUID?
+    /// Every run against this repository, of every kind.
+    let repositoryID: UUID
 
     var body: some View {
         Card("Recent problems") {
@@ -174,9 +174,11 @@ struct RecentProblemsCard: View {
                 // "recent" used to mean "all of history, latest five", which
                 // let a count read zero above a nine-day-old failure.
                 let since = OverviewMetrics.problemWindowStart(from: now)
-                let failures = (repositoryID.map {
-                    OverviewMetrics.problems(in: model.configuration.runs, since: since, repositoryID: $0)
-                } ?? OverviewMetrics.problems(in: model.configuration.runs, since: since))
+                let failures = OverviewMetrics.problems(
+                    in: model.configuration.runs,
+                    since: since,
+                    repositoryID: repositoryID
+                )
                     .sorted { $0.finishedAt > $1.finishedAt }
                     .prefix(5)
 

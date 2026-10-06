@@ -1006,9 +1006,6 @@ final class DeltaCollector: @unchecked Sendable {
         guard typeChange == nil else { return }
         if change.modifier.contains("T") {
             typeChange = change.path
-            added = []
-            removed = []
-            modified = []
             return
         }
         switch change.category {

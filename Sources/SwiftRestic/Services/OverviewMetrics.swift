@@ -46,7 +46,7 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
         isRunning: Bool = false
     ) {
         planID = plan.id
-        planName = plan.name.isEmpty ? "Untitled Plan" : plan.name
+        planName = plan.displayName
         repositoryID = plan.repositoryID
         self.stateText = stateText
         self.isKnown = isKnown

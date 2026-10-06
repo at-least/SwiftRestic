@@ -3,10 +3,6 @@ import SwiftUI
 struct ActivityView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    /// Route from a failure to the plan that owns it, and to the repository
-    /// the drawer's Open Repository lands on.
-    var onOpenPlan: ((UUID) -> Void)?
-    var onOpenRepository: ((UUID) -> Void)?
     @State private var selection: RunRecord.ID?
     /// Taken by a click in the table (`focusOnClick`), so ↑ and ↓ walk the
     /// runs rather than the sidebar out of Activity.
@@ -30,6 +26,7 @@ struct ActivityView: View {
 
     var body: some View {
         @Bindable var model = model
+        @Bindable var router = router
         // One filter+sort per render: the empty-state check, the table and
         // the detail lookup all need the same list, and the computed property
         // would re-run the history's sort at every access (the hoist
@@ -71,7 +68,7 @@ struct ActivityView: View {
                         // measured the same).
                         if let symbolName = run.outcome.symbolName {
                             Image(systemName: symbolName)
-                                .foregroundStyle(color(for: run.outcome))
+                                .foregroundStyle(StatusPalette.status(run.outcome))
                                 .help(run.outcome.displayName)
                                 .accessibilityLabel(run.outcome.displayName)
                         } else {
@@ -109,21 +106,21 @@ struct ActivityView: View {
                     .width(min: 162, ideal: 164, max: 164)
 
                     // Backups and restores name their plan or item, the Kind
-                    // column names the operation. A check, prune or
-                    // initialize has no plan to name — its subject is the
-                    // repository, which the Repository column beside this
-                    // one now says, and saying it here too would state one
-                    // fact twice in adjacent columns. Display-only for the
-                    // same reason: those rows' stored name is the
-                    // repository's, so a sort on this header would order
-                    // their "—" cells by a value on screen nowhere.
+                    // column names the operation. A check or prune has no
+                    // plan to name — its subject is the repository, which
+                    // the Repository column beside this one now says, and
+                    // saying it here too would state one fact twice in
+                    // adjacent columns. Display-only for the same reason:
+                    // those rows' stored name is the repository's, so a sort
+                    // on this header would order their "—" cells by a value
+                    // on screen nowhere.
                     TableColumn("Subject") { run in
                         Group {
                             switch run.kind {
                             case .backup, .forget, .restore:
                                 Text(run.planName.isEmpty ? "—" : run.planName)
                                     .help(run.planName)
-                            case .check, .prune, .initialize:
+                            case .check, .prune:
                                 Text("—")
                             }
                         }
@@ -149,7 +146,7 @@ struct ActivityView: View {
                     .width(min: 96, ideal: 104, max: 140)
 
                     TableColumn("Kind") { run in
-                        Text(run.kind.rawValue.capitalized)
+                        Text(run.kind.displayName)
                     }
                     .width(min: 52, ideal: 56, max: 56)
 
@@ -196,8 +193,6 @@ struct ActivityView: View {
                     Divider()
                     RunDetailPanel(
                         run: selected,
-                        onOpenPlan: onOpenPlan,
-                        onOpenRepository: onOpenRepository,
                         onCompare: { comparing = $0 },
                         onShowLog: { loggedRun = $0 }
                     )
@@ -209,10 +204,7 @@ struct ActivityView: View {
             ToolbarItemGroup {
                 // Two states: what went wrong, or everything. Full
                 // per-outcome filtering would serve nobody who reaches for it.
-                Picker("Show", selection: Binding(
-                    get: { router.activityShowsProblemsOnly },
-                    set: { router.activityShowsProblemsOnly = $0 }
-                )) {
+                Picker("Show", selection: $router.activityShowsProblemsOnly) {
                     Text("All runs").tag(false)
                     Text("Problems").tag(true)
                 }
@@ -278,8 +270,4 @@ struct ActivityView: View {
         comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
     }
     #endif
-
-    private func color(for outcome: RunRecord.Outcome) -> Color {
-        StatusPalette.status(outcome)
-    }
 }

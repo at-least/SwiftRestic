@@ -180,38 +180,23 @@ struct SwiftResticApp: App {
         .defaultSize(width: 1100, height: 720)
         .commands {
             // ⌘N is macOS's reflex for "new thing" — an emptied group here
-            // meant adding a repository was always a mouse trip to the sidebar
-            // footer. RootView owns the sheets and refuses these, with a beep,
-            // while a sheet is already up. Every command that targets the
-            // window also opens it: an intent parked while no window exists
-            // would otherwise ambush a later open — the old notification seam
-            // dropped asks nobody was listening for; these asks open their
-            // listener.
+            // meant adding a repository was always a mouse trip to the
+            // sidebar footer.
             CommandGroup(replacing: .newItem) {
-                Button("New Backup Plan…") {
-                    router.request(.newPlan)
-                    openWindow(id: Self.mainWindowID)
-                }
-                .keyboardShortcut("n", modifiers: .command)
-                .disabled(model.configuration.repositories.isEmpty)
+                Button("New Backup Plan…") { ask(.newPlan) }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .disabled(model.configuration.repositories.isEmpty)
 
                 Button("Add Repository…") {
-                    // Through the router's pending intent, not a live action:
-                    // the ask has to survive the window being closed. The
-                    // command also opens the window, like the tray's identical
-                    // button — a menu command that visibly does nothing is a
-                    // dead key, and the root view clears expired asks on
-                    // appear.
-                    router.request(.newRepository)
-                    openWindow(id: Self.mainWindowID)
+                    // Through the router's pending intent: the ask survives
+                    // the window being closed, and a menu command that
+                    // visibly does nothing is a dead key.
+                    ask(.newRepository)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
             CommandGroup(after: .help) {
-                Button("SwiftRestic Concepts…") {
-                    router.request(.showConcepts)
-                    openWindow(id: Self.mainWindowID)
-                }
+                Button("SwiftRestic Concepts…") { ask(.showConcepts) }
                 Divider()
                 Button("restic Documentation") {
                     NSWorkspace.shared.open(AppLinks.documentation)

@@ -27,10 +27,6 @@ struct FindFilesView: View {
     @State private var repositoryID: UUID?
     @State private var pattern = ""
     @State private var latestOnly = false
-    @State private var results: [FindResult] = []
-    /// Rows straight from the index engine; nil means the restic engine owns
-    /// the table and `results` is the source.
-    @State private var indexRows: [Row]?
     /// The table's rows, built once when a search's results land. A computed
     /// property would rebuild the snapshot-time dictionary and re-sort on
     /// every re-render — every keystroke in the pattern field — though a
@@ -366,8 +362,6 @@ struct FindFilesView: View {
                         pattern: searchedPattern, repositoryID: searchedRepository
                     )
                     guard !Task.isCancelled else { return }
-                    indexRows = built
-                    results = []
                     rows = built
                 } else {
                     let found = try await model.findFiles(
@@ -376,8 +370,6 @@ struct FindFilesView: View {
                         latestOnly: searchedLatestOnly
                     )
                     guard !Task.isCancelled else { return }
-                    results = found
-                    indexRows = nil
                     // Snapshot times resolve against the repository as of
                     // this search — the row's snapshot id is already fixed,
                     // so a later render must not re-derive or re-sort it.
@@ -394,8 +386,6 @@ struct FindFilesView: View {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                results = []
-                indexRows = nil
                 rows = []
                 errorMessage = error.localizedDescription
             }
@@ -430,7 +420,6 @@ struct FindFilesView: View {
                 path: hit.path,
                 type: hit.isDirectory ? "dir" : "file",
                 size: nil,
-                permissions: nil,
                 mtime: nil
             )
             rows.append(Row(
@@ -460,8 +449,6 @@ struct FindFilesView: View {
         searchTask?.cancel()
         searchTask = nil
         isSearching = false
-        results = []
-        indexRows = nil
         rows = []
         resultsTruncated = false
         hasSearched = false
@@ -515,8 +502,7 @@ struct FindFilesView: View {
                 guard let node = children.first(where: { PathKey($0.path) == PathKey(row.match.path) }) else {
                     throw ResticError.commandFailed(
                         exitCode: 0,
-                        message: "“\(row.match.name)” is no longer listed in the chosen snapshot — refresh and try again.",
-                        command: "ls"
+                        message: "“\(row.match.name)” is no longer listed in the chosen snapshot — refresh and try again."
                     )
                 }
                 model.restore(
