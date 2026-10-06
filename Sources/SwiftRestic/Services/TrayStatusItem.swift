@@ -171,8 +171,14 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             hasNoRepositories: hasNoRepositories,
             plans: model.configuration.plans,
             repositories: model.configuration.repositories
-        ) {
-            menu.addItem(disabledItem(problem))
+        ), let run = MenuBarStatus.newestStandingProblem(runs: model.configuration.runs) {
+            // The one status line that goes somewhere: the run it names,
+            // in Activity — the plan card's Show in Activity route.
+            let item = NSMenuItem(title: problem, action: #selector(showProblem(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = run.id.uuidString
+            item.toolTip = "Show this run in Activity"
+            menu.addItem(item)
         }
         var lines = MenuBarStatus.runningLines(
             plans: model.configuration.plans,
@@ -223,12 +229,17 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             // One submenu per repository, in configuration order, so the
             // tray names each plan's repository. App-wide items stay
             // outside: they act on every repository at once.
+            var problems: [UUID: RunRecord] = [:]
+            for plan in model.configuration.plans {
+                problems[plan.id] = model.currentProblem(for: plan.id)
+            }
             for group in MenuBarStatus.planGroups(
                 plans: model.configuration.plans,
                 repositories: model.configuration.repositories,
                 activity: model.activity,
                 isResticAvailable: model.isResticAvailable,
-                lockedRepositories: model.lockedRepositories
+                lockedRepositories: model.lockedRepositories,
+                problem: { problems[$0] }
             ) {
                 let submenu = NSMenu(title: group.title)
                 submenu.autoenablesItems = false
@@ -246,6 +257,12 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                     item.toolTip = row.disabledReason
                     item.representedObject = row.planID.uuidString
                     submenu.addItem(item)
+                }
+                if !group.newsLines.isEmpty {
+                    submenu.addItem(.separator())
+                    for line in group.newsLines {
+                        submenu.addItem(disabledItem(line))
+                    }
                 }
                 let item = NSMenuItem(title: group.title, action: nil, keyEquivalent: "")
                 item.submenu = submenu
@@ -329,6 +346,14 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     @objc private func stopBackup(_ sender: NSMenuItem) {
         guard let planID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
         model.cancelBackup(planID: planID)
+    }
+
+    /// Opens the window on Activity with the run the problem line names.
+    @objc private func showProblem(_ sender: NSMenuItem) {
+        guard let runID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
+        router.activityFocusRunID = runID
+        router.selection = .activity
+        openMainWindow()
     }
 
     @objc private func pauseBackups(_ sender: NSMenuItem) {

@@ -331,6 +331,46 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.problemLine(runs: [cancelled], hasNoRepositories: false) == nil)
     }
 
+    @Test("a repository's tray submenu carries its plans' news in the sidebar's words, and nothing for a quiet or running plan")
+    func submenuNewsLines() {
+        let now = Date.now
+        var home = Repository()
+        home.name = "Home NAS"
+        func plan(_ name: String) -> BackupPlan {
+            var plan = BackupPlan()
+            plan.name = name
+            plan.repositoryID = home.id
+            plan.sources = ["/tmp"]
+            plan.schedule.frequency = .weekly
+            return plan
+        }
+        let code = plan("Code")
+        var photos = plan("Photos")
+        photos.isEnabled = false
+        let quiet = plan("Quiet")
+        var failed = RunRecord(planName: "Code")
+        failed.planID = code.id
+        failed.outcome = .failed
+        failed.finishedAt = now.addingTimeInterval(-7_200)
+
+        #expect(MenuBarStatus.newsLines(for: code, activity: nil, problem: failed, now: now, relative: Self.ago)
+            == ["Code: Failed — 2 hours ago"])
+        #expect(MenuBarStatus.newsLines(for: photos, activity: nil, problem: nil, now: now, relative: Self.ago)
+            == ["Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
+        // A problem and a pause are both news: both lines, the problem first.
+        #expect(MenuBarStatus.newsLines(for: photos, activity: nil, problem: failed, now: now, relative: Self.ago)
+            == ["Photos: Failed — 2 hours ago", "Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
+        // Quiet success says nothing; a running plan's line leads the menu.
+        #expect(MenuBarStatus.newsLines(for: quiet, activity: nil, problem: nil, now: now, relative: Self.ago).isEmpty)
+        #expect(MenuBarStatus.newsLines(for: code, activity: PlanActivity(phase: .backingUp), problem: failed, now: now).isEmpty)
+
+        let groups = MenuBarStatus.planGroups(
+            plans: [code, photos, quiet], repositories: [home], activity: [:], isResticAvailable: true,
+            problem: { $0 == code.id ? failed : nil }, now: now, relative: Self.ago
+        )
+        #expect(groups.first?.newsLines == ["Code: Failed — 2 hours ago", "Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
+    }
+
     @Test("Back Up Now waits while its repository is locked exclusively, and says why")
     func backUpWaitsForAnExclusiveLock() {
         var repository = Repository()

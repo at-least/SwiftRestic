@@ -237,6 +237,39 @@ enum MenuBarStatus {
         var repositoryID: UUID
         var title: String
         var rows: [PlanRow]
+        /// The plans' news under the verbs: with the window closed the tray
+        /// is the only surface, and one plan's failure must not hide
+        /// another's, nor a paused plan go unsaid.
+        var newsLines: [String] = []
+    }
+
+    /// A plan's lines in its repository's submenu: news only — a standing
+    /// problem, then a pause — in the sidebar caption's words, joined to the
+    /// plan's name as the sidebar warning and the Protection card join them
+    /// ("Code: Failed — 3 hours ago"). A quiet plan says nothing (success is
+    /// quiet); a running plan's line already leads the menu. The menu's top
+    /// problem line repeats the newest problem as a sentence on purpose: a
+    /// submenu opened by hover must read on its own.
+    static func newsLines(
+        for plan: BackupPlan,
+        activity: PlanActivity?,
+        problem: RunRecord?,
+        now: Date,
+        relative: (Date) -> String = { Format.relative($0) }
+    ) -> [String] {
+        guard activity == nil else { return [] }
+        let hasPause = PlanStatus.pauseCaption(for: plan, now: now) != nil
+        guard problem != nil || hasPause else { return [] }
+        let caption = PlanStatus.sidebarCaption(
+            for: plan,
+            activity: nil,
+            problem: problem,
+            existingRepositoryIDs: [],
+            now: now,
+            relative: relative
+        )
+        return ([caption.text] + [caption.pauseNote].compactMap { $0 })
+            .map { "\(plan.displayName): \($0)" }
     }
 
     static func planGroups(
@@ -244,16 +277,25 @@ enum MenuBarStatus {
         repositories: [Repository],
         activity: [UUID: PlanActivity],
         isResticAvailable: Bool,
-        lockedRepositories: [UUID: String] = [:]
+        lockedRepositories: [UUID: String] = [:],
+        problem: (UUID) -> RunRecord? = { _ in nil },
+        now: Date = .now,
+        relative: (Date) -> String = { Format.relative($0) }
     ) -> [PlanGroup] {
         repositories.compactMap { repository in
+            let members = plans.filter { $0.repositoryID == repository.id }
             let rows = planRows(
-                plans: plans.filter { $0.repositoryID == repository.id },
+                plans: members,
                 activity: activity,
                 isResticAvailable: isResticAvailable,
                 lockedRepositories: lockedRepositories
             )
-            return rows.isEmpty ? nil : PlanGroup(repositoryID: repository.id, title: repository.name, rows: rows)
+            let news = members.flatMap { plan in
+                newsLines(for: plan, activity: activity[plan.id], problem: problem(plan.id), now: now, relative: relative)
+            }
+            return rows.isEmpty ? nil : PlanGroup(
+                repositoryID: repository.id, title: repository.name, rows: rows, newsLines: news
+            )
         }
     }
 
