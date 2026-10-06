@@ -1,11 +1,13 @@
+import QuickLook
+import QuickLookUI
 import SwiftUI
 
 /// A file of the Files view, by version: each content it had through its
 /// chain's history, newest first — the backups that held it unchanged
 /// (`ContentVersion`, from the index) — with when it was modified and how
 /// big it was, from one `restic find` of its path in each version's newest
-/// backup. Pick one to restore it or open it in its backup; drag one to
-/// Finder.
+/// backup. Pick one to preview it, restore it or open it in its backup;
+/// drag one to Finder.
 struct FileVersionsView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -30,6 +32,15 @@ struct FileVersionsView: View {
     @State private var destinationRequest: RestoreDestinationRequest?
     /// The file as this Mac holds it now, read with the versions' details.
     @State private var disk: DiskFile?
+    /// What Quick Look shows; Quick Look sets it to nil when its panel
+    /// closes.
+    @State private var previewURL: URL?
+    /// The preview copy this pane made and has not deleted yet — apart
+    /// from `previewURL`, so each copy is deleted exactly once, whichever
+    /// way the preview ends.
+    @State private var previewCopy: URL?
+    @State private var previewTask: Task<Void, Never>?
+    @State private var previewError: String?
     @FocusState private var listIsFocused: Bool
 
     private var chosen: ContentVersion? {
@@ -63,6 +74,24 @@ struct FileVersionsView: View {
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)
+        }
+        .quickLookPreview($previewURL)
+        // The copy is user data in a temporary folder: it goes when the
+        // preview closes, when another version is chosen — a preview must
+        // show the version the list says — and when the pane goes.
+        .onChange(of: previewURL) { _, url in
+            if url == nil { endPreview() }
+        }
+        .onChange(of: chosenID) { endPreview() }
+        .onDisappear {
+            let wasPreviewing = previewURL != nil
+            endPreview()
+            // The modifier goes with the pane, so the nil above never
+            // reaches the panel, which would stay up over a deleted copy
+            // beside another item's pane: close it here.
+            if wasPreviewing, QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared().isVisible {
+                QLPreviewPanel.shared().close()
+            }
         }
     }
 
@@ -111,7 +140,18 @@ struct FileVersionsView: View {
                         .foregroundStyle(.secondary)
                         .help(detailsError)
                 }
+                if let previewError {
+                    Label("Preview failed", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help(previewError)
+                }
                 Spacer()
+                if previewTask != nil {
+                    ProgressView()
+                        .controlSize(.small)
+                        .help("Copying the chosen version out of the repository for the preview")
+                }
                 Button("Show in Backups") {
                     guard let backup = chosen?.snapshots.first else { return }
                     router.showRestore(
@@ -122,6 +162,10 @@ struct FileVersionsView: View {
                 }
                 .disabled(chosen == nil)
                 .help("Open the chosen version's newest backup at this file's folder, in the sidebar's list of backups")
+                let blocked = chosen.flatMap { previewBlock(for: $0) }
+                Button("Preview") { preview() }
+                    .disabled(chosen == nil || blocked != nil || previewTask != nil)
+                    .help(blocked ?? "Look at the chosen version with Quick Look before restoring it — from a temporary copy, deleted when the preview closes")
                 Button("Restore…") { restoreChosen() }
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)
@@ -179,6 +223,58 @@ struct FileVersionsView: View {
             snapshotShortID: String(backup.id.prefix(8))
         ) { directories, overwrite in
             model.restore(repositoryID: repositoryID, snapshotID: backup.id, node: file, to: directories[0], overwrite: overwrite)
+        }
+    }
+
+    /// Why a version cannot be previewed, or nil: the repository and restic
+    /// first, as the drag's gate, then its size (`VersionPreview`).
+    private func previewBlock(for version: ContentVersion) -> String? {
+        guard model.repository(id: node.repositoryID) != nil else { return "The repository no longer exists" }
+        guard model.isResticAvailable else { return "Preview needs restic, which could not be found" }
+        return VersionPreview.unavailableReason(size: detail(of: version)?.size, isReading: isReadingDetails)
+    }
+
+    /// Copies the chosen version out and hands it to Quick Look. The button
+    /// waits for the size, so the node is the find's.
+    private func preview() {
+        guard let chosen, let (backup, file) = restorable(chosen) else { return }
+        endPreview()
+        previewError = nil
+        let repositoryID = node.repositoryID
+        previewTask = Task {
+            do {
+                let url = try await model.previewCopy(repositoryID: repositoryID, snapshotID: backup.id, node: file)
+                guard !Task.isCancelled else {
+                    discard(url)
+                    return
+                }
+                previewCopy = url
+                previewURL = url
+            } catch {
+                // A cancelled dump is the pane's own doing, not a failure.
+                if !Task.isCancelled { previewError = error.localizedDescription }
+            }
+            if !Task.isCancelled { previewTask = nil }
+        }
+    }
+
+    /// Stops a copy in flight, closes Quick Look and deletes the copy it
+    /// showed. Safe to call any number of times.
+    private func endPreview() {
+        previewTask?.cancel()
+        previewTask = nil
+        previewURL = nil
+        if let previewCopy {
+            self.previewCopy = nil
+            discard(previewCopy)
+        }
+    }
+
+    private func discard(_ url: URL) {
+        do {
+            try AppModel.removePreviewCopy(url)
+        } catch {
+            previewError = "The preview's copy could not be deleted: \(error.localizedDescription)"
         }
     }
 

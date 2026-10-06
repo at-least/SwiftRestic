@@ -244,18 +244,69 @@ struct AppModelTests {
         }
     }
 
-    @Test("the launch sweep removes old drag staging and nothing else")
+    @Test("a preview dumps one version into its own temporary folder, and nothing is left once it closes or fails")
+    func previewCopy() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let snapshot = try #require(
+            model.snapshots(for: harness.repository.id, planID: harness.plan.id).first
+        )
+        func previewFolders() throws -> Set<String> {
+            Set(try FileManager.default.contentsOfDirectory(atPath: FileManager.default.temporaryDirectory.path)
+                .filter { $0.hasPrefix(AppModel.previewPrefix) })
+        }
+        let before = try previewFolders()
+
+        let node = SnapshotNode(
+            name: "a.txt",
+            type: .file,
+            path: harness.sourceDirectory.appendingPathComponent("a.txt").path
+        )
+        let url = try await model.previewCopy(repositoryID: harness.repository.id, snapshotID: snapshot.id, node: node)
+        // The file keeps its own name, so it opens as what it is.
+        #expect(url.lastPathComponent == "a.txt")
+        let folder = url.deletingLastPathComponent()
+        #expect(folder.lastPathComponent.hasPrefix(AppModel.previewPrefix))
+        #expect(try String(contentsOf: url, encoding: .utf8) == "one")
+        // Quick Look offers to open the file in an app; edits saved there
+        // would go with the copy, so the copy is read-only.
+        #expect(!FileManager.default.isWritableFile(atPath: url.path))
+        // A preview is not a restore: no progress strip, no run record.
+        #expect(model.restoreActivity == nil)
+        #expect(model.configuration.runs.allSatisfy { $0.kind == .backup })
+
+        try AppModel.removePreviewCopy(url)
+        #expect(!FileManager.default.fileExists(atPath: folder.path))
+
+        // A dump that fails takes its folder with it.
+        let missing = SnapshotNode(name: "gone.txt", type: .file, path: "/no/such/gone.txt")
+        await #expect(throws: (any Error).self) {
+            try await model.previewCopy(repositoryID: harness.repository.id, snapshotID: snapshot.id, node: missing)
+        }
+        #expect(try previewFolders() == before)
+
+        await model.shutdown()
+    }
+
+    @Test("the launch sweep removes old drag and preview staging and nothing else")
     func dragStagingSweep() throws {
         let temp = FileManager.default.temporaryDirectory
         let stale = temp.appendingPathComponent("\(AppModel.dragRestorePrefix)\(UUID().uuidString)")
         let file = temp.appendingPathComponent("\(AppModel.dragRestorePrefix)\(UUID().uuidString)")
+        let preview = temp.appendingPathComponent("\(AppModel.previewPrefix)\(UUID().uuidString)")
         let unrelated = temp.appendingPathComponent("SwiftRestic-Keep-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
         try "x".write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: preview, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
         defer {
             try? FileManager.default.removeItem(at: stale)
             try? FileManager.default.removeItem(at: file)
+            try? FileManager.default.removeItem(at: preview)
             try? FileManager.default.removeItem(at: unrelated)
         }
 
@@ -263,6 +314,7 @@ struct AppModelTests {
 
         #expect(!FileManager.default.fileExists(atPath: stale.path))
         #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(!FileManager.default.fileExists(atPath: preview.path))
         #expect(FileManager.default.fileExists(atPath: unrelated.path))
     }
 

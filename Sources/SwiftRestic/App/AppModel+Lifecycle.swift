@@ -164,8 +164,8 @@ extension AppModel {
         activity.removeAll()
         planProgress.removeAll()
         maintenance.removeAll()
-        // Drag-restore staging from previous sessions is pure leftovers —
-        // Finder finished with those drops long ago. Not awaited: a slow
+        // Drag-restore staging and preview copies from previous sessions
+        // are pure leftovers — Finder finished with those drops long ago. Not awaited: a slow
         // temp directory must not hold the first screen behind the spinner.
         Task.detached { Self.sweepDragRestoreStaging() }
         // Logs whose records are gone — a crash between a log's write and

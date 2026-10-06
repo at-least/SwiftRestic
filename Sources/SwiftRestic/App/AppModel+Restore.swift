@@ -575,21 +575,71 @@ extension AppModel {
         )
     }
 
+    /// Prefix of every preview's temporary folder, shared with the launch
+    /// sweep and with `removePreviewCopy`, which deletes nothing else.
+    nonisolated static let previewPrefix = "SwiftRestic-Preview-"
+
+    /// One version of a file, copied out for Quick Look: dumped into a
+    /// fresh temporary folder of its own under its own name, so it opens as
+    /// what it is, and read-only. Like the drag restore, not a restore run
+    /// — no progress strip, no history, no banner; the preview is the
+    /// feedback. A dump that fails takes its folder with it. The caller removes the copy
+    /// when the preview closes (`removePreviewCopy`); a session that ends
+    /// first leaves it to the launch sweep.
+    func previewCopy(repositoryID: UUID, snapshotID: String, node: SnapshotNode) async throws -> URL {
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        let (service, context) = try await resticContext(for: repository)
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(Self.previewPrefix)\(UUID().uuidString)")
+        do {
+            _ = try await service.restore(
+                context,
+                snapshotID: snapshotID,
+                node: node,
+                destinationDirectory: folder,
+                // A fresh folder holds nothing to keep or replace.
+                overwrite: .keepExisting,
+                onProgress: nil
+            )
+            // Read-only: Quick Look offers to open the copy in an app, and
+            // edits saved there would be deleted with it.
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o444],
+                ofItemAtPath: ResticService.restoredItemURL(for: node, in: folder).path
+            )
+        } catch {
+            // The dump's own error is the one to report; a folder this
+            // removal misses is the launch sweep's.
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
+        return ResticService.restoredItemURL(for: node, in: folder)
+    }
+
+    /// Deletes a preview's copy and its folder — only ever a folder
+    /// `previewCopy` made.
+    nonisolated static func removePreviewCopy(_ url: URL) throws {
+        let folder = url.deletingLastPathComponent()
+        precondition(folder.lastPathComponent.hasPrefix(previewPrefix), "not a preview copy: \(url.path)")
+        try FileManager.default.removeItem(at: folder)
+    }
+
     /// Prefix shared by every drag-restore staging directory, so the launch
     /// sweep in `bootstrap` and the creator above can never drift apart.
     nonisolated static let dragRestorePrefix = "SwiftRestic-Drag-"
 
-    /// Removes drag-restore staging directories left behind by earlier
-    /// sessions. Run at launch only, never at shutdown: Finder may still be
-    /// copying from a directory a just-finished drop handed over, and no
-    /// callback says when that ends — deleting on our side of the handoff
-    /// is a race. A launch sweep has no such window: nothing from a previous
-    /// session can still be mid-copy.
+    /// Removes drag-restore staging directories and preview copies left
+    /// behind by earlier sessions. Run at launch only, never at shutdown:
+    /// Finder may still be copying from a directory a just-finished drop
+    /// handed over, and no callback says when that ends — deleting on our
+    /// side of the handoff is a race. A launch sweep has no such window:
+    /// nothing from a previous session can still be mid-copy.
     nonisolated static func sweepDragRestoreStaging(fileManager: FileManager = .default) {
         let temp = fileManager.temporaryDirectory
         guard let contents = try? fileManager.contentsOfDirectory(at: temp, includingPropertiesForKeys: nil)
         else { return }
-        for url in contents where url.lastPathComponent.hasPrefix(dragRestorePrefix) {
+        for url in contents where url.lastPathComponent.hasPrefix(dragRestorePrefix)
+            || url.lastPathComponent.hasPrefix(previewPrefix) {
             try? fileManager.removeItem(at: url)
         }
     }

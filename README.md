@@ -104,7 +104,12 @@ checked in so a normal build does not need it.
   view. While the index is still reading the repository the search says
   older backups may be missing, and one with no match offers *Search All
   Backups…*, Find Files over the whole repository. Return or
-  *Restore…* restores the chosen version, and a row drags to Finder. *Show
+  *Restore…* restores the chosen version, and a row drags to Finder.
+  *Preview* shows a file's chosen version in Quick Look before you restore
+  it: `restic dump` copies it, read-only, into a temporary folder of its own,
+  deleted when the preview closes, another version is chosen or the pane
+  goes (a quit leaves it to the next launch's sweep). It waits for the
+  version's size and stops at 1 GB — past that, restore it. *Show
   in Backups* opens the chosen backup at that place, under its plan in the
   sidebar. Each page keeps its tab, open folders and selection while the app
   runs — going to a backup and back finds the Files tab as it was left — and
