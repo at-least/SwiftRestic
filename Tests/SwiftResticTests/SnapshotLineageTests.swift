@@ -326,10 +326,18 @@ struct SnapshotLineageTests {
         #expect(removedTwo.caption == "abf72899 · 6 changes since \(since)")
         #expect(removedTwo.removed?.line == "Removed: old.txt, sub")
         #expect(removedTwo.removed?.detail == "Removed since \(since):\n/src/old.txt\n/src/sub and everything in it")
+        // Each name is a route to the copy the backup before holds.
+        #expect(removedTwo.removed?.names.items == [
+            RemovedItem(path: "/src/old.txt", isDirectory: false), RemovedItem(path: "/src/sub", isDirectory: true),
+        ])
+        #expect(removedTwo.removed?.names.items.map(\.name) == ["old.txt", "sub"])
+        #expect(removedTwo.removed?.baseline == baseline)
 
         // Past three names, a count; the tooltip lists them all.
         let five = heading(changeMap(["e", "a", "d", "b", "c"].map { ("/src/\($0).txt", "-") }))
         #expect(five.removed?.line == "Removed: a.txt, b.txt, c.txt, and 2 more")
+        #expect(five.removed?.names.items.map(\.name) == ["a.txt", "b.txt", "c.txt"])
+        #expect(five.removed?.names.more == 2)
         #expect(five.removed?.detail.split(separator: "\n").count == 6)
 
         // Twenty paths at most in the tooltip.

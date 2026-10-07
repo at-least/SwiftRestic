@@ -29,9 +29,16 @@ extension FolderChanges {
     }
 
     /// What is gone since the backup before, by name, in the order the
-    /// index lists them; nil when nothing is.
+    /// index lists them — the "Removed:" line's tooltip, every name; nil
+    /// when nothing is.
     var removedNames: String? {
         removed.isEmpty ? nil : "Removed: " + removed.map(ResticPath.basename(of:)).joined(separator: ", ")
+    }
+
+    /// What is gone, each with its kind, in the order the index lists
+    /// them — the "Removed:" line's routes.
+    var removedItems: [RemovedItem] {
+        removed.map { RemovedItem(path: $0, isDirectory: removedFolders.contains(PathKey($0))) }
     }
 
     /// Each listed child's mark, keyed by its path's bytes.

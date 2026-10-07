@@ -85,6 +85,8 @@ struct FolderChanges: Sendable, Equatable {
     var removed: [String] = []
     var modified: [String] = []
     var uncertain: [String] = []
+    /// The removed children that were folders, so a name can open its row.
+    var removedFolders: Set<PathKey> = []
 }
 
 /// A path's version list reduced to what Find Files shows: how many indexed
@@ -865,6 +867,7 @@ final class SnapshotIndex: @unchecked Sendable {
                 }
                 guard let now = after[name] else {
                     changes.removed.append(child)
+                    if was.isDirectory { changes.removedFolders.insert(PathKey(child)) }
                     continue
                 }
                 if was.isDirectory != now.isDirectory {

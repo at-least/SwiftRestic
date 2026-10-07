@@ -867,6 +867,7 @@ private struct RestorePaneBanners: View {
 /// tree beside it.
 private struct RestoreRecordHeader: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
 
     let repositoryID: UUID
     let record: Snapshot
@@ -911,13 +912,18 @@ private struct RestoreRecordHeader: View {
             .help(heading.detail)
             // Its own tooltip: a `.help` on the stack would cover this
             // line's too.
+            // Each name opens the item's versions at the backup compared
+            // with, which has it.
             if let removed = heading.removed {
-                Text(removed.line)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(removed.detail)
+                RemovedNamesLine(names: removed.names, help: removed.detail, before: removed.baseline.time) { item in
+                    router.showVersions(
+                        path: item.path,
+                        isDirectory: item.isDirectory,
+                        in: removed.baseline,
+                        repositoryID: repositoryID,
+                        page: model.shelves(for: repositoryID).page(of: removed.baseline, repositoryID: repositoryID)
+                    )
+                }
             }
         }
     }

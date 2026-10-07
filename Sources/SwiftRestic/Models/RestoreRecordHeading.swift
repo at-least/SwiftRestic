@@ -43,6 +43,40 @@ extension ChangeComparison {
     }
 }
 
+/// An item a backup no longer holds that the one before it did: a
+/// "Removed:" line's route to that copy's versions.
+struct RemovedItem: Hashable, Sendable {
+    var path: String
+    var isDirectory: Bool
+
+    /// The last component; the root reads as "/".
+    var name: String {
+        let last = ResticPath.basename(of: path)
+        return last.isEmpty ? path : last
+    }
+}
+
+/// What a "Removed:" line names — the Restore pane's header and a Files
+/// folder's change summary: the first few gone items, each a route, and how
+/// many more. Enough names to read on one line.
+struct RemovedNames: Equatable, Sendable {
+    static let shown = 3
+
+    var items: [RemovedItem]
+    var more: Int
+
+    init(_ all: [RemovedItem]) {
+        items = Array(all.prefix(Self.shown))
+        more = all.count - items.count
+    }
+
+    /// "Removed: old.txt, sub, and 2 more" — the line as one string, for
+    /// VoiceOver and the tests.
+    var line: String {
+        "Removed: " + (items.map(\.name) + (more > 0 ? ["and \(Format.count(more)) more"] : [])).joined(separator: ", ")
+    }
+}
+
 /// The restore pane's header: which backup is open, and what its Change
 /// column compares it with. A blank column means one of four things — first
 /// backup, nothing changed, still comparing, or a failed diff — and only this
@@ -71,14 +105,18 @@ struct RestoreRecordHeading: Equatable, Sendable {
     var removed: Removals?
 
     struct Removals: Equatable, Sendable {
-        /// "Removed: old.txt, sub", by name.
-        var line: String
+        /// The names the line shows, each a route to its versions at
+        /// `baseline`, which holds it.
+        var names: RemovedNames
+        /// The backup compared with.
+        var baseline: Snapshot
         /// The paths in full, for the line's tooltip.
         var detail: String
+
+        /// "Removed: old.txt, sub", by name.
+        var line: String { names.line }
     }
 
-    /// Enough names to read on one line beside the pane's search field.
-    private static let removedNames = 3
     /// Enough paths for a tooltip that still fits on screen.
     private static let removedPaths = 20
 
@@ -117,9 +155,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
         if case .failed = comparison { isProblem = true } else { isProblem = false }
 
         if case let .compared(baseline, _, removals) = comparison, !removals.isEmpty {
-            let names = removals.prefix(Self.removedNames).map(\.name)
-            let more = removals.count - names.count
-            let line = "Removed: " + (names + (more > 0 ? ["and \(Format.count(more)) more"] : [])).joined(separator: ", ")
+            let names = RemovedNames(removals.map { RemovedItem(path: ResticPath.normalized($0.path), isDirectory: $0.isDirectory) })
             let paths = removals.prefix(Self.removedPaths).map { change in
                 let path = ResticPath.normalized(change.path)
                 return change.isDirectory ? "\(path) and everything in it" : path
@@ -127,7 +163,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
             let rest = removals.count - paths.count
             let detail = (["Removed since \(Format.timestamp(baseline.time)):"] + paths
                 + (rest > 0 ? ["and \(Format.count(rest)) more"] : [])).joined(separator: "\n")
-            removed = Removals(line: line, detail: detail)
+            removed = Removals(names: names, baseline: baseline, detail: detail)
         }
     }
 

@@ -172,6 +172,23 @@ struct SnapshotIndexFilesTests {
         #expect(try await changes(index, from: "nope", to: "s2") == nil)
         #expect(try await changes(index, from: "b1", to: "s2") == nil)
         #expect(try await changes(index, "/nowhere", from: "s1", to: "s2") == nil)
+        // A removed child keeps its kind, so its name can open it.
+        #expect(try await index.changes(underPath: "/data", inChain: planA, from: "s2", to: "s1")?.removedFolders == [])
+        #expect(try await index.changes(underPath: "/data", inChain: planA, from: "s1", to: "s2")?.removedFolders == [])
+    }
+
+    @Test("a removed folder is said to be one")
+    func removedFolderKind() async throws {
+        let checked = try CheckedIndex()
+        let index = checked.index
+        try checked.reconcile([try snap("s1", 10), try snap("s2", 20)])
+        try checked.runToDone([
+            "s1": ["/data": true, "/data/dir": true, "/data/dir/x": false, "/data/f": false],
+            "s2": ["/data": true],
+        ])
+        let changes = try #require(try await index.changes(underPath: "/data", inChain: planA, from: "s1", to: "s2"))
+        #expect(changes.removed == ["/data/dir", "/data/f"])
+        #expect(changes.removedFolders == [PathKey("/data/dir")])
     }
 
     @Test("across a backup in between, one change is a change and a change undone may be none")

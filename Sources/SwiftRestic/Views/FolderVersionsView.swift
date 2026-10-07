@@ -108,16 +108,20 @@ struct FolderVersionsView: View {
         } else if let changes, let previous {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: changes.summary(since: previous.time))
+                    .help("Compared with the backup before that holds this folder — what changed inside its folders is theirs to say, and a change of a file's dates or permissions alone is not counted")
+                // Each name opens the item in the tree at the backup
+                // before, which has it.
                 if let removed = changes.removedNames {
-                    Text(verbatim: removed)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                        .help(removed)
+                    RemovedNamesLine(names: RemovedNames(changes.removedItems), help: removed, before: previous.time) { item in
+                        onOpen(
+                            FileNode(repositoryID: node.repositoryID, chainKey: node.chainKey, path: item.path, isDirectory: item.isDirectory),
+                            previous.id
+                        )
+                    }
                 }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
-            .help("Compared with the backup before that holds this folder — what changed inside its folders is theirs to say, and a change of a file's dates or permissions alone is not counted")
         }
     }
 

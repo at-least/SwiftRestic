@@ -288,7 +288,9 @@ checked in so a normal build does not need it.
   that it is the first of its folders. A removed item has no row to mark, so
   under a finished comparison the header names what the previous backup held
   and this one does not ("Removed: old.txt, sub" — a removed folder once, not
-  everything in it), the full paths in its tooltip. The Files view (above) walks one
+  everything in it), the full paths in its tooltip. Each name there — and in
+  a Files folder's "Removed:" line — is a link to the copy the previous
+  backup holds: its versions on the Files tab, opening at that backup. The Files view (above) walks one
   folder or file through every backup that holds it: *Show Versions*, in an
   item's right-click menu here and on Find Files' results, opens the item
   there — on the Files tab of the plan or group the backup belongs to, at

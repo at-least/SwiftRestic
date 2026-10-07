@@ -25,6 +25,17 @@ struct FolderChangeSummaryTests {
         let changes = FolderChanges(added: ["/d/new"], removed: ["/d/a", "/d/b"], modified: ["/d/caf\u{E9}"], uncertain: ["/d/u"])
         #expect(changes.removedNames == "Removed: a, b")
         #expect(FolderChanges(added: ["/d/x"]).removedNames == nil)
+        // The first three, each with its kind, are the line's routes.
+        var many = FolderChanges(removed: ["/d/a", "/d/b", "/d/c", "/d/d"])
+        many.removedFolders = [PathKey("/d/b")]
+        let names = RemovedNames(many.removedItems)
+        #expect(names.items == [
+            RemovedItem(path: "/d/a", isDirectory: false), RemovedItem(path: "/d/b", isDirectory: true),
+            RemovedItem(path: "/d/c", isDirectory: false),
+        ])
+        #expect(names.more == 1)
+        #expect(names.line == "Removed: a, b, c, and 1 more")
+        #expect(RemovedNames(changes.removedItems).line == "Removed: a, b")
         #expect(changes.marks == [
             PathKey("/d/new"): "Added", PathKey("/d/caf\u{E9}"): "Modified", PathKey("/d/u"): "May have changed",
         ])

@@ -203,6 +203,50 @@ struct HoverableButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Removed names
+
+/// A "Removed:" line whose names are routes: each opens the item's versions
+/// at the backup before, which still holds it — the incomplete strip's
+/// grammar, inline. The names wear the accent, as a link does; the words
+/// around them stay secondary. Each tooltip is its own: one on the line
+/// would cover the names'.
+struct RemovedNamesLine: View {
+    let names: RemovedNames
+    /// Every removed path or name, for the words around the names.
+    let help: String
+    /// When the backup before was made, for the names' tooltips.
+    let before: Date
+    let open: (RemovedItem) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text("Removed: ")
+                .help(help)
+            ForEach(Array(names.items.enumerated()), id: \.element) { index, item in
+                Button { open(item) } label: {
+                    Text(verbatim: item.name)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(HoverableButtonStyle())
+                .help("Not in this backup — the backup of \(Format.timestamp(before)) has it. Show its versions.")
+                if index < names.items.count - 1 || names.more > 0 {
+                    Text(verbatim: ", ")
+                }
+            }
+            if names.more > 0 {
+                Text("and \(Format.count(names.more)) more")
+                    .help(help)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .accessibilityElement(children: .contain)
+    }
+}
+
 // MARK: - Detail rows
 
 /// A label/value row inside an information card.
