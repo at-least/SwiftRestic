@@ -116,4 +116,14 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false)
             == nil)
     }
+
+    @Test("Test Connection's answer for a path with no repository says what Save will do in this mode")
+    func missingRepositoryWords() {
+        // A new repository is created on Save.
+        #expect(EditorRequirements.noRepositoryYet(isNew: true)
+            == "No repository at that location yet. Saving will create one.")
+        // An edit's Save creates nothing: its plans would fail against it.
+        #expect(EditorRequirements.noRepositoryYet(isNew: false)
+            == "No repository is at that path — backups to it would fail until one is created. Point it at the folder that holds the repository.")
+    }
 }

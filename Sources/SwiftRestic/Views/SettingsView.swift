@@ -87,7 +87,9 @@ struct SettingsView: View {
 
             Section("Notifications") {
                 Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
-                Toggle("Notify when a backup fails", isOn: $model.configuration.settings.notifyOnFailure)
+                // What it gates (`AppModel.notify(about:)`), in the alert
+                // channels' own event words.
+                Toggle("Notify when a backup fails or finishes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
                 // A plan that never runs writes no failure to notify about:
                 // an unplugged drive at every slot, a Mac asleep through them.
                 Picker("Notify when a scheduled plan has not backed up for", selection: $model.configuration.settings.staleAlertDays) {

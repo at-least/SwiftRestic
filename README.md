@@ -172,7 +172,10 @@ checked in so a normal build does not need it.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob
   Storage, Google Cloud Storage, an rclone remote, or a restic REST server.
   Creating one runs `restic init`; the app refuses to save a repository it could
-  not reach. The editor asks *Where is it?* — on this Mac, on another machine,
+  not reach. *Test Connection* on a path with no repository says what Save
+  will do: create one, for a new repository; for an existing one, nothing —
+  "backups to it would fail until one is created", so point it at the folder
+  that holds the repository. The editor asks *Where is it?* — on this Mac, on another machine,
   in the cloud, through a gateway — and groups the kinds that way whether the
   repository is new or being edited. An existing repository's *Change
   Password…* runs `restic key passwd` with the stored password, the new one
@@ -351,8 +354,9 @@ checked in so a normal build does not need it.
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
   run off.
 - **Alerts** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
-  Locally, besides a notification per failed (and, if wanted, successful)
-  backup, one for a scheduled plan gone quiet: *Notify when a scheduled plan
+  Locally, besides a notification per failed or warning backup (*Notify when
+  a backup fails or finishes with warnings*, the alert channels' own event
+  words) and, if wanted, per successful one, one for a scheduled plan gone quiet: *Notify when a scheduled plan
   has not backed up for* 3, 7 (the default) or 14 days, or never, in Settings ›
   General. A plan whose drive is unplugged at every slot, or whose slots the
   Mac sleeps through, writes no failed run, so nothing else would say it. It

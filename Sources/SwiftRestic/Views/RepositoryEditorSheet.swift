@@ -529,7 +529,7 @@ struct RepositoryEditorSheet: View {
                 return true
             }
             guard initializeIfMissing else {
-                status = .failure("No repository at that location yet. Saving will create one.")
+                status = .failure(EditorRequirements.noRepositoryYet(isNew: isNew))
                 return false
             }
             _ = try await service.initializeRepository(context)

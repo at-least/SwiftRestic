@@ -23,6 +23,16 @@ enum EditorRequirements {
         return nil
     }
 
+    /// Test Connection's answer when no repository is at the location: a
+    /// new repository's Save creates one there, an edit's Save creates
+    /// nothing — its plans' backups would fail (restic exit 10) against the
+    /// empty path.
+    static func noRepositoryYet(isNew: Bool) -> String {
+        isNew
+            ? "No repository at that location yet. Saving will create one."
+            : "No repository is at that path — backups to it would fail until one is created. Point it at the folder that holds the repository."
+    }
+
     /// Why Change Password cannot run yet, or nil. restic trims a password
     /// it reads from `--new-password-file` (checked on 0.19.1) while the app
     /// hands it the stored one untrimmed, so a new password with spaces at
