@@ -143,6 +143,9 @@ enum BackupRunEngine {
                 record.outcome = .skipped
                 record.detailText = RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
                 sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
+                // The listing learns it now, not at the next launch: the
+                // refresh answers from the same check, without restic.
+                await sink.refreshSnapshots(repositoryID: repository.id)
                 await finish(
                     record: &record, plan: plan, hooks: hooks, context: hookContext,
                     transcript: transcript, sink: sink

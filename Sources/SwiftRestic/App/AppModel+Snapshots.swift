@@ -27,6 +27,16 @@ extension AppModel {
 
     func refreshSnapshots(repositoryID: UUID) async {
         guard let repository = repository(id: repositoryID) else { return }
+        // The run engine's own check: a local repository whose drive is away
+        // is not asked about — restic's "does not exist" could not tell it
+        // from a moved folder — and its listing says what a skipped backup
+        // says, with no banner: the repository's row, the caveat and the
+        // Protection card already state it. Earlier rows stay, as for any
+        // failed read. A mount re-reads it (`refreshRepositories(onVolume:)`).
+        if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+            snapshotListingOutcomes[repositoryID] = .failed(RunRecord.skippedReason(sources: [repository.resolvedLocalPath]))
+            return
+        }
         guard !loadingSnapshots.contains(repositoryID) else {
             // A second refresh while one runs (a backup's closing refresh
             // racing the launch refresh, say) must not be dropped: the first

@@ -262,7 +262,13 @@ checked in so a normal build does not need it.
   open config file" (restic 0.19.1) — so the app looks at the volume itself:
   a folder under /Volumes counts only while it is the root of a mounted
   volume. With the volume here and the folder gone, the run still fails, and
-  its fix is *Edit Repository…*.
+  its fix is *Edit Repository…*. Reading the repository's backups follows the
+  same check: with its volume away the listing is not asked of restic, posts no
+  banner, and reads the skip's words — the sidebar row "“Travel SSD” is not
+  connected.", the caveat "Can't read snapshots — “Travel SSD” is not
+  connected." — earlier rows staying. A skipped run says it on the listing at
+  once, and the volume mounting re-reads the listings of the repositories on
+  it, while backups are paused too.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day. While restic cannot be found the scheduler starts

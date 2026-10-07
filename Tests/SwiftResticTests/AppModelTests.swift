@@ -497,6 +497,45 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a repository whose drive is away reads its listing as the skip does, with no restic and no banner; a run and a mount, under a pause too, bring the words")
+    func repositoryDriveAwayListing() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let rows = model.snapshots[id]
+        let banners = model.banners.count
+        let away = SnapshotListingOutcome.failed("“SwiftRestic Absent Drive” is not connected.")
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
+        model.configuration.repositories[index].localPath = "/Volumes/SwiftRestic Absent Drive/restic"
+
+        // Not restic's exit 10 ("Repository missing. …") with a red banner.
+        await model.refreshSnapshots(repositoryID: id)
+        #expect(model.snapshotListingOutcomes[id] == away)
+        #expect(model.banners.count == banners)
+        #expect(model.snapshots[id] == rows, "earlier rows stay, as for any failed read")
+
+        // The run that finds the drive away says it on the listing at once.
+        model.snapshotListingOutcomes[id] = .loaded
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.snapshotListingOutcomes[id] == away)
+
+        // A mount of its drive re-reads it while backups are paused; another
+        // drive's leaves it alone. (The drive is still away here, so the
+        // re-read answers the same words — what shows it ran.)
+        model.pauseBackups(for: .untilResumed)
+        model.snapshotListingOutcomes[id] = .loaded
+        model.refreshRepositories(onVolume: "/Volumes/Some Other Drive")
+        await model.tasks.drain()
+        #expect(model.snapshotListingOutcomes[id] == .loaded)
+        model.refreshRepositories(onVolume: "/Volumes/SwiftRestic Absent Drive")
+        await model.tasks.drain()
+        #expect(model.snapshotListingOutcomes[id] == away)
+
+        await model.shutdown()
+    }
+
     @Test("a backup that skipped only folders on a drive that is away is skipped, its snapshot kept; a folder simply gone stays a warning")
     func someSourcesAwayIsSkipped() async throws {
         let harness = try await makeHarness()

@@ -103,14 +103,33 @@ extension AppModel {
     func startMountWatcher() {
         mountObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didMountNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.runSkippedPlansAfterMount() }
+        ) { [weak self] notification in
+            let volume = (notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL)?.path
+            MainActor.assumeIsolated {
+                if let volume { self?.refreshRepositories(onVolume: volume) }
+                self?.runSkippedPlansAfterMount()
+            }
         }
     }
 
     func stopMountWatcher() {
         if let mountObserver { NSWorkspace.shared.notificationCenter.removeObserver(mountObserver) }
         mountObserver = nil
+    }
+
+    /// A volume back re-reads the listings of the local repositories on it,
+    /// whose refresh had answered "not connected" — under a hold too: a
+    /// listing read is read-only, and nothing else would clear the words
+    /// while backups are paused.
+    func refreshRepositories(onVolume volumePath: String) {
+        guard !isShuttingDown, let volume = VolumePresence.volumeName(of: volumePath) else { return }
+        for repository in configuration.repositories
+            where repository.kind == .local && VolumePresence.volumeName(of: repository.resolvedLocalPath) == volume
+        {
+            tasks.addBackground(Task { [weak self] in
+                await self?.refreshSnapshots(repositoryID: repository.id)
+            })
+        }
     }
 
     /// The mount's catch-up (`Scheduler.catchUpAfterMount`): only while
