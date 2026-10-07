@@ -176,7 +176,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return nil
     }
 
-    func repositoryExists(_ context: RepositoryContext) async throws -> Bool {
+    func repositoryExists(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> Bool {
         record("exists")
         return true
     }

@@ -33,6 +33,25 @@ enum EditorRequirements {
             : "No repository is at that path — backups to it would fail until one is created. Point it at the folder that holds the repository."
     }
 
+    /// Whether an edit's Save asks restic first: when it changes what
+    /// reaches restic — the location, a credential, the environment — or
+    /// the password, any of which a typo turns into every plan failing. A
+    /// rename, a maintenance setting or a hook saves at once.
+    static func editReachesRestic(
+        draft: Repository,
+        initial: Repository,
+        password: String,
+        initialPassword: String,
+        providerSecret: String,
+        initialProviderSecret: String
+    ) -> Bool {
+        if password != initialPassword { return true }
+        func environment(_ repository: Repository, _ secret: String) -> [String: String] {
+            RepositoryContext(repository: repository, password: "", providerSecret: secret).environment
+        }
+        return environment(draft, providerSecret) != environment(initial, initialProviderSecret)
+    }
+
     /// Why Change Password cannot run yet, or nil. restic trims a password
     /// it reads from `--new-password-file` (checked on 0.19.1) while the app
     /// hands it the stored one untrimmed, so a new password with spaces at

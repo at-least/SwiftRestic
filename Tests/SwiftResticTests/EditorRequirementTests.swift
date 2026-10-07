@@ -121,6 +121,42 @@ struct EditorRequirementTests {
         }
     }
 
+    @Test("an edit's Save asks restic first only when the edit changes what reaches restic")
+    func editReachesRestic() {
+        var initial = Repository()
+        initial.name = "NAS"
+        initial.kind = .sftp
+        initial.sftpHost = "nas.local"
+        initial.sftpPath = "/volume1/restic"
+        func reaches(_ edit: (inout Repository) -> Void, password: String = "pw", secret: String = "") -> Bool {
+            var draft = initial
+            edit(&draft)
+            return EditorRequirements.editReachesRestic(
+                draft: draft, initial: initial,
+                password: password, initialPassword: "pw",
+                providerSecret: secret, initialProviderSecret: ""
+            )
+        }
+        // Saved at once: nothing restic sees changed.
+        #expect(!reaches { _ in })
+        #expect(!reaches { $0.name = "Home NAS" })
+        #expect(!reaches { $0.maintenance.checkEnabled.toggle() })
+        #expect(!reaches { $0.hooks = [BackupHook()] })
+        // Checked first.
+        #expect(reaches { $0.sftpPath = "/volume1/restik" })
+        #expect(reaches { $0.sftpPort = "2222" })
+        #expect(reaches { $0.kind = .local })
+        #expect(reaches { $0.extraEnvironment = ["RESTIC_COMPRESSION": "max"] })
+        #expect(reaches({ _ in }, password: "pv"))
+        #expect(reaches({ $0.kind = .rest; $0.restURL = "https://host:8000/" }, secret: "s3cret"))
+        var rest = initial
+        rest.kind = .rest
+        rest.restURL = "https://host:8000/"
+        initial = rest
+        #expect(reaches { $0.restUser = "alice" })
+        #expect(reaches({ _ in }, secret: "s3cret"))
+    }
+
     @Test("the password rules only bind a new repository")
     func passwordRules() {
         var draft = Repository()

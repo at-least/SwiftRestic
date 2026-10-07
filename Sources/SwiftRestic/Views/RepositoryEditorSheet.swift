@@ -17,6 +17,9 @@ struct RepositoryEditorSheet: View {
     @State private var initialProviderSecret = ""
     @State private var status: Status?
     @State private var isWorking = false
+    /// The edit Save could not verify. Save Anyway stands only while the
+    /// sheet still holds that very edit; any change asks again.
+    @State private var unverifiedEdit: Edit?
     /// Change Password's own fields: never part of Save or of the discard
     /// check — the change is its own act, done or not when its button is.
     @State private var isChangingPassword = false
@@ -36,6 +39,21 @@ struct RepositoryEditorSheet: View {
     private let onCreated: (UUID) -> Void
 
     private enum Tab: Hashable { case repository, hooks }
+
+    private struct Edit: Equatable {
+        var draft: Repository
+        var password: String
+        var providerSecret: String
+    }
+
+    private var currentEdit: Edit {
+        Edit(draft: draft, password: password, providerSecret: providerSecret)
+    }
+
+    /// Bounds Test Connection and Save's check: against a REST server that
+    /// refuses connections restic 0.19.1 retried for over ten minutes, with
+    /// the sheet's buttons grey all the while.
+    private static let probeTimeout: TimeInterval = 60
 
     init(repository: Repository, onCreated: @escaping (UUID) -> Void = { _ in }) {
         _draft = State(initialValue: repository)
@@ -126,6 +144,13 @@ struct RepositoryEditorSheet: View {
                 Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
                     .disabled(isWorking)
+                if !isNew, unverifiedEdit == currentEdit {
+                    // A server that is down while its path is being fixed
+                    // must not block the fix; the answer above says what
+                    // the check met.
+                    Button("Save Anyway") { Task { await save(verifying: false) } }
+                        .disabled(isWorking)
+                }
                 Button(isNew ? "Add Repository" : "Save") { Task { await save() } }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
@@ -560,7 +585,7 @@ struct RepositoryEditorSheet: View {
                 settings: model.configuration.settings
             )
 
-            if try await service.repositoryExists(context) {
+            if try await service.repositoryExists(context, timeout: Self.probeTimeout) {
                 status = .ok("Connected to the existing repository.")
                 return true
             }
@@ -574,13 +599,16 @@ struct RepositoryEditorSheet: View {
             _ = try await service.initializeRepository(context)
             status = .ok("Created a new repository.")
             return true
+        } catch ResticError.timedOut {
+            status = .failure("No answer from the repository in \(Int(Self.probeTimeout)) seconds — check that it is reachable.")
+            return false
         } catch {
             status = .failure(error.localizedDescription)
             return false
         }
     }
 
-    private func save() async {
+    private func save(verifying: Bool = true) async {
         guard !isWorking else { return }
         isWorking = true
         defer { isWorking = false }
@@ -588,6 +616,23 @@ struct RepositoryEditorSheet: View {
         // init does not leave an unusable entry in the sidebar.
         if isNew {
             guard await probe(initializeIfMissing: true) else { return }
+        } else if verifying, model.isResticAvailable, let initial,
+                  EditorRequirements.editReachesRestic(
+                      draft: draft,
+                      initial: initial,
+                      password: password,
+                      initialPassword: initialPassword,
+                      providerSecret: providerSecret,
+                      initialProviderSecret: initialProviderSecret
+                  )
+        {
+            // Checked before it replaces what works: a mistyped password
+            // would overwrite the Keychain's working one, a mistyped path
+            // repoint every plan of the repository.
+            guard await probe(initializeIfMissing: false) else {
+                unverifiedEdit = currentEdit
+                return
+            }
         }
         await model.upsert(
             repository: draft,

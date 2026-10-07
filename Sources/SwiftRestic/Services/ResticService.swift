@@ -196,13 +196,14 @@ struct ResticService: ResticClient {
 
     /// Cheap probe used to validate credentials when adding a repository.
     /// Returns `false` when the repository does not exist yet (exit code 10).
-    func repositoryExists(_ context: RepositoryContext) async throws -> Bool {
+    func repositoryExists(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> Bool {
         do {
             _ = try await runner.run(
                 binary: binary,
                 invocation: ResticInvocation(
                     arguments: context.globalArguments + ["cat", "config", "--json"],
                     environment: context.environment,
+                    timeout: timeout,
                     retainFullOutput: true
                 )
             )

@@ -85,11 +85,11 @@ struct ResticIntegrationTests {
         defer { try? FileManager.default.removeItem(at: fixture.root) }
 
         // A repository that does not exist yet must report so rather than throw.
-        #expect(try await fixture.service.repositoryExists(fixture.context) == false)
+        #expect(try await fixture.service.repositoryExists(fixture.context, timeout: nil) == false)
 
         let repositoryID = try await fixture.service.initializeRepository(fixture.context)
         #expect(repositoryID != nil)
-        #expect(try await fixture.service.repositoryExists(fixture.context))
+        #expect(try await fixture.service.repositoryExists(fixture.context, timeout: nil))
 
         // Backup
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
@@ -517,6 +517,24 @@ struct ResticIntegrationTests {
         repository.sftpPath = "relative-repo"
         #expect(try await initialize(repository) == 0)
         #expect(FileManager.default.fileExists(atPath: root.path + "/relative-repo/config"))
+    }
+
+    @Test("the editor's connection check gives up at its timeout on a server that refuses connections")
+    func repositoryExistsTimesOut() async throws {
+        let binary = try ResticBinary.locate(userOverride: nil)
+        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        var repository = Repository()
+        repository.kind = .rest
+        // Port 1 refuses: restic 0.19.1 retried this for over ten minutes
+        // (probed) before the timeout bounded it.
+        repository.restURL = "http://127.0.0.1:1/"
+        let started = Date.now
+        do {
+            _ = try await service.repositoryExists(RepositoryContext(repository: repository, password: Self.password), timeout: 3)
+            Issue.record("expected the check to time out")
+        } catch ResticError.timedOut {
+            #expect(Date.now.timeIntervalSince(started) < 30)
+        }
     }
 
     @Test("a wrong password surfaces restic's exit code 12")

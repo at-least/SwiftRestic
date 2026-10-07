@@ -177,7 +177,14 @@ checked in so a normal build does not need it.
   "backups to it would fail until one is created", so point it at the folder
   that holds the repository. The answer shows above the editor's buttons, on
   either tab, and a new repository's empty location reads as information — an
-  expected first step, not the red of a failure. The editor asks *Where is it?* — on this Mac, on another machine,
+  expected first step, not the red of a failure. An edit's *Save* that
+  changes what reaches restic — the location, a credential, the extra
+  environment or the password — runs the same check first and saves only on
+  "Connected"; when the check fails it says why and offers *Save Anyway*, for
+  a server that is down while its path is being fixed. A rename, a
+  maintenance setting or a hook saves at once. The check gives up after 60
+  seconds: against a REST server refusing connections, restic 0.19.1 retried
+  for over ten minutes. The editor asks *Where is it?* — on this Mac, on another machine,
   in the cloud, through a gateway — and groups the kinds that way whether the
   repository is new or being edited. A REST server's login goes in *User*
   and *Server password* — the password in the Keychain like every backend's

@@ -402,7 +402,7 @@ struct AppModelTests {
         let service = try model.service()
         func opens(_ password: String) async throws -> Bool {
             do {
-                return try await service.repositoryExists(RepositoryContext(repository: harness.repository, password: password))
+                return try await service.repositoryExists(RepositoryContext(repository: harness.repository, password: password), timeout: nil)
             } catch let ResticError.commandFailed(code, _) where code == 12 {
                 return false
             }
