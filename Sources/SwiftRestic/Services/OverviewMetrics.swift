@@ -112,6 +112,41 @@ enum OverviewMetrics {
         }
     }
 
+    /// One Recent problems row: the newest run of a plan's (or a
+    /// repository's upkeep's) problems that ended the same way, and how many
+    /// the window holds.
+    struct ProblemGroup: Equatable, Identifiable {
+        var newest: RunRecord
+        var count: Int
+        var id: UUID { newest.id }
+    }
+
+    /// The card's reading of `problems`, newest first: a cause that stands —
+    /// one unreadable file warns every run — is one row with its count, not
+    /// a row per run pushing every other problem off the card. Grouped by
+    /// plan, kind and outcome, never by a guessed cause; Activity keeps each
+    /// run. Display only: the stored history is untouched.
+    static func problemGroups(_ problems: [RunRecord]) -> [ProblemGroup] {
+        struct Key: Hashable {
+            var planID: UUID?
+            var repositoryID: UUID?
+            var kind: RunRecord.Kind
+            var outcome: RunRecord.Outcome
+        }
+        var groups: [Key: ProblemGroup] = [:]
+        for run in problems {
+            let key = Key(planID: run.planID, repositoryID: run.repositoryID, kind: run.kind, outcome: run.outcome)
+            if var group = groups[key] {
+                group.count += 1
+                if run.finishedAt > group.newest.finishedAt { group.newest = run }
+                groups[key] = group
+            } else {
+                groups[key] = ProblemGroup(newest: run, count: 1)
+            }
+        }
+        return groups.values.sorted { $0.newest.finishedAt > $1.newest.finishedAt }
+    }
+
     /// Whether a backup problem no longer stands: a successful backup of the
     /// same plan finished after it — the next run fixed it. A run skipped
     /// for an away drive that still wrote a snapshot of the rest counts. Backups only: a

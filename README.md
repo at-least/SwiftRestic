@@ -160,7 +160,10 @@ checked in so a normal build does not need it.
   03:00"), so "2 of 2 plans protected" cannot hide a plan that has stopped;
   a manual plan never runs by itself and gets no line. Then an *Other
   backups* card listing each adoptable
-  group while there is one; the week's problems against it; then where it
+  group while there is one; the week's problems against it — a cause that
+  repeats, one unreadable file warning every run, is one row with its count
+  ("7 times · 19 hours ago"), opening the newest, and what five rows leave
+  out is a last "… and N more in Activity" row onto Activity's Problems; then where it
   is, how big it is, and its maintenance. The Protection card carries
   *New Backup Plan…* as a button while the repository has no plan; after
   that a plan starts from the sidebar's + or ⌘N, into the repository on

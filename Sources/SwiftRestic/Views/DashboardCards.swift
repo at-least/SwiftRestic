@@ -178,8 +178,10 @@ struct OtherBackupsCard: View {
 // MARK: - Recent problems
 
 /// The week's failed and completed-with-errors runs — the same window the
-/// sidebar's Activity badge and the menu bar count. A row opens Activity on
-/// that run: a failure the user cannot reach is a failure they cannot fix.
+/// sidebar's Activity badge and the menu bar count — one row per plan and
+/// outcome with its count (`OverviewMetrics.problemGroups`), and what five
+/// rows leave out in a last row. A row opens Activity on its newest run: a
+/// failure the user cannot reach is a failure they cannot fix.
 struct RecentProblemsCard: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -193,22 +195,28 @@ struct RecentProblemsCard: View {
             VStack(alignment: .leading, spacing: 7) {
                 // The same window the sidebar's badge counts.
                 let since = OverviewMetrics.problemWindowStart(from: now)
-                let failures = OverviewMetrics.problems(
+                // A cause that stands repeats every run: one row each, with
+                // its count, so it cannot push the rest off the card.
+                let groups = OverviewMetrics.problemGroups(OverviewMetrics.problems(
                     in: model.configuration.runs,
                     since: since,
                     repositoryID: repositoryID
-                )
-                    .sorted { $0.finishedAt > $1.finishedAt }
-                    .prefix(5)
+                ))
+                let shown = groups.prefix(5)
+                // What the badge counts and the rows do not show.
+                let hidden = groups.dropFirst(5).reduce(0) { $0 + $1.count }
 
-                if failures.isEmpty {
+                if groups.isEmpty {
                     // Quiet by rule: a clean week is the absence of trouble,
                     // not an achievement — words, no celebratory checkmark.
                     Text("Nothing has failed in the last seven days.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(Array(failures)) { run in
+                    ForEach(Array(shown)) { group in
+                        let run = group.newest
                         let title = RunRecordPresentation.problemRowTitle(for: run, plans: model.configuration.plans)
+                        let when = Format.ago(run.finishedAt, now: now)
+                        let times = group.count > 1 ? "\(group.count) times · " : ""
                         let caption = RunRecordPresentation.problemRowCaption(for: run)
                         Button { showInActivity(run) } label: {
                             HStack(spacing: 6) {
@@ -227,14 +235,31 @@ struct RecentProblemsCard: View {
                                         .help(caption)
                                 }
                                 Spacer()
-                                Text(Format.ago(run.finishedAt, now: now))
+                                // The newest of them is the one the row
+                                // opens.
+                                Text(times + when)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 DashboardRowChevron()
                             }
                         }
                         .buttonStyle(HoverableButtonStyle())
-                        .accessibilityLabel("\(title): \(caption). Show in Activity")
+                        .accessibilityLabel("\(title): \(caption). \(times)\(when). Show in Activity")
+                    }
+                    if hidden > 0 {
+                        Button {
+                            router.activityShowsProblemsOnly = true
+                            router.selection = .activity
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text("… and \(hidden) more in Activity")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                DashboardRowChevron()
+                            }
+                        }
+                        .buttonStyle(HoverableButtonStyle())
                     }
                 }
             }
