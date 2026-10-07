@@ -126,6 +126,36 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
+    @Test("with restic missing, a due plan and a mount's catch-up start nothing: no Failed record, banner or upkeep run")
+    func resticMissingRestsTheSchedule() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        // Never run, so due on the tick; its repository's upkeep is due too.
+        model.configuration.plans[index].schedule.frequency = .hourly
+        let repositoryIndex = try #require(model.configuration.repositories.firstIndex { $0.id == harness.repository.id })
+        model.configuration.repositories[repositoryIndex].maintenance.checkEnabled = true
+        model.configuration.repositories[repositoryIndex].maintenance.lastCheckAt = nil
+        // A skipped run, which a mount would catch up.
+        var skipped = RunRecord(kind: .backup, planID: harness.plan.id, planName: harness.plan.name, repositoryID: harness.repository.id)
+        skipped.outcome = .skipped
+        model.configuration.runs = [skipped]
+        let bannersBefore = model.banners.count
+        // As resolveBinary leaves it when restic is not found.
+        model.binary = nil
+
+        await model.runDuePlans()
+        model.runSkippedPlansAfterMount()
+        await model.tasks.drain()
+
+        #expect(model.configuration.runs.map(\.id) == [skipped.id])
+        #expect(model.activity.isEmpty && model.maintenance.isEmpty)
+        #expect(model.banners.count == bannersBefore)
+
+        await model.shutdown()
+    }
+
     @Test("restoring a file writes the dump, records the run and surfaces a banner")
     func restoringFileSucceeds() async throws {
         let harness = try await makeHarness(mode: "default")

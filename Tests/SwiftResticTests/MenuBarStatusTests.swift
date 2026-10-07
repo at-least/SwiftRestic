@@ -392,6 +392,29 @@ struct MenuBarStatusTests {
         #expect(free.first?.disabledReason == nil)
     }
 
+    @Test("while restic is missing the tray says the backups are held, promises no next run, and each grey row says why")
+    func resticMissing() {
+        var plan = BackupPlan()
+        plan.name = "Documents"
+        plan.repositoryID = UUID()
+        plan.sources = ["/tmp"]
+        let next = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(MenuBarStatus.resticMissingLine(isResticAvailable: false) == "restic is missing — backups are on hold.")
+        #expect(MenuBarStatus.resticMissingLine(isResticAvailable: true) == nil)
+        #expect(MenuBarStatus.headline(
+            activity: [:], isResticAvailable: false, repositories: [], nextRun: (plan, next)
+        ) == nil)
+        #expect(MenuBarStatus.headline(activity: [:], repositories: [], nextRun: (plan, next)) != nil)
+
+        let rows = MenuBarStatus.planRows(
+            plans: [plan], activity: [:], isResticAvailable: false,
+            lockedRepositories: [plan.repositoryID!: "Home NAS is running a prune — backups wait until it finishes."]
+        )
+        #expect(rows.first?.isEnabled == false)
+        // The cause no wait cures leads.
+        #expect(rows.first?.disabledReason == "restic is missing.")
+    }
+
     @Test("a recent failure and a recent warning both lead, newest first")
     func recentProblemsSurface() {
         var failed = RunRecord(planName: "Documents to NAS")

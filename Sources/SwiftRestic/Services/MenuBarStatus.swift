@@ -138,11 +138,18 @@ enum MenuBarStatus {
         return "\(subject) \(newest.outcome.displayName.lowercased()) \(relative(newest.finishedAt))"
     }
 
+    /// The line that leads the menu while restic is missing, as a hold's
+    /// does: the scheduler starts nothing without it.
+    static func resticMissingLine(isResticAvailable: Bool) -> String? {
+        isResticAvailable ? nil : "restic is missing — backups are on hold."
+    }
+
     /// The single line above the plan buttons. `nil` while anything runs —
     /// restores and repository upkeep included: the running lines replace it
     /// rather than sitting underneath. `nil` under a hold too: the hold's own
     /// line leads the menu, and a next-run headline would announce a run the
-    /// scheduler will not fire. `hasNoRepositories` answers the
+    /// scheduler will not fire — and while restic is missing, for the same
+    /// reason. `hasNoRepositories` answers the
     /// `unconfigured` icon face: it tells a first-time user what to do next.
     ///
     /// The plan is named with its repository — two repositories can hold
@@ -154,11 +161,12 @@ enum MenuBarStatus {
         isConsoleRunning: Bool = false,
         hasNoRepositories: Bool = false,
         hold: ScheduleHold? = nil,
+        isResticAvailable: Bool = true,
         repositories: [Repository],
         nextRun: (plan: BackupPlan, date: Date)?
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring, !isConsoleRunning else { return nil }
-        guard hold == nil else { return nil }
+        guard hold == nil, isResticAvailable else { return nil }
         if hasNoRepositories { return "No repository set up yet" }
         guard let nextRun else { return "No backups scheduled" }
         let name = RunRecordPresentation.planWithRepository(nextRun.plan, repositories: repositories)
@@ -205,7 +213,8 @@ enum MenuBarStatus {
                     title: "Back Up “\(name)” Now",
                     action: .backUp,
                     isEnabled: plan.isConfigurationComplete && isResticAvailable && lockReason == nil,
-                    disabledReason: lockReason
+                    // The Plan menu's own words for a missing restic.
+                    disabledReason: isResticAvailable ? lockReason : "restic is missing."
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)

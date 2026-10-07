@@ -256,7 +256,13 @@ checked in so a normal build does not need it.
   its fix is *Edit Repository…*.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
-  than skipping the day.
+  than skipping the day. While restic cannot be found the scheduler starts
+  nothing — no backup, check or prune, so no Failed record, banner or
+  notification per slot for runs that never began — and the menu bar's menu
+  leads with "restic is missing — backups are on hold.", promises no next run,
+  and each grey *Back Up* row says "restic is missing." The quiet-plan alert
+  still names a plan the absence leaves unprotected. restic found again
+  (*Re-detect* in Settings, or a relaunch) lets the due plans run.
 - **Pause** — *Pause Backups* in the menu bar holds every scheduled backup,
   check and prune for an hour, until tomorrow or until resumed; *Pause and Stop
   Running Backups* also stops backups in flight, which start over when the

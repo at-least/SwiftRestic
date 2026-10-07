@@ -19,7 +19,7 @@ extension AppModel {
     /// (the debounced save's flush follows the same rule). Resuming, and a
     /// pause running out, take effect here, within a minute: an extra tick
     /// started on Resume would break that rule.
-    private func runDuePlans() async {
+    func runDuePlans() async {
         // First, so a lapsed pause stops being shown and stops holding in the
         // same tick.
         expireLapsedPauses(now: .now)
@@ -33,6 +33,13 @@ extension AppModel {
         // After the guard: a hold exempts every plan from the quiet-plan
         // alert, as it holds their runs.
         alertQuietPlans(now: .now)
+
+        // Without restic every run would fail at its first restic call — a
+        // Failed record, a banner and a notification per slot, backups and
+        // upkeep alike — for a cause the window's banner and the menu bar
+        // already state. After the alert, which still names a plan the
+        // absence leaves unprotected.
+        guard isResticAvailable else { return }
 
         // Upkeep is considered first: a due prune should not be starved by a
         // backup, which will simply still be due on the next tick. A
@@ -107,9 +114,9 @@ extension AppModel {
     }
 
     /// The mount's catch-up (`Scheduler.catchUpAfterMount`): only while
-    /// nothing holds the schedule, as for the tick.
+    /// nothing holds the schedule and restic is there, as for the tick.
     func runSkippedPlansAfterMount(now: Date = .now) {
-        guard !isShuttingDown, scheduleHold == nil else { return }
+        guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         var newest: [UUID: RunRecord.Outcome] = [:]
         // Newest first.
         for run in configuration.runs where run.kind == .backup {

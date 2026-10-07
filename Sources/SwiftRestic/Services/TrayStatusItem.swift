@@ -158,7 +158,11 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         let hasNoRepositories = model.configuration.repositories.isEmpty
         let hold = model.scheduleHold
         // While backups are held, that nothing is being backed up is the
-        // news, so the hold leads — above the problem line.
+        // news, so the hold leads — above the problem line. A missing restic
+        // holds them too, and no pause lifts that one.
+        if let missing = MenuBarStatus.resticMissingLine(isResticAvailable: model.isResticAvailable) {
+            menu.addItem(disabledItem(missing))
+        }
         if let hold {
             menu.addItem(disabledItem(hold.summary()))
         }
@@ -204,6 +208,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             isConsoleRunning: model.console.isRunning,
             hasNoRepositories: hasNoRepositories,
             hold: hold,
+            isResticAvailable: model.isResticAvailable,
             repositories: model.configuration.repositories,
             nextRun: model.nextScheduledRun
         ) {
