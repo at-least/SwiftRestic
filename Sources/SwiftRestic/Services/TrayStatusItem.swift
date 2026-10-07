@@ -88,6 +88,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             _ = model.configuration.runs.isEmpty
             _ = model.configuration.settings.showMenuBarExtra
             _ = model.isOnBattery
+            _ = model.isOnMeteredNetwork
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
         }

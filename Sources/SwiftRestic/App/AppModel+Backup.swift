@@ -47,6 +47,7 @@ extension AppModel {
         pauseStoppedPlanIDs.remove(planID)
         activity[planID] = nil
         planProgress[planID] = nil
+        reconcileSleepAssertion()
     }
 
     /// Installs a fresh run strip — activity for the phase, a zeroed
@@ -60,6 +61,29 @@ extension AppModel {
         backupRunTokens[planID] = UUID()
         activity[planID] = PlanActivity()
         planProgress[planID] = OperationProgress()
+        reconcileSleepAssertion()
+    }
+
+    /// Whether the Mac is kept from idle sleep for running work.
+    var holdsOffSleep: Bool { sleepActivity != nil }
+
+    /// Holds off idle system sleep while any backup or maintenance job runs,
+    /// and lets go when the last one ends — a Mac that idles to sleep
+    /// mid-run suspends restic, and a long first backup otherwise never
+    /// finishes overnight. Called wherever a run strip is installed or
+    /// retired, so every way out of a run (done, failed, stopped) passes
+    /// here. The display may still sleep; a closed lid still sleeps.
+    func reconcileSleepAssertion() {
+        let working = !activity.isEmpty || !maintenance.isEmpty
+        if working, sleepActivity == nil {
+            sleepActivity = ProcessInfo.processInfo.beginActivity(
+                options: .idleSystemSleepDisabled,
+                reason: "SwiftRestic is running a backup"
+            )
+        } else if !working, let token = sleepActivity {
+            ProcessInfo.processInfo.endActivity(token)
+            sleepActivity = nil
+        }
     }
 
     /// Waits for a plan's in-flight run to finish, if there is one.

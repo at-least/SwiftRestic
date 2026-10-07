@@ -705,6 +705,8 @@ struct MenuBarStatusTests {
         )
         #expect(ScheduleHold.paused(until: nil).summary(now: now, calendar: calendar) == "Backups paused until you resume")
         #expect(ScheduleHold.onBattery.summary(now: now, calendar: calendar) == "Backups wait for power — this Mac is on battery")
+        #expect(ScheduleHold.onMeteredNetwork.summary(now: now, calendar: calendar) == "Backups wait — this Mac's network is metered")
+        #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
     }
 
     @Test("plan rows back up when idle, stop while running, and stand disabled while stopping")

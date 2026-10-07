@@ -201,7 +201,14 @@ checked in so a normal build does not need it.
   pause ends — restic cannot resume a backup. A plan's own *Pause Schedule*
   takes the same lengths. With *Pause scheduled backups on battery power* on,
   the menu bar, the repository pages and Settings say that backups wait for power
-  instead of announcing runs that will not start.
+  instead of announcing runs that will not start. *Pause scheduled backups on a
+  metered network* (off by default) holds them the same way while the network
+  is one macOS reports as expensive (its documentation names cellular) or
+  constrained — read from `NWPathMonitor`; the hold itself was checked with a
+  debug override, the detection on a real hotspot was not. While a backup or a
+  check or prune runs, SwiftRestic holds off idle sleep (`pmset -g assertions`
+  lists "SwiftRestic is running a backup") and lets go when the last one ends;
+  the display may still sleep, and a closed lid still sleeps the Mac.
 - **Browsing and restore** — every *Browse*, *Restore Files…* and *Show in
   Backups* opens the one browser, at that backup in the sidebar: a
   backup's folders as a tree, with a Change column and search, and three ways
@@ -502,13 +509,17 @@ on its Retention tab, and `adopt`/`adoptRetention` open the adopt sheet of the
 first adoptable group (with `SWIFTRESTIC_CAPTURE_PANE=orphanGroup`, the latter
 on its Retention tab),
 and `SWIFTRESTIC_REPO_PASSWORD` hands repositories a password directly (only
-honoured together with `SWIFTRESTIC_CONFIG_DIR`), so capture runs never touch
-the login Keychain. Capture runs also do not arm the scheduler, so a due plan
+honoured together with `SWIFTRESTIC_CONFIG_DIR`), so capture runs never read
+the login Keychain for a password. Writes are not redirected: saving a
+repository editor or a Change Password in such a run writes to the login
+Keychain. Capture runs also do not arm the scheduler, so a due plan
 cannot fire mid-capture. `SWIFTRESTIC_POWER_SOURCE` (`battery`/`ac`, debug
 builds only, honoured only with `SWIFTRESTIC_CONFIG_DIR`) stands in for the
 power adapter at each scheduler tick, so the battery hold can be looked at on
 a Mac that stays plugged in — in a normal launch, since a capture run never
-arms the scheduler and so never reads it. `SWIFTRESTIC_LOGIN_ITEM_INSTALLABLE=1`
+arms the scheduler and so never reads it. `SWIFTRESTIC_NETWORK`
+(`metered`/`unmetered`, the same gates) stands in for the network path, for the
+metered-network hold. `SWIFTRESTIC_LOGIN_ITEM_INSTALLABLE=1`
 (debug builds only, honoured only with `SWIFTRESTIC_CONFIG_DIR`) makes the
 start-at-login offers treat a build-folder copy as installed, so their *Start
 at Login* button can be looked at; it changes only what they offer —

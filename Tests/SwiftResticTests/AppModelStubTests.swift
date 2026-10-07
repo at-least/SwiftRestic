@@ -822,6 +822,29 @@ struct AppModelStubTests {
 
     // MARK: - Quit confirmation and run banners
 
+    @Test("idle sleep is held off while a backup or a check runs, and let go however it ends")
+    func sleepAssertionFollowsRuns() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        #expect(!model.holdsOffSleep)
+
+        model.runBackup(planID: harness.plan.id)
+        #expect(model.holdsOffSleep)
+        model.cancelBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(!model.holdsOffSleep, "a cancelled backup let go of the assertion")
+
+        // A check the stub answers at once, then a failed backup: each
+        // releases on its own way out.
+        model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
+        #expect(model.holdsOffSleep)
+        await model.waitForMaintenance(repositoryID: harness.repository.id)
+        #expect(!model.holdsOffSleep, "a finished check let go of the assertion")
+
+        await model.shutdown()
+    }
+
     @Test("a backup in flight is a reason to confirm quitting; an idle model has none")
     func runningBackupAsksForQuitConfirmation() async throws {
         let harness = try await makeHarness(mode: "hang-backup")

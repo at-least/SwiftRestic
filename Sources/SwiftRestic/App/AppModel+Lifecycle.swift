@@ -49,6 +49,8 @@ extension AppModel {
             pause: configuration.settings.schedulePause,
             pauseOnBattery: configuration.settings.pauseOnBattery,
             isOnBattery: isOnBattery,
+            pauseOnMeteredNetwork: configuration.settings.pauseOnMeteredNetwork,
+            isOnMeteredNetwork: isOnMeteredNetwork,
             now: now
         )
         let plansAfterQuit = configuration.plans.map { plan in
@@ -224,6 +226,7 @@ extension AppModel {
         // tccd, and nothing on the first screen waits for the answer.
         Task { await self.refreshFullDiskAccess() }
 
+        startNetworkMonitor()
         await refreshAllSnapshots()
         #if DEBUG
         // A capture run must photograph a deterministic state: a live scheduler
@@ -243,6 +246,7 @@ extension AppModel {
         guard !isShuttingDown else { return }
         isShuttingDown = true
         schedulerTask?.cancel()
+        networkMonitor?.cancel()
         // Slotted runs only: a start ping in flight is awaited below, never
         // aborted — its monitor must hear that the run started.
         tasks.cancelSlots()

@@ -94,6 +94,7 @@ the folder or file to select), `SWIFTRESTIC_CAPTURE_SEARCH` (with pane
 selected plan or group page on its Files tab), `SWIFTRESTIC_REPO_PASSWORD`,
 `SWIFTRESTIC_POWER_SOURCE` (`battery`/`ac`; read at scheduler ticks, so only
 in a normal launch — a capture run never arms the scheduler),
+`SWIFTRESTIC_NETWORK` (`metered`/`unmetered`, for the metered-network hold),
 `SWIFTRESTIC_LOGIN_ITEM_INSTALLABLE` (`1` shows the start-at-login offers'
 button from a build folder; registering still refuses there, so nothing is
 ever registered). All are documented
@@ -106,7 +107,9 @@ light mode.
 
 - **Never point a capture run at the real configuration.** Set
   `SWIFTRESTIC_CONFIG_DIR=/tmp/...` so the run cannot see or refresh the
-  user's actual repositories and never touches the login Keychain. Capture
+  user's actual repositories and never reads the login Keychain for a
+  password. Writes still go there: never save a repository editor or press
+  Change Password in a scratch run. Capture
   runs do not arm the scheduler, so no backup fires mid-capture — but
   snapshot refreshes against real remotes are still waste and risk.
 - **One output directory per agent and run.** A shared fixed filename gets

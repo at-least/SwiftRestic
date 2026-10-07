@@ -503,7 +503,7 @@ struct PlanEditorSheet: View {
             // daemon's honesty line stays — scheduled runs need the app.
             Section {
                 Text(
-                    "Scheduled runs need SwiftRestic to be running. It checks every minute and catches up on a run it missed while the Mac was asleep."
+                    "Scheduled runs need SwiftRestic to be running. It checks every minute and catches up on a run it missed while the Mac was asleep. While a backup runs, the Mac does not go to sleep on its own."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

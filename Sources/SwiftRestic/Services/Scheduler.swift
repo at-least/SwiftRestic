@@ -8,13 +8,16 @@ enum ScheduleHold: Equatable, Sendable {
     /// Pause Backups; `until` is `nil` for Until I Resume.
     case paused(until: Date?)
     case onBattery
+    /// The network macOS reports as expensive or constrained, while the
+    /// setting asks to wait for another.
+    case onMeteredNetwork
 
     /// When the hold lifts by itself, if it does — the date every held run
     /// moves to. The battery's end cannot be known ahead.
     var resumesAt: Date? {
         switch self {
         case let .paused(until): until
-        case .onBattery: nil
+        case .onBattery, .onMeteredNetwork: nil
         }
     }
 
@@ -26,6 +29,8 @@ enum ScheduleHold: Equatable, Sendable {
             "Backups paused until you resume"
         case .onBattery:
             "Backups wait for power — this Mac is on battery"
+        case .onMeteredNetwork:
+            "Backups wait — this Mac's network is metered"
         }
     }
 }
@@ -36,16 +41,20 @@ enum ScheduleHold: Equatable, Sendable {
 /// `now`.
 enum Scheduler {
     /// The app-wide hold in force at `now`: a live pause wins, then the
-    /// battery — only while the setting asks for it. A pause whose end has
+    /// battery, then a metered network — each only while its setting asks
+    /// for it. A pause whose end has
     /// passed holds nothing, even before the tick clears it.
     static func hold(
         pause: SchedulePause?,
         pauseOnBattery: Bool,
         isOnBattery: Bool,
+        pauseOnMeteredNetwork: Bool = false,
+        isOnMeteredNetwork: Bool = false,
         now: Date = .now
     ) -> ScheduleHold? {
         if let pause, pause.isActive(at: now) { return .paused(until: pause.until) }
         if pauseOnBattery, isOnBattery { return .onBattery }
+        if pauseOnMeteredNetwork, isOnMeteredNetwork { return .onMeteredNetwork }
         return nil
     }
 

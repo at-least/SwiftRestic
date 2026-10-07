@@ -207,6 +207,7 @@ enum PlanStatus {
             let when = switch hold {
             case .paused: "once backups resume"
             case .onBattery: "once this Mac is on power again"
+            case .onMeteredNetwork: "once this Mac is on another network"
             }
             return TileFace(value: "Waiting", help: "\(hold.summary(now: now)). This plan is due and runs \(when).")
         }

@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 extension AppModel {
     // MARK: - Scheduling
@@ -82,8 +83,36 @@ extension AppModel {
             pause: configuration.settings.schedulePause,
             pauseOnBattery: configuration.settings.pauseOnBattery,
             isOnBattery: isOnBattery,
+            pauseOnMeteredNetwork: configuration.settings.pauseOnMeteredNetwork,
+            isOnMeteredNetwork: isOnMeteredNetwork,
             now: .now
         )
+    }
+
+    /// Follows the network for the metered-network hold: macOS's own
+    /// "expensive" (cellular and the like) and "constrained" flags on the
+    /// current path, watched whether or not the setting is on, so the hold
+    /// is right the moment it is switched on.
+    func startNetworkMonitor() {
+        #if DEBUG
+        // Live checks cannot switch networks. Gated on the throwaway-config
+        // override, like the power-source seam.
+        let environment = ProcessInfo.processInfo.environment
+        if environment["SWIFTRESTIC_CONFIG_DIR"] != nil, let network = environment["SWIFTRESTIC_NETWORK"] {
+            isOnMeteredNetwork = network == "metered"
+            return
+        }
+        #endif
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            let metered = path.isExpensive || path.isConstrained
+            Task { @MainActor in
+                guard let self, self.isOnMeteredNetwork != metered else { return }
+                self.isOnMeteredNetwork = metered
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.newlix.SwiftRestic.network"))
+        networkMonitor = monitor
     }
 
     /// Pause Backups: holds every scheduled backup, check and prune for

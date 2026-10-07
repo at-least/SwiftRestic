@@ -16,6 +16,9 @@ struct AppSettings: Codable, Sendable, Hashable {
     var downloadLimitKiBps: Int = 0
     /// Skip scheduled runs while on battery power.
     var pauseOnBattery: Bool = false
+    /// Skip scheduled runs while the network is metered — one macOS reports
+    /// as expensive or constrained.
+    var pauseOnMeteredNetwork: Bool = false
     /// The tray's Pause Backups, while it holds: every scheduled backup,
     /// check and prune waits. `nil` when nothing is paused.
     var schedulePause: SchedulePause?
@@ -38,6 +41,7 @@ struct AppSettings: Codable, Sendable, Hashable {
         uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
         downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)
         pauseOnBattery = c.value(.pauseOnBattery, default: false)
+        pauseOnMeteredNetwork = c.value(.pauseOnMeteredNetwork, default: false)
         // A pause whose date does not read throws inside, so this reads as
         // not paused and says so — never as a pause without end.
         schedulePause = c.optional(.schedulePause)

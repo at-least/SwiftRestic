@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 import SwiftUI
 
@@ -137,6 +138,11 @@ final class AppModel {
     /// only when it changes, so the tray's observation does not fire every
     /// minute.
     var isOnBattery = false
+    /// Whether the network is one macOS reports as expensive or
+    /// constrained (`startNetworkMonitor`), written only when it changes —
+    /// the battery flag's rule.
+    var isOnMeteredNetwork = false
+    @ObservationIgnored var networkMonitor: NWPathMonitor?
     /// Plans whose running backup Pause and Stop ended. Such a run is
     /// recorded as stopped by the pause and leaves its slot unstamped, so
     /// it runs again when the pause ends. Each run's unwind removes its
@@ -235,6 +241,9 @@ final class AppModel {
     /// banner: once per failing stretch, so a denial does not nag on every
     /// failed run.
     @ObservationIgnored var notificationsProblemNoted = false
+    /// The idle-sleep assertion held while backups or maintenance run
+    /// (`reconcileSleepAssertion`).
+    @ObservationIgnored var sleepActivity: (any NSObjectProtocol)?
     /// The configuration writes, one at a time in call order — see
     /// `flushSave`.
     @ObservationIgnored private let saves = TaskChain()

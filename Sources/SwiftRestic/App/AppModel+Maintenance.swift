@@ -82,6 +82,7 @@ extension AppModel {
             // drops — `unwindPlanRun(_:)`'s rule.
             self?.maintenanceRunTokens[repositoryID] = nil
             self?.maintenance[repositoryID] = nil
+            self?.reconcileSleepAssertion()
         }, in: .maintenance(repositoryID))
     }
 
@@ -91,6 +92,7 @@ extension AppModel {
     func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask) {
         maintenanceRunTokens[repositoryID] = UUID()
         maintenance[repositoryID] = MaintenanceActivity(task: task)
+        reconcileSleepAssertion()
     }
 
     func cancelMaintenance(repositoryID: UUID) {

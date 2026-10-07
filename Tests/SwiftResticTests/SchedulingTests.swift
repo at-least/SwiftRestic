@@ -388,6 +388,14 @@ struct PauseSchedulingTests {
         #expect(Scheduler.hold(pause: nil, pauseOnBattery: true, isOnBattery: true, now: now) == .onBattery)
         #expect(Scheduler.hold(pause: nil, pauseOnBattery: false, isOnBattery: true, now: now) == nil)
         #expect(Scheduler.hold(pause: nil, pauseOnBattery: true, isOnBattery: false, now: now) == nil)
+        // A metered network holds only when asked, after a pause and the
+        // battery.
+        #expect(Scheduler.hold(pause: nil, pauseOnBattery: false, isOnBattery: false,
+                               pauseOnMeteredNetwork: true, isOnMeteredNetwork: true, now: now) == .onMeteredNetwork)
+        #expect(Scheduler.hold(pause: nil, pauseOnBattery: false, isOnBattery: false,
+                               pauseOnMeteredNetwork: false, isOnMeteredNetwork: true, now: now) == nil)
+        #expect(Scheduler.hold(pause: nil, pauseOnBattery: true, isOnBattery: true,
+                               pauseOnMeteredNetwork: true, isOnMeteredNetwork: true, now: now) == .onBattery)
         #expect(
             Scheduler.hold(
                 pause: SchedulePause(until: now.addingTimeInterval(-1)),

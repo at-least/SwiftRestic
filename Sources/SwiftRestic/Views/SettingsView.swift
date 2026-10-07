@@ -129,6 +129,8 @@ struct SettingsView: View {
                 }
 
                 Toggle("Pause scheduled backups on battery power", isOn: $model.configuration.settings.pauseOnBattery)
+                Toggle("Pause scheduled backups on a metered network", isOn: $model.configuration.settings.pauseOnMeteredNetwork)
+                    .help("A network macOS reports as expensive, such as cellular, or as constrained. Back Up Now still runs.")
                 // Held, the next run is whenever the hold lifts — say why
                 // instead of a date the scheduler will not keep.
                 if let hold = model.scheduleHold {
