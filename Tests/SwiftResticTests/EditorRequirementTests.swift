@@ -99,6 +99,28 @@ struct EditorRequirementTests {
             == "Enter the rclone remote to save it.")
     }
 
+    @Test("an SFTP port goes in Port: one typed into Host, or a field that is no port, keeps Save grey")
+    func sftpPortRequirement() {
+        var draft = Repository()
+        draft.name = "NAS"
+        draft.kind = .sftp
+        draft.sftpPath = "/volume1/restic"
+        // restic would dial 22 and read "2222:/volume1/restic" as the path.
+        draft.sftpHost = "nas.local:2222"
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false)
+            == "Put the port in Port, not in Host.")
+        draft.sftpHost = "nas.local"
+        for bad in ["0", "65536", "22a", " 22"] {
+            draft.sftpPort = bad
+            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false)
+                == "Port is a number from 1 to 65535.", "\(bad)")
+        }
+        for good in ["", "22", "2222", "65535"] {
+            draft.sftpPort = good
+            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false) == nil, "\(good)")
+        }
+    }
+
     @Test("the password rules only bind a new repository")
     func passwordRules() {
         var draft = Repository()

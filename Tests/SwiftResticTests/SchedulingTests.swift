@@ -886,6 +886,9 @@ struct RepositoryTests {
         sftp.sftpHost = "nas.local"
         sftp.sftpPath = "/volume1/restic"
         #expect(sftp.resticRepositoryString == "sftp:backup@nas.local:/volume1/restic")
+        // ssh's own port keeps the colon form, byte for byte.
+        sftp.sftpPort = "22"
+        #expect(sftp.resticRepositoryString == "sftp:backup@nas.local:/volume1/restic")
 
         var s3 = Repository()
         s3.kind = .s3
@@ -904,6 +907,36 @@ struct RepositoryTests {
         rest.kind = .rest
         rest.restURL = "https://host:8000/"
         #expect(rest.resticRepositoryString == "rest:https://host:8000/")
+    }
+
+    @Test("an SFTP port other than 22 moves to restic's URL form, the only one that carries a port")
+    func sftpPortString() throws {
+        var sftp = Repository()
+        sftp.kind = .sftp
+        sftp.sftpUser = "backup"
+        sftp.sftpHost = "nas.local"
+        sftp.sftpPort = "2222"
+        // The first slash ends the connection settings: an absolute path
+        // keeps its own after it.
+        sftp.sftpPath = "/volume1/restic"
+        #expect(sftp.resticRepositoryString == "sftp://backup@nas.local:2222//volume1/restic")
+        // One slash for a path relative to the login's home.
+        sftp.sftpPath = "restic"
+        #expect(sftp.resticRepositoryString == "sftp://backup@nas.local:2222/restic")
+        // Percent-encoded: restic reads the form as a URL, where a `#`
+        // would end the path.
+        sftp.sftpPath = "/volume1/Mac #1"
+        #expect(sftp.resticRepositoryString == "sftp://backup@nas.local:2222//volume1/Mac%20%231")
+        sftp.sftpUser = ""
+        #expect(sftp.resticRepositoryString == "sftp://nas.local:2222//volume1/Mac%20%231")
+
+        // A configuration saved before the field existed has none.
+        let old = try JSONDecoder().decode(
+            Repository.self,
+            from: Data(#"{"kind":"sftp","name":"NAS","sftpHost":"nas.local","sftpPath":"/r"}"#.utf8)
+        )
+        #expect(old.sftpPort == "")
+        #expect(old.resticRepositoryString == "sftp:nas.local:/r")
     }
 
     @Test("provider secrets map to the environment variables each backend reads")

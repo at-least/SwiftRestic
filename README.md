@@ -791,7 +791,11 @@ stretch.
   Terminal first. A refused host key (`Host key verification failed`, which
   restic 0.19.1 prints only as a `subprocess ssh:` stderr line beside its JSON
   error) is named in the failure, with the way to fix it — new server or
-  changed key.
+  changed key. A server on a port other than 22 takes it in *Port*: only
+  restic's URL form carries one (`sftp://user@host:2222//absolute/path`, its
+  path percent-encoded), while the colon form cuts the host at its first
+  colon, so a port typed into *Host* would be dialed as 22 with the port read
+  as the start of the path — the editor refuses it there.
 - No cron expressions: the schedule covers manual, every N hours, daily and
   weekly. No rclone-style remote *management* either — configure remotes with
   rclone itself.

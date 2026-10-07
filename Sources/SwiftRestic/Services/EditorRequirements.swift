@@ -71,6 +71,12 @@ enum EditorRequirements {
             if draft.localPath.isEmpty { return "Choose a folder to save it." }
         case .sftp:
             if draft.sftpHost.isEmpty || draft.sftpPath.isEmpty { return "Enter the host and path to save it." }
+            // restic cuts the host at its first colon, so a port typed there
+            // would become the start of the path and ssh would dial 22.
+            if draft.sftpHost.contains(":") { return "Put the port in Port, not in Host." }
+            if !draft.sftpPort.isEmpty, !(1 ... 65535).contains(Int(draft.sftpPort) ?? 0) {
+                return "Port is a number from 1 to 65535."
+            }
         case .s3:
             if draft.s3Bucket.isEmpty || draft.s3AccessKeyID.isEmpty { return "Enter the bucket and access key ID to save it." }
         case .b2:

@@ -162,7 +162,8 @@ struct RepositoryEditorSheet: View {
     private var firstContact: String {
         guard !draft.sftpHost.isEmpty else { return "connect to it once in Terminal with ssh and accept its key." }
         let user = draft.sftpUser.isEmpty ? "" : "\(draft.sftpUser)@"
-        return "connect once in Terminal (ssh \(user)\(draft.sftpHost)) and accept its key."
+        let port = draft.sftpCustomPort.map { "-p \($0) " } ?? ""
+        return "connect once in Terminal (ssh \(port)\(user)\(draft.sftpHost)) and accept its key."
     }
 
     private var settingsForm: some View {
@@ -360,6 +361,7 @@ struct RepositoryEditorSheet: View {
         case .sftp:
             TextField("User", text: $draft.sftpUser, prompt: Text("backup"))
             TextField("Host", text: $draft.sftpHost, prompt: Text("nas.local"))
+            TextField("Port", text: $draft.sftpPort, prompt: Text("22"))
             TextField("Path", text: $draft.sftpPath, prompt: Text("/volume1/restic"))
         case .s3:
             TextField("Endpoint", text: $draft.s3Endpoint, prompt: Text("s3.amazonaws.com"))
@@ -436,13 +438,9 @@ struct RepositoryEditorSheet: View {
 
     // MARK: - Logic
 
-    private var canSubmit: Bool {
-        guard draft.isConfigurationComplete else { return false }
-        if isNew {
-            return !password.isEmpty && password == confirmPassword
-        }
-        return true
-    }
+    /// The footer's reason and the buttons' state are one derivation: a
+    /// greyed button always has its reason beside it.
+    private var canSubmit: Bool { missingRequirement == nil }
 
     private var missingRequirement: String? {
         EditorRequirements.repository(

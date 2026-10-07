@@ -50,6 +50,8 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     // sftp
     var sftpUser: String = ""
     var sftpHost: String = ""
+    /// Blank for ssh's own port, 22; see `sftpCustomPort`.
+    var sftpPort: String = ""
     var sftpPath: String = ""
 
     // s3 / minio / wasabi
@@ -104,6 +106,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         localPath = c.value(.localPath, default: "")
         sftpUser = c.value(.sftpUser, default: "")
         sftpHost = c.value(.sftpHost, default: "")
+        sftpPort = c.value(.sftpPort, default: "")
         sftpPath = c.value(.sftpPath, default: "")
         s3Endpoint = c.value(.s3Endpoint, default: "s3.amazonaws.com")
         s3Bucket = c.value(.s3Bucket, default: "")
@@ -138,8 +141,16 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             // for plan sources and exclude patterns.
             return resolvedLocalPath
         case .sftp:
-            let user = sftpUser.isEmpty ? "" : "\(sftpUser)@"
-            return "sftp:\(user)\(sftpHost):\(sftpPath)"
+            guard let port = sftpCustomPort else {
+                let user = sftpUser.isEmpty ? "" : "\(sftpUser)@"
+                return "sftp:\(user)\(sftpHost):\(sftpPath)"
+            }
+            // Only restic's URL form carries a port. Its first slash ends the
+            // connection settings, so an absolute path keeps its own slash
+            // after it. restic 0.19.1 reads this form as a URL: the path is
+            // percent-encoded, or a `#` in it would cut it short.
+            let user = sftpUser.isEmpty ? "" : "\(Self.percentEncoded(sftpUser, .urlUserAllowed))@"
+            return "sftp://\(user)\(sftpHost):\(port)/\(Self.percentEncoded(sftpPath, .urlPathAllowed))"
         case .s3:
             let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
             let suffix = s3Prefix.isEmpty ? "" : "/\(s3Prefix.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
@@ -163,6 +174,20 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     private static func trimSlashes(_ value: String) -> String {
         value.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    /// Fails only on malformed UTF-16, which a Swift `String` never holds.
+    private static func percentEncoded(_ value: String, _ allowed: CharacterSet) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: allowed)!
+    }
+
+    /// The SFTP port when it is not ssh's own: nil for a blank field and
+    /// for 22, so every repository saved before the field existed keeps its
+    /// exact repository string. The editor refuses a field that is not a
+    /// port.
+    var sftpCustomPort: Int? {
+        guard let port = Int(sftpPort), port != 22 else { return nil }
+        return port
     }
 
     /// The local path with `~` expanded — the form every file-system

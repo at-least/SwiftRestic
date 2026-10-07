@@ -475,6 +475,50 @@ struct ResticIntegrationTests {
         }
     }
 
+    @Test("restic reads an SFTP repository string with a port where the editor meant it")
+    func sftpPortStringLandsWhereMeant() async throws {
+        // macOS's own sftp-server stands in for ssh and the NAS: restic
+        // speaks SFTP to it over a pipe, so the parsed path is what lands on
+        // disk, and the port in the string is parsed but never dialed.
+        let server = "/usr/libexec/sftp-server"
+        try #require(FileManager.default.isExecutableFile(atPath: server))
+        let binary = try ResticBinary.locate(userOverride: nil)
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticTests-\(UUID().uuidString)")
+            .resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        func initialize(_ repository: Repository) async throws -> Int32 {
+            let process = Process()
+            process.executableURL = binary.url
+            process.arguments = ["-r", repository.resticRepositoryString, "-o", "sftp.command=\(server)", "init"]
+            process.environment = ["RESTIC_PASSWORD": Self.password, "HOME": NSHomeDirectory()]
+            // The server's working directory is where a relative path lands.
+            process.currentDirectoryURL = root
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            await Self.waitForExit(process)
+            return process.terminationStatus
+        }
+
+        var repository = Repository()
+        repository.kind = .sftp
+        repository.sftpUser = "backup"
+        repository.sftpHost = "nas.example"
+        repository.sftpPort = "2222"
+        // A space and a `#`: unencoded, restic 0.19.1 reads the `#` as the
+        // URL's fragment and the path ends before it (probed).
+        repository.sftpPath = root.path + "/Mac #1"
+        #expect(try await initialize(repository) == 0)
+        #expect(FileManager.default.fileExists(atPath: root.path + "/Mac #1/config"))
+
+        repository.sftpPath = "relative-repo"
+        #expect(try await initialize(repository) == 0)
+        #expect(FileManager.default.fileExists(atPath: root.path + "/relative-repo/config"))
+    }
+
     @Test("a wrong password surfaces restic's exit code 12")
     func wrongPassword() async throws {
         let fixture = try makeFixture()
