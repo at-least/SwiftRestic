@@ -334,13 +334,17 @@ struct SnapshotDiffView: View {
                         }
                         Button("Restore “\(change.name)”…") { restore(change) }
                             .disabled(model.isRestoring || holder(of: change) == nil)
+                    } else if ids.count > 1 {
+                        let picked = rows.filter { ids.contains($0.id) }
+                        Button("Restore \(Format.plural(picked.count, "Item"))…") { restoreSelection(picked) }
+                            .disabled(model.isRestoring || picked.allSatisfy { holder(of: $0) == nil })
                     }
                 } primaryAction: { ids in
                     // Opens, never restores: a double-tap must not move bytes.
                     guard ids.count == 1, let change = rows.first(where: { $0.id == ids.first }) else { return }
                     showVersions(of: change)?()
                 }
-                .help("Double-click shows an item's versions; right-click to restore it from the backup that has it")
+                .help("Double-click shows an item's versions; Return or right-click restores the selection, each item from the backup that has it")
             }
         } else {
             // The filter pass for these inputs is still in flight — a blank
@@ -365,6 +369,14 @@ struct SnapshotDiffView: View {
                 // Files' does.
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                // Find Files' grammar: Return restores the selection, each
+                // row from the backup that has it, through the destination
+                // sheet.
+                let selected = (changeRows ?? []).filter { selection.contains($0.id) }
+                Button("Restore Selected…") { restoreSelection(selected) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(model.isRestoring || selected.allSatisfy { holder(of: $0) == nil })
             }
         }
         .padding(12)
@@ -399,15 +411,49 @@ struct SnapshotDiffView: View {
         }
     }
 
+    /// Restores the selected rows together: one destination sheet and one
+    /// run, each from the backup that has it (`DiffRestoreSelection`).
+    private func restoreSelection(_ picked: [ResticDiffChange]) {
+        let (items, note) = DiffRestoreSelection.plan(picked) { holder(of: $0) }
+        guard let first = items.first else { return }
+        guard items.count > 1 else {
+            restore(first.change, selectionNote: note)
+            return
+        }
+        let repositoryID = target.repositoryID
+        let backups = Set(items.map(\.backup.id))
+        destinationRequest = RestoreDestinationRequest(
+            subject: .items(items.map { RestoreItem(name: $0.change.name, path: $0.path, isDirectory: $0.change.isDirectory) }),
+            selectionNote: note,
+            backupTime: backups.count == 1 ? first.backup.time : nil,
+            snapshotShortID: first.backup.shortID,
+            backupCount: backups.count
+        ) { directories, overwrite in
+            Task {
+                do {
+                    var restored: [(snapshotID: String, node: SnapshotNode, directory: URL)] = []
+                    for (item, directory) in zip(items, directories) {
+                        let node = try await model.listedNode(repositoryID: repositoryID, snapshotID: item.backup.id, path: item.path)
+                        restored.append((snapshotID: item.backup.id, node: node, directory: directory))
+                    }
+                    model.restore(repositoryID: repositoryID, items: restored, overwrite: overwrite)
+                } catch {
+                    model.post(Banner(title: "Could not restore the selected items", message: error.localizedDescription, isError: true))
+                }
+            }
+        }
+    }
+
     /// Restores a row's item from the backup that has it, through the
     /// destination sheet. restic lists the node first (`listedNode`): a
     /// diff names a path and a kind, never a node.
-    private func restore(_ change: ResticDiffChange) {
+    private func restore(_ change: ResticDiffChange, selectionNote: String? = nil) {
         guard let record = holder(of: change) else { return }
         let repositoryID = target.repositoryID
         let path = ResticPath.normalized(change.path)
         destinationRequest = RestoreDestinationRequest(
             subject: .item(name: change.name, path: path, isDirectory: change.isDirectory),
+            selectionNote: selectionNote,
             backupTime: record.time,
             snapshotShortID: record.shortID
         ) { directories, overwrite in

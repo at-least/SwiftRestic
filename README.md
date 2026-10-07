@@ -373,7 +373,13 @@ checked in so a normal build does not need it.
   two that holds the item, the newer for an added or changed one, the older
   for a removed one. The restore lists the item's node with restic first, as
   Find Files does for an index hit: a diff names a path and a kind, never a
-  node.
+  node. Several rows (⌘- or ⇧-click) restore together, as Find Files'
+  results do: *Restore Selected…* (Return) or the right-click *Restore N
+  Items…* opens one destination sheet and one run, each row from the backup
+  of the two that holds it ("from 2 backups, each item from the one it was
+  found in"); a row inside a selected folder of the same backup comes with
+  the folder, and the sheet says so, while a file the newer backup removed
+  restores on its own, since the newer folder no longer holds it.
 - **Start at login** — the scheduler only runs while the app runs, so SwiftRestic
   can register itself as a login item and sit in the menu bar.
 - **Maintenance** — scheduled `check` and `prune` per repository, on a day
