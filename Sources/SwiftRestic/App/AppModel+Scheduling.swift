@@ -60,7 +60,7 @@ extension AppModel {
             busyPlanIDs: runningPlanIDs,
             busyRepositoryIDs: busy
         ) {
-            runBackup(planID: plan.id)
+            runBackup(planID: plan.id, askedByUser: false)
         }
     }
 
@@ -152,7 +152,7 @@ extension AppModel {
             },
             now: now
         ) {
-            runBackup(planID: planID)
+            runBackup(planID: planID, askedByUser: false)
         }
     }
 

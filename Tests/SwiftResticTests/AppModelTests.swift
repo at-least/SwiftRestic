@@ -536,6 +536,37 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a Back Up Now that ends skipped is answered with a passing banner in the skip's words; the scheduler's skip stays quiet")
+    func askedSkipIsAnswered() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == harness.repository.id })
+        model.configuration.repositories[index].localPath = "/Volumes/SwiftRestic Absent Drive/restic"
+        model.banners.removeAll()
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let banner = try #require(model.banners.first)
+        #expect(banner.title.hasSuffix("skipped"))
+        #expect(banner.message == "“SwiftRestic Absent Drive” is not connected.")
+        #expect(!banner.isError, "it goes by itself, like a success's")
+
+        // The same skip at a scheduled slot posts nothing.
+        model.banners.removeAll()
+        let planIndex = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        model.configuration.plans[planIndex].schedule.frequency = .hourly
+        model.configuration.plans[planIndex].lastRunAt = nil
+        let runs = model.configuration.runs.count
+        await model.runDuePlans()
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.configuration.plans[planIndex].lastRunAt != nil, "the slot ran")
+        #expect(model.configuration.runs.count == runs, "merged into the standing skip")
+        #expect(model.banners.isEmpty)
+
+        await model.shutdown()
+    }
+
     @Test("a backup that skipped only folders on a drive that is away is skipped, its snapshot kept; a folder simply gone stays a warning")
     func someSourcesAwayIsSkipped() async throws {
         let harness = try await makeHarness()

@@ -3,7 +3,8 @@ import Foundation
 extension AppModel {
     // MARK: - Running a backup
 
-    func runBackup(planID: UUID) {
+    /// `askedByUser` is false for the scheduler's and a mount's runs.
+    func runBackup(planID: UUID, askedByUser: Bool = true) {
         guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.plan(planID)) else { return }
         guard let plan = plan(id: planID) else { return }
@@ -23,6 +24,7 @@ extension AppModel {
         }
 
         installPlanActivity(planID: planID)
+        activity[planID]?.askedByUser = askedByUser
         tasks.install(Task { [weak self] in
             if let self {
                 await BackupRunEngine.perform(plan: plan, repository: repository, sink: self)
@@ -176,9 +178,12 @@ extension AppModel: BackupRunEngine.Sink {
             return
         case .skipped:
             // A drive away at every slot of an hourly plan would post one
-            // an hour; Activity says it, and the quiet-plan alert speaks if
-            // the drive stays away.
-            return
+            // an hour, so a run nobody asked for stays in Activity, and the
+            // quiet-plan alert speaks if the drive stays away. A Back Up Now
+            // is answered: it ends in milliseconds, the strip's flash saying
+            // nothing. Not an error, so it goes by itself.
+            guard let planID = record.planID, activity[planID]?.askedByUser == true else { return }
+            post(Banner(title: "“\(name)” skipped", message: record.detailText ?? "", isError: false))
         case .succeeded:
             post(Banner(
                 title: "“\(name)” backed up",

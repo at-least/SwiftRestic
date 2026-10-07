@@ -268,7 +268,10 @@ checked in so a normal build does not need it.
   connected.", the caveat "Can't read snapshots — “Travel SSD” is not
   connected." — earlier rows staying. A skipped run says it on the listing at
   once, and the volume mounting re-reads the listings of the repositories on
-  it, while backups are paused too.
+  it, while backups are paused too. A skip posts nothing at a scheduled slot
+  — an hourly plan would post one an hour — but a *Back Up Now* the user asked
+  for, which ends in milliseconds, is answered with a passing banner in the
+  same words: "“Documents” skipped — “Travel SSD” is not connected."
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day. While restic cannot be found the scheduler starts

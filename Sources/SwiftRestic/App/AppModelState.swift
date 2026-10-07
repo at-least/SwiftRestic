@@ -35,6 +35,9 @@ struct PlanActivity: Sendable, Equatable {
     /// slot but is no backup: however it ends — a quit's cancel included —
     /// it stamps no slot as run.
     var isBackup = true
+    /// A Back Up Now the user asked for, not the scheduler's or a mount's
+    /// catch-up: a skip answers it with a banner.
+    var askedByUser = false
 }
 
 /// Live state of one repository's check or prune.
