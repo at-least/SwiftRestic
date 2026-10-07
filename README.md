@@ -350,7 +350,12 @@ checked in so a normal build does not need it.
   opens its plan or its repository, and restores record which backup, which
   item and where it went. Run names carry their repository on every surface
   that names a run — the log sheet's header, notifications and failure
-  alerts, the menu bar and Settings.
+  alerts, the menu bar and Settings. The history keeps the newest *Keep runs*
+  records (Settings › General › History) and trims the oldest with their
+  logs, except what a standing problem still reads: each plan's newest
+  failed or completed-with-errors backup until a later success fixes it — its
+  caption and dot read it however old — and any other run's problem for the
+  week the Recent problems card, the Activity badge and the menu bar count.
 - **Menus** — the *Plan* and *Repository* menus act on what the sidebar has
   selected: a plan, a repository, or the repository a selected plan, backup
   record or Other-backups group belongs to. Items with nothing to act on are

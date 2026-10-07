@@ -128,6 +128,32 @@ enum OverviewMetrics {
         }
     }
 
+    /// The records a standing problem still reads, which the history cap
+    /// keeps past its count: each plan's newest failed or completed-with-
+    /// errors backup no later success healed — the sidebar caption and the
+    /// dot read it however old it is — and every other run's problem inside
+    /// the week, which a backup never heals (the repository's Recent
+    /// problems, the Activity badge, the menu bar). Bounded: one record per
+    /// plan, and a week of the rest.
+    static func standingProblemIDs(in runs: [RunRecord], now: Date) -> Set<UUID> {
+        var newestBackupProblem: [UUID: RunRecord] = [:]
+        var standing: Set<UUID> = []
+        let since = problemWindowStart(from: now)
+        for run in runs where run.outcome == .failed || run.outcome == .completedWithErrors {
+            if run.kind == .backup, let planID = run.planID {
+                if newestBackupProblem[planID].map({ $0.finishedAt < run.finishedAt }) ?? true {
+                    newestBackupProblem[planID] = run
+                }
+            } else if run.finishedAt >= since {
+                standing.insert(run.id)
+            }
+        }
+        for problem in newestBackupProblem.values where !isHealed(problem, in: runs) {
+            standing.insert(problem.id)
+        }
+        return standing
+    }
+
     /// One repository's share of that set, every kind of run: a check or
     /// prune has no plan, so the repository's page is the only place near it
     /// its failure can be read.

@@ -155,6 +155,11 @@ struct SettingsView: View {
                 Stepper(value: $model.configuration.settings.maxRunHistory, in: 20 ... 2000, step: 20) {
                     LabeledContent("Keep runs", value: "\(model.configuration.settings.maxRunHistory)")
                 }
+                // The trim's exemption (`OverviewMetrics.standingProblemIDs`).
+                Text("A problem that still stands is kept past this number: a plan's until a backup fixes it, any other for a week.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .formStyle(.grouped)

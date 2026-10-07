@@ -1890,3 +1890,74 @@ struct IndexCompletenessTests {
         #expect(await model.indexIsComplete(repositoryID: repositoryID))
     }
 }
+
+/// The "Keep runs" cap and what a standing problem still reads: the trim
+/// drops the oldest records by count, except the ones a standing surface
+/// would lose its problem with.
+@Suite("Run history trim")
+@MainActor
+struct RunHistoryTrimTests {
+    private func model() -> AppModel {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticTrim-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory()
+        )
+        model.configuration.settings.maxRunHistory = 20
+        return model
+    }
+
+    private func run(
+        _ kind: RunRecord.Kind,
+        plan: UUID? = nil,
+        _ outcome: RunRecord.Outcome,
+        hoursAgo: Double
+    ) -> RunRecord {
+        var record = RunRecord(kind: kind, planID: plan, planName: "Docs", startedAt: .now.addingTimeInterval(-hoursAgo * 3600))
+        record.outcome = outcome
+        return record
+    }
+
+    @Test("a plan's standing failure and a recent failed check outlive the cap; a healed failure, an old check and the rest trim by count")
+    func standingProblemsOutliveTheCap() {
+        let model = model()
+        let stuck = UUID()
+        let healed = UUID()
+        let busy = UUID()
+        // Oldest first, as they happen.
+        let standing = run(.backup, plan: stuck, .failed, hoursAgo: 300)
+        let olderFailure = run(.backup, plan: stuck, .completedWithErrors, hoursAgo: 310)
+        let healedFailure = run(.backup, plan: healed, .failed, hoursAgo: 299)
+        let healing = run(.backup, plan: healed, .succeeded, hoursAgo: 298)
+        let oldCheck = run(.check, .failed, hoursAgo: 200)
+        let recentCheck = run(.check, .failed, hoursAgo: 100)
+        for record in [olderFailure, standing, healedFailure, healing, oldCheck, recentCheck] {
+            model.append(record: record)
+        }
+        // A busy plan's successes push all of them past the cap.
+        for index in 0 ..< 25 {
+            model.append(record: run(.backup, plan: busy, .succeeded, hoursAgo: 50 - Double(index)))
+        }
+
+        let ids = Set(model.configuration.runs.map(\.id))
+        #expect(ids.contains(standing.id), "the plan's caption and dot still read it")
+        #expect(model.currentProblem(for: stuck)?.id == standing.id)
+        #expect(ids.contains(recentCheck.id), "inside the week the repository card and the menu bar count")
+        #expect(!ids.contains(olderFailure.id), "only the newest stands")
+        #expect(!ids.contains(healedFailure.id))
+        #expect(!ids.contains(healing.id))
+        #expect(!ids.contains(oldCheck.id))
+        #expect(model.configuration.runs.count == 22)
+        // Newest first still.
+        #expect(model.configuration.runs.first?.planID == busy)
+        #expect(model.configuration.runs.last?.id == standing.id)
+
+        // Healed, it trims like any other record.
+        model.append(record: run(.backup, plan: stuck, .succeeded, hoursAgo: 0))
+        model.append(record: run(.backup, plan: busy, .succeeded, hoursAgo: 0))
+        #expect(!model.configuration.runs.contains { $0.id == standing.id })
+        #expect(model.currentProblem(for: stuck) == nil)
+    }
+}

@@ -87,9 +87,12 @@ extension AppModel {
         configuration.runs.insert(record, at: 0)
         let limit = max(20, configuration.settings.maxRunHistory)
         if configuration.runs.count > limit {
-            let trimmed = configuration.runs.suffix(configuration.runs.count - limit).map(\.id)
-            configuration.runs.removeLast(configuration.runs.count - limit)
-            removeRunLogs(trimmed)
+            // Past the cap by count, except what a standing problem still
+            // reads (`OverviewMetrics.standingProblemIDs`).
+            let standing = OverviewMetrics.standingProblemIDs(in: configuration.runs, now: .now)
+            let trimmed = Set(configuration.runs.dropFirst(limit).map(\.id).filter { !standing.contains($0) })
+            configuration.runs.removeAll { trimmed.contains($0.id) }
+            removeRunLogs(Array(trimmed))
         }
     }
 
