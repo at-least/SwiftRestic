@@ -17,6 +17,9 @@ struct RestoreDestinationRequest: Identifiable {
     var selectionNote: String?
     let backupTime: Date?
     let snapshotShortID: String
+    /// How many backups the items come from: Find Files restores each row
+    /// from the backup it was found in.
+    var backupCount = 1
     /// Starts the restore with this policy, into these directories: one per
     /// item, in order (`RestoreSubject.directoryCount`) — the same folder for
     /// all, or for Original location each item's own parent — and one for
@@ -218,7 +221,8 @@ struct RestoreDestinationSheet: View {
     }
 
     private var backupLine: String {
-        request.backupTime.map { "from \(Format.timestamp($0))" } ?? "from backup \(request.snapshotShortID)"
+        if request.backupCount > 1 { return "from \(Format.count(request.backupCount)) backups, each item from the one it was found in" }
+        return request.backupTime.map { "from \(Format.timestamp($0))" } ?? "from backup \(request.snapshotShortID)"
     }
 
     /// The name the folder panel and the alerts use for what is restored.

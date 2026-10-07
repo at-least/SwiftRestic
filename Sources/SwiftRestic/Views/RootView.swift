@@ -305,7 +305,14 @@ struct RootView: View {
         case "plan": router.selection = model.configuration.plans.first.map { .plan($0.id) }
         case "repository": router.selection = model.configuration.repositories.first.map { .repository($0.id) }
         case "activity": router.selection = .activity
-        case "find": isShowingFind = true
+        case "find":
+            // SWIFTRESTIC_CAPTURE_FIND: a search to run on arrival in the
+            // first repository, as Search All Backups… hands one over.
+            if let pattern = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_FIND"],
+               let repositoryID = model.configuration.repositories.first?.id {
+                findPrefill = FindFilesView.Prefill(repositoryID: repositoryID, pattern: pattern)
+            }
+            isShowingFind = true
         // The Find pane over a non-first repository: the first plan whose
         // repository is not the landing pane's (a plan's own page searches
         // its Files tab instead). Plain `find` cannot tell the opening rule

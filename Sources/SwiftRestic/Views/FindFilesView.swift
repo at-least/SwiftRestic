@@ -36,7 +36,9 @@ struct FindFilesView: View {
     /// Whether the repository's index has finished its backfill. nil = not
     /// known yet for the selected repository.
     @State private var indexComplete: Bool?
-    @State private var selection: String?
+    /// Several at a time, as in the Restore pane: Restore Selected…
+    /// (Return) restores them together, each from its row's backup.
+    @State private var selection = Set<String>()
     @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var hasSearched = false
@@ -74,7 +76,9 @@ struct FindFilesView: View {
         let match: FindMatch
         let snapshotID: String
         let snapshotTime: Date?
-        /// Index rows know how many versions the path has; restic rows do not.
+        /// How many backups hold the path: every indexed one for an index
+        /// row, every searched one for a restic row — none for a search of
+        /// the latest snapshot only, which looked at one.
         let versionsCount: Int?
         /// Index rows carry the search hit; a restore resolves the node from
         /// the row's snapshot first, whatever kind the hit says (`restore`).
@@ -236,10 +240,9 @@ struct FindFilesView: View {
                 .width(min: 130, ideal: 160)
 
                 TableColumn("Versions") { row in
-                    // The index engine knows how many snapshots hold the path,
-                    // and the count is the way to them: Show Versions, as in
-                    // the row's context menu. The restic engine walked
-                    // exactly what it lists.
+                    // How many backups hold the path, and the way to them:
+                    // Show Versions, as in the row's context menu. A search
+                    // of the latest snapshot only looked at that one.
                     if let count = row.versionsCount, let open = showVersions(of: row) {
                         Button(action: open) {
                             HStack(spacing: 4) {
@@ -273,16 +276,22 @@ struct FindFilesView: View {
             // offers. Double-click does nothing: an accidental double-tap
             // must not start moving bytes.
             .contextMenu(forSelectionType: Row.ID.self) { ids in
-                if let id = ids.first, ids.count == 1,
-                   let row = rows.first(where: { $0.id == id }) {
-                    // The row is passed directly: a right-click on an
-                    // unselected row must not depend on selection state.
+                // The rows clicked are passed directly: a right-click on an
+                // unselected row must not depend on selection state.
+                let picked = rows.filter { ids.contains($0.id) }
+                if picked.count == 1, let row = picked.first {
                     Button("Restore “\(row.match.name)”…") {
-                        restoreSelection(row)
+                        restoreSelection(picked)
                     }
+                    .disabled(model.isRestoring)
                     if let open = showVersions(of: row) {
                         Button("Show Versions", action: open)
                     }
+                } else if picked.count > 1 {
+                    Button("Restore \(Format.plural(picked.count, "Item"))…") {
+                        restoreSelection(picked)
+                    }
+                    .disabled(model.isRestoring)
                 }
             }
         }
@@ -320,14 +329,14 @@ struct FindFilesView: View {
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .help(model.isRestoring ? "The restore keeps running" : "Close")
-                let selected = selectedRow(in: rows)
+                let selected = rows.filter { selection.contains($0.id) }
                 Button("Restore Selected…") { restoreSelection(selected) }
                     .buttonStyle(.borderedProminent)
                     // Same grammar as the Restore pane: Return offers the
                     // restore, always through the destination sheet, where
                     // the keep/replace choice lives.
                     .keyboardShortcut(.defaultAction)
-                    .disabled(selected == nil || model.isRestoring)
+                    .disabled(selected.isEmpty || model.isRestoring)
             }
         }
         .padding(12)
@@ -355,11 +364,6 @@ struct FindFilesView: View {
         }
     }
 
-    private func selectedRow(in rows: [Row]) -> Row? {
-        guard let selection else { return nil }
-        return rows.first { $0.id == selection }
-    }
-
     private var canSearch: Bool {
         repositoryID != nil
             && !isSearching
@@ -379,7 +383,7 @@ struct FindFilesView: View {
         // stopped early must not speak for a later restic-engine search that
         // ran to completion.
         resultsTruncated = false
-        selection = nil
+        selection = []
         searchTask = Task {
             // The engine is chosen per search, not per sheet: a backfill that
             // finished while the sheet sat open upgrades the next search.
@@ -405,14 +409,15 @@ struct FindFilesView: View {
                     // so a later render must not re-derive or re-sort it.
                     let snapshots = model.snapshots(for: searchedRepository)
                     let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
-                    rows = found
-                        .flatMap { result in
-                            result.matches.map {
-                                Row(match: $0, snapshotID: result.snapshot, snapshotTime: times[result.snapshot])
-                            }
-                        }
-                        // Newest snapshot first: that is usually the copy the user wants back.
-                        .sorted { ($0.snapshotTime ?? .distantPast) > ($1.snapshotTime ?? .distantPast) }
+                    // One row per path at its newest backup, newest first —
+                    // usually the copy the user wants back — as the index
+                    // engine's rows read.
+                    rows = FindResultGrouping.rows(found, times: times).map {
+                        Row(
+                            match: $0.match, snapshotID: $0.snapshotID, snapshotTime: $0.snapshotTime,
+                            versionsCount: searchedLatestOnly ? nil : $0.count
+                        )
+                    }
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -483,19 +488,55 @@ struct FindFilesView: View {
         resultsTruncated = false
         hasSearched = false
         errorMessage = nil
-        selection = nil
+        selection = []
     }
 
-    /// Restores the given row through the destination sheet, where the
-    /// keep/replace choice lives.
-    private func restoreSelection(_ row: Row?) {
-        guard let row, let repositoryID else { return }
+    /// Restores the picked rows through the destination sheet, where the
+    /// keep/replace choice lives — each from its row's backup. A folder
+    /// brings everything in it (`RestoreBatch.covering`), whichever backup
+    /// an item inside it was found in, and the sheet says so.
+    private func restoreSelection(_ picked: [Row]) {
+        guard let repositoryID else { return }
+        let nodes = picked.map(\.match.node)
+        let kept = Set(RestoreBatch.covering(nodes).map { PathKey($0.path) })
+        let restored = picked.filter { kept.contains(PathKey($0.match.path)) }
+        let note = RestoreBatch.coveredNote(RestoreBatch.covered(nodes))
+        guard let first = restored.first else { return }
+        guard restored.count > 1 else {
+            destinationRequest = RestoreDestinationRequest(
+                subject: .item(name: first.match.name, path: first.match.path, isDirectory: first.match.isDirectory),
+                selectionNote: note,
+                backupTime: first.snapshotTime,
+                snapshotShortID: String(first.snapshotID.prefix(8))
+            ) { directories, overwrite in
+                restore(first, repositoryID: repositoryID, to: directories[0], overwrite: overwrite)
+            }
+            return
+        }
+        let backups = Set(restored.map(\.snapshotID))
         destinationRequest = RestoreDestinationRequest(
-            subject: .item(name: row.match.name, path: row.match.path, isDirectory: row.match.isDirectory),
-            backupTime: row.snapshotTime,
-            snapshotShortID: String(row.snapshotID.prefix(8))
+            subject: .items(restored.map { RestoreItem(name: $0.match.name, path: $0.match.path, isDirectory: $0.match.isDirectory) }),
+            selectionNote: note,
+            backupTime: backups.count == 1 ? first.snapshotTime : nil,
+            snapshotShortID: String(first.snapshotID.prefix(8)),
+            backupCount: backups.count
         ) { directories, overwrite in
-            restore(row, repositoryID: repositoryID, to: directories[0], overwrite: overwrite)
+            Task {
+                do {
+                    // Index rows list their node first, as one row's
+                    // restore does (`restore(_:repositoryID:to:overwrite:)`).
+                    var items: [(snapshotID: String, node: SnapshotNode, directory: URL)] = []
+                    for (row, directory) in zip(restored, directories) {
+                        let node = row.hit == nil
+                            ? row.match.node
+                            : try await model.listedNode(repositoryID: repositoryID, snapshotID: row.snapshotID, path: row.match.path)
+                        items.append((snapshotID: row.snapshotID, node: node, directory: directory))
+                    }
+                    model.restore(repositoryID: repositoryID, items: items, overwrite: overwrite)
+                } catch {
+                    errorMessage = (error as? ResticError)?.errorDescription ?? error.localizedDescription
+                }
+            }
         }
     }
 

@@ -74,32 +74,55 @@ extension AppModel {
         items: [(node: SnapshotNode, directory: URL)],
         overwrite: RestoreOverwritePolicy
     ) {
+        restore(
+            repositoryID: repositoryID,
+            items: items.map { (snapshotID: snapshotID, node: $0.node, directory: $0.directory) },
+            overwrite: overwrite
+        )
+    }
+
+    /// Several items, each from its own backup — Find Files' selection, a
+    /// row per path at the backup it was found in: the backups in the
+    /// selection's order, each as `restore(repositoryID:snapshotID:items:)`
+    /// restores one — one restic call per folder of it and directory — all
+    /// steps of one run, each step's record naming its own backup.
+    func restore(
+        repositoryID: UUID,
+        items: [(snapshotID: String, node: SnapshotNode, directory: URL)],
+        overwrite: RestoreOverwritePolicy
+    ) {
         let reporter = restoreProgressReporter()
-        let steps = RestoreBatch.groups(items).map { group in
-            let label = Self.itemsLabel(group.nodes.map(\.name))
-            return RestoreStep(
-                label: label,
-                description: "Restoring \(label)",
-                sourcePath: nil,
-                sourcePaths: group.nodes.map(\.path),
-                destinationPath: group.directory.path,
-                itemCount: group.nodes.count,
-                operation: { service, context in
-                    try await service.restoreItems(
-                        context,
+        var backups: [String] = []
+        for item in items where !backups.contains(item.snapshotID) { backups.append(item.snapshotID) }
+        let steps = backups.flatMap { snapshotID in
+            RestoreBatch.groups(items.filter { $0.snapshotID == snapshotID }.map { (node: $0.node, directory: $0.directory) })
+                .map { group in
+                    let label = Self.itemsLabel(group.nodes.map(\.name))
+                    return RestoreStep(
+                        label: label,
+                        description: "Restoring \(label)",
                         snapshotID: snapshotID,
-                        parent: group.parent,
-                        nodes: group.nodes,
-                        destinationDirectory: group.directory,
-                        overwrite: overwrite,
-                        onProgress: reporter
+                        sourcePath: nil,
+                        sourcePaths: group.nodes.map(\.path),
+                        destinationPath: group.directory.path,
+                        itemCount: group.nodes.count,
+                        operation: { service, context in
+                            try await service.restoreItems(
+                                context,
+                                snapshotID: snapshotID,
+                                parent: group.parent,
+                                nodes: group.nodes,
+                                destinationDirectory: group.directory,
+                                overwrite: overwrite,
+                                onProgress: reporter
+                            )
+                        }
                     )
                 }
-            )
         }
         let landings = items.map { ResticService.restoredItemURL(for: $0.node, in: $0.directory) }
         let directories = Set(items.map(\.directory))
-        beginRestore(repositoryID: repositoryID, snapshotID: snapshotID, steps: steps) { [weak self] summaries in
+        beginRestore(repositoryID: repositoryID, steps: steps) { [weak self] summaries in
             self?.post(Self.itemsRestoreBanner(
                 landings: landings,
                 directory: directories.count == 1 ? directories.first : nil,
@@ -233,7 +256,7 @@ extension AppModel {
     }
 
     /// One item, or a whole backup: a run of one restic restore. See
-    /// `beginRestore(repositoryID:snapshotID:steps:onSuccess:)`.
+    /// `beginRestore(repositoryID:steps:onSuccess:)`.
     private func beginRestore(
         repositoryID: UUID,
         label: String,
@@ -246,10 +269,10 @@ extension AppModel {
     ) {
         beginRestore(
             repositoryID: repositoryID,
-            snapshotID: snapshotID,
             steps: [RestoreStep(
                 label: label,
                 description: description,
+                snapshotID: snapshotID,
                 sourcePath: sourcePath,
                 sourcePaths: nil,
                 destinationPath: destinationPath,
@@ -262,7 +285,7 @@ extension AppModel {
 
     /// Shared bookkeeping for every restore shape: one run at a time,
     /// progress published, and each step's outcome written to the run
-    /// history either way — with the backup it read (`snapshotID`), the
+    /// history either way — with the backup it read (its `snapshotID`), the
     /// items (`sourcePath`, `sourcePaths`, neither for a whole backup) and
     /// where they land (`destinationPath`: the restored item itself, or the
     /// folder several items or a whole backup go into), plus the step's
@@ -273,7 +296,6 @@ extension AppModel {
     /// every step's summary) runs only when all of them succeeded.
     private func beginRestore(
         repositoryID: UUID,
-        snapshotID: String,
         steps: [RestoreStep],
         onSuccess: @escaping @MainActor ([ResticSummary?]) -> Void
     ) {
@@ -309,7 +331,6 @@ extension AppModel {
                 guard case let .succeeded(summary) = await self.runRestoreStep(
                     step,
                     repositoryID: repositoryID,
-                    snapshotID: snapshotID,
                     restoredBefore: steps.count > 1 ? (itemsRestored, itemTotal) : nil
                 ) else { break }
                 summaries.append(summary)
@@ -333,9 +354,9 @@ extension AppModel {
     private func runRestoreStep(
         _ step: RestoreStep,
         repositoryID: UUID,
-        snapshotID: String,
         restoredBefore: (count: Int, total: Int)?
     ) async -> RestoreStepOutcome {
+        let snapshotID = step.snapshotID
         var record = RunRecord(
             kind: .restore,
             planName: step.label,
@@ -646,10 +667,12 @@ extension AppModel {
 }
 
 /// One restic restore in a restore run, with what its run record says
-/// about it. See `AppModel.beginRestore(repositoryID:snapshotID:steps:onSuccess:)`.
+/// about it. See `AppModel.beginRestore(repositoryID:steps:onSuccess:)`.
 private struct RestoreStep {
     var label: String
     var description: String
+    /// The backup it reads, which its record names.
+    var snapshotID: String
     var sourcePath: String?
     var sourcePaths: [String]?
     var destinationPath: String

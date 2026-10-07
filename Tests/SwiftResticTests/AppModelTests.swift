@@ -197,6 +197,47 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("items from several backups restore in one run, each from its own backup, each step's record naming it")
+    func restoreFromSeveralBackups() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let a = harness.sourceDirectory.appendingPathComponent("a.txt")
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        try "uno".write(to: a, atomically: true, encoding: .utf8)
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let backups = model.snapshots(for: harness.repository.id, planID: harness.plan.id).sorted { $0.time < $1.time }
+        try #require(backups.count == 2)
+
+        let first = harness.root.appendingPathComponent("from-first")
+        let second = harness.root.appendingPathComponent("from-second")
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+        let node = try await model.listedNode(repositoryID: harness.repository.id, snapshotID: backups[0].id, path: a.path)
+        model.restore(
+            repositoryID: harness.repository.id,
+            items: [
+                (snapshotID: backups[0].id, node: node, directory: first),
+                (snapshotID: backups[1].id, node: node, directory: second),
+            ],
+            overwrite: .keepExisting
+        )
+        let deadline = Date.now.addingTimeInterval(60)
+        while model.isRestoring, Date.now < deadline { try await Task.sleep(for: .milliseconds(50)) }
+
+        #expect(try String(contentsOf: first.appendingPathComponent("a.txt"), encoding: .utf8) == "one")
+        #expect(try String(contentsOf: second.appendingPathComponent("a.txt"), encoding: .utf8) == "uno")
+        let restores = model.configuration.runs.filter { $0.kind == .restore }
+        #expect(restores.count == 2)
+        #expect(Set(restores.compactMap(\.snapshotID)) == Set(backups.map(\.id)))
+        #expect(restores.allSatisfy { $0.outcome == .succeeded })
+
+        await model.shutdown()
+    }
+
     @Test("the Restore pane's drag provider promises a file's or a folder's content, restored on demand")
     func dragProviderPromisesContent() async throws {
         let harness = try await makeHarness()

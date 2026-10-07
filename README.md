@@ -311,7 +311,14 @@ checked in so a normal build does not need it.
   names its own repository. *Repository › Find Files in Snapshots…* (⇧⌘F)
   opens it — except on a plan's or a group's page, where it turns the page
   to its Files tab and puts the keyboard in its search field, which
-  searches that page's backups.
+  searches that page's backups. Each path is one row at the newest backup
+  that holds it, with how many backups do ("of 4 ›", Show Versions) —
+  whether the index answered or `restic find` did, so a common name does not
+  list a row per backup; a search of the latest snapshot only says "this
+  one". ⌘- or ⇧-click selects several rows, and *Restore Selected…* (Return)
+  restores them together through the destination sheet, each from its own
+  row's backup ("from 2 backups, each item from the one it was found in"),
+  an item inside a selected folder left to the folder.
 - **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
   runs `restic diff` against the previous snapshot of the same folders from the
   same Mac (any earlier one can be chosen) and lists what was added, removed or
@@ -576,7 +583,8 @@ Three more environment variables shape a capture run: `SWIFTRESTIC_APPEARANCE`
 (with `SWIFTRESTIC_CAPTURE_PANE=activity`), `retention` lands the plan editor
 on its Retention tab, and `adopt`/`adoptRetention` open the adopt sheet of the
 first adoptable group (with `SWIFTRESTIC_CAPTURE_PANE=orphanGroup`, the latter
-on its Retention tab),
+on its Retention tab), `SWIFTRESTIC_CAPTURE_FIND` runs a search on arrival
+in the first repository (with `SWIFTRESTIC_CAPTURE_PANE=find`),
 and `SWIFTRESTIC_REPO_PASSWORD` hands repositories a password directly (only
 honoured together with `SWIFTRESTIC_CONFIG_DIR`), so capture runs never read
 the login Keychain for a password. Writes are not redirected: saving a
