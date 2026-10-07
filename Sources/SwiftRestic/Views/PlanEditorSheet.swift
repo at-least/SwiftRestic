@@ -3,6 +3,7 @@ import SwiftUI
 struct PlanEditorSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.now) private var now
 
     @State private var draft: BackupPlan
     /// The state the sheet opened with (after the repository defaulting in
@@ -212,9 +213,9 @@ struct PlanEditorSheet: View {
         // centred in it.
         .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 620)
         .onAppear {
-            if draft.repositoryID == nil {
-                draft.repositoryID = model.configuration.repositories.first?.id
-            }
+            draft.repositoryID = EditorRequirements.initialRepositoryID(
+                draft.repositoryID, among: model.configuration.repositories
+            )
             // A new plan starts with its name; the Files tab below waits.
             if isNew { isNameFocused = true }
             // Snapshot after the defaulting above, so an untouched sheet is
@@ -374,6 +375,18 @@ struct PlanEditorSheet: View {
                 placeholder: "/Users/you/Documents",
                 expandsTildeInPath: true
             )
+            // A folder that is gone fills the history with "does not exist,
+            // skipping" lines; said here first. Adopt's footer already says
+            // it, in the same words.
+            if mode != .adopt, !draft.sources.isEmpty, !AppModel.allSourcesExist(draft.sources) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
+                    Text(AppModel.missingSourcesWarning)
+                }
+                .font(.callout)
+            }
             // Said here, where the source is chosen, rather than after a
             // backup comes back with warnings. The check is a few string
             // comparisons per source (ProtectedLocations).
@@ -397,8 +410,10 @@ struct PlanEditorSheet: View {
                 title: "Exclude patterns",
                 systemImage: "eye.slash",
                 paths: $draft.excludePatterns,
-                allowsBrowsing: false,
-                placeholder: "e.g. **/node_modules"  // a String variable, so not parsed as Markdown
+                placeholder: "e.g. **/node_modules",  // a String variable, so not parsed as Markdown
+                browseMessage: "Choose folders and files to leave out of backups",
+                browsePrompt: "Exclude",
+                escapesPickedGlobs: true
             )
             Toggle("Skip folders marked as caches (CACHEDIR.TAG)", isOn: $draft.excludeCaches)
             Toggle("Stay on one filesystem", isOn: $draft.oneFileSystem)
@@ -465,6 +480,23 @@ struct PlanEditorSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // When this schedule fires, as the plan page will say once it
+            // is saved — the moment a wrong guess would otherwise first
+            // show as a surprise run.
+            if let next = PlanStatus.editorNextBackup(
+                draft: draft,
+                stored: model.plan(id: draft.id),
+                existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
+                hold: model.scheduleHold,
+                isBackingUp: model.activity[draft.id]?.isBackup == true,
+                now: now
+            ) {
+                LabeledContent("Next backup") {
+                    Text(next.value)
+                        .help(next.help ?? "")
+                }
             }
 
             // No summary row: it would only restate the pickers above. The

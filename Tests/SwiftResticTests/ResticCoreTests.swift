@@ -57,6 +57,57 @@ struct ResticErrorTests {
         )
     }
 
+    @Test("an SFTP host-key refusal names its fix, from the line ssh printed beside restic's fatal one")
+    func sshHostKey() {
+        // restic 0.19.1, `cat config --json` over sftp with no terminal, as
+        // the app runs it: ssh's verdict arrives as plain stderr lines
+        // restic prefixes "subprocess ssh: ", and the exit_error JSON does
+        // not carry it.
+        let fatal = "Fatal: unable to open repository at sftp:nas:/srv/restic: unable to start the sftp session, "
+            + "error: error receiving version packet from server: server unexpectedly closed connection: unexpected EOF"
+        func result(_ sshLines: [String]) -> ResticRunResult {
+            let json = #"{"message_type":"exit_error","code":1,"message":"\#(fatal)"}"#
+            return ResticRunResult(
+                exitCode: 1,
+                messages: [.exitError(ResticExitError(code: 1, message: fatal))],
+                stdout: "",
+                stderr: (sshLines.map { "subprocess ssh: \($0)" } + [json]).joined(separator: "\n") + "\n"
+            )
+        }
+
+        // A server this Mac has never connected to.
+        let unknown = result(["Host key verification failed."])
+        #expect(unknown.failureMessage == fatal + "\nsubprocess ssh: Host key verification failed.")
+        // A server whose key changed: ssh's banner runs to a dozen lines;
+        // its verdict is the last ones.
+        let changed = result([
+            "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",
+            "@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @",
+            "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",
+            "IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!",
+            "Offending ED25519 key in /Users/me/.ssh/known_hosts:1",
+            "Host key for nas has changed and you have requested strict checking.",
+            "Host key verification failed.",
+        ])
+        #expect(changed.failureMessage == fatal
+            + "\nsubprocess ssh: Offending ED25519 key in /Users/me/.ssh/known_hosts:1"
+            + "\nsubprocess ssh: Host key for nas has changed and you have requested strict checking."
+            + "\nsubprocess ssh: Host key verification failed.")
+        // Nothing from a subprocess: restic's fatal line alone, as before.
+        #expect(result([]).failureMessage == fatal)
+
+        let unknownText = ResticError.commandFailed(exitCode: 1, message: unknown.failureMessage).errorDescription ?? ""
+        #expect(unknownText.hasPrefix("SSH does not know this server's key yet"))
+        #expect(unknownText.contains("Connect to it once in Terminal with ssh"))
+        #expect(unknownText.hasSuffix("restic reported: \(fatal)"))
+        let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
+        #expect(changedText.hasPrefix("This server's SSH key has changed since this Mac last connected"))
+        #expect(changedText.contains("ssh-keygen -R"))
+        // Any other fatal error keeps its wording.
+        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription
+            == "restic reported a fatal error — \(fatal)")
+    }
+
     @Test("the other failure shapes name what the user can do about them")
     func otherDescriptions() {
         #expect(

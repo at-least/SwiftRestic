@@ -73,9 +73,16 @@ struct ResticRunResult: Sendable {
     }
 
     /// restic's fatal-error line when it wrote one as JSON, else the tail of
-    /// stderr — what a failed command's error carries.
+    /// stderr — what a failed command's error carries. Under `--json` the
+    /// fatal line can lose the cause: what ssh or rclone said reaches
+    /// stderr only as plain lines restic prefixes "subprocess " ("subprocess
+    /// ssh: Host key verification failed.", restic 0.19.1), so the last of
+    /// those follow the fatal line — ssh's verdict is its last lines, after
+    /// a warning banner that runs to a dozen.
     var failureMessage: String {
-        exitError?.message ?? ResticRunner.tail(of: stderr, limit: 2000)
+        guard let fatal = exitError?.message else { return ResticRunner.tail(of: stderr, limit: 2000) }
+        let subprocess = stderr.split(separator: "\n").filter { $0.hasPrefix("subprocess ") }.suffix(3)
+        return ([fatal] + subprocess.map(String.init)).joined(separator: "\n")
     }
 
     /// Non-fatal per-item errors, in order.

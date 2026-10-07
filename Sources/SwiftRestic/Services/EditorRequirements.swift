@@ -23,6 +23,14 @@ enum EditorRequirements {
         return nil
     }
 
+    /// The repository a plan editor opens on: the plan's own, else the
+    /// only one there is. With two or more the picker says Choose… and the
+    /// footer asks — a silent first pick lands the plan wherever the first
+    /// row points.
+    static func initialRepositoryID(_ current: UUID?, among repositories: [Repository]) -> UUID? {
+        current ?? (repositories.count == 1 ? repositories[0].id : nil)
+    }
+
     /// The first requirement `Repository.isConfigurationComplete` plus the
     /// password rules bind only a new repository — an existing one spells
     /// "unchanged" with blank fields, not a gap.

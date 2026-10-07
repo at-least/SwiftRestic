@@ -59,6 +59,9 @@ enum ResticError: Error, LocalizedError, Equatable {
                 let restic = Format.firstSentence(message)
                 return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
             }
+            if let advice = Self.sshHostKeyAdvice(message) {
+                return "\(advice) restic reported: \(Format.firstSentence(message))"
+            }
             let known = ResticError.knownExitCodeDescription(code)
             if message.isEmpty { return known ?? "restic exited with code \(code)." }
             return known.map { "\($0) — \(message)" } ?? message
@@ -83,6 +86,21 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .folderInTheWay(path):
             return "A folder is already at \(path), where a restored file would go, so nothing was restored. Move it aside, or restore somewhere else."
         }
+    }
+
+    /// What to do when ssh refused the server's host key — the line ssh
+    /// prints both for a server it has never seen, which it cannot ask
+    /// about without a terminal, and for one whose key changed (checked
+    /// against restic 0.19.1 over sftp, run as the app runs it).
+    static func sshHostKeyAdvice(_ message: String) -> String? {
+        guard message.contains("Host key verification failed") else { return nil }
+        if message.contains("has changed") {
+            return "This server's SSH key has changed since this Mac last connected, and SSH refuses it: "
+                + "the server was reinstalled, or another machine is answering. If you expect the change, "
+                + "remove the old key with ssh-keygen -R and the server's name in Terminal, then connect once with ssh."
+        }
+        return "SSH does not know this server's key yet, and restic runs SSH without a terminal to confirm it. "
+            + "Connect to it once in Terminal with ssh and accept the key, then try again."
     }
 
     /// restic's documented exit codes.

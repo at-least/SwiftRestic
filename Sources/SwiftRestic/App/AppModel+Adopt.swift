@@ -100,7 +100,7 @@ extension AppModel {
         if prefill.hostname != localHostname, draft.sources == prefill.paths {
             warnings.append("The folders come from another Mac and may not exist here.")
         } else if !Self.allSourcesExist(draft.sources) {
-            warnings.append("Not all of these folders still exist on this Mac.")
+            warnings.append(Self.missingSourcesWarning)
         }
         // Both conditions: a stale foreign host is not another Mac still
         // writing, and a fresh backup this Mac made is the confirmation's
@@ -180,6 +180,10 @@ extension AppModel {
     static func prefillSnapshot(among snapshots: [Snapshot], localHost: String) -> Snapshot? {
         snapshots.first { $0.hostname == localHost } ?? snapshots.first
     }
+
+    /// The missing-folders warning, said by the adopt sheet's footer and
+    /// beside the plan editor's folders.
+    static let missingSourcesWarning = "Not all of these folders still exist on this Mac."
 
     /// Whether every source folder (or file) is on this Mac now, tilde
     /// expanded — the fact behind both the schedule's default and the

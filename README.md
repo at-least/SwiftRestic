@@ -163,7 +163,9 @@ checked in so a normal build does not need it.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob
   Storage, Google Cloud Storage, an rclone remote, or a restic REST server.
   Creating one runs `restic init`; the app refuses to save a repository it could
-  not reach.
+  not reach. The editor asks *Where is it?* — on this Mac, on another machine,
+  in the cloud, through a gateway — and groups the kinds that way whether the
+  repository is new or being edited.
 - **Backup plans** — a set of folders, exclude patterns, a schedule and a
   retention policy, pointed at one repository. Each plan stamps its snapshots
   with a private tag so retention can only ever touch its own. A plan's page
@@ -173,7 +175,13 @@ checked in so a normal build does not need it.
   Schedule*, its arrow offering the lengths, or *Resume Schedule* while
   paused (a manual plan has nothing to pause and shows none), and
   *Configuration* (its folders, exclude patterns and hooks) with *Edit*.
-  Every one of them is in the Plan menu and the plan row's menu too.
+  Every one of them is in the Plan menu and the plan row's menu too. The
+  plan editor picks the repository for a new plan only when there is just
+  one; it says when one of the plan's folders is not on this Mac; its exclude
+  list takes items chosen in a panel or dropped from Finder as their own
+  paths, glob characters escaped so each matches itself alone; and its
+  Schedule tab shows *Next backup* for the schedule being chosen, the plan
+  page's own value for the plan as Save would store it.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day.
@@ -651,7 +659,12 @@ stretch.
   AppleScript, a logout, restart or shutdown never waits on that question.
 - SFTP repositories do not inherit `SSH_AUTH_SOCK` from a GUI launch, so a
   passphrase-protected key cannot be unlocked. Use a passphrase-less key or an
-  `~/.ssh/config` entry with an explicit `IdentityFile`.
+  `~/.ssh/config` entry with an explicit `IdentityFile`. Nor can SSH ask to
+  accept a server's key without a terminal: connect once with `ssh` in
+  Terminal first. A refused host key (`Host key verification failed`, which
+  restic 0.19.1 prints only as a `subprocess ssh:` stderr line beside its JSON
+  error) is named in the failure, with the way to fix it — new server or
+  changed key.
 - No cron expressions: the schedule covers manual, every N hours, daily and
   weekly. No rclone-style remote *management* either — configure remotes with
   rclone itself.

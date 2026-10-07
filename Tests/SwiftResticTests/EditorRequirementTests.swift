@@ -26,6 +26,30 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.plan(plan) == "Name the plan to save it.")
     }
 
+    @Test("a new plan's repository is chosen for it only when there is one to choose")
+    func initialRepository() {
+        let one = Repository()
+        let two = Repository()
+        #expect(EditorRequirements.initialRepositoryID(nil, among: [one]) == one.id)
+        // Two or more: the picker says Choose…, and the footer asks.
+        #expect(EditorRequirements.initialRepositoryID(nil, among: [one, two]) == nil)
+        #expect(EditorRequirements.initialRepositoryID(nil, among: []) == nil)
+        // A plan that has one keeps it.
+        #expect(EditorRequirements.initialRepositoryID(two.id, among: [one, two]) == two.id)
+    }
+
+    @Test("a browsed or dropped exclude is the item's own path, glob characters escaped; a typed one is a pattern")
+    func excludeEntries() {
+        #expect(PathListEntry.value(for: " /Users/me/a[1].txt ", expandsTildeInPath: false, escapesGlobs: true)
+            == #"/Users/me/a\[1].txt"#)
+        #expect(PathListEntry.value(for: "**/node_modules", expandsTildeInPath: false, escapesGlobs: false)
+            == "**/node_modules")
+        #expect(PathListEntry.value(for: "   ", expandsTildeInPath: false, escapesGlobs: true) == nil)
+        // Sources: a real path, its tilde expanded.
+        #expect(PathListEntry.value(for: " ~/Documents", expandsTildeInPath: true, escapesGlobs: false)
+            == NSHomeDirectory() + "/Documents")
+    }
+
     @Test("the repository editor names the first unmet requirement per kind")
     func repositoryRequirementPerKind() {
         var draft = Repository()

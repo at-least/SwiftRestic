@@ -140,6 +140,29 @@ enum PlanStatus {
     /// app-wide `hold`, moves the date to its end; under an open-ended hold
     /// a due run reads "Waiting", never "Due now". A due slot whose backup
     /// is in flight reads "Running now".
+    /// The plan editor's Schedule tab: the Next backup tile of the plan as
+    /// Save would store it — the stored plan's run stamps and pause under
+    /// the draft's schedule (`merging(draft:)`) — so the editor cannot
+    /// promise a run the page will not show once saved. Nil where the tab
+    /// already speaks: a manual or switched-off schedule, a timed pause
+    /// (its own line), and a setup the footer says is incomplete.
+    static func editorNextBackup(
+        draft: BackupPlan,
+        stored: BackupPlan?,
+        existingRepositoryIDs: Set<UUID>,
+        hold: ScheduleHold? = nil,
+        isBackingUp: Bool = false,
+        now: Date = .now
+    ) -> TileFace? {
+        let plan = stored?.merging(draft: draft) ?? draft
+        guard plan.isEnabled, plan.schedule.frequency != .manual,
+              plan.activePauseEnd(at: now) == nil, plan.isConfigurationComplete
+        else { return nil }
+        return nextBackupTile(
+            for: plan, existingRepositoryIDs: existingRepositoryIDs, hold: hold, isBackingUp: isBackingUp, now: now
+        )
+    }
+
     static func nextBackupTile(
         for plan: BackupPlan,
         existingRepositoryIDs: Set<UUID>,

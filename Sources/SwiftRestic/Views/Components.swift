@@ -614,12 +614,17 @@ struct PathListEditor: View {
     /// wear the same icon.
     var systemImage = "folder.badge.gearshape"
     @Binding var paths: [String]
-    var allowsBrowsing = true
     var placeholder = "Add a pattern"
     /// Sources are real paths, so a leading `~` has to become the home
     /// directory — restic never sees a shell. Excludes are match patterns
     /// where `~` must stay literal.
     var expandsTildeInPath = false
+    /// Choose…'s panel: what it asks for and its button.
+    var browseMessage = "Choose folders and files to back up"
+    var browsePrompt = "Add"
+    /// Excludes: an item chosen in the panel or dropped from Finder is
+    /// entered as its own path, matching itself alone (`PathListEntry`).
+    var escapesPickedGlobs = false
 
     @State private var selection: Set<String> = []
     @State private var draft = ""
@@ -657,7 +662,7 @@ struct PathListEditor: View {
                 // would silently become a nonexistent backup source.
                 let filePaths = urls.filter(\.isFileURL).map(\.path)
                 guard !filePaths.isEmpty else { return false }
-                addPaths(filePaths)
+                addPaths(filePaths, picked: true)
                 return true
             } isTargeted: { isDropTargeted = $0 }
 
@@ -667,9 +672,7 @@ struct PathListEditor: View {
                     .onSubmit(addDraft)
                 Button("Add", action: addDraft)
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-                if allowsBrowsing {
-                    Button("Choose…") { browse() }
-                }
+                Button("Choose…") { browse() }
                 Spacer()
                 Button("Remove") {
                     paths.removeAll { selection.contains($0) }
@@ -681,28 +684,25 @@ struct PathListEditor: View {
     }
 
     private func addDraft() {
-        addPaths([draft])
+        addPaths([draft], picked: false)
     }
 
-    private func addPaths(_ rawPaths: [String]) {
+    /// `picked`: the paths came from the panel or a drop, not the field.
+    private func addPaths(_ rawPaths: [String], picked: Bool) {
         for raw in rawPaths {
-            // Trim first: a pasted " ~/Documents" does not start with `~`, so
-            // expanding before trimming would leave the tilde literal — and
-            // restic, seeing no shell, would stat a path that cannot exist.
-            let trimmed = raw.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-            let value = expandsTildeInPath
-                ? (trimmed as NSString).expandingTildeInPath
-                : trimmed
-            guard !paths.contains(value) else { continue }
+            guard let value = PathListEntry.value(
+                for: raw,
+                expandsTildeInPath: expandsTildeInPath,
+                escapesGlobs: picked && escapesPickedGlobs
+            ), !paths.contains(value) else { continue }
             paths.append(value)
         }
         draft = ""
     }
 
     private func browse() {
-        guard let chosen = FilePicker.chooseFoldersAndFiles() else { return }
-        addPaths(chosen.map(\.path))
+        guard let chosen = FilePicker.chooseFoldersAndFiles(message: browseMessage, prompt: browsePrompt) else { return }
+        addPaths(chosen.map(\.path), picked: true)
     }
 }
 
@@ -712,13 +712,13 @@ struct PathListEditor: View {
 /// replace here (we need multi-select across both files and folders).
 enum FilePicker {
     @MainActor
-    static func chooseFoldersAndFiles() -> [URL]? {
+    static func chooseFoldersAndFiles(message: String, prompt: String) -> [URL]? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
-        panel.message = "Choose folders and files to back up"
-        panel.prompt = "Add"
+        panel.message = message
+        panel.prompt = prompt
         return panel.runModal() == .OK ? panel.urls : nil
     }
 

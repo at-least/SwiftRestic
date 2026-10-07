@@ -24,6 +24,49 @@ struct PlanStatusTests {
 
     // MARK: - Next backup tile
 
+    @Test("the plan editor's Next backup is the page's tile for the plan as Save would store it")
+    func editorNextBackup() throws {
+        // The stored plan ran an hour ago, covering today's slot two hours
+        // back; the draft carries no stamp (opened before that run), and
+        // must not read as due.
+        var stored = completeDailyPlan()
+        let slot = Calendar.current.dateComponents([.hour, .minute], from: now.addingTimeInterval(-7200))
+        stored.schedule.hour = try #require(slot.hour)
+        stored.schedule.minute = try #require(slot.minute)
+        var draft = stored
+        draft.lastRunAt = nil
+        let face = PlanStatus.editorNextBackup(
+            draft: draft, stored: stored, existingRepositoryIDs: [repositoryID], now: now
+        )
+        #expect(face == PlanStatus.nextBackupTile(for: stored, existingRepositoryIDs: [repositoryID], now: now))
+        #expect(face?.value != "Due now")
+
+        // The draft's schedule is what it shows: weekly moves the date.
+        draft.schedule.frequency = .weekly
+        #expect(PlanStatus.editorNextBackup(draft: draft, stored: stored, existingRepositoryIDs: [repositoryID], now: now)
+            == PlanStatus.nextBackupTile(for: stored.merging(draft: draft), existingRepositoryIDs: [repositoryID], now: now))
+
+        // A new plan has never run: due at once, as the footer says.
+        #expect(PlanStatus.editorNextBackup(draft: draft, stored: nil, existingRepositoryIDs: [repositoryID], now: now)?.value
+            == "Due now")
+
+        // Nothing where the tab already speaks: manual, switched off, a
+        // timed pause (its own line), or a setup the footer says is
+        // incomplete.
+        var manual = draft
+        manual.schedule.frequency = .manual
+        var off = draft
+        off.isEnabled = false
+        var paused = stored
+        paused.pausedUntil = now.addingTimeInterval(3600)
+        var incomplete = draft
+        incomplete.sources = []
+        #expect(PlanStatus.editorNextBackup(draft: manual, stored: stored, existingRepositoryIDs: [repositoryID], now: now) == nil)
+        #expect(PlanStatus.editorNextBackup(draft: off, stored: stored, existingRepositoryIDs: [repositoryID], now: now) == nil)
+        #expect(PlanStatus.editorNextBackup(draft: draft, stored: paused, existingRepositoryIDs: [repositoryID], now: now) == nil)
+        #expect(PlanStatus.editorNextBackup(draft: incomplete, stored: stored, existingRepositoryIDs: [repositoryID], now: now) == nil)
+    }
+
     @Test("a paused plan's Next backup tile says Paused, not Manually")
     func pausedPlanTile() {
         var plan = completeDailyPlan()

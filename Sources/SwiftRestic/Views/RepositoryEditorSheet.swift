@@ -151,6 +151,14 @@ struct RepositoryEditorSheet: View {
         }
     }
 
+    /// The SSH note's first-contact step, with this repository's server
+    /// once its name is typed.
+    private var firstContact: String {
+        guard !draft.sftpHost.isEmpty else { return "connect to it once in Terminal with ssh and accept its key." }
+        let user = draft.sftpUser.isEmpty ? "" : "\(draft.sftpUser)@"
+        return "connect once in Terminal (ssh \(user)\(draft.sftpHost)) and accept its key."
+    }
+
     private var settingsForm: some View {
         Form {
             Section {
@@ -158,49 +166,30 @@ struct RepositoryEditorSheet: View {
                 // The eight kinds grouped by where the backup lives: the
                 // destination answers "where is it" as the section header
                 // above each kind, so one control carries both questions.
-                if isNew {
-                    Picker("Where is it?", selection: $draft.kind) {
-                        Section("On this Mac") {
-                            Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
-                        }
-                        Section("On another machine") {
-                            Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
-                            Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
-                        }
-                        Section("In the cloud") {
-                            Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
-                            Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
-                            Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
-                            Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
-                        }
-                        Section("Through a gateway") {
-                            Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
-                        }
+                // The same grouping when the repository is edited — what the
+                // user knows of it is the place they picked it by.
+                Picker("Where is it?", selection: $draft.kind) {
+                    Section("On this Mac") {
+                        Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
                     }
-                    Text(draft.kind.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    // Grouped by how a restic backend is actually reached, so
-                    // the eight kinds read as three decisions instead of one wall.
-                    Picker("Type", selection: $draft.kind) {
-                        Section("Local and direct") {
-                            Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
-                            Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
-                        }
-                        Section("Cloud storage") {
-                            Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
-                            Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
-                            Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
-                            Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
-                        }
-                        Section("Gateways") {
-                            Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
-                            Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
-                        }
+                    Section("On another machine") {
+                        Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
+                        Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
+                    }
+                    Section("In the cloud") {
+                        Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
+                        Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
+                        Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
+                        Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
+                    }
+                    Section("Through a gateway") {
+                        Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
                     }
                 }
+                Text(draft.kind.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Location") { locationFields }
@@ -227,7 +216,8 @@ struct RepositoryEditorSheet: View {
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         Text(
-                            "SwiftRestic launches restic without a terminal, so it cannot answer an SSH passphrase prompt and does not inherit your ssh-agent. Use a key without a passphrase, or add the host to ~/.ssh/config with IdentityFile."
+                            "SwiftRestic launches restic without a terminal, so it cannot answer an SSH passphrase prompt and does not inherit your ssh-agent. Use a key without a passphrase, or add the host to ~/.ssh/config with IdentityFile. "
+                                + "Nor can it accept a server's key on first contact: \(firstContact) SSH then refuses the server if its key ever changes."
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
