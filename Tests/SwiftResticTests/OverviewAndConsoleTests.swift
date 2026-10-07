@@ -167,7 +167,7 @@ struct OverviewMetricsTests {
             )
             let summary = OverviewMetrics.protectionSummary(
                 rows: rows, listingLoaded: true, otherBackupsCount: 0,
-                hold: nil, now: tick, relative: ago
+                willNotRun: { _ in nil }, hold: nil, now: tick, relative: ago
             )
             let caption = PlanStatus.sidebarCaption(
                 for: plan, activity: nil, problem: nil, latestSnapshot: newest,
@@ -359,7 +359,7 @@ struct OverviewMetricsTests {
         // is the newer of the two moments that have one.
         let plain = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 3,
-            hold: nil, now: date("2026-09-05 11:00:00"),
+            willNotRun: { _ in nil }, hold: nil, now: date("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
         #expect(plain?.text == "1 of 2 plans protected · Last backup 1 hour ago")
@@ -369,7 +369,7 @@ struct OverviewMetricsTests {
         let end = date("2026-09-05 14:00:00")
         let paused = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
-            hold: .paused(until: end), now: date("2026-09-05 11:00:00"),
+            willNotRun: { _ in nil }, hold: .paused(until: end), now: date("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
         #expect(paused?.text == "1 of 2 plans protected · Last backup 1 hour ago · "
@@ -380,7 +380,7 @@ struct OverviewMetricsTests {
         // plugging in.
         let onBattery = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
-            hold: .onBattery, now: date("2026-09-05 11:00:00"),
+            willNotRun: { _ in nil }, hold: .onBattery, now: date("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
         #expect(onBattery?.text == "1 of 2 plans protected · Last backup 1 hour ago · Backups wait for power — this Mac is on battery")
@@ -390,7 +390,7 @@ struct OverviewMetricsTests {
         // moment entirely rather than promising "Never".
         let single = OverviewMetrics.protectionSummary(
             rows: [protectionRow("Only", isKnown: true, isProtected: true, lastBackupAt: nil)],
-            listingLoaded: true, otherBackupsCount: 0, hold: nil,
+            listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil,
             now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         )
         #expect(single?.text == "1 of 1 plan protected")
@@ -399,10 +399,76 @@ struct OverviewMetricsTests {
                 protectionRow("Empty", isKnown: true, isProtected: false),
                 protectionRow("Adopted", isKnown: true, isProtected: false),
             ],
-            listingLoaded: true, otherBackupsCount: 0, hold: nil,
+            listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil,
             now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         )
         #expect(neverRan?.text == "0 of 2 plans protected")
+    }
+
+    @Test("the Protection card names each protected plan that will not run by itself, in the sidebar's words")
+    func protectionNamesPlansThatWillNotRun() {
+        let repository = UUID()
+        let now = date("2026-09-05 11:00:00")
+        var photos = plan("Photos", repository: repository)
+        photos.sources = ["/Users/someone/Pictures"]
+        photos.schedule.frequency = .weekly
+        photos.isEnabled = false
+        var documents = plan("Documents", repository: repository)
+        documents.sources = ["/Users/someone/Documents"]
+        documents.schedule.frequency = .daily
+        documents.pausedUntil = date("2026-09-05 13:00:00")
+        var code = plan("Code", repository: repository)
+        code.schedule.frequency = .hourly
+        var manual = plan("Archive", repository: repository)
+        manual.sources = ["/Users/someone/Archive"]
+        manual.schedule.frequency = .manual
+        manual.isEnabled = false
+        var running = plan("Music", repository: repository)
+        running.sources = ["/Users/someone/Music"]
+        running.schedule.frequency = .daily
+        let plans = [photos, documents, code, manual, running]
+
+        // The sidebar's pause words, "Not scheduled" for a plan the
+        // scheduler skips; a manual plan never runs by itself, paused or not.
+        func caption(_ plan: BackupPlan) -> String? {
+            PlanStatus.willNotRunCaption(for: plan, existingRepositoryIDs: [repository], now: now)
+        }
+        #expect(caption(photos) == PlanStatus.pauseCaption(for: photos, now: now))
+        #expect(caption(photos) == "Paused — \(photos.schedule.summary)")
+        #expect(caption(documents) == PlanStatus.pauseCaption(for: documents, now: now))
+        #expect(caption(code) == "Not scheduled")
+        #expect(caption(manual) == nil)
+        #expect(caption(running) == nil)
+
+        let rows = plans.map {
+            ProtectionRow(
+                plan: $0, stateText: "Last backup 1 hour ago",
+                isKnown: true, isProtected: true, didFail: false, lastBackupAt: date("2026-09-05 10:00:00")
+            )
+        }
+        let byID = Dictionary(uniqueKeysWithValues: plans.map { ($0.id, $0) })
+        let summary = OverviewMetrics.protectionSummary(
+            rows: rows, listingLoaded: true, otherBackupsCount: 0,
+            willNotRun: { byID[$0].flatMap(caption) },
+            hold: nil, now: now, relative: { _ in "1 hour ago" }
+        )
+        #expect(summary?.text == "5 of 5 plans protected · Last backup 1 hour ago")
+        #expect(summary?.attentionLines == [])
+        #expect(summary?.heldLines == [
+            "Photos: Paused — \(photos.schedule.summary)",
+            "Documents: \(PlanStatus.pauseCaption(for: documents, now: now) ?? "")",
+            "Code: Not scheduled",
+        ])
+
+        // An unprotected plan's line is its warning, never a second one.
+        let exposed = ProtectionRow(plan: photos, stateText: "No snapshots yet", isKnown: true, isProtected: false, didFail: false)
+        let warned = OverviewMetrics.protectionSummary(
+            rows: [exposed], listingLoaded: true, otherBackupsCount: 0,
+            willNotRun: { byID[$0].flatMap(caption) },
+            hold: nil, now: now, relative: { _ in "1 hour ago" }
+        )
+        #expect(warned?.attentionLines == ["Photos: No snapshots yet"])
+        #expect(warned?.heldLines == [])
     }
 
     @Test("the Protection card names each plan that is not protected in the sidebar warning's words, and a run in flight")
@@ -419,7 +485,7 @@ struct OverviewMetricsTests {
         )
         let summary = OverviewMetrics.protectionSummary(
             rows: [code, documents], listingLoaded: true, otherBackupsCount: 0,
-            hold: nil, now: now, relative: { _ in "1 hour ago" }
+            willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         // The count line stays as it was; the lines under it name the subject.
         #expect(summary?.text == "1 of 2 plans protected · Last backup 1 hour ago")
@@ -427,7 +493,7 @@ struct OverviewMetricsTests {
         // All protected: nothing to name.
         #expect(OverviewMetrics.protectionSummary(
             rows: [documents], listingLoaded: true, otherBackupsCount: 0,
-            hold: nil, now: now, relative: { _ in "1 hour ago" }
+            willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )?.attentionLines == [])
 
         // A first backup in flight is news, not an alarm: the line says the
@@ -438,14 +504,14 @@ struct OverviewMetricsTests {
         )
         let running = OverviewMetrics.protectionSummary(
             rows: [photos], listingLoaded: true, otherBackupsCount: 0,
-            hold: nil, now: now, relative: { _ in "1 hour ago" }
+            willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         #expect(running?.text == "0 of 1 plan protected · Photos — Backing up")
         #expect(running?.attentionLines == [])
         // Beside a last backup, the run comes before it.
         let both = OverviewMetrics.protectionSummary(
             rows: [photos, documents], listingLoaded: true, otherBackupsCount: 0,
-            hold: nil, now: now, relative: { _ in "1 hour ago" }
+            willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         #expect(both?.text == "1 of 2 plans protected · Photos — Backing up · Last backup 1 hour ago")
     }
@@ -463,11 +529,11 @@ struct OverviewMetricsTests {
         // and the line hides — with plans and without.
         #expect(OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: false, otherBackupsCount: 2,
-            hold: .paused(until: nil), now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
+            willNotRun: { _ in nil }, hold: .paused(until: nil), now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         ) == nil)
         #expect(OverviewMetrics.protectionSummary(
             rows: [], listingLoaded: false, otherBackupsCount: 2,
-            hold: nil, now: date("2026-09-05 11:00:00")
+            willNotRun: { _ in nil }, hold: nil, now: date("2026-09-05 11:00:00")
         ) == nil)
     }
 
@@ -475,20 +541,20 @@ struct OverviewMetricsTests {
     func protectionLineWithNoPlans() {
         let now = date("2026-09-05 11:00:00")
         let withHistory = OverviewMetrics.protectionSummary(
-            rows: [], listingLoaded: true, otherBackupsCount: 6, hold: nil, now: now
+            rows: [], listingLoaded: true, otherBackupsCount: 6, willNotRun: { _ in nil }, hold: nil, now: now
         )
         #expect(withHistory?.text == "No plans yet · 6 backups from no plan here")
         #expect(withHistory?.showsResume == false)
 
         let empty = OverviewMetrics.protectionSummary(
-            rows: [], listingLoaded: true, otherBackupsCount: 0, hold: nil, now: now
+            rows: [], listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil, now: now
         )
         #expect(empty?.text == "No plans yet")
 
         // The hold joins here too: it holds this repository's checks and
         // prunes, plans or no plans.
         let held = OverviewMetrics.protectionSummary(
-            rows: [], listingLoaded: true, otherBackupsCount: 0, hold: .paused(until: nil), now: now
+            rows: [], listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: .paused(until: nil), now: now
         )
         #expect(held?.text == "No plans yet · Backups paused until you resume")
         #expect(held?.showsResume == true)

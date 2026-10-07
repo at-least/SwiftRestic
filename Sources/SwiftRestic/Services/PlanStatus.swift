@@ -248,6 +248,25 @@ enum PlanStatus {
         return nil
     }
 
+    /// Why a scheduled plan will not run by itself now, for the Protection
+    /// card: its pause in the sidebar's words, else "Not scheduled" when
+    /// the scheduler skips it (the sidebar's and Next backup's word). Nil
+    /// while it will, and for a manual plan, which never does — paused or
+    /// not, that is its chosen mode.
+    static func willNotRunCaption(
+        for plan: BackupPlan,
+        existingRepositoryIDs: Set<UUID>,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> String? {
+        guard plan.schedule.frequency != .manual else { return nil }
+        if let pause = pauseCaption(for: plan, now: now, calendar: calendar) { return pause }
+        if Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty {
+            return "Not scheduled"
+        }
+        return nil
+    }
+
     /// The plan page's Configuration row: the sidebar's pause words, with
     /// the schedule named under a pause — the row is where the schedule is
     /// stated, so it never drops it. An open-ended pause's caption already

@@ -50,10 +50,17 @@ extension AppModel {
     /// Read from a view body, the lookups still register that view's
     /// observation of the state they touch.
     func protectionSummary(repositoryID: UUID, now: Date) -> ProtectionSummary? {
-        OverviewMetrics.protectionSummary(
-            rows: protectionRows(for: plans(in: repositoryID), now: now),
+        let plans = plans(in: repositoryID)
+        let existingRepositoryIDs = Set(configuration.repositories.map(\.id))
+        return OverviewMetrics.protectionSummary(
+            rows: protectionRows(for: plans, now: now),
             listingLoaded: snapshotListingOutcome(for: repositoryID) == .loaded,
             otherBackupsCount: shelves(for: repositoryID).otherBackupsCount,
+            willNotRun: { planID in
+                plans.first { $0.id == planID }.flatMap {
+                    PlanStatus.willNotRunCaption(for: $0, existingRepositoryIDs: existingRepositoryIDs, now: now)
+                }
+            },
             hold: scheduleHold,
             now: now,
             relative: { Format.ago($0, now: now) }

@@ -53,6 +53,17 @@ struct ProtectionCard: View {
                         }
                         .font(.caption)
                     }
+                    ForEach(summary.heldLines, id: \.self) { line in
+                        // Protected, but it will not run by itself: a pause
+                        // is a choice, so its glyph, not the warning's.
+                        Label {
+                            Text(line).foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: "pause.circle")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                    }
                 } else {
                     // No count is honest yet: the card's first glance says why.
                     SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: repositoryID))

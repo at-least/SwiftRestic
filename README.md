@@ -150,7 +150,13 @@ checked in so a normal build does not need it.
   plans protected · Last backup 1 hour ago”; with no plans yet, the count
   of backups from no plan here), which carries the hold's own words while
   backups are held app-wide and a *Resume* button while the hold is your
-  own *Pause Backups*; an *Other backups* card listing each adoptable
+  own *Pause Backups*. Under the count, each plan that is not protected is
+  named with its warning, and each protected plan that will not run by
+  itself — paused, or "Not scheduled" because its setup is incomplete —
+  with a pause glyph in the sidebar's words ("Photos: Paused — Sunday at
+  03:00"), so "2 of 2 plans protected" cannot hide a plan that has stopped;
+  a manual plan never runs by itself and gets no line. Then an *Other
+  backups* card listing each adoptable
   group while there is one; the week's problems against it; then where it
   is, how big it is, and its maintenance. The Protection card carries
   *New Backup Plan…* as a button while the repository has no plan; after
