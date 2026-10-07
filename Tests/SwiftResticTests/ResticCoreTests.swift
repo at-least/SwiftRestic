@@ -31,20 +31,33 @@ struct ResticErrorTests {
                 .errorDescription?.contains("check it in the repository settings") == true
         )
 
-        // Other known codes: explanation and restic's words, both there.
-        let known = ResticError.commandFailed(
+        // A missing repository and a lock carry their fix the same way: the
+        // banner and the notification repeat this message.
+        #expect(ResticError.commandFailed(
+            exitCode: 10,
+            message: "Fatal: repository does not exist: unable to open config file: stat /Volumes/A/config: no such file or directory"
+        ).errorDescription == "No repository is at its saved path — point it at the folder that holds the repository. restic reported: Fatal: repository does not exist: unable to open config file: stat /Volumes/A/config: no such file or directory")
+        #expect(ResticError.commandFailed(exitCode: 10, message: "").errorDescription
+            == "No repository is at its saved path — point it at the folder that holds the repository.")
+        #expect(ResticError.commandFailed(
             exitCode: 11,
             message: "Fatal: repository is locked"
+        ).errorDescription == "The repository is locked — if no other Mac is using it, remove the stale locks. restic reported: Fatal: repository is locked")
+
+        // Other known codes: explanation and restic's words, both there.
+        let known = ResticError.commandFailed(
+            exitCode: 3,
+            message: "warning: at least one source file could not be read"
         ).errorDescription ?? ""
-        #expect(known.contains("already locked"))
-        #expect(known.contains("Fatal: repository is locked"))
+        #expect(known.contains("some data could not be read"))
+        #expect(known.contains("warning: at least one source file could not be read"))
 
         // Known code, no JSON message: the explanation is all there is.
         let bare = ResticError.commandFailed(
-            exitCode: 10,
+            exitCode: 130,
             message: ""
         ).errorDescription ?? ""
-        #expect(bare.contains("does not exist"))
+        #expect(bare == "restic was interrupted")
 
         // Unknown code: restic's words verbatim, no invented explanation.
         #expect(

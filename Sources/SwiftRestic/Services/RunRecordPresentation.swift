@@ -29,7 +29,7 @@ enum RunFix: Equatable {
     var help: String {
         switch self {
         case .editRepository: "The password doesn't open this repository — check it in the repository settings"
-        case .editRepositoryPath: "No repository is at its saved path — point it at the folder that holds the repository"
+        case .editRepositoryPath: ResticError.noRepositoryAtPath
         case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
         }
     }

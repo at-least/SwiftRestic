@@ -409,7 +409,13 @@ checked in so a normal build does not need it.
   bytes added, the files restic could not read, and a plain-text log of what
   restic printed (Show Log…, Copy Details); the drawer below a selected run
   opens its plan or its repository, and restores record which backup, which
-  item and where it went. Run names carry their repository on every surface
+  item and where it went. A failure the drawer offers a fix for carries the
+  fix in its own words, so the banner and the notification say it too: exit
+  12 "The password doesn't open this repository — check it in the repository
+  settings.", exit 10 "No repository is at its saved path — point it at the
+  folder that holds the repository." (*Edit Repository…*), exit 11 "The
+  repository is locked — if no other Mac is using it, remove the stale locks."
+  (*Remove Stale Locks…*), each followed by restic's first sentence. Run names carry their repository on every surface
   that names a run — the log sheet's header, notifications and failure
   alerts, the menu bar and Settings. The history keeps the newest *Keep runs*
   records (Settings › General › History) and trims the oldest with their
