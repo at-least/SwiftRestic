@@ -516,8 +516,8 @@ a headless SSH box.
   SwiftRestic marks with a warning triangle in the sidebar and in Activity's run
   drawer; the Restore pane lists what could not be read. SwiftRestic detects
   the grant — at launch, whenever it becomes active, and after every backup —
-  and shows it first in Settings › General; the build is ad-hoc signed, so a
-  rebuilt or updated copy may need it granted again. A run's unreadable items
+  and shows it first in Settings › General; an ad-hoc-signed build (Release)
+  may need it granted again after each rebuild or update. A run's unreadable items
   say which cause is which: "operation not permitted" is macOS withholding the
   item, which the grant fixes, while "permission denied" is the file's own
   permissions, which it does not.
@@ -619,10 +619,15 @@ stretch.
 - **A repository with no saved password is skipped, not retried.** Maintenance
   is not scheduled for it and no failure is recorded — the repository screen says
   it is waiting for a password instead.
-- **A development build asks for Keychain access on every rebuild.** The app is
-  ad-hoc signed, so its signature changes each time it is built and macOS treats
-  it as a new application. Choose *Always Allow*, or expect the prompt again after
-  the next build. A Developer ID signature makes this go away.
+- **Debug builds are signed with an Apple Development certificate**
+  (`project.yml`, the Debug configuration), not ad hoc. An ad-hoc signature's
+  designated requirement is the build's cdhash, so every rebuild was a new
+  application to the Keychain and asked for the repository passwords again;
+  the certificate's requirement — the bundle ID and the certificate's name —
+  is the same from build to build. The first launch under it asks once:
+  choose *Always Allow*. Building on another Mac needs that Mac's own
+  certificate there, or `CODE_SIGN_IDENTITY=-` for an ad-hoc build. Release
+  stays ad hoc.
 - **The menu bar's dot goes once the next backup works.** A failed or warned
   backup puts a dot on the menu bar icon and a line naming it in its menu;
   the same plan's next successful backup clears both, as it clears the plan's
@@ -670,7 +675,7 @@ stretch.
   rclone itself.
 - restic is not downloaded or updated by the app. That is Homebrew's job;
   fetching executables from a GUI is a signing and quarantine mess.
-- The build is ad-hoc signed with the hardened runtime off. Distribution would
+- Release builds are ad-hoc signed, with the hardened runtime off. Distribution would
   need a Developer ID, hardened runtime and notarization — and note that
   re-signing changes which Keychain items the app can read.
 - *Compare* keeps the first 20,000 changed paths and says so when it stopped;

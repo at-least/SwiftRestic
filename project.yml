@@ -25,6 +25,15 @@ settings:
     DEAD_CODE_STRIPPING: YES
     GCC_WARN_UNDECLARED_SELECTOR: YES
     CLANG_ENABLE_MODULES: YES
+  configs:
+    # Debug is signed with the developer's Apple Development certificate, not
+    # ad hoc: an ad-hoc signature's designated requirement is the build's
+    # cdhash, so every rebuild was a new app to the Keychain and asked for
+    # the repository passwords again. A certificate's requirement survives
+    # rebuilds.
+    Debug:
+      CODE_SIGN_IDENTITY: "Apple Development: Mengyi Chen (VANHGVZ28R)"
+      DEVELOPMENT_TEAM: 9683UUUF28
 
 targets:
   SwiftRestic:
