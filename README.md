@@ -60,8 +60,9 @@ checked in so a normal build does not need it.
 - **Overview | Files** — a plan's page has both, in the window toolbar.
   Overview is its cards; Files lists its folders and files across every
   backup it made, items its newest backup no longer holds included, dimmed
-  and wearing the day they were last backed up (*until Oct 2*), which the
-  pane's header says in full: the tree on the left, starting at the page's edge (drag that edge
+  and wearing the day they were last backed up (*until Oct 2*) where the
+  whole name fits beside it — the name never shortens for the day, which
+  the row's tooltip and the pane's header say in full: the tree on the left, starting at the page's edge (drag that edge
   to widen it), the folder or file picked in it on the right. A first visit
   opens at the plan's first folder. The tree comes from the snapshot index;
   while the index is still reading a repository it fills in as it goes, and

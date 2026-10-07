@@ -528,30 +528,57 @@ struct FilesTreeRow: View {
                     .frame(width: Self.foldWidth)
                     .accessibilityHidden(true)
             }
-            Label {
-                Text(title)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            } icon: {
-                Image(systemName: entry.node.isDirectory ? "folder" : "doc")
-            }
-            .foregroundStyle(entry.isInNewest ? .primary : .secondary)
-            .help(Self.help(for: entry))
-            .accessibilityLabel(entry.isInNewest
-                ? title
-                : "\(title), not in the newest backup, last backed up \(Format.timestamp(entry.newest.time))")
-            Spacer(minLength: 0)
-            // The day it was last backed up, on the row: what made it dim,
-            // without a hover. VoiceOver has it in the label above.
-            if !entry.isInNewest {
-                Text(Format.until(entry.newest.time))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .accessibilityHidden(true)
+            if entry.isInNewest {
+                nameLabel
+                Spacer(minLength: 0)
+            } else {
+                // The name is what identifies the row, so the day yields
+                // first: beside the whole name when both fit, else left to
+                // the tooltip, the label and the pane's line, the name
+                // keeping the room — and truncating only past it.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) {
+                        nameLabel.fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 8)
+                        dayTag
+                    }
+                    HStack(spacing: 4) {
+                        nameLabel.fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 0)
+                    }
+                    HStack(spacing: 4) {
+                        nameLabel
+                        Spacer(minLength: 0)
+                    }
+                }
             }
         }
+    }
+
+    private var nameLabel: some View {
+        Label {
+            Text(title)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        } icon: {
+            Image(systemName: entry.node.isDirectory ? "folder" : "doc")
+        }
+        .foregroundStyle(entry.isInNewest ? .primary : .secondary)
+        .help(Self.help(for: entry))
+        .accessibilityLabel(entry.isInNewest
+            ? title
+            : "\(title), not in the newest backup, last backed up \(Format.timestamp(entry.newest.time))")
+    }
+
+    /// The day it was last backed up, on the row: what made it dim,
+    /// without a hover. VoiceOver has it in the label.
+    private var dayTag: some View {
+        Text(Format.until(entry.newest.time))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityHidden(true)
     }
 
     /// The row's tooltip — a search's hit row wears it too: the item's
