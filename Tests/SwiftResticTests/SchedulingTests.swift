@@ -736,6 +736,13 @@ struct MaintenanceSchedulingTests {
         // A record older than the stamp is not the last check — the history
         // lost the newer one: the stamp's moment, without a verdict.
         #expect(last([check(.failed, at: "2026-09-02 12:00:00")]) == ago)
+        // The same record is the page's route to the console when it found
+        // damage, and only then.
+        let damaged = check(.completedWithErrors, at: "2026-09-09 12:00:00")
+        let found = Scheduler.newestMaintenanceRun(.check, of: repository, runs: [damaged])
+        #expect(found?.id == damaged.id)
+        #expect(found.flatMap { RunRecordPresentation.repairRoute(for: $0, repositoryExists: true) } == repository.id)
+        #expect(Scheduler.newestMaintenanceRun(.check, of: repository, runs: [check(.completedWithErrors, at: "2026-09-02 12:00:00")]) == nil)
         // Nothing recorded: the stamp, as before.
         #expect(last([]) == ago)
     }

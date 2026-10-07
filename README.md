@@ -407,7 +407,11 @@ checked in so a normal build does not need it.
   Console…*). A command that may change the backups — the ones it confirms
   first, and `tag` and `copy` — re-reads the repository's listing when it
   ends, so the sidebar, the Files tabs and the counts drop what a `forget`
-  removed without waiting for the next refresh.
+  removed without waiting for the next refresh. A check that found errors
+  advises "`restic repair` can recover some damage."; its Activity drawer and
+  the repository page's Maintenance card offer *Open in Console*, which opens
+  the console on that repository — the password supplied — and types
+  nothing: `repair` stays a command the user writes, confirmed first.
 - **Activity** — every run recorded with its outcome, its repository, duration,
   bytes added, the files restic could not read, and a plain-text log of what
   restic printed (Show Log…, Copy Details); the drawer below a selected run

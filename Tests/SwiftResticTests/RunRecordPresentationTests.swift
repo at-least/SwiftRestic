@@ -279,6 +279,14 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.backup, .failed), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.forget, .failed), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .failed), repositoryExists: false) == nil)
+
+        // Only a check that found damage routes to the console, whose
+        // `restic repair` its verdict advises.
+        #expect(RunRecordPresentation.repairRoute(for: run(.check, .completedWithErrors), repositoryExists: true) == repository)
+        #expect(RunRecordPresentation.repairRoute(for: run(.check, .failed), repositoryExists: true) == nil)
+        #expect(RunRecordPresentation.repairRoute(for: run(.check, .succeeded), repositoryExists: true) == nil)
+        #expect(RunRecordPresentation.repairRoute(for: run(.backup, .completedWithErrors), repositoryExists: true) == nil)
+        #expect(RunRecordPresentation.repairRoute(for: run(.check, .completedWithErrors), repositoryExists: false) == nil)
     }
 
     @Test("the Detail column's wording for each kind of run")

@@ -30,6 +30,22 @@ struct ConsoleModelTests {
         return (app, app.console, root)
     }
 
+    @Test("a route points the console at its repository; the pane's appear does not take it back")
+    func routeChoosesTheRepository() throws {
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var other = Repository()
+        other.name = "Damaged"
+        app.configuration.repositories.append(other)
+        app.consoleDidAppear()
+        #expect(console.repositoryID == app.configuration.repositories.first?.id)
+        // A check's Open in Console on the second repository: the picker
+        // switches, and the pane appearing again keeps it.
+        app.pointConsole(at: other.id)
+        app.consoleDidAppear()
+        #expect(console.repositoryID == other.id)
+    }
+
     @Test("a destructive command arms a confirmation instead of running")
     func destructiveArms() throws {
         let (app, console, _) = try makeHarness()

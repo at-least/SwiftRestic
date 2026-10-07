@@ -74,6 +74,14 @@ enum RunRecordPresentation {
         }
     }
 
+    /// The repository a check that found damage sends to the restic console:
+    /// its verdict advises `restic repair`, and the console is where the
+    /// repository's password is supplied. Nil for any other run.
+    static func repairRoute(for run: RunRecord, repositoryExists: Bool) -> UUID? {
+        guard repositoryExists, run.kind == .check, run.outcome == .completedWithErrors else { return nil }
+        return run.repositoryID
+    }
+
     static func fix(for run: RunRecord, repositoryExists: Bool, repositoryBusy: Bool) -> RunFix? {
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
         if run.exitCode == 12 { return .editRepository(repositoryID) }

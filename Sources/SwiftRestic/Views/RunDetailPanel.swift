@@ -134,7 +134,18 @@ struct RunDetailPanel: View {
             // A check's verdict, or what Apply Retention Now… removed —
             // Copy Details' Result line.
             if run.kind == .check || run.kind == .forget, let result = run.detailText {
-                DetailRow("Result") { Text(result).textSelection(.enabled) }
+                DetailRow("Result") {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(result).textSelection(.enabled)
+                        // The verdict advises `restic repair`: the console
+                        // is where it runs with the password supplied.
+                        if let id = RunRecordPresentation.repairRoute(for: run, repositoryExists: repositoryName != nil) {
+                            // The drawer's buttons' size.
+                            ConsoleRouteButton(repositoryID: id)
+                                .controlSize(.small)
+                        }
+                    }
+                }
             }
             exitRow
         }
@@ -370,6 +381,25 @@ struct RunFixButton: View {
             }
         }
         .help(fix.help)
+    }
+}
+
+/// Opens the restic console on a repository whose check found damage. It
+/// types nothing: repair stays a command the user writes, and the console
+/// asks before running it.
+struct ConsoleRouteButton: View {
+    @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
+    let repositoryID: UUID
+
+    var body: some View {
+        Button("Open in Console") {
+            model.pointConsole(at: repositoryID)
+            router.request(.showConsole)
+        }
+        // The Repository menu's console item's own rule.
+        .disabled(!model.isResticAvailable)
+        .help("Open the restic console on this repository — `restic repair` runs there with its password supplied")
     }
 }
 

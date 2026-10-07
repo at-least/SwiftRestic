@@ -165,18 +165,27 @@ enum Scheduler {
         runs: [RunRecord],
         now: Date = .now
     ) -> String {
-        let kind: RunRecord.Kind = task == .check ? .check : .prune
         let stamp = task == .check ? repository.maintenance.lastCheckAt : repository.maintenance.lastPruneAt
-        let newest = runs
-            .filter { $0.kind == kind && $0.repositoryID == repository.id }
-            .max { $0.startedAt < $1.startedAt }
-        guard let newest, newest.startedAt >= stamp ?? .distantPast else { return Format.ago(stamp, now: now) }
+        guard let newest = newestMaintenanceRun(task, of: repository, runs: runs) else { return Format.ago(stamp, now: now) }
         let ago = Format.ago(newest.startedAt, now: now)
         switch newest.outcome {
         case .succeeded: return ago
         case .completedWithErrors: return "\(ago) · errors found"
         case .failed, .cancelled, .skipped: return "\(ago) · \(newest.outcome.displayName.lowercased())"
         }
+    }
+
+    /// The record of the newest check or prune, when it is the attempt the
+    /// stamp marks — the run `lastMaintenanceText` words; nil when the
+    /// history no longer holds it.
+    static func newestMaintenanceRun(_ task: MaintenanceTask, of repository: Repository, runs: [RunRecord]) -> RunRecord? {
+        let kind: RunRecord.Kind = task == .check ? .check : .prune
+        let stamp = task == .check ? repository.maintenance.lastCheckAt : repository.maintenance.lastPruneAt
+        let newest = runs
+            .filter { $0.kind == kind && $0.repositoryID == repository.id }
+            .max { $0.startedAt < $1.startedAt }
+        guard let newest, newest.startedAt >= stamp ?? .distantPast else { return nil }
+        return newest
     }
 
     /// A repository page's Next check or Next prune, as the scheduler will

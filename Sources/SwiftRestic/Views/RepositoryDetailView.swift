@@ -212,6 +212,16 @@ struct RepositoryDetailView: View {
                     }
                 }
 
+                // A check that found damage: the console, where `restic
+                // repair` runs with the password supplied, beside the
+                // verdict. A route, as the drawer offers it — the page keeps
+                // no maintenance controls.
+                if let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: model.configuration.runs),
+                   RunRecordPresentation.repairRoute(for: check, repositoryExists: true) != nil
+                {
+                    ConsoleRouteButton(repositoryID: repositoryID)
+                }
+
                 if model.repositoriesMissingPassword.contains(repositoryID) {
                     Label(
                         "Waiting for a repository password — nothing is scheduled until one is saved.",

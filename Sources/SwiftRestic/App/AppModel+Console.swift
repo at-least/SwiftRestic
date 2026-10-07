@@ -12,6 +12,13 @@ extension AppModel {
         )
     }
 
+    /// Points the console at a repository before routing to it — the pane's
+    /// appear fills only an empty picker, so a route left to it would open
+    /// on whichever repository the console last had, or the first.
+    func pointConsole(at repositoryID: UUID) {
+        console.repositoryID = repositoryID
+    }
+
     /// Runs an arbitrary restic command against a repository and returns
     /// what it printed.
     ///
