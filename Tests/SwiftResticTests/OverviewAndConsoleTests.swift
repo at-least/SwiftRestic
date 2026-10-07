@@ -698,6 +698,14 @@ struct CommandLineTokenizerTests {
         #expect(!CommandLineTokenizer.isDestructive(["snapshots"]))
         #expect(!CommandLineTokenizer.isDestructive(["ls", "latest"]))
         #expect(!CommandLineTokenizer.isDestructive([]))
+
+        // What may change the backups the app lists: those, and `tag` and
+        // `copy`, which confirm nothing but write snapshots.
+        #expect(CommandLineTokenizer.mayChangeSnapshots(["-r", "/repo", "forget", "--keep-last", "1"]))
+        #expect(CommandLineTokenizer.mayChangeSnapshots(["tag", "--add", "x", "latest"]))
+        #expect(CommandLineTokenizer.mayChangeSnapshots(["copy", "--from-repo", "/other"]))
+        #expect(!CommandLineTokenizer.mayChangeSnapshots(["snapshots"]))
+        #expect(!CommandLineTokenizer.mayChangeSnapshots(["ls", "latest"]))
     }
 }
 

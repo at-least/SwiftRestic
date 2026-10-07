@@ -139,4 +139,11 @@ enum CommandLineTokenizer {
         // `--tag prune` confirms — which is the safe side to err on.
         arguments.contains { destructiveSubcommands.contains($0) }
     }
+
+    /// Whether a command may change the backups the app lists: the
+    /// destructive ones, and `tag` and `copy`, which confirm nothing but
+    /// write snapshots. Checked token by token, as `isDestructive` is.
+    static func mayChangeSnapshots(_ arguments: [String]) -> Bool {
+        isDestructive(arguments) || arguments.contains { $0 == "tag" || $0 == "copy" }
+    }
 }

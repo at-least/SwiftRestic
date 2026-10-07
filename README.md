@@ -371,7 +371,10 @@ checked in so a normal build does not need it.
   tick after waking. The menu bar's dot and problem line stay run-driven.
 - **restic console** — run any restic command against a repository and read its
   own output, for the things the UI does not cover (*Repository › restic
-  Console…*).
+  Console…*). A command that may change the backups — the ones it confirms
+  first, and `tag` and `copy` — re-reads the repository's listing when it
+  ends, so the sidebar, the Files tabs and the counts drop what a `forget`
+  removed without waiting for the next refresh.
 - **Activity** — every run recorded with its outcome, its repository, duration,
   bytes added, the files restic could not read, and a plain-text log of what
   restic printed (Show Log…, Copy Details); the drawer below a selected run

@@ -238,6 +238,34 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a console command that can change the backups re-reads the listing; one that only reads does not")
+    func consoleRefreshesAfterAMutatingCommand() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        try "uno".write(to: harness.sourceDirectory.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        await model.tasks.drain()
+        #expect(model.snapshots(for: id).count == 2)
+
+        // Reading commands leave the listing alone.
+        _ = await model.runConsoleCommand(repositoryID: id, arguments: ["snapshots"])
+        await model.tasks.drain()
+        #expect(model.snapshots(for: id).count == 2)
+
+        // restic forgets one; the app's lists follow without a manual refresh.
+        _ = await model.runConsoleCommand(repositoryID: id, arguments: ["forget", "--keep-last", "1"])
+        await model.tasks.drain()
+        #expect(model.snapshots(for: id).count == 1)
+
+        await model.shutdown()
+    }
+
     @Test("the Restore pane's drag provider promises a file's or a folder's content, restored on demand")
     func dragProviderPromisesContent() async throws {
         let harness = try await makeHarness()

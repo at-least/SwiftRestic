@@ -17,9 +17,18 @@ extension AppModel {
     ///
     /// No `--json` is added: the console exists to show restic's own output,
     /// and the human-readable form is what the user came for.
+    ///
+    /// A command that may change the backups (`mayChangeSnapshots`: a
+    /// forget, a rewrite, a tag, a copy…) re-reads the repository's listing
+    /// afterwards, however it ended — a forget can fail part-way — as a
+    /// check or prune does, so the sidebar, the Files tabs and the counts
+    /// do not list what restic no longer holds until the next refresh.
     func runConsoleCommand(repositoryID: UUID, arguments: [String]) async -> String {
         guard let repository = repository(id: repositoryID) else {
             return "No such repository."
+        }
+        defer {
+            if CommandLineTokenizer.mayChangeSnapshots(arguments) { scheduleSnapshotRefresh(repositoryID: repositoryID) }
         }
         do {
             let (service, context) = try await resticContext(for: repository)
