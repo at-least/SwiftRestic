@@ -51,12 +51,30 @@ struct RepositoryEditorSheet: View {
 
     private enum Status: Equatable {
         case ok(String)
+        /// An expected state, not a problem: a new repository's empty
+        /// location, which Save fills.
+        case info(String)
         case failure(String)
 
-        var isError: Bool { if case .failure = self { true } else { false } }
         var text: String {
             switch self {
-            case let .ok(message), let .failure(message): message
+            case let .ok(message), let .info(message), let .failure(message): message
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .ok: "checkmark.circle.fill"
+            case .info: "info.circle"
+            case .failure: "xmark.octagon.fill"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .ok: Theme.success
+            case .info: .secondary
+            case .failure: Theme.danger
             }
         }
     }
@@ -75,6 +93,18 @@ struct RepositoryEditorSheet: View {
             .padding(12)
 
             Divider()
+
+            // Test Connection's answer, and Save's or Change Password's,
+            // beside the buttons on either tab: at the end of the scrolled
+            // form it landed below the fold, or behind the Hooks tab.
+            if let status {
+                Label(status.text, systemImage: status.symbolName)
+                    .foregroundStyle(status.color)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding([.horizontal, .top], 12)
+            }
 
             HStack {
                 // A greyed Save or Test Connection owes the user the reason
@@ -118,6 +148,9 @@ struct RepositoryEditorSheet: View {
             initialPassword = password
             initialProviderSecret = providerSecret
         }
+        // An answer about another location would stand above the buttons
+        // as if it were this one's.
+        .onChange(of: draft.resticRepositoryString) { status = nil }
         .task(id: draft.kind) {
             // Requeried on every return to the rclone kind: remotes are edited
             // outside the app, so a list from a previous visit may be stale.
@@ -267,14 +300,6 @@ struct RepositoryEditorSheet: View {
                 )
             }
 
-            if let status {
-                Section {
-                    Label(status.text, systemImage: status.isError ? "xmark.octagon.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(status.isError ? Theme.danger : Theme.success)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
         }
         .formStyle(.grouped)
     }
@@ -540,7 +565,10 @@ struct RepositoryEditorSheet: View {
                 return true
             }
             guard initializeIfMissing else {
-                status = .failure(EditorRequirements.noRepositoryYet(isNew: isNew))
+                // Where a new repository goes, nothing there yet is the
+                // expected first answer; for an edit it is a problem.
+                let answer = EditorRequirements.noRepositoryYet(isNew: isNew)
+                status = isNew ? .info(answer) : .failure(answer)
                 return false
             }
             _ = try await service.initializeRepository(context)

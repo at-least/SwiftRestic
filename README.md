@@ -175,7 +175,9 @@ checked in so a normal build does not need it.
   not reach. *Test Connection* on a path with no repository says what Save
   will do: create one, for a new repository; for an existing one, nothing —
   "backups to it would fail until one is created", so point it at the folder
-  that holds the repository. The editor asks *Where is it?* — on this Mac, on another machine,
+  that holds the repository. The answer shows above the editor's buttons, on
+  either tab, and a new repository's empty location reads as information — an
+  expected first step, not the red of a failure. The editor asks *Where is it?* — on this Mac, on another machine,
   in the cloud, through a gateway — and groups the kinds that way whether the
   repository is new or being edited. A REST server's login goes in *User*
   and *Server password* — the password in the Keychain like every backend's
