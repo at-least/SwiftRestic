@@ -198,13 +198,16 @@ struct RepositoryDetailView: View {
                 // behind the dates is the editor's, and each run is a
                 // record in Activity.
                 DetailGrid {
-                    DetailRow("Last check", Format.ago(repository.maintenance.lastCheckAt, now: now))
+                    // Activity's newest run, with how it ended; the stamp
+                    // is written for every attempt.
+                    let runs = model.configuration.runs
+                    DetailRow("Last check", Scheduler.lastMaintenanceText(.check, of: repository, runs: runs, now: now))
                     // As the scheduler will start them: the hold holds upkeep
                     // too, so a due task reads "Waiting", never "Due now".
                     let hold = model.scheduleHold
                     DetailRow("Next check", Scheduler.nextMaintenanceText(.check, of: repository, hold: hold, now: now))
                     if repository.maintenance.pruneEnabled {
-                        DetailRow("Last prune", Format.ago(repository.maintenance.lastPruneAt, now: now))
+                        DetailRow("Last prune", Scheduler.lastMaintenanceText(.prune, of: repository, runs: runs, now: now))
                         DetailRow("Next prune", Scheduler.nextMaintenanceText(.prune, of: repository, hold: hold, now: now))
                     }
                 }

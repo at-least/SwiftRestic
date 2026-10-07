@@ -699,6 +699,47 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.dueMaintenance(in: [repository], now: date("2026-09-16 00:00:01")).count == 1)
     }
 
+    @Test("the repository page's Last check reads the newest check run with how it ended, the stamp only without one")
+    func lastMaintenanceReadsTheRecord() {
+        var repository = repository { $0.maintenance.checkIntervalDays = 7 }
+        let now = date("2026-09-10 12:00:00")
+        func check(_ outcome: RunRecord.Outcome, at stamp: String, repository id: UUID? = nil) -> RunRecord {
+            var run = RunRecord(kind: .check, planName: repository.name, repositoryID: id ?? repository.id, startedAt: date(stamp))
+            run.outcome = outcome
+            return run
+        }
+        func last(_ runs: [RunRecord]) -> String {
+            Scheduler.lastMaintenanceText(.check, of: repository, runs: runs, now: now)
+        }
+        // Neither a stamp nor a record.
+        #expect(last([]) == "Never")
+        // A record without a stamp — history older than the stamp itself.
+        #expect(last([check(.succeeded, at: "2026-09-08 12:00:00")]) == Format.ago(date("2026-09-08 12:00:00"), now: now))
+
+        repository.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
+        let ago = Format.ago(date("2026-09-09 12:00:00"), now: now)
+        // The stamp is written for every attempt; the record says how it went.
+        #expect(last([check(.succeeded, at: "2026-09-09 12:00:00")]) == ago)
+        #expect(last([check(.failed, at: "2026-09-09 12:00:00")]) == "\(ago) · failed")
+        #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · errors found")
+        #expect(last([check(.cancelled, at: "2026-09-09 12:00:00")]) == "\(ago) · cancelled")
+        // The newest of the repository's own checks, never a prune's or
+        // another repository's.
+        var prune = check(.failed, at: "2026-09-09 13:00:00")
+        prune.kind = .prune
+        #expect(last([
+            prune,
+            check(.failed, at: "2026-09-09 14:00:00", repository: UUID()),
+            check(.succeeded, at: "2026-09-09 12:00:00"),
+            check(.failed, at: "2026-09-02 12:00:00"),
+        ]) == ago)
+        // A record older than the stamp is not the last check — the history
+        // lost the newer one: the stamp's moment, without a verdict.
+        #expect(last([check(.failed, at: "2026-09-02 12:00:00")]) == ago)
+        // Nothing recorded: the stamp, as before.
+        #expect(last([]) == ago)
+    }
+
     @Test("the repository page's Next check and Next prune wait under a hold, and move to a timed hold's end")
     func nextMaintenanceUnderAHold() {
         let repository = repository {

@@ -154,6 +154,31 @@ enum Scheduler {
         }
     }
 
+    /// A repository page's Last check or Last prune: the newest such run
+    /// of the repository, how long ago it started and — when it did not
+    /// succeed — how it ended ("3 days ago · failed"), since the stamp the
+    /// scheduler keeps is written for every attempt. The stamp's moment
+    /// alone when the history holds no run as new as it.
+    static func lastMaintenanceText(
+        _ task: MaintenanceTask,
+        of repository: Repository,
+        runs: [RunRecord],
+        now: Date = .now
+    ) -> String {
+        let kind: RunRecord.Kind = task == .check ? .check : .prune
+        let stamp = task == .check ? repository.maintenance.lastCheckAt : repository.maintenance.lastPruneAt
+        let newest = runs
+            .filter { $0.kind == kind && $0.repositoryID == repository.id }
+            .max { $0.startedAt < $1.startedAt }
+        guard let newest, newest.startedAt >= stamp ?? .distantPast else { return Format.ago(stamp, now: now) }
+        let ago = Format.ago(newest.startedAt, now: now)
+        switch newest.outcome {
+        case .succeeded: return ago
+        case .completedWithErrors: return "\(ago) · errors found"
+        case .failed, .cancelled, .skipped: return "\(ago) · \(newest.outcome.displayName.lowercased())"
+        }
+    }
+
     /// A repository page's Next check or Next prune, as the scheduler will
     /// start it: the app-wide hold holds upkeep too, so a timed hold moves
     /// the date to its end and a due task under an open-ended one (Until I
