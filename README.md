@@ -70,7 +70,9 @@ checked in so a normal build does not need it.
   lists at most 200 items in the tree, then one row that opens the folder in
   the pane. Picking a folder lists it as a backup held it, each file with its
   size — *As backed up* picks which of the backups holding it, by its
-  moment, newest first — under one line of what changed in the folder
+  moment, newest first, grouped by month once they span more than one, as
+  the Compare sheet's picker is and a plan's backups in the sidebar are
+  (an inert month caption above each month's rows) — under one line of what changed in the folder
   itself since the backup before that holds it (*Since Oct 1, 2026 at 9:15
   AM, in this folder: 2 modified*), with what is gone named and each item
   marked *Added*, *Modified* or *May have changed*: from the index's record

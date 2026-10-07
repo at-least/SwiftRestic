@@ -149,7 +149,7 @@ struct SnapshotDiffView: View {
                     // on is the cheapest jump a menu can offer.
                     ForEach(grouped, id: \.label) { group in
                         Section(group.label) {
-                            ForEach(group.snapshots) { snapshot in
+                            ForEach(group.items) { snapshot in
                                 Text(comparisonLabel(snapshot, sharedMinutes: sharedMinutes))
                                     .tag(String?.some(snapshot.id))
                             }

@@ -80,10 +80,23 @@ struct FolderVersionsView: View {
                 set: { chosenID = $0 }
             )) {
                 // The moment alone: the short ID is restic's handle, which
-                // the restore sheet and Show in Backups carry.
-                ForEach(versions, id: \.id) { version in
-                    Text(verbatim: Format.timestamp(version.time))
-                        .tag(Optional(version.id))
+                // the restore sheet and Show in Backups carry. A history
+                // past one month is grouped by month, the Compare sheet's
+                // landmarks, so a year of backups is not one flat scroll.
+                if let months = DiffCandidateGrouping.landmarks(in: versions, time: \.time) {
+                    ForEach(months, id: \.label) { month in
+                        Section(month.label) {
+                            ForEach(month.items, id: \.id) { version in
+                                Text(verbatim: Format.timestamp(version.time))
+                                    .tag(Optional(version.id))
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(versions, id: \.id) { version in
+                        Text(verbatim: Format.timestamp(version.time))
+                            .tag(Optional(version.id))
+                    }
                 }
             }
             .labelsHidden()

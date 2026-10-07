@@ -103,11 +103,29 @@ struct DiffCandidateGroupingTests {
 
         #expect(buckets.count == 2)
         // Input is newest first, so first sight of a month names the group.
-        #expect(buckets[0].snapshots.map(\.id) == ["f2", "f1"])
-        #expect(buckets[1].snapshots.map(\.id) == ["j1"])
+        #expect(buckets[0].items.map(\.id) == ["f2", "f1"])
+        #expect(buckets[1].items.map(\.id) == ["j1"])
         // Distinct months carry distinct, non-empty labels.
         #expect(!buckets[0].label.isEmpty && !buckets[1].label.isEmpty)
         #expect(buckets[0].label != buckets[1].label)
+    }
+
+    @Test("a folder's backups group by month too, as the Files pane's picker and the sidebar's fold read them")
+    func versionMonths() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let day = { (iso: String) in ISO8601DateFormatter().date(from: iso)! }
+        let versions = [
+            IndexVersion(id: "m2", time: day("2026-03-02T09:00:00Z")),
+            IndexVersion(id: "m1", time: day("2026-03-01T00:30:00Z")),
+            IndexVersion(id: "f9", time: day("2026-02-28T23:30:00Z")),
+        ]
+        let months = DiffCandidateGrouping.months(in: versions, time: \.time, calendar: calendar)
+        #expect(months.map { $0.items.map(\.id) } == [["m2", "m1"], ["f9"]])
+        #expect(months.map(\.label) == ["March 2026", "February 2026"])
+        // One month needs no landmark: the list reads as it always has.
+        #expect(DiffCandidateGrouping.landmarks(in: Array(versions.prefix(2)), time: \.time, calendar: calendar) == nil)
+        #expect(DiffCandidateGrouping.landmarks(in: versions, time: \.time, calendar: calendar)?.count == 2)
     }
 
     @Test("empty input groups to nothing")

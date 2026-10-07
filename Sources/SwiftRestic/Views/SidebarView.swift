@@ -449,18 +449,34 @@ struct SidebarView: View {
 
     /// An open plan's backups, newest first — flat, even when the plan's
     /// folders changed: each record's Change column still compares within
-    /// its own folders, and the restore pane's header says which.
+    /// its own folders, and the restore pane's header says which. Past one
+    /// month, each month opens with an inert caption row (the Compare
+    /// sheet's months), so a deep history has landmarks.
     @ViewBuilder
     private func planBackups(_ records: [Snapshot], in repository: Repository) -> some View {
         if records.isEmpty {
             BackupsStatusRow(repositoryID: repository.id)
                 .padding(.leading, Indent.planRecord)
-        } else {
-            ForEach(records) { snapshot in
-                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+        } else if let months = DiffCandidateGrouping.landmarks(in: records, time: \.time) {
+            ForEach(months, id: \.label) { month in
+                // No tag: a caption, never a selection.
+                Text(month.label)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
                     .padding(.leading, Indent.planRecord)
-                    .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+                    .accessibilityAddTraits(.isHeader)
+                recordRows(month.items, in: repository)
             }
+        } else {
+            recordRows(records, in: repository)
+        }
+    }
+
+    private func recordRows(_ records: [Snapshot], in repository: Repository) -> some View {
+        ForEach(records) { snapshot in
+            RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+                .padding(.leading, Indent.planRecord)
+                .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
         }
     }
 
