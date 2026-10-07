@@ -152,8 +152,12 @@ enum RunRecordPresentation {
         // The first sentence: restic's multi-line tail stays in the drawer,
         // the plan card and Copy Details, which show the whole message.
         if let failure = run.failureMessage { return Format.firstSentence(failure) }
-        // Why there was nothing to back up, before any hook's complaint.
-        if run.kind == .backup, run.outcome == .skipped, let reason = run.detailText { return reason }
+        // Why there was nothing to back up, before any hook's complaint,
+        // and how long it has stood.
+        if run.kind == .backup, run.outcome == .skipped, let reason = run.detailText {
+            guard let count = run.skipCount, let since = run.skippedSince else { return reason }
+            return "\(reason) Skipped \(count) times since \(Format.timestamp(since))."
+        }
         // An unnamed exit 3 is among the facts, so the plan row says it too.
         let facts = PlanStatus.facts(for: run)
         if !facts.isEmpty { return facts.joined(separator: " · ") }
@@ -266,6 +270,9 @@ enum RunRecordPresentation {
             // Why it was skipped, before what the rest added when a
             // snapshot was written anyway.
             if run.outcome == .skipped, let reason = run.detailText { lines.append("Skipped: \(reason)") }
+            if let since = run.skippedSince, let count = run.skipCount {
+                lines.append("Skipped since: \(Format.timestamp(since)) (\(count) runs)")
+            }
             if hasBackupNumbers(run) {
                 lines.append(
                     "Files: \(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed, "

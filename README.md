@@ -210,7 +210,13 @@ checked in so a normal build does not need it.
   volume mounts, each scheduled plan whose newest backup was skipped and whose
   folders are all back runs at once instead of a whole interval later (a disk
   image attached with `-nobrowse` counted). The quiet-plan alert speaks if the
-  drive stays away. Some but not all folders missing is restic's exit 3 with
+  drive stays away. A skip that continues the plan's last one — the same
+  reason, neither writing a snapshot, the earlier one without a hook's
+  complaint — replaces it, its log with it: one record whose Detail reads
+  "“Archive SSD” is not connected. Skipped 24 times since …", with a *Since*
+  row in the drawer and a "Skipped since:" line in Copy Details. An hourly
+  plan whose drive is away for a week is one row, not 168, and "Keep runs"
+  stays for real runs. Some but not all folders missing is restic's exit 3 with
   a snapshot of the rest. When every folder restic skipped is on a volume
   that is not mounted, and it could read everything else, that run is
   Skipped too — "“Archive SSD” is not connected; the other folders were

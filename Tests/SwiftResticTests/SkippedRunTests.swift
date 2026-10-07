@@ -182,6 +182,57 @@ struct SkippedRunTests {
             == "https://hc-ping.com/abc-123/fail")
     }
 
+    @Test("a skip that continues the plan's last one — same reason, nothing written — becomes one record that counts the runs")
+    func standingSkipMerges() throws {
+        let planID = UUID()
+        func skip(_ minutes: Double, reason: String = "“Archive SSD” is not connected.") -> RunRecord {
+            var run = RunRecord(kind: .backup, planID: planID, planName: "Archive", startedAt: now.addingTimeInterval(minutes * 60))
+            run.outcome = .skipped
+            run.detailText = reason
+            return run
+        }
+        let first = skip(0)
+        let second = try #require(skip(60).continuingSkip(of: first))
+        #expect(second.skipCount == 2)
+        #expect(second.skippedSince == first.startedAt)
+        #expect(second.startedAt == now.addingTimeInterval(3600), "the newest run's own times")
+        let third = try #require(skip(120).continuingSkip(of: second))
+        #expect(third.skipCount == 3)
+        #expect(third.skippedSince == first.startedAt)
+
+        // Anything that makes the earlier record its own news keeps it.
+        #expect(skip(60, reason: "“Travel” is not connected.").continuingSkip(of: first) == nil)
+        var wrote = first
+        wrote.snapshotID = "b824a66c"
+        #expect(skip(60).continuingSkip(of: wrote) == nil)
+        var complained = first
+        complained.hookMessages = ["“eject” exited with 1"]
+        #expect(skip(60).continuingSkip(of: complained) == nil)
+        var failed = first
+        failed.outcome = .failed
+        #expect(skip(60).continuingSkip(of: failed) == nil)
+        var otherPlan = first
+        otherPlan.planID = UUID()
+        #expect(skip(60).continuingSkip(of: otherPlan) == nil)
+
+        // Read once, with how long it has stood.
+        let since = Format.timestamp(first.startedAt)
+        #expect(RunRecordPresentation.detail(for: third) == "“Archive SSD” is not connected. Skipped 3 times since \(since).")
+        let details = RunRecordPresentation.detailsText(
+            for: third, repositoryName: "Home NAS", versionsNow: RunLogVersions.current(resticVersion: "")
+        )
+        #expect(details.contains("Skipped: “Archive SSD” is not connected.\nSkipped since: \(since) (3 runs)"))
+
+        // Older records carry neither field.
+        let older = try JSONDecoder().decode(RunRecord.self, from: Data(#"{"outcome":"skipped"}"#.utf8))
+        #expect(older.skipCount == nil)
+        #expect(older.skippedSince == nil)
+        let encoder = JSONEncoder()
+        let roundTrip = try JSONDecoder().decode(RunRecord.self, from: encoder.encode(third))
+        #expect(roundTrip.skipCount == 3)
+        #expect(roundTrip.skippedSince == third.skippedSince)
+    }
+
     @Test("new plans leave online-only cloud files out; a plan saved before the option keeps backing them up")
     func cloudFilesDefault() throws {
         #expect(BackupPlan().excludeCloudFiles)

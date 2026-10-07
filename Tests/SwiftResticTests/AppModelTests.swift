@@ -431,6 +431,34 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a drive away at every slot leaves one record that counts the runs, and the replaced run's log goes with it")
+    func standingSkipIsOneRecord() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        model.configuration.plans[index].sources = ["/Volumes/SwiftRestic Test Drive/Documents"]
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let first = try #require(model.configuration.runs.first)
+        #expect(await model.loadRunLog(first) != nil)
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+
+        let backups = model.configuration.runs.filter { $0.planID == harness.plan.id && $0.kind == .backup }
+        #expect(backups.count == 1)
+        let standing = try #require(backups.first)
+        #expect(standing.id != first.id)
+        #expect(standing.skipCount == 2)
+        #expect(standing.skippedSince == first.startedAt)
+        #expect(await model.loadRunLog(standing) != nil)
+        await model.tasks.drain()
+        #expect(await model.loadRunLog(first) == nil, "the replaced run's log leaves with it")
+
+        await model.shutdown()
+    }
+
     @Test("online-only cloud files are left out with restic's own flag when the plan asks for it")
     func excludeCloudFilesFlag() async throws {
         let harness = try await makeHarness()

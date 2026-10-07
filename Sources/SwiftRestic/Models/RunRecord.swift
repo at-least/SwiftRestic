@@ -145,6 +145,14 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// `files_restored` key).
     var filesSkipped: Int = 0
 
+    // A standing skip (`continuingSkip(of:)`): one record for every run a
+    // drive stayed away for. Nil for a run that stands alone.
+
+    /// How many runs the record stands for.
+    var skipCount: Int?
+    /// When the first of them started.
+    var skippedSince: Date?
+
     init(
         kind: Kind = .backup,
         planID: UUID? = nil,
@@ -195,6 +203,8 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         destinationPath = c.optional(.destinationPath)
         filesRestored = c.value(.filesRestored, default: 0)
         filesSkipped = c.value(.filesSkipped, default: 0)
+        skipCount = c.optional(.skipCount)
+        skippedSince = c.optional(.skippedSince)
     }
 
     var duration: TimeInterval { max(0, finishedAt.timeIntervalSince(startedAt)) }
@@ -316,6 +326,26 @@ extension RunRecord {
         let names = volumes.map { "“\($0)”" }
         let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!
         return "\(list) \(names.count == 1 ? "is" : "are") not connected"
+    }
+
+    /// This skipped backup as the continuation of `previous` — the plan's
+    /// newest backup before it, skipped for the same reason, neither run
+    /// writing a snapshot and `previous` carrying no hook's complaint: one
+    /// record, this run's, counting `previous`'s runs and keeping when the
+    /// skips began. An hourly plan whose drive is away a week is one row,
+    /// not 168, and leaves the history cap to real runs. Nil when it does
+    /// not continue it.
+    func continuingSkip(of previous: RunRecord) -> RunRecord? {
+        guard kind == .backup, previous.kind == .backup,
+              let planID, previous.planID == planID, previous.repositoryID == repositoryID,
+              outcome == .skipped, previous.outcome == .skipped,
+              snapshotID == nil, previous.snapshotID == nil,
+              detailText == previous.detailText, previous.hookMessages.isEmpty
+        else { return nil }
+        var merged = self
+        merged.skipCount = (previous.skipCount ?? 1) + 1
+        merged.skippedSince = previous.skippedSince ?? previous.startedAt
+        return merged
     }
 
     mutating func setOutcome(from error: Error, cancellationMessage: String) {

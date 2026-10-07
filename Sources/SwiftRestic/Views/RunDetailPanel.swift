@@ -80,6 +80,10 @@ struct RunDetailPanel: View {
             if run.outcome == .skipped, let reason = run.detailText {
                 DetailRow("Skipped", reason)
             }
+            // A standing skip: one record for every run the drive was away.
+            if let since = run.skippedSince, let count = run.skipCount {
+                DetailRow("Since", "\(Format.timestamp(since)) · \(count) runs")
+            }
             if RunRecordPresentation.hasBackupNumbers(run) {
                 DetailRow(
                     "Files",

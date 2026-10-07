@@ -75,6 +75,15 @@ extension AppModel {
     }
 
     func append(record: RunRecord) {
+        var record = record
+        // A skip continuing the plan's last one replaces it, counting it
+        // (`continuingSkip(of:)`); its log leaves with it.
+        if record.outcome == .skipped,
+           let index = configuration.runs.firstIndex(where: { $0.kind == .backup && $0.planID == record.planID }),
+           let merged = record.continuingSkip(of: configuration.runs[index]) {
+            removeRunLogs([configuration.runs.remove(at: index).id])
+            record = merged
+        }
         configuration.runs.insert(record, at: 0)
         let limit = max(20, configuration.settings.maxRunHistory)
         if configuration.runs.count > limit {
