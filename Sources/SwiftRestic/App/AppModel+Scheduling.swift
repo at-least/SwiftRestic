@@ -30,17 +30,23 @@ extension AppModel {
         // Now never comes through here.
         guard scheduleHold == nil else { return }
 
-        // After the guard: a hold exempts every plan from the quiet-plan
-        // alert, as it holds their runs.
-        alertQuietPlans(now: .now)
-
         // Without restic every run would fail at its first restic call — a
         // Failed record, a banner and a notification per slot, backups and
         // upkeep alike — for a cause the window's banner and the menu bar
-        // already state. After the alert, which still names a plan the
-        // absence leaves unprotected.
-        guard isResticAvailable else { return }
+        // already state.
+        if isResticAvailable { startDueWork() }
 
+        // After the guard: a hold exempts every plan from the quiet-plan
+        // alert, as it holds their runs. After the starts: a plan this tick
+        // just started is running, so it is not named for the stretch its
+        // run is about to end — a pause lapsing, or a Mac back from a long
+        // sleep, would otherwise hear of the very plan starting. A missing
+        // restic starts nothing, so the alert still names what it leaves
+        // unprotected.
+        alertQuietPlans(now: .now)
+    }
+
+    private func startDueWork() {
         // Upkeep is considered first: a due prune should not be starved by a
         // backup, which will simply still be due on the next tick. A
         // repository with no stored password has nothing runnable; treat it

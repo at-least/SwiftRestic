@@ -400,7 +400,9 @@ checked in so a normal build does not need it.
   the last one was …", the mark saved on the plan — and that plan's next
   success re-arms it; clicking it opens the plan. Only plans the scheduler
   would start count: paused, manual, incomplete or running plans never, nor
-  anything while Pause Backups or the battery hold is on. The window is the
+  anything while Pause Backups or the battery hold is on — and it is checked
+  after the tick starts what is due, so a pause lapsing or a Mac waking from a
+  long sleep does not name the very plan whose overdue backup is starting. The window is the
   setting or one schedule interval and a day, whichever is longer, so a
   weekly plan is not named the hour before each run. It is checked on the
   scheduler's minute tick: a Mac asleep the whole time hears at its first

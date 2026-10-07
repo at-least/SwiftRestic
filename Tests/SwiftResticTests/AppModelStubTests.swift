@@ -126,6 +126,25 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
+    @Test("the quiet-plan alert does not name a plan in the tick that starts its overdue backup")
+    func quietAlertWaitsForTheStartingRun() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        // Quiet ten days — a pause just lapsed, say — and due on this tick.
+        model.configuration.plans[index].schedule.frequency = .hourly
+        model.configuration.plans[index].lastRunAt = nil
+        model.configuration.plans[index].lastSuccessAt = Date.now.addingTimeInterval(-10 * 86400)
+
+        await model.runDuePlans()
+        #expect(model.activity[harness.plan.id] != nil, "the tick started it")
+        #expect(model.plan(id: harness.plan.id)?.staleAlertedFor == nil, "and did not name it")
+        await model.tasks.drain()
+
+        await model.shutdown()
+    }
+
     @Test("with restic missing, a due plan and a mount's catch-up start nothing: no Failed record, banner or upkeep run")
     func resticMissingRestsTheSchedule() async throws {
         let harness = try await makeHarness(mode: "default")

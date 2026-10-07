@@ -97,7 +97,7 @@ struct SettingsView: View {
                         Text(days == 0 ? "Never" : Format.plural(days, "day")).tag(days)
                     }
                 }
-                Text("Once per quiet stretch, until the plan's next successful backup. Checked every minute while SwiftRestic runs — a Mac asleep the whole time hears at its first check after waking. Paused and manual plans are never named.")
+                Text("Once per quiet stretch, until the plan's next successful backup. Checked every minute while SwiftRestic runs — a Mac asleep the whole time hears at its first check after waking. Paused and manual plans are never named, nor a plan that is running or starting.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
