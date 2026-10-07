@@ -88,7 +88,10 @@ checked in so a normal build does not need it.
   version below (*+17 bytes*, *Same size*) — or *May be identical* where no
   diff split the two and their sizes do not tell them apart — and, for a
   content several backups held, which (*In 4 backups · Oct 2 – Oct 4,
-  2026*). Above them, for a file this Mac backed up by its own path, one
+  2026*). Past one month the versions group by month, as the picker does,
+  each under the month of the first backup that held it — the backup after
+  its change, so the month its *Modified* date sits in, give or take one
+  backup's interval. Above them, for a file this Mac backed up by its own path, one
   line says what the copy here is: *the same as the newest version*, the
   same as an older one, none of them (with its own date and size), or *Not
   on this Mac* — one `lstat`, compared by size and modification time to

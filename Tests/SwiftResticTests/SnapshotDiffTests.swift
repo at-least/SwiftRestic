@@ -128,6 +128,31 @@ struct DiffCandidateGroupingTests {
         #expect(DiffCandidateGrouping.landmarks(in: versions, time: \.time, calendar: calendar)?.count == 2)
     }
 
+    @Test("a file's versions group by the month of the first backup that held each, as the file pane's list reads them")
+    func contentVersionMonths() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let day = { (iso: String) in ISO8601DateFormatter().date(from: iso)! }
+        // Newest first, each version's backups newest first: the oldest
+        // version, left alone, was still held in March.
+        let versions = [
+            ContentVersion(snapshots: [IndexVersion(id: "c", time: day("2026-03-20T09:00:00Z"))], since: .changed),
+            ContentVersion(snapshots: [
+                IndexVersion(id: "b2", time: day("2026-03-10T09:00:00Z")),
+                IndexVersion(id: "b1", time: day("2026-03-02T09:00:00Z")),
+            ], since: .changed),
+            ContentVersion(snapshots: [
+                IndexVersion(id: "a3", time: day("2026-03-01T09:00:00Z")),
+                IndexVersion(id: "a1", time: day("2026-01-15T09:00:00Z")),
+            ], since: nil),
+        ]
+        let months = try #require(DiffCandidateGrouping.landmarks(in: versions, time: \.snapshots.last!.time, calendar: calendar))
+        #expect(months.map(\.label) == ["March 2026", "January 2026"])
+        #expect(months.map { $0.items.map(\.id) } == [["c", "b2"], ["a3"]])
+        // A file whose versions all began in one month reads as before.
+        #expect(DiffCandidateGrouping.landmarks(in: Array(versions.prefix(2)), time: \.snapshots.last!.time, calendar: calendar) == nil)
+    }
+
     @Test("empty input groups to nothing")
     func emptyInput() throws {
         #expect(DiffCandidateGrouping.months(in: []).isEmpty)

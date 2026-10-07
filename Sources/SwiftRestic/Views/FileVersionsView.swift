@@ -95,22 +95,41 @@ struct FileVersionsView: View {
         }
     }
 
+    private func versionRow(_ version: ContentVersion) -> some View {
+        FileVersionRow(
+            version: version,
+            detail: detail(of: version),
+            olderDetail: older(than: version).flatMap(detail(of:)),
+            isReadingDetail: isReadingDetails
+        )
+        // The list's own drag, no gesture on the row (the Restore pane's
+        // rule).
+        .itemProvider { dragProvider(for: version) }
+    }
+
     @ViewBuilder
     private var list: some View {
         if versions.isEmpty {
             // The empty state says why, while the index reads.
             ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
         } else {
-            List(versions, selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) { version in
-                FileVersionRow(
-                    version: version,
-                    detail: detail(of: version),
-                    olderDetail: older(than: version).flatMap(detail(of:)),
-                    isReadingDetail: isReadingDetails
-                )
-                // The list's own drag, no gesture on the row (the Restore
-                // pane's rule).
-                .itemProvider { dragProvider(for: version) }
+            List(selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) {
+                // A history past one month is grouped by month, as the
+                // folder pane's picker and the sidebar's fold are, so a year
+                // of hourly versions is not one flat scroll. Each version
+                // falls under the month of the first backup that held it —
+                // the backup after its change, so the month its "Modified"
+                // date sits in, give or take one backup's interval; its
+                // newest backup could be months later for a file left alone.
+                if let months = DiffCandidateGrouping.landmarks(in: versions, time: \.snapshots.last!.time) {
+                    ForEach(months, id: \.label) { month in
+                        Section(month.label) {
+                            ForEach(month.items) { versionRow($0) }
+                        }
+                    }
+                } else {
+                    ForEach(versions) { versionRow($0) }
+                }
             }
             .listStyle(.inset)
             .focusOnClick($listIsFocused)
