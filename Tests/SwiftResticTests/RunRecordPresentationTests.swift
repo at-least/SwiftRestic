@@ -259,6 +259,28 @@ struct RunRecordPresentationTests {
         #expect(RunFix.editRepositoryPath(repository).help == "No repository is at its saved path — point it at the folder that holds the repository")
     }
 
+    @Test("a check or prune that did not end clean offers itself again; nothing else does")
+    func maintenanceRetry() {
+        let repository = UUID()
+        func run(_ kind: RunRecord.Kind, _ outcome: RunRecord.Outcome) -> RunRecord {
+            var record = RunRecord(kind: kind, repositoryID: repository)
+            record.outcome = outcome
+            return record
+        }
+        #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .failed), repositoryExists: true) == .check(repository))
+        // A check that found damage: its verdict, not a crash, is the news.
+        #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .completedWithErrors), repositoryExists: true) == .check(repository))
+        #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .failed), repositoryExists: true) == .prune(repository))
+        #expect(MaintenanceRetry.check(repository).title == "Check Again…")
+        #expect(MaintenanceRetry.prune(repository).title == "Prune Again…")
+        // A clean or cancelled one, another kind, a repository gone: nothing.
+        #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .succeeded), repositoryExists: true) == nil)
+        #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .cancelled), repositoryExists: true) == nil)
+        #expect(RunRecordPresentation.maintenanceRetry(for: run(.backup, .failed), repositoryExists: true) == nil)
+        #expect(RunRecordPresentation.maintenanceRetry(for: run(.forget, .failed), repositoryExists: true) == nil)
+        #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .failed), repositoryExists: false) == nil)
+    }
+
     @Test("the Detail column's wording for each kind of run")
     func detailWording() {
         let detail = RunRecordPresentation.detail(for:)

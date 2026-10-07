@@ -35,11 +35,45 @@ enum RunFix: Equatable {
     }
 }
 
+/// A check or prune that did not end clean, run again from the drawer where
+/// its verdict is read — the Repository menu's command, through the same
+/// confirmation.
+enum MaintenanceRetry: Equatable {
+    case check(UUID)
+    case prune(UUID)
+
+    var title: String {
+        switch self {
+        case .check: "Check Again…"
+        case .prune: "Prune Again…"
+        }
+    }
+
+    var repositoryID: UUID {
+        switch self {
+        case let .check(id), let .prune(id): id
+        }
+    }
+}
+
 enum RunRecordPresentation {
     /// The fix for a failed run, or nil when its cause has none the app can
     /// perform. Only while the repository is still set up; Remove Stale
     /// Locks… only while no run here holds a lock on it, so "stale" means
     /// nobody here is using it.
+    /// The re-run a failed check or prune offers, or one that found errors;
+    /// nil for any other run, a clean one, or one whose repository is gone.
+    static func maintenanceRetry(for run: RunRecord, repositoryExists: Bool) -> MaintenanceRetry? {
+        guard repositoryExists, let id = run.repositoryID,
+              run.outcome == .failed || run.outcome == .completedWithErrors
+        else { return nil }
+        switch run.kind {
+        case .check: return .check(id)
+        case .prune: return .prune(id)
+        case .backup, .forget, .restore: return nil
+        }
+    }
+
     static func fix(for run: RunRecord, repositoryExists: Bool, repositoryBusy: Bool) -> RunFix? {
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
         if run.exitCode == 12 { return .editRepository(repositoryID) }

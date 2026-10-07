@@ -229,6 +229,18 @@ struct RunDetailPanel: View {
             if let fix = model.fix(for: run) {
                 RunFixButton(fix: fix)
             }
+            // A check's verdict stands a week with nothing on its page to
+            // act on it; its re-run sits here, beside the fix. Greyed as
+            // the menu's command is while the repository is busy.
+            if let retry = RunRecordPresentation.maintenanceRetry(for: run, repositoryExists: repositoryName != nil) {
+                Button(retry.title) {
+                    switch retry {
+                    case let .check(id): router.request(.confirm(.check(id)))
+                    case let .prune(id): router.request(.confirm(.prune(id)))
+                    }
+                }
+                .disabled(!model.repositoryCommands(for: .repository(retry.repositoryID)).canMaintain)
+            }
             if let planID = run.planID, let plan = model.plan(id: planID) {
                 // A retry only where there is something to retry: a clean
                 // record's next step is not a pointless re-run.

@@ -378,7 +378,10 @@ checked in so a normal build does not need it.
   how it ended when it did not succeed ("3 days ago · failed", "· errors
   found", "· cancelled"); the stamp the scheduler keeps — written for every
   attempt, so a failing check is not retried every minute — is read only
-  when the history holds no run as new as it.
+  when the history holds no run as new as it. A failed check or prune, or a
+  check that found errors, offers *Check Again…* or *Prune Again…* in its
+  Activity drawer — the Repository menu's command, behind the same
+  confirmation, grey while the repository is busy.
 - **Hooks** — shell commands before a backup and after success, warnings or
   failure, and per repository before and after a check or prune. Context arrives
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
