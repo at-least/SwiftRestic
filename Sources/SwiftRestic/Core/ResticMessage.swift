@@ -210,6 +210,12 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
         return .metadataOnly
     }
 
+    /// The backup of the two compared that holds this path: the older for
+    /// a removal, the newer for every other change.
+    func holder(newer: Snapshot, older: Snapshot) -> Snapshot {
+        category == .removed ? older : newer
+    }
+
     /// A short phrase for the row's tooltip.
     var explanation: String {
         var parts: [String] = []

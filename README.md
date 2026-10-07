@@ -318,6 +318,13 @@ checked in so a normal build does not need it.
   modified, filterable by kind and path, with restic's byte totals, under a
   header that names the repository the diff ran against. Answers
   "what did last night's backup actually pick up?" without restoring anything.
+  A row leads on: its right-click menu has *Show Versions* (also a
+  double-click), which closes the sheet onto the item's Files tab, and
+  *Restore “…”…* through the destination sheet — both from the backup of the
+  two that holds the item, the newer for an added or changed one, the older
+  for a removed one. The restore lists the item's node with restic first, as
+  Find Files does for an index hit: a diff names a path and a kind, never a
+  node.
 - **Start at login** — the scheduler only runs while the app runs, so SwiftRestic
   can register itself as a login item and sit in the menu bar.
 - **Maintenance** — scheduled `check` and `prune` per repository, on a day

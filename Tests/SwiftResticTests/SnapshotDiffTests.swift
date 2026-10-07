@@ -30,6 +30,16 @@ struct SnapshotDiffTests {
         #expect(photos.previousComparable(in: all) == nil)
     }
 
+    @Test("a change row's copy is in the newer backup, a removed one's in the older")
+    func changeHolder() throws {
+        let older = try snapshot("a1", time: "2026-09-01T02:00:00Z", paths: ["/src"])
+        let newer = try snapshot("a2", time: "2026-09-02T02:00:00Z", paths: ["/src"])
+        for modifier in ["+", "M", "T", "U", "MU", "?"] {
+            #expect(ResticDiffChange(path: "/src/a.txt", modifier: modifier).holder(newer: newer, older: older) == newer)
+        }
+        #expect(ResticDiffChange(path: "/src/gone/", modifier: "-").holder(newer: newer, older: older) == older)
+    }
+
     @Test("counts by category and remembers the order the IDs were passed in")
     func diffCounts() throws {
         var diff = SnapshotDiff(olderID: "old", newerID: "new")

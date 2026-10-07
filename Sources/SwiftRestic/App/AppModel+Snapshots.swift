@@ -184,6 +184,24 @@ extension AppModel {
         return all.filter { $0.tags.contains(tag) }
     }
 
+    /// The node restic lists for `path` in a backup — its parent's listing,
+    /// matched by bytes: a sibling whose name only canonically equals this
+    /// one is another file. For a restore asked by path (a Find Files hit
+    /// from the index, a Compare row): the index and a diff name a path and
+    /// a kind but no node, and a kind they got wrong would send a folder to
+    /// `dump`, which writes its tar into one file with no error. A path the
+    /// backup no longer lists fails loudly.
+    func listedNode(repositoryID: UUID, snapshotID: String, path: String) async throws -> SnapshotNode {
+        let siblings = try await children(repositoryID: repositoryID, snapshotID: snapshotID, path: ResticPath.parent(of: path))
+        guard let node = siblings.first(where: { PathKey($0.path) == PathKey(path) }) else {
+            throw ResticError.commandFailed(
+                exitCode: 0,
+                message: "“\(ResticPath.basename(of: path))” is no longer listed in the chosen snapshot — refresh and try again."
+            )
+        }
+        return node
+    }
+
     func children(
         repositoryID: UUID,
         snapshotID: String,

@@ -209,6 +209,7 @@ struct ActivityView: View {
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target)
                 .environment(model)
+                .environment(router)
         }
         .sheet(item: $loggedRun) { run in
             RunLogSheet(run: run)

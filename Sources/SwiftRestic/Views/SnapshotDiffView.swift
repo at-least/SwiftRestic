@@ -12,8 +12,11 @@ struct SnapshotDiffTarget: Identifiable {
 /// Answers "what did last night's backup actually pick up?" without restoring
 /// anything. The comparison defaults to the previous snapshot of the same
 /// folders from the same Mac; anything earlier in the repository can be chosen.
+/// A row leads on, as every list of items does: Show Versions (also a
+/// double-click) and Restore…, from the backup of the two that holds it.
 struct SnapshotDiffView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     @Environment(\.dismiss) private var dismiss
     @Environment(\.now) private var now
 
@@ -42,6 +45,9 @@ struct SnapshotDiffView: View {
     /// Bumped by every `installDiff`, so a new diff's rows recompute even
     /// when its filter and needle read the same as the last one's.
     @State private var diffLoad = 0
+    @State private var selection = Set<ResticDiffChange.ID>()
+    /// The restore waiting in the destination sheet.
+    @State private var destinationRequest: RestoreDestinationRequest?
 
     private var newer: Snapshot { target.snapshot }
 
@@ -94,6 +100,10 @@ struct SnapshotDiffView: View {
         }
         .task(id: RowFilterKey(load: diffLoad, category: filter, needle: appliedSearchText)) {
             await computeRows()
+        }
+        .sheet(item: $destinationRequest) { request in
+            RestoreDestinationSheet(request: request)
+                .environment(model)
         }
     }
 
@@ -287,7 +297,7 @@ struct SnapshotDiffView: View {
             if rows.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
-                List(rows) { change in
+                List(rows, selection: $selection) { change in
                     HStack(spacing: 8) {
                         Text(glyph(for: change))
                             .font(.system(.body, design: .monospaced).weight(.semibold))
@@ -315,6 +325,22 @@ struct SnapshotDiffView: View {
                     }
                 }
                 .listStyle(.inset)
+                // The row is the one clicked, not the selection's: a
+                // right-click on an unselected row must not depend on it.
+                .contextMenu(forSelectionType: ResticDiffChange.ID.self) { ids in
+                    if ids.count == 1, let change = rows.first(where: { $0.id == ids.first }) {
+                        if let open = showVersions(of: change) {
+                            Button("Show Versions", action: open)
+                        }
+                        Button("Restore “\(change.name)”…") { restore(change) }
+                            .disabled(model.isRestoring || holder(of: change) == nil)
+                    }
+                } primaryAction: { ids in
+                    // Opens, never restores: a double-tap must not move bytes.
+                    guard ids.count == 1, let change = rows.first(where: { $0.id == ids.first }) else { return }
+                    showVersions(of: change)?()
+                }
+                .help("Double-click shows an item's versions; right-click to restore it from the backup that has it")
             }
         } else {
             // The filter pass for these inputs is still in flight — a blank
@@ -326,17 +352,74 @@ struct SnapshotDiffView: View {
     }
 
     private func footer(_ changeRows: [ResticDiffChange]?) -> some View {
-        HStack {
-            if let diff, let shown = changeRows?.count {
-                Text(footerText(diff, shown: shown))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            RestoreProgressStrip()
+            HStack {
+                if let diff, let shown = changeRows?.count {
+                    Text(footerText(diff, shown: shown))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                // A restore keeps running with the sheet gone, as Find
+                // Files' does.
+                Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
             }
-            Spacer()
-            Button("Close") { dismiss() }
-                .keyboardShortcut(.cancelAction)
         }
         .padding(12)
+    }
+
+    // MARK: - Routes
+
+    /// The backup of the two compared that holds a row's item
+    /// (`ResticDiffChange.holder`): the rows are the loaded diff's, so its
+    /// older backup, which the picker may already have moved past. Nil once
+    /// that backup is no longer listed.
+    private func holder(of change: ResticDiffChange) -> Snapshot? {
+        guard let diff, let older = model.snapshots(for: target.repositoryID).first(where: { $0.id == diff.olderID })
+        else { return nil }
+        return change.holder(newer: newer, older: older)
+    }
+
+    /// Show Versions for a row — out of the sheet, onto the Files tab that
+    /// holds the item's history, at the backup that has it.
+    private func showVersions(of change: ResticDiffChange) -> (() -> Void)? {
+        guard let record = holder(of: change) else { return nil }
+        let repositoryID = target.repositoryID
+        return {
+            router.showVersions(
+                path: ResticPath.normalized(change.path),
+                isDirectory: change.isDirectory,
+                in: record,
+                repositoryID: repositoryID,
+                page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
+            )
+            dismiss()
+        }
+    }
+
+    /// Restores a row's item from the backup that has it, through the
+    /// destination sheet. restic lists the node first (`listedNode`): a
+    /// diff names a path and a kind, never a node.
+    private func restore(_ change: ResticDiffChange) {
+        guard let record = holder(of: change) else { return }
+        let repositoryID = target.repositoryID
+        let path = ResticPath.normalized(change.path)
+        destinationRequest = RestoreDestinationRequest(
+            subject: .item(name: change.name, path: path, isDirectory: change.isDirectory),
+            backupTime: record.time,
+            snapshotShortID: record.shortID
+        ) { directories, overwrite in
+            Task {
+                do {
+                    let node = try await model.listedNode(repositoryID: repositoryID, snapshotID: record.id, path: path)
+                    model.restore(repositoryID: repositoryID, snapshotID: record.id, node: node, to: directories[0], overwrite: overwrite)
+                } catch {
+                    model.post(Banner(title: "Could not restore “\(change.name)”", message: error.localizedDescription, isError: true))
+                }
+            }
+        }
     }
 
     // MARK: - Helpers

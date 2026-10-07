@@ -520,21 +520,7 @@ struct FindFilesView: View {
         }
         Task {
             do {
-                let parent = (row.match.path as NSString).deletingLastPathComponent
-                let children = try await model.children(
-                    repositoryID: repositoryID,
-                    snapshotID: row.snapshotID,
-                    path: parent
-                )
-                // By bytes: a sibling whose name only canonically equals
-                // this one is another file, and restoring it would restore
-                // the wrong item under this row's name and kind.
-                guard let node = children.first(where: { PathKey($0.path) == PathKey(row.match.path) }) else {
-                    throw ResticError.commandFailed(
-                        exitCode: 0,
-                        message: "“\(row.match.name)” is no longer listed in the chosen snapshot — refresh and try again."
-                    )
-                }
+                let node = try await model.listedNode(repositoryID: repositoryID, snapshotID: row.snapshotID, path: row.match.path)
                 model.restore(
                     repositoryID: repositoryID,
                     snapshotID: row.snapshotID,

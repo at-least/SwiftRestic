@@ -165,6 +165,38 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("an item named by its path is restored from the node restic lists for it, and a path the backup lacks says so")
+    func listedNodeByPath() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let snapshot = try #require(model.snapshots(for: harness.repository.id, planID: harness.plan.id).first)
+
+        let file = try await model.listedNode(
+            repositoryID: harness.repository.id, snapshotID: snapshot.id,
+            path: harness.sourceDirectory.appendingPathComponent("a.txt").path
+        )
+        #expect(file.name == "a.txt")
+        #expect(!file.isDirectory)
+        let folder = try await model.listedNode(
+            repositoryID: harness.repository.id, snapshotID: snapshot.id, path: harness.sourceDirectory.path
+        )
+        #expect(folder.isDirectory)
+        await #expect(throws: ResticError.commandFailed(
+            exitCode: 0, message: "“gone.txt” is no longer listed in the chosen snapshot — refresh and try again."
+        )) {
+            try await model.listedNode(
+                repositoryID: harness.repository.id, snapshotID: snapshot.id,
+                path: harness.sourceDirectory.appendingPathComponent("gone.txt").path
+            )
+        }
+
+        await model.shutdown()
+    }
+
     @Test("the Restore pane's drag provider promises a file's or a folder's content, restored on demand")
     func dragProviderPromisesContent() async throws {
         let harness = try await makeHarness()
