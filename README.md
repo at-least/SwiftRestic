@@ -270,6 +270,20 @@ checked in so a normal build does not need it.
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
   run off.
 - **Alerts** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
+  Locally, besides a notification per failed (and, if wanted, successful)
+  backup, one for a scheduled plan gone quiet: *Notify when a scheduled plan
+  has not backed up for* 3, 7 (the default) or 14 days, or never, in Settings ›
+  General. A plan whose drive is unplugged at every slot, or whose slots the
+  Mac sleeps through, writes no failed run, so nothing else would say it. It
+  names each plan once per quiet stretch — "No successful backup in 8 days —
+  the last one was …", the mark saved on the plan — and that plan's next
+  success re-arms it; clicking it opens the plan. Only plans the scheduler
+  would start count: paused, manual, incomplete or running plans never, nor
+  anything while Pause Backups or the battery hold is on. The window is the
+  setting or one schedule interval and a day, whichever is longer, so a
+  weekly plan is not named the hour before each run. It is checked on the
+  scheduler's minute tick: a Mac asleep the whole time hears at its first
+  tick after waking. The menu bar's dot and problem line stay run-driven.
 - **restic console** — run any restic command against a repository and read its
   own output, for the things the UI does not cover (*Repository › restic
   Console…*).

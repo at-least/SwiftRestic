@@ -7,6 +7,8 @@ struct AppSettings: Codable, Sendable, Hashable {
     var showMenuBarExtra: Bool = true
     var notifyOnSuccess: Bool = false
     var notifyOnFailure: Bool = true
+    /// The quiet-plan alert's threshold in days (`StaleAlert`); 0 is off.
+    var staleAlertDays: Int = 7
     /// How many run records to keep before the oldest are dropped.
     var maxRunHistory: Int = 300
     /// 0 means unlimited. Passed to restic as `--limit-upload` / `--limit-download`.
@@ -31,6 +33,7 @@ struct AppSettings: Codable, Sendable, Hashable {
         showMenuBarExtra = c.value(.showMenuBarExtra, default: true)
         notifyOnSuccess = c.value(.notifyOnSuccess, default: false)
         notifyOnFailure = c.value(.notifyOnFailure, default: true)
+        staleAlertDays = c.value(.staleAlertDays, default: 7)
         maxRunHistory = c.value(.maxRunHistory, default: 300)
         uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
         downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)

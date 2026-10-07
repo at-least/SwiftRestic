@@ -9,7 +9,17 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard let runID = UUID(uuidString: response.notification.request.identifier) else { return }
+        let identifier = response.notification.request.identifier
+        // A quiet plan's notification opens the plan; a run's, the run.
+        if identifier.hasPrefix(AppModel.quietPlanNotificationPrefix),
+           let planID = UUID(uuidString: String(identifier.dropFirst(AppModel.quietPlanNotificationPrefix.count))) {
+            await MainActor.run {
+                router?.selection = .plan(planID)
+                tray?.openMainWindow()
+            }
+            return
+        }
+        guard let runID = UUID(uuidString: identifier) else { return }
         await MainActor.run {
             router?.focusRun(runID)
             tray?.openMainWindow()

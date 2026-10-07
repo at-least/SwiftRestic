@@ -103,6 +103,29 @@ struct AppModelStubTests {
 
     // MARK: - Restore
 
+    @Test("a quiet scheduled plan is named once per stretch, and the mark is saved on the plan")
+    func quietPlanAlert() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let now = Date()
+        let last = now.addingTimeInterval(-10 * 86400)
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        model.configuration.plans[index].schedule.frequency = .daily
+        model.configuration.plans[index].lastSuccessAt = last
+
+        #expect(model.alertQuietPlans(now: now).map(\.planID) == [harness.plan.id])
+        #expect(model.plan(id: harness.plan.id)?.staleAlertedFor == last)
+        // The next tick names nothing: one notification per stretch.
+        #expect(model.alertQuietPlans(now: now.addingTimeInterval(60)).isEmpty)
+        // Off names nothing either.
+        model.configuration.plans[index].lastSuccessAt = last.addingTimeInterval(3600)
+        model.configuration.settings.staleAlertDays = 0
+        #expect(model.alertQuietPlans(now: now).isEmpty)
+
+        await model.shutdown()
+    }
+
     @Test("restoring a file writes the dump, records the run and surfaces a banner")
     func restoringFileSucceeds() async throws {
         let harness = try await makeHarness(mode: "default")

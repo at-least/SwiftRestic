@@ -286,6 +286,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var hooks: [BackupHook] = []
     var lastRunAt: Date?
     var lastSuccessAt: Date?
+    /// The last backup the quiet-plan alert last named this plan for
+    /// (`StaleAlert`): one notification per stretch, re-armed by a newer
+    /// success.
+    var staleAlertedFor: Date?
 
     init() {}
 
@@ -310,6 +314,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         hooks = c.value(.hooks, default: [])
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
+        staleAlertedFor = c.optional(.staleAlertedFor)
     }
 
     /// Noise the Finder, package managers and caches regenerate on their own.
@@ -353,8 +358,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     }
 
     /// The stored plan wins over the editor's draft for the model-written
-    /// fields the draft may hold stale: the run stamps (`markPlanRun`) and a
-    /// timed pause's end, which the scheduler's tick clears once it passes —
+    /// fields the draft may hold stale: the run stamps (`markPlanRun`), the
+    /// quiet-plan alert's mark, and a timed pause's end, which the
+    /// scheduler's tick clears once it passes —
     /// a stale draft must not erase the plan's last success or bring back a
     /// pause that has ended.
     /// Everything else comes from the draft; a new model-written field joins
@@ -365,6 +371,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         merged.lastRunAt = lastRunAt
         merged.lastSuccessAt = lastSuccessAt
         merged.pausedUntil = pausedUntil
+        merged.staleAlertedFor = staleAlertedFor
         return merged
     }
 }

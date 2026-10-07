@@ -28,6 +28,10 @@ extension AppModel {
         // Now never comes through here.
         guard scheduleHold == nil else { return }
 
+        // After the guard: a hold exempts every plan from the quiet-plan
+        // alert, as it holds their runs.
+        alertQuietPlans(now: .now)
+
         // Upkeep is considered first: a due prune should not be starved by a
         // backup, which will simply still be due on the next tick. A
         // repository with no stored password has nothing runnable; treat it

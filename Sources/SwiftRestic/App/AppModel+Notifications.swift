@@ -42,6 +42,50 @@ extension AppModel {
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
     }
 
+    /// The quiet-plan alert's tick (`StaleAlert`): names each plan that
+    /// has gone quiet past its window, once per stretch — the mark is saved
+    /// on the plan, so a relaunch does not name it again. Marked even when
+    /// local notifications are off or not allowed: the alert is the
+    /// notification, and a later permission must not bring back old news.
+    @discardableResult
+    func alertQuietPlans(now: Date) -> [StalePlanAlert] {
+        var latest: [UUID: Date] = [:]
+        for plan in configuration.plans {
+            latest[plan.id] = snapshots(for: plan.repositoryID, planID: plan.id).first?.time
+        }
+        let alerts = StaleAlert.due(
+            plans: configuration.plans,
+            latestSnapshotTimes: latest,
+            thresholdDays: configuration.settings.staleAlertDays,
+            running: runningPlanIDs,
+            now: now
+        )
+        for alert in alerts {
+            guard let index = configuration.plans.firstIndex(where: { $0.id == alert.planID }) else { continue }
+            configuration.plans[index].staleAlertedFor = alert.lastBackupAt
+            guard Self.supportsNotifications else { continue }
+            let text = StaleAlert.notification(
+                planTitle: RunRecordPresentation.planWithRepository(
+                    configuration.plans[index], repositories: configuration.repositories
+                ),
+                alert: alert
+            )
+            let content = UNMutableNotificationContent()
+            content.title = text.title
+            content.body = text.body
+            deliver(UNNotificationRequest(
+                identifier: Self.quietPlanNotificationPrefix + alert.planID.uuidString,
+                content: content,
+                trigger: nil
+            ))
+        }
+        return alerts
+    }
+
+    /// A quiet-plan notification's identifier: this prefix and the plan's
+    /// ID, which a click opens; a run notification's is the run's ID.
+    nonisolated static let quietPlanNotificationPrefix = "quiet-plan:"
+
     func notify(about record: RunRecord) {
         let settings = configuration.settings
         let wantsNotification = switch record.outcome {
@@ -58,11 +102,15 @@ extension AppModel {
             repositories: configuration.repositories
         )
         content.body = Self.notificationBody(for: record)
-        let request = UNNotificationRequest(
+        deliver(UNNotificationRequest(
             identifier: record.id.uuidString,
             content: content,
             trigger: nil
-        )
+        ))
+    }
+
+    /// Hands a notification to macOS, or says once why it cannot.
+    private func deliver(_ request: UNNotificationRequest) {
         Task {
             // A notification that silently never arrives is the failure mode
             // a backup app most cannot afford: external channels banner their

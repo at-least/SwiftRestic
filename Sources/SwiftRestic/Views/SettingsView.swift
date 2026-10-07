@@ -88,6 +88,17 @@ struct SettingsView: View {
             Section("Notifications") {
                 Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
                 Toggle("Notify when a backup fails", isOn: $model.configuration.settings.notifyOnFailure)
+                // A plan that never runs writes no failure to notify about:
+                // an unplugged drive at every slot, a Mac asleep through them.
+                Picker("Notify when a scheduled plan has not backed up for", selection: $model.configuration.settings.staleAlertDays) {
+                    ForEach(StaleAlert.choices, id: \.self) { days in
+                        Text(days == 0 ? "Never" : Format.plural(days, "day")).tag(days)
+                    }
+                }
+                Text("Once per quiet stretch, until the plan's next successful backup. Checked every minute while SwiftRestic runs — a Mac asleep the whole time hears at its first check after waking. Paused and manual plans are never named.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 // The relationship between the two toggle layers, stated
                 // where both are visible: these gate this Mac's notification
                 // centre; the Alerts tab's channels carry their own
