@@ -142,6 +142,7 @@ extension AppModel {
         case .completedWithErrors: stage = .warned
         case .failed: stage = .failed
         case .cancelled: stage = .cancelled
+        case .skipped: stage = .skipped
         }
         return NotificationEvent(
             stage: stage,
@@ -149,7 +150,8 @@ extension AppModel {
             repositoryName: repositoryName,
             operation: record.kind.displayName,
             snapshotID: record.snapshotID,
-            errorMessage: record.failureMessage,
+            // A skipped run's reason is its detail, not a failure.
+            errorMessage: record.failureMessage ?? (record.outcome == .skipped ? record.detailText : nil),
             // restic's own warnings only. `hookMessages` deliberately does not
             // leave the machine. The excerpts are for the message body; the
             // count is what the summary announces.

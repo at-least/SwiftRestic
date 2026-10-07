@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Network
 
@@ -87,6 +88,42 @@ extension AppModel {
             isOnMeteredNetwork: isOnMeteredNetwork,
             now: .now
         )
+    }
+
+    /// Watches for volumes mounting: a plan skipped because its drive was
+    /// away runs again when the drive comes back, not a whole interval
+    /// later.
+    func startMountWatcher() {
+        mountObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didMountNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.runSkippedPlansAfterMount() }
+        }
+    }
+
+    func stopMountWatcher() {
+        if let mountObserver { NSWorkspace.shared.notificationCenter.removeObserver(mountObserver) }
+        mountObserver = nil
+    }
+
+    /// The mount's catch-up (`Scheduler.catchUpAfterMount`): only while
+    /// nothing holds the schedule, as for the tick.
+    func runSkippedPlansAfterMount(now: Date = .now) {
+        guard !isShuttingDown, scheduleHold == nil else { return }
+        var newest: [UUID: RunRecord.Outcome] = [:]
+        // Newest first.
+        for run in configuration.runs where run.kind == .backup {
+            if let planID = run.planID, newest[planID] == nil { newest[planID] = run.outcome }
+        }
+        for planID in Scheduler.catchUpAfterMount(
+            plans: configuration.plans,
+            newestBackupOutcome: newest,
+            running: runningPlanIDs,
+            sourcesExist: { Self.allSourcesExist($0.sources) },
+            now: now
+        ) {
+            runBackup(planID: planID)
+        }
     }
 
     /// Follows the network for the metered-network hold: macOS's own

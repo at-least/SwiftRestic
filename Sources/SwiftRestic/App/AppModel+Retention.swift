@@ -88,8 +88,9 @@ extension AppModel: RetentionRunEngine.Sink {
                 message: record.failureMessage ?? "",
                 isError: true
             ))
-        case .cancelled:
-            // The user's own Stop, or the quit they confirmed: nothing to add.
+        case .cancelled, .skipped:
+            // The user's own Stop, or the quit they confirmed: nothing to
+            // add. (A retention run is never skipped.)
             break
         }
     }

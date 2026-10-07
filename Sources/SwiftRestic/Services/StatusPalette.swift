@@ -9,7 +9,7 @@ enum StatusPalette {
         case .succeeded: .green
         case .completedWithErrors: .orange
         case .failed: .red
-        case .cancelled: .gray
+        case .cancelled, .skipped: .gray
         }
     }
 }

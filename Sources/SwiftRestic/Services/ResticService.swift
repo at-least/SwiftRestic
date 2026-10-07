@@ -113,6 +113,9 @@ struct ResticService: ResticClient {
     /// Whether the located restic takes `restore --overwrite` (0.17+).
     /// Defaults on, for the same reason as the stall cap.
     var supportsRestoreOverwrite = true
+    /// Whether this restic takes `--exclude-cloud-files` on macOS (0.19+).
+    /// Below that a plan's setting passes nothing, and the editor says so.
+    var excludesCloudFiles = true
 
     /// Tag stamped on every snapshot a plan creates, so retention and snapshot
     /// listings can be scoped to that plan without touching anyone else's data.
@@ -549,6 +552,7 @@ struct ResticService: ResticClient {
         }
         if plan.excludeCaches { args.append("--exclude-caches") }
         if plan.oneFileSystem { args.append("--one-file-system") }
+        if plan.excludeCloudFiles, excludesCloudFiles { args.append("--exclude-cloud-files") }
         args += ["--tag", Self.planTag(plan.id)]
         for tag in plan.tags where !tag.trimmingCharacters(in: .whitespaces).isEmpty {
             args += ["--tag", tag]

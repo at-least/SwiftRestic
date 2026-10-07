@@ -40,6 +40,26 @@ enum ScheduleHold: Equatable, Sendable {
 /// Pure: the wall-clock timer lives in `AppModel`, so tests hand it a fixed
 /// `now`.
 enum Scheduler {
+    /// The plans a newly mounted volume brings back: each the scheduler
+    /// would start by itself whose newest backup was skipped — its folders
+    /// were missing — and whose folders are all here now. They run at once
+    /// instead of waiting a whole interval for the next slot. (The app-wide
+    /// hold is the caller's guard, as for the tick.)
+    static func catchUpAfterMount(
+        plans: [BackupPlan],
+        newestBackupOutcome: [UUID: RunRecord.Outcome],
+        running: Set<UUID>,
+        sourcesExist: (BackupPlan) -> Bool,
+        now: Date
+    ) -> [UUID] {
+        plans
+            .filter {
+                $0.isScheduleActive(at: now) && $0.schedule.frequency != .manual && $0.isConfigurationComplete
+                    && !running.contains($0.id) && newestBackupOutcome[$0.id] == .skipped && sourcesExist($0)
+            }
+            .map(\.id)
+    }
+
     /// The app-wide hold in force at `now`: a live pause wins, then the
     /// battery, then a metered network — each only while its setting asks
     /// for it. A pause whose end has

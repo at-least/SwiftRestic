@@ -217,6 +217,14 @@ enum BackupRunEngine {
 
             // A cache must never delay, and never fail, the run that feeds it.
             await sink.refreshSnapshots(repositoryID: repository.id)
+        } catch let ResticError.commandFailed(_, message) where message.hasPrefix(RunRecord.everySourceMissingMessage) {
+            // Every folder missing — a drive not plugged in: restic wrote
+            // nothing and said so. The slot is stamped, so an hourly plan
+            // does not try again every tick; a mount brings it back sooner
+            // (`catchUpAfterMount`).
+            record.outcome = .skipped
+            record.detailText = RunRecord.skippedReason(sources: plan.sources)
+            sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
             sink.noteAuthFailure(error, repositoryID: repository.id)
@@ -254,6 +262,8 @@ enum BackupRunEngine {
         case .succeeded: [.afterSuccess, .afterAny]
         case .completedWithErrors: [.afterWarning, .afterAny]
         case .failed: [.afterFailure, .afterAny]
+        // Nothing was backed up, nothing failed: only the hooks for any end.
+        case .skipped: [.afterAny]
         case .cancelled: []
         }
         await runAfterHooks(
@@ -425,7 +435,8 @@ enum MaintenanceRunEngine {
         let events: [BackupHook.Event] = switch record.outcome {
         case .succeeded: [.afterMaintenanceSuccess, .afterAnyMaintenance]
         case .completedWithErrors, .failed: [.afterMaintenanceFailure, .afterAnyMaintenance]
-        case .cancelled: []
+        // A check or prune is never skipped.
+        case .cancelled, .skipped: []
         }
         await runAfterHooks(
             repository.hooks, events: events, context: hookContext,

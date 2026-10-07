@@ -24,7 +24,7 @@ enum NotificationPayload {
             // dead-man's switch stops meaning anything.
             switch event.stage {
             case .started: url.append(path: "start")
-            case .failed, .cancelled: url.append(path: "fail")
+            case .failed, .cancelled, .skipped: url.append(path: "fail")
             case .succeeded, .warned: break
             }
             // Healthchecks stores a POST body as the run's log.

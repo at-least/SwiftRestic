@@ -91,7 +91,9 @@ extension AppModel {
         let wantsNotification = switch record.outcome {
         case .succeeded: settings.notifyOnSuccess
         case .completedWithErrors, .failed: settings.notifyOnFailure
-        case .cancelled: false
+        // A drive not plugged in is no failure; the quiet-plan alert speaks
+        // if it stays away.
+        case .cancelled, .skipped: false
         }
         guard wantsNotification, Self.supportsNotifications else { return }
 
@@ -176,6 +178,8 @@ extension AppModel {
             return record.failureMessage.map(Format.firstSentence) ?? "The backup failed."
         case .cancelled:
             return "Cancelled."
+        case .skipped:
+            return record.detailText ?? "Skipped."
         }
     }
 

@@ -144,4 +144,10 @@ struct ResticVersion: Equatable, Sendable {
     var supportsRestoreOverwrite: Bool {
         (major, minor, patch) >= (0, 17, 0)
     }
+
+    /// `backup --exclude-cloud-files` came in restic 0.18 for Windows only;
+    /// 0.19 brought it to macOS (restic's CHANGELOG, #3697 and #5352).
+    var excludesCloudFilesOnMac: Bool {
+        (major, minor, patch) >= (0, 19, 0)
+    }
 }

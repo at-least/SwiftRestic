@@ -417,8 +417,26 @@ struct PlanEditorSheet: View {
             )
             Toggle("Skip folders marked as caches (CACHEDIR.TAG)", isOn: $draft.excludeCaches)
             Toggle("Stay on one filesystem", isOn: $draft.oneFileSystem)
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Skip online-only cloud files (iCloud Drive, OneDrive)", isOn: $draft.excludeCloudFiles)
+                // No row anywhere can show a file that was left out, so the
+                // trade is said here, once.
+                Text(cloudFilesCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.top, 6)
+    }
+
+    /// What the cloud-files switch does with this restic: 0.19 brought
+    /// `--exclude-cloud-files` to macOS.
+    private var cloudFilesCaption: String {
+        if let version = ResticVersion(parsing: model.resticVersion), !version.excludesCloudFilesOnMac {
+            return "Needs restic 0.19 or later — this restic backs them up like any other file."
+        }
+        return "Files kept only online, not downloaded to this Mac, are left out (restic's --exclude-cloud-files). Off, restic reads them like any other file."
     }
 
     private var scheduleTab: some View {

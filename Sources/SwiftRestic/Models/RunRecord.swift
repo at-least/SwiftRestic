@@ -18,6 +18,10 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 
     enum Outcome: String, Codable, Sendable {
         case succeeded, completedWithErrors, failed, cancelled
+        /// A backup with nothing to back up: every folder was missing — a
+        /// drive not plugged in — so restic wrote nothing. Stamps the slot;
+        /// no problem surface counts it (`detailText` says why).
+        case skipped
 
         var displayName: String {
             switch self {
@@ -25,6 +29,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             case .completedWithErrors: "Completed with errors"
             case .failed: "Failed"
             case .cancelled: "Cancelled"
+            case .skipped: "Skipped"
             }
         }
 
@@ -36,6 +41,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             switch self {
             case .succeeded: nil
             case .cancelled: "slash.circle"
+            case .skipped: "minus.circle"
             case .completedWithErrors: "exclamationmark.triangle.fill"
             case .failed: "xmark.octagon.fill"
             }
@@ -279,6 +285,27 @@ extension RunRecord {
     /// it was the user's stop or the app quitting, and anything else as
     /// `.failed` with the error's message. Callers keep their own side effects:
     /// stamps, banners, bookkeeping.
+    /// restic's fatal line when every source of a backup is missing
+    /// (restic 0.19.1, exit 1, no snapshot written).
+    static let everySourceMissingMessage = "Fatal: all source directories/files do not exist"
+
+    /// Why a backup was skipped, for Activity's Detail: the drives its
+    /// folders live on when every one is on a volume under /Volumes — the
+    /// usual reason they are all missing — else that none of them is here.
+    static func skippedReason(sources: [String]) -> String {
+        var volumes: [String] = []
+        for source in sources {
+            let parts = (source as NSString).expandingTildeInPath.split(separator: "/", omittingEmptySubsequences: true)
+            guard parts.count >= 2, parts[0] == "Volumes" else { return "None of its folders are on this Mac." }
+            let volume = String(parts[1])
+            if !volumes.contains(volume) { volumes.append(volume) }
+        }
+        guard !volumes.isEmpty else { return "None of its folders are on this Mac." }
+        let names = volumes.map { "“\($0)”" }
+        let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!
+        return "\(list) \(names.count == 1 ? "is" : "are") not connected."
+    }
+
     mutating func setOutcome(from error: Error, cancellationMessage: String) {
         let cancelled = ResticError.isCancellation(error)
         outcome = cancelled ? .cancelled : .failed

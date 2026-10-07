@@ -290,6 +290,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// (`StaleAlert`): one notification per stretch, re-armed by a newer
     /// success.
     var staleAlertedFor: Date?
+    /// Leave out online-only cloud files (iCloud Drive, OneDrive), with
+    /// restic's `--exclude-cloud-files`. On for new plans; a plan saved
+    /// before the option reads it off, so its backups do not change under it.
+    var excludeCloudFiles: Bool = true
 
     init() {}
 
@@ -315,6 +319,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
+        excludeCloudFiles = c.value(.excludeCloudFiles, default: false)
     }
 
     /// Noise the Finder, package managers and caches regenerate on their own.

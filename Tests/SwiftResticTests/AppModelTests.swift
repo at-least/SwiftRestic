@@ -330,6 +330,61 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a backup whose every folder is missing is skipped, not failed: the slot is stamped and nothing calls it a problem")
+    func everySourceMissingIsSkipped() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        model.configuration.plans[index].sources = ["/Volumes/SwiftRestic Test Drive/Documents"]
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.outcome == .skipped)
+        #expect(record.detailText == "“SwiftRestic Test Drive” is not connected.")
+        #expect(record.failureMessage == nil)
+        #expect(record.snapshotID == nil)
+        #expect(RunRecordPresentation.detail(for: record) == "“SwiftRestic Test Drive” is not connected.")
+        let plan = try #require(model.plan(id: harness.plan.id))
+        #expect(plan.lastRunAt != nil, "the slot is stamped, so the plan does not re-fire every tick")
+        #expect(plan.lastSuccessAt == nil)
+        #expect(model.currentProblem(for: harness.plan.id) == nil)
+
+        // A folder that is simply gone, not on a volume.
+        model.configuration.plans[index].sources = [harness.root.appendingPathComponent("gone").path]
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.configuration.runs.first?.detailText == "None of its folders are on this Mac.")
+
+        await model.shutdown()
+    }
+
+    @Test("online-only cloud files are left out with restic's own flag when the plan asks for it")
+    func excludeCloudFilesFlag() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+
+        model.configuration.plans[index].excludeCloudFiles = true
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let with = try #require(model.configuration.runs.first)
+        #expect(with.outcome == .succeeded)
+        #expect(model.runLogs.read(with.id)?.contains("--exclude-cloud-files") == true)
+
+        model.configuration.plans[index].excludeCloudFiles = false
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let without = try #require(model.configuration.runs.first)
+        #expect(without.id != with.id)
+        #expect(model.runLogs.read(without.id)?.contains("--exclude-cloud-files") == false)
+
+        await model.shutdown()
+    }
+
     @Test("the launch sweep removes old drag and preview staging and nothing else")
     func dragStagingSweep() throws {
         let temp = FileManager.default.temporaryDirectory

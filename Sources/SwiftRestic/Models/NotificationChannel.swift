@@ -61,7 +61,7 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
         case .failed: notifyOnFailure
         // A cancelled backup did not happen: only a dead-man's switch needs
         // to hear of it, and whoever cancelled it already knows.
-        case .cancelled: kind.usesStartPing && notifyOnFailure
+        case .cancelled, .skipped: kind.usesStartPing && notifyOnFailure
         }
     }
 
@@ -87,6 +87,9 @@ struct NotificationEvent: Sendable, Equatable {
         /// The user stopped the run. Chat channels stay quiet, but a monitor
         /// waiting for a check-in has still missed one.
         case cancelled
+        /// Nothing to back up: every folder was missing. Like a cancel,
+        /// only a monitor waiting for a check-in needs to hear of it.
+        case skipped
     }
 
     var stage: Stage
@@ -136,6 +139,8 @@ struct NotificationEvent: Sendable, Equatable {
             return "\(operation) FAILED: \(subject) — \(errorMessage ?? "no details")"
         case .cancelled:
             return "\(operation) cancelled before finishing: \(subject)"
+        case .skipped:
+            return "\(operation) skipped: \(subject)" + (errorMessage.map { " — \($0)" } ?? "")
         }
     }
 }

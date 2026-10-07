@@ -227,6 +227,7 @@ extension AppModel {
         Task { await self.refreshFullDiskAccess() }
 
         startNetworkMonitor()
+        startMountWatcher()
         await refreshAllSnapshots()
         #if DEBUG
         // A capture run must photograph a deterministic state: a live scheduler
@@ -247,6 +248,7 @@ extension AppModel {
         isShuttingDown = true
         schedulerTask?.cancel()
         networkMonitor?.cancel()
+        stopMountWatcher()
         // Slotted runs only: a start ping in flight is awaited below, never
         // aborted — its monitor must hear that the run started.
         tasks.cancelSlots()

@@ -260,7 +260,8 @@ extension AppModel {
             // `resolveBinary` probed the version at launch; an unreadable
             // answer keeps the defaults (stall cap on, --overwrite passed).
             streamsRestoreProgress: version?.streamsRestoreProgress ?? true,
-            supportsRestoreOverwrite: version?.supportsRestoreOverwrite ?? true
+            supportsRestoreOverwrite: version?.supportsRestoreOverwrite ?? true,
+            excludesCloudFiles: version?.excludesCloudFilesOnMac ?? true
         )
     }
 }

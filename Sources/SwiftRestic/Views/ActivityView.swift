@@ -52,7 +52,7 @@ struct ActivityView: View {
                 ContentUnavailableView(
                     "No problems recorded",
                     systemImage: "checkmark.circle",
-                    description: Text("Every run in the history succeeded. Turn the filter off to see them.")
+                    description: Text("No run in the history failed or finished with errors. Turn the filter off to see them all.")
                 )
             } else {
                 Table(runs, selection: $selection, sortOrder: $sortOrder) {

@@ -174,6 +174,11 @@ extension AppModel: BackupRunEngine.Sink {
             // The user asked for this stop, or confirmed the quit that
             // caused it — a banner would add nothing.
             return
+        case .skipped:
+            // A drive away at every slot of an hourly plan would post one
+            // an hour; Activity says it, and the quiet-plan alert speaks if
+            // the drive stays away.
+            return
         case .succeeded:
             post(Banner(
                 title: "“\(name)” backed up",

@@ -191,7 +191,27 @@ checked in so a normal build does not need it.
   list takes items chosen in a panel or dropped from Finder as their own
   paths, glob characters escaped so each matches itself alone; and its
   Schedule tab shows *Next backup* for the schedule being chosen, the plan
-  page's own value for the plan as Save would store it.
+  page's own value for the plan as Save would store it. *Skip online-only
+  cloud files (iCloud Drive, OneDrive)* passes restic's
+  `--exclude-cloud-files`: on for new plans, off for a plan saved before the
+  option (its backups do not change under it), and only with restic 0.19 or
+  later, which brought the flag to macOS (restic's changelog) — the editor
+  says when this restic is older. What restic does with an online-only file
+  without the flag was not tried here: it would mean reading one of a real
+  iCloud Drive's files.
+- **Skipped backups** — when every folder of a plan is missing, restic writes
+  nothing and says so (exit 1, "Fatal: all source directories/files do not
+  exist", restic 0.19.1). That run is recorded as *Skipped*, with the reason
+  in Activity's Detail column, the drawer and Copy Details — "“Archive SSD” is
+  not connected." when the folders live on volumes, else "None of its folders
+  are on this Mac." It is no failure: no dot, notification, banner or problem
+  row (an alert channel with a start ping hears a fail, as for a cancel), and
+  it stamps the slot, so an hourly plan does not retry every minute. When a
+  volume mounts, each scheduled plan whose newest backup was skipped and whose
+  folders are all back runs at once instead of a whole interval later (a disk
+  image attached with `-nobrowse` counted). The quiet-plan alert speaks if the
+  drive stays away. Some but not all folders missing is restic's exit 3 — a
+  backup completed with errors, as before.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day.

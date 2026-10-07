@@ -76,6 +76,10 @@ struct RunDetailPanel: View {
             if run.snapshotID != nil {
                 DetailRow("Snapshot") { RunSnapshotRow(run: run, onCompare: onCompare) }
             }
+            // Why there was nothing to back up — the Detail column's words.
+            if run.outcome == .skipped, let reason = run.detailText {
+                DetailRow("Skipped", reason)
+            }
             if RunRecordPresentation.hasBackupNumbers(run) {
                 DetailRow(
                     "Files",

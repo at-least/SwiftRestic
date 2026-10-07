@@ -143,6 +143,8 @@ final class AppModel {
     /// the battery flag's rule.
     var isOnMeteredNetwork = false
     @ObservationIgnored var networkMonitor: NWPathMonitor?
+    /// The volume-mount observer (`startMountWatcher`).
+    @ObservationIgnored var mountObserver: (any NSObjectProtocol)?
     /// Plans whose running backup Pause and Stop ended. Such a run is
     /// recorded as stopped by the pause and leaves its slot unstamped, so
     /// it runs again when the pause ends. Each run's unwind removes its

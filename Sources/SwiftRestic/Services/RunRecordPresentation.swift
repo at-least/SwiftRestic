@@ -138,6 +138,8 @@ enum RunRecordPresentation {
         // The first sentence: restic's multi-line tail stays in the drawer,
         // the plan card and Copy Details, which show the whole message.
         if let failure = run.failureMessage { return Format.firstSentence(failure) }
+        // Why there was nothing to back up, before any hook's complaint.
+        if run.kind == .backup, run.outcome == .skipped, let reason = run.detailText { return reason }
         // An unnamed exit 3 is among the facts, so the plan row says it too.
         let facts = PlanStatus.facts(for: run)
         if !facts.isEmpty { return facts.joined(separator: " · ") }
@@ -216,7 +218,7 @@ enum RunRecordPresentation {
     /// that failed or was stopped before restic summarised has only zeros,
     /// which would read as "nothing changed".
     static func hasBackupNumbers(_ run: RunRecord) -> Bool {
-        guard run.outcome == .failed || run.outcome == .cancelled else { return true }
+        guard run.outcome == .failed || run.outcome == .cancelled || run.outcome == .skipped else { return true }
         return run.filesNew + run.filesChanged + run.filesUnmodified > 0
             || run.bytesProcessed > 0 || run.dataAdded > 0
     }
@@ -271,6 +273,9 @@ enum RunRecordPresentation {
         case .check, .forget:
             // A check's verdict, or what Apply Retention Now… removed.
             if let result = run.detailText { lines.append("Result: \(result)") }
+        case .backup where run.outcome == .skipped:
+            // Why there was nothing to back up.
+            if let reason = run.detailText { lines.append("Skipped: \(reason)") }
         default:
             break
         }
