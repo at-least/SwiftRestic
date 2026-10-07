@@ -232,6 +232,10 @@ struct RepositoryEditorSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    } else if draft.kind == .rest {
+                        // A server without logins leaves both blank.
+                        TextField("User", text: $draft.restUser, prompt: Text("Optional"))
+                        SecureField(label, text: $providerSecret, prompt: Text("Optional"))
                     } else {
                         SecureField(label, text: $providerSecret)
                     }
@@ -397,7 +401,16 @@ struct RepositoryEditorSheet: View {
                 detail: "restic reads the key file from disk itself. Keep the file readable only by you."
             )
         case .rest:
-            TextField("URL", text: $draft.restURL, prompt: Text("https://user:pass@host:8000/"))
+            TextField("URL", text: $draft.restURL, prompt: Text("https://host:8000/"))
+                // A URL pasted with its login sheds it into User and the
+                // Keychain, so the configuration file and the "restic will
+                // use" line below never hold the password.
+                .onChange(of: draft.restURL) { _, url in
+                    guard let split = Repository.splittingRESTCredentials(url) else { return }
+                    draft.restURL = split.url
+                    draft.restUser = split.user
+                    if let password = split.password { providerSecret = password }
+                }
         case .rclone:
             HStack {
                 TextField("Remote", text: $draft.rcloneRemote, prompt: Text("mydrive"))

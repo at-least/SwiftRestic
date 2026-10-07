@@ -960,6 +960,42 @@ struct RepositoryTests {
         #expect(local.credentialEnvironment(secret: nil).isEmpty)
     }
 
+    @Test("a REST server's login rides in restic's environment from the Keychain, never in the stored URL")
+    func restCredentials() throws {
+        var rest = Repository()
+        rest.kind = .rest
+        rest.restURL = "https://host:8000/"
+        rest.restUser = "alice"
+        // The password is the provider secret: the editor shows its field.
+        #expect(rest.secretFieldLabel == "Server password")
+        let env = rest.credentialEnvironment(secret: "s3cret")
+        #expect(env["RESTIC_REST_USERNAME"] == "alice")
+        #expect(env["RESTIC_REST_PASSWORD"] == "s3cret")
+        #expect(rest.resticRepositoryString == "rest:https://host:8000/")
+
+        // A pasted URL sheds its login, decoded, into the fields.
+        let split = try #require(Repository.splittingRESTCredentials("https://alice:p%40ss@host:8000/repo/"))
+        #expect(split.url == "https://host:8000/repo/")
+        #expect(split.user == "alice")
+        #expect(split.password == "p@ss")
+        let prefixed = try #require(Repository.splittingRESTCredentials("rest:http://bob@10.0.0.2:8000/"))
+        #expect(prefixed.url == "rest:http://10.0.0.2:8000/")
+        #expect(prefixed.user == "bob")
+        #expect(prefixed.password == nil)
+        // Nothing to take, or no server yet while the user is typing.
+        #expect(Repository.splittingRESTCredentials("https://host:8000/") == nil)
+        #expect(Repository.splittingRESTCredentials("https://alice:pa@") == nil)
+
+        // A repository saved with its login in the URL keeps working as it
+        // did: the URL passes through, and restic prefers its credentials.
+        let old = try JSONDecoder().decode(
+            Repository.self,
+            from: Data(#"{"kind":"rest","name":"Server","restURL":"https://alice:s3cret@host:8000/"}"#.utf8)
+        )
+        #expect(old.restUser == "")
+        #expect(old.resticRepositoryString == "rest:https://alice:s3cret@host:8000/")
+    }
+
     @Test("plan tags are stable and unique per plan")
     func planTags() {
         let id = UUID()

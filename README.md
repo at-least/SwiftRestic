@@ -177,7 +177,13 @@ checked in so a normal build does not need it.
   "backups to it would fail until one is created", so point it at the folder
   that holds the repository. The editor asks *Where is it?* — on this Mac, on another machine,
   in the cloud, through a gateway — and groups the kinds that way whether the
-  repository is new or being edited. An existing repository's *Change
+  repository is new or being edited. A REST server's login goes in *User*
+  and *Server password* — the password in the Keychain like every backend's
+  secret — and reaches restic as `RESTIC_REST_USERNAME`/`RESTIC_REST_PASSWORD`,
+  so the URL in the configuration file and on the repository page holds no
+  password; a URL pasted with its login sheds it into those fields. One saved
+  with the login in it keeps working: restic prefers a URL's own credentials.
+  An existing repository's *Change
   Password…* runs `restic key passwd` with the stored password, the new one
   handed over in a file only this user can read, deleted when restic ends;
   only then does the Keychain take the new password. It asks first — the old

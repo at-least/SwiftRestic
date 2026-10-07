@@ -80,6 +80,10 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     // rest
     var restURL: String = ""
+    /// The REST server's user. Its password is the provider secret, in the
+    /// Keychain like every other backend's, so neither has to ride in the
+    /// URL this file stores.
+    var restUser: String = ""
 
     // rclone
     var rcloneRemote: String = ""
@@ -123,6 +127,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         gcsProjectID = c.value(.gcsProjectID, default: "")
         gcsCredentialsPath = c.value(.gcsCredentialsPath, default: "")
         restURL = c.value(.restURL, default: "")
+        restUser = c.value(.restUser, default: "")
         rcloneRemote = c.value(.rcloneRemote, default: "")
         rclonePath = c.value(.rclonePath, default: "")
         extraEnvironment = c.value(.extraEnvironment, default: [:])
@@ -229,8 +234,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// backend needs no second credential).
     var secretFieldLabel: String? {
         switch kind {
-        case .local, .rest, .gcs, .rclone: nil
+        case .local, .gcs, .rclone: nil
         case .sftp: "SSH is authenticated with your keys — see the note below"
+        case .rest: "Server password"
         case .s3: "Secret access key"
         case .b2: "Application key"
         case .azure: "Account key"
@@ -254,10 +260,33 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             if !gcsProjectID.isEmpty { env["GOOGLE_PROJECT_ID"] = gcsProjectID }
             // restic reads the service-account JSON from this path itself.
             env["GOOGLE_APPLICATION_CREDENTIALS"] = ResticService.expandTilde(gcsCredentialsPath)
-        case .local, .sftp, .rest, .rclone:
+        case .rest:
+            // restic 0.19.1 reads these only when the URL carries no
+            // credentials of its own, so a repository saved with them in its
+            // URL works as it did; unset and empty send the same blank login.
+            env["RESTIC_REST_USERNAME"] = restUser
+            if let secret { env["RESTIC_REST_PASSWORD"] = secret }
+        case .local, .sftp, .rclone:
             break
         }
         return env
+    }
+
+    /// A REST server URL with its credentials taken out, for the editor to
+    /// keep in User and the Keychain instead — nil when it carries none, or
+    /// no server yet (the user is still typing).
+    static func splittingRESTCredentials(_ url: String) -> (url: String, user: String, password: String?)? {
+        let prefix = url.hasPrefix("rest:") ? "rest:" : ""
+        guard var components = URLComponents(string: String(url.dropFirst(prefix.count))),
+              components.user != nil || components.password != nil,
+              components.host?.isEmpty == false
+        else { return nil }
+        let user = components.user ?? ""
+        let password = components.password
+        components.user = nil
+        components.password = nil
+        guard let bare = components.string else { return nil }
+        return (prefix + bare, user, password)
     }
 
     /// restic shells out to `rclone` for this backend, so the helper has to be
