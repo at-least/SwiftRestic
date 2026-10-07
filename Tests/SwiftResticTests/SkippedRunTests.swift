@@ -41,6 +41,29 @@ struct SkippedRunTests {
         #expect(RunRecordPresentation.detail(for: run) == "“Archive SSD” is not connected.")
     }
 
+    @Test("a path's drive is named by its folder under /Volumes, and is here only while a volume is mounted there")
+    func volumePresence() throws {
+        #expect(VolumePresence.volumeName(of: "/Volumes/Archive SSD/restic") == "Archive SSD")
+        #expect(VolumePresence.volumeName(of: "/Volumes/Archive SSD") == "Archive SSD")
+        #expect(VolumePresence.volumeName(of: "/Users/me/restic") == nil)
+        #expect(VolumePresence.volumeName(of: "/Volumes") == nil)
+
+        // The startup disk is always here.
+        #expect(VolumePresence.isMounted(volumeOf: "/Users/me/restic") == nil)
+        #expect(VolumePresence.isMounted(volumeOf: "/Volumes/SwiftRestic Absent Drive/restic") == false)
+        // /Volumes also lists the startup disk, as a link to /.
+        let startup = try #require(
+            FileManager.default.contentsOfDirectory(atPath: "/Volumes").first {
+                (try? FileManager.default.destinationOfSymbolicLink(atPath: "/Volumes/\($0)")) == "/"
+            }
+        )
+        #expect(VolumePresence.isMounted(volumeOf: "/Volumes/\(startup)/Users") == true)
+        // A folder left behind under /Volumes by a drive that went away
+        // uncleanly sits on the startup disk: not a volume.
+        #expect(VolumePresence.isVolumeRoot("/"))
+        #expect(!VolumePresence.isVolumeRoot(FileManager.default.temporaryDirectory.path))
+    }
+
     @Test("a mounted volume runs again each scheduled plan whose last run was skipped and whose folders are back")
     func catchUpAfterMount() {
         func plan(_ frequency: Schedule.Frequency = .daily) -> BackupPlan {
@@ -58,7 +81,8 @@ struct SkippedRunTests {
         var paused = plan()
         paused.isEnabled = false
         let running = plan()
-        let plans = [back, stillGone, failedLast, manual, paused, running]
+        let repositoryAway = plan()
+        let plans = [back, stillGone, failedLast, manual, paused, running, repositoryAway]
         let newest: [UUID: RunRecord.Outcome] = Dictionary(uniqueKeysWithValues: plans.map {
             ($0.id, $0.id == failedLast.id ? .failed : .skipped)
         })
@@ -67,6 +91,7 @@ struct SkippedRunTests {
             newestBackupOutcome: newest,
             running: [running.id],
             sourcesExist: { $0.id != stillGone.id },
+            repositoryReachable: { $0.id != repositoryAway.id },
             now: now
         )
         #expect(due == [back.id])

@@ -295,9 +295,9 @@ extension RunRecord {
     static func skippedReason(sources: [String]) -> String {
         var volumes: [String] = []
         for source in sources {
-            let parts = (source as NSString).expandingTildeInPath.split(separator: "/", omittingEmptySubsequences: true)
-            guard parts.count >= 2, parts[0] == "Volumes" else { return "None of its folders are on this Mac." }
-            let volume = String(parts[1])
+            guard let volume = VolumePresence.volumeName(of: (source as NSString).expandingTildeInPath) else {
+                return "None of its folders are on this Mac."
+            }
             if !volumes.contains(volume) { volumes.append(volume) }
         }
         guard !volumes.isEmpty else { return "None of its folders are on this Mac." }

@@ -136,6 +136,20 @@ enum BackupRunEngine {
                 }
             }
 
+            // The repository's drive away (after the hooks, which may mount
+            // it): skipped as for the folders' drive, never asking restic,
+            // whose "does not exist" could not tell it from a moved folder.
+            if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+                record.outcome = .skipped
+                record.detailText = RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
+                sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
+                await finish(
+                    record: &record, plan: plan, hooks: hooks, context: hookContext,
+                    transcript: transcript, sink: sink
+                )
+                return
+            }
+
             // Healthchecks measures the run against this ping, so it has to go out
             // before the backup starts — but concurrently, so a slow endpoint
             // cannot delay the backup itself.

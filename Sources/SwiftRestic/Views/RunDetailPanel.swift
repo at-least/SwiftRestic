@@ -349,18 +349,11 @@ struct RunFixButton: View {
     var body: some View {
         Button(fix.title) {
             switch fix {
-            case let .editRepository(id): router.request(.editRepository(id))
+            case let .editRepository(id), let .editRepositoryPath(id): router.request(.editRepository(id))
             case let .removeStaleLocks(id): router.request(.confirm(.unlock(id)))
             }
         }
-        .help(help)
-    }
-
-    private var help: String {
-        switch fix {
-        case .editRepository: "The password doesn't open this repository — check it in the repository settings"
-        case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
-        }
+        .help(fix.help)
     }
 }
 

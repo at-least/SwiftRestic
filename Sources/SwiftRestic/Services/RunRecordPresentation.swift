@@ -11,13 +11,26 @@ import Foundation
 enum RunFix: Equatable {
     /// restic exit 12: the stored password does not open the repository.
     case editRepository(UUID)
+    /// restic exit 10: no repository is at its saved path — a folder moved
+    /// or renamed on a drive that is here (a drive that is away skips the
+    /// run instead).
+    case editRepositoryPath(UUID)
     /// restic exit 11: a lock this app does not hold is in the way.
     case removeStaleLocks(UUID)
 
     var title: String {
         switch self {
-        case .editRepository: "Edit Repository…"
+        case .editRepository, .editRepositoryPath: "Edit Repository…"
         case .removeStaleLocks: "Remove Stale Locks…"
+        }
+    }
+
+    /// The button's tooltip: the cause it fixes.
+    var help: String {
+        switch self {
+        case .editRepository: "The password doesn't open this repository — check it in the repository settings"
+        case .editRepositoryPath: "No repository is at its saved path — point it at the folder that holds the repository"
+        case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
         }
     }
 }
@@ -30,6 +43,7 @@ enum RunRecordPresentation {
     static func fix(for run: RunRecord, repositoryExists: Bool, repositoryBusy: Bool) -> RunFix? {
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
         if run.exitCode == 12 { return .editRepository(repositoryID) }
+        if run.exitCode == 10 { return .editRepositoryPath(repositoryID) }
         let locked = run.exitCode == 11 || run.failureMessage?.contains("already locked") == true
         return locked && !repositoryBusy ? .removeStaleLocks(repositoryID) : nil
     }

@@ -361,6 +361,41 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a backup to a repository whose drive is away is skipped, not failed; one whose folder is gone from a drive that is here fails with the editor as its fix")
+    func repositoryDriveAwayIsSkipped() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == harness.repository.id })
+        model.configuration.repositories[index].localPath = "/Volumes/SwiftRestic Absent Drive/restic"
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.outcome == .skipped)
+        #expect(record.detailText == "“SwiftRestic Absent Drive” is not connected.")
+        #expect(record.failureMessage == nil)
+        #expect(record.exitCode == nil, "restic is never asked")
+        let plan = try #require(model.plan(id: harness.plan.id))
+        #expect(plan.lastRunAt != nil, "the slot is stamped, so the plan does not re-fire every tick")
+        #expect(plan.lastSuccessAt == nil)
+        #expect(model.currentProblem(for: harness.plan.id) == nil)
+
+        // The drive is here and the folder is not: restic's exit 10 stays
+        // a failure, and the repository's editor is where the path is fixed.
+        model.configuration.repositories[index].localPath = harness.root.appendingPathComponent("moved").path
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let failed = try #require(model.configuration.runs.first)
+        #expect(failed.outcome == .failed)
+        #expect(failed.exitCode == 10)
+        #expect(RunRecordPresentation.fix(for: failed, repositoryExists: true, repositoryBusy: false)
+            == .editRepositoryPath(harness.repository.id))
+
+        await model.shutdown()
+    }
+
     @Test("online-only cloud files are left out with restic's own flag when the plan asks for it")
     func excludeCloudFilesFlag() async throws {
         let harness = try await makeHarness()

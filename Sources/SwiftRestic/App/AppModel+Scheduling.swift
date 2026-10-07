@@ -120,6 +120,10 @@ extension AppModel {
             newestBackupOutcome: newest,
             running: runningPlanIDs,
             sourcesExist: { Self.allSourcesExist($0.sources) },
+            repositoryReachable: { plan in
+                guard let repository = configuration.repository(id: plan.repositoryID) else { return false }
+                return repository.kind != .local || VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) != false
+            },
             now: now
         ) {
             runBackup(planID: planID)

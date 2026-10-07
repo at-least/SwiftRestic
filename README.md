@@ -211,7 +211,16 @@ checked in so a normal build does not need it.
   folders are all back runs at once instead of a whole interval later (a disk
   image attached with `-nobrowse` counted). The quiet-plan alert speaks if the
   drive stays away. Some but not all folders missing is restic's exit 3 — a
-  backup completed with errors, as before.
+  backup completed with errors, as before. The repository's side is the
+  same: a backup to a local repository under /Volumes whose volume is not
+  mounted (checked after the before-backup hooks, which may mount it) is
+  Skipped with "“Travel SSD” is not connected." without asking restic, and
+  runs when the volume mounts. restic cannot tell that case from a moved
+  folder — both are exit 10, "Fatal: repository does not exist: unable to
+  open config file" (restic 0.19.1) — so the app looks at the volume itself:
+  a folder under /Volumes counts only while it is the root of a mounted
+  volume. With the volume here and the folder gone, the run still fails, and
+  its fix is *Edit Repository…*.
 - **Scheduling** — hourly / daily / weekly, checked once a minute. A daily plan
   whose window passed while the Mac was asleep runs as soon as it wakes rather
   than skipping the day.

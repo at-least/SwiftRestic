@@ -42,7 +42,8 @@ enum ScheduleHold: Equatable, Sendable {
 enum Scheduler {
     /// The plans a newly mounted volume brings back: each the scheduler
     /// would start by itself whose newest backup was skipped — its folders
-    /// were missing — and whose folders are all here now. They run at once
+    /// or its repository's drive were missing — and whose folders and
+    /// repository are all here now. They run at once
     /// instead of waiting a whole interval for the next slot. (The app-wide
     /// hold is the caller's guard, as for the tick.)
     static func catchUpAfterMount(
@@ -50,12 +51,14 @@ enum Scheduler {
         newestBackupOutcome: [UUID: RunRecord.Outcome],
         running: Set<UUID>,
         sourcesExist: (BackupPlan) -> Bool,
+        repositoryReachable: (BackupPlan) -> Bool,
         now: Date
     ) -> [UUID] {
         plans
             .filter {
                 $0.isScheduleActive(at: now) && $0.schedule.frequency != .manual && $0.isConfigurationComplete
                     && !running.contains($0.id) && newestBackupOutcome[$0.id] == .skipped && sourcesExist($0)
+                    && repositoryReachable($0)
             }
             .map(\.id)
     }

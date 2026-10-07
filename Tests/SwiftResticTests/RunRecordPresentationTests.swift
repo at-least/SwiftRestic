@@ -206,7 +206,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Completed with errors · 2 unreadable items")
     }
 
-    @Test("a failure whose cause the app knows offers its fix: the password's editor, or Remove Stale Locks… while nobody here holds the lock")
+    @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path, or Remove Stale Locks… while nobody here holds the lock")
     func failureFixes() {
         let repository = UUID()
         var wrongPassword = backup {
@@ -216,6 +216,15 @@ struct RunRecordPresentationTests {
         }
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == .editRepository(repository))
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: false, repositoryBusy: false) == nil)
+
+        // restic's "does not exist": the repository is not at its saved
+        // path — its folder moved or renamed on a drive that is here.
+        let missing = backup {
+            $0.repositoryID = repository
+            $0.outcome = .failed
+            $0.exitCode = 10
+        }
+        #expect(RunRecordPresentation.fix(for: missing, repositoryExists: true, repositoryBusy: false) == .editRepositoryPath(repository))
 
         var locked = backup {
             $0.repositoryID = repository
@@ -243,7 +252,11 @@ struct RunRecordPresentationTests {
         wrongPassword.repositoryID = nil
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == nil)
         #expect(RunFix.editRepository(repository).title == "Edit Repository…")
+        #expect(RunFix.editRepositoryPath(repository).title == "Edit Repository…")
         #expect(RunFix.removeStaleLocks(repository).title == "Remove Stale Locks…")
+        // Each says the cause it fixes.
+        #expect(RunFix.editRepository(repository).help == "The password doesn't open this repository — check it in the repository settings")
+        #expect(RunFix.editRepositoryPath(repository).help == "No repository is at its saved path — point it at the folder that holds the repository")
     }
 
     @Test("the Detail column's wording for each kind of run")
