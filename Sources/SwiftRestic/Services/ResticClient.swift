@@ -23,6 +23,10 @@ protocol ResticClient: Sendable {
 
     func unlock(_ context: RepositoryContext) async throws
 
+    /// `restic key passwd`: the repository opens with `newPassword` from
+    /// now on, and no longer with the context's.
+    func changePassword(_ context: RepositoryContext, newPassword: String) async throws
+
     func stats(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> RepositoryStats
 
     func check(_ context: RepositoryContext, readDataSubsetPercent: Int?) async throws -> ResticSummary?

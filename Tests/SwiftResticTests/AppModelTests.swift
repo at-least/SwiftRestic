@@ -292,6 +292,44 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("Change Password rotates the repository's key and the stored password together; a refused change stores nothing")
+    func changePassword() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let service = try model.service()
+        func opens(_ password: String) async throws -> Bool {
+            do {
+                return try await service.repositoryExists(RepositoryContext(repository: harness.repository, password: password))
+            } catch let ResticError.commandFailed(code, _) where code == 12 {
+                return false
+            }
+        }
+        // Opened once, so a cached context holds the old password.
+        #expect(try await model.context(for: harness.repository).password == "test-password")
+
+        try await model.changeRepositoryPassword(repositoryID: id, to: "new-password")
+        #expect(try await model.secrets.load(id).password == "new-password")
+        #expect(try await opens("new-password"))
+        #expect(try await !opens("test-password"))
+        // The cached context went with the old password.
+        #expect(try await model.context(for: harness.repository).password == "new-password")
+
+        // A stored password the repository does not take: restic refuses
+        // (exit 12), and neither the key nor the stored password moves.
+        try await model.secrets.save(id, "stale-password", nil)
+        model.noteAuthFailure(ResticError.commandFailed(exitCode: 12, message: ""), repositoryID: id)
+        await #expect(throws: ResticError.commandFailed(exitCode: 12, message: "Fatal: wrong password or no key found")) {
+            try await model.changeRepositoryPassword(repositoryID: id, to: "third-password")
+        }
+        #expect(try await model.secrets.load(id).password == "stale-password")
+        #expect(try await opens("new-password"))
+        #expect(try await !opens("third-password"))
+
+        await model.shutdown()
+    }
+
     @Test("the launch sweep removes old drag and preview staging and nothing else")
     func dragStagingSweep() throws {
         let temp = FileManager.default.temporaryDirectory

@@ -165,7 +165,17 @@ checked in so a normal build does not need it.
   Creating one runs `restic init`; the app refuses to save a repository it could
   not reach. The editor asks *Where is it?* — on this Mac, on another machine,
   in the cloud, through a gateway — and groups the kinds that way whether the
-  repository is new or being edited.
+  repository is new or being edited. An existing repository's *Change
+  Password…* runs `restic key passwd` with the stored password, the new one
+  handed over in a file only this user can read, deleted when restic ends;
+  only then does the Keychain take the new password. It asks first — the old
+  password stops opening the repository everywhere — and waits while a backup
+  or maintenance job uses the repository: restic needs it to itself and fails
+  at once under another lock (exit 11, restic 0.19.1). A refused change
+  (exit 12: the stored password does not open it) stores nothing. restic
+  trims spaces from the ends of a password it reads from a file, so a new
+  password with them is refused rather than left to disagree with the
+  Keychain.
 - **Backup plans** — a set of folders, exclude patterns, a schedule and a
   retention policy, pointed at one repository. Each plan stamps its snapshots
   with a private tag so retention can only ever touch its own. A plan's page

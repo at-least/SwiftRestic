@@ -38,6 +38,17 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.initialRepositoryID(two.id, among: [one, two]) == two.id)
     }
 
+    @Test("Change Password names what stops the change: nothing typed, two that differ, spaces restic would drop")
+    func newPasswordRequirement() {
+        #expect(EditorRequirements.newPassword("", confirm: "") == "Type the new password twice to change it.")
+        #expect(EditorRequirements.newPassword("correct horse", confirm: "correct hose") == "The two new passwords differ.")
+        // restic 0.19.1 trims a password read from --new-password-file:
+        // the key would be "pw" while the Keychain stored " pw ".
+        #expect(EditorRequirements.newPassword(" pw ", confirm: " pw ")
+            == "restic drops spaces at the ends of a new password — remove them.")
+        #expect(EditorRequirements.newPassword("correct horse", confirm: "correct horse") == nil)
+    }
+
     @Test("a browsed or dropped exclude is the item's own path, glob characters escaped; a typed one is a pattern")
     func excludeEntries() {
         #expect(PathListEntry.value(for: " /Users/me/a[1].txt ", expandsTildeInPath: false, escapesGlobs: true)

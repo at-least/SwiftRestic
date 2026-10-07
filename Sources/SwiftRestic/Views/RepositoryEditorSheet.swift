@@ -17,6 +17,12 @@ struct RepositoryEditorSheet: View {
     @State private var initialProviderSecret = ""
     @State private var status: Status?
     @State private var isWorking = false
+    /// Change Password's own fields: never part of Save or of the discard
+    /// check — the change is its own act, done or not when its button is.
+    @State private var isChangingPassword = false
+    @State private var newPassword = ""
+    @State private var confirmNewPassword = ""
+    @State private var isConfirmingPasswordChange = false
     @State private var isConfirmingDiscard = false
     @State private var tab: Tab = .repository
     /// Remotes reported by the user's own rclone, or `nil` when unknown or
@@ -207,6 +213,9 @@ struct RepositoryEditorSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                if !isNew {
+                    changePasswordGroup
+                }
             }
 
             if let label = draft.secretFieldLabel {
@@ -263,6 +272,75 @@ struct RepositoryEditorSheet: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    // MARK: - Change Password
+
+    /// The repository's own password changed in place: restic adds a key
+    /// for the new one and removes the old, then the Keychain follows
+    /// (`AppModel.changeRepositoryPassword`). Not the field above, which
+    /// only corrects what the Keychain holds.
+    private var changePasswordGroup: some View {
+        DisclosureGroup("Change Password…", isExpanded: $isChangingPassword) {
+            SecureField("New password", text: $newPassword)
+            SecureField("Confirm new password", text: $confirmNewPassword)
+            HStack {
+                if let reason = passwordChangeBlock {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Button("Change Password") { isConfirmingPasswordChange = true }
+                    .disabled(passwordChangeBlock != nil || isWorking)
+            }
+            Text("There is no recovery if you lose the new password either — store it in your password manager.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .confirmationDialog(
+            "Change the password of “\(draft.name)”?",
+            isPresented: $isConfirmingPasswordChange,
+            titleVisibility: .visible
+        ) {
+            Button("Change Password") { Task { await changePassword() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The old password stops opening it — everywhere. Another Mac or a script that backs up to it needs the new one.")
+        }
+    }
+
+    /// Why Change Password waits, or nil. restic needs the repository to
+    /// itself: under a backup's or a check's lock it fails at once (exit 11).
+    private var passwordChangeBlock: String? {
+        if model.busyRepositoryIDs.contains(draft.id) {
+            return "Waits while a backup or maintenance job uses this repository."
+        }
+        if !model.isResticAvailable { return "Needs restic, which could not be found." }
+        return EditorRequirements.newPassword(newPassword, confirm: confirmNewPassword)
+    }
+
+    private func changePassword() async {
+        guard passwordChangeBlock == nil, !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        status = nil
+        do {
+            try await model.changeRepositoryPassword(repositoryID: draft.id, to: newPassword)
+            // The Keychain now holds the new password: it is the sheet's
+            // baseline, so Save writes nothing back over it.
+            password = newPassword
+            confirmPassword = newPassword
+            initialPassword = newPassword
+            newPassword = ""
+            confirmNewPassword = ""
+            isChangingPassword = false
+            status = .ok("Password changed. The old password no longer opens “\(draft.name)”.")
+        } catch {
+            status = .failure(error.localizedDescription)
+        }
     }
 
     // MARK: - Fields

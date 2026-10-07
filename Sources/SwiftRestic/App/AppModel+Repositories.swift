@@ -196,6 +196,31 @@ extension AppModel {
         return context
     }
 
+    /// Change Password: the repository's key moves to `newPassword` with
+    /// the stored password the app opened it with, then the Keychain
+    /// follows. A refusal — a stored password the repository does not take
+    /// (exit 12), a lock held elsewhere (11) — throws with nothing stored.
+    /// Once restic has changed the key the old password is gone, so a
+    /// Keychain that cannot store the new one says so in its error rather
+    /// than leaving the two silently apart.
+    func changeRepositoryPassword(repositoryID: UUID, to newPassword: String) async throws {
+        precondition(EditorRequirements.newPassword(newPassword, confirm: newPassword) == nil, "an unchecked new password")
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        let (service, context) = try await resticContext(for: repository)
+        do {
+            try await service.changePassword(context, newPassword: newPassword)
+        } catch {
+            noteAuthFailure(error, repositoryID: repositoryID)
+            throw error
+        }
+        resolvedContexts[repositoryID] = nil
+        do {
+            try await secrets.save(repositoryID, newPassword, nil)
+        } catch {
+            throw PasswordNotStored(repositoryName: repository.name, reason: error.localizedDescription)
+        }
+    }
+
     /// The read path's opener: the engine plus the repository's decrypted
     /// context, assembled together. Callers keep their own
     /// missing-repository guard, because each surface phrases that answer
@@ -254,5 +279,17 @@ struct ResolvedContextKey: Equatable, Sendable {
         self.repository = repository
         self.uploadLimitKiBps = settings.uploadLimitKiBps
         self.downloadLimitKiBps = settings.downloadLimitKiBps
+    }
+}
+
+/// Change Password's one failure after the change itself: restic took the
+/// new password, the Keychain did not.
+struct PasswordNotStored: LocalizedError {
+    let repositoryName: String
+    let reason: String
+
+    var errorDescription: String? {
+        "“\(repositoryName)” now opens only with the new password, but the Keychain could not store it: \(reason) "
+            + "Type the new password in Repository password and save once the Keychain works — until then its backups fail."
     }
 }

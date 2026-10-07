@@ -191,6 +191,34 @@ struct ResticService: ResticClient {
         }
     }
 
+    /// The new password reaches restic through a file — it has no other
+    /// non-interactive way in — readable by this user alone, in a folder of
+    /// its own that goes when the command ends. restic takes an exclusive
+    /// lock: under another process's lock it fails at once with exit 11,
+    /// and a current password it does not take fails with 12, both leaving
+    /// the old key standing (checked on 0.19.1).
+    func changePassword(_ context: RepositoryContext, newPassword: String) async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftRestic-Key-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("new-password")
+        guard FileManager.default.createFile(
+            atPath: file.path, contents: Data(newPassword.utf8), attributes: [.posixPermissions: 0o600]
+        ) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: file.path])
+        }
+        _ = try await runner.run(
+            binary: binary,
+            invocation: ResticInvocation(
+                arguments: context.globalArguments + ["key", "passwd", "--json", "--new-password-file", file.path],
+                environment: context.environment
+            )
+        )
+    }
+
     func unlock(_ context: RepositoryContext) async throws {
         _ = try await runner.run(
             binary: binary,

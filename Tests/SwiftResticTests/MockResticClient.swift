@@ -185,6 +185,10 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         record("unlock")
     }
 
+    func changePassword(_ context: RepositoryContext, newPassword: String) async throws {
+        record("changePassword")
+    }
+
     func stats(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> RepositoryStats {
         record("stats")
         return try locked { statsScript }.get()

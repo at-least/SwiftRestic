@@ -23,6 +23,19 @@ enum EditorRequirements {
         return nil
     }
 
+    /// Why Change Password cannot run yet, or nil. restic trims a password
+    /// it reads from `--new-password-file` (checked on 0.19.1) while the app
+    /// hands it the stored one untrimmed, so a new password with spaces at
+    /// its ends would leave the key and the Keychain disagreeing.
+    static func newPassword(_ password: String, confirm: String) -> String? {
+        if password.isEmpty { return "Type the new password twice to change it." }
+        if password != confirm { return "The two new passwords differ." }
+        if password != password.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return "restic drops spaces at the ends of a new password — remove them."
+        }
+        return nil
+    }
+
     /// The repository a plan editor opens on: the plan's own, else the
     /// only one there is. With two or more the picker says Choose… and the
     /// footer asks — a silent first pick lands the plan wherever the first
