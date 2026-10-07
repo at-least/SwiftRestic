@@ -61,6 +61,10 @@ struct Banner: Identifiable, Equatable {
     /// them all — a restore that ends with "here is the path" reads finished
     /// only half-way.
     var revealPaths: [String] = []
+    /// A banner that is news, neither a success nor a failure, wears this
+    /// glyph in the secondary colour — a skipped run's own — instead of the
+    /// success check.
+    var symbolName: String?
 }
 
 /// Which pane the detail column is showing — the sidebar's selection, or the

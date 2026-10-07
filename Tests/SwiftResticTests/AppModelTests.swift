@@ -551,6 +551,7 @@ struct AppModelTests {
         #expect(banner.title.hasSuffix("skipped"))
         #expect(banner.message == "“SwiftRestic Absent Drive” is not connected.")
         #expect(!banner.isError, "it goes by itself, like a success's")
+        #expect(banner.symbolName == "minus.circle", "the skipped row's glyph, not a success's check")
 
         // The same skip at a scheduled slot posts nothing.
         model.banners.removeAll()

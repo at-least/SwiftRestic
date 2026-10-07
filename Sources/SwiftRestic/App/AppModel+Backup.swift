@@ -183,7 +183,12 @@ extension AppModel: BackupRunEngine.Sink {
             // is answered: it ends in milliseconds, the strip's flash saying
             // nothing. Not an error, so it goes by itself.
             guard let planID = record.planID, activity[planID]?.askedByUser == true else { return }
-            post(Banner(title: "“\(name)” skipped", message: record.detailText ?? "", isError: false))
+            post(Banner(
+                title: "“\(name)” skipped",
+                message: record.detailText ?? "",
+                isError: false,
+                symbolName: RunRecord.Outcome.skipped.symbolName
+            ))
         case .succeeded:
             post(Banner(
                 title: "“\(name)” backed up",

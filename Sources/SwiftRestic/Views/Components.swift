@@ -77,9 +77,11 @@ struct BannerView: View {
     let banner: Banner
     var isDismissible = true
 
-    private var hue: Color { banner.isError ? Theme.danger : Theme.success }
+    private var hue: Color {
+        banner.isError ? Theme.danger : banner.symbolName == nil ? Theme.success : .secondary
+    }
     private var symbol: String {
-        banner.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+        banner.symbolName ?? (banner.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
     }
 
     var body: some View {
