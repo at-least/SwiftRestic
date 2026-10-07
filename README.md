@@ -210,8 +210,17 @@ checked in so a normal build does not need it.
   volume mounts, each scheduled plan whose newest backup was skipped and whose
   folders are all back runs at once instead of a whole interval later (a disk
   image attached with `-nobrowse` counted). The quiet-plan alert speaks if the
-  drive stays away. Some but not all folders missing is restic's exit 3 — a
-  backup completed with errors, as before. The repository's side is the
+  drive stays away. Some but not all folders missing is restic's exit 3 with
+  a snapshot of the rest. When every folder restic skipped is on a volume
+  that is not mounted, and it could read everything else, that run is
+  Skipped too — "“Archive SSD” is not connected; the other folders were
+  backed up." — with its snapshot, numbers and *Last backup* kept: it heals
+  an older failure, pings a Healthchecks channel alive, and the mount runs
+  it again in full. Accepted with it: while the other folders keep backing
+  up, the quiet-plan alert does not speak for the away one. A skipped folder
+  whose drive is here, or any other unreadable item, keeps the whole run
+  *Completed with errors*, every skipped folder among its items. The
+  repository's side is the
   same: a backup to a local repository under /Volumes whose volume is not
   mounted (checked after the before-backup hooks, which may mount it) is
   Skipped with "“Travel SSD” is not connected." without asking restic, and

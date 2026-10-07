@@ -107,7 +107,8 @@ enum OverviewMetrics {
     }
 
     /// Whether a backup problem no longer stands: a successful backup of the
-    /// same plan finished after it — the next run fixed it. Backups only: a
+    /// same plan finished after it — the next run fixed it. A run skipped
+    /// for an away drive that still wrote a snapshot of the rest counts. Backups only: a
     /// failed check, prune, forget or restore is not fixed by a backup going
     /// through, and Apply Retention Now… records its forget under the plan's
     /// ID, so its success heals nothing. The sidebar's standing problem and
@@ -115,7 +116,8 @@ enum OverviewMetrics {
     static func isHealed(_ problem: RunRecord, in runs: [RunRecord]) -> Bool {
         guard problem.kind == .backup, let planID = problem.planID else { return false }
         return runs.contains {
-            $0.kind == .backup && $0.planID == planID && $0.outcome == .succeeded
+            $0.kind == .backup && $0.planID == planID
+                && ($0.outcome == .succeeded || $0.outcome == .skipped && $0.snapshotID != nil)
                 && $0.finishedAt > problem.finishedAt
         }
     }

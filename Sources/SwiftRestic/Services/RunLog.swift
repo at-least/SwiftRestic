@@ -83,6 +83,9 @@ enum RunLog {
         if let failure = record.failureMessage, failure != record.outcome.displayName {
             lines.append(failure)
         }
+        if record.outcome == .skipped, let reason = record.detailText {
+            lines.append(reason)
+        }
         if let snapshotID = record.snapshotID {
             lines.append("Snapshot \(snapshotID)")
         }

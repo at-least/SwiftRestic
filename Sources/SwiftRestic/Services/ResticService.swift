@@ -87,6 +87,24 @@ struct BackupOutcome: Sendable {
     /// named one. See `ResticService.unreadableItemPaths(errors:stderr:)`.
     var itemPaths: [String: String] = [:]
 
+    /// Sets aside the sources restic skipped because their drive is away
+    /// (`isAway`, asked of each skip line's path) when they are all it
+    /// could not read: their lines leave `itemErrors` and their paths are
+    /// returned. Anything else unread — an error event, a skipped folder
+    /// whose drive is here, a reporting gap — leaves everything in place
+    /// and returns none.
+    mutating func setAsideAwaySources(isAway: (String) -> Bool) -> [String] {
+        guard decodingWarning == nil else { return [] }
+        var away: [String] = []
+        for line in itemErrors {
+            guard ResticService.isSkipLine(line), let path = itemPaths[line], isAway(path) else { return [] }
+            away.append(path)
+        }
+        itemErrors = []
+        itemPaths = [:]
+        return away
+    }
+
     /// True for restic exit 3 — finished but skipped files it could not
     /// read — or when the outcome records unreadable items or a decoding gap.
     var completedWithErrors: Bool {
@@ -620,6 +638,11 @@ struct ResticService: ResticClient {
     }
 
     private static let skipSuffixes = [" does not exist, skipping", " cannot be accessed, skipping"]
+
+    /// Whether an unreadable line is restic's word that it skipped a source.
+    static func isSkipLine(_ line: String) -> Bool {
+        skipSuffixes.contains { line.hasSuffix($0) }
+    }
 
     private static func unreadableEntries(errors: [ResticErrorMessage], stderr: String) -> [(line: String, path: String?)] {
         var seen: Set<String> = []

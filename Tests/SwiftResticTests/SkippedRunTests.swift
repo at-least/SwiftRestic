@@ -97,6 +97,91 @@ struct SkippedRunTests {
         #expect(due == [back.id])
     }
 
+    @Test("sources restic skipped are set aside only when each is on a drive that is away and nothing else went unread")
+    func awaySourcesSetAside() {
+        let photos = "/Volumes/Archive SSD/Photos does not exist, skipping"
+        let music = "/Volumes/Archive SSD/Music cannot be accessed, skipping"
+        func outcome(_ lines: [String]) -> BackupOutcome {
+            var outcome = BackupOutcome(summary: nil, itemErrors: lines, exitCode: 3)
+            for line in lines {
+                outcome.itemPaths[line] = line.components(separatedBy: " does not exist").first?
+                    .components(separatedBy: " cannot be accessed").first
+            }
+            return outcome
+        }
+        let away: (String) -> Bool = { $0.hasPrefix("/Volumes/Archive SSD/") }
+
+        var both = outcome([photos, music])
+        #expect(both.setAsideAwaySources(isAway: away) == ["/Volumes/Archive SSD/Photos", "/Volumes/Archive SSD/Music"])
+        #expect(both.itemErrors.isEmpty)
+        #expect(both.itemPaths.isEmpty)
+
+        // Anything else unread keeps every line an unreadable item.
+        var mixed = outcome([photos, "/Users/me/Mail: permission denied"])
+        mixed.itemPaths["/Users/me/Mail: permission denied"] = "/Users/me/Mail"
+        #expect(mixed.setAsideAwaySources(isAway: away).isEmpty)
+        #expect(mixed.itemErrors.count == 2)
+        // A skipped folder whose drive is here is gone or blocked: unreadable.
+        var here = outcome([photos])
+        #expect(here.setAsideAwaySources(isAway: { _ in false }).isEmpty)
+        #expect(here.itemErrors == [photos])
+        // A reporting gap is not explained by a drive.
+        var gap = outcome([photos])
+        gap.decodingWarning = "1 restic message could not be read"
+        #expect(gap.setAsideAwaySources(isAway: away).isEmpty)
+        #expect(gap.itemErrors == [photos])
+    }
+
+    @Test("a backup that skipped only an away drive's folders says so, and that the rest was backed up")
+    @MainActor
+    func partlySkippedWords() throws {
+        #expect(RunRecord.partlySkippedReason(sources: ["/Volumes/Archive SSD/Photos"])
+            == "“Archive SSD” is not connected; the other folders were backed up.")
+
+        var run = RunRecord(kind: .backup, planName: "Documents", startedAt: now)
+        run.outcome = .skipped
+        run.snapshotID = "6d7f8d20"
+        run.filesNew = 2
+        run.dataAdded = 120
+        run.exitCode = 3
+        run.detailText = RunRecord.partlySkippedReason(sources: ["/Volumes/Archive SSD/Photos"])
+        #expect(RunRecordPresentation.detail(for: run) == "“Archive SSD” is not connected; the other folders were backed up.")
+        // Copy Details carries the reason and the numbers.
+        let details = RunRecordPresentation.detailsText(
+            for: run, repositoryName: "Home NAS", versionsNow: RunLogVersions.current(resticVersion: "")
+        )
+        #expect(details.contains("Skipped: “Archive SSD” is not connected; the other folders were backed up."))
+        #expect(details.contains("Files: 2 new"))
+        // So does the run's log.
+        let log = RunLog.render(
+            record: run, repositoryName: "Home NAS", repositoryKind: nil,
+            versions: RunLogVersions.current(resticVersion: ""), transcript: RunTranscript.Contents(),
+            timeZone: try #require(TimeZone(identifier: "UTC"))
+        )
+        #expect(log.contains("— Skipped\n“Archive SSD” is not connected; the other folders were backed up."))
+
+        // It wrote a snapshot: a backup went through, so it heals an older
+        // failure and a dead-man's switch hears it alive. A skip that wrote
+        // none does neither.
+        var failure = RunRecord(kind: .backup, planID: UUID(), planName: "Documents", startedAt: now.addingTimeInterval(-3600))
+        failure.outcome = .failed
+        run.planID = failure.planID
+        #expect(OverviewMetrics.isHealed(failure, in: [run, failure]))
+        var nothing = run
+        nothing.snapshotID = nil
+        #expect(!OverviewMetrics.isHealed(failure, in: [nothing, failure]))
+
+        var healthchecks = NotificationChannel()
+        healthchecks.kind = .healthchecks
+        healthchecks.url = "https://hc-ping.com/abc-123"
+        let alive = AppModel.notificationEvent(for: run, repositoryName: "Home NAS")
+        #expect(try #require(NotificationPayload.request(for: healthchecks, event: alive)).url.absoluteString
+            == "https://hc-ping.com/abc-123")
+        let skipped = AppModel.notificationEvent(for: nothing, repositoryName: "Home NAS")
+        #expect(try #require(NotificationPayload.request(for: healthchecks, event: skipped)).url.absoluteString
+            == "https://hc-ping.com/abc-123/fail")
+    }
+
     @Test("new plans leave online-only cloud files out; a plan saved before the option keeps backing them up")
     func cloudFilesDefault() throws {
         #expect(BackupPlan().excludeCloudFiles)

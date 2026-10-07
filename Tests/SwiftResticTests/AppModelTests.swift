@@ -396,6 +396,41 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a backup that skipped only folders on a drive that is away is skipped, its snapshot kept; a folder simply gone stays a warning")
+    func someSourcesAwayIsSkipped() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        let source = try #require(harness.plan.sources.first)
+        model.configuration.plans[index].sources = [source, "/Volumes/SwiftRestic Absent Drive/Photos"]
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.outcome == .skipped)
+        #expect(record.snapshotID != nil, "the folders that are here were backed up")
+        #expect(record.filesNew == 2)
+        #expect(record.detailText == "“SwiftRestic Absent Drive” is not connected; the other folders were backed up.")
+        #expect(record.itemErrorCount == 0)
+        #expect(record.itemErrors.isEmpty)
+        #expect(record.exitCode == 3)
+        let plan = try #require(model.plan(id: harness.plan.id))
+        #expect(plan.lastSuccessAt != nil)
+        #expect(model.currentProblem(for: harness.plan.id) == nil)
+
+        // A folder gone from the startup disk is not a drive away.
+        model.configuration.plans[index].sources = [source, harness.root.appendingPathComponent("gone").path]
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let warned = try #require(model.configuration.runs.first)
+        #expect(warned.outcome == .completedWithErrors)
+        #expect(warned.itemErrorCount == 1)
+
+        await model.shutdown()
+    }
+
     @Test("online-only cloud files are left out with restic's own flag when the plan asks for it")
     func excludeCloudFilesFlag() async throws {
         let harness = try await makeHarness()

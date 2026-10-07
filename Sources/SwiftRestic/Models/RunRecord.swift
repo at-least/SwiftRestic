@@ -293,17 +293,29 @@ extension RunRecord {
     /// folders live on when every one is on a volume under /Volumes — the
     /// usual reason they are all missing — else that none of them is here.
     static func skippedReason(sources: [String]) -> String {
+        notConnected(sources).map { $0 + "." } ?? "None of its folders are on this Mac."
+    }
+
+    /// Why a backup that wrote a snapshot was still skipped: restic left
+    /// out only folders on drives that are away (`setAsideAwaySources`,
+    /// which hands over paths under /Volumes alone).
+    static func partlySkippedReason(sources: [String]) -> String {
+        guard let drives = notConnected(sources) else { preconditionFailure("a skipped source not on a volume: \(sources)") }
+        return drives + "; the other folders were backed up."
+    }
+
+    /// "“Archive SSD” is not connected", naming each drive once, or nil
+    /// when a source is not on a volume under /Volumes.
+    private static func notConnected(_ sources: [String]) -> String? {
         var volumes: [String] = []
         for source in sources {
-            guard let volume = VolumePresence.volumeName(of: (source as NSString).expandingTildeInPath) else {
-                return "None of its folders are on this Mac."
-            }
+            guard let volume = VolumePresence.volumeName(of: (source as NSString).expandingTildeInPath) else { return nil }
             if !volumes.contains(volume) { volumes.append(volume) }
         }
-        guard !volumes.isEmpty else { return "None of its folders are on this Mac." }
+        guard !volumes.isEmpty else { return nil }
         let names = volumes.map { "“\($0)”" }
         let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!
-        return "\(list) \(names.count == 1 ? "is" : "are") not connected."
+        return "\(list) \(names.count == 1 ? "is" : "are") not connected"
     }
 
     mutating func setOutcome(from error: Error, cancellationMessage: String) {

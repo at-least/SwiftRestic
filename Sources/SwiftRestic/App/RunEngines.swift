@@ -161,13 +161,18 @@ enum BackupRunEngine {
             sink.addStartPing(startEvent)
 
             sink.setActivityPhase(.backingUp, for: plan.id)
-            let outcome = try await RunTranscript.$current.withValue(transcript) {
+            var outcome = try await RunTranscript.$current.withValue(transcript) {
                 try await service.backup(
                     context,
                     plan: plan,
                     onProgress: sink.progressReporter(planID: plan.id)
                 )
             }
+
+            // Folders on a drive that is away, when they are all restic
+            // could not read: the rest is backed up, and the run reads as
+            // skipped for the drive, as when every folder is on it.
+            let awaySources = outcome.setAsideAwaySources { VolumePresence.isMounted(volumeOf: $0) == false }
 
             record.snapshotID = outcome.summary?.snapshotID
             record.filesNew = outcome.summary?.filesNew ?? 0
@@ -190,9 +195,14 @@ enum BackupRunEngine {
             if let decodingWarning = outcome.decodingWarning {
                 record.itemErrors.append(decodingWarning)
             }
-            record.outcome = record.itemErrors.isEmpty && !outcome.completedWithErrors
-                ? .succeeded
-                : .completedWithErrors
+            if awaySources.isEmpty {
+                record.outcome = record.itemErrors.isEmpty && !outcome.completedWithErrors
+                    ? .succeeded
+                    : .completedWithErrors
+            } else {
+                record.outcome = .skipped
+                record.detailText = RunRecord.partlySkippedReason(sources: awaySources)
+            }
 
             // The snapshot exists from here on. Mark the run before doing anything
             // else, so nothing that follows can make a good backup look like a
@@ -276,7 +286,7 @@ enum BackupRunEngine {
         case .succeeded: [.afterSuccess, .afterAny]
         case .completedWithErrors: [.afterWarning, .afterAny]
         case .failed: [.afterFailure, .afterAny]
-        // Nothing was backed up, nothing failed: only the hooks for any end.
+        // A drive away, nothing failed: only the hooks for any end.
         case .skipped: [.afterAny]
         case .cancelled: []
         }

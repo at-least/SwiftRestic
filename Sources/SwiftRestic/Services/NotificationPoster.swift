@@ -24,8 +24,10 @@ enum NotificationPayload {
             // dead-man's switch stops meaning anything.
             switch event.stage {
             case .started: url.append(path: "start")
-            case .failed, .cancelled, .skipped: url.append(path: "fail")
-            case .succeeded, .warned: break
+            case .failed, .cancelled: url.append(path: "fail")
+            // A skip that wrote a snapshot backed up the rest: alive.
+            case .skipped where event.snapshotID == nil: url.append(path: "fail")
+            case .succeeded, .warned, .skipped: break
             }
             // Healthchecks stores a POST body as the run's log.
             return Request(

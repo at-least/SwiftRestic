@@ -262,12 +262,17 @@ enum RunRecordPresentation {
             lines.append("Snapshot: \(snapshotID)\(made)")
         }
         switch run.kind {
-        case .backup where hasBackupNumbers(run):
-            lines.append(
-                "Files: \(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed, "
-                    + "\(Format.count(run.filesUnmodified)) unmodified · processed \(Format.bytes(run.bytesProcessed))"
-                    + " · added \(Format.bytes(run.dataAdded))"
-            )
+        case .backup:
+            // Why it was skipped, before what the rest added when a
+            // snapshot was written anyway.
+            if run.outcome == .skipped, let reason = run.detailText { lines.append("Skipped: \(reason)") }
+            if hasBackupNumbers(run) {
+                lines.append(
+                    "Files: \(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed, "
+                        + "\(Format.count(run.filesUnmodified)) unmodified · processed \(Format.bytes(run.bytesProcessed))"
+                        + " · added \(Format.bytes(run.dataAdded))"
+                )
+            }
         case .restore:
             // A record with no stored destination says nothing: "Entire
             // snapshot" would be a guess about it. That word is the
@@ -287,9 +292,6 @@ enum RunRecordPresentation {
         case .check, .forget:
             // A check's verdict, or what Apply Retention Now… removed.
             if let result = run.detailText { lines.append("Result: \(result)") }
-        case .backup where run.outcome == .skipped:
-            // Why there was nothing to back up.
-            if let reason = run.detailText { lines.append("Skipped: \(reason)") }
         default:
             break
         }
