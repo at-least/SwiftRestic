@@ -299,20 +299,47 @@ struct SnapshotIndexTests {
     /// Equal times are real: `restic rewrite` without `--forget` keeps the
     /// original beside a rewritten snapshot of the same time, and `restic
     /// copy` keeps times. The summary's newest must be the version the
-    /// browser opens — `versions(ofPath:).first` — or a Find Files row names,
-    /// and restores from, another snapshot than the one the browser shows.
+    /// Files tab its row opens lists first — its chain's
+    /// `versions(ofPath:inChain:).first` — or a Find Files row names, and
+    /// restores from, another snapshot than the one the tab shows.
     @Test("versionSummaries' newest breaks a time tie as versions does: the later arrival")
     func summariesTieMatchesVersions() async throws {
         let fixture = try IndexFixture()
         let index = fixture.index
         let content: IndexContent = ["/data": true, "/data/f": false]
-        _ = try index.reconcile(listing: [try snap("b-first", t0)])
-        _ = try index.reconcile(listing: [try snap("b-first", t0), try snap("a-second", t0, tags: [planB])])
+        let first = try snap("b-first", t0)
+        _ = try index.reconcile(listing: [first])
+        _ = try index.reconcile(listing: [first, try snap("a-second", t0)])
         try index.runToDone(["b-first": content, "a-second": content])
-        let versions = try await index.versions(ofPath: "/data/f")
+        let versions = try await index.versions(ofPath: "/data/f", inChain: SnapshotIndex.chainKey(for: first))
         #expect(versions.map(\.id) == ["a-second", "b-first"])
         let summary = try #require(try await index.versionSummaries(ofPaths: ["/data/f"])["/data/f"])
         #expect(summary.newest == versions.first)
+    }
+
+    /// Across chains the tie goes to the higher chain id, not the later
+    /// arrival `versions(ofPath:)` lists first: the summary stays its own
+    /// chain's, the Files tab its Find Files row opens.
+    @Test("a summary's newest through a time tie across chains is its own chain's first version")
+    func summariesCrossChainTieIsChainScoped() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let content: IndexContent = ["/data": true, "/data/f": false]
+        // Plan B's chain arrives first, so plan A's id is the higher; at t1
+        // plan A's backup arrives before plan B's.
+        let bOld = try snap("b-old", t0, tags: [planB])
+        let aTie = try snap("a-tie", t1)
+        let bTie = try snap("b-tie", t1, tags: [planB])
+        _ = try index.reconcile(listing: [bOld])
+        _ = try index.reconcile(listing: [bOld, aTie])
+        _ = try index.reconcile(listing: [bOld, aTie, bTie])
+        try index.runToDone(["b-old": content, "a-tie": content, "b-tie": content])
+        #expect(try await index.versionIDs("/data/f") == ["b-tie", "a-tie", "b-old"])
+        let summary = try #require(try await index.versionSummaries(ofPaths: ["/data/f"])["/data/f"])
+        let chain = try await index.versions(ofPath: "/data/f", inChain: SnapshotIndex.chainKey(for: aTie))
+        #expect(summary.newest.id == "a-tie")
+        #expect(summary.newest == chain.first)
+        #expect(summary.count == chain.count)
     }
 
     @Test("search's kind breaks a time tie as versions does: the later arrival's kind")

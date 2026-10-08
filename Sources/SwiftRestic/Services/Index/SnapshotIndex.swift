@@ -891,9 +891,11 @@ final class SnapshotIndex: @unchecked Sendable {
     }
 
     /// Per path: the newest indexed snapshot holding it and how many of its
-    /// chain's snapshots do — `newest == versions(ofPath:).first` and `count`
-    /// that chain's `versions(ofPath:inChain:).count`, without
-    /// materialising a list that can run to thousands of versions. Unknown
+    /// chain's snapshots do — that chain's `versions(ofPath:inChain:).first`
+    /// and `.count`, without materialising a list that can run to
+    /// thousands of versions. Not always `versions(ofPath:).first`: two
+    /// chains holding it at one newest moment go to the higher chain id
+    /// (`summaries`), where that list puts the later arrival first. Unknown
     /// paths, and paths with no indexed version, are absent. Keyed by the
     /// bytes asked for (`PathKey`), so canonically equal spellings keep
     /// their own answers. Find Files reads the summaries inside its search
