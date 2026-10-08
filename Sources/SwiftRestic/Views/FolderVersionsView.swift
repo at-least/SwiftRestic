@@ -277,19 +277,15 @@ struct FolderVersionsView: View {
     }
 
     /// The selected items, or with nothing selected the folder itself, as
-    /// of the chosen backup (`RestoreDestinationRequest.picked`'s rule —
-    /// the Restore pane's).
+    /// of the chosen backup (`RestoreDestinationRequest.picked`'s rule).
     private func restoreSelection() {
         guard let chosen else { return }
         let picked = selectedNodes.isEmpty
             ? [SnapshotNode(name: node.name, type: .dir, path: node.path)]
             : selectedNodes
         destinationRequest = RestoreDestinationRequest.picked(
-            picked,
+            picked.map { RestoreSource($0, snapshotID: chosen.id, backupTime: chosen.time) },
             repositoryID: node.repositoryID,
-            snapshotID: chosen.id,
-            snapshotShortID: String(chosen.id.prefix(8)),
-            backupTime: chosen.time,
             model: model
         )
     }

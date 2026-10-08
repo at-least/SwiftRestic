@@ -254,22 +254,19 @@ struct AppModelTests {
         let backups = model.snapshots(for: id, planID: harness.plan.id).sorted { $0.time < $1.time }
         try #require(backups.count == 2)
 
-        // Find Files' rows: the folder at the newer backup, the deleted file
-        // at the older, the newest that holds it.
+        // Find Files' index rows: the folder at the newer backup, the deleted
+        // file at the older, the newest that holds it — no node, so restic
+        // lists each first.
         let rows = [
-            (snapshotID: backups[1].id, node: try await model.listedNode(repositoryID: id, snapshotID: backups[1].id, path: source.path)),
-            (snapshotID: backups[0].id, node: try await model.listedNode(repositoryID: id, snapshotID: backups[0].id, path: b.path)),
+            RestoreSource(name: source.lastPathComponent, path: source.path, isDirectory: true, snapshotID: backups[1].id, backupTime: backups[1].time, node: nil),
+            RestoreSource(name: "b.txt", path: b.path, isDirectory: false, snapshotID: backups[0].id, backupTime: backups[0].time, node: nil),
         ]
-        let (kept, covered) = RestoreBatch.covering(rows, node: { $0.node }, backup: { $0.snapshotID })
-        #expect(kept.count == 2)
-        #expect(covered.isEmpty)
+        let selection = try #require(RestoreSelection(rows))
+        #expect(selection.sources == rows)
+        #expect(selection.note == nil)
 
         func restore(into directories: [URL]) async {
-            model.restore(
-                repositoryID: id,
-                items: zip(kept, directories).map { (snapshotID: $0.snapshotID, node: $0.node, directory: $1) },
-                overwrite: .keepExisting
-            )
+            await model.restore(selection, repositoryID: id, into: directories, overwrite: .keepExisting)
             await waitUntilRestoreFinishes(in: model, within: 60)
         }
 
@@ -289,6 +286,33 @@ struct AppModelTests {
         #expect(try String(contentsOf: b, encoding: .utf8) == "two")
         #expect(try String(contentsOf: source.appendingPathComponent("a.txt"), encoding: .utf8) == "one")
         #expect(model.configuration.runs.filter { $0.kind == .restore }.allSatisfy { $0.outcome == .succeeded })
+
+        await model.shutdown()
+    }
+
+    @Test("a selection whose item restic no longer lists restores nothing, and a banner says why")
+    func restoreSelectionWhoseItemIsNotListed() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let backup = try #require(model.snapshots(for: id, planID: harness.plan.id).first)
+        let gone = harness.sourceDirectory.appendingPathComponent("gone.txt").path
+        let selection = try #require(RestoreSelection([
+            RestoreSource(name: "gone.txt", path: gone, isDirectory: false, snapshotID: backup.id, backupTime: backup.time, node: nil),
+        ]))
+        let chosen = harness.root.appendingPathComponent("chosen")
+        try FileManager.default.createDirectory(at: chosen, withIntermediateDirectories: true)
+
+        await model.restore(selection, repositoryID: id, into: [chosen], overwrite: .keepExisting)
+        #expect(!model.isRestoring)
+        #expect(model.configuration.runs.allSatisfy { $0.kind != .restore })
+        let banner = try #require(model.banners.first { $0.title == "Could not restore “gone.txt”" })
+        #expect(banner.isError)
+        #expect(banner.message == "“gone.txt” is no longer listed in the chosen snapshot — refresh and try again.")
 
         await model.shutdown()
     }

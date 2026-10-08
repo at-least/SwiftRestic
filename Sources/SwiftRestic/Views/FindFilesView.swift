@@ -83,7 +83,8 @@ struct FindFilesView: View {
         /// the latest snapshot only, which looked at one.
         let versionsCount: Int?
         /// Index rows carry the search hit; a restore resolves the node from
-        /// the row's snapshot first, whatever kind the hit says (`restore`).
+        /// the row's snapshot first, whatever kind the hit says
+        /// (`RestoreSource.node`).
         let hit: SearchHit?
 
         init(match: FindMatch, snapshotID: String, snapshotTime: Date?, versionsCount: Int? = nil, hit: SearchHit? = nil) {
@@ -523,86 +524,26 @@ struct FindFilesView: View {
     }
 
     /// Restores the picked rows through the destination sheet, where the
-    /// keep/replace choice lives — each from its row's backup. A folder
-    /// brings what its own backup holds of the rows inside it, and the
-    /// sheet says so; a row found in an older backup than its folder's is
-    /// one the folder's backup no longer holds, restored on its own
-    /// (`RestoreBatch.covering`).
+    /// keep/replace choice lives — each from its row's backup, a folder
+    /// leaving to itself only the rows of its own backup
+    /// (`RestoreDestinationRequest.picked`). A restic-engine row carries
+    /// restic's node; an index row's is listed first, its kind being the
+    /// index's (`RestoreSource.node`).
     private func restoreSelection(_ picked: [Row]) {
         guard let repositoryID else { return }
-        let (restored, covered) = RestoreBatch.covering(picked, node: \.match.node, backup: \.snapshotID)
-        let note = RestoreBatch.coveredNote(covered)
-        guard let first = restored.first else { return }
-        guard restored.count > 1 else {
-            destinationRequest = RestoreDestinationRequest(
-                subject: .item(name: first.match.name, path: first.match.path, isDirectory: first.match.isDirectory),
-                selectionNote: note,
-                backupTime: first.snapshotTime,
-                snapshotShortID: String(first.snapshotID.prefix(8))
-            ) { directories, overwrite in
-                restore(first, repositoryID: repositoryID, to: directories[0], overwrite: overwrite)
-            }
-            return
-        }
-        let backups = Set(restored.map(\.snapshotID))
-        destinationRequest = RestoreDestinationRequest(
-            subject: .items(restored.map { RestoreItem(name: $0.match.name, path: $0.match.path, isDirectory: $0.match.isDirectory) }),
-            selectionNote: note,
-            backupTime: backups.count == 1 ? first.snapshotTime : nil,
-            snapshotShortID: String(first.snapshotID.prefix(8)),
-            backupCount: backups.count
-        ) { directories, overwrite in
-            Task {
-                do {
-                    // Index rows list their node first, as one row's
-                    // restore does (`restore(_:repositoryID:to:overwrite:)`).
-                    var items: [(snapshotID: String, node: SnapshotNode, directory: URL)] = []
-                    for (row, directory) in zip(restored, directories) {
-                        let node = row.hit == nil
-                            ? row.match.node
-                            : try await model.listedNode(repositoryID: repositoryID, snapshotID: row.snapshotID, path: row.match.path)
-                        items.append((snapshotID: row.snapshotID, node: node, directory: directory))
-                    }
-                    model.restore(repositoryID: repositoryID, items: items, overwrite: overwrite)
-                } catch {
-                    errorMessage = (error as? ResticError)?.errorDescription ?? error.localizedDescription
-                }
-            }
-        }
-    }
-
-    /// Index rows resolve their node from the snapshot itself, no matter what
-    /// kind the index gave. The hit's kind and the row's snapshot come from
-    /// one read of the index, so they describe the same snapshot — but the
-    /// index is a cache and restic the truth, and a kind it got wrong would
-    /// send a folder to `dump`, which happily writes its tar into one file,
-    /// no error. A listing that cannot answer fails the restore loudly
-    /// instead.
-    private func restore(_ row: Row, repositoryID: UUID, to destination: URL, overwrite: RestoreOverwritePolicy) {
-        if row.hit == nil {
-            // A restic-engine row: the node came from restic itself.
-            model.restore(
-                repositoryID: repositoryID,
-                snapshotID: row.snapshotID,
-                node: row.match.node,
-                to: destination,
-                overwrite: overwrite
-            )
-            return
-        }
-        Task {
-            do {
-                let node = try await model.listedNode(repositoryID: repositoryID, snapshotID: row.snapshotID, path: row.match.path)
-                model.restore(
-                    repositoryID: repositoryID,
+        destinationRequest = RestoreDestinationRequest.picked(
+            picked.map { row in
+                RestoreSource(
+                    name: row.match.name,
+                    path: row.match.path,
+                    isDirectory: row.match.isDirectory,
                     snapshotID: row.snapshotID,
-                    node: node,
-                    to: destination,
-                    overwrite: overwrite
+                    backupTime: row.snapshotTime,
+                    node: row.hit == nil ? row.match.node : nil
                 )
-            } catch {
-                errorMessage = (error as? ResticError)?.errorDescription ?? error.localizedDescription
-            }
-        }
+            },
+            repositoryID: repositoryID,
+            model: model
+        )
     }
 }

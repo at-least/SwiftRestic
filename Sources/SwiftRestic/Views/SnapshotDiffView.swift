@@ -332,7 +332,7 @@ struct SnapshotDiffView: View {
                         if let open = showVersions(of: change) {
                             Button("Show Versions", action: open)
                         }
-                        Button("Restore “\(change.name)”…") { restore(change) }
+                        Button("Restore “\(change.name)”…") { restoreSelection([change]) }
                             .disabled(model.isRestoring || holder(of: change) == nil)
                     } else if ids.count > 1 {
                         let picked = rows.filter { ids.contains($0.id) }
@@ -411,61 +411,15 @@ struct SnapshotDiffView: View {
         }
     }
 
-    /// Restores the selected rows together: one destination sheet and one
-    /// run, each from the backup that has it (`DiffRestoreSelection`).
+    /// Restores rows — the selection, or the one right-clicked — through the
+    /// destination sheet, each from the backup of the two that holds it
+    /// (`DiffRestoreSelection`), together in one run.
     private func restoreSelection(_ picked: [ResticDiffChange]) {
-        let (items, note) = DiffRestoreSelection.plan(picked) { holder(of: $0) }
-        guard let first = items.first else { return }
-        guard items.count > 1 else {
-            restore(first.change, selectionNote: note)
-            return
-        }
-        let repositoryID = target.repositoryID
-        let backups = Set(items.map(\.backup.id))
-        destinationRequest = RestoreDestinationRequest(
-            subject: .items(items.map { RestoreItem(name: $0.change.name, path: $0.path, isDirectory: $0.change.isDirectory) }),
-            selectionNote: note,
-            backupTime: backups.count == 1 ? first.backup.time : nil,
-            snapshotShortID: first.backup.shortID,
-            backupCount: backups.count
-        ) { directories, overwrite in
-            Task {
-                do {
-                    var restored: [(snapshotID: String, node: SnapshotNode, directory: URL)] = []
-                    for (item, directory) in zip(items, directories) {
-                        let node = try await model.listedNode(repositoryID: repositoryID, snapshotID: item.backup.id, path: item.path)
-                        restored.append((snapshotID: item.backup.id, node: node, directory: directory))
-                    }
-                    model.restore(repositoryID: repositoryID, items: restored, overwrite: overwrite)
-                } catch {
-                    model.post(Banner(title: "Could not restore the selected items", message: error.localizedDescription, isError: true))
-                }
-            }
-        }
-    }
-
-    /// Restores a row's item from the backup that has it, through the
-    /// destination sheet. restic lists the node first (`listedNode`): a
-    /// diff names a path and a kind, never a node.
-    private func restore(_ change: ResticDiffChange, selectionNote: String? = nil) {
-        guard let record = holder(of: change) else { return }
-        let repositoryID = target.repositoryID
-        let path = ResticPath.normalized(change.path)
-        destinationRequest = RestoreDestinationRequest(
-            subject: .item(name: change.name, path: path, isDirectory: change.isDirectory),
-            selectionNote: selectionNote,
-            backupTime: record.time,
-            snapshotShortID: record.shortID
-        ) { directories, overwrite in
-            Task {
-                do {
-                    let node = try await model.listedNode(repositoryID: repositoryID, snapshotID: record.id, path: path)
-                    model.restore(repositoryID: repositoryID, snapshotID: record.id, node: node, to: directories[0], overwrite: overwrite)
-                } catch {
-                    model.post(Banner(title: "Could not restore “\(change.name)”", message: error.localizedDescription, isError: true))
-                }
-            }
-        }
+        destinationRequest = RestoreDestinationRequest.picked(
+            DiffRestoreSelection.sources(picked) { holder(of: $0) },
+            repositoryID: target.repositoryID,
+            model: model
+        )
     }
 
     // MARK: - Helpers

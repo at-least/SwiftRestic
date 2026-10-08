@@ -1,8 +1,19 @@
 import Foundation
 
-/// Several items of one backup restored together — the Restore pane's
-/// Restore… over a multiple selection. The rules that turn the selection into
-/// restic calls, apart from restic so they can be tested.
+/// What `RestoreBatch.covering` reads of a selected item: its name, for the
+/// destination sheet's note, its path in its backup, and whether it is a
+/// folder.
+protocol RestoreBatchItem {
+    var name: String { get }
+    var path: String { get }
+    var isDirectory: Bool { get }
+}
+
+extension SnapshotNode: RestoreBatchItem {}
+
+/// Several items restored together — a multiple selection of the Restore
+/// pane, Find Files or the Compare sheet. The rules that turn the selection
+/// into restic calls, apart from restic so they can be tested.
 ///
 /// Paths are compared by their bytes (`PathKey`), never as Swift strings:
 /// `String`'s `==` and `hasPrefix` are canonical equivalence, under which
@@ -29,26 +40,25 @@ enum RestoreBatch {
     /// backup holding it), or one a diff's newer backup removed, so it
     /// restores on its own. A selection of one backup — the Restore pane's —
     /// names that one for every item.
-    static func covering<Item>(
+    static func covering<Item: RestoreBatchItem>(
         _ items: [Item],
-        node: (Item) -> SnapshotNode,
         backup: (Item) -> String
-    ) -> (kept: [Item], covered: [(item: SnapshotNode, folder: SnapshotNode)]) {
+    ) -> (kept: [Item], covered: [(item: Item, folder: Item)]) {
+        let keys = items.map { Key(backup: backup($0), path: PathKey($0.path)) }
         var keptKeys: Set<Key> = []
-        var coveredByKey: [Key: (item: SnapshotNode, folder: SnapshotNode)] = [:]
-        for (backupID, group) in Dictionary(grouping: items, by: backup) {
-            let nodes = group.map(node)
-            let kept = covering(nodes)
-            for keptNode in kept { keptKeys.insert(Key(backup: backupID, path: PathKey(keptNode.path))) }
-            for pair in covered(nodes, kept: kept) {
+        var coveredByKey: [Key: (item: Item, folder: Item)] = [:]
+        for (backupID, members) in Dictionary(grouping: items.indices, by: { keys[$0].backup }) {
+            let group = members.map { items[$0] }
+            let kept = covering(group)
+            for item in kept { keptKeys.insert(Key(backup: backupID, path: PathKey(item.path))) }
+            for pair in covered(group, kept: kept) {
                 coveredByKey[Key(backup: backupID, path: PathKey(pair.item.path))] = pair
             }
         }
         // Each verdict is taken once, so a repeat of an item finds none.
         var keptItems: [Item] = []
-        var coveredItems: [(item: SnapshotNode, folder: SnapshotNode)] = []
-        for item in items {
-            let key = Key(backup: backup(item), path: PathKey(node(item).path))
+        var coveredItems: [(item: Item, folder: Item)] = []
+        for (item, key) in zip(items, keys) {
             if keptKeys.remove(key) != nil {
                 keptItems.append(item)
             } else if let pair = coveredByKey.removeValue(forKey: key) {
@@ -66,38 +76,37 @@ enum RestoreBatch {
 
     /// One backup's items that restore, in its order: each once, none
     /// inside a selected folder.
-    private static func covering(_ nodes: [SnapshotNode]) -> [SnapshotNode] {
-        let folders = nodes.filter(\.isDirectory)
+    private static func covering<Item: RestoreBatchItem>(_ items: [Item]) -> [Item] {
+        let folders = items.filter(\.isDirectory).map { insidePrefix($0.path) }
         var seen: Set<PathKey> = []
-        return nodes.filter { node in
-            guard seen.insert(PathKey(node.path)).inserted else { return false }
-            return !folders.contains { isInside(node, $0) }
+        return items.filter { item in
+            guard seen.insert(PathKey(item.path)).inserted else { return false }
+            return !folders.contains { isInside(item.path, prefix: $0) }
         }
     }
 
     /// One backup's items `covering` dropped for being inside a selected
     /// folder, `kept` being what it kept: each with the folder it is
     /// restored with — the outermost, the one `covering` keeps.
-    private static func covered(
-        _ nodes: [SnapshotNode],
-        kept: [SnapshotNode]
-    ) -> [(item: SnapshotNode, folder: SnapshotNode)] {
+    private static func covered<Item: RestoreBatchItem>(
+        _ items: [Item],
+        kept: [Item]
+    ) -> [(item: Item, folder: Item)] {
         let keptPaths = Set(kept.map { PathKey($0.path) })
-        let keptFolders = kept.filter(\.isDirectory)
+        let keptFolders = kept.filter(\.isDirectory).map { (folder: $0, prefix: insidePrefix($0.path)) }
         var reported: Set<PathKey> = []
-        return nodes.compactMap { node in
-            let key = PathKey(node.path)
-            guard !keptPaths.contains(key), reported.insert(key).inserted,
-                  let folder = keptFolders.first(where: { isInside(node, $0) })
+        return items.compactMap { item in
+            guard !keptPaths.contains(PathKey(item.path)), reported.insert(PathKey(item.path)).inserted,
+                  let folder = keptFolders.first(where: { isInside(item.path, prefix: $0.prefix) })?.folder
             else { return nil }
-            return (node, folder)
+            return (item, folder)
         }
     }
 
     /// The destination sheet's line about `covered` items, so a selection of
     /// three rows read as "Restore 2 items" says where the third went. Nil
     /// when nothing was dropped.
-    static func coveredNote(_ covered: [(item: SnapshotNode, folder: SnapshotNode)]) -> String? {
+    static func coveredNote<Item: RestoreBatchItem>(_ covered: [(item: Item, folder: Item)]) -> String? {
         guard let first = covered.first else { return nil }
         let folders = Set(covered.map { PathKey($0.folder.path) })
         guard folders.count == 1 else {
@@ -114,10 +123,18 @@ enum RestoreBatch {
         }
     }
 
-    /// Whether `node` is somewhere inside `folder`, by bytes: a sibling whose
-    /// name only begins with the folder's is not.
-    private static func isInside(_ node: SnapshotNode, _ folder: SnapshotNode) -> Bool {
-        node.path.utf8.starts(with: (folder.path.hasSuffix("/") ? folder.path : folder.path + "/").utf8)
+    /// The bytes every path inside a folder starts with: its path and a
+    /// slash, so a sibling whose name only begins with the folder's is not
+    /// inside it.
+    private static func insidePrefix(_ folderPath: String) -> [UInt8] {
+        Array((folderPath.hasSuffix("/") ? folderPath : folderPath + "/").utf8)
+    }
+
+    /// Whether `path` is inside the folder `prefix` came from: longer than
+    /// it, so a folder spelled with its slash, or the root, is not inside
+    /// itself.
+    private static func isInside(_ path: String, prefix: [UInt8]) -> Bool {
+        path.utf8.count > prefix.count && path.utf8.starts(with: prefix)
     }
 
     /// Names two items would both land under in one directory — the same

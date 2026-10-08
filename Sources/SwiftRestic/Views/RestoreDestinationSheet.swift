@@ -26,50 +26,27 @@ struct RestoreDestinationRequest: Identifiable {
     /// an item or a whole backup.
     let perform: @MainActor ([URL], RestoreOverwritePolicy) -> Void
 
-    /// The picked rows' restore — the Restore pane's and the folder-versions
-    /// pane's, the same rule both: `RestoreBatch.covering` drops items inside
-    /// a selected folder, which the folder brings anyway, and `coveredNote`
-    /// says so, or three selected rows would read as two. One item goes the
-    /// way a single item always has; nil when the picked rows cover nothing.
+    /// The picked rows' restore — every surface's that restores a selection:
+    /// the Restore pane's and the folder-versions pane's, of one backup, and
+    /// Find Files' and the Compare sheet's, of several. One rule and one
+    /// wording for all (`RestoreSelection`): items inside a selected folder
+    /// of the same backup are left to it, and the sheet says so, or three
+    /// selected rows would read as two. Nil when the picked rows restore
+    /// nothing.
     static func picked(
-        _ picked: [SnapshotNode],
+        _ picked: [RestoreSource],
         repositoryID: UUID,
-        snapshotID: String,
-        snapshotShortID: String,
-        backupTime: Date,
         model: AppModel
     ) -> RestoreDestinationRequest? {
-        let (nodes, covered) = RestoreBatch.covering(picked, node: { $0 }, backup: { _ in snapshotID })
-        let note = RestoreBatch.coveredNote(covered)
-        guard let first = nodes.first else { return nil }
-        guard nodes.count > 1 else {
-            return RestoreDestinationRequest(
-                subject: .item(name: first.name, path: first.path, isDirectory: first.isDirectory),
-                selectionNote: note,
-                backupTime: backupTime,
-                snapshotShortID: snapshotShortID
-            ) { directories, overwrite in
-                model.restore(
-                    repositoryID: repositoryID,
-                    snapshotID: snapshotID,
-                    node: first,
-                    to: directories[0],
-                    overwrite: overwrite
-                )
-            }
-        }
+        guard let selection = RestoreSelection(picked) else { return nil }
         return RestoreDestinationRequest(
-            subject: .items(nodes.map { RestoreItem(name: $0.name, path: $0.path, isDirectory: $0.isDirectory) }),
-            selectionNote: note,
-            backupTime: backupTime,
-            snapshotShortID: snapshotShortID
+            subject: selection.subject,
+            selectionNote: selection.note,
+            backupTime: selection.backupTime,
+            snapshotShortID: selection.snapshotShortID,
+            backupCount: selection.backupCount
         ) { directories, overwrite in
-            model.restore(
-                repositoryID: repositoryID,
-                snapshotID: snapshotID,
-                items: zip(nodes, directories).map { (node: $0, directory: $1) },
-                overwrite: overwrite
-            )
+            Task { await model.restore(selection, repositoryID: repositoryID, into: directories, overwrite: overwrite) }
         }
     }
 }

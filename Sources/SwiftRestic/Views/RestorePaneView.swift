@@ -833,16 +833,12 @@ struct RestorePaneView: View {
 
     /// The picked rows through the shared factory
     /// (`RestoreDestinationRequest.picked`): the covering rule and the
-    /// sheet's wording live there, one rule for this pane and the Files
-    /// view's folder versions.
+    /// sheet's wording live there, one rule for every selection restore.
     private func restoreSelection() {
         guard let record else { return }
         destinationRequest = RestoreDestinationRequest.picked(
-            selectedNodes,
+            selectedNodes.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) },
             repositoryID: repositoryID,
-            snapshotID: record.id,
-            snapshotShortID: record.shortID,
-            backupTime: record.time,
             model: model
         )
     }

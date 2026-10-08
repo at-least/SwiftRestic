@@ -60,32 +60,56 @@ extension AppModel {
         }
     }
 
-    /// Several items of one backup, each into its directory — one folder for
-    /// all, or each back into its own parent — in one restic call per folder
-    /// of the backup and directory (`RestoreBatch.groups`,
-    /// `ResticService.restoreItems`). Each call is a step of one run with a
-    /// record of its own; one banner names the lot. The caller has already
-    /// dropped items inside other selected folders and refused names that
-    /// would land twice in one directory (`RestoreBatch.covering`,
-    /// `collidingNames`).
+    /// A picked selection's restore, once the destination sheet has its
+    /// directories, one per item in order: each item's node — the row's own,
+    /// or listed by restic first (`listedNode`) — then one item restores as a
+    /// single item always has, several together. A listing that fails
+    /// restores nothing and says why in a banner.
     func restore(
+        _ selection: RestoreSelection,
         repositoryID: UUID,
-        snapshotID: String,
-        items: [(node: SnapshotNode, directory: URL)],
+        into directories: [URL],
         overwrite: RestoreOverwritePolicy
-    ) {
-        restore(
-            repositoryID: repositoryID,
-            items: items.map { (snapshotID: snapshotID, node: $0.node, directory: $0.directory) },
-            overwrite: overwrite
-        )
+    ) async {
+        precondition(directories.count == selection.sources.count, "one directory per item")
+        var items: [(snapshotID: String, node: SnapshotNode, directory: URL)] = []
+        do {
+            for (source, directory) in zip(selection.sources, directories) {
+                let node: SnapshotNode
+                if let known = source.node {
+                    node = known
+                } else {
+                    node = try await listedNode(repositoryID: repositoryID, snapshotID: source.snapshotID, path: source.path)
+                }
+                items.append((snapshotID: source.snapshotID, node: node, directory: directory))
+            }
+        } catch {
+            let subject = selection.sources.count == 1 ? "“\(selection.sources[0].name)”" : "the selected items"
+            post(Banner(title: "Could not restore \(subject)", message: error.localizedDescription, isError: true))
+            return
+        }
+        guard items.count > 1 else {
+            restore(
+                repositoryID: repositoryID,
+                snapshotID: items[0].snapshotID,
+                node: items[0].node,
+                to: items[0].directory,
+                overwrite: overwrite
+            )
+            return
+        }
+        restore(repositoryID: repositoryID, items: items, overwrite: overwrite)
     }
 
-    /// Several items, each from its own backup — Find Files' selection, a
-    /// row per path at the backup it was found in: the backups in the
-    /// selection's order, each as `restore(repositoryID:snapshotID:items:)`
-    /// restores one — one restic call per folder of it and directory — all
-    /// steps of one run, each step's record naming its own backup.
+    /// Several items, each from its own backup, each into its directory —
+    /// one folder for all, or each back into its own parent: the backups in
+    /// the items' order, one restic call per folder of a backup and
+    /// directory (`RestoreBatch.groups`, `ResticService.restoreItems`). Each
+    /// call is a step of one run with a record of its own, naming its
+    /// backup; one banner names the lot. The caller has already dropped
+    /// items inside other selected folders and refused names that would
+    /// land twice in one directory (`RestoreSelection`,
+    /// `RestoreBatch.collidingNames`).
     func restore(
         repositoryID: UUID,
         items: [(snapshotID: String, node: SnapshotNode, directory: URL)],

@@ -1,8 +1,8 @@
 import Foundation
 import Testing
 
-/// Several items of one backup restored together: which items a selection
-/// restores, which names it refuses, and the restic calls it becomes.
+/// Several items restored together: which items a selection restores,
+/// which names it refuses, and the restic calls it becomes.
 @Suite("Restore batch")
 struct RestoreBatchTests {
     private func file(_ path: String) -> SnapshotNode {
@@ -15,7 +15,7 @@ struct RestoreBatchTests {
 
     /// A selection of one backup, as the Restore pane's is.
     private func oneBackup(_ nodes: [SnapshotNode]) -> (kept: [SnapshotNode], covered: [(item: SnapshotNode, folder: SnapshotNode)]) {
-        RestoreBatch.covering(nodes, node: { $0 }, backup: { _ in "backup" })
+        RestoreBatch.covering(nodes, backup: { _ in "backup" })
     }
 
     @Test("an item inside a selected folder is dropped — the folder brings it — and a repeat counts once")
@@ -30,6 +30,13 @@ struct RestoreBatchTests {
             == ["/Data/Project", "/Data/Project 2.txt", "/Data/todo.txt"])
         // A file is no folder: nothing is inside it.
         #expect(oneBackup([file("/Data/a"), file("/Data/a/b")]).kept.count == 2)
+        // A folder spelled with its slash, or the root, is not inside itself.
+        let slashed = oneBackup([folder("/Data/Project/"), inside])
+        #expect(slashed.kept.map(\.path) == ["/Data/Project/"])
+        #expect(slashed.covered.map(\.item.path) == ["/Data/Project/notes.txt"])
+        let root = oneBackup([folder("/"), other])
+        #expect(root.kept.map(\.path) == ["/"])
+        #expect(root.covered.map(\.item.path) == ["/Data/todo.txt"])
     }
 
     @Test("what was dropped for being inside a selected folder, with the folder that brings it, in words")
@@ -51,7 +58,7 @@ struct RestoreBatchTests {
         #expect(oneBackup([project, other, project]).covered.isEmpty)
         // Nothing inside anything: nothing to say.
         #expect(oneBackup([project, other]).covered.isEmpty)
-        #expect(RestoreBatch.coveredNote([]) == nil)
+        #expect(RestoreBatch.coveredNote(oneBackup([]).covered) == nil)
 
         func note(_ nodes: [SnapshotNode]) -> String? {
             RestoreBatch.coveredNote(oneBackup(nodes).covered)
@@ -64,18 +71,14 @@ struct RestoreBatchTests {
 
     @Test("from several backups, a folder brings only what its own backup holds: a file found in an older backup restores on its own")
     func coveringAcrossBackups() {
-        struct Picked {
-            let node: SnapshotNode
-            let backup: String
-        }
         // Find Files' rows, each path at the newest backup holding it: Oct 2
         // still holds notes/ and keep.txt, notes.txt was deleted after Oct 1.
-        let notes = Picked(node: folder("/src/notes"), backup: "oct2")
-        let keep = Picked(node: file("/src/notes/keep.txt"), backup: "oct2")
-        let deleted = Picked(node: file("/src/notes/notes.txt"), backup: "oct1")
-        let (kept, covered) = RestoreBatch.covering([notes, keep, deleted, keep], node: \.node, backup: \.backup)
-        #expect(kept.map(\.node.path) == ["/src/notes", "/src/notes/notes.txt"])
-        #expect(kept.map(\.backup) == ["oct2", "oct1"])
+        let notes = RestoreSource(folder("/src/notes"), snapshotID: "oct2", backupTime: nil)
+        let keep = RestoreSource(file("/src/notes/keep.txt"), snapshotID: "oct2", backupTime: nil)
+        let deleted = RestoreSource(file("/src/notes/notes.txt"), snapshotID: "oct1", backupTime: nil)
+        let (kept, covered) = RestoreBatch.covering([notes, keep, deleted, keep], backup: \.snapshotID)
+        #expect(kept.map(\.path) == ["/src/notes", "/src/notes/notes.txt"])
+        #expect(kept.map(\.snapshotID) == ["oct2", "oct1"])
         #expect(covered.map(\.item.path) == ["/src/notes/keep.txt"])
         #expect(RestoreBatch.coveredNote(covered) == "“keep.txt” is inside “notes” and is restored with it.")
     }

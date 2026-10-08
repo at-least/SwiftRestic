@@ -282,8 +282,7 @@ struct AppModelStubTests {
         let destination = harness.root.appendingPathComponent("restored")
         harness.model.restore(
             repositoryID: harness.repository.id,
-            snapshotID: "latest",
-            items: [(project, destination), (photo, destination), (notes, destination)],
+            items: [project, photo, notes].map { (snapshotID: "latest", node: $0, directory: destination) },
             overwrite: .keepExisting
         )
         await waitUntilRestoreFinishes(in: harness.model)
@@ -323,12 +322,11 @@ struct AppModelStubTests {
         let destination = harness.root.appendingPathComponent("restored")
         harness.model.restore(
             repositoryID: harness.repository.id,
-            snapshotID: "latest",
             items: [
-                (SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt"), destination),
-                (SnapshotNode(name: "b.txt", type: .file, path: "/src/b.txt"), destination),
-                (SnapshotNode(name: "c.txt", type: .file, path: "/other/c.txt"), destination),
-            ],
+                SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt"),
+                SnapshotNode(name: "b.txt", type: .file, path: "/src/b.txt"),
+                SnapshotNode(name: "c.txt", type: .file, path: "/other/c.txt"),
+            ].map { (snapshotID: "latest", node: $0, directory: destination) },
             overwrite: .keepExisting
         )
         await waitUntilRestoreFinishes(in: harness.model)
