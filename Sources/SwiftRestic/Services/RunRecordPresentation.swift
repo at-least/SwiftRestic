@@ -216,9 +216,29 @@ enum RunRecordPresentation {
             // Apply Retention Now…'s count ("Removed 2 snapshots. Their data
             // stays until the next prune."), one short line.
             return run.detailText ?? run.outcome.displayName
+        case .check:
+            // The verdict the run recorded — "2 errors — `restic repair` can
+            // recover some damage." or "No errors found." — its first
+            // sentence; a record from before the verdict falls to the
+            // outcome. The glyph already says the outcome; the count and the
+            // fix are what the column adds. No final period: the column's
+            // other entries ("2 unreadable items", "0 new, 1 changed") carry
+            // none, and the sentence cut drops one before a second sentence.
+            guard let verdict = run.detailText else { return run.outcome.displayName }
+            let first = Format.firstSentence(verdict)
+            return first.hasSuffix(".") ? String(first.dropLast()) : first
         default:
             return run.outcome.displayName
         }
+    }
+
+    /// The Detail column's words for a row that continues a line — the
+    /// Maintenance card's "22 hours ago · 2 errors — `restic repair` can
+    /// recover some damage" — the outcome lowercased when the detail is
+    /// only the outcome.
+    static func verdictClause(for run: RunRecord) -> String {
+        let detail = detail(for: run)
+        return detail == run.outcome.displayName ? detail.lowercased() : detail
     }
 
     /// The in-app banner's message for a backup that finished with

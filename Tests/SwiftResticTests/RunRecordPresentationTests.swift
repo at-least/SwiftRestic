@@ -289,6 +289,31 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.repairRoute(for: run(.check, .completedWithErrors), repositoryExists: false) == nil)
     }
 
+    @Test("a check's Detail is its verdict's first sentence; a row continuing a line drops the period")
+    func checkVerdict() {
+        func check(_ outcome: RunRecord.Outcome, _ verdict: String?) -> RunRecord {
+            var record = RunRecord(kind: .check, planName: "")
+            record.outcome = outcome
+            record.detailText = verdict
+            return record
+        }
+        let damaged = check(.completedWithErrors, "2 errors — `restic repair` can recover some damage. restic suggests running prune.")
+        #expect(RunRecordPresentation.detail(for: damaged) == "2 errors — `restic repair` can recover some damage")
+        #expect(RunRecordPresentation.verdictClause(for: damaged) == "2 errors — `restic repair` can recover some damage")
+        #expect(RunRecordPresentation.problemRowCaption(for: damaged)
+            == "Completed with errors · 2 errors — `restic repair` can recover some damage")
+        // A verdict stored before 2026-10-09 put a period before the
+        // command, which the sentence cut leaves alone: shown whole, its
+        // own final period dropped like every entry's.
+        let older = check(.completedWithErrors, "2 errors. `restic repair` can recover some damage.")
+        #expect(RunRecordPresentation.detail(for: older) == "2 errors. `restic repair` can recover some damage")
+        // No verdict at all: the outcome, as every kind without words.
+        #expect(RunRecordPresentation.detail(for: check(.completedWithErrors, nil)) == "Completed with errors")
+        #expect(RunRecordPresentation.verdictClause(for: check(.completedWithErrors, nil)) == "completed with errors")
+        #expect(RunRecordPresentation.problemRowCaption(for: check(.completedWithErrors, nil)) == "Completed with errors")
+        #expect(RunRecordPresentation.detail(for: check(.succeeded, "No errors found.")) == "No errors found")
+    }
+
     @Test("the Detail column's wording for each kind of run")
     func detailWording() {
         let detail = RunRecordPresentation.detail(for:)

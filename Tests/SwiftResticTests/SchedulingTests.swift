@@ -729,7 +729,13 @@ struct MaintenanceSchedulingTests {
         // The stamp is written for every attempt; the record says how it went.
         #expect(last([check(.succeeded, at: "2026-09-09 12:00:00")]) == ago)
         #expect(last([check(.failed, at: "2026-09-09 12:00:00")]) == "\(ago) · failed")
-        #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · errors found")
+        // A check that found damage says what it found, in its record's
+        // own words — the Detail column's — not a second spelling.
+        var withVerdict = check(.completedWithErrors, at: "2026-09-09 12:00:00")
+        withVerdict.detailText = "2 errors — `restic repair` can recover some damage. restic suggests running prune."
+        #expect(last([withVerdict]) == "\(ago) · 2 errors — `restic repair` can recover some damage")
+        // A record from before the verdict was stored: the outcome itself.
+        #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · completed with errors")
         #expect(last([check(.cancelled, at: "2026-09-09 12:00:00")]) == "\(ago) · cancelled")
         // The newest of the repository's own checks, never a prune's or
         // another repository's.

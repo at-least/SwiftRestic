@@ -201,13 +201,23 @@ struct RepositoryDetailView: View {
                     // Activity's newest run, with how it ended; the stamp
                     // is written for every attempt.
                     let runs = model.configuration.runs
-                    DetailRow("Last check", Scheduler.lastMaintenanceText(.check, of: repository, runs: runs, now: now))
+                    DetailRow("Last check") {
+                        MaintenanceRunValue(
+                            text: Scheduler.lastMaintenanceText(.check, of: repository, runs: runs, now: now),
+                            run: Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
+                        )
+                    }
                     // As the scheduler will start them: the hold holds upkeep
                     // too, so a due task reads "Waiting", never "Due now".
                     let hold = model.scheduleHold
                     DetailRow("Next check", Scheduler.nextMaintenanceText(.check, of: repository, hold: hold, now: now))
                     if repository.maintenance.pruneEnabled {
-                        DetailRow("Last prune", Scheduler.lastMaintenanceText(.prune, of: repository, runs: runs, now: now))
+                        DetailRow("Last prune") {
+                            MaintenanceRunValue(
+                                text: Scheduler.lastMaintenanceText(.prune, of: repository, runs: runs, now: now),
+                                run: Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
+                            )
+                        }
                         DetailRow("Next prune", Scheduler.nextMaintenanceText(.prune, of: repository, hold: hold, now: now))
                     } else {
                         // Off is a fact the page states beside the disk bar,
@@ -240,4 +250,30 @@ struct RepositoryDetailView: View {
         }
     }
 
+}
+
+/// The Last check / Last prune value: the words alone after a run that
+/// succeeded, else the same words as a route to the run in Activity — its
+/// drawer holds Check Again…, the log and Copy Details, so the page gains no
+/// maintenance control, and the route outlives the Recent problems card's
+/// week.
+private struct MaintenanceRunValue: View {
+    @Environment(AppRouter.self) private var router
+    let text: String
+    let run: RunRecord?
+
+    var body: some View {
+        if let run, run.outcome != .succeeded {
+            Button { router.focusRun(run.id) } label: {
+                HStack(spacing: 6) {
+                    Text(text)
+                    DashboardRowChevron()
+                }
+            }
+            .buttonStyle(HoverableButtonStyle())
+            .help("Show this run in Activity")
+        } else {
+            Text(text)
+        }
+    }
 }

@@ -276,7 +276,7 @@ struct RecentProblemsCard: View {
 }
 
 /// The trailing mark of a dashboard row that goes somewhere.
-private struct DashboardRowChevron: View {
+struct DashboardRowChevron: View {
     var body: some View {
         Image(systemName: "chevron.forward")
             .font(.caption.weight(.semibold))

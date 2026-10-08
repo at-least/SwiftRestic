@@ -619,8 +619,12 @@ struct MaintenanceRunEngineTests {
             sink: StubMaintenanceServiceSink(client: client, base: sink)
         )
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
-        #expect(sink.deliveredRecords[0].detailText?.contains("2 errors") == true)
-        #expect(sink.deliveredRecords[0].detailText?.contains("suggests running prune") == true)
+        // One sentence for the verdict, so the Detail column carries it
+        // whole; restic's advice is the second.
+        #expect(sink.deliveredRecords[0].detailText
+            == "2 errors — `restic repair` can recover some damage. restic suggests running prune.")
+        #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0])
+            == "2 errors — `restic repair` can recover some damage")
     }
 
     @Test("a missing password records nothing and stamps nothing")

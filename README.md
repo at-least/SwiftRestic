@@ -412,8 +412,12 @@ checked in so a normal build does not need it.
   plan's retention applied on demand (*Plan › Apply Retention Now…* previews
   with `restic forget --dry-run --no-lock`, then asks). The repository page's
   *Last check* and *Last prune* read the newest such run in Activity and say
-  how it ended when it did not succeed ("3 days ago · failed", "· errors
-  found", "· cancelled"); the stamp the scheduler keeps — written for every
+  how it ended when it did not succeed ("3 days ago · failed", "· cancelled",
+  and for a check that found damage its own verdict, "· 2 errors — `restic
+  repair` can recover some damage" — the words Activity's Detail column and
+  the Recent problems row show, derived once from the record), and such a
+  row is a route to the run in Activity, whose drawer holds Check Again…,
+  the log and Copy Details; the stamp the scheduler keeps — written for every
   attempt, so a failing check is not retried every minute — is read only
   when the history holds no run as new as it. A failed check or prune, or a
   check that found errors, offers *Check Again…* or *Prune Again…* in its
