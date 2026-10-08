@@ -395,7 +395,10 @@ checked in so a normal build does not need it.
   is the plan's own; a copy a Home plan holds beside a Documents plan's is
   that plan's to list — whether the index answered or `restic find` did, so a
   common name does not list a row per backup; a search of the latest
-  snapshot only says "this one". ⌘- or ⇧-click selects several rows, and *Restore Selected…* (Return)
+  snapshot only says "this one". A search run before the repository's
+  listing has landed names each row's backup by its short ID in the
+  Snapshot column; the listing landing fills in the times, the rows
+  staying where they were. ⌘- or ⇧-click selects several rows, and *Restore Selected…* (Return)
   restores them together through the destination sheet, each from its own
   row's backup ("from 2 backups, each item from the one it was found in"),
   an item inside a selected folder of the same backup left to the folder.

@@ -149,6 +149,11 @@ struct FindFilesView: View {
                 // the wrong one.
                 cancelSearch()
             }
+            // The listing landing after a search ran ahead of it: the
+            // Snapshot column's short IDs become times (`fillLateTimes`).
+            .onChange(of: repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) }) { _, _ in
+                fillLateTimes()
+            }
 
             HStack(spacing: 8) {
                 // The prompt has to be verbatim: a literal string title is a
@@ -430,9 +435,11 @@ struct FindFilesView: View {
                         latestOnly: searchedLatestOnly
                     )
                     guard !Task.isCancelled else { return }
-                    // Snapshot times resolve against the repository as of
-                    // this search — the row's snapshot id is already fixed,
-                    // so a later render must not re-derive or re-sort it.
+                    // The listing as of this search: the row's snapshot ID
+                    // and its place in the list are fixed here. A listing
+                    // that lands later only fills in a time the search had
+                    // none for (`fillLateTimes`) — it never re-derives the
+                    // ID or re-sorts the rows under the user.
                     let snapshots = model.snapshots(for: searchedRepository)
                     let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
                     // Each backup's page, whose Files tab a row's "of N"
@@ -507,6 +514,30 @@ struct FindFilesView: View {
                 return timeA != timeB ? timeA > timeB : a.offset < b.offset
             }
             .map(\.element)
+    }
+
+    /// The listing's times for the rows that have none, once it lands: a
+    /// search run before the repository's listing landed named its backups
+    /// by short ID (the restic engine reads the times at completion). Each
+    /// row keeps its place and its ID and gains only its time — a map over
+    /// the rows, never a sort — and the rows are rewritten rather than
+    /// looked up beside, because the Table's cells follow their row's
+    /// data: a lookup the parent held left the column on its short IDs
+    /// after the listing landed (seen live, 2026-10-09). The restore
+    /// request reads the same row, so the sheet names the moment the
+    /// column shows.
+    private func fillLateTimes() {
+        let missing = Set(rows.lazy.filter { $0.snapshotTime == nil }.map(\.snapshotID))
+        guard !missing.isEmpty else { return }
+        var times: [String: Date] = [:]
+        for snapshot in model.snapshots(for: repositoryID) where missing.contains(snapshot.id) {
+            times[snapshot.id] = snapshot.time
+        }
+        guard !times.isEmpty else { return }
+        rows = rows.map { row in
+            guard row.snapshotTime == nil, let time = times[row.snapshotID] else { return row }
+            return Row(match: row.match, snapshotID: row.snapshotID, snapshotTime: time, versionsCount: row.versionsCount, hit: row.hit)
+        }
     }
 
     /// Abandons the running search, if any. The view state is reset here rather
