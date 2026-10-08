@@ -106,9 +106,6 @@ struct FindFilesView: View {
         }
         .frame(minWidth: 760, minHeight: 480)
         .previewSession(previewer)
-        .onChange(of: previewer.failure) { _, failure in
-            if let failure { errorMessage = failure }
-        }
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)
@@ -343,6 +340,15 @@ struct FindFilesView: View {
                                 .foregroundStyle(.tertiary)
                         }
                     }
+                }
+                // Beside the results, never in place of them: the search
+                // did not fail, and its rows are what the user is choosing
+                // from.
+                if let failure = previewer.failure {
+                    Label("Preview failed", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help(failure)
                 }
                 Spacer()
                 Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
