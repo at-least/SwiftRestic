@@ -109,6 +109,11 @@ struct RepositoryEditorSheet: View {
                     .tag(Tab.hooks)
             }
             .padding(12)
+            // Held while restic is asked: the probe checks the fields as
+            // they were when it began, and Save then stores the fields as
+            // they are — an edit typed in between would be saved unchecked,
+            // under an answer about the location the fields no longer show.
+            .disabled(isWorking)
 
             Divider()
 

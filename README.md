@@ -187,7 +187,9 @@ checked in so a normal build does not need it.
   changes what reaches restic — the location, a credential, the extra
   environment or the password — runs the same check first and saves only on
   "Connected"; when the check fails it says why and offers *Save Anyway*, for
-  a server that is down while its path is being fixed. A rename, a
+  a server that is down while its path is being fixed. The form waits
+  while either check runs, so its answer is about the fields on screen and
+  Save stores what was checked. A rename, a
   maintenance setting or a hook saves at once. The check gives up after 60
   seconds: against a REST server refusing connections, restic 0.19.1 retried
   for over ten minutes. The editor asks *Where is it?* — on this Mac, on another machine,
