@@ -37,6 +37,14 @@ struct OverviewMetricsTests {
         // The same plan failing is its own row, not folded into its warnings.
         #expect(Set(groups.map(\.newest.outcome)) == [.completedWithErrors, .failed])
         #expect(OverviewMetrics.problemGroups([]).isEmpty)
+
+        // The plan page's count is the row's: the week's runs that ended
+        // like the standing problem; one for a problem older than the week.
+        let runs = warnings + [failure, documentsFailed, check]
+        let now = date("2026-10-07 12:00:00")
+        #expect(OverviewMetrics.recurrences(of: warnings[6], in: runs, now: now) == 7)
+        #expect(OverviewMetrics.recurrences(of: failure, in: runs, now: now) == 1)
+        #expect(OverviewMetrics.recurrences(of: warnings[6], in: runs, now: date("2026-10-20 12:00:00")) == 1)
     }
 
     // MARK: - Protection rows

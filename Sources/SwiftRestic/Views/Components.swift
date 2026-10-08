@@ -876,3 +876,79 @@ struct ItemErrorHintsView: View {
         }
     }
 }
+
+/// One unreadable item's line — in Activity's drawer and on the plan
+/// page's problem card — with the two fixes the diagnosis above it names,
+/// Reveal in Finder and Exclude from the plan, in a menu at its end and in
+/// its context menu. Only where restic named the
+/// item's path and the run stored it (`RunRecord.unreadableItemPaths`); older
+/// records' lines stay plain text. Exclude asks first: it changes what the
+/// plan backs up from now on.
+struct UnreadableItemLine: View {
+    @Environment(AppModel.self) private var model
+    let run: RunRecord
+    let line: String
+    /// Nil until the check lands; Reveal waits disabled until then.
+    @State private var exists: Bool?
+    @State private var isConfirmingExclude = false
+
+    var body: some View {
+        let path = run.unreadableItemPaths?[line]
+        let plan = run.planID.flatMap { model.plan(id: $0) }
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(line)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            if let path {
+                Spacer(minLength: 4)
+                Menu {
+                    actions(path: path, plan: plan)
+                } label: {
+                    // Named by the item, so VoiceOver tells one line's menu
+                    // from the next.
+                    Label("Actions for \((path as NSString).lastPathComponent)", systemImage: "ellipsis.circle")
+                        .labelStyle(.iconOnly)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Reveal this item in Finder, or exclude it from the plan")
+            }
+        }
+        .contextMenu {
+            if let path { actions(path: path, plan: plan) }
+        }
+        .confirmationDialog(
+            "Exclude “\(path.map { ($0 as NSString).lastPathComponent } ?? "")” from “\(plan?.displayName ?? "")”?",
+            isPresented: $isConfirmingExclude
+        ) {
+            if let path, let plan {
+                Button("Exclude") { model.exclude(path: path, fromPlan: plan.id) }
+            }
+        } message: {
+            Text("Its next backups skip \(path ?? "") — backups already made keep it. The plan's exclude patterns list it, and Edit takes it out again.")
+        }
+        .task(id: path) {
+            guard let path else { return }
+            exists = nil
+            let found = await Task.detached(priority: .utility) {
+                FileManager.default.fileExists(atPath: path)
+            }.value
+            guard !Task.isCancelled else { return }
+            exists = found
+        }
+    }
+
+    @ViewBuilder
+    private func actions(path: String, plan: BackupPlan?) -> some View {
+        Button("Reveal in Finder") {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        }
+        .disabled(exists != true)
+        if let plan {
+            Button("Exclude from “\(plan.displayName)”…") { isConfirmingExclude = true }
+                .disabled(plan.excludePatterns.contains(ResticService.globEscaped(path)))
+        }
+    }
+}

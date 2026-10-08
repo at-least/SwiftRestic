@@ -147,6 +147,15 @@ enum OverviewMetrics {
         return groups.values.sorted { $0.newest.finishedAt > $1.newest.finishedAt }
     }
 
+    /// How many runs of the week ended like `problem` — the count the
+    /// Recent problems card's row for it carries (`problemGroups`), so the
+    /// plan page's card and the repository page say one number. One when
+    /// the problem stands alone, or is older than the week's window.
+    static func recurrences(of problem: RunRecord, in runs: [RunRecord], now: Date) -> Int {
+        problemGroups(problems(in: runs, since: problemWindowStart(from: now)))
+            .first { $0.newest.id == problem.id }?.count ?? 1
+    }
+
     /// Whether a backup problem no longer stands: a successful backup of the
     /// same plan finished after it — the next run fixed it. A run skipped
     /// for an away drive that still wrote a snapshot of the rest counts. Backups only: a

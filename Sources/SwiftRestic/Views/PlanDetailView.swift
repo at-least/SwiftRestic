@@ -131,6 +131,8 @@ struct PlanDetailView: View {
         let summary: PlanProblemSummary
         /// The run the summary describes, for the fix its items need.
         let run: RunRecord
+        /// The week's count of this problem (`OverviewMetrics.recurrences`).
+        let recurrences: Int
         var onShowInActivity: (() -> Void)?
 
         var body: some View {
@@ -146,7 +148,9 @@ struct PlanDetailView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(summary.headline)
                                 .font(.headline)
-                            Text(Format.ago(summary.finishedAt, now: now))
+                            // The week's count in the Recent problems
+                            // card's words, then the newest run's moment.
+                            Text(PlanStatus.problemWhen(count: recurrences, ago: Format.ago(summary.finishedAt, now: now)))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                                 .help(Format.timestamp(summary.finishedAt))
@@ -174,6 +178,21 @@ struct PlanDetailView: View {
                     // The drawer's diagnosis, outside the combined text so
                     // its button stays a control of its own.
                     ItemErrorHintsView(run: run)
+                    // The items the diagnosis is about, each with its
+                    // Reveal in Finder and Exclude — the drawer's own line
+                    // — and what the cap leaves to Activity.
+                    if !summary.items.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(summary.items.enumerated()), id: \.offset) { _, line in
+                                UnreadableItemLine(run: run, line: line)
+                            }
+                            if summary.unlistedItemCount > 0 {
+                                Text("… and \(Format.count(summary.unlistedItemCount)) more in Activity")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
                 Spacer(minLength: 12)
                 // The failure's one known fix, left of the way to its record.
@@ -220,7 +239,12 @@ struct PlanDetailView: View {
             // The plan's standing problem, on the plan's own page: present
             // exactly while the sidebar names it, gone once a run succeeds.
             if let problem = model.currentProblem(for: plan.id) {
-                PlanProblemRow(summary: PlanStatus.summary(of: problem), run: problem, onShowInActivity: showInActivity(problem))
+                PlanProblemRow(
+                    summary: PlanStatus.summary(of: problem),
+                    run: problem,
+                    recurrences: OverviewMetrics.recurrences(of: problem, in: model.configuration.runs, now: now),
+                    onShowInActivity: showInActivity(problem)
+                )
             }
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             scheduleCard(plan)

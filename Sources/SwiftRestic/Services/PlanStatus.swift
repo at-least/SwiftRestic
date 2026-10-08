@@ -9,6 +9,12 @@ struct PlanProblemSummary: Equatable, Sendable {
     let headline: String
     let message: String?
     let facts: [String]
+    /// The unreadable items the card lists, restic's own lines, at most
+    /// `PlanStatus.listedItemLimit` of them, each with the drawer's fixes.
+    let items: [String]
+    /// How many unreadable items the card leaves to Activity — from
+    /// restic's count, never the stored lines.
+    let unlistedItemCount: Int
 }
 
 /// A stat tile's face: the value on it and the tooltip behind it.
@@ -41,6 +47,17 @@ struct PlanCaption: Equatable, Sendable {
 enum PlanStatus {
     private static let retentionSkippedFact = "Retention skipped"
     static let unnamedUnreadFact = "Some source data could not be read"
+    /// How many unreadable items the plan page's card lists; the drawer
+    /// holds the rest. Five: the usual run names one or two, and a home
+    /// folder macOS blocked in bulk is a diagnosis, not a list.
+    static let listedItemLimit = 5
+
+    /// The card's when-line: the week's count of this problem in the
+    /// Recent problems card's words ("3 times · 2 days ago",
+    /// `OverviewMetrics.recurrences`), else the moment alone.
+    static func problemWhen(count: Int, ago: String) -> String {
+        count > 1 ? "\(count) times · \(ago)" : ago
+    }
 
     /// A run's problems as short countable facts, in a fixed order: the
     /// unreadable items (or, for a backup restic ended with exit 3 without
@@ -78,14 +95,20 @@ enum PlanStatus {
     /// unreadable file), else a hook's complaint, else the banner's words
     /// for a bare exit 3.
     static func summary(of run: RunRecord) -> PlanProblemSummary {
-        let explanation = run.unreadableItems.first
-            ?? trailingLines(of: run).first
+        // The card lists the unreadable items (each with Reveal and
+        // Exclude, as the drawer's lines), so the message never repeats
+        // the first of them: it explains the warning past the items — a
+        // decoding gap, a skipped retention step — or a hook's complaint.
+        let items = Array(run.unreadableItems.prefix(listedItemLimit))
+        let explanation = trailingLines(of: run).first
             ?? run.hookMessages.first
         let message: String? = if run.outcome == .failed {
             run.failureMessage ?? explanation
         } else {
+            // The banner's words for a bare exit 3 — only while the card
+            // lists nothing: listed items are the explanation.
             explanation ?? run.failureMessage
-                ?? (run.outcome == .completedWithErrors ? RunRecord.unexplainedWarningMessage : nil)
+                ?? (run.outcome == .completedWithErrors && items.isEmpty ? RunRecord.unexplainedWarningMessage : nil)
         }
 
         var facts = facts(for: run)
@@ -103,7 +126,9 @@ enum PlanStatus {
             // only writer that stamps a planID on a run, so the noun is fixed.
             headline: "Backup \(run.outcome.displayName.lowercased())",
             message: message,
-            facts: facts
+            facts: facts,
+            items: items,
+            unlistedItemCount: max(0, run.itemErrorCount - items.count)
         )
     }
 

@@ -247,7 +247,14 @@ checked in so a normal build does not need it.
   Schedule*, its arrow offering the lengths, or *Resume Schedule* while
   paused (a manual plan has nothing to pause and shows none), and
   *Configuration* (its folders, exclude patterns and hooks) with *Edit*.
-  Every one of them is in the Plan menu and the plan row's menu too. The
+  Every one of them is in the Plan menu and the plan row's menu too. While
+  the plan's newest backup failed or completed with errors and no later
+  one succeeded, a problem card sits under *Backups*: the outcome, the
+  week's count in the Recent problems card's words ("3 times · 2 days
+  ago"), restic's message, the facts, the drawer's diagnosis, and up to
+  five of the unreadable items, each with the drawer's *Reveal in Finder*
+  and *Exclude from “Documents”…* menu, then "… and N more in Activity";
+  *Show in Activity* opens the run. The
   plan editor picks the repository for a new plan only when there is just
   one; it says when one of the plan's folders is not on this Mac; its exclude
   list takes items chosen in a panel or dropped from Finder as their own

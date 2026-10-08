@@ -268,7 +268,9 @@ struct BackupRunEngineTests {
 
         let summary = PlanStatus.summary(of: try #require(sink.deliveredRecords.first))
         #expect(summary.headline == "Backup completed with errors")
-        #expect(summary.message == "/etc/x: permission denied")
+        // The card lists the item itself, with its fixes; no message repeats it.
+        #expect(summary.items == ["/etc/x: permission denied"])
+        #expect(summary.message == nil)
         #expect(summary.facts == ["1 unreadable item"])
     }
 

@@ -495,8 +495,27 @@ struct PlanStatusTests {
 
         let summary = PlanStatus.summary(of: partial)
         #expect(summary.headline == "Backup completed with errors")
-        #expect(summary.message == items[0])
+        // The card lists the first five items with their fixes and leaves
+        // the rest — restic's count less the listed — to Activity; the
+        // message explains what the items do not (here the retention line).
+        #expect(summary.items == Array(items.prefix(5)))
+        #expect(summary.unlistedItemCount == 115)
+        #expect(summary.message == partial.itemErrors[50])
         #expect(summary.facts == ["120 unreadable items", "Retention skipped"])
+
+        // Two items: both listed, nothing left over, no message to repeat them.
+        var two = run(.completedWithErrors)
+        two.itemErrors = Array(items.prefix(2))
+        two.itemErrorCount = 2
+        let twoSummary = PlanStatus.summary(of: two)
+        #expect(twoSummary.items == Array(items.prefix(2)))
+        #expect(twoSummary.unlistedItemCount == 0)
+        #expect(twoSummary.message == nil)
+        #expect(twoSummary.facts == ["2 unreadable items"])
+
+        // The when-line: the week's count in the Recent problems card's words.
+        #expect(PlanStatus.problemWhen(count: 1, ago: "2 days ago") == "2 days ago")
+        #expect(PlanStatus.problemWhen(count: 3, ago: "2 days ago") == "3 times · 2 days ago")
     }
 
     @Test("a retention line already in history still reads as Retention skipped")
@@ -521,6 +540,7 @@ struct PlanStatusTests {
         let hookSummary = PlanStatus.summary(of: hooked)
         #expect(hookSummary.message == "notify.sh exited with status 1")
         #expect(hookSummary.facts == ["1 hook issue"])
+        #expect(hookSummary.items.isEmpty)
 
         // restic exited 3 and named nothing: the row must not be a bare
         // headline, and it uses the banner's own words — with Activity's
