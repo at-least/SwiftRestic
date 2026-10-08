@@ -236,7 +236,16 @@ enum BackupRunEngine {
                     // same repository fails this with exit code 11. The data
                     // is safe; warn instead of failing the whole backup.
                     record.outcome = .completedWithErrors
-                    let line = RunRecord.retentionSkippedPrefix + error.localizedDescription
+                    // Not exit 11's own words, whose stale-lock advice fits a
+                    // run that failed: here the lock is most often that other
+                    // backup's, live, and the next backup's retention runs
+                    // again by itself.
+                    let reason = if case ResticError.commandFailed(exitCode: 11, _) = error {
+                        "another backup or job held the repository's lock — retention runs again after the next backup."
+                    } else {
+                        error.localizedDescription
+                    }
+                    let line = RunRecord.retentionSkippedPrefix + reason
                     record.itemErrors.append(line)
                     transcript.note(line)
                 }

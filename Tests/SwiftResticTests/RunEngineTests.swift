@@ -194,7 +194,11 @@ struct BackupRunEngineTests {
 
         let record = sink.deliveredRecords[0]
         #expect(record.outcome == .completedWithErrors)
-        #expect(record.itemErrors.contains { $0.contains("Retention skipped") })
+        // Lost to a lock — most often another backup of this Mac to the same
+        // repository, its own lock live: the line says so, never the stale-
+        // lock advice a failed run's exit 11 carries, which would send the
+        // user to remove a lock nothing left behind.
+        #expect(record.itemErrors == ["Retention skipped: another backup or job held the repository's lock — retention runs again after the next backup."])
         // The snapshot was written; the run itself stays marked successful.
         #expect(sink.log.contains("mark:true"))
     }
