@@ -210,7 +210,16 @@ checked in so a normal build does not need it.
   (exit 12: the stored password does not open it) stores nothing. restic
   trims spaces from the ends of a password it reads from a file, so a new
   password with them is refused rather than left to disagree with the
-  Keychain.
+  Keychain. A repository this Mac holds no password for — a configuration
+  file carried to another Mac (secrets never live in it), a Keychain item
+  removed — is named as such in the editor: the Encryption caption says "No
+  password is stored for the repository “Home NAS”. Enter it here to read it
+  and back up to it.", and *Save* and *Test Connection* wait, with the reason
+  beside them, until one is typed — the same gap the listing and the
+  Maintenance card already report. Neither check ever hands restic an empty
+  password: that refusal, and its advice to pass `--insecure-no-password`,
+  are restic's words for a terminal, not for this app. Until the password is
+  entered the repository cannot be renamed or re-hooked either, by design.
 - **Backup plans** — a set of folders, exclude patterns, a schedule and a
   retention policy, pointed at one repository. Each plan stamps its snapshots
   with a private tag so retention can only ever touch its own. A plan's page

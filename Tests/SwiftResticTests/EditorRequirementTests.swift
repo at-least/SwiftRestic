@@ -64,38 +64,38 @@ struct EditorRequirementTests {
     @Test("the repository editor names the first unmet requirement per kind")
     func repositoryRequirementPerKind() {
         var draft = Repository()
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Name the repository to save it.")
 
         draft.name = "Vault"
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Choose a folder to save it.")
         draft.localPath = "/Volumes/Backup/restic"
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Set a repository password to save it.")
 
         // Each backend names its own required pair rather than the local one,
         // and every one is pinned so a field rename cannot desync its copy.
         draft.kind = .sftp
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Enter the host and path to save it.")
         draft.kind = .s3
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Enter the bucket and access key ID to save it.")
         draft.kind = .b2
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Enter the bucket and account ID to save it.")
         draft.kind = .azure
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Enter the container and account name to save it.")
         draft.kind = .gcs
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Enter the bucket and service account file to save it.")
         draft.kind = .rest
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Enter the server URL to save it.")
         draft.kind = .rclone
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Enter the rclone remote to save it.")
     }
 
@@ -107,17 +107,17 @@ struct EditorRequirementTests {
         draft.sftpPath = "/volume1/restic"
         // restic would dial 22 and read "2222:/volume1/restic" as the path.
         draft.sftpHost = "nas.local:2222"
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true)
             == "Put the port in Port, not in Host.")
         draft.sftpHost = "nas.local"
         for bad in ["0", "65536", "22a", " 22"] {
             draft.sftpPort = bad
-            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false)
+            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true)
                 == "Port is a number from 1 to 65535.", "\(bad)")
         }
         for good in ["", "22", "2222", "65535"] {
             draft.sftpPort = good
-            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false) == nil, "\(good)")
+            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true) == nil, "\(good)")
         }
     }
 
@@ -163,16 +163,53 @@ struct EditorRequirementTests {
         draft.name = "Vault"
         draft.localPath = "/Volumes/Backup/restic"
 
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
             == "Set a repository password to save it.")
-        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "no", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "no", isNew: true, hasStoredPassword: nil)
             == "The passwords do not match yet.")
-        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "secret", isNew: true)
+        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "secret", isNew: true, hasStoredPassword: nil)
             == nil)
         // An existing repository keeps its Keychain password; blank fields are
         // how "unchanged" is spelled, not a gap.
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true)
             == nil)
+    }
+
+    @Test("an existing repository with no password on this Mac needs one typed before it can be saved")
+    func missingStoredPassword() {
+        var draft = Repository()
+        draft.name = "Vault"
+        draft.localPath = "/Volumes/Backup/restic"
+
+        // Known absent: the blank field is the gap the listing already names.
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: false)
+            == "Enter the repository password to save it.")
+        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "", isNew: false, hasStoredPassword: false)
+            == nil)
+        // Stored, or not yet known (the Keychain still answering, or its
+        // read failed): a blank field means unchanged.
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true)
+            == nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: nil)
+            == nil)
+        // The location's gaps come first, in field order.
+        draft.localPath = ""
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: false)
+            == "Choose a folder to save it.")
+    }
+
+    @Test("the probe's password is the typed one, else the stored one, and never an empty string")
+    func probePassword() throws {
+        #expect(try EditorRequirements.probePassword(typed: "typed", stored: "stored", repositoryName: "Vault") == "typed")
+        #expect(try EditorRequirements.probePassword(typed: "", stored: "stored", repositoryName: "Vault") == "stored")
+        for stored in [nil, ""] {
+            #expect(throws: ResticError.passwordMissing(repositoryName: "Vault")) {
+                try EditorRequirements.probePassword(typed: "", stored: stored, repositoryName: "Vault")
+            }
+        }
+        #expect(
+            (try? EditorRequirements.probePassword(typed: "", stored: nil, repositoryName: "Vault")) == nil
+        )
     }
 
     @Test("Test Connection's answer for a path with no repository says what Save will do in this mode")

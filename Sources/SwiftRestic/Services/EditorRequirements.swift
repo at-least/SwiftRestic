@@ -74,13 +74,17 @@ enum EditorRequirements {
     }
 
     /// The first requirement `Repository.isConfigurationComplete` plus the
-    /// password rules bind only a new repository — an existing one spells
-    /// "unchanged" with blank fields, not a gap.
+    /// password rules. They bind a new repository, and an existing one only
+    /// when this Mac holds no password for it — then a blank field is not
+    /// "unchanged" but the gap every run already names. `hasStoredPassword`
+    /// is nil until the Keychain has answered, and stays nil when the read
+    /// failed: an error must not be read as "nothing stored".
     static func repository(
         _ draft: Repository,
         password: String,
         confirmPassword: String,
-        isNew: Bool
+        isNew: Bool,
+        hasStoredPassword: Bool?
     ) -> String? {
         if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Name the repository to save it."
@@ -116,7 +120,20 @@ enum EditorRequirements {
             if password != confirmPassword {
                 return "The passwords do not match yet."
             }
+        } else if hasStoredPassword == false, password.isEmpty {
+            return "Enter the repository password to save it."
         }
         return nil
+    }
+
+    /// The password Test Connection and an edit's Save hand restic: the
+    /// typed one, else the stored one. Neither is `passwordMissing` — the
+    /// run path's own answer — never an empty string, which restic refuses
+    /// in its own words, with advice (`--insecure-no-password`) that is
+    /// wrong for this app.
+    static func probePassword(typed: String, stored: String?, repositoryName: String) throws -> String {
+        if !typed.isEmpty { return typed }
+        if let stored, !stored.isEmpty { return stored }
+        throw ResticError.passwordMissing(repositoryName: repositoryName)
     }
 }

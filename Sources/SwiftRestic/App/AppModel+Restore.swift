@@ -573,6 +573,23 @@ extension AppModel {
         return ResticService.restoredItemURL(for: node, in: destination)
     }
 
+    #if DEBUG
+    /// Capture and CI runs hand over the password through the environment
+    /// so they never touch the login Keychain. Gated on the throwaway-config
+    /// override as well, so a stale variable in a developer's shell cannot
+    /// silently feed the wrong password to a normal debug run. One answer
+    /// for every reader of "what password this repository has": the run
+    /// path and the repository editor, which would otherwise disagree about
+    /// whether a password exists.
+    nonisolated static func injectedDebugSecrets() -> (password: String, providerSecret: String?)? {
+        let environment = ProcessInfo.processInfo.environment
+        guard let injected = environment["SWIFTRESTIC_REPO_PASSWORD"], !injected.isEmpty,
+              environment["SWIFTRESTIC_CONFIG_DIR"] != nil
+        else { return nil }
+        return (injected, environment["SWIFTRESTIC_REPO_SECRET"])
+    }
+    #endif
+
     /// Everything a restic command needs, from pre-captured values, with no
     /// main-actor dependency. One definition of the rules, shared by the
     /// drag path above and the instance `context(for:)`.
@@ -582,18 +599,11 @@ extension AppModel {
         secrets: SecretStore
     ) async throws -> RepositoryContext {
         #if DEBUG
-        // Capture and CI runs hand over the password through the environment
-        // so they never touch the login Keychain. Gated on the throwaway-config
-        // override as well, so a stale variable in a developer's shell cannot
-        // silently feed the wrong password to a normal debug run.
-        if let injected = ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_PASSWORD"],
-           !injected.isEmpty,
-           ProcessInfo.processInfo.environment["SWIFTRESTIC_CONFIG_DIR"] != nil
-        {
+        if let injected = injectedDebugSecrets() {
             return RepositoryContext(
                 repository: repository,
-                password: injected,
-                providerSecret: ProcessInfo.processInfo.environment["SWIFTRESTIC_REPO_SECRET"],
+                password: injected.password,
+                providerSecret: injected.providerSecret,
                 settings: settings
             )
         }

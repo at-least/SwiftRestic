@@ -15,6 +15,10 @@ struct RepositoryEditorSheet: View {
     @State private var initial: Repository?
     @State private var initialPassword = ""
     @State private var initialProviderSecret = ""
+    /// Whether this Mac holds a password for the repository: nil until the
+    /// Keychain has answered, and still nil when its read failed — a failure
+    /// is reported as itself, never read as "nothing stored".
+    @State private var hasStoredPassword: Bool?
     @State private var status: Status?
     @State private var isWorking = false
     /// The edit Save could not verify. Save Anyway stands only while the
@@ -269,11 +273,7 @@ struct RepositoryEditorSheet: View {
                 if isNew {
                     SecureField("Confirm password", text: $confirmPassword)
                 }
-                Text(
-                    isNew
-                        ? "restic encrypts everything with this password. There is no recovery if you lose it — store it in your password manager."
-                        : "Leave blank to keep the password already saved in your Keychain."
-                )
+                Text(encryptionHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -515,8 +515,26 @@ struct RepositoryEditorSheet: View {
             draft,
             password: password,
             confirmPassword: confirmPassword,
-            isNew: isNew
+            isNew: isNew,
+            hasStoredPassword: hasStoredPassword
         )
+    }
+
+    /// The Encryption section's caption. For an existing repository the
+    /// blank field means "unchanged" only while a password is stored; when
+    /// none is — a configuration carried to another Mac, a Keychain item
+    /// removed — the caption says so in the words every run and the
+    /// listing already use (`ResticError.passwordMissing`), and the footer
+    /// asks for the password before Save.
+    private var encryptionHint: String {
+        if isNew {
+            return "restic encrypts everything with this password. There is no recovery if you lose it — store it in your password manager."
+        }
+        if hasStoredPassword == false {
+            return ResticError.passwordMissing(repositoryName: draft.name).localizedDescription
+                + " Enter it here to read it and back up to it."
+        }
+        return "Leave blank to keep the password already saved in your Keychain."
     }
 
     private func loadExistingSecrets() async {
@@ -534,6 +552,7 @@ struct RepositoryEditorSheet: View {
             if providerSecret.isEmpty {
                 providerSecret = secrets.providerSecret ?? ""
             }
+            hasStoredPassword = !(secrets.password ?? "").isEmpty
         } catch {
             // Prefill failed — say so. Blank fields would read as "no
             // password stored" and a save would silently keep whatever the
@@ -553,8 +572,15 @@ struct RepositoryEditorSheet: View {
         return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
     }
 
+    /// The typed password, else the stored one; neither throws
+    /// `passwordMissing` — the run path's answer — so an empty password never
+    /// reaches restic, whose own refusal advises `--insecure-no-password`.
     private func effectivePassword() async throws -> String {
-        password.isEmpty ? (try await model.storedPassword(for: draft.id) ?? "") : password
+        try EditorRequirements.probePassword(
+            typed: password,
+            stored: password.isEmpty ? try await model.storedPassword(for: draft.id) : nil,
+            repositoryName: draft.name
+        )
     }
 
     /// Probes the repository, optionally running `restic init` when it is missing.
