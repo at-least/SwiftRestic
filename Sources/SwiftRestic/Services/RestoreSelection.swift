@@ -69,4 +69,19 @@ struct RestoreSelection: Sendable, Equatable {
     /// The first item's backup as restic shortens its ID: `short_id` is the
     /// ID's first eight characters.
     var snapshotShortID: String { String(sources[0].snapshotID.prefix(8)) }
+
+    /// The destination sheet's second line: where the bytes come from.
+    /// Several backups are counted; one is dated — and when the request
+    /// came from a version row, named by its modified time rather than its
+    /// backup's, that time leads, so the confirmation repeats the words the
+    /// user picked by ("the version modified Sep 17, 2026 at 9:00 PM, from
+    /// the backup of Sep 17, 2026 at 11:00 PM").
+    static func backupLine(backupCount: Int, backupTime: Date?, snapshotShortID: String, versionModified: Date?) -> String {
+        if backupCount > 1 { return "from \(Format.count(backupCount)) backups, each item from the one it was found in" }
+        guard let backupTime else { return "from backup \(snapshotShortID)" }
+        if let versionModified {
+            return "the version modified \(Format.timestamp(versionModified)), from the backup of \(Format.timestamp(backupTime))"
+        }
+        return "from \(Format.timestamp(backupTime))"
+    }
 }

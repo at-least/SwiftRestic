@@ -95,7 +95,10 @@ checked in so a normal build does not need it.
   version below (*+17 bytes*, *Same size*) — or *May be identical* where no
   diff split the two and their sizes do not tell them apart — and, for a
   content several backups held, which (*In 4 backups · Oct 2 – Oct 4,
-  2026*). Past one month the versions group by month, as the picker does,
+  2026*); *Restore…* on a row confirms "the version modified Sep 17, 2026
+  at 9:00 PM, from the backup of Sep 17, 2026 at 11:00 PM" — the time the
+  row was picked by beside the backup the bytes come from. Past one month
+  the versions group by month, as the picker does,
   each under the month of the first backup that held it — the backup after
   its change, so the month its *Modified* date sits in, give or take one
   backup's interval. Above them, for a file this Mac backed up by its own path, one

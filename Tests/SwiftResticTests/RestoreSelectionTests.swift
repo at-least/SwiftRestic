@@ -58,6 +58,20 @@ struct RestoreSelectionTests {
         #expect(selection.sources.map { $0.node == nil } == [false, true])
     }
 
+    @Test("the sheet's backup line counts several backups, dates one, and leads with a version's own modified time")
+    func backupLine() {
+        let backup = Date(timeIntervalSince1970: 1_790_000_000)
+        let modified = backup.addingTimeInterval(-7_200)
+        #expect(RestoreSelection.backupLine(backupCount: 3, backupTime: nil, snapshotShortID: "abcdef12", versionModified: nil)
+            == "from 3 backups, each item from the one it was found in")
+        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: backup, snapshotShortID: "abcdef12", versionModified: nil)
+            == "from \(Format.timestamp(backup))")
+        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: nil, snapshotShortID: "abcdef12", versionModified: nil)
+            == "from backup abcdef12")
+        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: backup, snapshotShortID: "abcdef12", versionModified: modified)
+            == "the version modified \(Format.timestamp(modified)), from the backup of \(Format.timestamp(backup))")
+    }
+
     @Test("a selection that restores nothing is no selection")
     func empty() {
         #expect(RestoreSelection([]) == nil)

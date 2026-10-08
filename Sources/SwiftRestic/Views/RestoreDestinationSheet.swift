@@ -20,6 +20,10 @@ struct RestoreDestinationRequest: Identifiable {
     /// How many backups the items come from: Find Files restores each row
     /// from the backup it was found in.
     var backupCount = 1
+    /// The version's own modified time, when the request came from a row
+    /// named by it (the Files tab's version list): the sheet then repeats
+    /// the words the user chose by beside the backup the bytes come from.
+    var versionModified: Date?
     /// Starts the restore with this policy, into these directories: one per
     /// item, in order (`RestoreSubject.directoryCount`) — the same folder for
     /// all, or for Original location each item's own parent — and one for
@@ -198,8 +202,12 @@ struct RestoreDestinationSheet: View {
     }
 
     private var backupLine: String {
-        if request.backupCount > 1 { return "from \(Format.count(request.backupCount)) backups, each item from the one it was found in" }
-        return request.backupTime.map { "from \(Format.timestamp($0))" } ?? "from backup \(request.snapshotShortID)"
+        RestoreSelection.backupLine(
+            backupCount: request.backupCount,
+            backupTime: request.backupTime,
+            snapshotShortID: request.snapshotShortID,
+            versionModified: request.versionModified
+        )
     }
 
     /// The name the folder panel and the alerts use for what is restored.

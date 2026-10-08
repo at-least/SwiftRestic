@@ -219,7 +219,9 @@ struct FileVersionsView: View {
         destinationRequest = RestoreDestinationRequest(
             subject: .item(name: file.name, path: file.path, isDirectory: false),
             backupTime: backup.time,
-            snapshotShortID: String(backup.id.prefix(8))
+            snapshotShortID: String(backup.id.prefix(8)),
+            // The row was picked by this time; the sheet says it back.
+            versionModified: file.mtime
         ) { directories, overwrite in
             model.restore(repositoryID: repositoryID, snapshotID: backup.id, node: file, to: directories[0], overwrite: overwrite)
         }
