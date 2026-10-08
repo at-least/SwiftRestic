@@ -161,7 +161,12 @@ struct SnapshotIndexPlanTests {
             "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
         ]),
         "summaryCounts": Rule(contains: byPrimaryKeyVersions, excludes: ["TEMP B-TREE"]),
-        "summaryNewest": Rule(contains: byPrimaryKeyVersions + ["USE TEMP B-TREE FOR ORDER BY"]),
+        // The newest in one chain: the run's key narrows by chain too.
+        "summaryNewest": Rule(contains: [
+            "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=?)",
+            "SEARCH s USING INDEX snap_cover (chain_id=? AND state=? AND seq>? AND seq<?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+        ]),
         "containsKind": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq<?)"]),
         // The EXISTS as pendingChains': one probe per run.
         "aliveRuns": Rule(contains: [

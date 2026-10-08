@@ -354,10 +354,12 @@ checked in so a normal build does not need it.
   opens it — except on a plan's or a group's page, where it turns the page
   to its Files tab and puts the keyboard in its search field, which
   searches that page's backups. Each path is one row at the newest backup
-  that holds it, with how many backups do ("of 4 ›", Show Versions) —
-  whether the index answered or `restic find` did, so a common name does not
-  list a row per backup; a search of the latest snapshot only says "this
-  one". ⌘- or ⇧-click selects several rows, and *Restore Selected…* (Return)
+  that holds it, with how many backups of that backup's plan or group do
+  ("of 4 ›", Show Versions) — the count the Files tab it opens lists, which
+  is the plan's own; a copy a Home plan holds beside a Documents plan's is
+  that plan's to list — whether the index answered or `restic find` did, so a
+  common name does not list a row per backup; a search of the latest
+  snapshot only says "this one". ⌘- or ⇧-click selects several rows, and *Restore Selected…* (Return)
   restores them together through the destination sheet, each from its own
   row's backup ("from 2 backups, each item from the one it was found in"),
   an item inside a selected folder left to the folder.

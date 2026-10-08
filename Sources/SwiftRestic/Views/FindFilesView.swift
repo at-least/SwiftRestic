@@ -409,10 +409,16 @@ struct FindFilesView: View {
                     // so a later render must not re-derive or re-sort it.
                     let snapshots = model.snapshots(for: searchedRepository)
                     let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
+                    // Each backup's page, whose Files tab a row's "of N"
+                    // must agree with: its count is that chain's.
+                    let shelves = model.shelves(for: searchedRepository)
+                    let pages = Dictionary(uniqueKeysWithValues: snapshots.map {
+                        ($0.id, shelves.page(of: $0, repositoryID: searchedRepository))
+                    })
                     // One row per path at its newest backup, newest first —
                     // usually the copy the user wants back — as the index
                     // engine's rows read.
-                    rows = FindResultGrouping.rows(found, times: times).map {
+                    rows = FindResultGrouping.rows(found, times: times, chain: { pages[$0] }).map {
                         Row(
                             match: $0.match, snapshotID: $0.snapshotID, snapshotTime: $0.snapshotTime,
                             versionsCount: searchedLatestOnly ? nil : $0.count

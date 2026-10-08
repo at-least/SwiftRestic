@@ -416,18 +416,22 @@ enum SnapshotIndexSchema {
             """
         let summaryCounts = InList { placeholders in
             """
-            SELECT r.node_id, count(*), max(s.time) FROM run r
+            SELECT r.node_id, r.chain_id, count(*), max(s.time) FROM run r
             JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
                 AND s.seq BETWEEN r.first_seq AND r.last_seq
             WHERE r.node_id IN (\(placeholders))
-            GROUP BY r.node_id
+            GROUP BY r.node_id, r.chain_id
             """
         }
+        // CROSS JOIN keeps the run outermost: with the chain bound and a
+        // plain JOIN, SQLite's default costs started from the chain's every
+        // live snapshot (`SEARCH s USING INDEX snap_cover (chain_id=? AND
+        // state=?)`), each probed against the run — per node of a search.
         let summaryNewest = """
             SELECT s.hash FROM run r
-            JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
+            CROSS JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
                 AND s.seq BETWEEN r.first_seq AND r.last_seq
-            WHERE r.node_id = ? AND s.time = ?
+            WHERE r.node_id = ? AND r.chain_id = ? AND s.time = ?
             ORDER BY s.id DESC LIMIT 1
             """
         let containsKind = InList { placeholders in

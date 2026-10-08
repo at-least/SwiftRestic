@@ -89,9 +89,11 @@ struct FolderChanges: Sendable, Equatable {
     var removedFolders: Set<PathKey> = []
 }
 
-/// A path's version list reduced to what Find Files shows: how many indexed
-/// snapshots hold it, and the newest of them. Output-light whatever the
-/// version count, which is the point.
+/// A path's version list reduced to what Find Files shows: the newest
+/// indexed snapshot holding it, and how many of its chain's snapshots do —
+/// the count the Files tab its row opens lists, which is chain-scoped; a
+/// copy under another plan is that plan's to list. Output-light whatever
+/// the version count, which is the point.
 struct VersionSummary: Sendable, Equatable {
     var count: Int
     var newest: IndexVersion
@@ -888,8 +890,9 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// Per path: how many indexed snapshots hold it and the newest of them —
-    /// `count == versions(ofPath:).count` and `newest == .first`, without
+    /// Per path: the newest indexed snapshot holding it and how many of its
+    /// chain's snapshots do — `newest == versions(ofPath:).first` and `count`
+    /// that chain's `versions(ofPath:inChain:).count`, without
     /// materialising a list that can run to thousands of versions. Unknown
     /// paths, and paths with no indexed version, are absent. Keyed by the
     /// bytes asked for (`PathKey`), so canonically equal spellings keep
@@ -983,27 +986,36 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// Each node's summary — how many indexed snapshots hold it, and the
-    /// newest — for the nodes that have any, `lookupChunk` ids per
-    /// statement. Node ids come from the caller's own transaction, `db`.
+    /// Each node's summary — the newest indexed snapshot holding it, and how
+    /// many of that snapshot's chain hold it — for the nodes that have any,
+    /// `lookupChunk` ids per statement. Node ids come from the caller's own
+    /// transaction, `db`.
     ///
-    /// Two statements, the counts per chunk and then the newest hash at
-    /// each node's newest time, rather than one with window functions
-    /// (`count(*) OVER` and `row_number()` by node): that form answers the
-    /// same, ties included, but sorts every version of the chunk and runs
-    /// about three times slower.
+    /// Two statements, the counts and newest time per node and chain, then
+    /// the newest hash in the chain that holds it latest, rather than one
+    /// with window functions (`count(*) OVER` and `row_number()` by node):
+    /// that form answers the same, ties included, but sorts every version
+    /// of the chunk and runs about three times slower. Two chains holding a
+    /// node at one moment — two backups of one second — go to the higher
+    /// chain id, as the newest of one chain goes to the higher snapshot id.
     private static func summaries(_ db: Database, of nodes: [Int64]) throws -> [Int64: VersionSummary] {
         let newest = try db.cachedStatement(sql: SQL.summaryNewest)
-        var result: [Int64: VersionSummary] = [:]
+        var latest: [Int64: (chain: Int64, count: Int, time: Int64)] = [:]
         for chunk in nodes.chunked(into: lookupChunk) {
             let sql = SQL.summaryCounts(placeholders: SQL.placeholders(chunk.count))
             for row in try Row.fetchAll(db, sql: sql, arguments: StatementArguments(chunk)) {
                 let node: Int64 = row[0]
-                let count: Int = row[1]
-                let time: Int64 = row[2]
-                guard let hash = try String.fetchOne(newest, arguments: [node, time]) else { continue }
-                result[node] = VersionSummary(count: count, newest: IndexVersion(id: hash, time: date(micros: time)))
+                let chain: Int64 = row[1]
+                let count: Int = row[2]
+                let time: Int64 = row[3]
+                if let held = latest[node], (held.time, held.chain) > (time, chain) { continue }
+                latest[node] = (chain, count, time)
             }
+        }
+        var result: [Int64: VersionSummary] = [:]
+        for (node, held) in latest {
+            guard let hash = try String.fetchOne(newest, arguments: [node, held.chain, held.time]) else { continue }
+            result[node] = VersionSummary(count: held.count, newest: IndexVersion(id: hash, time: date(micros: held.time)))
         }
         return result
     }

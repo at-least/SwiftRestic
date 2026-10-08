@@ -70,6 +70,29 @@ struct SnapshotIndexTests {
         #expect(try await index.versions(ofPath: "/data/f", inChain: "swiftrestic-plan-unknown").isEmpty)
     }
 
+    @Test("Find Files' summary counts the backups of its newest copy's chain — the Files tab its row opens — not every plan's")
+    func summaryCountsTheNewestChain() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let content: IndexContent = ["/data": true, "/data/f": false]
+        // A Home plan (A) held /data/f twice; a Documents plan (B) over the
+        // same folder holds it newest, once.
+        var listing = [try snap("a1", t0), try snap("a2", t1), try snap("b1", t2, tags: [planB])]
+        try index.reconcile(listing: listing)
+        try index.runToDone(Dictionary(uniqueKeysWithValues: listing.map { ($0.id, content) }))
+        var summary = try await index.versionSummaries(ofPaths: ["/data/f"])[PathKey("/data/f")]
+        #expect(summary?.newest.id == "b1")
+        #expect(summary?.count == 1, "plan B's one backup, which its Files tab lists, not all three")
+
+        // Plan A backs it up again, newest now: A's three.
+        listing.append(try snap("a3", t3))
+        try index.reconcile(listing: listing)
+        try index.runToDone(Dictionary(uniqueKeysWithValues: listing.map { ($0.id, content) }))
+        summary = try await index.versionSummaries(ofPaths: ["/data/f"])[PathKey("/data/f")]
+        #expect(summary?.newest.id == "a3")
+        #expect(summary?.count == 3)
+    }
+
     @Test("reconcile is idempotent: a second pass over the same listing changes nothing")
     func reconcileIdempotent() async throws {
         let fixture = try IndexFixture()
@@ -709,7 +732,8 @@ struct SnapshotIndexTests {
         let hit = try #require(found.hits.first { $0.path == "/data/k" })
         let summary = try #require(found.summaries["/data/k"])
         #expect(summary.newest.id == "a-second")
-        #expect(summary.count == 2)
+        // Counted in a-second's chain, plan B's, as its Files tab lists.
+        #expect(summary.count == 1)
         let inNewest = try await index.contains(paths: ["/data/k"], inSnapshot: summary.newest.id)
         #expect(inNewest["/data/k"] == hit.isDirectory)
         #expect(hit.isDirectory)

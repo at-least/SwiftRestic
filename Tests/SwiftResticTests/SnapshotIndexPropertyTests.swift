@@ -548,8 +548,13 @@ private final class PropertyRun {
             let summary = summaries[PathKey(path)]
             if want.isEmpty {
                 if summary != nil { fail("mismatch", "\(label): summary for unheld \(path)") }
-            } else if summary?.count != want.count || summary?.newest.id != want.first {
-                fail("mismatch", "\(label): summary(\(path)) got \(String(describing: summary?.count)) want \(want.count)")
+            } else {
+                // Counted in the chain of the newest snapshot holding it —
+                // the Files tab its Find Files row opens.
+                let chainCount = truth(path, chain: world.all[want[0]]?.chain).count
+                if summary?.count != chainCount || summary?.newest.id != want.first {
+                    fail("mismatch", "\(label): summary(\(path)) got \(String(describing: summary?.count)) want \(chainCount)")
+                }
             }
         }
         for snapshot in alive {
@@ -674,9 +679,10 @@ private final class PropertyRun {
             }
             for hit in hits {
                 let want = truth(hit.path)
+                let chainCount = want.first.map { truth(hit.path, chain: world.all[$0]?.chain).count } ?? 0
                 let summary = summarized.summaries[PathKey(hit.path)]
-                if summary?.count != want.count || summary?.newest.id != want.first {
-                    fail("mismatch", "\(label): searchWithSummaries(\(query)) summary of \(hit.path) got \(String(describing: summary?.count)) want \(want.count)")
+                if summary?.count != chainCount || summary?.newest.id != want.first {
+                    fail("mismatch", "\(label): searchWithSummaries(\(query)) summary of \(hit.path) got \(String(describing: summary?.count)) want \(chainCount)")
                 }
             }
             for snapshot in alive {
