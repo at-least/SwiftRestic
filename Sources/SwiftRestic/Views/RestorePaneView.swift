@@ -57,6 +57,8 @@ struct RestorePaneView: View {
     /// their folder open but never scroll.
     @State private var revealPath: String?
     /// The restore waiting in the destination sheet.
+    /// A file's Preview: its copy and its Quick Look panel.
+    @State private var previewer = PreviewSession()
     @State private var destinationRequest: RestoreDestinationRequest?
     /// The tree rows' content width, read by the column header alone: a
     /// legacy scroller narrows the rows but not the header above them, and
@@ -99,6 +101,12 @@ struct RestorePaneView: View {
         // tree already holds their rows, and re-running the diff on every
         // chevron click would make a large repository feel broken.
         .task(id: snapshotID) { await loadLevel() }
+        .previewSession(previewer)
+        // The copy belongs to the backup on screen.
+        .onChange(of: snapshotID) { previewer.end() }
+        .onChange(of: previewer.failure) { _, failure in
+            if let failure { model.post(Banner(title: "Could not preview", message: failure, isError: true)) }
+        }
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)
@@ -281,6 +289,10 @@ struct RestorePaneView: View {
             .contextMenu(forSelectionType: String.self) { ids in
                 if ids.count == 1, let path = ids.first, let node = tree.node(at: path) {
                     showVersionsItem(path: node.path, isDirectory: node.isDirectory)
+                    if !node.isDirectory {
+                        // The tree's node is restic's own, size included.
+                        previewItem { node }
+                    }
                 }
             } primaryAction: { ids in
                 guard ids.count == 1, let path = ids.first,
@@ -359,7 +371,27 @@ struct RestorePaneView: View {
         .contextMenu(forSelectionType: String.self) { ids in
             if ids.count == 1, let id = ids.first, let hit = hits.first(where: { $0.id == id }) {
                 showVersionsItem(path: hit.path, isDirectory: hit.isDirectory)
+                if !hit.isDirectory, let record {
+                    // A hit is the index's, which carries no size: restic
+                    // lists the file first, as its restore does.
+                    previewItem { [model, repositoryID] in
+                        try await model.listedNode(repositoryID: repositoryID, snapshotID: record.id, path: hit.path)
+                    }
+                }
             }
+        }
+    }
+
+    /// Preview: a look at a file of this backup with Quick Look before
+    /// restoring it, from a temporary copy deleted when the preview closes —
+    /// what the file pane's button does, without leaving the backup.
+    @ViewBuilder
+    private func previewItem(_ node: @escaping @MainActor () async throws -> SnapshotNode) -> some View {
+        if let record {
+            Button("Preview") {
+                previewer.start(model, repositoryID: repositoryID, snapshotID: record.id, node: node)
+            }
+            .disabled(!model.isResticAvailable || previewer.isCopying)
         }
     }
 

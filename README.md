@@ -341,7 +341,12 @@ checked in so a normal build does not need it.
   list answers Finder's outline keys: → opens a folder, ← closes it or steps to
   the folder that holds the selection. Its search covers the open backup and
   says how many matches only other backups hold; *Search All Backups…* carries
-  the search on in Find Files. A hit drags to Finder as a tree row does.
+  the search on in Find Files. A hit drags to Finder as a tree row does. A
+  file's right-click menu here, in its search hits and on Find Files' results
+  has *Preview*: the file copied from that backup to a temporary folder and
+  shown with Quick Look, deleted when the preview closes — what the Files
+  tab's *Preview* button does, gated by the same size (a hit, which the index
+  keeps no size for, is listed by restic first).
 - **Find files across snapshots** — search every snapshot for a name or glob when
   you do not know which backup still has the file, then restore the match
   (while the index still reads, a word with no glob character is looked for

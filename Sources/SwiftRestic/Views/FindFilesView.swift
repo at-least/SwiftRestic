@@ -24,6 +24,8 @@ struct FindFilesView: View {
 
     private let prefill: Prefill?
 
+    /// A file's Preview: its copy and its Quick Look panel.
+    @State private var previewer = PreviewSession()
     @State private var repositoryID: UUID?
     @State private var pattern = ""
     @State private var latestOnly = false
@@ -103,6 +105,10 @@ struct FindFilesView: View {
             footer(rows)
         }
         .frame(minWidth: 760, minHeight: 480)
+        .previewSession(previewer)
+        .onChange(of: previewer.failure) { _, failure in
+            if let failure { errorMessage = failure }
+        }
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)
@@ -286,6 +292,19 @@ struct FindFilesView: View {
                     .disabled(model.isRestoring)
                     if let open = showVersions(of: row) {
                         Button("Show Versions", action: open)
+                    }
+                    if !row.match.isDirectory, let repositoryID {
+                        // An index row carries no size: restic lists the
+                        // file first, as its restore does, and the size
+                        // gate reads that.
+                        Button("Preview") {
+                            previewer.start(model, repositoryID: repositoryID, snapshotID: row.snapshotID) { [model] in
+                                row.hit == nil
+                                    ? row.match.node
+                                    : try await model.listedNode(repositoryID: repositoryID, snapshotID: row.snapshotID, path: row.match.path)
+                            }
+                        }
+                        .disabled(!model.isResticAvailable || previewer.isCopying)
                     }
                 } else if picked.count > 1 {
                     Button("Restore \(Format.plural(picked.count, "Item"))…") {
