@@ -18,10 +18,55 @@ enum RestoreBatch {
         let nodes: [SnapshotNode]
     }
 
-    /// The items a selection restores, in its order. A folder brings
-    /// everything in it, so an item selected inside a selected folder would
-    /// be restored twice — it is dropped, as Finder's own copy drops it.
-    static func covering(_ nodes: [SnapshotNode]) -> [SnapshotNode] {
+    /// The items a selection restores, in its order, and the ones a
+    /// selected folder brings, in theirs, each with that folder. A folder
+    /// brings everything in it, so an item selected inside a selected folder
+    /// would be restored twice — it is dropped, as Finder's own copy drops
+    /// it — and a repeat counts once. Only within one backup: a folder
+    /// restores as its own backup holds it and brings nothing of another's.
+    /// A file found in an older backup than its folder's is one the folder's
+    /// backup no longer holds (Find Files lists each path at the newest
+    /// backup holding it), or one a diff's newer backup removed, so it
+    /// restores on its own. A selection of one backup — the Restore pane's —
+    /// names that one for every item.
+    static func covering<Item>(
+        _ items: [Item],
+        node: (Item) -> SnapshotNode,
+        backup: (Item) -> String
+    ) -> (kept: [Item], covered: [(item: SnapshotNode, folder: SnapshotNode)]) {
+        var keptKeys: Set<Key> = []
+        var coveredByKey: [Key: (item: SnapshotNode, folder: SnapshotNode)] = [:]
+        for (backupID, group) in Dictionary(grouping: items, by: backup) {
+            let nodes = group.map(node)
+            let kept = covering(nodes)
+            for keptNode in kept { keptKeys.insert(Key(backup: backupID, path: PathKey(keptNode.path))) }
+            for pair in covered(nodes, kept: kept) {
+                coveredByKey[Key(backup: backupID, path: PathKey(pair.item.path))] = pair
+            }
+        }
+        // Each verdict is taken once, so a repeat of an item finds none.
+        var keptItems: [Item] = []
+        var coveredItems: [(item: SnapshotNode, folder: SnapshotNode)] = []
+        for item in items {
+            let key = Key(backup: backup(item), path: PathKey(node(item).path))
+            if keptKeys.remove(key) != nil {
+                keptItems.append(item)
+            } else if let pair = coveredByKey.removeValue(forKey: key) {
+                coveredItems.append(pair)
+            }
+        }
+        return (keptItems, coveredItems)
+    }
+
+    /// An item of a selection: its backup and its path's bytes.
+    private struct Key: Hashable {
+        let backup: String
+        let path: PathKey
+    }
+
+    /// One backup's items that restore, in its order: each once, none
+    /// inside a selected folder.
+    private static func covering(_ nodes: [SnapshotNode]) -> [SnapshotNode] {
         let folders = nodes.filter(\.isDirectory)
         var seen: Set<PathKey> = []
         return nodes.filter { node in
@@ -30,11 +75,13 @@ enum RestoreBatch {
         }
     }
 
-    /// The items `covering` drops for being inside another selected folder,
-    /// each with the selected folder it is restored with — the outermost,
-    /// the one `covering` keeps.
-    static func covered(_ nodes: [SnapshotNode]) -> [(item: SnapshotNode, folder: SnapshotNode)] {
-        let kept = covering(nodes)
+    /// One backup's items `covering` dropped for being inside a selected
+    /// folder, `kept` being what it kept: each with the folder it is
+    /// restored with — the outermost, the one `covering` keeps.
+    private static func covered(
+        _ nodes: [SnapshotNode],
+        kept: [SnapshotNode]
+    ) -> [(item: SnapshotNode, folder: SnapshotNode)] {
         let keptPaths = Set(kept.map { PathKey($0.path) })
         let keptFolders = kept.filter(\.isDirectory)
         var reported: Set<PathKey> = []
@@ -45,48 +92,6 @@ enum RestoreBatch {
             else { return nil }
             return (node, folder)
         }
-    }
-
-    /// A selection drawn from several backups — Find Files' rows, the
-    /// Compare sheet's — as `covering` and `covered` read it, within each
-    /// backup: the items it restores, in its order, and the ones a selected
-    /// folder brings, in theirs. A folder restores as its own backup holds
-    /// it and brings nothing of another's: a file found in an older backup
-    /// than its folder's is one the folder's backup no longer holds (Find
-    /// Files lists each path at the newest backup holding it), or one a
-    /// diff's newer backup removed, so it restores on its own.
-    static func covering<Item>(
-        _ items: [Item],
-        node: (Item) -> SnapshotNode,
-        backup: (Item) -> String
-    ) -> (kept: [Item], covered: [(item: SnapshotNode, folder: SnapshotNode)]) {
-        var keptKeys: Set<Key> = []
-        var coveredByKey: [Key: (item: SnapshotNode, folder: SnapshotNode)] = [:]
-        for (backupID, group) in Dictionary(grouping: items, by: backup) {
-            let nodes = group.map(node)
-            for kept in covering(nodes) { keptKeys.insert(Key(backup: backupID, path: PathKey(kept.path))) }
-            for pair in covered(nodes) { coveredByKey[Key(backup: backupID, path: PathKey(pair.item.path))] = pair }
-        }
-        var keptItems: [Item] = []
-        var coveredItems: [(item: SnapshotNode, folder: SnapshotNode)] = []
-        var seen: Set<Key> = []
-        for item in items {
-            let key = Key(backup: backup(item), path: PathKey(node(item).path))
-            guard seen.insert(key).inserted else { continue }
-            if keptKeys.contains(key) {
-                keptItems.append(item)
-            } else if let pair = coveredByKey[key] {
-                coveredItems.append(pair)
-            }
-        }
-        return (keptItems, coveredItems)
-    }
-
-    /// An item of a selection drawn from several backups: its backup and
-    /// its path's bytes.
-    private struct Key: Hashable {
-        let backup: String
-        let path: PathKey
     }
 
     /// The destination sheet's line about `covered` items, so a selection of

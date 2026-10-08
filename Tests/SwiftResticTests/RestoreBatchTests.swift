@@ -13,6 +13,11 @@ struct RestoreBatchTests {
         SnapshotNode(name: (path as NSString).lastPathComponent, type: .dir, path: path)
     }
 
+    /// A selection of one backup, as the Restore pane's is.
+    private func oneBackup(_ nodes: [SnapshotNode]) -> (kept: [SnapshotNode], covered: [(item: SnapshotNode, folder: SnapshotNode)]) {
+        RestoreBatch.covering(nodes, node: { $0 }, backup: { _ in "backup" })
+    }
+
     @Test("an item inside a selected folder is dropped — the folder brings it — and a repeat counts once")
     func covering() {
         let project = folder("/Data/Project")
@@ -21,10 +26,10 @@ struct RestoreBatchTests {
         // A sibling whose name only starts with the folder's is not inside it.
         let sibling = file("/Data/Project 2.txt")
         let other = file("/Data/todo.txt")
-        #expect(RestoreBatch.covering([inside, project, sibling, deeper, other, project]).map(\.path)
+        #expect(oneBackup([inside, project, sibling, deeper, other, project]).kept.map(\.path)
             == ["/Data/Project", "/Data/Project 2.txt", "/Data/todo.txt"])
         // A file is no folder: nothing is inside it.
-        #expect(RestoreBatch.covering([file("/Data/a"), file("/Data/a/b")]).count == 2)
+        #expect(oneBackup([file("/Data/a"), file("/Data/a/b")]).kept.count == 2)
     }
 
     @Test("what was dropped for being inside a selected folder, with the folder that brings it, in words")
@@ -39,17 +44,17 @@ struct RestoreBatchTests {
 
         // A file inside a folder inside the selected one is restored with
         // the outermost — the folder `covering` keeps.
-        let covered = RestoreBatch.covered([project, src, main, other])
+        let covered = oneBackup([project, src, main, other]).covered
         #expect(covered.map(\.item.path) == ["/Data/Project/src", "/Data/Project/src/main.swift"])
         #expect(covered.map(\.folder.path) == ["/Data/Project", "/Data/Project"])
         // A row twice is restored once, and was not inside anything.
-        #expect(RestoreBatch.covered([project, other, project]).isEmpty)
+        #expect(oneBackup([project, other, project]).covered.isEmpty)
         // Nothing inside anything: nothing to say.
-        #expect(RestoreBatch.covered([project, other]).isEmpty)
+        #expect(oneBackup([project, other]).covered.isEmpty)
         #expect(RestoreBatch.coveredNote([]) == nil)
 
         func note(_ nodes: [SnapshotNode]) -> String? {
-            RestoreBatch.coveredNote(RestoreBatch.covered(nodes))
+            RestoreBatch.coveredNote(oneBackup(nodes).covered)
         }
         #expect(note([src, main]) == "“main.swift” is inside “src” and is restored with it.")
         #expect(note([project, notes, main]) == "“notes.txt” and “main.swift” are inside “Project” and are restored with it.")
@@ -81,7 +86,7 @@ struct RestoreBatchTests {
         let composed = file("/Data/caf\u{00E9}.txt")
         let decomposed = file("/Data/cafe\u{0301}.txt")
         #expect(composed.path == decomposed.path)
-        #expect(RestoreBatch.covering([composed, decomposed]).count == 2)
+        #expect(oneBackup([composed, decomposed]).kept.count == 2)
     }
 
     @Test("names that would land twice in one folder are named, without case, each once")

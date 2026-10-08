@@ -93,14 +93,6 @@ struct AppModelStubTests {
         return model.banners.first(where: { $0.title.contains(fragment) })
     }
 
-    /// Restores run as detached tasks with no `waitFor` API; watch the flag.
-    private func waitUntilRestoreFinishes(in model: AppModel, within seconds: TimeInterval = 10) async {
-        let deadline = Date.now.addingTimeInterval(seconds)
-        while model.isRestoring, Date.now < deadline {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-    }
-
     // MARK: - Restore
 
     @Test("a quiet scheduled plan is named once per stretch, and the mark is saved on the plan")

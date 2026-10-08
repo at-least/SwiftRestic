@@ -225,8 +225,7 @@ struct AppModelTests {
             ],
             overwrite: .keepExisting
         )
-        let deadline = Date.now.addingTimeInterval(60)
-        while model.isRestoring, Date.now < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        await waitUntilRestoreFinishes(in: model, within: 60)
 
         #expect(try String(contentsOf: first.appendingPathComponent("a.txt"), encoding: .utf8) == "one")
         #expect(try String(contentsOf: second.appendingPathComponent("a.txt"), encoding: .utf8) == "uno")
@@ -265,21 +264,20 @@ struct AppModelTests {
         #expect(kept.count == 2)
         #expect(covered.isEmpty)
 
-        func restore(into directories: [URL]) async throws {
+        func restore(into directories: [URL]) async {
             model.restore(
                 repositoryID: id,
                 items: zip(kept, directories).map { (snapshotID: $0.snapshotID, node: $0.node, directory: $1) },
                 overwrite: .keepExisting
             )
-            let deadline = Date.now.addingTimeInterval(60)
-            while model.isRestoring, Date.now < deadline { try await Task.sleep(for: .milliseconds(50)) }
+            await waitUntilRestoreFinishes(in: model, within: 60)
         }
 
         // One chosen folder: the folder exactly as the newer backup holds it,
         // the file beside it.
         let chosen = harness.root.appendingPathComponent("chosen")
         try FileManager.default.createDirectory(at: chosen, withIntermediateDirectories: true)
-        try await restore(into: [chosen, chosen])
+        await restore(into: [chosen, chosen])
         let folder = chosen.appendingPathComponent(source.lastPathComponent)
         #expect(try String(contentsOf: folder.appendingPathComponent("a.txt"), encoding: .utf8) == "one")
         #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("b.txt").path))
@@ -287,7 +285,7 @@ struct AppModelTests {
 
         // Original locations, each item into its own parent: the file is back
         // inside the folder.
-        try await restore(into: [source.deletingLastPathComponent(), source])
+        await restore(into: [source.deletingLastPathComponent(), source])
         #expect(try String(contentsOf: b, encoding: .utf8) == "two")
         #expect(try String(contentsOf: source.appendingPathComponent("a.txt"), encoding: .utf8) == "one")
         #expect(model.configuration.runs.filter { $0.kind == .restore }.allSatisfy { $0.outcome == .succeeded })

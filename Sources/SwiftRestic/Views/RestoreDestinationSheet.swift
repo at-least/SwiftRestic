@@ -39,8 +39,8 @@ struct RestoreDestinationRequest: Identifiable {
         backupTime: Date,
         model: AppModel
     ) -> RestoreDestinationRequest? {
-        let nodes = RestoreBatch.covering(picked)
-        let note = RestoreBatch.coveredNote(RestoreBatch.covered(picked))
+        let (nodes, covered) = RestoreBatch.covering(picked, node: { $0 }, backup: { _ in snapshotID })
+        let note = RestoreBatch.coveredNote(covered)
         guard let first = nodes.first else { return nil }
         guard nodes.count > 1 else {
             return RestoreDestinationRequest(
