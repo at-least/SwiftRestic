@@ -131,6 +131,14 @@ enum Format {
         return date.formatted(timestampStyle)
     }
 
+    private static let dayStyle = Date.FormatStyle(date: .abbreviated, time: .omitted)
+
+    /// The day alone — "Jun 1, 2025" — for a reach a row states inline; the
+    /// moment itself is the tooltip's.
+    static func day(_ date: Date) -> String {
+        date.formatted(dayStyle)
+    }
+
     /// The span a group's history was made over — "Sep 28 – Oct 2, 2026",
     /// the adopt sheet's header — each end only as specific as it has to be:
     /// one day says itself, a year both ends share is said once.

@@ -401,9 +401,20 @@ enum OverviewMetrics {
     /// some backups belong to no plan of it — the same count the sidebar's
     /// Other backups node and the Protection line carry. When none is a
     /// plan's, "all" says so instead of repeating the count.
-    static func snapshotsLine(total: Int, otherBackups: Int) -> String {
-        if otherBackups == 0 { return Format.count(total) }
-        if otherBackups == total { return "\(Format.count(total)) · all from no plan here" }
-        return "\(Format.count(total)) · \(Format.count(otherBackups)) from no plan here"
+    static func snapshotsLine(total: Int, otherBackups: Int, since: Date? = nil) -> String {
+        var line = Format.count(total)
+        if otherBackups == total, total > 0 {
+            line += " · all from no plan here"
+        } else if otherBackups > 0 {
+            line += " · \(Format.count(otherBackups)) from no plan here"
+        }
+        // How far back the history reaches — the oldest backup's day, which
+        // nothing else on the page says and which both the sidebar fold
+        // and the Files tab's picker put at the end of a long list. One
+        // backup reaches no further than itself.
+        if let since, total > 1 {
+            line += " · since \(Format.day(since))"
+        }
+        return line
     }
 }

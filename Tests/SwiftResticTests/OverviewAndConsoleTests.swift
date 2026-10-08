@@ -589,6 +589,14 @@ struct OverviewMetricsTests {
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 0) == "11")
         // A plan-less repository's: none of its backups is a plan's.
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11) == "11 · all from no plan here")
+        // How far back the history reaches, after the split; a single
+        // backup reaches no further than itself.
+        let oldest = Date(timeIntervalSince1970: 1_748_782_800)
+        #expect(OverviewMetrics.snapshotsLine(total: 495, otherBackups: 0, since: oldest) == "495 · since \(Format.day(oldest))")
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, since: oldest)
+            == "11 · 6 from no plan here · since \(Format.day(oldest))")
+        #expect(OverviewMetrics.snapshotsLine(total: 1, otherBackups: 0, since: oldest) == "1")
+        #expect(OverviewMetrics.snapshotsLine(total: 0, otherBackups: 0, since: nil) == "0")
     }
 
     @Test("problem figures")

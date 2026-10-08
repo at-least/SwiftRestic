@@ -119,12 +119,15 @@ struct RepositoryDetailView: View {
     private var snapshotsValue: some View {
         switch model.snapshotListingOutcome(for: repositoryID) {
         case .loaded:
+            let oldest = model.snapshots(for: repositoryID).map(\.time).min()
             Text(OverviewMetrics.snapshotsLine(
                 total: model.repositoryStats[repositoryID]?.snapshotsCount
                     ?? model.snapshots(for: repositoryID).count,
-                otherBackups: model.shelves(for: repositoryID).otherBackupsCount
+                otherBackups: model.shelves(for: repositoryID).otherBackupsCount,
+                since: oldest
             ))
             .monospacedDigit()
+            .help(oldest.map { "The oldest backup here is from \(Format.timestamp($0))." } ?? "")
         case let .failed(message):
             Text("—").help(message)
         case .idle:

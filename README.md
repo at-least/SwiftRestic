@@ -178,7 +178,11 @@ checked in so a normal build does not need it.
   that a plan starts from the sidebar's + or ⌘N, into the repository on
   screen, or from the repository row's menu. The *Snapshots* row splits the
   backups no plan of the repository made (“11 · 6 from no plan here”, or
-  “all” when none of them is a plan's). A repository whose
+  “all” when none of them is a plan's) and says how far back the history
+  reaches (“509 · 3 from no plan here · since Jun 1, 2025”, the oldest
+  backup's day, its moment in the tooltip) — a plan page's Snapshots row
+  does the same for the plan's own backups, so whether last March can be
+  reached is answered before any browsing. A repository whose
   first listing finds no plans and adoptable history opens its *Other
   backups* shelf so the groups are in view; no modal, no wizard.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob
