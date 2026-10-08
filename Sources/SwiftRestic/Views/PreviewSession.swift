@@ -35,6 +35,10 @@ final class PreviewSession {
         task = Task {
             do {
                 let file = try await node()
+                // Ended while the node was read — a cached listing answers
+                // even then: the gate's answer and the task slot belong to
+                // whatever preview came next.
+                guard !Task.isCancelled else { return }
                 if let reason = VersionPreview.unavailableReason(size: file.size, isReading: false) {
                     failure = reason
                     task = nil
