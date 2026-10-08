@@ -16,6 +16,13 @@ protocol ResticClient: Sendable {
 
     func version() async throws -> String
 
+    /// `restic cache`: the local cache's directories, sizes and which are
+    /// old — no repository, no password.
+    func cacheReport() async throws -> ResticCacheReport
+
+    /// `restic cache --cleanup`: removes the directories restic marks old.
+    func cleanupCache() async throws
+
     @discardableResult
     func initializeRepository(_ context: RepositoryContext) async throws -> String?
 

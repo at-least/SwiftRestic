@@ -178,6 +178,35 @@ struct ResticService: ResticClient {
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// `restic cache`: the local cache's directories with their sizes — no
+    /// repository, no password. restic measures each directory, so a Mac
+    /// whose tests left thousands of scratch repositories answers in a
+    /// dozen seconds; a user's handful answers at once.
+    func cacheReport() async throws -> ResticCacheReport {
+        let result = try await runner.run(
+            binary: binary,
+            invocation: ResticInvocation(arguments: ["cache"], timeout: 120, retainFullOutput: true)
+        )
+        guard let report = ResticCacheReport.parse(result.stdout) else {
+            throw ResticError.commandFailed(
+                exitCode: result.exitCode,
+                message: "restic cache answered in a form the app does not read: \(result.stdout.prefix(200))"
+            )
+        }
+        return report
+    }
+
+    /// `restic cache --cleanup`: removes the directories restic marks old —
+    /// unused for `ResticCacheReport.oldAfterDays` days, a repository still
+    /// set up here included; restic rebuilds one the next time it opens
+    /// that repository. Prints "no old cache dirs found" when none is.
+    func cleanupCache() async throws {
+        _ = try await runner.run(
+            binary: binary,
+            invocation: ResticInvocation(arguments: ["cache", "--cleanup"], timeout: 600, retainFullOutput: true)
+        )
+    }
+
     /// Creates a new repository. Fails if one already exists at the location.
     @discardableResult
     func initializeRepository(_ context: RepositoryContext) async throws -> String? {

@@ -48,6 +48,12 @@ final class AppModel {
     // MARK: Runtime state
 
     var resticVersion: String = ""
+    /// restic's cache as Settings › restic last measured it: nil until the
+    /// tab asks, then the report or the failure's words.
+    var resticCache: ResticCacheState?
+    var isWorkingOnResticCache = false
+    /// What the last cleanup removed, in the Settings tab's own words.
+    var resticCacheNote: String?
     var binaryProblem: String?
     var activity: [UUID: PlanActivity] = [:]
     /// Live backup progress per plan, in its own observable storage: a

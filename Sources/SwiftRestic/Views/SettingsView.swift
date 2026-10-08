@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var isConfirmingCacheCleanup = false
     @Environment(AppModel.self) private var model
     /// Arms the "you can strand the app" confirmation: menu bar item off and
     /// window closed leaves the scheduler running with no visible way back.
@@ -195,6 +196,14 @@ struct SettingsView: View {
                 Button("Re-detect") { Task { await model.resolveBinary() } }
             }
 
+            // restic keeps one cache folder per repository it has opened
+            // here and never removes one; the only user action that exists
+            // is its own cleanup, so it lives where the restic facts sit —
+            // with the cost said before it runs.
+            Section("Cache") {
+                resticCacheRows(model: model)
+            }
+
             Section("Bandwidth") {
                 // Typeable, not steppers. Values are clamped on commit; the
                 // assignment itself refreshes the field even when the clamp
@@ -212,6 +221,64 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private func resticCacheRows(model: AppModel) -> some View {
+        switch model.resticCache {
+        case let .measured(report):
+            LabeledContent("Size") {
+                Text("\(Format.bytes(report.totalBytes)) in \(Format.plural(report.count, "folder"))")
+                    .textSelection(.enabled)
+            }
+            Text(
+                "At \((report.directory as NSString).abbreviatingWithTildeInPath): one folder per repository restic has opened on this Mac, kept after a repository is removed here. "
+                    + (report.oldCount == 0
+                        ? "None has gone unused for \(ResticCacheReport.oldAfterDays) days."
+                        : "\(Format.count(report.oldCount)) \(report.oldCount == 1 ? "has" : "have") not been used for \(ResticCacheReport.oldAfterDays) days.")
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Remove Caches Unused for \(ResticCacheReport.oldAfterDays) Days…") { isConfirmingCacheCleanup = true }
+                    .disabled(report.oldCount == 0 || model.isWorkingOnResticCache)
+                if model.isWorkingOnResticCache { ProgressView().controlSize(.small) }
+                if let note = model.resticCacheNote {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .confirmationDialog(
+                "Remove \(Format.plural(report.oldCount, "cache folder")) restic has not used for \(ResticCacheReport.oldAfterDays) days?",
+                isPresented: $isConfirmingCacheCleanup,
+                titleVisibility: .visible
+            ) {
+                Button("Remove", role: .destructive) { Task { await model.cleanupResticCache() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    "A repository still set up here loses its cache too when it went unused that long — a drive away for a month, for instance. restic rebuilds it the next time it opens that repository, over the network for a remote one. Nothing inside any repository is touched."
+                )
+            }
+        case let .failed(message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(Theme.warning)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Measure Again") { Task { await model.measureResticCache() } }
+                .disabled(model.isWorkingOnResticCache)
+        case nil:
+            HStack {
+                ProgressView().controlSize(.small)
+                Text("Measuring…")
+                    .foregroundStyle(.secondary)
+            }
+            .task {
+                if model.resticCache == nil { await model.measureResticCache() }
+            }
+        }
     }
 
     /// Keeps the typed value inside restic's accepted range: out-of-range

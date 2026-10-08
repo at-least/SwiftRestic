@@ -419,6 +419,18 @@ checked in so a normal build does not need it.
   check that found errors, offers *Check Again…* or *Prune Again…* in its
   Activity drawer — the Repository menu's command, behind the same
   confirmation, grey while the repository is busy.
+- **restic's cache** — restic keeps one cache folder per repository it has
+  opened on this Mac (`~/Library/Caches/restic`), keeps it after the
+  repository is removed here, and never cleans one up on its own: once a
+  folder has gone unused for 30 days it only prints, at the start of a
+  command, that `restic cache --cleanup` would remove it — a terminal
+  command nobody sees. Settings › restic measures the cache (`restic
+  cache`: the size and the folder count, how many are unused) and offers
+  *Remove Caches Unused for 30 Days…*, which runs that cleanup behind a
+  confirmation that states the cost: a repository still set up here loses
+  its cache too when it went unused that long, and restic rebuilds it the
+  next time it opens the repository — over the network for a remote one.
+  Nothing inside a repository is touched, and nothing runs on its own.
 - **Hooks** — shell commands before a backup and after success, warnings or
   failure, and per repository before and after a check or prune. Context arrives
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
