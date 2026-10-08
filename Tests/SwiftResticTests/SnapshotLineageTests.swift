@@ -20,6 +20,28 @@ struct SnapshotLineageTests {
         return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
     }
 
+    @Test("a folder's tally counts every change beneath it, once per folder above, so the root's equals the header's")
+    func changesInsideFolders() throws {
+        func change(_ path: String, _ modifier: String) -> ResticDiffChange {
+            ResticDiffChange(path: path, modifier: modifier)
+        }
+        let changes: [String: ResticDiffChange] = [
+            "/r/a/x.txt": change("/r/a/x.txt", "M"),
+            "/r/a/y.txt": change("/r/a/y.txt", "-"),
+            "/r/b": change("/r/b/", "+"),
+            "/r/b/z.txt": change("/r/b/z.txt", "+"),
+        ]
+        let inside = ChangeComparison.changesInside(changes)
+        #expect(inside["/r/a"] == ChangesInside(added: 0, removed: 1, modified: 1, metadata: 0))
+        #expect(inside["/r/b"] == ChangesInside(added: 1, removed: 0, modified: 0, metadata: 0))
+        #expect(inside["/r"]?.total == changes.count)
+        #expect(inside["/r"]?.summary == "2 added, 1 removed, 1 modified")
+        // A file has nothing inside; a path the diff names keeps its own
+        // word in the column, so its tally is only for its folders.
+        #expect(inside["/r/a/x.txt"] == nil)
+        #expect(ChangeComparison.changesInside([:]).isEmpty)
+    }
+
     @Test("the Change column compares against the previous backup of the same folders, not the row above")
     func changeBaselineSkipsOtherPlans() throws {
         // Two plans sharing one repository, interleaved in time — the listing

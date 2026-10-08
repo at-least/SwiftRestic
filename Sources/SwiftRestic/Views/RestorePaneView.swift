@@ -23,6 +23,8 @@ struct RestorePaneView: View {
     /// The folder the tree is focused on — kept across record switches.
     @State private var currentPath: String?
     @State private var changes: [String: ResticDiffChange] = [:]
+    /// Each folder's tally of the changes beneath it, from the same diff.
+    @State private var changesInside: [String: ChangesInside] = [:]
     /// What `changes` was computed against, for the header: written beside
     /// the map in `loadLevel`, never re-derived — the header must name the
     /// comparison whose marks are on screen.
@@ -517,10 +519,32 @@ struct RestorePaneView: View {
                     .lineLimit(1)
                     .help(change.explanation)
                     .frame(width: 56, alignment: .leading)
+            } else if let inside = changesInside[path], inside.total > 0 {
+                // A folder the diff never names, whose subtree it does: the
+                // count leads the expansion toward the leaves, and the
+                // root's equals the header's — a collapsed root under
+                // "1 change since …" no longer reads as unchanged.
+                Text("\(Format.count(inside.total)) inside")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .help(insideHelp(inside))
+                    .frame(width: 56, alignment: .leading)
             } else {
                 Spacer().frame(width: 56)
             }
         }
+    }
+
+    /// "3 changes inside this folder since Oct 7, 2026 at 11:00 PM: 2
+    /// modified, 1 removed" — the header's baseline, the tally's kinds.
+    private func insideHelp(_ inside: ChangesInside) -> String {
+        let baseline: Snapshot? = switch comparison {
+        case let .comparing(baseline), let .compared(baseline, _, _), let .failed(baseline, _): baseline
+        case .firstBackup, nil: nil
+        }
+        let since = baseline.map { " since \(Format.timestamp($0.time))" } ?? ""
+        return "\(Format.plural(inside.total, "change")) inside this folder\(since): \(inside.summary)"
     }
 
     /// The record a drag names is the one the rows on screen were built
@@ -669,6 +693,7 @@ struct RestorePaneView: View {
             // into the new one's header: both are written after this guard.
             guard !Task.isCancelled else { return }
             changes = marks.changes
+            changesInside = ChangeComparison.changesInside(marks.changes)
             comparison = marks.failure.map { .failed(baseline: predecessor, reason: $0) }
                 ?? .compared(
                     baseline: predecessor,
@@ -677,6 +702,7 @@ struct RestorePaneView: View {
                 )
         } else {
             changes = [:]
+            changesInside = [:]
             comparison = .firstBackup
         }
 

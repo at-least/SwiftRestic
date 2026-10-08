@@ -351,7 +351,11 @@ checked in so a normal build does not need it.
   same folders from the same Mac — not merely the row below it, which for a
   plan whose folders changed is a backup of other folders; the pane's header
   names the open backup and says what its Change column is compared with, or
-  that it is the first of its folders. A removed item has no row to mark, so
+  that it is the first of its folders. A folder the diff never names but
+  whose contents it does carries “N inside” — the count of changes beneath
+  it, the tree root's equal to the header's, the kinds in its tooltip — so
+  the marks lead the expansion toward the leaves instead of a collapsed
+  root reading as unchanged. A removed item has no row to mark, so
   under a finished comparison the header names what the previous backup held
   and this one does not ("Removed: old.txt, sub" — a removed folder once, not
   everything in it), the full paths in its tooltip. Each name there — and in

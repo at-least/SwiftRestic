@@ -43,6 +43,55 @@ extension ChangeComparison {
     }
 }
 
+/// What a folder's subtree holds of a diff, counted by kind: restic's diff
+/// names the leaves — a modified file's folders are never listed — so a
+/// collapsed folder would otherwise read as unchanged under a header that
+/// counts changes.
+struct ChangesInside: Equatable, Sendable {
+    var added = 0
+    var removed = 0
+    var modified = 0
+    var metadata = 0
+
+    var total: Int { added + removed + modified + metadata }
+
+    /// "2 modified, 1 removed" — the kinds present, in the diff's own order.
+    var summary: String {
+        [(added, "added"), (removed, "removed"), (modified, "modified"), (metadata, "metadata")]
+            .filter { $0.0 > 0 }
+            .map { "\(Format.count($0.0)) \($0.1)" }
+            .joined(separator: ", ")
+    }
+
+    mutating func add(_ category: ResticDiffChange.Category) {
+        switch category {
+        case .added: added += 1
+        case .removed: removed += 1
+        case .modified: modified += 1
+        case .metadataOnly: metadata += 1
+        }
+    }
+}
+
+extension ChangeComparison {
+    /// Each folder's tally of the changes beneath it — every entry of the
+    /// diff counted once per folder above it, removals included, so the
+    /// tree root's total is the header's count. One pass over the map's
+    /// keys when the diff lands, not a walk per row. Keys are the diff's
+    /// own: normalized paths, no trailing slash.
+    static func changesInside(_ changes: [String: ResticDiffChange]) -> [String: ChangesInside] {
+        var inside: [String: ChangesInside] = [:]
+        for (key, change) in changes {
+            var path = key
+            while path != "/", path.contains("/") {
+                path = ResticPath.parent(of: path)
+                inside[path, default: ChangesInside()].add(change.category)
+            }
+        }
+        return inside
+    }
+}
+
 /// An item a backup no longer holds that the one before it did: a
 /// "Removed:" line's route to that copy's versions.
 struct RemovedItem: Hashable, Sendable {
