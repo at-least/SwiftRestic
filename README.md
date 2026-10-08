@@ -79,7 +79,9 @@ checked in so a normal build does not need it.
   size — *As backed up* picks which of the backups holding it, by its
   moment, newest first, grouped by month once they span more than one, as
   the Compare sheet's picker is and a plan's backups in the sidebar are
-  (an inert month caption above each month's rows) — under one line of what changed in the folder
+  (an inert month caption above each month's rows; past three months the
+  two pickers fold each older month into a submenu, the newest month's
+  rows staying in reach, while the sidebar keeps its captions) — under one line of what changed in the folder
   itself since the backup before that holds it (*Since Oct 1, 2026 at 9:15
   AM, in this folder: 2 modified*), with what is gone named and each item
   marked *Added*, *Modified* or *May have changed*: from the index's record

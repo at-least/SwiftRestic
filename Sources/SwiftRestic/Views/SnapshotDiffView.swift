@@ -138,26 +138,55 @@ struct SnapshotDiffView: View {
             }
 
             HStack(spacing: 8) {
-                Picker("Compared with", selection: $olderID) {
-                    // The no-baseline state needs a row of its own, or the
-                    // picker holds a selection none of its items carry.
-                    if olderID == nil {
-                        Text("Choose a snapshot").tag(String?.none)
+                // Grouped by month: a year of hourly snapshots is a
+                // thousand-row flat scroll, and a header to park the eye
+                // on is the cheapest jump a menu can offer — and past three
+                // months the older months fold into submenus
+                // (`DiffCandidateGrouping.nested`), the newest month's rows
+                // staying in reach.
+                if let nested = DiffCandidateGrouping.nested(grouped) {
+                    Text("Compared with")
+                    Menu {
+                        Section(nested.flat.label) {
+                            ForEach(nested.flat.items) { snapshot in
+                                comparisonChoice(snapshot, sharedMinutes: sharedMinutes)
+                            }
+                        }
+                        ForEach(nested.submenus, id: \.label) { month in
+                            Menu(month.label) {
+                                ForEach(month.items) { snapshot in
+                                    comparisonChoice(snapshot, sharedMinutes: sharedMinutes)
+                                }
+                            }
+                        }
+                    } label: {
+                        Text(
+                            candidates.first { $0.id == olderID }
+                                .map { comparisonLabel($0, sharedMinutes: sharedMinutes) } ?? "Choose a snapshot"
+                        )
                     }
-                    // Grouped by month: a year of hourly snapshots is a
-                    // thousand-row flat scroll, and a header to park the eye
-                    // on is the cheapest jump a menu can offer.
-                    ForEach(grouped, id: \.label) { group in
-                        Section(group.label) {
-                            ForEach(group.items) { snapshot in
-                                Text(comparisonLabel(snapshot, sharedMinutes: sharedMinutes))
-                                    .tag(String?.some(snapshot.id))
+                    .frame(maxWidth: 420)
+                    .disabled(candidates.isEmpty)
+                    .accessibilityLabel("Compared with")
+                } else {
+                    Picker("Compared with", selection: $olderID) {
+                        // The no-baseline state needs a row of its own, or the
+                        // picker holds a selection none of its items carry.
+                        if olderID == nil {
+                            Text("Choose a snapshot").tag(String?.none)
+                        }
+                        ForEach(grouped, id: \.label) { group in
+                            Section(group.label) {
+                                ForEach(group.items) { snapshot in
+                                    Text(comparisonLabel(snapshot, sharedMinutes: sharedMinutes))
+                                        .tag(String?.some(snapshot.id))
+                                }
                             }
                         }
                     }
+                    .frame(maxWidth: 420)
+                    .disabled(candidates.isEmpty)
                 }
-                .frame(maxWidth: 420)
-                .disabled(candidates.isEmpty)
 
                 if let older = candidates.first(where: { $0.id == olderID }),
                    older.lineageKey != newer.lineageKey {
@@ -469,6 +498,18 @@ struct SnapshotDiffView: View {
         return sharesDisplayedMinute
             ? "\(when) · \(Format.ago(snapshot.time, now: now)) · \(snapshot.shortID)"
             : "\(when) · \(snapshot.shortID)"
+    }
+
+    /// One snapshot's row in the nested menu, a checkmark on the chosen
+    /// one. A Toggle, not a Picker per month: several Pickers sharing one
+    /// selection would each warn of a tag none of their own rows carry.
+    private func comparisonChoice(_ snapshot: Snapshot, sharedMinutes: Set<String>) -> some View {
+        Toggle(isOn: Binding(
+            get: { olderID == snapshot.id },
+            set: { if $0 { olderID = snapshot.id } }
+        )) {
+            Text(comparisonLabel(snapshot, sharedMinutes: sharedMinutes))
+        }
     }
 
     private func glyph(for change: ResticDiffChange) -> String {

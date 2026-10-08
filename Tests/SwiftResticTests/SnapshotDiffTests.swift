@@ -153,6 +153,22 @@ struct DiffCandidateGroupingTests {
         #expect(DiffCandidateGrouping.landmarks(in: Array(versions.prefix(2)), time: \.snapshots.last!.time, calendar: calendar) == nil)
     }
 
+    @Test("past three months the pickers nest: the newest month flat, each older one a submenu")
+    func nestedMonths() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let day = { (iso: String) in ISO8601DateFormatter().date(from: iso)! }
+        let times = ["2026-04-02T09:00:00Z", "2026-03-20T09:00:00Z", "2026-02-10T09:00:00Z", "2026-01-05T09:00:00Z"].map(day)
+        let months = DiffCandidateGrouping.months(in: times, time: { $0 }, calendar: calendar)
+        let nested = try #require(DiffCandidateGrouping.nested(months))
+        #expect(nested.flat.label == "April 2026")
+        #expect(nested.flat.items == [times[0]])
+        #expect(nested.submenus.map(\.label) == ["March 2026", "February 2026", "January 2026"])
+        // Three months are captions in one list, as decided.
+        #expect(DiffCandidateGrouping.flatMonthLimit == 3)
+        #expect(DiffCandidateGrouping.nested(Array(months.prefix(3))) == nil)
+    }
+
     @Test("empty input groups to nothing")
     func emptyInput() throws {
         #expect(DiffCandidateGrouping.months(in: []).isEmpty)

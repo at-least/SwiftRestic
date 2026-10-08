@@ -55,6 +55,21 @@ enum DiffCandidateGrouping {
         return grouped.count > 1 ? grouped : nil
     }
 
+    /// Past this many months a picker nests: the newest month's rows stay
+    /// flat under its caption and each older month is a submenu, so
+    /// sixteen months of hourly backups open as one short menu rather than
+    /// a 500-row scroll. Up to it the months are captions in one list
+    /// (`landmarks`), as decided for a history of a season; the sidebar's
+    /// fold keeps its captions whatever the span.
+    static let flatMonthLimit = 3
+
+    /// A picker's shape for `months` (newest first): the newest month flat
+    /// and the rest as submenus, or nil when they fit in one list.
+    static func nested<Item>(_ months: [Month<Item>]) -> (flat: Month<Item>, submenus: [Month<Item>])? {
+        guard months.count > flatMonthLimit else { return nil }
+        return (months[0], Array(months.dropFirst()))
+    }
+
     /// The minute string a picker row displays. The rows and the shared set
     /// below must spell minutes the same way, so both come through here.
     static func displayedMinute(_ time: Date) -> String {

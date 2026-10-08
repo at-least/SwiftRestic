@@ -75,35 +75,74 @@ struct FolderVersionsView: View {
         HStack(spacing: 8) {
             Text("As backed up")
                 .foregroundStyle(.secondary)
-            Picker("As backed up", selection: Binding(
-                get: { chosen?.id },
-                set: { chosenID = $0 }
-            )) {
-                // The moment alone: the short ID is restic's handle, which
-                // the restore sheet and Show in Backups carry. A history
-                // past one month is grouped by month, the Compare sheet's
-                // landmarks, so a year of backups is not one flat scroll.
-                if let months = DiffCandidateGrouping.landmarks(in: versions, time: \.time) {
-                    ForEach(months, id: \.label) { month in
-                        Section(month.label) {
+            // The moment alone: the short ID is restic's handle, which
+            // the restore sheet and Show in Backups carry. A history
+            // past one month is grouped by month, the Compare sheet's
+            // landmarks, so a year of backups is not one flat scroll —
+            // and past three months the older months fold into submenus
+            // (`DiffCandidateGrouping.nested`), the newest month's rows
+            // staying in reach.
+            let months = DiffCandidateGrouping.landmarks(in: versions, time: \.time)
+            if let months, let nested = DiffCandidateGrouping.nested(months) {
+                Menu {
+                    Section(nested.flat.label) {
+                        ForEach(nested.flat.items, id: \.id) { version in
+                            versionChoice(version)
+                        }
+                    }
+                    ForEach(nested.submenus, id: \.label) { month in
+                        Menu(month.label) {
                             ForEach(month.items, id: \.id) { version in
-                                Text(verbatim: Format.timestamp(version.time))
-                                    .tag(Optional(version.id))
+                                versionChoice(version)
                             }
                         }
                     }
-                } else {
-                    ForEach(versions, id: \.id) { version in
-                        Text(verbatim: Format.timestamp(version.time))
-                            .tag(Optional(version.id))
+                } label: {
+                    Text(verbatim: chosen.map { Format.timestamp($0.time) } ?? "")
+                }
+                .frame(maxWidth: 340)
+                .disabled(versions.isEmpty)
+                .help("Which backup the folder is listed from")
+                .accessibilityLabel("As backed up")
+            } else {
+                Picker("As backed up", selection: Binding(
+                    get: { chosen?.id },
+                    set: { chosenID = $0 }
+                )) {
+                    if let months {
+                        ForEach(months, id: \.label) { month in
+                            Section(month.label) {
+                                ForEach(month.items, id: \.id) { version in
+                                    Text(verbatim: Format.timestamp(version.time))
+                                        .tag(Optional(version.id))
+                                }
+                            }
+                        }
+                    } else {
+                        ForEach(versions, id: \.id) { version in
+                            Text(verbatim: Format.timestamp(version.time))
+                                .tag(Optional(version.id))
+                        }
                     }
                 }
+                .labelsHidden()
+                .frame(maxWidth: 340)
+                .disabled(versions.isEmpty)
+                .help("Which backup the folder is listed from")
             }
-            .labelsHidden()
-            .frame(maxWidth: 340)
-            .disabled(versions.isEmpty)
-            .help("Which backup the folder is listed from")
             Spacer()
+        }
+    }
+
+    /// One backup's row in the nested menu, a checkmark on the chosen one.
+    /// A Toggle, not a Picker per month: several Pickers sharing one
+    /// selection would each warn of a tag none of their own rows carry.
+    private func versionChoice(_ version: IndexVersion) -> some View {
+        Toggle(isOn: Binding(
+            get: { chosen?.id == version.id },
+            set: { if $0 { chosenID = version.id } }
+        )) {
+            Text(verbatim: Format.timestamp(version.time))
         }
     }
 
