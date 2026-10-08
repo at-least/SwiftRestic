@@ -555,6 +555,10 @@ struct SnapshotDiffView: View {
         diff = value
         search = DiffChangeSearch(changes: value?.changes ?? [])
         filteredRows = nil
+        // A row's id is its path, so a selection kept across diffs would
+        // stay on the same path in the new one — where the backup holding
+        // it can be another, and Return would restore from that one.
+        selection = []
         diffLoad += 1
     }
 

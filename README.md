@@ -388,7 +388,10 @@ checked in so a normal build does not need it.
   of the two that holds it ("from 2 backups, each item from the one it was
   found in"); a row inside a selected folder of the same backup comes with
   the folder, and the sheet says so, while a file the newer backup removed
-  restores on its own, since the newer folder no longer holds it.
+  restores on its own, since the newer folder no longer holds it. Choosing
+  another backup to compare with, or including metadata changes, clears
+  the selection: the same path in the new list can be held by another
+  backup.
 - **Start at login** — the scheduler only runs while the app runs, so SwiftRestic
   can register itself as a login item and sit in the menu bar.
 - **Maintenance** — scheduled `check` and `prune` per repository, on a day
