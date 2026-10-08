@@ -1997,6 +1997,13 @@ struct AppModelStubTests {
         try await withScratchIndexDirectory {
             let harness = try await makeHarness(mode: "findfile")
             defer { try? FileManager.default.removeItem(at: harness.root) }
+            // The first launch's listing is empty — no snapshots.json yet —
+            // and its reconcile runs on the background lane, which bootstrap
+            // does not await. Landed here, before the find's rows are
+            // cached: landing after them, it sweeps rows of backups the
+            // index does not hold, and the relaunch asks restic again — the
+            // order the full run saw once (2026-10-09).
+            await harness.model.tasks.drain()
             let older = String(repeating: "a", count: 64)
             let newer = String(repeating: "b", count: 64)
             let newest = String(repeating: "c", count: 64)
