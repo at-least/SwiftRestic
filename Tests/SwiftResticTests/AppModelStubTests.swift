@@ -711,6 +711,36 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a refresh that finds the repository's drive away while a read runs is queued behind it: the read that began with the drive there does not leave the listing reading loaded")
+    func driveAwayDuringReadIsQueued() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let id = harness.repository.id
+
+        // A read in flight: the listing answers, its size read hangs.
+        harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "hang-stats"
+        let reading = Task { await harness.model.refreshSnapshots(repositoryID: id) }
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
+            "the stub never established its stats hang"
+        )
+
+        // The drive goes away mid-read, and a refresh is asked.
+        harness.model.configuration.repositories[0].localPath = "/Volumes/SwiftRestic Absent Drive/restic"
+        await harness.model.refreshSnapshots(repositoryID: id)
+
+        // The read that began with the drive there ends, its listing in hand.
+        for pid in StubRestic.findProcesses(matching: harness.stub.sleepMarker) {
+            kill(pid_t(pid)!, SIGTERM)
+        }
+        await reading.value
+        await harness.model.tasks.drain()
+
+        #expect(harness.model.snapshotListingOutcome(for: id) == .failed("“SwiftRestic Absent Drive” is not connected."))
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Snapshot listing states
 
     @Test("a successful refresh settles the listing as loaded and stamps freshness")
