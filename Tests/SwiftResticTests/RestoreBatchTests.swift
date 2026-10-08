@@ -57,6 +57,24 @@ struct RestoreBatchTests {
         #expect(note([project, notes, photos, trip]) == "2 of the selected items are inside selected folders and are restored with them.")
     }
 
+    @Test("from several backups, a folder brings only what its own backup holds: a file found in an older backup restores on its own")
+    func coveringAcrossBackups() {
+        struct Picked {
+            let node: SnapshotNode
+            let backup: String
+        }
+        // Find Files' rows, each path at the newest backup holding it: Oct 2
+        // still holds notes/ and keep.txt, notes.txt was deleted after Oct 1.
+        let notes = Picked(node: folder("/src/notes"), backup: "oct2")
+        let keep = Picked(node: file("/src/notes/keep.txt"), backup: "oct2")
+        let deleted = Picked(node: file("/src/notes/notes.txt"), backup: "oct1")
+        let (kept, covered) = RestoreBatch.covering([notes, keep, deleted, keep], node: \.node, backup: \.backup)
+        #expect(kept.map(\.node.path) == ["/src/notes", "/src/notes/notes.txt"])
+        #expect(kept.map(\.backup) == ["oct2", "oct1"])
+        #expect(covered.map(\.item.path) == ["/src/notes/keep.txt"])
+        #expect(RestoreBatch.coveredNote(covered) == "“keep.txt” is inside “notes” and is restored with it.")
+    }
+
     @Test("two names differing only in normalization are two items, not one")
     func coveringIsByteExact() {
         // "é" precomposed and decomposed: equal as Swift strings.

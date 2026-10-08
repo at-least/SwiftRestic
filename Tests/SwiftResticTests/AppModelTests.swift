@@ -238,6 +238,63 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a folder and a file deleted from it since, picked from two backups, both come back: the folder as its backup holds it, the file beside it or back inside it")
+    func restoreFolderWithAFileItsBackupNoLongerHolds() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let source = harness.sourceDirectory
+        let b = source.appendingPathComponent("b.txt")
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        try FileManager.default.removeItem(at: b)
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let backups = model.snapshots(for: id, planID: harness.plan.id).sorted { $0.time < $1.time }
+        try #require(backups.count == 2)
+
+        // Find Files' rows: the folder at the newer backup, the deleted file
+        // at the older, the newest that holds it.
+        let rows = [
+            (snapshotID: backups[1].id, node: try await model.listedNode(repositoryID: id, snapshotID: backups[1].id, path: source.path)),
+            (snapshotID: backups[0].id, node: try await model.listedNode(repositoryID: id, snapshotID: backups[0].id, path: b.path)),
+        ]
+        let (kept, covered) = RestoreBatch.covering(rows, node: { $0.node }, backup: { $0.snapshotID })
+        #expect(kept.count == 2)
+        #expect(covered.isEmpty)
+
+        func restore(into directories: [URL]) async throws {
+            model.restore(
+                repositoryID: id,
+                items: zip(kept, directories).map { (snapshotID: $0.snapshotID, node: $0.node, directory: $1) },
+                overwrite: .keepExisting
+            )
+            let deadline = Date.now.addingTimeInterval(60)
+            while model.isRestoring, Date.now < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        }
+
+        // One chosen folder: the folder exactly as the newer backup holds it,
+        // the file beside it.
+        let chosen = harness.root.appendingPathComponent("chosen")
+        try FileManager.default.createDirectory(at: chosen, withIntermediateDirectories: true)
+        try await restore(into: [chosen, chosen])
+        let folder = chosen.appendingPathComponent(source.lastPathComponent)
+        #expect(try String(contentsOf: folder.appendingPathComponent("a.txt"), encoding: .utf8) == "one")
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("b.txt").path))
+        #expect(try String(contentsOf: chosen.appendingPathComponent("b.txt"), encoding: .utf8) == "two")
+
+        // Original locations, each item into its own parent: the file is back
+        // inside the folder.
+        try await restore(into: [source.deletingLastPathComponent(), source])
+        #expect(try String(contentsOf: b, encoding: .utf8) == "two")
+        #expect(try String(contentsOf: source.appendingPathComponent("a.txt"), encoding: .utf8) == "one")
+        #expect(model.configuration.runs.filter { $0.kind == .restore }.allSatisfy { $0.outcome == .succeeded })
+
+        await model.shutdown()
+    }
+
     @Test("a console command that can change the backups re-reads the listing; one that only reads does not")
     func consoleRefreshesAfterAMutatingCommand() async throws {
         let harness = try await makeHarness()

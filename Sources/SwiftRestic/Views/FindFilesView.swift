@@ -524,14 +524,14 @@ struct FindFilesView: View {
 
     /// Restores the picked rows through the destination sheet, where the
     /// keep/replace choice lives — each from its row's backup. A folder
-    /// brings everything in it (`RestoreBatch.covering`), whichever backup
-    /// an item inside it was found in, and the sheet says so.
+    /// brings what its own backup holds of the rows inside it, and the
+    /// sheet says so; a row found in an older backup than its folder's is
+    /// one the folder's backup no longer holds, restored on its own
+    /// (`RestoreBatch.covering`).
     private func restoreSelection(_ picked: [Row]) {
         guard let repositoryID else { return }
-        let nodes = picked.map(\.match.node)
-        let kept = Set(RestoreBatch.covering(nodes).map { PathKey($0.path) })
-        let restored = picked.filter { kept.contains(PathKey($0.match.path)) }
-        let note = RestoreBatch.coveredNote(RestoreBatch.covered(nodes))
+        let (restored, covered) = RestoreBatch.covering(picked, node: \.match.node, backup: \.snapshotID)
+        let note = RestoreBatch.coveredNote(covered)
         guard let first = restored.first else { return }
         guard restored.count > 1 else {
             destinationRequest = RestoreDestinationRequest(

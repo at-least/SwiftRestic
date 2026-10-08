@@ -25,20 +25,14 @@ enum DiffRestoreSelection {
         holder: (ResticDiffChange) -> Snapshot?
     ) -> (items: [Item], note: String?) {
         let held = changes.compactMap { change in holder(change).map { Item(change: change, backup: $0) } }
-        var kept: Set<[String]> = []
-        var covered: [(item: SnapshotNode, folder: SnapshotNode)] = []
-        for (backupID, items) in Dictionary(grouping: held, by: \.backup.id) {
+        let (items, covered) = RestoreBatch.covering(
+            held,
             // A diff names a path and a kind, never a node: these stand in
             // for the folder test, and restic lists the real nodes before
             // restoring.
-            let nodes = items.map { SnapshotNode(name: $0.change.name, type: $0.change.isDirectory ? .dir : .file, path: $0.path) }
-            for node in RestoreBatch.covering(nodes) { kept.insert([backupID, node.path]) }
-            covered += RestoreBatch.covered(nodes)
-        }
-        let items = held.filter { kept.contains([$0.backup.id, $0.path]) }
-        // Ordered as the rows are, so the note names them as listed.
-        let order = Dictionary(held.enumerated().map { ($0.element.path, $0.offset) }, uniquingKeysWith: min)
-        covered.sort { order[$0.item.path]! < order[$1.item.path]! }
+            node: { SnapshotNode(name: $0.change.name, type: $0.change.isDirectory ? .dir : .file, path: $0.path) },
+            backup: \.backup.id
+        )
         return (items, RestoreBatch.coveredNote(covered))
     }
 }

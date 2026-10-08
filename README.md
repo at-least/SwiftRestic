@@ -369,7 +369,11 @@ checked in so a normal build does not need it.
   snapshot only says "this one". ⌘- or ⇧-click selects several rows, and *Restore Selected…* (Return)
   restores them together through the destination sheet, each from its own
   row's backup ("from 2 backups, each item from the one it was found in"),
-  an item inside a selected folder left to the folder.
+  an item inside a selected folder of the same backup left to the folder.
+  A folder comes back as its own backup holds it, so a file found in an
+  older backup than its folder's — deleted since, which is why its row is
+  older — restores on its own: beside the folder in a chosen folder, back
+  inside it at the original location.
 - **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
   runs `restic diff` against the previous snapshot of the same folders from the
   same Mac (any earlier one can be chosen) and lists what was added, removed or

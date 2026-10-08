@@ -47,6 +47,48 @@ enum RestoreBatch {
         }
     }
 
+    /// A selection drawn from several backups — Find Files' rows, the
+    /// Compare sheet's — as `covering` and `covered` read it, within each
+    /// backup: the items it restores, in its order, and the ones a selected
+    /// folder brings, in theirs. A folder restores as its own backup holds
+    /// it and brings nothing of another's: a file found in an older backup
+    /// than its folder's is one the folder's backup no longer holds (Find
+    /// Files lists each path at the newest backup holding it), or one a
+    /// diff's newer backup removed, so it restores on its own.
+    static func covering<Item>(
+        _ items: [Item],
+        node: (Item) -> SnapshotNode,
+        backup: (Item) -> String
+    ) -> (kept: [Item], covered: [(item: SnapshotNode, folder: SnapshotNode)]) {
+        var keptKeys: Set<Key> = []
+        var coveredByKey: [Key: (item: SnapshotNode, folder: SnapshotNode)] = [:]
+        for (backupID, group) in Dictionary(grouping: items, by: backup) {
+            let nodes = group.map(node)
+            for kept in covering(nodes) { keptKeys.insert(Key(backup: backupID, path: PathKey(kept.path))) }
+            for pair in covered(nodes) { coveredByKey[Key(backup: backupID, path: PathKey(pair.item.path))] = pair }
+        }
+        var keptItems: [Item] = []
+        var coveredItems: [(item: SnapshotNode, folder: SnapshotNode)] = []
+        var seen: Set<Key> = []
+        for item in items {
+            let key = Key(backup: backup(item), path: PathKey(node(item).path))
+            guard seen.insert(key).inserted else { continue }
+            if keptKeys.contains(key) {
+                keptItems.append(item)
+            } else if let pair = coveredByKey[key] {
+                coveredItems.append(pair)
+            }
+        }
+        return (keptItems, coveredItems)
+    }
+
+    /// An item of a selection drawn from several backups: its backup and
+    /// its path's bytes.
+    private struct Key: Hashable {
+        let backup: String
+        let path: PathKey
+    }
+
     /// The destination sheet's line about `covered` items, so a selection of
     /// three rows read as "Restore 2 items" says where the third went. Nil
     /// when nothing was dropped.
