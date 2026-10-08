@@ -189,6 +189,17 @@ struct SidebarFolds: Equatable {
     /// lineages' folds are the sidebar's view state and start open.
     var otherGroups: Set<OtherGroupFoldID> = []
 
+    /// The row whose fold holds `record` — its plan's row, else its
+    /// plan-UUID group's under Other backups, else its lineage's: where ←
+    /// on the record goes, the outline convention that a child's ← selects
+    /// its parent, from which a second ← folds. `plans` are the
+    /// repository's own.
+    static func foldRow(above record: Snapshot, in repositoryID: UUID, plans repositoryPlans: [BackupPlan]) -> SidebarItem {
+        if let planID = BackupShelves.owner(of: record, among: repositoryPlans) { return .plan(planID) }
+        if let planID = record.planID { return .orphanPlan(repositoryID: repositoryID, planID: planID) }
+        return .lineage(repositoryID: repositoryID, key: record.lineageKey)
+    }
+
     /// Opens the fold `record` sits in — its plan's, or its repository's
     /// Other backups and, under it, the plan-UUID group that holds it.
     /// `plans` are the repository's own.

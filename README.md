@@ -43,7 +43,11 @@ checked in so a normal build does not need it.
 - **Repositories in the sidebar** — each repository is a row with its backup
   plans always in view beneath it, and each plan folds open to the backups it
   made there; a repository with no plan yet shows *New Backup Plan…* where
-  its plans would be. Backups no plan of the repository made — from another
+  its plans would be. A plan's row answers → and ← by showing and hiding
+  its backups; on a backup row ← goes to the row its fold hangs from (the
+  plan's, or a group's) and a second ← folds it, and the row's menu offers
+  *Hide This Plan's Backups* — a way back from any depth of a long fold.
+  Backups no plan of the repository made — from another
   Mac or the restic console, a deleted plan, or a plan that now backs up to
   another repository — sit under *Other backups*, grouped by the plan that
   made them (its `swiftrestic-plan-` tag says which, so a deleted plan's

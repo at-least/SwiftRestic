@@ -323,7 +323,7 @@ struct SidebarView: View {
                 // re-runs on every minute tick and selection change.
                 planRow(plan, latestSnapshot: shelves.byPlan[plan.id]?.first)
                 if folds.plans.contains(plan.id) {
-                    planBackups(shelves.byPlan[plan.id] ?? [], in: repository)
+                    planBackups(shelves.byPlan[plan.id] ?? [], of: plan, in: repository)
                 }
             }
         case .addPlan:
@@ -437,6 +437,15 @@ struct SidebarView: View {
             if open == collapsedLineages.contains(id) { toggleLineage(id, title: title) }
             if open { folds.otherBackups.insert(repositoryID) }
             return .handled
+        case let .restoreSnapshot(repositoryID, snapshotID):
+            // ← on a backup row: the outline convention — a child's ← selects
+            // its parent — so a record two hundred rows into a fold has a way
+            // back: the fold's row, from which a second ← folds it. → has
+            // nothing to open on a record.
+            guard !open, let record = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
+            else { return .ignored }
+            router.selection = SidebarFolds.foldRow(above: record, in: repositoryID, plans: model.plans(in: repositoryID))
+            return .handled
         default:
             return .ignored
         }
@@ -467,7 +476,7 @@ struct SidebarView: View {
     /// month, each month opens with an inert caption row (the Compare
     /// sheet's months), so a deep history has landmarks.
     @ViewBuilder
-    private func planBackups(_ records: [Snapshot], in repository: Repository) -> some View {
+    private func planBackups(_ records: [Snapshot], of plan: BackupPlan, in repository: Repository) -> some View {
         if records.isEmpty {
             BackupsStatusRow(repositoryID: repository.id)
                 .padding(.leading, Indent.planRecord)
@@ -479,14 +488,14 @@ struct SidebarView: View {
                     .foregroundStyle(.tertiary)
                     .padding(.leading, Indent.planRecord)
                     .accessibilityAddTraits(.isHeader)
-                recordRows(month.items, in: repository)
+                recordRows(month.items, of: plan, in: repository)
             }
         } else {
-            recordRows(records, in: repository)
+            recordRows(records, of: plan, in: repository)
         }
     }
 
-    private func recordRows(_ records: [Snapshot], in repository: Repository) -> some View {
+    private func recordRows(_ records: [Snapshot], of plan: BackupPlan, in repository: Repository) -> some View {
         ForEach(records) { snapshot in
             let item = SidebarItem.restoreSnapshot(repository.id, snapshot.id)
             RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
@@ -494,6 +503,11 @@ struct SidebarView: View {
                 .tag(item)
                 // The scroll target a reveal names (the selection's own value).
                 .id(item)
+                // The chevron's own verb, reachable from any depth of the
+                // fold — the row at its top may be a year of rows away.
+                .contextMenu {
+                    Button("Hide This Plan's Backups") { togglePlan(plan) }
+                }
         }
     }
 
@@ -608,6 +622,9 @@ struct SidebarView: View {
                     .padding(.leading, Indent.groupRecord)
                     .tag(item)
                     .id(item)
+                    .contextMenu {
+                        Button("Hide This Group's Backups") { toggleOtherGroup(id, title: title) }
+                    }
             }
         }
     }
@@ -727,6 +744,9 @@ struct SidebarView: View {
                     .padding(.leading, Indent.groupRecord)
                     .tag(item)
                     .id(item)
+                    .contextMenu {
+                        Button("Hide This Group's Backups") { toggleLineage(id, title: title) }
+                    }
             }
         }
     }

@@ -284,6 +284,11 @@ struct SidebarTreeTests {
             otherBackups: [nas],
             otherGroups: [OtherGroupFoldID(repositoryID: nas, planID: deleted)]
         ))
+        // ← on each record goes to the row whose fold reveal opened: the
+        // plan's, the tagged orphan's group, the untagged lineage.
+        #expect(SidebarFolds.foldRow(above: mine, in: nas, plans: [documents]) == .plan(documents.id))
+        #expect(SidebarFolds.foldRow(above: tagged, in: nas, plans: [documents]) == .orphanPlan(repositoryID: nas, planID: deleted))
+        #expect(SidebarFolds.foldRow(above: foreign, in: nas, plans: [documents]) == .lineage(repositoryID: nas, key: foreign.lineageKey))
     }
 
     @Test("a backup is named for where it sits: its plan, or its group among the Other backups")
