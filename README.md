@@ -57,7 +57,10 @@ checked in so a normal build does not need it.
   “Offsite”*, *outside SwiftRestic* — and names the Mac its newest backup
   came from when that isn't this one. A plan's row caption gives its last
   backup (*“Last backup 1 hour ago”*); the plan's page, the tray and
-  Settings say when it runs next. A
+  Settings say when it runs next, and the tray's menu carries each
+  repository's Protection line in the page's own words (*“Home NAS — 3 of 3
+  plans protected · Last backup 3 hours ago”*), so the window need not open
+  to learn that the backups ran. A
   repository wears a warning while one of its plans is not protected — its
   backups cannot be read, a plan has no backup, or a plan's last backup
   failed; the warning's tooltip names the plan.

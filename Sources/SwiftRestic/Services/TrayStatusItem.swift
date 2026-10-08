@@ -185,6 +185,15 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             item.toolTip = "Show this run in Activity"
             menu.addItem(item)
         }
+        // Each repository's Protection line, the page's own words: the
+        // fact the menu never carried. Absent while a listing has not
+        // loaded, as the card is.
+        for line in MenuBarStatus.protectionLines(
+            repositories: model.configuration.repositories,
+            summary: { model.protectionSummary(repositoryID: $0, now: .now) }
+        ) {
+            menu.addItem(disabledItem(line))
+        }
         var lines = MenuBarStatus.runningLines(
             plans: model.configuration.plans,
             repositories: model.configuration.repositories,

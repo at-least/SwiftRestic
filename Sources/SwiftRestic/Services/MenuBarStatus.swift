@@ -103,6 +103,18 @@ enum MenuBarStatus {
     /// face with a failure of a removed repository's runs.
     ///
     /// `plans` and `repositories` name the subject by the one run-naming rule.
+    /// One disabled line per repository whose listing has loaded, in the
+    /// Protection line's exact words — "Home NAS — 3 of 3 plans protected ·
+    /// Last backup 3 hours ago" — so the menu answers "did my backups run?"
+    /// with the window closed, where before only the absence of a problem
+    /// line said so. A summary, not per-plan noise: a quiet plan still says
+    /// nothing in its submenu.
+    static func protectionLines(repositories: [Repository], summary: (UUID) -> ProtectionSummary?) -> [String] {
+        repositories.compactMap { repository in
+            summary(repository.id).map { "\(repository.name) — \($0.text)" }
+        }
+    }
+
     static func problemLine(
         runs: [RunRecord],
         hasNoRepositories: Bool,

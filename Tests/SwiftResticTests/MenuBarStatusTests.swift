@@ -32,6 +32,16 @@ struct MenuBarStatusTests {
         return value
     }
 
+    @Test("the menu carries each repository's Protection line in the card's words, only once its listing has loaded")
+    func protectionLines() {
+        let nas = repository(named: "Home NAS")
+        let ssd = repository(named: "Travel SSD")
+        let summary = ProtectionSummary(text: "2 of 2 plans protected · Last backup 1 hour ago", showsResume: false)
+        let lines = MenuBarStatus.protectionLines(repositories: [nas, ssd]) { id in id == nas.id ? summary : nil }
+        #expect(lines == ["Home NAS — 2 of 2 plans protected · Last backup 1 hour ago"])
+        #expect(MenuBarStatus.protectionLines(repositories: []) { _ in summary }.isEmpty)
+    }
+
     @Test("idle with nothing configured says there is no schedule")
     func idleNoPlans() {
         let next = Date.now.addingTimeInterval(3600)
