@@ -117,7 +117,9 @@ checked in so a normal build does not need it.
   goes (a quit leaves it to the next launch's sweep). It waits for the
   version's size and stops at 1 GB — past that, restore it. *Show
   in Backups* opens the chosen backup at that place, under its plan in the
-  sidebar. Each page keeps its tab, open folders and selection while the app
+  sidebar, and brings that backup's row into view — a fold sixteen months
+  long is scrolled to it, as the Files tree scrolls to a revealed item.
+  Each page keeps its tab, open folders and selection while the app
   runs — going to a backup and back finds the Files tab as it was left — and
   every page opens on Overview after a launch.
 - **A group under Other backups is a page** — a group's row selects like a

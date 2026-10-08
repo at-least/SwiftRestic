@@ -58,6 +58,12 @@ struct SidebarView: View {
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     var body: some View {
+        ScrollViewReader { proxy in
+            sidebarList(proxy: proxy)
+        }
+    }
+
+    private func sidebarList(proxy: ScrollViewProxy) -> some View {
         List(selection: Binding(
             get: { router.selection },
             set: { router.selection = $0 }
@@ -126,14 +132,22 @@ struct SidebarView: View {
             isPlain(press) ? foldSelection(open: false) : .ignored
         }
         .onChange(of: router.selection) {
+            guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection else { return }
+            // A record picked from elsewhere — Show in Backups on a version,
+            // a run's Browse — lands in a fold that may be sixteen months
+            // long: its row is brought into view, a turn later because the
+            // fold the same change opens lists the row in this update (the
+            // Files tree's own rule). A click's row is in view already, and
+            // the minimal scroll leaves it where it is.
+            let item = SidebarItem.restoreSnapshot(repositoryID, snapshotID)
+            Task { @MainActor in proxy.scrollTo(item) }
             // A lineage's fold is the sidebar's own view state, so an
             // unowned record with no plan tag reopens it here; plan-UUID
             // groups reopen through RootDetailView's SidebarFolds.reveal on
             // the same change (a plan's record must not reopen a lineage,
             // and a tagged record's group is a plan fold, closed until
             // opened).
-            guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
-                  let snapshot = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }),
+            guard let snapshot = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }),
                   snapshot.planID == nil,
                   BackupShelves.owner(of: snapshot, among: model.plans(in: repositoryID)) == nil
             else { return }
@@ -474,9 +488,12 @@ struct SidebarView: View {
 
     private func recordRows(_ records: [Snapshot], in repository: Repository) -> some View {
         ForEach(records) { snapshot in
+            let item = SidebarItem.restoreSnapshot(repository.id, snapshot.id)
             RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
                 .padding(.leading, Indent.planRecord)
-                .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+                .tag(item)
+                // The scroll target a reveal names (the selection's own value).
+                .id(item)
         }
     }
 
@@ -586,9 +603,11 @@ struct SidebarView: View {
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
         if isExpanded {
             ForEach(snapshots) { snapshot in
+                let item = SidebarItem.restoreSnapshot(repository.id, snapshot.id)
                 RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
                     .padding(.leading, Indent.groupRecord)
-                    .tag(SidebarItem.restoreSnapshot(repository.id, snapshot.id))
+                    .tag(item)
+                    .id(item)
             }
         }
     }
@@ -703,9 +722,11 @@ struct SidebarView: View {
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
         if isExpanded {
             ForEach(lineage.snapshots) { snapshot in
+                let item = SidebarItem.restoreSnapshot(repositoryID, snapshot.id)
                 RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
                     .padding(.leading, Indent.groupRecord)
-                    .tag(SidebarItem.restoreSnapshot(repositoryID, snapshot.id))
+                    .tag(item)
+                    .id(item)
             }
         }
     }
