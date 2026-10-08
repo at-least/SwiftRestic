@@ -209,6 +209,10 @@ struct RepositoryDetailView: View {
                     if repository.maintenance.pruneEnabled {
                         DetailRow("Last prune", Scheduler.lastMaintenanceText(.prune, of: repository, runs: runs, now: now))
                         DetailRow("Next prune", Scheduler.nextMaintenanceText(.prune, of: repository, hold: hold, now: now))
+                    } else {
+                        // Off is a fact the page states beside the disk bar,
+                        // not two rows that vanish; Edit is its fix.
+                        DetailRow("Prune", Scheduler.pruneOffText)
                     }
                 }
 

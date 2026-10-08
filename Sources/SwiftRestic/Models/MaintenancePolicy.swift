@@ -13,9 +13,21 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
     /// only, which is fast; reading data is thorough and slow.
     var checkReadDataPercent: Int = 0
 
-    /// Off by default: pruning rewrites pack files and can take a long time.
+    /// Off here and for a repository saved without the key — pruning rewrites
+    /// pack files and can take a long time — while a repository added from
+    /// now on starts from `forNewRepository`.
     var pruneEnabled: Bool = false
     var pruneIntervalDays: Int = 30
+
+    /// What the editor gives a new repository (2026-10-09): prune on, every
+    /// 30 days, the first one 30 days after the repository is added —
+    /// retention runs after every backup, and only a prune frees what it
+    /// removed. A repository saved before keeps its own setting.
+    static var forNewRepository: MaintenancePolicy {
+        var policy = MaintenancePolicy()
+        policy.pruneEnabled = true
+        return policy
+    }
 
     var lastCheckAt: Date?
     var lastPruneAt: Date?

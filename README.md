@@ -418,7 +418,13 @@ checked in so a normal build does not need it.
   when the history holds no run as new as it. A failed check or prune, or a
   check that found errors, offers *Check Again…* or *Prune Again…* in its
   Activity drawer — the Repository menu's command, behind the same
-  confirmation, grey while the repository is busy.
+  confirmation, grey while the repository is busy. A repository added from
+  2026-10-09 on prunes by default — every 30 days, the first one 30 days
+  after it is added — because retention runs after every backup and only a
+  prune frees the space it removed; a repository saved before keeps its own
+  setting. While prune is off the Maintenance card says so ("Prune — Off —
+  the data retention removes stays in the repository until a prune") instead
+  of hiding its rows.
 - **restic's cache** — restic keeps one cache folder per repository it has
   opened on this Mac (`~/Library/Caches/restic`), keeps it after the
   repository is removed here, and never cleans one up on its own: once a

@@ -670,6 +670,14 @@ struct MaintenanceSchedulingTests {
         #expect(due.map(\.task) == [.prune])
     }
 
+    @Test("a repository added from now on prunes 30 days after it was added; one saved without the key stays off")
+    func newRepositoryPrunes() {
+        let added = date("2026-10-09 00:00:00")
+        #expect(MaintenancePolicy.forNewRepository.nextDate(for: .prune, addedAt: added) == date("2026-11-08 00:00:00"))
+        #expect(MaintenancePolicy.forNewRepository.nextDate(for: .check, addedAt: added) == date("2026-10-16 00:00:00"))
+        #expect(MaintenancePolicy().nextDate(for: .prune, addedAt: added) == nil)
+    }
+
     @Test("a disabled task never comes due")
     func disabledTasksNeverDue() {
         let repository = repository {

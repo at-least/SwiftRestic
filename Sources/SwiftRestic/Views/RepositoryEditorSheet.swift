@@ -60,9 +60,13 @@ struct RepositoryEditorSheet: View {
     private static let probeTimeout: TimeInterval = 60
 
     init(repository: Repository, onCreated: @escaping (UUID) -> Void = { _ in }) {
+        isNew = repository.name.isEmpty && repository.localPath.isEmpty
+        var repository = repository
+        // A new repository prunes by default; one being edited keeps what
+        // was saved for it.
+        if isNew { repository.maintenance = .forNewRepository }
         _draft = State(initialValue: repository)
         self.onCreated = onCreated
-        isNew = repository.name.isEmpty && repository.localPath.isEmpty
         #if DEBUG
         // Debug-only: lets a capture run land on the Hooks tab.
         if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "repositoryHooks" {

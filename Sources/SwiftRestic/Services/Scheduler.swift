@@ -159,6 +159,11 @@ enum Scheduler {
     /// succeed — how it ended ("3 days ago · failed"), since the stamp the
     /// scheduler keeps is written for every attempt. The stamp's moment
     /// alone when the history holds no run as new as it.
+    /// The Maintenance card's Prune row while prune is off: stated, not
+    /// hidden — retention runs after every backup, and only a prune frees
+    /// what it removed.
+    static let pruneOffText = "Off — the data retention removes stays in the repository until a prune"
+
     static func lastMaintenanceText(
         _ task: MaintenanceTask,
         of repository: Repository,
