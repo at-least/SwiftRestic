@@ -56,9 +56,9 @@ struct RestorePaneView: View {
     /// set by `loadLevel`, spent by the list. Plain record switches keep
     /// their folder open but never scroll.
     @State private var revealPath: String?
-    /// The restore waiting in the destination sheet.
     /// A file's Preview: its copy and its Quick Look panel.
     @State private var previewer = PreviewSession()
+    /// The restore waiting in the destination sheet.
     @State private var destinationRequest: RestoreDestinationRequest?
     /// The tree rows' content width, read by the column header alone: a
     /// legacy scroller narrows the rows but not the header above them, and
