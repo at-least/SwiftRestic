@@ -27,6 +27,11 @@ struct PlanCaption: Equatable, Sendable {
     /// The pause, on a line of its own, when a standing problem took the
     /// first one — so neither state hides the other.
     var pauseNote: String?
+    /// A shorter spelling of `text` for a column too narrow for it —
+    /// "Errors — 2 days ago" for "Completed with errors — 2 days ago" —
+    /// tried before the middle cut that reads "Completed with…rors". Nil
+    /// when no shorter form exists.
+    var shortText: String? = nil
 }
 
 /// The plan page's words and the app's one "Last backup" moment, kept out
@@ -184,7 +189,9 @@ enum PlanStatus {
             )
         }
         guard plan.schedule.frequency != .manual else {
-            return TileFace(value: "Manually", help: "This plan runs only when you click Back Up Now.")
+            // The row asks when; "Manually" answered how. The schedule row
+            // above it keeps the word.
+            return TileFace(value: "When you click Back Up Now", help: "This plan runs only when you click Back Up Now.")
         }
         guard let next = Scheduler.upcomingRuns(
             in: [plan],
@@ -309,10 +316,14 @@ enum PlanStatus {
         }
         let pause = pauseCaption(for: plan, now: now, calendar: calendar)
         if let problem {
+            let when = relative(problem.finishedAt)
             return PlanCaption(
-                text: "\(problem.outcome.displayName) — \(relative(problem.finishedAt))",
+                text: "\(problem.outcome.displayName) — \(when)",
                 outcome: problem.outcome,
-                pauseNote: pause
+                pauseNote: pause,
+                // The one outcome whose words outgrow the column; the glyph
+                // beside them carries the severity either way.
+                shortText: problem.outcome == .completedWithErrors ? "Errors — \(when)" : nil
             )
         }
         if let pause {

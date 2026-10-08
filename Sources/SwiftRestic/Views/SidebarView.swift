@@ -912,14 +912,23 @@ private struct PlanSidebarRow: View {
                             .foregroundStyle(StatusPalette.status(outcome))
                             .accessibilityHidden(true)
                     }
-                    // Middle truncation: the trailing marker narrows the
-                    // column, and a tail cut would take "ago" — when it
-                    // happened. The tooltip and VoiceOver keep the whole line.
-                    Text(caption.text)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(caption.text)
+                    // The whole line when it fits, its shorter spelling when
+                    // one exists ("Errors — 2 days ago"), and only then the
+                    // middle cut: the trailing marker narrows the column,
+                    // and a tail cut would take "ago" — when it happened.
+                    // The tooltip and VoiceOver keep the whole line.
+                    ViewThatFits(in: .horizontal) {
+                        Text(caption.text)
+                        if let shortText = caption.shortText {
+                            Text(shortText)
+                        }
+                        Text(caption.text)
+                            .truncationMode(.middle)
+                    }
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help(caption.text)
+                    .accessibilityLabel(caption.text)
                 }
                 .font(.caption)
                 // A paused plan whose problem took the line above: the pause

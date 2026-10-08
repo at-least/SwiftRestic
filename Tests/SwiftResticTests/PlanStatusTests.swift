@@ -129,7 +129,9 @@ struct PlanStatusTests {
 
         var manual = completeDailyPlan()
         manual.schedule.frequency = .manual
-        #expect(PlanStatus.nextBackupTile(for: manual, existingRepositoryIDs: [repositoryID], now: now).value == "Manually")
+        // The row asks when; the schedule row above it says "Manually".
+        #expect(PlanStatus.nextBackupTile(for: manual, existingRepositoryIDs: [repositoryID], now: now).value
+            == "When you click Back Up Now")
     }
 
     @Test("an overdue plan under an open-ended hold reads Waiting, never Due now")
@@ -298,6 +300,22 @@ struct PlanStatusTests {
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
         #expect(withProblem.pauseNote == "Paused")
+    }
+
+    @Test("a completed-with-errors caption has a short spelling for a narrow column; other outcomes none")
+    func captionShortForm() {
+        let plan = completeDailyPlan()
+        let withErrors = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: run(.completedWithErrors),
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(withErrors.text.hasPrefix("Completed with errors — "))
+        #expect(withErrors.shortText == "Errors — " + withErrors.text.dropFirst("Completed with errors — ".count))
+        let failed = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: run(.failed),
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(failed.shortText == nil)
     }
 
     @Test("a paused plan with a standing problem names both, the problem first")
