@@ -98,7 +98,7 @@ extension AppModel {
         tasks.cancel(.plan(planID))
     }
 
-    func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool) {
+    func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool, complete: Bool) {
         // A backup Pause and Stop ended leaves its slot unstamped, so the
         // scheduler runs it again once the pause ends: restic cannot resume
         // it, and stamping would count the slot as done — the stopped run
@@ -109,6 +109,7 @@ extension AppModel {
         guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
         configuration.plans[index].lastRunAt = date
         if succeeded { configuration.plans[index].lastSuccessAt = date }
+        if succeeded, complete { configuration.plans[index].lastCompleteBackupAt = date }
     }
 }
 

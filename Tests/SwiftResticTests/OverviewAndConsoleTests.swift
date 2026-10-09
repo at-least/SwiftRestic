@@ -478,13 +478,18 @@ struct OverviewMetricsTests {
             )
         }
         let byID = Dictionary(uniqueKeysWithValues: plans.map { ($0.id, $0) })
+        let skipReason = "“Archive SSD” is not connected; the other folders were backed up."
         let summary = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { byID[$0].flatMap(caption) },
+            partialSkip: { $0 == code.id ? skipReason : nil },
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         #expect(summary?.text == "5 of 5 plans protected · Last backup 1 hour ago")
         #expect(summary?.attentionLines == [])
+        // A protected plan backing up around an away drive is named in the
+        // record's words, beside its held line if it has one.
+        #expect(summary?.skippedLines == ["Code: \(skipReason)"])
         #expect(summary?.heldLines == [
             "Photos: Paused — \(photos.schedule.summary)",
             "Documents: \(PlanStatus.pauseCaption(for: documents, now: now) ?? "")",

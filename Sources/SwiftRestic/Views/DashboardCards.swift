@@ -53,6 +53,17 @@ struct ProtectionCard: View {
                         }
                         .font(.caption)
                     }
+                    ForEach(summary.skippedLines, id: \.self) { line in
+                        // Backed up around an away drive: Activity's skip
+                        // glyph, and the record's words.
+                        Label {
+                            Text(line).foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: RunRecord.Outcome.skipped.symbolName ?? "minus.circle")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                    }
                     ForEach(summary.heldLines, id: \.self) { line in
                         // Protected, but it will not run by itself: a pause
                         // is a choice, so its glyph, not the warning's.

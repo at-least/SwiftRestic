@@ -233,6 +233,49 @@ struct SkippedRunTests {
         #expect(roundTrip.skippedSince == third.skippedSince)
     }
 
+    @Test("a backup around an away drive continues the plan's last such one, and the earlier snapshots still resolve to the record")
+    func partialSkipMerges() throws {
+        let planID = UUID()
+        func partial(_ minutes: Double, snapshot: String) -> RunRecord {
+            var run = RunRecord(kind: .backup, planID: planID, planName: "Archive", startedAt: now.addingTimeInterval(minutes * 60))
+            run.outcome = .skipped
+            run.snapshotID = snapshot
+            run.exitCode = ResticError.backupPartialSuccessCode
+            run.detailText = "“Archive SSD” is not connected; the other folders were backed up."
+            return run
+        }
+        let first = partial(0, snapshot: "aaaa1111")
+        let second = try #require(partial(60, snapshot: "bbbb2222").continuingSkip(of: first))
+        #expect(second.skipCount == 2)
+        #expect(second.skippedSince == first.startedAt)
+        #expect(second.snapshotID == "bbbb2222", "the newest run's own snapshot")
+        #expect(second.continuedSnapshotIDs == ["aaaa1111"])
+        let third = try #require(partial(120, snapshot: "cccc3333").continuingSkip(of: second))
+        #expect(third.continuedSnapshotIDs == ["bbbb2222", "aaaa1111"])
+        // The earlier backups keep their incomplete mark through the record.
+        let bySnapshot = RunRecord.backupRunsBySnapshot([third])
+        #expect(bySnapshot["aaaa1111"]?.id == third.id)
+        #expect(bySnapshot["aaaa1111"]?.snapshotCompleteness == .incomplete)
+        #expect(bySnapshot["cccc3333"]?.id == third.id)
+        #expect(RunRecordPresentation.detail(for: third)
+            == "“Archive SSD” is not connected; the other folders were backed up. Skipped 3 times since \(Format.timestamp(first.startedAt)).")
+
+        // A whole skip after a partial one is its own news, and so is a
+        // retention line.
+        var whole = partial(60, snapshot: "dddd4444")
+        whole.snapshotID = nil
+        #expect(whole.continuingSkip(of: first) == nil)
+        var retentionSkipped = partial(60, snapshot: "eeee5555")
+        retentionSkipped.itemErrors = [RunRecord.retentionSkippedPrefix + "repository is already locked"]
+        #expect(retentionSkipped.continuingSkip(of: first) == nil)
+
+        // Older records carry no list; a merged one round-trips.
+        let older = try JSONDecoder().decode(RunRecord.self, from: Data(#"{"outcome":"skipped"}"#.utf8))
+        #expect(older.continuedSnapshotIDs == nil)
+        let roundTrip = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(third))
+        #expect(roundTrip.continuedSnapshotIDs == ["bbbb2222", "aaaa1111"])
+    }
+
     @Test("new plans leave online-only cloud files out; a plan saved before the option keeps backing them up")
     func cloudFilesDefault() throws {
         #expect(BackupPlan().excludeCloudFiles)

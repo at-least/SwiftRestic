@@ -280,10 +280,13 @@ checked in so a normal build does not need it.
   folders are all back runs at once instead of a whole interval later (a disk
   image attached with `-nobrowse` counted). The quiet-plan alert speaks if the
   drive stays away. A skip that continues the plan's last one — the same
-  reason, neither writing a snapshot, the earlier one without a hook's
-  complaint — replaces it, its log with it: one record whose Detail reads
+  reason, both writing a snapshot of the other folders or neither, the
+  same stored lines, the earlier one without a hook's complaint — replaces
+  it, its log with it: one record whose Detail reads
   "“Archive SSD” is not connected. Skipped 24 times since …", with a *Since*
-  row in the drawer and a "Skipped since:" line in Copy Details. An hourly
+  row in the drawer and a "Skipped since:" line in Copy Details; the
+  snapshots the earlier runs wrote still resolve to the record, so each
+  keeps its incomplete mark. An hourly
   plan whose drive is away for a week is one row, not 168, and "Keep runs"
   stays for real runs. Some but not all folders missing is restic's exit 3 with
   a snapshot of the rest. When every folder restic skipped is on a volume
@@ -291,8 +294,15 @@ checked in so a normal build does not need it.
   Skipped too — "“Archive SSD” is not connected; the other folders were
   backed up." — with its snapshot, numbers and *Last backup* kept: it heals
   an older failure, pings a Healthchecks channel alive, and the mount runs
-  it again in full. Accepted with it: while the other folders keep backing
-  up, the quiet-plan alert does not speak for the away one. A skipped folder
+  it again in full. It does not count as a whole backup: the quiet-plan
+  alert counts from the last backup that read every folder, so while the
+  other folders keep backing up it still speaks for the away drive, in the
+  skip's words — "“Archive SSD” has not been backed up in 14 days — the last
+  backup that included it was …; the plan's other folders are still backed
+  up." — and the repository page's Protection card names the standing skip
+  under its count, in the record's words, with Activity's skip glyph. A
+  plan stamped only before this build counts from its last backup until
+  its next whole one. A skipped folder
   whose drive is here, or any other unreadable item, keeps the whole run
   *Completed with errors*, every skipped folder among its items. The
   repository's side is the

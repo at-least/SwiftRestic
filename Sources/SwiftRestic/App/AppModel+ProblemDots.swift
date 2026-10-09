@@ -16,6 +16,18 @@ extension AppModel {
         return problem
     }
 
+    /// The plan's newest backup, when it backed up the rest of the plan
+    /// around an away drive's folders (`RunRecord.partlySkippedReason`) —
+    /// the record whose words name the drive, for the Protection card.
+    /// Nil once any later backup ran, whole or not.
+    func standingPartialSkip(for planID: UUID) -> RunRecord? {
+        let newest = configuration.runs
+            .filter { $0.planID == planID && $0.kind == .backup }
+            .max { $0.finishedAt < $1.finishedAt }
+        guard let newest, newest.outcome == .skipped, newest.snapshotID != nil else { return nil }
+        return newest
+    }
+
     /// Whether the plan's sidebar row wears the blue dot: a standing problem
     /// the user has not opened since it happened. Opening the plan's page
     /// stamps it seen; a later successful run heals the dot away even unseen

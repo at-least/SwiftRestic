@@ -152,6 +152,12 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var skipCount: Int?
     /// When the first of them started.
     var skippedSince: Date?
+    /// The snapshots the runs this record counts wrote before its own,
+    /// newest first — a backup around an away drive writes one per run
+    /// (`partlySkippedReason`). Each resolves to this record
+    /// (`backupRunsBySnapshot`), so an earlier backup keeps its incomplete
+    /// mark and its drawer after the merge. Nil for a whole skip's record.
+    var continuedSnapshotIDs: [String]?
 
     init(
         kind: Kind = .backup,
@@ -205,6 +211,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         filesSkipped = c.value(.filesSkipped, default: 0)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
+        continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
     }
 
     var duration: TimeInterval { max(0, finishedAt.timeIntervalSince(startedAt)) }
@@ -284,6 +291,9 @@ extension RunRecord {
         for run in runs where run.kind == .backup {
             guard let snapshotID = run.snapshotID, map[snapshotID] == nil else { continue }
             map[snapshotID] = run
+            for continued in run.continuedSnapshotIDs ?? [] where map[continued] == nil {
+                map[continued] = run
+            }
         }
         return map
     }
@@ -329,22 +339,27 @@ extension RunRecord {
     }
 
     /// This skipped backup as the continuation of `previous` — the plan's
-    /// newest backup before it, skipped for the same reason, neither run
-    /// writing a snapshot and `previous` carrying no hook's complaint: one
-    /// record, this run's, counting `previous`'s runs and keeping when the
-    /// skips began. An hourly plan whose drive is away a week is one row,
-    /// not 168, and leaves the history cap to real runs. Nil when it does
-    /// not continue it.
+    /// newest backup before it, skipped for the same reason, both runs
+    /// writing a snapshot of the other folders or neither, the same stored
+    /// lines (a retention skip is news) and `previous` carrying no hook's
+    /// complaint: one record, this run's, counting `previous`'s runs and
+    /// keeping when the skips began — and the snapshots they wrote
+    /// (`continuedSnapshotIDs`). An hourly plan whose drive is away a week
+    /// is one row, not 168, and leaves the history cap to real runs. Nil
+    /// when it does not continue it.
     func continuingSkip(of previous: RunRecord) -> RunRecord? {
         guard kind == .backup, previous.kind == .backup,
               let planID, previous.planID == planID, previous.repositoryID == repositoryID,
               outcome == .skipped, previous.outcome == .skipped,
-              snapshotID == nil, previous.snapshotID == nil,
-              detailText == previous.detailText, previous.hookMessages.isEmpty
+              (snapshotID == nil) == (previous.snapshotID == nil),
+              detailText == previous.detailText, itemErrors == previous.itemErrors, previous.hookMessages.isEmpty
         else { return nil }
         var merged = self
         merged.skipCount = (previous.skipCount ?? 1) + 1
         merged.skippedSince = previous.skippedSince ?? previous.startedAt
+        if let earlier = previous.snapshotID {
+            merged.continuedSnapshotIDs = [earlier] + (previous.continuedSnapshotIDs ?? [])
+        }
         return merged
     }
 

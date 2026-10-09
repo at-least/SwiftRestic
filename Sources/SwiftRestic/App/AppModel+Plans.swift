@@ -61,6 +61,7 @@ extension AppModel {
                     PlanStatus.willNotRunCaption(for: $0, existingRepositoryIDs: existingRepositoryIDs, now: now)
                 }
             },
+            partialSkip: { self.standingPartialSkip(for: $0)?.detailText },
             hold: scheduleHold,
             now: now,
             relative: { Format.ago($0, now: now) }

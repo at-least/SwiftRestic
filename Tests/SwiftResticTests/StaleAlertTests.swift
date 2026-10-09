@@ -21,8 +21,11 @@ struct StaleAlertTests {
         return plan
     }
 
-    private func due(_ plans: [BackupPlan], days: Int = 7, running: Set<UUID> = [], snapshots: [UUID: Date] = [:]) -> [StalePlanAlert] {
-        StaleAlert.due(plans: plans, latestSnapshotTimes: snapshots, thresholdDays: days, running: running, now: now)
+    private func due(
+        _ plans: [BackupPlan], days: Int = 7, running: Set<UUID> = [], snapshots: [UUID: Date] = [:],
+        awayDrives: (BackupPlan) -> [String] = { _ in [] }
+    ) -> [StalePlanAlert] {
+        StaleAlert.due(plans: plans, latestSnapshotTimes: snapshots, thresholdDays: days, running: running, now: now, awayDrives: awayDrives)
     }
 
     @Test("a daily plan past the window is named once, with the days and the moment it counts from")
@@ -82,6 +85,43 @@ struct StaleAlertTests {
         let text = StaleAlert.notification(planTitle: "Documents (Home NAS)", alert: StalePlanAlert(planID: UUID(), lastBackupAt: last, days: 8))
         #expect(text.title == "Documents (Home NAS)")
         #expect(text.body == "No successful backup in 8 days — the last one was \(Format.timestamp(last)).")
+    }
+
+    @Test("a plan backing up around an away drive is named from its last whole backup, for the drive, and re-armed by the next whole one")
+    func partialBackups() throws {
+        var partial = plan(lastSuccessDaysAgo: 0.5)
+        partial.sources = ["/Users/someone/Documents", "/Volumes/Archive SSD/Photos", "/Volumes/Archive SSD/Music"]
+        let whole = now.addingTimeInterval(-9 * day)
+        partial.lastCompleteBackupAt = whole
+        let alert = try #require(due([partial], awayDrives: { _ in ["Archive SSD"] }).first)
+        #expect(alert == StalePlanAlert(planID: partial.id, lastBackupAt: whole, days: 9, isPartial: true, awayDrives: ["Archive SSD"]))
+        let text = StaleAlert.notification(planTitle: "Documents (Home NAS)", alert: alert)
+        #expect(text.body == "“Archive SSD” has not been backed up in 9 days — the last backup that included it was \(Format.timestamp(whole)); the plan's other folders are still backed up.")
+        // Two drives; and none known to be away now.
+        let two = StalePlanAlert(planID: partial.id, lastBackupAt: whole, days: 9, isPartial: true, awayDrives: ["Archive SSD", "Photos"])
+        #expect(StaleAlert.notification(planTitle: "Documents", alert: two).body.hasPrefix("“Archive SSD” and “Photos” have not been backed up in 9 days — the last backup that included them was"))
+        let unnamed = StalePlanAlert(planID: partial.id, lastBackupAt: whole, days: 9, isPartial: true)
+        #expect(StaleAlert.notification(planTitle: "Documents", alert: unnamed).body
+            == "Some folders have not been backed up in 9 days — the last backup that included every folder was \(Format.timestamp(whole)); the others are still backed up.")
+
+        // Named once per stretch; a newer whole backup re-arms it; a whole
+        // backup inside the window names nothing.
+        var alerted = partial
+        alerted.staleAlertedFor = whole
+        #expect(due([alerted], awayDrives: { _ in ["Archive SSD"] }).isEmpty)
+        alerted.lastCompleteBackupAt = now.addingTimeInterval(-8 * day)
+        #expect(due([alerted]).map(\.days) == [8])
+        alerted.lastCompleteBackupAt = now.addingTimeInterval(-2 * day)
+        #expect(due([alerted]).isEmpty)
+        // A plan stamped before the field existed counts from its last success.
+        #expect(due([plan(lastSuccessDaysAgo: 0.5)]).isEmpty)
+        // The drives: the plan's folders on volumes not mounted now, each named once.
+        #expect(StaleAlert.awayDrives(of: partial, isMounted: { $0.hasPrefix("/Volumes/") ? false : nil }) == ["Archive SSD"])
+        #expect(StaleAlert.awayDrives(of: partial, isMounted: { _ in true }).isEmpty)
+        // The stamp survives an editor save, as the others do.
+        var draft = partial
+        draft.lastCompleteBackupAt = nil
+        #expect(partial.merging(draft: draft).lastCompleteBackupAt == whole)
     }
 
     @Test("the setting is on at seven days unless the file says otherwise, and the alert mark survives an editor save")

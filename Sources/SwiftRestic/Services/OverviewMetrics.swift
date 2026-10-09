@@ -70,6 +70,12 @@ struct ProtectionSummary: Equatable, Sendable {
     /// words ("Code: Failed — 3 hours ago"), so the count names its subject.
     /// Empty when every plan is protected.
     var attentionLines: [String] = []
+    /// One line per protected plan whose newest backup left an away
+    /// drive's folders out, in the record's own words ("Journal: “Archive
+    /// SSD” is not connected; the other folders were backed up.") —
+    /// protected, since the rest is backed up, but not whole. Empty when
+    /// every plan's newest backup read every folder.
+    var skippedLines: [String] = []
     /// One line per protected plan that will not run by itself now — its
     /// pause, or "Not scheduled" — in the sidebar's words ("Photos: Paused
     /// — Sunday at 03:00"), so "all protected" cannot hide a plan that has
@@ -353,6 +359,7 @@ enum OverviewMetrics {
         listingLoaded: Bool,
         otherBackupsCount: Int,
         willNotRun: (UUID) -> String?,
+        partialSkip: (UUID) -> String? = { _ in nil },
         hold: ScheduleHold?,
         now: Date,
         relative: (Date) -> String = { Format.relative($0) }
@@ -395,13 +402,19 @@ enum OverviewMetrics {
         // (`PlanStatus.willNotRunCaption`); an unprotected one's line above
         // already names it.
         var held: [String] = []
+        // And the protected plans whose newest backup went around an away
+        // drive (`partialSkip`: the record's words), which "protected"
+        // alone would hide.
+        var skipped: [String] = []
         for row in rows where row.isKnown && row.isProtected && !row.isRunning {
             if let caption = willNotRun(row.planID) { held.append("\(row.planName): \(caption)") }
+            if let skip = partialSkip(row.planID) { skipped.append("\(row.planName): \(skip)") }
         }
         return ProtectionSummary(
             text: segments.joined(separator: " · "),
             showsResume: showsResume,
             attentionLines: attention,
+            skippedLines: skipped,
             heldLines: held
         )
     }

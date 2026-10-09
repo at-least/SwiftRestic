@@ -69,7 +69,9 @@ enum BackupRunEngine {
         /// Sink-built is load-bearing: @Sendable captures a concrete
         /// main-actor class, not an existential or a generic parameter.
         func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void
-        func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool)
+        /// `complete`: the snapshot holds every folder — false when the run
+        /// set aside an away drive's folders (`BackupPlan.lastCompleteBackupAt`).
+        func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool, complete: Bool)
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
         /// A start ping in flight must not be lost to a quit mid-backup. The
         /// channels are read at send time, not capture time — a channel
@@ -127,7 +129,7 @@ enum BackupRunEngine {
                     record.outcome = .failed
                     record.failureMessage =
                         "A before-backup hook failed and is set to cancel the backup."
-                    sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
+                    sink.markPlanRun(plan.id, at: startedAt, succeeded: false, complete: false)
                     await finish(
                         record: &record, plan: plan, hooks: hooks, context: hookContext,
                         transcript: transcript, sink: sink
@@ -142,7 +144,7 @@ enum BackupRunEngine {
             if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
                 record.outcome = .skipped
                 record.detailText = RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
-                sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
+                sink.markPlanRun(plan.id, at: startedAt, succeeded: false, complete: false)
                 // The listing learns it now, not at the next launch: the
                 // refresh answers from the same check, without restic.
                 await sink.refreshSnapshots(repositoryID: repository.id)
@@ -210,7 +212,7 @@ enum BackupRunEngine {
             // The snapshot exists from here on. Mark the run before doing anything
             // else, so nothing that follows can make a good backup look like a
             // failed one.
-            sink.markPlanRun(plan.id, at: startedAt, succeeded: true)
+            sink.markPlanRun(plan.id, at: startedAt, succeeded: true, complete: awaySources.isEmpty)
 
             // Retention runs only after a backup that actually produced a
             // snapshot, so a failed run can never trigger a forget against stale
@@ -260,11 +262,11 @@ enum BackupRunEngine {
             // (`catchUpAfterMount`).
             record.outcome = .skipped
             record.detailText = RunRecord.skippedReason(sources: plan.sources)
-            sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
+            sink.markPlanRun(plan.id, at: startedAt, succeeded: false, complete: false)
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
             sink.noteAuthFailure(error, repositoryID: repository.id)
-            sink.markPlanRun(plan.id, at: startedAt, succeeded: false)
+            sink.markPlanRun(plan.id, at: startedAt, succeeded: false, complete: false)
         }
 
         hookContext.snapshotID = record.snapshotID

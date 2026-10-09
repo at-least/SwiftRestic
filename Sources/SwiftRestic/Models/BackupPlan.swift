@@ -286,6 +286,13 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var hooks: [BackupHook] = []
     var lastRunAt: Date?
     var lastSuccessAt: Date?
+    /// The last backup that read every folder. `lastSuccessAt` also
+    /// advances on a run that set aside an away drive's folders and backed
+    /// up the rest (`RunRecord.partlySkippedReason`); the quiet-plan alert
+    /// counts from this one, so weeks of such backups cannot pass for whole
+    /// ones. Nil on a plan stamped only before the field existed, which
+    /// counts from `lastSuccessAt` until its next whole backup.
+    var lastCompleteBackupAt: Date?
     /// The last backup the quiet-plan alert last named this plan for
     /// (`StaleAlert`): one notification per stretch, re-armed by a newer
     /// success.
@@ -318,6 +325,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         hooks = c.value(.hooks, default: [])
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
+        lastCompleteBackupAt = c.optional(.lastCompleteBackupAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
         excludeCloudFiles = c.value(.excludeCloudFiles, default: false)
     }
@@ -375,6 +383,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         var merged = draft
         merged.lastRunAt = lastRunAt
         merged.lastSuccessAt = lastSuccessAt
+        merged.lastCompleteBackupAt = lastCompleteBackupAt
         merged.pausedUntil = pausedUntil
         merged.staleAlertedFor = staleAlertedFor
         return merged
