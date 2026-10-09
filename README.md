@@ -726,9 +726,11 @@ was just then looking at. Captures prefer ScreenCaptureKit, which renders
 Tahoe's glass materials correctly but needs a one-time grant (System Settings
 → Privacy & Security → Screen Recording → SwiftRestic); without it the shots
 fall back to `cacheDisplay`, which draws those materials black on macOS 26,
-and each capture logs which backend produced it. Either way the session must
-be unlocked — a locked screen hides the window from capture entirely. All
-of it is `#if DEBUG`. SwiftUI defers creating the main window until the app is
+and each capture logs which backend produced it. Either way keep the session
+unlocked: on macOS 26 a locked screen hid the window from this capture
+entirely (2026-09-14); on macOS 27.0.1 `screencapture -l` still photographed
+a window by its ID while the screen was locked, a region capture (`-R`)
+failed, and this capture was not tried (2026-10-09). All of it is `#if DEBUG`. SwiftUI defers creating the main window until the app is
 activated; the capture path activates the app on purpose at launch for exactly
 that reason, so launching through `open` (as above) and launching the binary
 directly both work:
