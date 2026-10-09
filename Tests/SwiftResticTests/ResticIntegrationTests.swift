@@ -302,11 +302,21 @@ struct ResticIntegrationTests {
         )
 
         // A backup of its own holds a lock while the preview runs — the
-        // situation a user opening the sheet mid-backup is in.
+        // situation a user opening the sheet mid-backup is in. Its stdin
+        // command waits for a file this test writes, so the lock is held
+        // for as long as the preview and the control below take, however
+        // slowly restic runs: a 30 s sleep in its place let the lock go
+        // before the control forget on a loaded Mac (2026-10-09, the test
+        // at 228 s against its usual 12), and the forget pruned two
+        // snapshots.
         let binary = try ResticBinary.locate(userOverride: nil)
+        let release = fixture.root.appendingPathComponent("release-hold")
         let holder = Process()
         holder.executableURL = binary.url
-        holder.arguments = ["backup", "--stdin-from-command", "--stdin-filename", "hold", "--", "/bin/sleep", "30"]
+        holder.arguments = [
+            "backup", "--stdin-from-command", "--stdin-filename", "hold", "--",
+            "/bin/sh", "-c", "while [ ! -e \"$1\" ]; do sleep 0.2; done", "hold", release.path,
+        ]
         var environment = ProcessInfo.processInfo.environment
         environment["RESTIC_REPOSITORY"] = fixture.root.appendingPathComponent("repo").path
         environment["RESTIC_PASSWORD"] = Self.password
@@ -314,10 +324,16 @@ struct ResticIntegrationTests {
         holder.standardOutput = FileHandle.nullDevice
         holder.standardError = FileHandle.nullDevice
         try holder.run()
-        // A failed expectation must not leave restic holding the lock.
-        defer { holder.terminate() }
+        // A failed expectation must not leave restic holding the lock, nor
+        // the shell waiting for a release that never comes.
+        defer {
+            try? Data().write(to: release)
+            holder.terminate()
+        }
         let locks = fixture.root.appendingPathComponent("repo/locks")
-        let lockDeadline = Date.now.addingTimeInterval(20)
+        // Waits on restic's own start — key derivation and the repository
+        // open — which load stretches; 20 s was a bet on it.
+        let lockDeadline = Date.now.addingTimeInterval(120)
         while ((try? FileManager.default.contentsOfDirectory(atPath: locks.path)) ?? []).isEmpty, Date.now < lockDeadline {
             try await Task.sleep(for: .milliseconds(100))
         }
@@ -341,8 +357,11 @@ struct ResticIntegrationTests {
             }
         }
 
-        holder.terminate()
-        await Self.waitForExit(holder)
+        // Let the holder finish: the shell exits, restic writes its untagged
+        // snapshot and releases the lock on its own.
+        try Data().write(to: release)
+        await Self.waitForExit(holder, within: 120)
+        #expect(!holder.isRunning, "the holder did not finish after its release")
         // Nothing was removed — neither by the dry run nor by the refused forget.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
     }

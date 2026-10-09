@@ -25,9 +25,10 @@ Two rules the flaky-run hunt of 2026-09-14 added:
   the restart banner — which also fires for a plain test crash or timeout,
   so read the xcresult before blaming a collision.
 
-Five timing tests failed now and then under load and passed on a re-run. On
+Six timing tests failed now and then under load and passed on a re-run. On
 2026-10-04, 5 of 13 `./build.sh test` runs failed on one or more of the first
-four, and the fifth failed in 1 of 6 later runs. Other work on the Mac held
+four, and the fifth failed in 1 of 6 later runs; the sixth failed once in the
+18 gate runs of 2026-10-09, in the one run that other work slowed 3.4×. Other work on the Mac held
 the load average between 7 and 53: another project's simulator UI tests and
 builds, and mediaanalysisd. No other test failed. Each bet on a wall clock
 that load stretches, and each was fixed the same day:
@@ -39,12 +40,14 @@ that load stretches, and each was fixed the same day:
 | "status lines are decoded and delivered while the run is still going" | 4 of 13 | `arrival < 0.7 * elapsed` | The stub (`dribble-wait`) holds the run open until the progress callback plants a flag, so mid-run delivery holds by construction |
 | "cancelling a backup ends the run and the child process is really gone" | 3 of 13 | "the stub never established its hang within 10 s; trace: [no trace]", no stub in `ps` | Waits up to 60 s for the hang, and the message says when the backup's task started |
 | "a refresh asked while another is running runs after it, not never" | 1 of 6 | "the refresh requested mid-flight never ran", after 11.4 s against a 10 s poll | Awaits the registry's background lane (`tasks.drain()`), where the re-run is registered |
+| "the retention preview is a dry run that works while a backup holds the lock" | 1 of 18 on 2026-10-09 | `Expectation failed: … snapshots(…, planID: plan.id).count == 3` (ResticIntegrationTests.swift:347) after 228 s against its usual 12–20, the whole run 1914 s against ~565; the second of its two issues, the control forget that ran, never reached the log | The backup that holds the lock reads its stdin from a shell waiting for a file the test writes after the control forget, where `/bin/sleep 30` had let the lock go while the preview and the forget were still starting; the wait for its lock is 120 s, not 20 |
 
 How the fixes were proved, each at the line that failed:
 - **Before.** A stand-in for load on the one term each threshold bet on made each old test fail with its recorded message: the shell living 2 s; 4 s before the first status line; a 3 s gap between lines; the backup's task waiting 11 s before it spawns the stub; the remembered re-run starting 11 s late.
 - **After.** The fixed tests pass under the same stand-ins: 96 tests in the four suites.
 - **Still able to fail.** With the remembered refresh dropped, the refresh test fails in 0.4 s. With the status line delivered after the stub gave up waiting, the status-line test fails.
 - **Natural failures.** A full run that afternoon, before the fixes, failed the grandchild and stall-cap tests on its own, with their recorded messages.
+- **The sixth, 2026-10-09.** A 31 s sleep between the holder's lock and the preview — the stand-in for the load that stretched that run — failed the old test in 51 s with its two issues, "Issue recorded" at the forget that ran and the count at 347; the fixed test passed under the same sleep in 45 s; with the release written before the control forget instead, it failed in 51 s with the same two issues.
 
 What load stretched is not measured. The suite runs one test at a time (the scheme's testable is `parallelizable = NO`): while a probe test ran first for 110 s, no other test finished. So no other test was holding the cooperative pool when these failed, and blocking as many pool threads as there are cores for 11 s, from inside the cancel test, did not fail it. The likelier source is the other work on the Mac. With the Mac lightly loaded (load average 6–9), the probe's per-10-s maxima over 45 windows were: a task's wait for the pool ≤ 1 ms; a utility-QoS block's wait ≤ 96 ms; `/bin/sh -c` spawn to observed exit 15–37 ms; a script written just before, run directly as every stub and raw-script test does, 55–897 ms, of which `Process.run()` took ≤ 3 ms.
 
@@ -277,6 +280,8 @@ Facts for the next scripted run:
 - **A locked screen fails `screencapture -R`** ("could not create image from rect", the display awake), and the accessibility tree of a fresh instance answered with the application element while it was locked; `screencapture -l <windowID>` still photographed the instance's window with its content. `CGSessionCopyCurrentDictionary`'s `CGSSessionScreenIsLocked` says whether it is locked: poll it before a scripted shot and after a long wait. The key is absent, not false, while the screen is unlocked — a waiter that matched `locked=0` slept through the unlock on 2026-10-09, and the bar photographs waited until the user was back — so test for the key's presence. Taken then: the idle, attention and empty faces of scratch instances and the user's own item, all in the bar's white ink, the attention face of the user's instance byte-identical to the scratch one's.
 - **To see a surface before the listing lands**, point the scratch configuration's `resticPathOverride` at a wrapper that sleeps on `snapshots` and execs restic otherwise: the listing is held for as long as the wrapper says while every other command runs at once. A cold index (no `index` folder) makes Find Files take the restic engine.
 - **A Table's cells follow their row's data.** A lookup held by the parent view and read in a cell closure did not re-render the cells when the lookup changed; rewriting the rows did.
+- **A submenu opens through the accessibility API** while a process holds its menu open: `AXPress` on the month item of the Files pane's "As backed up" menu and of the Compare sheet's "Compared with" menu opened its submenu, both photographed with their rows (the scratchpad's axshot `holdsub:` step, 2026-10-09 after the unlock). An Activity row is selected through its `AXRow`, one level above the cell's hosting group where the text sits, not through the cell. The plan page's problem card is one `AXButton` to the tree — its item lines' ⋯ menus cannot be opened that way.
+- **A partial skip merges live.** Two Back Up Now runs of a scratch Journal plan with a second source under an absent `/Volumes/…`, the plan paused: one Skipped record in Activity, "“Archive SSD” is not connected; the other folders were backed up. Skipped 2 times since …", on disk with `skipCount` 2 and the first run's snapshot in `continuedSnapshotIDs`, the repository two backups richer. Point the scratch repository at a copy first: the runs write to it.
 
 ### Not handled
 
