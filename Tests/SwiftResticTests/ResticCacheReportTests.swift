@@ -46,6 +46,18 @@ struct ResticCacheReportTests {
         #expect(ResticCacheReport.parse("") == nil)
     }
 
+    @Test("the caption's last sentence counts the unused folders, and says an empty cache is empty")
+    func unusedLine() {
+        let empty = ResticCacheReport(directory: "/c", count: 0, oldCount: 0, totalBytes: 0)
+        #expect(AppModel.unusedLine(empty) == "Nothing is cached yet.")
+        let fresh = ResticCacheReport(directory: "/c", count: 4, oldCount: 0, totalBytes: 1_000)
+        #expect(AppModel.unusedLine(fresh) == "None has gone unused for 30 days.")
+        let one = ResticCacheReport(directory: "/c", count: 4, oldCount: 1, totalBytes: 1_000)
+        #expect(AppModel.unusedLine(one) == "1 has not been used for 30 days.")
+        let many = ResticCacheReport(directory: "/c", count: 5, oldCount: 3, totalBytes: 1_000)
+        #expect(AppModel.unusedLine(many) == "3 have not been used for 30 days.")
+    }
+
     @Test("the cleanup note counts what the two reports differ by, or says nothing was old enough")
     func cleanupNote() {
         let before = ResticCacheReport(directory: "/c", count: 5, oldCount: 3, totalBytes: 10_000_000)

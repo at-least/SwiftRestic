@@ -8,7 +8,8 @@ import Foundation
 /// no JSON form (restic 0.19.1): it prints a table — "Repo ID / Last Used /
 /// Old / Size", a row per directory, "N days ago" always in days, "yes" in
 /// Old past `--max-age` days, the size in restic's binary units — and a
-/// last line "N cache dirs in <directory>".
+/// last line "N cache dirs in <directory>"; an empty cache prints only
+/// "no cache dirs found, basedir is <directory>".
 struct ResticCacheReport: Equatable, Sendable {
     /// The directory restic names: ~/Library/Caches/restic unless
     /// RESTIC_CACHE_DIR or XDG_CACHE_HOME moved it.

@@ -233,9 +233,7 @@ struct SettingsView: View {
             }
             Text(
                 "At \((report.directory as NSString).abbreviatingWithTildeInPath): one folder per repository restic has opened on this Mac, kept after a repository is removed here. "
-                    + (report.oldCount == 0
-                        ? "None has gone unused for \(ResticCacheReport.oldAfterDays) days."
-                        : "\(Format.count(report.oldCount)) \(report.oldCount == 1 ? "has" : "have") not been used for \(ResticCacheReport.oldAfterDays) days.")
+                    + AppModel.unusedLine(report)
             )
             .font(.caption)
             .foregroundStyle(.secondary)
