@@ -11,10 +11,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     private var backupScript: Result<BackupOutcome, Error> =
         .success(BackupOutcome(summary: nil, itemErrors: [], exitCode: 0))
     private var forgetScript: Result<Int, Error> = .success(0)
-    private var forgetPreviewScript: Result<RetentionPreview, Error> =
-        .success(RetentionPreview(kept: [], removed: []))
     private var checkScript: Result<ResticSummary?, Error> = .success(nil)
-    private var pruneScript: Result<String, Error> = .success("")
     private var snapshotsScript: Result<[Snapshot], Error> = .success([])
     private var statsScript: Result<RepositoryStats, Error> =
         .success(RepositoryStats(totalSize: 0))
@@ -46,18 +43,8 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return self
     }
 
-    func onForgetPreview(_ result: Result<RetentionPreview, Error>) -> Self {
-        locked { forgetPreviewScript = result }
-        return self
-    }
-
     func onCheck(_ result: Result<ResticSummary?, Error>) -> Self {
         locked { checkScript = result }
-        return self
-    }
-
-    func onPrune(_ result: Result<String, Error>) -> Self {
-        locked { pruneScript = result }
         return self
     }
 
@@ -215,7 +202,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     ) async throws -> String {
         record("prune")
         transcribe("prune")
-        return try locked { pruneScript }.get()
+        return ""
     }
 
     func runRaw(_ context: RepositoryContext, arguments: [String]) async throws -> String {
@@ -357,7 +344,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     /// Not transcribed: the preview is a read the sheet asks for, not a run.
     func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview {
         record("forgetPreview")
-        return try locked { forgetPreviewScript }.get()
+        return RetentionPreview(kept: [], removed: [])
     }
 
     func restore(

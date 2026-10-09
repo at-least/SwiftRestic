@@ -37,7 +37,6 @@ struct ProblemDotTests {
         return record
     }
 
-    private let hour0 = Date(timeIntervalSince1970: 1_700_000_000)
     private let hour1 = Date(timeIntervalSince1970: 1_700_003_600)
     private let hour2 = Date(timeIntervalSince1970: 1_700_007_200)
 
