@@ -135,7 +135,7 @@ extension AppModel {
                 notificationsProblemNoted = true
                 let message: String
                 if let problem = error as? NotificationProblem, problem == .permissionDenied {
-                    message = "macOS notification permission is off — turn SwiftRestic on in System Settings › Notifications to see failure alerts again."
+                    message = "macOS notification permission is off — turn SwiftRestic on in System Settings › Notifications to see its alerts again."
                 } else {
                     message = error.localizedDescription
                 }
