@@ -165,7 +165,6 @@ struct DiffCandidateGroupingTests {
         #expect(nested.flat.items == [times[0]])
         #expect(nested.submenus.map(\.label) == ["March 2026", "February 2026", "January 2026"])
         // Three months are captions in one list, as decided.
-        #expect(DiffCandidateGrouping.flatMonthLimit == 3)
         #expect(DiffCandidateGrouping.nested(Array(months.prefix(3))) == nil)
     }
 

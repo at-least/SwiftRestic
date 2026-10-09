@@ -143,11 +143,13 @@ enum MenuBarLogo {
     /// mark in its place — template rendering tints from the alpha channel
     /// alone, so a faded plate survives as gray. The construction fills the
     /// canvas proportionally, so the mark scales with it (the hero).
+    /// Template ink: the bar tints it, so only its alpha counts.
+    private static let ink = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
+
     private static func draw(in rect: CGRect, into context: CGContext, content: Content) {
         let s = impliedSize * rect.width / canvasSize
         let stroke = s * 0.068
         let center = CGPoint(x: rect.midX, y: rect.midY)
-        let ink = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
 
         // Circular restore arrow: opening on the left, sweeping
         // counterclockwise from the tail below it to the head above.
@@ -204,8 +206,7 @@ enum MenuBarLogo {
     /// The exclamation mark (`exclamationBarTop` and friends): the bar with
     /// the stroke's round ends, the dot below it, both solid ink.
     private static func drawExclamation(into context: CGContext, center: CGPoint, s: CGFloat, stroke: CGFloat) {
-        context.saveGState()
-        context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
+        context.setFillColor(ink)
         let bar = CGRect(
             x: center.x - stroke / 2,
             y: center.y + exclamationBarBottom * s,
@@ -222,7 +223,6 @@ enum MenuBarLogo {
             width: dotRadius * 2,
             height: dotRadius * 2
         ))
-        context.restoreGState()
     }
 
     private static func drawStack(

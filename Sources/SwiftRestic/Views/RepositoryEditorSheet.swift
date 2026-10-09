@@ -15,10 +15,12 @@ struct RepositoryEditorSheet: View {
     @State private var initial: Repository?
     @State private var initialPassword = ""
     @State private var initialProviderSecret = ""
-    /// Whether this Mac holds a password for the repository: nil until the
-    /// Keychain has answered, and still nil when its read failed — a failure
-    /// is reported as itself, never read as "nothing stored".
-    @State private var hasStoredPassword: Bool?
+    /// What the Keychain holds for the repository: nil until it has
+    /// answered, and still nil when its read failed — a failure is reported
+    /// as itself, never read as "nothing stored". The requirements' "has a
+    /// stored password" and the probe's fallback both read it, so the sheet
+    /// asks the Keychain once.
+    @State private var storedSecrets: (password: String?, providerSecret: String?)?
     @State private var status: Status?
     @State private var isWorking = false
     /// The edit Save could not verify. Save Anyway stands only while the
@@ -556,7 +558,7 @@ struct RepositoryEditorSheet: View {
             if providerSecret.isEmpty {
                 providerSecret = secrets.providerSecret ?? ""
             }
-            hasStoredPassword = !(secrets.password ?? "").isEmpty
+            storedSecrets = secrets
         } catch {
             // Prefill failed — say so. Blank fields would read as "no
             // password stored" and a save would silently keep whatever the
@@ -579,12 +581,16 @@ struct RepositoryEditorSheet: View {
     /// The typed password, else the stored one; neither throws
     /// `passwordMissing` — the run path's answer — so an empty password never
     /// reaches restic, whose own refusal advises `--insecure-no-password`.
-    private func effectivePassword() async throws -> String {
+    private func effectivePassword() throws -> String {
         try EditorRequirements.probePassword(
             typed: password,
-            stored: password.isEmpty ? try await model.storedPassword(for: draft.id) : nil,
+            stored: password.isEmpty ? storedSecrets?.password : nil,
             repositoryName: draft.name
         )
+    }
+
+    private var hasStoredPassword: Bool? {
+        storedSecrets.map { !($0.password ?? "").isEmpty }
     }
 
     /// Probes the repository, optionally running `restic init` when it is missing.
@@ -615,7 +621,7 @@ struct RepositoryEditorSheet: View {
             let service = try model.service()
             let context = RepositoryContext(
                 repository: draft,
-                password: try await effectivePassword(),
+                password: try effectivePassword(),
                 providerSecret: providerSecret.isEmpty ? nil : providerSecret,
                 settings: model.configuration.settings
             )

@@ -302,32 +302,31 @@ struct ResticIntegrationTests {
         )
 
         // A backup of its own holds a lock while the preview runs — the
-        // situation a user opening the sheet mid-backup is in. Its stdin
-        // command waits for a file this test writes, so the lock is held
-        // for as long as the preview and the control below take, however
-        // slowly restic runs: a 30 s sleep in its place let the lock go
-        // before the control forget on a loaded Mac (2026-10-09, the test
-        // at 228 s against its usual 12), and the forget pruned two
-        // snapshots.
+        // situation a user opening the sheet mid-backup is in. It reads its
+        // file from a pipe this test holds open, so the lock is held for as
+        // long as the preview and the control below take, however slowly
+        // restic runs: a 30 s sleep in its place let the lock go before the
+        // control forget on a loaded Mac (2026-10-09, the test at 228 s
+        // against its usual 12), and the forget pruned two snapshots.
         let binary = try ResticBinary.locate(userOverride: nil)
-        let release = fixture.root.appendingPathComponent("release-hold")
         let holder = Process()
         holder.executableURL = binary.url
-        holder.arguments = [
-            "backup", "--stdin-from-command", "--stdin-filename", "hold", "--",
-            "/bin/sh", "-c", "while [ ! -e \"$1\" ]; do sleep 0.2; done", "hold", release.path,
-        ]
+        holder.arguments = ["backup", "--stdin", "--stdin-filename", "hold"]
         var environment = ProcessInfo.processInfo.environment
         environment["RESTIC_REPOSITORY"] = fixture.root.appendingPathComponent("repo").path
         environment["RESTIC_PASSWORD"] = Self.password
         holder.environment = environment
+        let feed = Pipe()
+        holder.standardInput = feed
         holder.standardOutput = FileHandle.nullDevice
         holder.standardError = FileHandle.nullDevice
         try holder.run()
-        // A failed expectation must not leave restic holding the lock, nor
-        // the shell waiting for a release that never comes.
+        // One byte: with none, restic reports "no data read" (exit 3) at
+        // the end of input, though it still saves and unlocks.
+        try feed.fileHandleForWriting.write(contentsOf: Data("x".utf8))
+        // A failed expectation must not leave restic holding the lock.
         defer {
-            try? Data().write(to: release)
+            try? feed.fileHandleForWriting.close()
             holder.terminate()
         }
         let locks = fixture.root.appendingPathComponent("repo/locks")
@@ -357,11 +356,11 @@ struct ResticIntegrationTests {
             }
         }
 
-        // Let the holder finish: the shell exits, restic writes its untagged
-        // snapshot and releases the lock on its own.
-        try Data().write(to: release)
+        // Let the holder finish: at the end of its input restic writes its
+        // untagged snapshot and releases the lock on its own.
+        try feed.fileHandleForWriting.close()
         await Self.waitForExit(holder, within: 120)
-        #expect(!holder.isRunning, "the holder did not finish after its release")
+        #expect(!holder.isRunning, "the holder did not finish after its input ended")
         // Nothing was removed — neither by the dry run nor by the refused forget.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
     }

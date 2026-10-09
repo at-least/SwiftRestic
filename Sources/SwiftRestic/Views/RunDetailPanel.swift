@@ -177,8 +177,7 @@ struct RunDetailPanel: View {
 
     @ViewBuilder
     private var messages: some View {
-        let unreadable = run.unreadableItems
-        let unlisted = run.itemErrorCount - unreadable.count
+        let (unreadable, unlisted) = run.unreadableItemListing()
         if hasMessages {
             VStack(alignment: .leading, spacing: 6) {
                 if let failure = run.failureMessage {

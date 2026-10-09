@@ -42,39 +42,14 @@ struct ProtectionCard: View {
                                 .help("Resume scheduled backups, checks and prunes")
                         }
                     }
-                    ForEach(summary.attentionLines, id: \.self) { line in
-                        // The sidebar triangle's glyph; the words stay
-                        // secondary, as the caveat's do.
-                        Label {
-                            Text(line).foregroundStyle(.secondary)
-                        } icon: {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(Theme.warning)
-                        }
-                        .font(.caption)
-                    }
-                    ForEach(summary.skippedLines, id: \.self) { line in
-                        // Backed up around an away drive: Activity's skip
-                        // glyph, and the record's words.
-                        Label {
-                            Text(line).foregroundStyle(.secondary)
-                        } icon: {
-                            Image(systemName: RunRecord.Outcome.skipped.symbolName ?? "minus.circle")
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.caption)
-                    }
-                    ForEach(summary.heldLines, id: \.self) { line in
-                        // Protected, but it will not run by itself: a pause
-                        // is a choice, so its glyph, not the warning's.
-                        Label {
-                            Text(line).foregroundStyle(.secondary)
-                        } icon: {
-                            Image(systemName: "pause.circle")
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.caption)
-                    }
+                    // The sidebar triangle's glyph for what needs attention;
+                    // Activity's skip glyph for a backup around an away drive,
+                    // with the record's words; a pause is a choice, so its
+                    // glyph, not the warning's. The words stay secondary
+                    // throughout, as the caveat's do.
+                    captionLines(summary.attentionLines, symbol: "exclamationmark.triangle.fill", tint: Theme.warning)
+                    captionLines(summary.skippedLines, symbol: RunRecord.Outcome.skipped.symbolName ?? "minus.circle", tint: .secondary)
+                    captionLines(summary.heldLines, symbol: "pause.circle", tint: .secondary)
                 } else {
                     // No count is honest yet: the card's first glance says why.
                     SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: repositoryID))
@@ -89,6 +64,17 @@ struct ProtectionCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func captionLines(_ lines: [String], symbol: String, tint: some ShapeStyle) -> some View {
+        ForEach(lines, id: \.self) { line in
+            Label {
+                Text(line).foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: symbol).foregroundStyle(tint)
+            }
+            .font(.caption)
         }
     }
 }
@@ -226,8 +212,7 @@ struct RecentProblemsCard: View {
                     ForEach(Array(shown)) { group in
                         let run = group.newest
                         let title = RunRecordPresentation.problemRowTitle(for: run, plans: model.configuration.plans)
-                        let when = Format.ago(run.finishedAt, now: now)
-                        let times = group.count > 1 ? "\(group.count) times · " : ""
+                        let when = PlanStatus.problemWhen(count: group.count, ago: Format.ago(run.finishedAt, now: now))
                         let caption = RunRecordPresentation.problemRowCaption(for: run)
                         Button { showInActivity(run) } label: {
                             HStack(spacing: 6) {
@@ -248,14 +233,14 @@ struct RecentProblemsCard: View {
                                 Spacer()
                                 // The newest of them is the one the row
                                 // opens.
-                                Text(times + when)
+                                Text(when)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 DashboardRowChevron()
                             }
                         }
                         .buttonStyle(HoverableButtonStyle())
-                        .accessibilityLabel("\(title): \(caption). \(times)\(when). Show in Activity")
+                        .accessibilityLabel("\(title): \(caption). \(when). Show in Activity")
                     }
                     if hidden > 0 {
                         Button {

@@ -170,8 +170,19 @@ enum Scheduler {
         runs: [RunRecord],
         now: Date = .now
     ) -> String {
+        lastMaintenanceText(task, of: repository, newest: newestMaintenanceRun(task, of: repository, runs: runs), now: now)
+    }
+
+    /// The same, given the newest run already found (`newestMaintenanceRun`)
+    /// — a page that also shows the run finds it once.
+    static func lastMaintenanceText(
+        _ task: MaintenanceTask,
+        of repository: Repository,
+        newest: RunRecord?,
+        now: Date = .now
+    ) -> String {
         let stamp = task == .check ? repository.maintenance.lastCheckAt : repository.maintenance.lastPruneAt
-        guard let newest = newestMaintenanceRun(task, of: repository, runs: runs) else { return Format.ago(stamp, now: now) }
+        guard let newest else { return Format.ago(stamp, now: now) }
         let ago = Format.ago(newest.startedAt, now: now)
         switch newest.outcome {
         case .succeeded: return ago

@@ -279,7 +279,7 @@ final class AppModel {
 
     init(
         store: ConfigStore = ConfigStore(),
-        secrets: SecretStore = .keychain,
+        secrets: SecretStore = .standard,
         defaults: UserDefaults = .standard,
         localHostname: String = ResticService.localHostname
     ) {

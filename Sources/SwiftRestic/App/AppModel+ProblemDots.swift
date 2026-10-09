@@ -21,10 +21,7 @@ extension AppModel {
     /// the record whose words name the drive, for the Protection card.
     /// Nil once any later backup ran, whole or not.
     func standingPartialSkip(for planID: UUID) -> RunRecord? {
-        let newest = configuration.runs
-            .filter { $0.planID == planID && $0.kind == .backup }
-            .max { $0.finishedAt < $1.finishedAt }
-        guard let newest, newest.outcome == .skipped, newest.snapshotID != nil else { return nil }
+        guard let newest = newestRun(for: planID), newest.isPartialSkip else { return nil }
         return newest
     }
 
@@ -74,10 +71,10 @@ extension AppModel {
     /// count in Activity and the 7-day problem count, as check and prune do.
     private func newestRun(
         for planID: UUID,
-        outcomeIn outcomes: Set<RunRecord.Outcome>
+        outcomeIn outcomes: Set<RunRecord.Outcome>? = nil
     ) -> RunRecord? {
         configuration.runs
-            .filter { $0.planID == planID && $0.kind == .backup && outcomes.contains($0.outcome) }
+            .filter { $0.planID == planID && $0.kind == .backup && outcomes?.contains($0.outcome) ?? true }
             .max { $0.finishedAt < $1.finishedAt }
     }
 }

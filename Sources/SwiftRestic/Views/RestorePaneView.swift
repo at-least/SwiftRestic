@@ -539,12 +539,17 @@ struct RestorePaneView: View {
     /// "3 changes inside this folder since Oct 7, 2026 at 11:00 PM: 2
     /// modified, 1 removed" — the header's baseline, the tally's kinds.
     private func insideHelp(_ inside: ChangesInside) -> String {
+        "\(Format.plural(inside.total, "change")) inside this folder\(sinceBaseline): \(inside.summary)"
+    }
+
+    /// " since Oct 7, 2026 at 11:00 PM" — the same for every row, so it is
+    /// formatted once per render, not once per folder with changes.
+    private var sinceBaseline: String {
         let baseline: Snapshot? = switch comparison {
         case let .comparing(baseline), let .compared(baseline, _, _), let .failed(baseline, _): baseline
         case .firstBackup, nil: nil
         }
-        let since = baseline.map { " since \(Format.timestamp($0.time))" } ?? ""
-        return "\(Format.plural(inside.total, "change")) inside this folder\(since): \(inside.summary)"
+        return baseline.map { " since \(Format.timestamp($0.time))" } ?? ""
     }
 
     /// The record a drag names is the one the rows on screen were built

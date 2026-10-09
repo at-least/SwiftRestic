@@ -33,10 +33,8 @@ struct BackupRunEngineTests {
             return { _ in }
         }
 
-        func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool, complete: Bool) {
-            // One entry, so the pinned sequences read the stamp whole: a
-            // clean run stamps succeeded and complete, a failure neither.
-            log.append("mark:\(succeeded),complete:\(complete)")
+        func markPlanRun(_ planID: UUID, at date: Date, wrote stamp: BackupStamp) {
+            log.append("mark:\(stamp)")
         }
 
         func noteAuthFailure(_ error: Error, repositoryID: UUID) {
@@ -100,7 +98,7 @@ struct BackupRunEngineTests {
             "ping:started",
             "phase:backingUp",
             "reporter-built",
-            "mark:true,complete:true",
+            "mark:whole",
             "phase:applyingRetention",
             "refresh",
             "deliver:succeeded",
@@ -131,7 +129,7 @@ struct BackupRunEngineTests {
         let plan = makePlan()
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
 
-        #expect(sink.log.contains("mark:false,complete:false"))
+        #expect(sink.log.contains("mark:nothing"))
         #expect(sink.log.contains("auth-noted"))
         #expect(sink.deliveredRecords[0].outcome == .failed)
     }
@@ -202,7 +200,7 @@ struct BackupRunEngineTests {
         // user to remove a lock nothing left behind.
         #expect(record.itemErrors == ["Retention skipped: another backup or job held the repository's lock — retention runs again after the next backup."])
         // The snapshot was written; the run itself stays marked successful.
-        #expect(sink.log.contains("mark:true,complete:true"))
+        #expect(sink.log.contains("mark:whole"))
     }
 
     @Test("stopping a backup during its own retention step reads as cancelled, not a warning")
@@ -225,7 +223,7 @@ struct BackupRunEngineTests {
         // The snapshot was written before the stop: it keeps its record and
         // its success stamp, and nothing stamps the run again as failed.
         #expect(record.snapshotID == "cafe0000")
-        #expect(sink.log.filter { $0.hasPrefix("mark:") } == ["mark:true,complete:true"], "log was \(sink.log)")
+        #expect(sink.log.filter { $0.hasPrefix("mark:") } == ["mark:whole"], "log was \(sink.log)")
         #expect(!sink.log.contains("auth-noted"))
     }
 
@@ -797,8 +795,8 @@ private final class StubServiceSink: BackupRunEngine.Sink {
     func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {
         base.progressReporter(planID: planID)
     }
-    func markPlanRun(_ planID: UUID, at date: Date, succeeded: Bool, complete: Bool) {
-        base.markPlanRun(planID, at: date, succeeded: succeeded, complete: complete)
+    func markPlanRun(_ planID: UUID, at date: Date, wrote stamp: BackupStamp) {
+        base.markPlanRun(planID, at: date, wrote: stamp)
     }
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
         base.noteAuthFailure(error, repositoryID: repositoryID)

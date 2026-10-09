@@ -66,6 +66,19 @@ enum ResticPath {
         return last == path.unicodeScalars.startIndex ? "/" : String(path.unicodeScalars[..<last])
     }
 
+    /// The folders above `path`, nearest first, up to the root: "/a/b/c" →
+    /// ["/a/b", "/a", "/"]; none for the root or a bare name. `parent`'s
+    /// byte-exact steps, so "/src/data2" is never inside "/src/data".
+    static func ancestors(of path: String) -> [String] {
+        var ancestors: [String] = []
+        var current = path
+        while current != "/", current.contains("/") {
+            current = parent(of: current)
+            ancestors.append(current)
+        }
+        return ancestors
+    }
+
     /// Whether `path` is `folder` or inside it, byte for byte, as the index
     /// compares paths: "/Data2" is not inside "/Data".
     static func holds(_ folder: String, _ path: String) -> Bool {

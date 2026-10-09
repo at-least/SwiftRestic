@@ -133,15 +133,9 @@ enum OverviewMetrics {
     /// plan, kind and outcome, never by a guessed cause; Activity keeps each
     /// run. Display only: the stored history is untouched.
     static func problemGroups(_ problems: [RunRecord]) -> [ProblemGroup] {
-        struct Key: Hashable {
-            var planID: UUID?
-            var repositoryID: UUID?
-            var kind: RunRecord.Kind
-            var outcome: RunRecord.Outcome
-        }
-        var groups: [Key: ProblemGroup] = [:]
+        var groups: [ProblemKey: ProblemGroup] = [:]
         for run in problems {
-            let key = Key(planID: run.planID, repositoryID: run.repositoryID, kind: run.kind, outcome: run.outcome)
+            let key = ProblemKey(run)
             if var group = groups[key] {
                 group.count += 1
                 if run.finishedAt > group.newest.finishedAt { group.newest = run }
@@ -158,8 +152,24 @@ enum OverviewMetrics {
     /// plan page's card and the repository page say one number. One when
     /// the problem stands alone, or is older than the week's window.
     static func recurrences(of problem: RunRecord, in runs: [RunRecord], now: Date) -> Int {
-        problemGroups(problems(in: runs, since: problemWindowStart(from: now)))
-            .first { $0.newest.id == problem.id }?.count ?? 1
+        let key = ProblemKey(problem)
+        return max(1, problems(in: runs, since: problemWindowStart(from: now)).count { ProblemKey($0) == key })
+    }
+
+    /// What one Recent problems row collects: a plan's (or a repository's
+    /// upkeep's) runs of one kind that ended the same way.
+    private struct ProblemKey: Hashable {
+        var planID: UUID?
+        var repositoryID: UUID?
+        var kind: RunRecord.Kind
+        var outcome: RunRecord.Outcome
+
+        init(_ run: RunRecord) {
+            planID = run.planID
+            repositoryID = run.repositoryID
+            kind = run.kind
+            outcome = run.outcome
+        }
     }
 
     /// Whether a backup problem no longer stands: a successful backup of the
@@ -173,7 +183,7 @@ enum OverviewMetrics {
         guard problem.kind == .backup, let planID = problem.planID else { return false }
         return runs.contains {
             $0.kind == .backup && $0.planID == planID
-                && ($0.outcome == .succeeded || $0.outcome == .skipped && $0.snapshotID != nil)
+                && ($0.outcome == .succeeded || $0.isPartialSkip)
                 && $0.finishedAt > problem.finishedAt
         }
     }
@@ -416,6 +426,19 @@ enum OverviewMetrics {
             attentionLines: attention,
             skippedLines: skipped,
             heldLines: held
+        )
+    }
+
+    /// The Snapshots tile of a repository page (`subject` "here") or a plan
+    /// page ("of this plan"): `snapshotsLine` on its face, the oldest
+    /// backup's moment behind it. `snapshots` are newest first, as every
+    /// listing is (the pages read their newest from `first`), so the oldest
+    /// is the last.
+    static func snapshotsTile(total: Int, otherBackups: Int, snapshots: [Snapshot], subject: String) -> TileFace {
+        let oldest = snapshots.last?.time
+        return TileFace(
+            value: snapshotsLine(total: total, otherBackups: otherBackups, since: oldest),
+            help: oldest.map { "The oldest backup \(subject) is from \(Format.timestamp($0))." }
         )
     }
 

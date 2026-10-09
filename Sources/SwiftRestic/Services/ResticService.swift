@@ -188,10 +188,7 @@ struct ResticService: ResticClient {
             invocation: ResticInvocation(arguments: ["cache"], timeout: 120, retainFullOutput: true)
         )
         guard let report = ResticCacheReport.parse(result.stdout) else {
-            throw ResticError.commandFailed(
-                exitCode: result.exitCode,
-                message: "restic cache answered in a form the app does not read: \(result.stdout.prefix(200))"
-            )
+            throw ResticError.malformedOutput(detail: "restic cache's table could not be read: \(result.stdout.prefix(200))")
         }
         return report
     }

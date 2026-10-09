@@ -35,17 +35,22 @@ struct ResticCacheReport: Equatable, Sendable {
             let tokens = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
             // "10982 cache dirs in /Users/me/Library/Caches/restic" — the
             // directory may hold spaces, so it is the rest of the line.
-            if tokens.count >= 5, let n = Int(tokens[0]), tokens[1] == "cache",
-               tokens[2] == "dirs" || tokens[2] == "dir", tokens[3] == "in"
-            {
+            if tokens.count >= 5, let n = Int(tokens[0]), tokens[1] == "cache", tokens[2] == "dirs", tokens[3] == "in" {
                 count = n
                 directory = tokens.dropFirst(4).joined(separator: " ")
                 continue
             }
+            // An empty cache has no table and no count line: restic 0.19
+            // says where it looked instead.
+            let emptyPrefix = "no cache dirs found, basedir is "
+            if line.hasPrefix(emptyPrefix) {
+                directory = String(line.dropFirst(emptyPrefix.count))
+                continue
+            }
             // A row: "<id>  <n> days ago  [yes]  [<size> <unit>]". The header
             // and the dashed rules carry no "ago".
-            guard let ago = tokens.firstIndex(of: "ago"), ago == 3 else { continue }
-            var rest = tokens[(ago + 1)...]
+            guard tokens.count > 3, tokens[3] == "ago" else { continue }
+            var rest = tokens[4...]
             if rest.first == "yes" {
                 oldCount += 1
                 rest = rest.dropFirst()

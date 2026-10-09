@@ -139,7 +139,7 @@ extension SnapshotLineage {
                 var writers = named.map(\.name)
                 if named.count < lineage.planTags.count { writers.append("a removed plan") }
                 if lineage.hasSnapshotsWithoutPlan { writers.append("outside SwiftRestic") }
-                detail += "\nBacked up by \(listing(writers))"
+                detail += "\nBacked up by \(Format.list(writers))"
             }
             labels[lineage.key] = Label(
                 title: title,
@@ -180,12 +180,6 @@ extension SnapshotLineage {
               let tag = lineage.planTags.first
         else { return nil }
         return plans.first { ResticService.planTag($0.id) == tag }
-    }
-
-    /// "A", "A and B", "A, B and C".
-    private static func listing(_ items: [String]) -> String {
-        guard items.count > 1 else { return items.first ?? "" }
-        return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
     }
 }
 

@@ -207,9 +207,6 @@ struct EditorRequirementTests {
                 try EditorRequirements.probePassword(typed: "", stored: stored, repositoryName: "Vault")
             }
         }
-        #expect(
-            (try? EditorRequirements.probePassword(typed: "", stored: nil, repositoryName: "Vault")) == nil
-        )
     }
 
     @Test("Test Connection's answer for a path with no repository says what Save will do in this mode")

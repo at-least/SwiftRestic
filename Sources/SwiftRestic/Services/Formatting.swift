@@ -9,6 +9,12 @@ import Foundation
 /// notification broadcast's background task), so every use crosses the lock
 /// pattern `ResticDateFormat.parse` already established.
 enum Format {
+    /// "A", "A and B", "A, B and C".
+    static func list(_ items: [String]) -> String {
+        guard items.count > 1 else { return items.first ?? "" }
+        return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
+    }
+
     nonisolated(unsafe) private static let byteCounter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         // ByteCountFormatter spells zero as "Zero KB" by default, which reads

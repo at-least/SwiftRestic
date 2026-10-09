@@ -1252,15 +1252,15 @@ struct UpsertStampTests {
 
         // The drive away: the rest backed up, the whole-backup stamp untouched.
         let around = Date.now.addingTimeInterval(-7200)
-        model.markPlanRun(plan.id, at: around, succeeded: true, complete: false)
+        model.markPlanRun(plan.id, at: around, wrote: .partial)
         #expect(model.configuration.plans[0].lastSuccessAt == around)
         #expect(model.configuration.plans[0].lastCompleteBackupAt == nil)
         // Every folder read: both stamps.
         let whole = Date.now.addingTimeInterval(-3600)
-        model.markPlanRun(plan.id, at: whole, succeeded: true, complete: true)
+        model.markPlanRun(plan.id, at: whole, wrote: .whole)
         #expect(model.configuration.plans[0].lastCompleteBackupAt == whole)
         // A failure stamps neither.
-        model.markPlanRun(plan.id, at: .now, succeeded: false, complete: false)
+        model.markPlanRun(plan.id, at: .now, wrote: .nothing)
         #expect(model.configuration.plans[0].lastSuccessAt == whole)
         #expect(model.configuration.plans[0].lastCompleteBackupAt == whole)
     }

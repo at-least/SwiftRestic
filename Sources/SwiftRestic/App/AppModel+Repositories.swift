@@ -168,16 +168,10 @@ extension AppModel {
     }
 
     /// What this Mac holds for the repository, as the run path sees it: the
-    /// debug override when a capture run set one, else the Keychain.
+    /// store's answer — the Keychain, or a capture run's environment
+    /// (`SecretStore.standard`).
     func storedSecrets(for repositoryID: UUID) async throws -> (password: String?, providerSecret: String?) {
-        #if DEBUG
-        if let injected = Self.injectedDebugSecrets() { return (injected.password, injected.providerSecret) }
-        #endif
-        return try await secrets.load(repositoryID)
-    }
-
-    func storedPassword(for repositoryID: UUID) async throws -> String? {
-        try await storedSecrets(for: repositoryID).password
+        try await secrets.load(repositoryID)
     }
     /// Builds everything a restic command needs, or explains what is missing.
     /// The password rules live once, in the drag path's main-actor-free

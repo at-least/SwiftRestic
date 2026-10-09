@@ -39,7 +39,8 @@ struct ResticCacheReportTests {
         #expect(ResticCacheReport.parse(noSize) == ResticCacheReport(
             directory: "/Volumes/My Disk/caches/restic", count: 2, oldCount: 1, totalBytes: 0
         ))
-        #expect(ResticCacheReport.parse("0 cache dirs in /Users/me/Library/Caches/restic")
+        // An empty cache, as restic 0.19.1 prints it (no table, no count line).
+        #expect(ResticCacheReport.parse("no cache dirs found, basedir is /Users/me/Library/Caches/restic")
             == ResticCacheReport(directory: "/Users/me/Library/Caches/restic", count: 0, oldCount: 0, totalBytes: 0))
         #expect(ResticCacheReport.parse("no old cache dirs found") == nil)
         #expect(ResticCacheReport.parse("") == nil)

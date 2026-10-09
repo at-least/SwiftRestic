@@ -30,14 +30,7 @@ extension ChangeComparison {
     static func removals(in changes: [String: ResticDiffChange]) -> [ResticDiffChange] {
         let removed = changes.filter { $0.value.category == .removed }
         return removed
-            .filter { key, _ in
-                var path = key
-                while path != "/", path.contains("/") {
-                    path = ResticPath.parent(of: path)
-                    if removed[path] != nil { return false }
-                }
-                return true
-            }
+            .filter { key, _ in !ResticPath.ancestors(of: key).contains { removed[$0] != nil } }
             .map(\.value)
             .sorted { $0.path < $1.path }
     }
@@ -48,28 +41,20 @@ extension ChangeComparison {
 /// collapsed folder would otherwise read as unchanged under a header that
 /// counts changes.
 struct ChangesInside: Equatable, Sendable {
-    var added = 0
-    var removed = 0
-    var modified = 0
-    var metadata = 0
+    /// The kinds present and how many of each; a kind with none is absent.
+    var counts: [ResticDiffChange.Category: Int] = [:]
 
-    var total: Int { added + removed + modified + metadata }
+    var total: Int { counts.values.reduce(0, +) }
 
     /// "2 modified, 1 removed" — the kinds present, in the diff's own order.
     var summary: String {
-        [(added, "added"), (removed, "removed"), (modified, "modified"), (metadata, "metadata")]
-            .filter { $0.0 > 0 }
-            .map { "\(Format.count($0.0)) \($0.1)" }
+        ResticDiffChange.Category.allCases
+            .compactMap { category in counts[category].map { "\(Format.count($0)) \(category.displayName.lowercased())" } }
             .joined(separator: ", ")
     }
 
     mutating func add(_ category: ResticDiffChange.Category) {
-        switch category {
-        case .added: added += 1
-        case .removed: removed += 1
-        case .modified: modified += 1
-        case .metadataOnly: metadata += 1
-        }
+        counts[category, default: 0] += 1
     }
 }
 
@@ -82,10 +67,8 @@ extension ChangeComparison {
     static func changesInside(_ changes: [String: ResticDiffChange]) -> [String: ChangesInside] {
         var inside: [String: ChangesInside] = [:]
         for (key, change) in changes {
-            var path = key
-            while path != "/", path.contains("/") {
-                path = ResticPath.parent(of: path)
-                inside[path, default: ChangesInside()].add(change.category)
+            for folder in ResticPath.ancestors(of: key) {
+                inside[folder, default: ChangesInside()].add(change.category)
             }
         }
         return inside

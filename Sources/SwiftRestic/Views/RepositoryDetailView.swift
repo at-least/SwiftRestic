@@ -119,15 +119,16 @@ struct RepositoryDetailView: View {
     private var snapshotsValue: some View {
         switch model.snapshotListingOutcome(for: repositoryID) {
         case .loaded:
-            let oldest = model.snapshots(for: repositoryID).map(\.time).min()
-            Text(OverviewMetrics.snapshotsLine(
-                total: model.repositoryStats[repositoryID]?.snapshotsCount
-                    ?? model.snapshots(for: repositoryID).count,
+            let snapshots = model.snapshots(for: repositoryID)
+            let tile = OverviewMetrics.snapshotsTile(
+                total: model.repositoryStats[repositoryID]?.snapshotsCount ?? snapshots.count,
                 otherBackups: model.shelves(for: repositoryID).otherBackupsCount,
-                since: oldest
-            ))
-            .monospacedDigit()
-            .help(oldest.map { "The oldest backup here is from \(Format.timestamp($0))." } ?? "")
+                snapshots: snapshots,
+                subject: "here"
+            )
+            Text(tile.value)
+                .monospacedDigit()
+                .help(tile.help ?? "")
         case let .failed(message):
             Text("—").help(message)
         case .idle:
@@ -200,14 +201,16 @@ struct RepositoryDetailView: View {
                 // When it was last verified, and when next: the policy
                 // behind the dates is the editor's, and each run is a
                 // record in Activity.
+                // Activity's newest run of each, with how it ended; the
+                // stamp is written for every attempt.
+                let runs = model.configuration.runs
+                let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
+                let prune = Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
                 DetailGrid {
-                    // Activity's newest run, with how it ended; the stamp
-                    // is written for every attempt.
-                    let runs = model.configuration.runs
                     DetailRow("Last check") {
                         MaintenanceRunValue(
-                            text: Scheduler.lastMaintenanceText(.check, of: repository, runs: runs, now: now),
-                            run: Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
+                            text: Scheduler.lastMaintenanceText(.check, of: repository, newest: check, now: now),
+                            run: check
                         )
                     }
                     // As the scheduler will start them: the hold holds upkeep
@@ -217,8 +220,8 @@ struct RepositoryDetailView: View {
                     if repository.maintenance.pruneEnabled {
                         DetailRow("Last prune") {
                             MaintenanceRunValue(
-                                text: Scheduler.lastMaintenanceText(.prune, of: repository, runs: runs, now: now),
-                                run: Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
+                                text: Scheduler.lastMaintenanceText(.prune, of: repository, newest: prune, now: now),
+                                run: prune
                             )
                         }
                         DetailRow("Next prune", Scheduler.nextMaintenanceText(.prune, of: repository, hold: hold, now: now))
@@ -233,9 +236,7 @@ struct RepositoryDetailView: View {
                 // repair` runs with the password supplied, beside the
                 // verdict. A route, as the drawer offers it — the page keeps
                 // no maintenance controls.
-                if let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: model.configuration.runs),
-                   RunRecordPresentation.repairRoute(for: check, repositoryExists: true) != nil
-                {
+                if let check, RunRecordPresentation.repairRoute(for: check, repositoryExists: true) != nil {
                     ConsoleRouteButton(repositoryID: repositoryID)
                 }
 

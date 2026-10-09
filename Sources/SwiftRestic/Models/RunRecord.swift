@@ -275,6 +275,16 @@ extension RunRecord {
     /// lines. A scan-time complaint about an item the archiver then read
     /// fine (a permission changed mid-run) is still among them — rare, and
     /// restic gives no way to tell.
+    /// The unreadable items a surface lists and how many more Activity's
+    /// drawer holds past them, counted from restic's total (`itemErrorCount`),
+    /// never the stored lines, which are capped: the drawer lists every
+    /// stored line, the plan page's card the first few
+    /// (`PlanStatus.listedItemLimit`).
+    func unreadableItemListing(limit: Int? = nil) -> (listed: ArraySlice<String>, unlisted: Int) {
+        let listed = limit.map { unreadableItems.prefix($0) } ?? unreadableItems
+        return (listed, max(0, itemErrorCount - listed.count))
+    }
+
     var unreadableItems: ArraySlice<String> {
         itemErrors.prefix(min(itemErrorCount, Self.storedItemErrorLimit))
     }
@@ -319,6 +329,13 @@ extension RunRecord {
     /// Why a backup that wrote a snapshot was still skipped: restic left
     /// out only folders on drives that are away (`setAsideAwaySources`,
     /// which hands over paths under /Volumes alone).
+    /// A backup that went around an away drive's folders and wrote a
+    /// snapshot of the rest: the rest is backed up, the drive's folders are
+    /// not, which the Protection card names and a later whole backup heals.
+    var isPartialSkip: Bool {
+        kind == .backup && outcome == .skipped && snapshotID != nil
+    }
+
     static func partlySkippedReason(sources: [String]) -> String {
         guard let drives = notConnected(sources) else { preconditionFailure("a skipped source not on a volume: \(sources)") }
         return drives + "; the other folders were backed up."
@@ -334,8 +351,7 @@ extension RunRecord {
         }
         guard !volumes.isEmpty else { return nil }
         let names = volumes.map { "“\($0)”" }
-        let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!
-        return "\(list) \(names.count == 1 ? "is" : "are") not connected"
+        return "\(Format.list(names)) \(names.count == 1 ? "is" : "are") not connected"
     }
 
     /// This skipped backup as the continuation of `previous` — the plan's

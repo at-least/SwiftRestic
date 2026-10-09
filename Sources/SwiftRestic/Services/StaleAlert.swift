@@ -112,8 +112,7 @@ enum StaleAlert {
             return (planTitle, "Some folders have not been backed up in \(days) — the last backup that included every folder was \(last); the others are still backed up.")
         }
         let names = alert.awayDrives.map { "“\($0)”" }
-        let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!
         let (have, them) = names.count == 1 ? ("has", "it") : ("have", "them")
-        return (planTitle, "\(list) \(have) not been backed up in \(days) — the last backup that included \(them) was \(last); the plan's other folders are still backed up.")
+        return (planTitle, "\(Format.list(names)) \(have) not been backed up in \(days) — the last backup that included \(them) was \(last); the plan's other folders are still backed up.")
     }
 }

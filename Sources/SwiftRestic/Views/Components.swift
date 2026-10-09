@@ -952,3 +952,47 @@ struct UnreadableItemLine: View {
         }
     }
 }
+
+/// A picker over a history of more than `DiffCandidateGrouping.flatMonthLimit`
+/// months, the shape `DiffCandidateGrouping.nested` answers with: the newest
+/// month's rows flat under its caption, each older month a submenu of its
+/// rows, a checkmark on the chosen one. The rows are Toggles, not a Picker
+/// per month: several Pickers sharing one selection would each warn of a
+/// tag none of their own rows carry. The Files pane's "As backed up" and
+/// the Compare sheet's "Compared with" are both this view.
+struct NestedMonthMenu<Item, Label: View>: View {
+    let nested: (flat: DiffCandidateGrouping.Month<Item>, submenus: [DiffCandidateGrouping.Month<Item>])
+    /// The row's identity, which `selected` names.
+    let id: KeyPath<Item, String>
+    /// The chosen row, resolved once by the caller: a pane whose nil means
+    /// the newest resolves it before asking, so no row scans for it.
+    let selected: String?
+    let select: (String) -> Void
+    let rowText: (Item) -> String
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        Menu {
+            Section(nested.flat.label) {
+                ForEach(nested.flat.items, id: id) { row($0) }
+            }
+            ForEach(nested.submenus, id: \.label) { month in
+                Menu(month.label) {
+                    ForEach(month.items, id: id) { row($0) }
+                }
+            }
+        } label: {
+            label()
+        }
+    }
+
+    private func row(_ item: Item) -> some View {
+        let itemID = item[keyPath: id]
+        return Toggle(isOn: Binding(
+            get: { selected == itemID },
+            set: { if $0 { select(itemID) } }
+        )) {
+            Text(verbatim: rowText(item))
+        }
+    }
+}

@@ -612,6 +612,23 @@ struct OverviewMetricsTests {
         #expect(OverviewMetrics.snapshotsLine(total: 0, otherBackups: 0, since: nil) == "0")
     }
 
+    @Test("the Snapshots tile names the oldest backup behind its face, read from the end of the newest-first listing")
+    func snapshotsTile() {
+        let oldest = Date(timeIntervalSince1970: 1_748_782_800)
+        let listing = [
+            snapshot("aaaa", at: Date(timeIntervalSince1970: 1_760_000_000)),
+            snapshot("bbbb", at: Date(timeIntervalSince1970: 1_750_000_000)),
+            snapshot("cccc", at: oldest),
+        ]
+        let tile = OverviewMetrics.snapshotsTile(total: 3, otherBackups: 0, snapshots: listing, subject: "of this plan")
+        #expect(tile.value == "3 · since \(Format.day(oldest))")
+        #expect(tile.help == "The oldest backup of this plan is from \(Format.timestamp(oldest)).")
+        // Nothing listed: no moment to name.
+        let empty = OverviewMetrics.snapshotsTile(total: 0, otherBackups: 0, snapshots: [], subject: "here")
+        #expect(empty.value == "0")
+        #expect(empty.help == nil)
+    }
+
     @Test("problem figures")
     func headlineFigures() {
         var failed = run(plan: "Docs", at: "2026-09-05 01:00:00", added: 0)

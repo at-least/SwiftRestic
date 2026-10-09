@@ -275,9 +275,7 @@ struct SettingsView: View {
                 Text("Measuring…")
                     .foregroundStyle(.secondary)
             }
-            .task {
-                if model.resticCache == nil { await model.measureResticCache() }
-            }
+            .task { await model.measureResticCache() }
         }
     }
 

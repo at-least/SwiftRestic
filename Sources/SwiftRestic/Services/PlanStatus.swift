@@ -99,7 +99,7 @@ enum PlanStatus {
         // Exclude, as the drawer's lines), so the message never repeats
         // the first of them: it explains the warning past the items — a
         // decoding gap, a skipped retention step — or a hook's complaint.
-        let items = Array(run.unreadableItems.prefix(listedItemLimit))
+        let (listedItems, unlisted) = run.unreadableItemListing(limit: listedItemLimit)
         let explanation = trailingLines(of: run).first
             ?? run.hookMessages.first
         let message: String? = if run.outcome == .failed {
@@ -108,7 +108,7 @@ enum PlanStatus {
             // The banner's words for a bare exit 3 — only while the card
             // lists nothing: listed items are the explanation.
             explanation ?? run.failureMessage
-                ?? (run.outcome == .completedWithErrors && items.isEmpty ? RunRecord.unexplainedWarningMessage : nil)
+                ?? (run.outcome == .completedWithErrors && listedItems.isEmpty ? RunRecord.unexplainedWarningMessage : nil)
         }
 
         var facts = facts(for: run)
@@ -127,8 +127,8 @@ enum PlanStatus {
             headline: "Backup \(run.outcome.displayName.lowercased())",
             message: message,
             facts: facts,
-            items: items,
-            unlistedItemCount: max(0, run.itemErrorCount - items.count)
+            items: Array(listedItems),
+            unlistedItemCount: unlisted
         )
     }
 

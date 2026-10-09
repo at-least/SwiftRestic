@@ -148,10 +148,9 @@ struct SidebarView: View {
             // and a tagged record's group is a plan fold, closed until
             // opened).
             guard let snapshot = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }),
-                  snapshot.planID == nil,
-                  BackupShelves.owner(of: snapshot, among: model.plans(in: repositoryID)) == nil
+                  case let .lineage(_, key) = model.shelves(for: repositoryID).page(of: snapshot, repositoryID: repositoryID)
             else { return }
-            collapsedLineages.remove(LineageFoldID(repositoryID: repositoryID, key: snapshot.lineageKey))
+            collapsedLineages.remove(LineageFoldID(repositoryID: repositoryID, key: key))
         }
     }
 
@@ -444,7 +443,7 @@ struct SidebarView: View {
             // nothing to open on a record.
             guard !open, let record = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
             else { return .ignored }
-            router.selection = SidebarFolds.foldRow(above: record, in: repositoryID, plans: model.plans(in: repositoryID))
+            router.selection = model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
             return .handled
         default:
             return .ignored
@@ -497,18 +496,31 @@ struct SidebarView: View {
 
     private func recordRows(_ records: [Snapshot], of plan: BackupPlan, in repository: Repository) -> some View {
         ForEach(records) { snapshot in
-            let item = SidebarItem.restoreSnapshot(repository.id, snapshot.id)
-            RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                .padding(.leading, Indent.planRecord)
-                .tag(item)
-                // The scroll target a reveal names (the selection's own value).
-                .id(item)
-                // The chevron's own verb, reachable from any depth of the
-                // fold — the row at its top may be a year of rows away.
-                .contextMenu {
-                    Button("Hide This Plan's Backups") { togglePlan(plan) }
-                }
+            recordRow(snapshot, in: repository.id, indent: Indent.planRecord, hideTitle: "Hide This Plan's Backups") {
+                togglePlan(plan)
+            }
         }
+    }
+
+    /// A backup's row under a fold: the scroll target a reveal names (the
+    /// selection's own value), and the fold's chevron's own verb in its
+    /// menu, reachable from any depth of the fold — the row at its top may
+    /// be a year of rows away.
+    private func recordRow(
+        _ snapshot: Snapshot,
+        in repositoryID: UUID,
+        indent: CGFloat,
+        hideTitle: String,
+        hide: @escaping () -> Void
+    ) -> some View {
+        let item = SidebarItem.restoreSnapshot(repositoryID, snapshot.id)
+        return RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+            .padding(.leading, indent)
+            .tag(item)
+            .id(item)
+            .contextMenu {
+                Button(hideTitle) { hide() }
+            }
     }
 
     // MARK: - Other backups
@@ -617,14 +629,9 @@ struct SidebarView: View {
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
         if isExpanded {
             ForEach(snapshots) { snapshot in
-                let item = SidebarItem.restoreSnapshot(repository.id, snapshot.id)
-                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                    .padding(.leading, Indent.groupRecord)
-                    .tag(item)
-                    .id(item)
-                    .contextMenu {
-                        Button("Hide This Group's Backups") { toggleOtherGroup(id, title: title) }
-                    }
+                recordRow(snapshot, in: repository.id, indent: Indent.groupRecord, hideTitle: "Hide This Group's Backups") {
+                    toggleOtherGroup(id, title: title)
+                }
             }
         }
     }
@@ -739,14 +746,9 @@ struct SidebarView: View {
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
         if isExpanded {
             ForEach(lineage.snapshots) { snapshot in
-                let item = SidebarItem.restoreSnapshot(repositoryID, snapshot.id)
-                RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-                    .padding(.leading, Indent.groupRecord)
-                    .tag(item)
-                    .id(item)
-                    .contextMenu {
-                        Button("Hide This Group's Backups") { toggleLineage(id, title: title) }
-                    }
+                recordRow(snapshot, in: repositoryID, indent: Indent.groupRecord, hideTitle: "Hide This Group's Backups") {
+                    toggleLineage(id, title: title)
+                }
             }
         }
     }
@@ -917,13 +919,18 @@ private struct PlanSidebarRow: View {
                     // middle cut: the trailing marker narrows the column,
                     // and a tail cut would take "ago" — when it happened.
                     // The tooltip and VoiceOver keep the whole line.
-                    ViewThatFits(in: .horizontal) {
-                        Text(caption.text)
+                    Group {
                         if let shortText = caption.shortText {
-                            Text(shortText)
+                            ViewThatFits(in: .horizontal) {
+                                Text(caption.text)
+                                Text(shortText)
+                                Text(caption.text)
+                                    .truncationMode(.middle)
+                            }
+                        } else {
+                            Text(caption.text)
+                                .truncationMode(.middle)
                         }
-                        Text(caption.text)
-                            .truncationMode(.middle)
                     }
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

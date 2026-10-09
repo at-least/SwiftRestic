@@ -125,6 +125,14 @@ struct FilesTreeTests {
         #expect(ResticPath.parent(of: "/d\u{0600}/x") == "/d\u{0600}")
     }
 
+    @Test("ResticPath.ancestors walks parent by parent up to the root; none for the root or a bare name")
+    func ancestorPaths() {
+        #expect(ResticPath.ancestors(of: "/a/b/c") == ["/a/b", "/a", "/"])
+        #expect(ResticPath.ancestors(of: "/a") == ["/"])
+        #expect(ResticPath.ancestors(of: "/") == [])
+        #expect(ResticPath.ancestors(of: "a") == [])
+    }
+
     @Test("a path's tails run from the whole path to its last name, split on the separator's byte")
     func tails() {
         #expect(FilesTree.tails(of: "/a/b/c") == ["/a/b/c", "/b/c", "/c"])

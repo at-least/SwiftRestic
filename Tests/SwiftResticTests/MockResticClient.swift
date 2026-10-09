@@ -166,8 +166,9 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     // MARK: - ResticClient
 
-    var cacheReportAnswer = ResticCacheReport(directory: "/tmp/restic-cache", count: 0, oldCount: 0, totalBytes: 0)
-    func cacheReport() async throws -> ResticCacheReport { cacheReportAnswer }
+    func cacheReport() async throws -> ResticCacheReport {
+        ResticCacheReport(directory: "/tmp/restic-cache", count: 0, oldCount: 0, totalBytes: 0)
+    }
     func cleanupCache() async throws {}
 
     func version() async throws -> String {

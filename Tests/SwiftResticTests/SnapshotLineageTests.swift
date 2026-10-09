@@ -32,8 +32,8 @@ struct SnapshotLineageTests {
             "/r/b/z.txt": change("/r/b/z.txt", "+"),
         ]
         let inside = ChangeComparison.changesInside(changes)
-        #expect(inside["/r/a"] == ChangesInside(added: 0, removed: 1, modified: 1, metadata: 0))
-        #expect(inside["/r/b"] == ChangesInside(added: 1, removed: 0, modified: 0, metadata: 0))
+        #expect(inside["/r/a"] == ChangesInside(counts: [.removed: 1, .modified: 1]))
+        #expect(inside["/r/b"] == ChangesInside(counts: [.added: 1]))
         #expect(inside["/r"]?.total == changes.count)
         #expect(inside["/r"]?.summary == "2 added, 1 removed, 1 modified")
         // A file has nothing inside; a path the diff names keeps its own

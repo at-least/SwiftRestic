@@ -44,6 +44,39 @@ struct SecretStore: Sendable {
         }
     )
 
+    /// The app's store: the login Keychain — or, in a debug build, a
+    /// capture run's environment (`injectedForCapture`).
+    static var standard: SecretStore {
+        #if DEBUG
+        if let injected = injectedForCapture { return injected }
+        #endif
+        return .keychain
+    }
+
+    #if DEBUG
+    /// A capture run's password from the environment in the Keychain's
+    /// place — `SWIFTRESTIC_REPO_PASSWORD`, with `SWIFTRESTIC_REPO_SECRET` —
+    /// only while `SWIFTRESTIC_CONFIG_DIR` points the run at a throwaway
+    /// configuration, so a stale variable in a developer's shell cannot
+    /// silently feed the wrong password to a normal debug run; nil
+    /// otherwise. One store for every reader of "what password this
+    /// repository has" — the run path and the repository editor — which
+    /// would otherwise disagree about whether a password exists. Saves and
+    /// removals go nowhere: a scratch run never touches the login Keychain.
+    static var injectedForCapture: SecretStore? {
+        let environment = ProcessInfo.processInfo.environment
+        guard let password = environment["SWIFTRESTIC_REPO_PASSWORD"], !password.isEmpty,
+              environment["SWIFTRESTIC_CONFIG_DIR"] != nil
+        else { return nil }
+        let providerSecret = environment["SWIFTRESTIC_REPO_SECRET"]
+        return SecretStore(
+            load: { _ in (password, providerSecret) },
+            save: { _, _, _ in },
+            remove: { _ in }
+        )
+    }
+    #endif
+
     /// In-memory store for tests.
     static func inMemory(_ initial: [UUID: (password: String, providerSecret: String?)] = [:]) -> SecretStore {
         let box = InMemorySecrets(initial)

@@ -82,26 +82,19 @@ struct FolderVersionsView: View {
             // and past three months the older months fold into submenus
             // (`DiffCandidateGrouping.nested`), the newest month's rows
             // staying in reach.
+            let chosen = self.chosen
             let months = DiffCandidateGrouping.landmarks(in: versions, time: \.time)
             if let months, let nested = DiffCandidateGrouping.nested(months) {
-                Menu {
-                    Section(nested.flat.label) {
-                        ForEach(nested.flat.items, id: \.id) { version in
-                            versionChoice(version)
-                        }
-                    }
-                    ForEach(nested.submenus, id: \.label) { month in
-                        Menu(month.label) {
-                            ForEach(month.items, id: \.id) { version in
-                                versionChoice(version)
-                            }
-                        }
-                    }
-                } label: {
+                NestedMonthMenu(
+                    nested: nested,
+                    id: \.id,
+                    selected: chosen?.id,
+                    select: { chosenID = $0 },
+                    rowText: { Format.timestamp($0.time) }
+                ) {
                     Text(verbatim: chosen.map { Format.timestamp($0.time) } ?? "")
                 }
                 .frame(maxWidth: 340)
-                .disabled(versions.isEmpty)
                 .help("Which backup the folder is listed from")
                 .accessibilityLabel("As backed up")
             } else {
@@ -131,18 +124,6 @@ struct FolderVersionsView: View {
                 .help("Which backup the folder is listed from")
             }
             Spacer()
-        }
-    }
-
-    /// One backup's row in the nested menu, a checkmark on the chosen one.
-    /// A Toggle, not a Picker per month: several Pickers sharing one
-    /// selection would each warn of a tag none of their own rows carry.
-    private func versionChoice(_ version: IndexVersion) -> some View {
-        Toggle(isOn: Binding(
-            get: { chosen?.id == version.id },
-            set: { if $0 { chosenID = version.id } }
-        )) {
-            Text(verbatim: Format.timestamp(version.time))
         }
     }
 

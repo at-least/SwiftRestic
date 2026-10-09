@@ -379,10 +379,12 @@ struct PlanDetailView: View {
                 case .loaded where !snapshots.isEmpty:
                     // The count and how far back the plan's history reaches
                     // — the repository page's own line, for this plan alone.
-                    let oldest = snapshots.map(\.time).min()
-                    Text(OverviewMetrics.snapshotsLine(total: snapshots.count, otherBackups: 0, since: oldest))
+                    let tile = OverviewMetrics.snapshotsTile(
+                        total: snapshots.count, otherBackups: 0, snapshots: snapshots, subject: "of this plan"
+                    )
+                    Text(tile.value)
                         .monospacedDigit()
-                        .help(oldest.map { "The oldest backup of this plan is from \(Format.timestamp($0))." } ?? "")
+                        .help(tile.help ?? "")
                 case .loaded:
                     Text(
                         model.snapshots(for: repositoryID).isEmpty
