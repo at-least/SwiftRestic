@@ -494,7 +494,7 @@ checked in so a normal build does not need it.
   setting or one schedule interval and a day, whichever is longer, so a
   weekly plan is not named the hour before each run. It is checked on the
   scheduler's minute tick: a Mac asleep the whole time hears at its first
-  tick after waking. The menu bar's dot and problem line stay run-driven.
+  tick after waking. The menu bar's exclamation mark and problem line stay run-driven.
 - **restic console** — run any restic command against a repository and read its
   own output, for the things the UI does not cover (*Repository › restic
   Console…*). A command that may change the backups — the ones it confirms
@@ -886,11 +886,13 @@ stretch.
   choose *Always Allow*. Building on another Mac needs that Mac's own
   certificate there, or `CODE_SIGN_IDENTITY=-` for an ad-hoc build. Release
   stays ad hoc.
-- **The menu bar's dot goes once the next backup works.** A failed or warned
-  backup puts a dot on the menu bar icon and a line naming it in its menu;
-  the same plan's next successful backup clears both, as it clears the plan's
-  own failure row.
-  A failed check, prune, retention run or restore keeps the dot for seven days,
+- **The menu bar's exclamation mark goes once the next backup works.** A
+  failed or warned backup stands an exclamation mark in the menu bar icon,
+  where its snapshot stack sits — Time Machine's own sign, in the bar's own
+  ink, since every face of the icon is a template image — and a line naming
+  it in its menu; the same plan's next successful backup clears both, as it
+  clears the plan's own failure row.
+  A failed check, prune, retention run or restore keeps the mark for seven days,
   since a backup going through fixes none of them. Activity's badge and a
   repository's Recent problems keep the week's record either way.
 - **A newly added repository is not checked immediately.** Maintenance counts

@@ -6,10 +6,17 @@ import Foundation
 /// drawing instead of a stock symbol. Idle wears the ring at rest, the two
 /// plates settled; running wears the same ring with the stack pulsing, the
 /// bright plate stepping from bottom to top and back to read as data
-/// climbing it — see `MenuBarStatus.Glyph`. Both intervention states wear
-/// the resting mark with one small companion dot at the ring's lower-right —
-/// the unread-badge grammar Mail's Dock icon follows: the mark never
-/// changes silhouette, the dot alone says "open me".
+/// climbing it — see `MenuBarStatus.Glyph`. The attention face wears the
+/// same ring with an exclamation mark standing where the stack sits — Time
+/// Machine's own menu bar sign for a backup that needs the user — so the
+/// mark never changes silhouette or size between faces.
+///
+/// Every face is a template image: the menu bar tints it with its own label
+/// ink, whatever the bar's appearance. The attention face used to be a
+/// baked bitmap with a blue dot, keyed on the status button's effective
+/// appearance; applied at launch, before the button follows the bar, it
+/// drew black ink on a dark bar and the mark vanished behind its dot. A
+/// template has no ink to get wrong.
 ///
 /// The plate stack, ring and head mirror the app icon's construction in
 /// `Tools/GenerateAppIcon.swift`, so the tray and the Dock icon read as one
@@ -25,12 +32,6 @@ import Foundation
 enum MenuBarLogo {
     /// A standard status item's canvas.
     private static let canvasSize: CGFloat = 18
-    /// The badged face's canvas: one point of extra margin on every side so
-    /// the dot's transparent halo stays inside the bitmap. The construction
-    /// is drawn at the same absolute size (`impliedSize` is resolved against
-    /// this canvas), so the mark itself never changes size between faces —
-    /// only the item's width moves.
-    private static let badgedCanvasSize: CGFloat = 20
     /// The welcome screen's hero mark, same construction at display size.
     private static let heroCanvasSize: CGFloat = 96
     /// The generator's proportions are fractions of the full icon tile; the
@@ -59,6 +60,17 @@ enum MenuBarLogo {
     /// peripheral vision, not a flicker.
     static let frameInterval: TimeInterval = 0.6
 
+    /// The exclamation mark's geometry, in fractions of the implied size as
+    /// the stack's is, measured from the mark's centre (y up): a bar the
+    /// stroke's width standing from a touch above the top plate's place to
+    /// just below the centre, and its dot beneath, one stroke's gap between.
+    /// It sits where the plates sit, so the ring, the head and the ink
+    /// footprint are the idle face's. Read by the tests.
+    static let exclamationBarTop: CGFloat = 0.170
+    static let exclamationBarBottom: CGFloat = -0.030
+    static let exclamationDotCenter: CGFloat = -0.135
+    static let exclamationDotRadius: CGFloat = 0.040
+
     /// Which running frame is showing at a given moment. Pure so the cadence
     /// can be tested without a live timer or view.
     static func phase(at date: Date) -> Int {
@@ -77,8 +89,9 @@ enum MenuBarLogo {
             draw(in: rect, into: context, content: .running(phase))
         }
     }
-    private static let badgedLightImageCache: NSImage = makeBadgedImage(isDark: false)
-    private static let badgedDarkImageCache: NSImage = makeBadgedImage(isDark: true)
+    private static let attentionImageCache: NSImage = makeImage { rect, context in
+        draw(in: rect, into: context, content: .attention)
+    }
     private static let heroImageCache: NSImage = makeImage(size: heroCanvasSize) { rect, context in
         draw(in: rect, into: context, content: .resting)
     }
@@ -86,50 +99,14 @@ enum MenuBarLogo {
     /// The ring at rest, the plate stack settled rather than pulsing.
     static func image() -> NSImage { restingImage }
 
-    private static var badgedLightImage: NSImage { badgedLightImageCache }
-    private static var badgedDarkImage: NSImage { badgedDarkImageCache }
-
-    /// The attention face: the resting mark plus the companion dot, drawn in
-    /// fixed colour — the mark in the menu bar's label ink for `appearance`,
-    /// the dot in systemBlue, Mail's unread-dot colour. Returns one of the
-    /// two cached variants, matched to `appearance`.
-    ///
-    /// This face leaves the template rule: the menu bar flattens its whole
-    /// label and tints it, so blue painted in the SwiftUI view layer dies —
-    /// the colour has to be baked into the bitmap, and a baked bitmap cannot
-    /// also be a template image. The cost is contained: idle and running keep
-    /// their template faces and adapt for free; only this face swaps cached
-    /// variants on appearance change, and both accessors must stay
-    /// allocation-free.
-    static func badgedImage(for appearance: NSAppearance) -> NSImage {
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? badgedDarkImage : badgedLightImage
-    }
+    /// The attention face: the resting ring with an exclamation mark in the
+    /// stack's place — a template like every face, on the same canvas, so
+    /// the item neither changes width nor guesses the bar's ink.
+    static var attentionImage: NSImage { attentionImageCache }
 
     /// The welcome screen's brand mark — the app's own construction at hero
     /// scale, not a borrowed SF Symbol.
     static var heroImage: NSImage { heroImageCache }
-
-    private static func makeBadgedImage(isDark: Bool) -> NSImage {
-        let components: (red: CGFloat, green: CGFloat, blue: CGFloat) = isDark ? (1, 1, 1) : (0, 0, 0)
-        // Resolve systemBlue under this appearance so the dark menu bar gets
-        // the brighter variant, the way a template image would adapt.
-        var dot = CGColor(srgbRed: 0, green: 0.478, blue: 1, alpha: 1)
-        if let named = NSAppearance(named: isDark ? .darkAqua : .aqua) {
-            named.performAsCurrentDrawingAppearance {
-                if let resolved = NSColor.systemBlue.usingColorSpace(.sRGB)?.cgColor {
-                    dot = resolved
-                }
-            }
-        }
-        let image = makeImage(size: badgedCanvasSize) { rect, context in
-            draw(
-                in: rect, into: context, content: .badged, scaleBasis: badgedCanvasSize,
-                inkComponents: components, dotColor: dot
-            )
-        }
-        image.isTemplate = false
-        return image
-    }
 
     /// A running frame: the ring with the snapshot stack pulsing.
     static func image(phase: Int) -> NSImage {
@@ -157,40 +134,20 @@ enum MenuBarLogo {
 
     private enum Content {
         case resting
-        case badged
+        case attention
         case running(Int)
     }
 
     /// Same ring-and-arrowhead construction as the icon generator, minus the
-    /// tile, plus the snapshot stack, settled or pulsing — template
-    /// rendering tints from the alpha channel alone, so a faded plate
-    /// survives as gray.
-    ///
-    /// `scaleBasis` is the canvas the construction proportionally fills. The
-    /// full-bleed faces (resting, running, hero) take the default, so the
-    /// mark scales with its canvas. The badged face passes its own canvas
-    /// instead: one-to-one with `impliedSize`, the mark keeps the idle
-    /// construction's absolute size and the wider canvas buys real
-    /// halo margin — the tray glyph must never change size with its state.
-    /// `inkComponents` recolours the construction for the non-template faces
-    /// (white on the dark menu bar); `dotColor` recolours the attention dot.
-    private static func draw(
-        in rect: CGRect,
-        into context: CGContext,
-        content: Content,
-        scaleBasis: CGFloat = canvasSize,
-        inkComponents: (red: CGFloat, green: CGFloat, blue: CGFloat) = (0, 0, 0),
-        dotColor: CGColor? = nil
-    ) {
-        let s = impliedSize * rect.width / scaleBasis
+    /// tile, plus the snapshot stack, settled or pulsing, or the exclamation
+    /// mark in its place — template rendering tints from the alpha channel
+    /// alone, so a faded plate survives as gray. The construction fills the
+    /// canvas proportionally, so the mark scales with it (the hero).
+    private static func draw(in rect: CGRect, into context: CGContext, content: Content) {
+        let s = impliedSize * rect.width / canvasSize
         let stroke = s * 0.068
         let center = CGPoint(x: rect.midX, y: rect.midY)
-        let ink = CGColor(
-            srgbRed: inkComponents.red,
-            green: inkComponents.green,
-            blue: inkComponents.blue,
-            alpha: 1
-        )
+        let ink = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
 
         // Circular restore arrow: opening on the left, sweeping
         // counterclockwise from the tail below it to the head above.
@@ -233,76 +190,50 @@ enum MenuBarLogo {
 
         switch content {
         case .resting:
-            drawStack(
-                alphas: restingAlphas, into: context, center: center, s: s, stroke: stroke,
-                components: inkComponents
-            )
-        case .badged:
-            drawStack(
-                alphas: restingAlphas, into: context, center: center, s: s, stroke: stroke,
-                components: inkComponents
-            )
-            drawAttentionDot(into: context, center: center, s: s, dotColor: dotColor ?? ink)
+            drawStack(alphas: restingAlphas, into: context, center: center, s: s, stroke: stroke)
+        case .attention:
+            drawExclamation(into: context, center: center, s: s, stroke: stroke)
         case .running(let phase):
             drawStack(
                 alphas: runningAlphaFrames[phase % runningAlphaFrames.count],
-                into: context, center: center, s: s, stroke: stroke,
-                components: inkComponents
+                into: context, center: center, s: s, stroke: stroke
             )
         }
     }
 
-    /// The companion dot that turns the resting mark into the attention face:
-    /// one small filled circle pinned on the ring at its lower-right, away
-    /// from the arrowhead's upper-left. Template rendering tints from alpha
-    /// alone, so the halo around the dot is knocked out to *transparent* —
-    /// a drawn light-coloured ring would tint as ink and read as a second
-    /// stroke — which leaves a real gap between dot and ring on any menu bar,
-    /// and lets the non-template faces paint the dot in colour over the gap.
-    private static func drawAttentionDot(
-        into context: CGContext, center: CGPoint, s: CGFloat, dotColor: CGColor
-    ) {
-        let ringRadius = s * 0.260
-        let dotRadius = s * 0.064
-        let haloRadius = s * 0.093
-        let angle = CGFloat.pi * 7 / 4
-        let dotCenter = CGPoint(
-            x: center.x + cos(angle) * ringRadius,
-            y: center.y + sin(angle) * ringRadius
-        )
+    /// The exclamation mark (`exclamationBarTop` and friends): the bar with
+    /// the stroke's round ends, the dot below it, both solid ink.
+    private static func drawExclamation(into context: CGContext, center: CGPoint, s: CGFloat, stroke: CGFloat) {
         context.saveGState()
-        context.setBlendMode(.clear)
-        context.fillEllipse(in: ellipse(at: dotCenter, radius: haloRadius))
-        context.setBlendMode(.normal)
-        context.setFillColor(dotColor)
-        context.fillEllipse(in: ellipse(at: dotCenter, radius: dotRadius))
+        context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
+        let bar = CGRect(
+            x: center.x - stroke / 2,
+            y: center.y + exclamationBarBottom * s,
+            width: stroke,
+            height: (exclamationBarTop - exclamationBarBottom) * s
+        )
+        context.addPath(CGPath(roundedRect: bar, cornerWidth: stroke / 2, cornerHeight: stroke / 2, transform: nil))
+        context.fillPath()
+        let dotRadius = exclamationDotRadius * s
+        let dotCenter = CGPoint(x: center.x, y: center.y + exclamationDotCenter * s)
+        context.fillEllipse(in: CGRect(
+            x: dotCenter.x - dotRadius,
+            y: dotCenter.y - dotRadius,
+            width: dotRadius * 2,
+            height: dotRadius * 2
+        ))
         context.restoreGState()
     }
 
-    private static func ellipse(at center: CGPoint, radius: CGFloat) -> CGRect {
-        CGRect(
-            x: center.x - radius,
-            y: center.y - radius,
-            width: radius * 2,
-            height: radius * 2
-        )
-    }
-
     private static func drawStack(
-        alphas: [CGFloat], into context: CGContext, center: CGPoint, s: CGFloat, stroke: CGFloat,
-        components: (red: CGFloat, green: CGFloat, blue: CGFloat)
+        alphas: [CGFloat], into context: CGContext, center: CGPoint, s: CGFloat, stroke: CGFloat
     ) {
         let plateWidth = s * 0.190
         let spacing = s * 0.160
         let stackOffset = CGFloat(alphas.count - 1) * spacing / 2
         for (index, alpha) in alphas.enumerated() {
             let y = center.y - stackOffset + CGFloat(index) * spacing
-            context.setFillColor(CGColor(
-                srgbRed: components.red,
-                green: components.green,
-                blue: components.blue,
-                alpha: alpha
-            ))
+            context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: alpha))
             let plateRect = CGRect(
                 x: center.x - plateWidth / 2,
                 y: y - stroke / 2,

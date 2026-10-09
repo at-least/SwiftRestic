@@ -38,22 +38,25 @@ enum MenuBarStatus {
     }
 
     /// What the icon draws for a state: the app's own line drawing (see
-    /// `MenuBarLogo`), pulsing while running, and one small companion dot for
-    /// both intervention states — the dot's job is "open me", and the menu's
-    /// first line names the reason, so unconfigured and problem share one
-    /// face.
+    /// `MenuBarLogo`), pulsing while running, and with an exclamation mark
+    /// in the stack's place for a standing problem — Time Machine's menu
+    /// bar sign for a backup that needs the user; the menu's first line
+    /// names the run. An empty install wears the plain mark: a mark asking
+    /// for attention over a setup that has not begun would read as a
+    /// failure that has not happened, and the menu's first line says what
+    /// to set up (its VoiceOver words say so too).
     enum Glyph: Equatable {
         case logo
-        case badgedLogo
+        case attentionLogo
         case animatedLogo
     }
 
     static func glyph(for state: IconState) -> Glyph {
         switch state {
-        case .unconfigured: .badgedLogo
+        case .unconfigured: .logo
         case .idle: .logo
         case .running: .animatedLogo
-        case .problem: .badgedLogo
+        case .problem: .attentionLogo
         }
     }
 

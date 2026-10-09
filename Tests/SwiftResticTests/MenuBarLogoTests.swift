@@ -41,98 +41,42 @@ struct MenuBarLogoTests {
         #expect(MenuBarLogo.stillRunningImage.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
     }
 
-    @Test("the attention face keeps the mark and adds a haloed dot on the ring")
-    func badgedFace() throws {
-        let light = try #require(NSAppearance(named: .aqua))
-        let badged = MenuBarLogo.badgedImage(for: light)
-        // Same identity, one companion mark: the TIFF differs from rest, and
-        // the badged canvas is one point wider on every side for the halo.
-        #expect(badged.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
-        #expect(badged.size.width == 20)
-        #expect(!badged.isTemplate, "the blue dot must be baked in, so this face cannot be template")
+    @Test("the attention face keeps the ring and stands an exclamation mark where the stack sits, as a template")
+    func attentionFace() throws {
+        let attention = MenuBarLogo.attentionImage
+        // A template on the idle canvas: the bar tints it with its own ink,
+        // and the item keeps its width between faces.
+        #expect(attention.isTemplate, "the bar's ink, not a guess baked into a bitmap")
+        #expect(attention.size.width == 18)
+        #expect(attention.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
 
-        // Pixel facts at 4x, coordinates in the 20pt canvas (y-up). The dot
-        // sits on the ring at its lower-right; the halo between dot and ring
-        // must be truly transparent, and the ring must survive right next
-        // door — a halo that tinted as ink would read as a second stroke.
-        let rep = try render(badged, canvas: 20, scale: 4)
-        func alpha(x: CGFloat, y: CGFloat) throws -> CGFloat {
-            let pixel = NSPoint(
-                x: (x * 4).rounded(),
-                y: ((20 - y) * 4).rounded() // bitmap rows run top-down
-            )
-            let color = try #require(rep.colorAt(x: Int(pixel.x), y: Int(pixel.y)))
+        // Pixel facts at 4x, coordinates in the 18pt canvas (y-up), the mark
+        // centred at (9, 9) with s = 28 (`MenuBarLogo.impliedSize`).
+        let rep = try render(attention, canvas: 18, scale: 4)
+        let resting = try render(MenuBarLogo.image(), canvas: 18, scale: 4)
+        func alpha(_ rep: NSBitmapImageRep, x: CGFloat, y: CGFloat) throws -> CGFloat {
+            let color = try #require(rep.colorAt(x: Int((x * 4).rounded()), y: Int(((18 - y) * 4).rounded())))
                 .usingColorSpace(.deviceRGB)
             return try #require(color).alphaComponent
         }
-
-        // Geometry from MenuBarLogo's construction (scale basis = the 20pt
-        // canvas, so s = 28 exactly): ring radius 0.260 * 28, dot radius
-        // 0.064 * 28, halo 0.093 * 28, dot centered at 7π/4 on the ring.
-        let ringRadius: CGFloat = 0.260 * 28
-        let dotCenter = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4), dy: 10 + ringRadius * sin(.pi * 7 / 4))
-        try #expect(alpha(x: dotCenter.dx, y: dotCenter.dy) > 0.85, "the dot itself is solid ink")
-        // The dot is baked in systemBlue, not the mark's ink: blue dominates.
-        let dotColor = try #require(rep.colorAt(
-            x: Int((dotCenter.dx * 4).rounded()),
-            y: Int(((20 - dotCenter.dy) * 4).rounded())
-        )?.usingColorSpace(.deviceRGB))
-        #expect(dotColor.blueComponent > dotColor.redComponent + 0.2, "the light face's dot is blue")
-        // On the ring's centerline 17° away: inside the halo, outside the dot.
-        let gap = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4 + 0.30), dy: 10 + ringRadius * sin(.pi * 7 / 4 + 0.30))
-        try #expect(alpha(x: gap.dx, y: gap.dy) < 0.2, "the halo separates dot from ring with real transparency")
-        // On the ring's centerline 33° away: past the halo, ink must survive.
-        let survivor = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4 + 0.58), dy: 10 + ringRadius * sin(.pi * 7 / 4 + 0.58))
-        try #expect(alpha(x: survivor.dx, y: survivor.dy) > 0.85, "the ring survives beside the dot")
-        // The light face's ink is black — routing the dark ink here would
-        // still pass the alpha check above, so pin the colour itself.
-        let inkColor = try #require(rep.colorAt(
-            x: Int((survivor.dx * 4).rounded()),
-            y: Int(((20 - survivor.dy) * 4).rounded())
-        )?.usingColorSpace(.deviceRGB))
-        #expect(inkColor.redComponent < 0.15, "the light face's mark draws in black ink")
-
-        // The mark itself must not change size with its state: the badged
-        // construction is drawn one-to-one with the idle construction, so
-        // their ink footprints match (a scale slip would read as the tray
-        // glyph growing every time a problem appears).
-        let restingRep = try render(MenuBarLogo.image(), canvas: 18, scale: 4)
-        let restingExtent = try inkExtent(restingRep, canvas: 18)
-        let badgedExtent = try inkExtent(rep, canvas: 20)
-        #expect(abs(badgedExtent.width - restingExtent.width) < 0.5)
-        #expect(abs(badgedExtent.height - restingExtent.height) < 0.5)
-    }
-
-    @Test("the dark-appearance attention face wears white ink and the blue dot")
-    func badgedDarkFace() throws {
-        let dark = try #require(NSAppearance(named: .darkAqua))
-        let badged = MenuBarLogo.badgedImage(for: dark)
-        #expect(!badged.isTemplate)
-
-        let rep = try render(badged, canvas: 20, scale: 4)
-        let ringRadius: CGFloat = 0.260 * 28
-        func rgb(x: CGFloat, y: CGFloat) throws -> (r: CGFloat, g: CGFloat, b: CGFloat) {
-            let pixel = NSPoint(
-                x: (x * 4).rounded(),
-                y: ((20 - y) * 4).rounded()
-            )
-            let color = try #require(rep.colorAt(x: Int(pixel.x), y: Int(pixel.y)))
-                .usingColorSpace(.deviceRGB)
-            let resolved = try #require(color)
-            return (resolved.redComponent, resolved.greenComponent, resolved.blueComponent)
-        }
-
-        // The mark's ink must be white on the dark menu bar, not the template
-        // construction's black — a black mark would vanish there.
-        let survivor = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4 + 0.58), dy: 10 + ringRadius * sin(.pi * 7 / 4 + 0.58))
-        let ink = try rgb(x: survivor.dx, y: survivor.dy)
-        #expect(ink.r > 0.85, "the mark draws in white ink on the dark face")
-
-        // The dot is blue on the dark face — b dominates r and g — while the
-        // mark's ink is white; on the light face both flip per badgedFace.
-        let dotCenter = CGVector(dx: 10 + ringRadius * cos(.pi * 7 / 4), dy: 10 + ringRadius * sin(.pi * 7 / 4))
-        let darkDot = try rgb(x: dotCenter.dx, y: dotCenter.dy)
-        #expect(darkDot.b > darkDot.r + 0.2 && darkDot.b > darkDot.g + 0.2, "the dark face's dot is blue")
+        let s: CGFloat = 28
+        let barMiddle = 9 + (MenuBarLogo.exclamationBarTop + MenuBarLogo.exclamationBarBottom) / 2 * s
+        try #expect(alpha(rep, x: 9, y: barMiddle) > 0.85, "the bar is solid ink")
+        try #expect(alpha(rep, x: 9, y: 9 + MenuBarLogo.exclamationDotCenter * s) > 0.85, "the dot is solid ink")
+        // Between bar and dot: clear. Where the plates' ends were: clear —
+        // the stack is gone, where the resting face has ink there.
+        try #expect(alpha(rep, x: 9, y: 9 - 0.08 * s) < 0.2, "a gap between bar and dot")
+        try #expect(alpha(rep, x: 9 + 0.07 * s, y: 9 + 0.08 * s) < 0.2, "the top plate's end is clear")
+        try #expect(alpha(rep, x: 9 + 0.07 * s, y: 9 - 0.08 * s) < 0.2, "the bottom plate's end is clear")
+        try #expect(alpha(resting, x: 9 + 0.07 * s, y: 9 + 0.08 * s) > 0.85, "the control: rest has its top plate there")
+        // The same ring: ink on its centreline at the lower right, and the
+        // same ink footprint — the mark must not change size with its state.
+        let ringRadius: CGFloat = 0.260 * s
+        try #expect(alpha(rep, x: 9 + ringRadius * cos(.pi * 7 / 4), y: 9 + ringRadius * sin(.pi * 7 / 4)) > 0.85)
+        let restingExtent = try inkExtent(resting, canvas: 18)
+        let attentionExtent = try inkExtent(rep, canvas: 18)
+        #expect(abs(attentionExtent.width - restingExtent.width) < 0.5)
+        #expect(abs(attentionExtent.height - restingExtent.height) < 0.5)
     }
 
     /// The drawing's bounding box in points, from opaque pixels.
@@ -156,7 +100,7 @@ struct MenuBarLogoTests {
 
     @Test("every face renders, including the hero scale")
     func allFacesRender() {
-        #expect(MenuBarLogo.badgedImage(for: .currentDrawing()).size.width > 0)
+        #expect(MenuBarLogo.attentionImage.size.width > 0)
         #expect(MenuBarLogo.heroImage.size.width == 96)
     }
 
@@ -209,7 +153,7 @@ struct MenuBarLogoTests {
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         let faces: [(String, NSImage, CGFloat)] = [
             ("idle", MenuBarLogo.image(), 18),
-            ("attention", MenuBarLogo.badgedImage(for: .currentDrawing()), 20),
+            ("attention", MenuBarLogo.attentionImage, 18),
             ("running-0", MenuBarLogo.image(phase: 0), 18),
             ("running-1", MenuBarLogo.image(phase: 1), 18),
             ("hero", MenuBarLogo.heroImage, 96),

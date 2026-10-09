@@ -35,27 +35,15 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
         menu.delegate = self
         statusItem.menu = menu
-        // The badged faces are non-template bitmaps keyed on the bar's
-        // appearance, and the observation loop below watches model state
-        // only — an appearance flip with no model change would leave
-        // black-ink art on a dark bar until something else happened.
-        DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            // Face only, not `refresh()`: a full refresh here would install a
-            // second observation registration beside the live one, and each
-            // theme flip would stack another.
-            Task { @MainActor in self?.reapplyFace() }
-        }
+        // Every face is a template image, so the bar's ink is the bar's
+        // business: no theme observer, and the observation loop below
+        // watches model state only.
         refresh()
     }
 
     // MARK: - Faces
 
-    /// The model state `iconState` reads, so `refresh` and `reapplyFace` keep
-    /// the same six arguments by construction.
+    /// The model state `iconState` reads.
     private func currentState() -> MenuBarStatus.IconState {
         MenuBarStatus.iconState(
             activity: model.activity,
@@ -94,23 +82,13 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Re-renders the face for the current state without touching the
-    /// observation registration — the theme-changed path's entry point.
-    private func reapplyFace() {
-        applyFace(for: currentState(), hold: model.scheduleHold)
-    }
-
     private func applyFace(for state: MenuBarStatus.IconState, hold: ScheduleHold?) {
         let button = statusItem.button
         switch MenuBarStatus.glyph(for: state) {
         case .logo:
             button?.image = MenuBarLogo.image()
-        case .badgedLogo:
-            // The baked badge variants are keyed on the *item's* appearance,
-            // which follows the menu bar and can differ from the app's.
-            if let button {
-                button.image = MenuBarLogo.badgedImage(for: button.effectiveAppearance)
-            }
+        case .attentionLogo:
+            button?.image = MenuBarLogo.attentionImage
         case .animatedLogo:
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 button?.image = MenuBarLogo.stillRunningImage
@@ -119,8 +97,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             }
         }
         // The held face: the same glyph, dimmed — AppKit's own "off but
-        // still functional" look for a status item — so a problem badge
-        // stays readable under it. The words go to VoiceOver.
+        // still functional" look for a status item — so a problem's
+        // exclamation mark stays readable under it. The words go to VoiceOver.
         button?.appearsDisabled = MenuBarStatus.appearsHeld(state: state, hold: hold)
         button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(for: state, hold: hold))
     }
