@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-@testable import SwiftRestic
 
 @Suite("restic cache report")
 struct ResticCacheReportTests {
