@@ -12,13 +12,18 @@ concurrency:
 jobs:
   test:
     name: Tests (macOS)
-    runs-on: macos-15
+    # macos-26 defaults to Xcode 26.6; macos-15's Xcode 16.4 SDK does not
+    # mark UNNotificationSettings Sendable, which Swift 6 strict concurrency
+    # rejects in AppModel+Notifications.
+    runs-on: macos-26
     env:
       # A silent skip is a lie in CI: with this set, a missing restic fails the
       # run instead of letting every integration suite skip. The guard itself
       # lives in build.sh, which greps the log for the integration suite's
       # start line.
       SWIFTRESTIC_TEST_DISALLOW_SKIP: "1"
+      # The runner has no Apple Development certificate; see build.sh.
+      SWIFTRESTIC_ADHOC_SIGN: "1"
     steps:
       - uses: actions/checkout@v4
 
