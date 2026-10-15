@@ -328,7 +328,12 @@ struct NetworkSharePasswordRows: View {
         } icon: {
             Image(systemName: "network")
         }
-        SecureField("Share password", text: $password, prompt: Text(isSaved ? "Saved" : "Needed to reconnect it"))
+        // Labelled in a stack as in a Form: a bare field outside a Form
+        // shows only its prompt.
+        LabeledContent("Share password") {
+            SecureField("Share password", text: $password, prompt: Text(isSaved ? "Saved" : "Needed to reconnect it"))
+                .labelsHidden()
+        }
         Text(isSaved
             ? "SwiftRestic reconnects the share before a backup when it isn't mounted. Type a password to replace the saved one."
             : "SwiftRestic reconnects the share before a backup when it isn't mounted.")
