@@ -419,6 +419,30 @@ struct RepeatedProblemNotificationTests {
         #expect(!warned(60).isSameProblem(as: failed(0)))
         #expect(!failed(60).isSameProblem(as: ended(0, .succeeded)))
         #expect(!ended(60, .succeeded).isSameProblem(as: ended(0, .succeeded)))
+        // Folders gone from this Mac, by their paths: the message names only
+        // each one's last component, and loses its digits.
+        func gone(_ path: String) -> RunRecord {
+            var run = failed(0, message: RunRecord.folderGoneMessage(sources: [path]))
+            run.missingSources = [path]
+            return run
+        }
+        #expect(!gone("/Users/me/Photos 2024").isSameProblem(as: gone("/Users/me/Photos 2023")))
+        #expect(!gone("/Users/me/New/Photos").isSameProblem(as: gone("/Users/me/Old/Photos")))
+        #expect(gone("/Users/me/Photos 2023").isSameProblem(as: gone("/Users/me/Photos 2023")))
+        // A warning's other lines and hook complaints with their numbers
+        // aside; its unreadable items exactly — two files are two problems.
+        var timedOut = warned(60)
+        timedOut.hookMessages = ["After-success hook exited with status 28: curl: (28) Operation timed out after 1010 milliseconds with 0 bytes received"]
+        var timedOutBefore = warned(0)
+        timedOutBefore.hookMessages = ["After-success hook exited with status 28: curl: (28) Operation timed out after 1007 milliseconds with 0 bytes received"]
+        #expect(timedOut.isSameProblem(as: timedOutBefore))
+        var gap = warned(60)
+        gap.itemErrors.append("3 restic messages could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete.")
+        var gapBefore = warned(0)
+        gapBefore.itemErrors.append("5 restic messages could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete.")
+        #expect(gap.isSameProblem(as: gapBefore))
+        #expect(!warned(60, items: ["/a/IMG_0002.jpg: open /a/IMG_0002.jpg: permission denied"])
+            .isSameProblem(as: warned(0, items: ["/a/IMG_0001.jpg: open /a/IMG_0001.jpg: permission denied"])))
         // A merged repeat (a standing failure for the same folders gone)
         // counts the runs it stands for, and continues its predecessor's.
         var standing = failed(60)

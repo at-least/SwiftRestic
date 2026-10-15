@@ -460,11 +460,13 @@ the generator after editing it; the PNGs are checked in.
   Locally, a notification when a backup fails or finishes with warnings
   (*Notify when a backup fails or finishes with warnings*, the channels' own
   event words), once per stretch: a run with its plan's last problem again —
-  the same outcome for the same cause, restic's exit and first sentence with
-  its numbers aside, or the same unreadable items — posts none until a
-  success (or a backup around an away drive) or another cause; a backup
-  skipped whole or stopped in between passes over it. The menu bar's mark,
-  the plan's caption, Activity and the channels still have every run.
+  the same outcome for the same cause: the same folders gone from this Mac,
+  by their paths; restic's exit and first sentence with its numbers aside;
+  or the same unreadable items, exactly, with the run's other lines and its
+  hooks' complaints numbers aside — posts none until a success (or a backup
+  around an away drive) or another cause; a backup skipped whole or stopped
+  in between passes over it. The menu bar's mark, the plan's caption,
+  Activity and the channels still have every run.
   Optionally one per successful backup, and one for a scheduled plan gone
   quiet:
   *Notify when a scheduled plan has not backed up for* 3, 7 (the default) or

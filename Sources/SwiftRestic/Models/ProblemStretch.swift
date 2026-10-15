@@ -25,16 +25,24 @@ extension RunRecord {
         isBackupProblem && other.isBackupProblem && outcome == other.outcome && problemCause == other.problemCause
     }
 
-    /// What a problem is about: a failure by restic's exit and first
-    /// sentence, its digits dropped — a lock's PID and age, an address,
-    /// differ from run to run — and a warning by its stored lines and hook
-    /// complaints.
+    /// What a problem is about. A failure for folders gone from this Mac by
+    /// their paths (`missingSources`: its message names only each one's
+    /// last component); any other failure by restic's exit and first
+    /// sentence. A warning by its unreadable items, exactly — two files are
+    /// two problems — then its other lines (the decoding gap, a skipped
+    /// retention) and hook complaints. The sentence, the other lines and the
+    /// complaints lose their digits: a lock's PID and age, an address, a
+    /// count, a hook's timing change from run to run.
     private var problemCause: String {
+        func withoutDigits(_ text: String) -> String { text.filter { !$0.isNumber } }
         if outcome == .failed {
+            if let missingSources { return "gone\n" + missingSources.joined(separator: "\n") }
             let sentence = failureMessage.map(Format.firstSentence) ?? ""
-            return "\(exitCode.map(String.init) ?? "-") " + sentence.filter { !$0.isNumber }
+            return "\(exitCode.map(String.init) ?? "-") " + withoutDigits(sentence)
         }
-        return (itemErrors + hookMessages).joined(separator: "\n")
+        let items = unreadableItems
+        let rest = (itemErrors.dropFirst(items.count) + hookMessages).map(withoutDigits)
+        return (Array(items) + rest).joined(separator: "\n")
     }
 
     /// This backup's stretch, `previous` being its plan's backup before it
