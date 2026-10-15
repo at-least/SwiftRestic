@@ -145,8 +145,14 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// `files_restored` key).
     var filesSkipped: Int = 0
 
-    // A standing skip (`continuingSkip(of:)`): one record for every run a
-    // drive stayed away for. Nil for a run that stands alone.
+    /// The plan's folders when a backup failed because none of them is on
+    /// this Mac and no drive it could wait for is away
+    /// (`folderGoneMessage(sources:)`). Nil for any other run.
+    var missingSources: [String]?
+
+    // A standing skip (`continuingSkip(of:)`), or a standing failure for the
+    // same folders gone (`continuingFolderGone(of:)`): one record for every
+    // run it lasted. Nil for a run that stands alone.
 
     /// How many runs the record stands for.
     var skipCount: Int?
@@ -209,6 +215,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         destinationPath = c.optional(.destinationPath)
         filesRestored = c.value(.filesRestored, default: 0)
         filesSkipped = c.value(.filesSkipped, default: 0)
+        missingSources = c.optional(.missingSources)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
@@ -320,10 +327,39 @@ extension RunRecord {
     static let everySourceMissingMessage = "Fatal: all source directories/files do not exist"
 
     /// Why a backup was skipped, for Activity's Detail: the drives its
-    /// folders live on when every one is on a volume under /Volumes — the
-    /// usual reason they are all missing — else that none of them is here.
+    /// folders — or the repository — live on, every one away. A folder
+    /// missing from this Mac is no skip (`folderGoneMessage(sources:)`).
     static func skippedReason(sources: [String]) -> String {
-        notConnected(sources).map { $0 + "." } ?? "None of its folders are on this Mac."
+        guard let drives = notConnected(sources) else { preconditionFailure("a skip with a source not on a volume: \(sources)") }
+        return drives + "."
+    }
+
+    /// Why a backup failed when none of its folders is on this Mac and no
+    /// drive it could wait for is away: each named, and what to do.
+    static func folderGoneMessage(sources: [String]) -> String {
+        let names = sources.map { "“\(($0 as NSString).lastPathComponent)”" }
+        return names.count == 1
+            ? "\(names[0]) is not on this Mac — it was moved, renamed or deleted. Edit the plan to back up where it is now."
+            : "\(Format.list(names)) are not on this Mac — they were moved, renamed or deleted. Edit the plan to back up where they are now."
+    }
+
+    /// This folder-gone failure as the continuation of `previous`, the
+    /// plan's newest backup before it, failed for the same folders gone and
+    /// carrying no hook's complaint: one record, this run's, counting the
+    /// runs as a standing skip does (`continuingSkip(of:)`, whose fields it
+    /// shares). An hourly plan whose folder was deleted is one row and one
+    /// notification, not one an hour. Nil when it does not continue it.
+    func continuingFolderGone(of previous: RunRecord) -> RunRecord? {
+        guard kind == .backup, previous.kind == .backup,
+              let planID, previous.planID == planID, previous.repositoryID == repositoryID,
+              outcome == .failed, previous.outcome == .failed,
+              let missingSources, missingSources == previous.missingSources,
+              previous.hookMessages.isEmpty
+        else { return nil }
+        var merged = self
+        merged.skipCount = (previous.skipCount ?? 1) + 1
+        merged.skippedSince = previous.skippedSince ?? previous.startedAt
+        return merged
     }
 
     /// Why a backup that wrote a snapshot was still skipped: restic left

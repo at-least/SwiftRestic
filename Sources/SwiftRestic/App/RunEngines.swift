@@ -262,12 +262,21 @@ enum BackupRunEngine {
             // A cache must never delay, and never fail, the run that feeds it.
             await sink.refreshSnapshots(repositoryID: repository.id)
         } catch let ResticError.commandFailed(_, message) where message.hasPrefix(RunRecord.everySourceMissingMessage) {
-            // Every folder missing — a drive not plugged in: restic wrote
-            // nothing and said so. The slot is stamped, so an hourly plan
-            // does not try again every tick; a mount brings it back sooner
-            // (`catchUpAfterMount`).
-            record.outcome = .skipped
-            record.detailText = RunRecord.skippedReason(sources: plan.sources)
+            // Every folder missing: restic wrote nothing and said so. On
+            // drives that are away the run is skipped — a mount brings it
+            // back sooner (`catchUpAfterMount`). Missing from this Mac — its
+            // startup disk, or a drive that is here — nothing brings it
+            // back, so the run fails and the plan's editor is the fix. The
+            // slot is stamped either way, so an hourly plan does not try
+            // again every tick.
+            if plan.sources.allSatisfy({ VolumePresence.isMounted(volumeOf: ResticService.expandTilde($0)) == false }) {
+                record.outcome = .skipped
+                record.detailText = RunRecord.skippedReason(sources: plan.sources)
+            } else {
+                record.outcome = .failed
+                record.missingSources = plan.sources
+                record.failureMessage = RunRecord.folderGoneMessage(sources: plan.sources)
+            }
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))

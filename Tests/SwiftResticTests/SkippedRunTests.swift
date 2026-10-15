@@ -10,15 +10,64 @@ import Testing
 struct SkippedRunTests {
     private let now = Date(timeIntervalSince1970: 1_790_000_000)
 
-    @Test("the reason names the drive when every folder is on one, else says the folders are gone")
+    @Test("the reason names the drive every folder is on, each drive once")
     func skippedReason() {
         #expect(RunRecord.skippedReason(sources: ["/Volumes/Archive SSD/Documents", "/Volumes/Archive SSD/Photos"])
             == "“Archive SSD” is not connected.")
         #expect(RunRecord.skippedReason(sources: ["/Volumes/Archive SSD/Documents", "/Volumes/Travel/Code"])
             == "“Archive SSD” and “Travel” are not connected.")
-        #expect(RunRecord.skippedReason(sources: ["/Volumes/Archive SSD", "/Users/me/gone"])
-            == "None of its folders are on this Mac.")
-        #expect(RunRecord.skippedReason(sources: ["/Users/me/gone"]) == "None of its folders are on this Mac.")
+    }
+
+    @Test("a backup whose folders are gone from this Mac names them and says what to do")
+    func folderGoneMessage() {
+        #expect(RunRecord.folderGoneMessage(sources: ["/Users/me/Projects"])
+            == "“Projects” is not on this Mac — it was moved, renamed or deleted. Edit the plan to back up where it is now.")
+        #expect(RunRecord.folderGoneMessage(sources: ["/Users/me/Projects", "~/Notes"])
+            == "“Projects” and “Notes” are not on this Mac — they were moved, renamed or deleted. Edit the plan to back up where they are now.")
+    }
+
+    @Test("a failure for the same folders gone continues the plan's last one; any other failure stands alone")
+    func folderGoneRepeatsMerge() throws {
+        let planID = UUID()
+        func gone(_ minutes: Double, _ sources: [String] = ["/Users/me/Projects"]) -> RunRecord {
+            var run = RunRecord(kind: .backup, planID: planID, planName: "Projects", startedAt: now.addingTimeInterval(minutes * 60))
+            run.outcome = .failed
+            run.missingSources = sources
+            run.failureMessage = RunRecord.folderGoneMessage(sources: sources)
+            return run
+        }
+        let first = gone(0)
+        let second = try #require(gone(60).continuingFolderGone(of: first))
+        #expect(second.skipCount == 2)
+        #expect(second.skippedSince == first.startedAt)
+        let third = try #require(gone(120).continuingFolderGone(of: second))
+        #expect(third.skipCount == 3)
+        #expect(third.skippedSince == first.startedAt)
+
+        #expect(gone(60, ["/Users/me/Elsewhere"]).continuingFolderGone(of: first) == nil)
+        var otherFailure = first
+        otherFailure.missingSources = nil
+        otherFailure.failureMessage = "Fatal: unable to open config file"
+        #expect(gone(60).continuingFolderGone(of: otherFailure) == nil)
+        #expect(otherFailure.continuingFolderGone(of: first) == nil)
+        var complained = first
+        complained.hookMessages = ["“mount” exited with 1"]
+        #expect(gone(60).continuingFolderGone(of: complained) == nil)
+        var otherPlan = first
+        otherPlan.planID = UUID()
+        #expect(gone(60).continuingFolderGone(of: otherPlan) == nil)
+
+        // Read once, with how long it has stood, as a standing skip is.
+        let since = Format.timestamp(first.startedAt)
+        #expect(RunRecordPresentation.detail(for: third)
+            == "“Projects” is not on this Mac — it was moved, renamed or deleted. Failed 3 times since \(since).")
+        let details = RunRecordPresentation.detailsText(
+            for: third, repositoryName: "Home NAS", versionsNow: RunLogVersions.current(resticVersion: "")
+        )
+        #expect(details.contains("Failing since: \(since) (3 runs)"))
+        #expect(!details.contains("Skipped since"))
+        let roundTrip = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(third))
+        #expect(roundTrip.missingSources == ["/Users/me/Projects"])
     }
 
     @Test("a skipped run reads quietly: its own name, no alarm glyph, no numbers")

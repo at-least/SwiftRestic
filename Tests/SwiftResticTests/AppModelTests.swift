@@ -532,11 +532,53 @@ struct AppModelTests {
         #expect(plan.lastSuccessAt == nil)
         #expect(model.currentProblem(for: harness.plan.id) == nil)
 
-        // A folder that is simply gone, not on a volume.
-        model.configuration.plans[index].sources = [harness.root.appendingPathComponent("gone").path]
+        await model.shutdown()
+    }
+
+    @Test("a backup whose every folder is gone from this Mac fails with the plan's editor as its fix, and its repeats are one record")
+    func everySourceGoneFromThisMacFails() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        let gone = harness.root.appendingPathComponent("gone").path
+        model.configuration.plans[index].sources = [gone]
+
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
-        #expect(model.configuration.runs.first?.detailText == "None of its folders are on this Mac.")
+
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.outcome == .failed)
+        #expect(record.missingSources == [gone])
+        #expect(record.failureMessage
+            == "“gone” is not on this Mac — it was moved, renamed or deleted. Edit the plan to back up where it is now.")
+        #expect(model.fix(for: record) == .editPlan(harness.plan.id))
+        #expect(model.currentProblem(for: harness.plan.id) != nil)
+        let plan = try #require(model.plan(id: harness.plan.id))
+        #expect(plan.lastRunAt != nil, "the slot is stamped, so the plan does not re-fire every tick")
+
+        // The same folders gone again: one record for both runs.
+        let count = model.configuration.runs.count
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.configuration.runs.count == count)
+        let standing = try #require(model.configuration.runs.first)
+        #expect(standing.outcome == .failed)
+        #expect(standing.skipCount == 2)
+        #expect(standing.skippedSince == record.startedAt)
+
+        // A drive that is here, the folder gone from it: not an away drive.
+        let startup = try #require(
+            FileManager.default.contentsOfDirectory(atPath: "/Volumes").first {
+                (try? FileManager.default.destinationOfSymbolicLink(atPath: "/Volumes/\($0)")) == "/"
+            }
+        )
+        let onDriveHere = "/Volumes/\(startup)\(harness.root.path)/moved"
+        model.configuration.plans[index].sources = [onDriveHere]
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.configuration.runs.first?.outcome == .failed)
+        #expect(model.configuration.runs.first?.missingSources == [onDriveHere])
 
         await model.shutdown()
     }

@@ -225,12 +225,21 @@ the generator after editing it; the PNGs are checked in.
   tried: it would mean reading a real iCloud Drive file.
 - **Skipped backups** — when every folder of a plan is missing, restic writes
   nothing (exit 1, "Fatal: all source directories/files do not exist",
-  restic 0.19.1). The run is recorded as *Skipped*, its reason in Activity's
-  Detail column, the drawer and Copy Details: "“Archive SSD” is not
-  connected." when the folders live on volumes, else "None of its folders
-  are on this Mac." It is no failure — no dot, notification, banner or
+  restic 0.19.1). When every one is on a drive that is away — a volume under
+  /Volumes that is not mounted — the run is recorded as *Skipped*, its
+  reason in Activity's Detail column, the drawer and Copy Details: "“Archive
+  SSD” is not connected." It is no failure — no dot, notification, banner or
   problem row (a channel with a start ping hears a fail, as for a cancel) —
   and it stamps the slot, so an hourly plan does not retry every minute. A
+  folder missing from this Mac — its startup disk, or a drive that is here —
+  comes back with no mount, so that run fails: "“Projects” is not on this
+  Mac — it was moved, renamed or deleted. Edit the plan to back up where it
+  is now.", with *Edit Plan…* beside it in the drawer and on the plan page;
+  the plan counts as unprotected, and a failure for the same folders merges
+  into the last one as a standing skip does ("… Failed 5 times since …", a
+  "Failing since:" line in Copy Details). Until 2026-10-15 such a run was
+  Skipped, "None of its folders are on this Mac.", and the plan read as
+  protected while one folder of two gone was already a warning. A
   scheduled *Skipped* posts nothing, but a *Back Up Now*, which ends in
   milliseconds, gets a passing banner: "“Documents” skipped — “Travel SSD” is
   not connected." When a volume mounts, each scheduled plan whose newest

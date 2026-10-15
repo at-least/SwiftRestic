@@ -76,11 +76,14 @@ extension AppModel {
 
     func append(record: RunRecord) {
         var record = record
-        // A skip continuing the plan's last one replaces it, counting it
-        // (`continuingSkip(of:)`); its log leaves with it.
-        if record.outcome == .skipped,
+        // A skip, or a failure for the same folders gone, continuing the
+        // plan's last one replaces it, counting it (`continuingSkip(of:)`,
+        // `continuingFolderGone(of:)`); its log leaves with it.
+        if record.outcome == .skipped || record.missingSources != nil,
            let index = configuration.runs.firstIndex(where: { $0.kind == .backup && $0.planID == record.planID }),
-           let merged = record.continuingSkip(of: configuration.runs[index]) {
+           let merged = record.outcome == .skipped
+               ? record.continuingSkip(of: configuration.runs[index])
+               : record.continuingFolderGone(of: configuration.runs[index]) {
             removeRunLogs([configuration.runs.remove(at: index).id])
             record = merged
         }

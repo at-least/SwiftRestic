@@ -17,11 +17,14 @@ enum RunFix: Equatable {
     case editRepositoryPath(UUID)
     /// restic exit 11: a lock this app does not hold is in the way.
     case removeStaleLocks(UUID)
+    /// None of the plan's folders is on this Mac (`RunRecord.missingSources`).
+    case editPlan(UUID)
 
     var title: String {
         switch self {
         case .editRepository, .editRepositoryPath: "Edit Repository…"
         case .removeStaleLocks: "Remove Stale Locks…"
+        case .editPlan: "Edit Plan…"
         }
     }
 
@@ -31,6 +34,7 @@ enum RunFix: Equatable {
         case .editRepository: "The password doesn't open this repository — check it in the repository settings"
         case .editRepositoryPath: ResticError.noRepositoryAtPath
         case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
+        case .editPlan: "Point the plan at where its folders are now"
         }
     }
 }
@@ -82,8 +86,11 @@ enum RunRecordPresentation {
         return run.repositoryID
     }
 
-    static func fix(for run: RunRecord, repositoryExists: Bool, repositoryBusy: Bool) -> RunFix? {
+    static func fix(for run: RunRecord, repositoryExists: Bool, repositoryBusy: Bool, planExists: Bool = true) -> RunFix? {
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
+        if run.missingSources != nil, let planID = run.planID {
+            return planExists ? .editPlan(planID) : nil
+        }
         if run.exitCode == 12 { return .editRepository(repositoryID) }
         if run.exitCode == 10 { return .editRepositoryPath(repositoryID) }
         let locked = run.exitCode == 11 || run.failureMessage?.contains("already locked") == true
@@ -193,7 +200,14 @@ enum RunRecordPresentation {
     static func detail(for run: RunRecord) -> String {
         // The first sentence: restic's multi-line tail stays in the drawer,
         // the plan card and Copy Details, which show the whole message.
-        if let failure = run.failureMessage { return Format.firstSentence(failure) }
+        if let failure = run.failureMessage {
+            let reason = Format.firstSentence(failure)
+            // A standing failure for the same folders gone, as a skip.
+            guard let count = run.skipCount, let since = run.skippedSince else { return reason }
+            // firstSentence leaves the full stop off a cut sentence.
+            let sentence = reason.hasSuffix(".") ? reason : reason + "."
+            return "\(sentence) Failed \(count) times since \(Format.timestamp(since))."
+        }
         // Why there was nothing to back up, before any hook's complaint,
         // and how long it has stood.
         if run.kind == .backup, run.outcome == .skipped, let reason = run.detailText {
@@ -333,7 +347,8 @@ enum RunRecordPresentation {
             // snapshot was written anyway.
             if run.outcome == .skipped, let reason = run.detailText { lines.append("Skipped: \(reason)") }
             if let since = run.skippedSince, let count = run.skipCount {
-                lines.append("Skipped since: \(Format.timestamp(since)) (\(count) runs)")
+                let label = run.outcome == .failed ? "Failing since" : "Skipped since"
+                lines.append("\(label): \(Format.timestamp(since)) (\(count) runs)")
             }
             if hasBackupNumbers(run) {
                 lines.append(

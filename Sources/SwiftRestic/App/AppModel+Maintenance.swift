@@ -39,7 +39,8 @@ extension AppModel {
         RunRecordPresentation.fix(
             for: run,
             repositoryExists: repository(id: run.repositoryID) != nil,
-            repositoryBusy: run.repositoryID.map { busyRepositoryIDs.contains($0) } ?? false
+            repositoryBusy: run.repositoryID.map { busyRepositoryIDs.contains($0) } ?? false,
+            planExists: plan(id: run.planID) != nil
         )
     }
 
