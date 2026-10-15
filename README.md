@@ -422,9 +422,14 @@ the generator after editing it; the PNGs are checked in.
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
   run off.
 - **Alerts** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
-  Locally, a notification per failed or warning backup (*Notify when a
-  backup fails or finishes with warnings*, the channels' own event words),
-  optionally per successful one, and one for a scheduled plan gone quiet:
+  Locally, a notification when a backup fails or finishes with warnings
+  (*Notify when a backup fails or finishes with warnings*, the channels' own
+  event words), once per stretch: a run with its plan's last problem again —
+  the same outcome for the same cause, restic's exit and first sentence with
+  its numbers aside, or the same unreadable items — posts none until a
+  success or another cause, while the menu bar's mark, the plan's caption,
+  Activity and the channels still have every run. Optionally one per
+  successful backup, and one for a scheduled plan gone quiet:
   *Notify when a scheduled plan has not backed up for* 3, 7 (the default) or
   14 days, or never (Settings › General) — a drive unplugged at every slot,
   or slots slept through, write no failed run, so nothing else would say it.

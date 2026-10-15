@@ -352,3 +352,106 @@ struct WarningCountTests {
         #expect(two.summary.contains("2 warnings"), "summary was: \(two.summary)")
     }
 }
+
+/// A backup that fails the same way again notifies once: the first of a
+/// stretch posts, a repeat stays quiet until a success, a skip or another
+/// cause re-arms it. The menu bar, the caption and Activity still show
+/// every run; the channels' per-run pings are not this rule's.
+@Suite("Repeated problems notify once")
+struct RepeatedProblemNotificationTests {
+    private let now = Date(timeIntervalSince1970: 1_790_000_000)
+    private let planID = UUID()
+
+    private func failed(_ minutes: Double, exit: Int32 = 1, message: String = "Fatal: unable to open config file: Stat: no such file or directory") -> RunRecord {
+        var run = RunRecord(kind: .backup, planID: planID, planName: "Documents", startedAt: now.addingTimeInterval(minutes * 60))
+        run.outcome = .failed
+        run.exitCode = exit
+        run.failureMessage = message
+        return run
+    }
+
+    private func warned(_ minutes: Double, items: [String] = ["/a: open /a: permission denied"]) -> RunRecord {
+        var run = RunRecord(kind: .backup, planID: planID, planName: "Documents", startedAt: now.addingTimeInterval(minutes * 60))
+        run.outcome = .completedWithErrors
+        run.exitCode = 3
+        run.itemErrors = items
+        run.itemErrorCount = items.count
+        return run
+    }
+
+    @Test("the same outcome for the same cause repeats the problem; anything else is news")
+    func sameCauseRepeats() {
+        #expect(AppModel.repeatsProblem(failed(60), previous: failed(0)))
+        #expect(!AppModel.repeatsProblem(failed(60), previous: nil))
+        #expect(!AppModel.repeatsProblem(failed(60, exit: 11), previous: failed(0)))
+        #expect(!AppModel.repeatsProblem(failed(60, message: "Fatal: wrong password or no key found"), previous: failed(0)))
+        // Numbers in restic's words change from run to run: a lock's PID and age.
+        #expect(AppModel.repeatsProblem(
+            failed(60, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 4242 on nas by u (UID 501, GID 20)"),
+            previous: failed(0, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 517 on nas by u (UID 501, GID 20)")
+        ))
+        #expect(AppModel.repeatsProblem(warned(60), previous: warned(0)))
+        #expect(!AppModel.repeatsProblem(warned(60, items: ["/b: open /b: permission denied"]), previous: warned(0)))
+        #expect(!AppModel.repeatsProblem(warned(60), previous: failed(0)))
+        var success = failed(0)
+        success.outcome = .succeeded
+        success.failureMessage = nil
+        #expect(!AppModel.repeatsProblem(failed(60), previous: success))
+        // A merged repeat (a standing failure for the same folders gone)
+        // carries its own count.
+        var standing = failed(60)
+        standing.skipCount = 2
+        #expect(AppModel.repeatsProblem(standing, previous: nil))
+        // A success is never a repeat.
+        #expect(!AppModel.repeatsProblem(success, previous: success))
+    }
+
+    @MainActor
+    @Test("a run's notification follows the setting, and a problem's only the first time in a stretch")
+    func wantsNotification() {
+        let suite = "SwiftResticRepeatedProblemTests"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let model = AppModel(
+            store: ConfigStore(directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("SwiftResticRepeated-\(UUID().uuidString)")),
+            secrets: .inMemory(),
+            defaults: defaults
+        )
+        let first = failed(0)
+        model.append(record: first)
+        #expect(model.wantsNotification(for: first))
+        let again = failed(60)
+        model.append(record: again)
+        #expect(!model.wantsNotification(for: again))
+
+        var success = failed(120)
+        success.outcome = .succeeded
+        success.failureMessage = nil
+        model.append(record: success)
+        #expect(!model.wantsNotification(for: success), "successes notify only when asked")
+        let afterSuccess = failed(180)
+        model.append(record: afterSuccess)
+        #expect(model.wantsNotification(for: afterSuccess))
+
+        // A run merged into a standing failure for the same folders gone:
+        // the run it continued is gone from the history, its count is not.
+        func gone(_ minutes: Double) -> RunRecord {
+            var run = failed(minutes, message: RunRecord.folderGoneMessage(sources: ["/Users/me/Projects"]))
+            run.missingSources = ["/Users/me/Projects"]
+            return run
+        }
+        let goneFirst = gone(240)
+        model.append(record: goneFirst)
+        #expect(model.wantsNotification(for: goneFirst))
+        let goneAgain = gone(300)
+        model.append(record: goneAgain)
+        #expect(model.configuration.runs.first?.skipCount == 2)
+        #expect(!model.wantsNotification(for: goneAgain))
+
+        model.configuration.settings.notifyOnFailure = false
+        let silenced = failed(360, exit: 12, message: "Fatal: wrong password or no key found")
+        model.append(record: silenced)
+        #expect(!model.wantsNotification(for: silenced))
+    }
+}

@@ -91,6 +91,11 @@ struct SettingsView: View {
                 // What it gates (`AppModel.notify(about:)`), in the alert
                 // channels' own event words.
                 Toggle("Notify when a backup fails or finishes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
+                // `AppModel.repeatsProblem`: the rule said where it is set.
+                Text("Once for each cause: a backup that fails the same way again stays quiet until one succeeds or the cause changes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 // A plan that never runs writes no failure to notify about:
                 // an unplugged drive at every slot, a Mac asleep through them.
                 Picker("Notify when a scheduled plan has not backed up for", selection: $model.configuration.settings.staleAlertDays) {

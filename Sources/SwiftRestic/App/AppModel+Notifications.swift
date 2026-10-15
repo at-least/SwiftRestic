@@ -87,16 +87,53 @@ extension AppModel {
     /// ID, which a click opens; a run notification's is the run's ID.
     nonisolated static let quietPlanNotificationPrefix = "quiet-plan:"
 
-    func notify(about record: RunRecord) {
+    /// Whether a finished backup gets a local notification: its outcome's
+    /// setting, and for a problem, only the first of a stretch.
+    func wantsNotification(for record: RunRecord) -> Bool {
         let settings = configuration.settings
-        let wantsNotification = switch record.outcome {
-        case .succeeded: settings.notifyOnSuccess
-        case .completedWithErrors, .failed: settings.notifyOnFailure
+        switch record.outcome {
+        case .succeeded: return settings.notifyOnSuccess
+        case .completedWithErrors, .failed:
+            guard settings.notifyOnFailure else { return false }
+            // As stored: a run merged into a standing failure counts its
+            // runs, and the one it continued is gone from the history.
+            let stored = configuration.runs.first { $0.id == record.id } ?? record
+            let previous = configuration.runs.first {
+                $0.id != record.id && $0.kind == .backup && $0.planID == record.planID
+            }
+            return !Self.repeatsProblem(stored, previous: previous)
         // A drive not plugged in is no failure; the quiet-plan alert speaks
         // if it stays away.
-        case .cancelled, .skipped: false
+        case .cancelled, .skipped: return false
         }
-        guard wantsNotification, Self.supportsNotifications else { return }
+    }
+
+    /// Whether a failed or warning backup repeats the problem the plan's
+    /// previous backup had — the same outcome for the same cause — so the
+    /// stretch's first run already notified. A success, a skip, a cancel or
+    /// another cause in between is news. A run merged into a standing
+    /// failure (`continuingFolderGone(of:)`) counts its own repeats.
+    nonisolated static func repeatsProblem(_ record: RunRecord, previous: RunRecord?) -> Bool {
+        guard record.outcome == .failed || record.outcome == .completedWithErrors else { return false }
+        if (record.skipCount ?? 1) > 1 { return true }
+        guard let previous, previous.outcome == record.outcome else { return false }
+        return problemCause(of: record) == problemCause(of: previous)
+    }
+
+    /// What a problem is about, for `repeatsProblem`: a failure by restic's
+    /// exit and first sentence, its digits dropped — a lock's PID and age,
+    /// an address, differ from run to run — and a warning by its stored
+    /// lines and hook complaints.
+    nonisolated private static func problemCause(of run: RunRecord) -> String {
+        if run.outcome == .failed {
+            let sentence = run.failureMessage.map(Format.firstSentence) ?? ""
+            return "\(run.exitCode.map(String.init) ?? "-") " + sentence.filter { !$0.isNumber }
+        }
+        return (run.itemErrors + run.hookMessages).joined(separator: "\n")
+    }
+
+    func notify(about record: RunRecord) {
+        guard wantsNotification(for: record), Self.supportsNotifications else { return }
 
         let content = UNMutableNotificationContent()
         content.title = Self.notificationTitle(
