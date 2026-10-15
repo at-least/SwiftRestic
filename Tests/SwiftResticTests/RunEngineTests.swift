@@ -611,6 +611,14 @@ struct MaintenanceRunEngineTests {
         func makeHookRunner() -> HookRunner {
             HookRunner(runner: ResticRunner())
         }
+
+        /// The canned answer to a reconnect; every ask is logged.
+        var reconnectAnswer: [ShareReconnect] = []
+
+        func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
+            log.append("reconnect:\(volumes.joined(separator: ","))")
+            return reconnectAnswer
+        }
     }
 
     @Test("a clean check is delivered succeeded with its verdict")
@@ -628,6 +636,40 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
         #expect(sink.deliveredRecords[0].detailText == "No errors found.")
         #expect(sink.log.contains("stamp:check"))
+    }
+
+    @Test("a check on a repository whose network share is away reconnects it first; a share that stays away fails the run in those words, restic not asked")
+    func checkReconnectsItsShare() async throws {
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        let reason = "the server could not be reached"
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/Volumes/\(volume)/restic"
+
+        let failing = RecordingSink()
+        failing.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .failed(reason))]
+        let untouched = MockResticClient().onCheck(.success(ResticSummary()))
+        await MaintenanceRunEngine.perform(
+            repository: repository, task: .check, readDataPercentOverride: nil,
+            sink: StubMaintenanceServiceSink(client: untouched, base: failing)
+        )
+        #expect(failing.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(volume)"], "log was \(failing.log)")
+        #expect(untouched.callLog.isEmpty)
+        let record = try #require(failing.deliveredRecords.first)
+        #expect(record.outcome == .failed)
+        #expect(record.failureMessage == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: \(reason).")
+        #expect(failing.log.contains("stamp:check"))
+
+        let reconnected = RecordingSink()
+        reconnected.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .reconnected)]
+        let checked = MockResticClient().onCheck(.success(ResticSummary()))
+        await MaintenanceRunEngine.perform(
+            repository: repository, task: .prune, readDataPercentOverride: nil,
+            sink: StubMaintenanceServiceSink(client: checked, base: reconnected)
+        )
+        #expect(reconnected.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(volume)"], "log was \(reconnected.log)")
+        #expect(checked.callLog == ["prune"])
+        #expect(reconnected.deliveredRecords.first?.outcome == .succeeded)
     }
 
     @Test("a cancelled check still refreshes snapshots, outside the cancelled task")
@@ -770,6 +812,14 @@ struct RetentionRunEngineTests {
         func scheduleSnapshotRefresh(repositoryID: UUID) {
             log.append("schedule-refresh")
         }
+
+        /// The canned answer to a reconnect; every ask is logged.
+        var reconnectAnswer: [ShareReconnect] = []
+
+        func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
+            log.append("reconnect:\(volumes.joined(separator: ","))")
+            return reconnectAnswer
+        }
     }
 
     private func makePlan() -> BackupPlan {
@@ -778,6 +828,26 @@ struct RetentionRunEngineTests {
         plan.repositoryID = Repository().id
         plan.sources = ["/tmp/engine-source"]
         return plan
+    }
+
+    @Test("Apply Retention on a repository whose network share is away reconnects it first; a share that stays away fails the run in those words, no forget")
+    func retentionReconnectsItsShare() async throws {
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/Volumes/\(volume)/restic"
+        let client = MockResticClient().onForget(.success(2))
+        let sink = RecordingSink(client: client)
+        sink.reconnectAnswer = [ShareReconnect(
+            volumeName: volume, url: "smb://me@nas.local/\(volume)",
+            outcome: .failed("the share did not accept the user name and password")
+        )]
+        await RetentionRunEngine.perform(plan: makePlan(), repository: repository, sink: sink)
+
+        #expect(sink.log == ["context", "reconnect:\(volume)", "deliver:failed", "schedule-refresh"], "log was \(sink.log)")
+        #expect(client.callLog.isEmpty)
+        #expect(sink.deliveredRecords.first?.failureMessage
+            == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the share did not accept the user name and password.")
     }
 
     @Test("a clean run records a forget under the plan and refreshes the listing")
@@ -894,4 +964,5 @@ private final class StubMaintenanceServiceSink: MaintenanceRunEngine.Sink {
     func refreshSnapshots(repositoryID: UUID) async { await base.refreshSnapshots(repositoryID: repositoryID) }
     func scheduleSnapshotRefresh(repositoryID: UUID) { base.scheduleSnapshotRefresh(repositoryID: repositoryID) }
     func makeHookRunner() -> HookRunner { base.makeHookRunner() }
+    func reconnectShares(volumes: [String]) async -> [ShareReconnect] { await base.reconnectShares(volumes: volumes) }
 }

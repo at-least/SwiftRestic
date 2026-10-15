@@ -303,11 +303,13 @@ the generator after editing it; the PNGs are checked in.
     connected. Reconnecting “NAS” failed: the share did not accept the user
     name and password." Two runs needing one share mount it once, and a
     share macOS mounts beside a leftover /Volumes folder ("NAS-1") is no
-    reconnect. Checks, prunes and retention runs do not reconnect; a share
-    mounted with no user name offers no password; and each reconnect adds
-    the server to macOS's Recent Servers, as Finder's do. Tried against
-    Samba 4.23.8 on 2026-10-16, the password both injected and kept in the
-    Keychain.
+    reconnect. *Check…*, *Prune Now…* and *Apply Retention Now…* — its
+    preview too — reconnect the repository's share the same way; one that
+    stays away fails the run in those words rather than restic's
+    "repository does not exist". A share mounted with no user name offers no
+    password, and each reconnect adds the server to macOS's Recent Servers,
+    as Finder's do. Tried against Samba 4.23.8 on 2026-10-16, the password
+    both injected and kept in the Keychain.
 - **Scheduling** — hourly / daily / weekly, checked once a minute; a daily
   window missed asleep runs on waking. While restic cannot be found the
   scheduler starts nothing (no Failed record, banner or notification per

@@ -31,6 +31,25 @@ extension AppModel {
         configuration.settings.networkShares.removeAll { $0.id == share.id }
     }
 
+    /// A read that needs a local repository on a network share — the
+    /// retention preview — reconnects its saved share first when it is
+    /// away, as a run does; still away, it throws in the run's words
+    /// (`ShareNotReconnected`). A volume with no saved share is left to the
+    /// read, as before.
+    func reconnectShare(before repository: Repository) async throws {
+        let path = repository.resolvedLocalPath
+        guard repository.kind == .local, VolumePresence.isMounted(volumeOf: path) == false,
+              let volume = VolumePresence.volumeName(of: path)
+        else { return }
+        var failures: [String: String] = [:]
+        for answer in await reconnectShares(volumes: [volume]) {
+            if case let .failed(reason) = answer.outcome { failures[answer.volumeName] = reason }
+        }
+        guard failures.isEmpty else {
+            throw ShareNotReconnected(message: RunRecord.skippedReason(sources: [path], reconnectFailures: failures))
+        }
+    }
+
     /// Reconnects the saved shares among `volumes` — volumes a backup needs
     /// that are away. A volume no share is saved for is left to the run's
     /// away checks, as before; it gets no entry.
@@ -82,4 +101,11 @@ extension AppModel {
         shareReconnects[share.volumeName] = nil
         return reconnect
     }
+}
+
+/// A local repository's network share that stayed away when a read needed
+/// it, in a skipped run's words.
+struct ShareNotReconnected: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
 }
