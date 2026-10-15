@@ -37,6 +37,11 @@ struct RepositoryEditorSheet: View {
     /// Remotes reported by the user's own rclone, or `nil` when unknown or
     /// unavailable — the Remote field then stays a plain text field.
     @State private var rcloneRemotes: [RcloneRemote]?
+    /// The local folder's network share while it is mounted
+    /// (`VolumePresence.mountedShare`), read off the main actor.
+    @State private var mountedShare: MountedShare?
+    /// The share's password as typed: empty leaves a saved one as it is.
+    @State private var sharePassword = ""
 
     private let isNew: Bool
     /// Told the new repository's id once it is created and saved — never on
@@ -193,6 +198,18 @@ struct RepositoryEditorSheet: View {
         // An answer about another location would stand above the buttons
         // as if it were this one's.
         .onChange(of: draft.resticRepositoryString) { status = nil }
+        // The folder's network share, read off the main actor: a stalled
+        // share can hold the read for seconds.
+        .task(id: draft.kind == .local ? draft.resolvedLocalPath : "") {
+            guard draft.kind == .local else {
+                mountedShare = nil
+                return
+            }
+            let path = draft.resolvedLocalPath
+            let share = await Task.detached { VolumePresence.mountedShare(holding: path) }.value
+            guard !Task.isCancelled else { return }
+            mountedShare = share
+        }
         .task(id: draft.kind) {
             // Requeried on every return to the rclone kind: remotes are edited
             // outside the app, so a list from a previous visit may be stale.
@@ -221,7 +238,18 @@ struct RepositoryEditorSheet: View {
         if let initial, draft != initial { return true }
         if password != initialPassword { return true }
         if providerSecret != initialProviderSecret { return true }
+        if !sharePassword.isEmpty { return true }
         return false
+    }
+
+    /// The share the folder is on: as mounted now, else as saved — a share
+    /// away while the sheet is open keeps its row, so its password can
+    /// still be replaced. Nil off a share, and for any kind but a folder.
+    private var folderShare: (share: MountedShare, isSaved: Bool)? {
+        guard draft.kind == .local else { return nil }
+        let saved = VolumePresence.volumeName(of: draft.resolvedLocalPath).flatMap(model.networkShare(forVolume:))
+        if let mountedShare { return (mountedShare, saved != nil) }
+        return saved.map { (MountedShare(volumeName: $0.volumeName, url: $0.url), true) }
     }
 
     private func cancel() {
@@ -424,6 +452,9 @@ struct RepositoryEditorSheet: View {
                         draft.localPath = url.path
                     }
                 }
+            }
+            if let folderShare {
+                NetworkSharePasswordRows(url: folderShare.share.url, isSaved: folderShare.isSaved, password: $sharePassword)
             }
         case .sftp:
             TextField("User", text: $draft.sftpUser, prompt: Text("backup"))
@@ -682,6 +713,15 @@ struct RepositoryEditorSheet: View {
             password: password.isEmpty ? nil : password,
             providerSecret: draft.secretFieldLabel == nil || draft.kind == .sftp ? nil : providerSecret
         )
+        if !sharePassword.isEmpty, let share = folderShare?.share {
+            do {
+                try await model.saveNetworkShare(share, password: sharePassword)
+            } catch {
+                status = .failure("The repository is saved, but the share's password could not be: \(error.localizedDescription)")
+                return
+            }
+            sharePassword = ""
+        }
         await model.flushSave()
         await model.refreshSnapshots(repositoryID: draft.id)
         if isNew { onCreated(draft.id) }

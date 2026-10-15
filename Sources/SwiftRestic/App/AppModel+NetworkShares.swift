@@ -9,6 +9,28 @@ extension AppModel {
         configuration.settings.networkShares.first { $0.volumeName == volumeName }
     }
 
+    /// Saves a share's password and, the first time, the share itself, by
+    /// volume name — a repository and a plan on one share keep one record,
+    /// its URL as last read from the mounted volume. The password goes
+    /// first: a share is never saved without one.
+    func saveNetworkShare(_ share: MountedShare, password: String) async throws {
+        var saved = networkShare(forVolume: share.volumeName) ?? NetworkShare(volumeName: share.volumeName, url: share.url)
+        try await secrets.saveSharePassword(saved.id, password)
+        saved.url = share.url
+        if let index = configuration.settings.networkShares.firstIndex(where: { $0.id == saved.id }) {
+            configuration.settings.networkShares[index] = saved
+        } else {
+            configuration.settings.networkShares.append(saved)
+        }
+    }
+
+    /// Forgets a share: its password first, then the share — a Keychain
+    /// that refuses keeps both.
+    func removeNetworkShare(_ share: NetworkShare) async throws {
+        try await secrets.saveSharePassword(share.id, nil)
+        configuration.settings.networkShares.removeAll { $0.id == share.id }
+    }
+
     /// Reconnects the saved shares among `volumes` — volumes a backup needs
     /// that are away. A volume no share is saved for is left to the run's
     /// away checks, as before; it gets no entry.

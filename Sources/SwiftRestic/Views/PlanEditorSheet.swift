@@ -34,6 +34,12 @@ struct PlanEditorSheet: View {
     /// true words.
     @State private var isConfirmingAdopt = false
     @State private var armedAdoptConfirmation: ConfirmationCopy?
+    /// The network shares among the folders while mounted
+    /// (`VolumePresence.mountedShare`), read off the main actor.
+    @State private var mountedShares: [MountedShare] = []
+    /// Each share's password as typed, by volume name: empty leaves a saved
+    /// one as it is.
+    @State private var sharePasswords: [String: String] = [:]
     /// Which kind of editing this sheet is for. An adopt draft is prefilled,
     /// so emptiness alone would read it as an edit; adoption says so — the
     /// presenting root names `.adopt` when it raises the sheet.
@@ -193,6 +199,7 @@ struct PlanEditorSheet: View {
                 Button(mode == .adopt ? "Adopt" : (isNew ? "Create Plan" : "Save")) {
                     guard mode == .adopt else {
                         model.upsert(plan: draft)
+                        saveSharePasswords()
                         dismiss()
                         return
                     }
@@ -303,8 +310,51 @@ struct PlanEditorSheet: View {
     private func cancel() {
         if let initial, draft != initial {
             isConfirmingDiscard = true
+        } else if sharePasswords.values.contains(where: { !$0.isEmpty }) {
+            isConfirmingDiscard = true
         } else {
             dismiss()
+        }
+    }
+
+    /// The network shares the folders are on, each once: as mounted now,
+    /// else as saved — a share away while the sheet is open keeps its rows,
+    /// so its password can still be replaced.
+    private var folderShares: [(share: MountedShare, isSaved: Bool)] {
+        var shares: [(share: MountedShare, isSaved: Bool)] = []
+        for source in draft.sources {
+            guard let volume = VolumePresence.volumeName(of: ResticService.expandTilde(source)),
+                  !shares.contains(where: { $0.share.volumeName == volume })
+            else { continue }
+            let saved = model.networkShare(forVolume: volume)
+            if let mounted = mountedShares.first(where: { $0.volumeName == volume }) {
+                shares.append((mounted, saved != nil))
+            } else if let saved {
+                shares.append((MountedShare(volumeName: saved.volumeName, url: saved.url), true))
+            }
+        }
+        return shares
+    }
+
+    /// The typed share passwords, saved once the sheet has closed — the
+    /// Keychain answers off the main actor; a failure says so in a banner.
+    private func saveSharePasswords() {
+        let typed = folderShares.compactMap { entry in
+            sharePasswords[entry.share.volumeName].flatMap { $0.isEmpty ? nil : (share: entry.share, password: $0) }
+        }
+        guard !typed.isEmpty else { return }
+        Task { [model] in
+            for entry in typed {
+                do {
+                    try await model.saveNetworkShare(entry.share, password: entry.password)
+                } catch {
+                    model.post(Banner(
+                        title: "The password for \(entry.share.url) was not saved",
+                        message: error.localizedDescription,
+                        isError: true
+                    ))
+                }
+            }
         }
     }
 
@@ -379,6 +429,22 @@ struct PlanEditorSheet: View {
                 placeholder: "/Users/you/Documents",
                 expandsTildeInPath: true
             )
+            // Folders on a network share: its password, so a backup can
+            // reconnect it. Not while adopting — the sheet is about history.
+            if mode != .adopt {
+                ForEach(folderShares, id: \.share.volumeName) { entry in
+                    VStack(alignment: .leading, spacing: 6) {
+                        NetworkSharePasswordRows(
+                            url: entry.share.url,
+                            isSaved: entry.isSaved,
+                            password: Binding(
+                                get: { sharePasswords[entry.share.volumeName] ?? "" },
+                                set: { sharePasswords[entry.share.volumeName] = $0 }
+                            )
+                        )
+                    }
+                }
+            }
             // A folder that is gone fills the history with "does not exist,
             // skipping" lines; said here first. Adopt's footer already says
             // it, in the same words.
@@ -432,6 +498,24 @@ struct PlanEditorSheet: View {
             }
         }
         .padding(.top, 6)
+        // The folders' network shares, read off the main actor: a stalled
+        // share can hold the read for seconds.
+        .task(id: draft.sources) {
+            let sources = draft.sources.map(ResticService.expandTilde)
+            let shares = await Task.detached {
+                var found: [MountedShare] = []
+                for source in sources {
+                    guard let volume = VolumePresence.volumeName(of: source),
+                          !found.contains(where: { $0.volumeName == volume }),
+                          let share = VolumePresence.mountedShare(holding: source)
+                    else { continue }
+                    found.append(share)
+                }
+                return found
+            }.value
+            guard !Task.isCancelled else { return }
+            mountedShares = shares
+        }
     }
 
     /// What the cloud-files switch does with this restic: 0.19 brought

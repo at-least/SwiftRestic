@@ -6,6 +6,8 @@ struct SettingsView: View {
     /// Arms the "you can strand the app" confirmation: menu bar item off and
     /// window closed leaves the scheduler running with no visible way back.
     @State private var isConfirmingMenuBarOff = false
+    /// The network share whose Remove asks first.
+    @State private var removingShare: NetworkShare?
 
     var body: some View {
         TabView {
@@ -28,6 +30,28 @@ struct SettingsView: View {
             }
         } message: {
             Text("Closing the main window afterwards leaves scheduled backups running with no visible way back into SwiftRestic — reopening means launching the app again. Keep the item on to always have a way in.")
+        }
+        .confirmationDialog(
+            "Forget this network share's password?",
+            isPresented: Binding(get: { removingShare != nil }, set: { if !$0 { removingShare = nil } }),
+            titleVisibility: .visible,
+            presenting: removingShare
+        ) { share in
+            Button("Remove", role: .destructive) {
+                Task {
+                    do {
+                        try await model.removeNetworkShare(share)
+                    } catch {
+                        model.post(Banner(
+                            title: "The password for \(share.url) could not be removed",
+                            message: error.localizedDescription,
+                            isError: true
+                        ))
+                    }
+                }
+            }
+        } message: { share in
+            Text("A backup that needs \(share.url) is skipped while it is not mounted, until its password is entered again in the repository's or plan's editor.")
         }
         .task {
             await model.refreshFullDiskAccess()
@@ -156,6 +180,27 @@ struct SettingsView: View {
                     )
                 } else {
                     LabeledContent("Next backup", value: "Nothing scheduled")
+                }
+            }
+
+            // Saved from the repository and plan editors, where a folder on
+            // a share asks for its password.
+            if !model.configuration.settings.networkShares.isEmpty {
+                Section("Network shares") {
+                    ForEach(model.configuration.settings.networkShares) { share in
+                        LabeledContent {
+                            Button("Remove") { removingShare = share }
+                        } label: {
+                            Text(share.url)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(share.url)
+                        }
+                    }
+                    Text("SwiftRestic reconnects these shares with their saved passwords before a backup that needs them.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 

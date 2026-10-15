@@ -112,6 +112,64 @@ struct NetworkShareTests {
         #expect(a.map(\.outcome) == [.failed("the share did not accept the user name and password")])
     }
 
+    private func makeEditorModel(secrets: SecretStore) -> AppModel {
+        AppModel(
+            store: ConfigStore(directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("SwiftResticShareEdits-\(UUID().uuidString)")),
+            secrets: secrets,
+            shareMounter: ShareMounter { _, _ in .failed(EAUTH) }
+        )
+    }
+
+    /// A store whose share-password writes all fail, as a locked Keychain's.
+    private func refusingStore() -> SecretStore {
+        SecretStore(
+            load: { _ in (nil, nil) },
+            save: { _, _, _ in },
+            remove: { _ in },
+            loadSharePassword: { _ in nil },
+            saveSharePassword: { _, _ in throw KeychainStore.KeychainError.unexpectedStatus(errSecInteractionNotAllowed) }
+        )
+    }
+
+    @Test("saving a share's password saves the share once, by volume name; saving again replaces the password and the URL")
+    func savedOncePerVolume() async throws {
+        let secrets = SecretStore.inMemory()
+        let model = makeEditorModel(secrets: secrets)
+        try await model.saveNetworkShare(MountedShare(volumeName: "NAS", url: "smb://me@old.local/NAS"), password: "one")
+        let first = try #require(model.configuration.settings.networkShares.first)
+        #expect(model.configuration.settings.networkShares.count == 1)
+        #expect(try await secrets.loadSharePassword(first.id) == "one")
+        try await model.saveNetworkShare(MountedShare(volumeName: "NAS", url: "smb://me@new.local/NAS"), password: "two")
+        #expect(model.configuration.settings.networkShares == [NetworkShare(id: first.id, volumeName: "NAS", url: "smb://me@new.local/NAS")])
+        #expect(try await secrets.loadSharePassword(first.id) == "two")
+    }
+
+    @Test("a Keychain that refuses the password leaves no share saved")
+    func refusedPasswordNoRecord() async {
+        let model = makeEditorModel(secrets: refusingStore())
+        await #expect(throws: KeychainStore.KeychainError.self) {
+            try await model.saveNetworkShare(MountedShare(volumeName: "NAS", url: "smb://me@nas.local/NAS"), password: "pw")
+        }
+        #expect(model.configuration.settings.networkShares.isEmpty)
+    }
+
+    @Test("removing a share forgets its password and the share; a Keychain that refuses keeps both")
+    func removeForgetsBoth() async throws {
+        let secrets = SecretStore.inMemory()
+        let model = makeEditorModel(secrets: secrets)
+        try await model.saveNetworkShare(MountedShare(volumeName: "NAS", url: "smb://me@nas.local/NAS"), password: "pw")
+        let share = try #require(model.configuration.settings.networkShares.first)
+        try await model.removeNetworkShare(share)
+        #expect(model.configuration.settings.networkShares.isEmpty)
+        #expect(try await secrets.loadSharePassword(share.id) == nil)
+
+        let refusing = makeEditorModel(secrets: refusingStore())
+        refusing.configuration.settings.networkShares = [share]
+        await #expect(throws: KeychainStore.KeychainError.self) { try await refusing.removeNetworkShare(share) }
+        #expect(refusing.configuration.settings.networkShares == [share])
+    }
+
     @Test("NetFS's status reads as the reason a reconnect failed")
     func statusWords() {
         #expect(ShareMounter.describe(status: EAUTH) == "the share did not accept the user name and password")

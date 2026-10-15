@@ -290,6 +290,24 @@ the generator after editing it; the PNGs are checked in.
     SSD” is not connected.", earlier rows staying. A skipped run shows on the
     listing at once, and a mount re-reads the listings of the repositories
     on it, paused or not.
+  - *Network shares.* A repository's folder or a plan's folders on a
+    mounted network share (SMB) show which share in the repository editor,
+    under *Folder*, and on the plan editor's Files tab — "On the network
+    share smb://me@nas.local/NAS", read from the mounted volume — with a
+    *Share password* field; the password is kept in the Keychain, and
+    Settings › General lists the saved shares, *Remove* forgetting one.
+    Before a backup, after the before-backup hooks, a share the run needs
+    that is not mounted is mounted with that password, with no dialog, and
+    the log says "Reconnected the network share … at /Volumes/NAS."; if it
+    cannot be, the run is Skipped as above, saying why: "“NAS” is not
+    connected. Reconnecting “NAS” failed: the share did not accept the user
+    name and password." Two runs needing one share mount it once, and a
+    share macOS mounts beside a leftover /Volumes folder ("NAS-1") is no
+    reconnect. Checks, prunes and retention runs do not reconnect; a share
+    mounted with no user name offers no password; and each reconnect adds
+    the server to macOS's Recent Servers, as Finder's do. Tried against
+    Samba 4.23.8 on 2026-10-16, the password both injected and kept in the
+    Keychain.
 - **Scheduling** — hourly / daily / weekly, checked once a minute; a daily
   window missed asleep runs on waking. While restic cannot be found the
   scheduler starts nothing (no Failed record, banner or notification per

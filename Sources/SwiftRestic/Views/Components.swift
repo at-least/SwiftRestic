@@ -306,6 +306,38 @@ struct RemovedNamesLine: View {
     }
 }
 
+// MARK: - Network shares
+
+/// A repository's folder or a plan's folders on a network share: which
+/// share, and the password SwiftRestic reconnects it with before a backup
+/// when it is not mounted (`NetworkShare`). Rows, so a Form lays them out
+/// as its own and a stack stacks them. A secure field reads back empty, so
+/// a saved password shows in the prompt, and an empty field leaves it as
+/// it is.
+struct NetworkSharePasswordRows: View {
+    let url: String
+    let isSaved: Bool
+    @Binding var password: String
+
+    var body: some View {
+        Label {
+            Text("On the network share \(url)")
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(url)
+        } icon: {
+            Image(systemName: "network")
+        }
+        SecureField("Share password", text: $password, prompt: Text(isSaved ? "Saved" : "Needed to reconnect it"))
+        Text(isSaved
+            ? "SwiftRestic reconnects the share before a backup when it isn't mounted. Type a password to replace the saved one."
+            : "SwiftRestic reconnects the share before a backup when it isn't mounted.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 // MARK: - Detail rows
 
 /// A label/value row inside an information card.
