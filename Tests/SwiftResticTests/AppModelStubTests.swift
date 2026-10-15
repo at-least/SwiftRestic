@@ -1043,7 +1043,8 @@ struct AppModelStubTests {
         let banner = try #require(harness.model.banners.first)
         #expect(banner.isError)
         #expect(banner.title.contains("finished with warnings"))
-        #expect(banner.message.contains("unreadable item"))
+        // The item by its name, from the path the run stored.
+        #expect(banner.message.hasPrefix("“secret-target” could not be read."), "message was \(banner.message)")
 
         await harness.model.shutdown()
     }

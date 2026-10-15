@@ -39,6 +39,13 @@ enum RunFix: Equatable {
     }
 }
 
+/// One unreadable item as the app says it (`RunRecordPresentation.unreadableItemWords`).
+struct UnreadableItemWords: Equatable {
+    var name: String
+    var location: String
+    var reason: String
+}
+
 /// A check or prune that did not end clean, run again from the drawer where
 /// its verdict is read — the Repository menu's command, through the same
 /// confirmation.
@@ -255,17 +262,62 @@ enum RunRecordPresentation {
         return detail == run.outcome.displayName ? detail.lowercased() : detail
     }
 
+    /// One unreadable item as the app says it: its name, where it is —
+    /// inside the plan folder that holds it, else on disk — and why: the
+    /// cause `ItemErrorDiagnosis` reads off the line's end, a top folder
+    /// restic skipped, or any other cause in restic's words after the
+    /// item's own name. From the path the run stored
+    /// (`RunRecord.unreadableItemPaths`); nil for a line with none, which
+    /// stays restic's own.
+    static func unreadableItemWords(line: String, path: String?, sources: [String]) -> UnreadableItemWords? {
+        guard let path else { return nil }
+        let parent = (path as NSString).deletingLastPathComponent
+        let tops = sources.map { source in
+            var top = ResticService.expandTilde(source)
+            while top.count > 1, top.hasSuffix("/") { top.removeLast() }
+            return top
+        }
+        let location = if let top = tops.first(where: { parent == $0 || parent.hasPrefix($0 + "/") }) {
+            (top as NSString).lastPathComponent + parent.dropFirst(top.count)
+        } else {
+            (parent as NSString).abbreviatingWithTildeInPath
+        }
+        let reason = switch ItemErrorDiagnosis.kind(of: line) {
+        case .deniedByFilePermissions: "permission denied"
+        case .blockedByMacOS: "blocked by macOS"
+        case .other:
+            if line.hasSuffix(" does not exist, skipping") {
+                "not on this Mac"
+            } else if line.hasSuffix(" cannot be accessed, skipping") {
+                "can't be accessed"
+            } else if line.hasPrefix(path + ": ") {
+                String(line.dropFirst(path.count + 2))
+            } else {
+                line
+            }
+        }
+        return UnreadableItemWords(name: (path as NSString).lastPathComponent, location: location, reason: reason)
+    }
+
     /// The in-app banner's message for a backup that finished with
-    /// warnings: the first unreadable item and restic's count of them —
-    /// never the stored lines. Without one, what the plan row explains the
-    /// warning with (the line stored after the items — a skipped retention
-    /// step, a decoding gap — else a hook's complaint), led by an unnamed
-    /// exit 3 as the facts lead with it, so a retention line never passes
-    /// for the whole story. The fix, when the app knows one, is the
-    /// caller's to add.
+    /// warnings: the first unreadable item by name and how many more
+    /// restic counted, never how many lines were stored — restic's line
+    /// and count on a record that stored no path. Without one, what the
+    /// plan row explains the warning with (the line stored after the
+    /// items — a skipped retention step, a decoding gap — else a hook's
+    /// complaint), led by an unnamed exit 3 as the facts lead with it, so
+    /// a retention line never passes for the whole story. The fix, when
+    /// the app knows one, is the caller's to add.
     static func warningBannerMessage(for run: RunRecord) -> String {
         if let item = run.unreadableItems.first {
-            return "\(item) — \(Format.plural(run.itemErrorCount, "unreadable item")) in total."
+            // By name where the run stored the item's path; older records
+            // keep restic's line.
+            guard let path = run.unreadableItemPaths?[item] else {
+                return "\(item) — \(Format.plural(run.itemErrorCount, "unreadable item")) in total."
+            }
+            let name = "“\((path as NSString).lastPathComponent)”"
+            let more = run.itemErrorCount - 1
+            return more > 0 ? "\(name) and \(Format.plural(more, "more item")) could not be read." : "\(name) could not be read."
         }
         let explanation = run.itemErrors.first ?? run.hookMessages.first ?? run.failureMessage
         guard PlanStatus.facts(for: run).first == PlanStatus.unnamedUnreadFact else {

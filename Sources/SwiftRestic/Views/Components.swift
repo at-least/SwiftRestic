@@ -950,10 +950,27 @@ struct UnreadableItemLine: View {
         let path = run.unreadableItemPaths?[line]
         let plan = run.planID.flatMap { model.plan(id: $0) }
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(line)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            // By name, where and why; restic's whole line in the tooltip,
+            // Copy Details and the log. A line with no stored path stays
+            // restic's own.
+            if let words = RunRecordPresentation.unreadableItemWords(line: line, path: path, sources: plan?.sources ?? []) {
+                VStack(alignment: .leading, spacing: 1) {
+                    (Text(words.name) + Text(" — \(words.reason)").foregroundStyle(.secondary))
+                        .font(.callout)
+                    Text(words.location)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
                 .textSelection(.enabled)
+                .help(line)
+            } else {
+                Text(line)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
             if let path {
                 Spacer(minLength: 4)
                 Menu {

@@ -425,6 +425,53 @@ struct RunRecordPresentationTests {
         #expect(detail(failedCheck) == "Completed with errors")
     }
 
+    @Test("an unreadable item reads as its name, where it is and why — from the path the run stored, not restic's words taken apart")
+    func unreadableItemWords() {
+        let sources = ["/Volumes/Data/Documents", "/Volumes/Data/Projects"]
+        func words(_ line: String, _ path: String?) -> UnreadableItemWords? {
+            RunRecordPresentation.unreadableItemWords(line: line, path: path, sources: sources)
+        }
+        let denied = "/Volumes/Data/Documents/Medical/vacc.pdf"
+        #expect(words("\(denied): open \(denied): permission denied", denied)
+            == UnreadableItemWords(name: "vacc.pdf", location: "Documents/Medical", reason: "permission denied"))
+        let mail = "/Volumes/Data/Documents/Mail"
+        #expect(words("\(mail): open \(mail): operation not permitted", mail)
+            == UnreadableItemWords(name: "Mail", location: "Documents", reason: "blocked by macOS"))
+        // A top folder restic skipped is named where it lives.
+        #expect(words("/Volumes/Data/Projects does not exist, skipping", "/Volumes/Data/Projects")
+            == UnreadableItemWords(name: "Projects", location: "/Volumes/Data", reason: "not on this Mac"))
+        #expect(words("/Volumes/Data/Projects cannot be accessed, skipping", "/Volumes/Data/Projects")?.reason == "can't be accessed")
+        // Any other cause in restic's words, after the item's own name.
+        let odd = "/Volumes/Data/Documents/odd.bin"
+        #expect(words("\(odd): read \(odd): input/output error", odd)?.reason == "read \(odd): input/output error")
+        // Outside the plan's folders, where it is on disk.
+        #expect(words("/Volumes/Other/x.txt: open /Volumes/Other/x.txt: permission denied", "/Volumes/Other/x.txt")?.location == "/Volumes/Other")
+        // A plan folder written with a tilde holds what is under it.
+        let home = NSHomeDirectory() + "/Notes/a.md"
+        #expect(RunRecordPresentation.unreadableItemWords(line: "\(home): open \(home): permission denied", path: home, sources: ["~/Notes"])?.location == "Notes")
+        // A line with no stored path stays restic's own.
+        #expect(words("restic: some message without an item", nil) == nil)
+    }
+
+    @Test("the warning banner names the first unreadable item by its name")
+    func warningBannerNamesTheItem() {
+        let message = RunRecordPresentation.warningBannerMessage(for:)
+        let path = "/Volumes/Data/Documents/Medical/vacc.pdf"
+        let line = "\(path): open \(path): permission denied"
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.itemErrors = [line]
+            $0.itemErrorCount = 1
+            $0.unreadableItemPaths = [line: path]
+        }) == "“vacc.pdf” could not be read.")
+        #expect(message(backup {
+            $0.outcome = .completedWithErrors
+            $0.itemErrors = [line, "/b: open /b: permission denied", "/c: open /c: permission denied"]
+            $0.itemErrorCount = 3
+            $0.unreadableItemPaths = [line: path]
+        }) == "“vacc.pdf” and 2 more items could not be read.")
+    }
+
     @Test("the warning banner says what the plan row says, the unnamed exit 3 and a hook's complaint included")
     func warningBannerWording() {
         let message = RunRecordPresentation.warningBannerMessage(for:)
