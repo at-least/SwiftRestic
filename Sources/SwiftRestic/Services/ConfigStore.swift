@@ -66,7 +66,9 @@ struct AppConfiguration: Codable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         repositories = c.value(.repositories, default: [])
         plans = c.value(.plans, default: [])
-        runs = c.value(.runs, default: [])
+        // Records written before stretches were stored get theirs here, so
+        // every backup problem in memory has one.
+        runs = RunRecord.fillingProblemStretches(c.value(.runs, default: []))
         settings = c.value(.settings, default: AppSettings())
     }
 

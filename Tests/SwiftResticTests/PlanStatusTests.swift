@@ -516,6 +516,7 @@ struct PlanStatusTests {
         // The card's when-line: the problem's stretch, said as one; the
         // Recent problems card's row counts the week in its own words.
         #expect(PlanStatus.standingProblemWhen(inARow: 1, ago: "2 days ago") == "2 days ago")
+        #expect(PlanStatus.standingProblemWhen(inARow: 2, ago: "Just now") == "2 times in a row · Just now")
         #expect(PlanStatus.standingProblemWhen(inARow: 3, ago: "2 days ago") == "3 times in a row · 2 days ago")
         #expect(PlanStatus.problemWhen(count: 1, ago: "2 days ago") == "2 days ago")
         #expect(PlanStatus.problemWhen(count: 3, ago: "2 days ago") == "3 times · 2 days ago")

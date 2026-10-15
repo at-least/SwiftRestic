@@ -159,6 +159,39 @@ struct TolerantDecodingTests {
         }
     }
 
+    @Test("a history saved before stretches were stored gets them at load; a stored one stands")
+    func problemStretchesFilledAtLoad() throws {
+        let plan = UUID()
+        func backup(_ outcome: RunRecord.Outcome, stretch: Int? = nil) -> RunRecord {
+            var run = RunRecord(kind: .backup, planID: plan)
+            run.outcome = outcome
+            if outcome == .completedWithErrors {
+                run.exitCode = 3
+                run.itemErrors = ["/a: open /a: permission denied"]
+                run.itemErrorCount = 1
+            }
+            run.problemStretch = stretch
+            return run
+        }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var configuration = AppConfiguration()
+        // Newest first, as stored: two warnings since a success, two before it.
+        configuration.runs = [
+            backup(.completedWithErrors), backup(.completedWithErrors), backup(.succeeded),
+            backup(.completedWithErrors), backup(.completedWithErrors),
+        ]
+        let legacy = String(decoding: try encoder.encode(configuration), as: UTF8.self)
+        #expect(!legacy.contains("problemStretch"))
+        #expect(try decode(AppConfiguration.self, legacy).runs.map(\.problemStretch) == [2, 1, nil, 2, 1])
+
+        // A stretch already stored is not counted again — what it counted may
+        // be trimmed since — and the backup after it continues it.
+        configuration.runs = [backup(.completedWithErrors), backup(.completedWithErrors, stretch: 7)]
+        let stored = String(decoding: try encoder.encode(configuration), as: UTF8.self)
+        #expect(try decode(AppConfiguration.self, stored).runs.map(\.problemStretch) == [8, 7])
+    }
+
     @Test("a run record from before the exit code was stored never claims a complete snapshot")
     func legacyRunRecordsNeverClaimComplete() throws {
         // Without an exit code, restic's per-item errors are the only trace

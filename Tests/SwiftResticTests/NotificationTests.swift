@@ -354,9 +354,10 @@ struct WarningCountTests {
 }
 
 /// A backup that fails the same way again notifies once: the first of a
-/// stretch posts, a repeat stays quiet until a success, a skip or another
-/// cause re-arms it. The menu bar, the caption and Activity still show
-/// every run; the channels' per-run pings are not this rule's.
+/// stretch posts, a repeat stays quiet until a success or another cause
+/// re-arms it — a backup skipped whole or stopped passes over it. The menu
+/// bar, the caption and Activity still show every run; the channels'
+/// per-run pings are not this rule's.
 @Suite("Repeated problems notify once")
 struct RepeatedProblemNotificationTests {
     private let now = Date(timeIntervalSince1970: 1_790_000_000)
@@ -379,77 +380,14 @@ struct RepeatedProblemNotificationTests {
         return run
     }
 
-    @Test("the same outcome for the same cause repeats the problem; anything else is news")
-    func sameCauseRepeats() {
-        #expect(AppModel.repeatsProblem(failed(60), previous: failed(0)))
-        #expect(!AppModel.repeatsProblem(failed(60), previous: nil))
-        #expect(!AppModel.repeatsProblem(failed(60, exit: 11), previous: failed(0)))
-        #expect(!AppModel.repeatsProblem(failed(60, message: "Fatal: wrong password or no key found"), previous: failed(0)))
-        // Numbers in restic's words change from run to run: a lock's PID and age.
-        #expect(AppModel.repeatsProblem(
-            failed(60, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 4242 on nas by u (UID 501, GID 20)"),
-            previous: failed(0, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 517 on nas by u (UID 501, GID 20)")
-        ))
-        #expect(AppModel.repeatsProblem(warned(60), previous: warned(0)))
-        #expect(!AppModel.repeatsProblem(warned(60, items: ["/b: open /b: permission denied"]), previous: warned(0)))
-        #expect(!AppModel.repeatsProblem(warned(60), previous: failed(0)))
-        var success = failed(0)
-        success.outcome = .succeeded
-        success.failureMessage = nil
-        #expect(!AppModel.repeatsProblem(failed(60), previous: success))
-        // A merged repeat (a standing failure for the same folders gone)
-        // carries its own count.
-        var standing = failed(60)
-        standing.skipCount = 2
-        #expect(AppModel.repeatsProblem(standing, previous: nil))
-        // A success is never a repeat.
-        #expect(!AppModel.repeatsProblem(success, previous: success))
-    }
-
-    private func ended(_ minutes: Double, _ outcome: RunRecord.Outcome) -> RunRecord {
-        var run = RunRecord(kind: .backup, planID: planID, planName: "Documents", startedAt: now.addingTimeInterval(minutes * 60))
+    private func ended(_ minutes: Double, _ outcome: RunRecord.Outcome, plan: UUID? = nil) -> RunRecord {
+        var run = RunRecord(kind: .backup, planID: plan ?? planID, planName: "Documents", startedAt: now.addingTimeInterval(minutes * 60))
         run.outcome = outcome
         return run
     }
 
-    @Test("the plan page's card counts the problem's stretch — the backups in a row the notification rule calls one problem")
-    func stretch() {
-        func count(_ newestFirst: [RunRecord], of problem: RunRecord? = nil) -> Int {
-            AppModel.problemStretch(of: problem ?? newestFirst[0], in: newestFirst)
-        }
-        // Three warnings for the same file since a success, two before it.
-        #expect(count([warned(600), warned(540), warned(480), ended(420, .succeeded), warned(360), warned(300)]) == 3)
-        // A skip or a cancel in between ends it too, as it re-arms the notification.
-        #expect(count([warned(600), ended(540, .skipped), warned(480)]) == 1)
-        #expect(count([warned(600), ended(540, .cancelled), warned(480)]) == 1)
-        // Another cause, or another outcome, is another problem.
-        #expect(count([warned(600, items: ["/b: open /b: permission denied"]), warned(540)]) == 1)
-        #expect(count([failed(600), warned(540)]) == 1)
-        // The numbers in restic's words change from run to run; the cause does not.
-        #expect(count([
-            failed(600, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 4242 on nas by u (UID 501, GID 20)"),
-            failed(540, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 517 on nas by u (UID 501, GID 20)"),
-        ]) == 2)
-        // Another plan's runs neither end it nor add to it.
-        var otherSuccess = ended(570, .succeeded)
-        otherSuccess.planID = UUID()
-        var otherWarning = warned(560)
-        otherWarning.planID = UUID()
-        #expect(count([warned(600), otherSuccess, otherWarning, warned(540)]) == 2)
-        // A failure merged into a standing one for the same folders gone
-        // counts the runs it stands for.
-        var standing = failed(600)
-        standing.skipCount = 3
-        #expect(count([standing, ended(300, .succeeded)]) == 3)
-        // The card's problem need not be the newest record: a plain skip
-        // after it heals nothing, and the count starts from the problem.
-        let problem = warned(540)
-        #expect(count([ended(600, .skipped), problem, warned(480), ended(420, .succeeded)], of: problem) == 2)
-    }
-
     @MainActor
-    @Test("a run's notification follows the setting, and a problem's only the first time in a stretch")
-    func wantsNotification() {
+    private func makeModel(keepingRuns limit: Int? = nil) -> AppModel {
         let suite = "SwiftResticRepeatedProblemTests"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
@@ -459,12 +397,100 @@ struct RepeatedProblemNotificationTests {
             secrets: .inMemory(),
             defaults: defaults
         )
+        if let limit { model.configuration.settings.maxRunHistory = limit }
+        return model
+    }
+
+    @MainActor
+    private func stored(_ run: RunRecord, in model: AppModel) -> RunRecord? {
+        model.configuration.runs.first { $0.id == run.id }
+    }
+
+    @Test("the same outcome for the same cause is the same problem; anything else is news")
+    func sameCause() {
+        #expect(failed(60).isSameProblem(as: failed(0)))
+        #expect(!failed(60, exit: 11).isSameProblem(as: failed(0)))
+        #expect(!failed(60, message: "Fatal: wrong password or no key found").isSameProblem(as: failed(0)))
+        // Numbers in restic's words change from run to run: a lock's PID and age.
+        #expect(failed(60, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 4242 on nas by u (UID 501, GID 20)")
+            .isSameProblem(as: failed(0, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 517 on nas by u (UID 501, GID 20)")))
+        #expect(warned(60).isSameProblem(as: warned(0)))
+        #expect(!warned(60, items: ["/b: open /b: permission denied"]).isSameProblem(as: warned(0)))
+        #expect(!warned(60).isSameProblem(as: failed(0)))
+        #expect(!failed(60).isSameProblem(as: ended(0, .succeeded)))
+        #expect(!ended(60, .succeeded).isSameProblem(as: ended(0, .succeeded)))
+        // A merged repeat (a standing failure for the same folders gone)
+        // counts the runs it stands for, and continues its predecessor's.
+        var standing = failed(60)
+        standing.skipCount = 3
+        #expect(standing.stretchFollowing(nil) == 3)
+        var before = failed(0)
+        before.problemStretch = 2
+        #expect(standing.stretchFollowing(before) == 5)
+        #expect(ended(60, .succeeded).stretchFollowing(before) == nil)
+    }
+
+    @Test("a stretch counts the plan's backups in a row that ended the same way; a skip or a stop passes over it")
+    func stretch() {
+        func counts(_ newestFirst: [RunRecord]) -> [Int?] {
+            RunRecord.fillingProblemStretches(newestFirst).map(\.problemStretch)
+        }
+        // Three warnings for the same file since a success, two before it.
+        #expect(counts([warned(600), warned(540), warned(480), ended(420, .succeeded), warned(360), warned(300)])
+            == [3, 2, 1, nil, 2, 1])
+        // A backup skipped whole or stopped ran nothing: the stretch goes on.
+        #expect(counts([warned(600), ended(540, .skipped), warned(480)]) == [2, nil, 1])
+        #expect(counts([warned(600), ended(540, .cancelled), warned(480)]) == [2, nil, 1])
+        // One that backed up the rest around an away drive heals, as a success does.
+        var partial = ended(540, .skipped)
+        partial.snapshotID = "0ef0dab0"
+        #expect(counts([warned(600), partial, warned(480)]) == [1, nil, 1])
+        // Another cause, or another outcome, is another problem.
+        #expect(counts([warned(600, items: ["/b: open /b: permission denied"]), warned(540)]) == [1, 1])
+        #expect(counts([failed(600), warned(540)]) == [1, 1])
+        // Another plan's runs, and the plan's own retention run, neither end
+        // it nor add to it.
+        var forget = ended(550, .succeeded)
+        forget.kind = .forget
+        #expect(counts([warned(600), ended(570, .succeeded, plan: UUID()), forget, warned(560, items: ["/z"]).withPlan(UUID()), warned(540)])
+            == [2, nil, nil, 1, 1])
+        // A failure merged into a standing one counts the runs it stands for,
+        // on top of an earlier failure for the same cause it did not merge
+        // into (a hook's complaint on that one stops the merge).
+        var merged = failed(600)
+        merged.skipCount = 3
+        var complained = failed(300)
+        complained.hookMessages = ["After-failure hook exited with status 1"]
+        #expect(counts([merged, complained, failed(200)]) == [5, 2, 1])
+        // A stored stretch stands — the backups it counted may be trimmed
+        // since — and the next one continues it.
+        var kept = warned(300)
+        kept.problemStretch = 7
+        #expect(counts([warned(600), kept]) == [8, 7])
+    }
+
+    @MainActor
+    @Test("a run's notification follows the setting, and a problem's only the first time in a stretch")
+    func wantsNotification() {
+        let model = makeModel()
         let first = failed(0)
         model.append(record: first)
         #expect(model.wantsNotification(for: first))
         let again = failed(60)
         model.append(record: again)
         #expect(!model.wantsNotification(for: again))
+
+        // A backup skipped whole, or stopped, between two runs of the same
+        // problem leaves it standing: still one notification.
+        model.append(record: ended(90, .skipped))
+        let afterSkip = failed(100)
+        model.append(record: afterSkip)
+        #expect(!model.wantsNotification(for: afterSkip))
+        model.append(record: ended(105, .cancelled))
+        let afterStop = failed(110)
+        model.append(record: afterStop)
+        #expect(!model.wantsNotification(for: afterStop))
+        #expect(stored(afterStop, in: model)?.problemStretch == 4)
 
         var success = failed(120)
         success.outcome = .succeeded
@@ -488,6 +514,7 @@ struct RepeatedProblemNotificationTests {
         let goneAgain = gone(300)
         model.append(record: goneAgain)
         #expect(model.configuration.runs.first?.skipCount == 2)
+        #expect(stored(goneAgain, in: model)?.problemStretch == 2)
         #expect(!model.wantsNotification(for: goneAgain))
 
         model.configuration.settings.notifyOnFailure = false
@@ -495,4 +522,52 @@ struct RepeatedProblemNotificationTests {
         model.append(record: silenced)
         #expect(!model.wantsNotification(for: silenced))
     }
+
+    @MainActor
+    @Test("the history cap trims what a stretch counted, never the count")
+    func capKeepsTheCount() {
+        let other = UUID()
+        // The cap's floor, 20: another plan's backups push this plan's
+        // earlier warnings out; the newest, standing, is kept.
+        let model = makeModel(keepingRuns: 20)
+        for minute in [0.0, 60, 120] { model.append(record: warned(minute)) }
+        for minute in 0 ..< 25 { model.append(record: ended(130 + Double(minute), .succeeded, plan: other)) }
+        #expect(model.configuration.runs.count { $0.planID == planID } == 1)
+        let fourth = warned(200)
+        model.append(record: fourth)
+        #expect(stored(fourth, in: model)?.problemStretch == 4)
+        #expect(!model.wantsNotification(for: fourth))
+
+        // The warning before is trimmed by this very append: the count was
+        // taken first, so the notification stays quiet.
+        let edge = makeModel(keepingRuns: 20)
+        edge.append(record: warned(0))
+        for minute in 0 ..< 19 { edge.append(record: ended(10 + Double(minute), .succeeded, plan: other)) }
+        let second = warned(100)
+        edge.append(record: second)
+        #expect(edge.configuration.runs.count { $0.planID == planID } == 1)
+        #expect(stored(second, in: edge)?.problemStretch == 2)
+        #expect(!edge.wantsNotification(for: second))
+
+        // A success trimmed with the warning before it ends the stretch all
+        // the same: the warning, healed, goes first.
+        let healed = makeModel(keepingRuns: 20)
+        healed.append(record: warned(0))
+        healed.append(record: ended(10, .succeeded))
+        for minute in 0 ..< 30 { healed.append(record: ended(20 + Double(minute), .succeeded, plan: other)) }
+        #expect(healed.configuration.runs.count { $0.planID == planID } == 0)
+        let after = warned(100)
+        healed.append(record: after)
+        #expect(stored(after, in: healed)?.problemStretch == 1)
+        #expect(healed.wantsNotification(for: after))
+    }
 }
+
+private extension RunRecord {
+    func withPlan(_ id: UUID) -> RunRecord {
+        var run = self
+        run.planID = id
+        return run
+    }
+}
+

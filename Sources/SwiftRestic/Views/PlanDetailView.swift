@@ -131,7 +131,7 @@ struct PlanDetailView: View {
         let summary: PlanProblemSummary
         /// The run the summary describes, for the fix its items need.
         let run: RunRecord
-        /// How many backups in a row ended this way (`AppModel.problemStretch`).
+        /// How many backups in a row ended this way (`RunRecord.problemStretch`).
         let inARow: Int
         var onShowInActivity: (() -> Void)?
 
@@ -242,7 +242,9 @@ struct PlanDetailView: View {
                 PlanProblemRow(
                     summary: PlanStatus.summary(of: problem),
                     run: problem,
-                    inARow: AppModel.problemStretch(of: problem, in: model.configuration.runs),
+                    // Every backup problem in the history has one: filled at
+                    // load and as each run is appended.
+                    inARow: problem.problemStretch!,
                     onShowInActivity: showInActivity(problem)
                 )
             }

@@ -214,12 +214,13 @@ the generator after editing it; the PNGs are checked in.
   *Back Up Now* — *Stop* while it runs; *Schedule* (and when it runs next)
   with *Pause Schedule*, its arrow offering the lengths, or *Resume Schedule*
   (none for a manual plan); *Configuration* (folders, exclude patterns,
-  hooks) with *Edit*. While the newest backup failed or completed with
-  errors and none succeeded since, a problem card sits under *Backups*: the
-  outcome, how many backups in a row ended that way for the same cause ("3
-  times in a row · 2 days ago" — a success, a skip, a cancel or another
-  cause starts the count over, as it does a notification; the repository
-  page's Recent problems counts the week), restic's message, the facts, the
+  hooks) with *Edit*. While the plan's newest failed or completed-with-errors
+  backup stands — no backup succeeded since, a backup skipped whole or
+  stopped not ending it — a problem card sits under *Backups*: the outcome,
+  how many backups in a row ended that way for the same cause ("3 times in
+  a row · 2 days ago", the notifications' stretch below, stored with each
+  run so the history cap cannot shorten it; the repository page's Recent
+  problems counts the week), restic's message, the facts, the
   drawer's diagnosis, and up to five unreadable items with the drawer's
   *Reveal in Finder* and *Exclude from “Documents”…* menu, then "… and N
   more in Activity"; *Show in Activity* opens the run. The editor
@@ -461,9 +462,11 @@ the generator after editing it; the PNGs are checked in.
   event words), once per stretch: a run with its plan's last problem again —
   the same outcome for the same cause, restic's exit and first sentence with
   its numbers aside, or the same unreadable items — posts none until a
-  success or another cause, while the menu bar's mark, the plan's caption,
-  Activity and the channels still have every run. Optionally one per
-  successful backup, and one for a scheduled plan gone quiet:
+  success (or a backup around an away drive) or another cause; a backup
+  skipped whole or stopped in between passes over it. The menu bar's mark,
+  the plan's caption, Activity and the channels still have every run.
+  Optionally one per successful backup, and one for a scheduled plan gone
+  quiet:
   *Notify when a scheduled plan has not backed up for* 3, 7 (the default) or
   14 days, or never (Settings › General) — a drive unplugged at every slot,
   or slots slept through, write no failed run, so nothing else would say it.

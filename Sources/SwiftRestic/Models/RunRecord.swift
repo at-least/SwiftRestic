@@ -165,6 +165,13 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// mark and its drawer after the merge. Nil for a whole skip's record.
     var continuedSnapshotIDs: [String]?
 
+    /// A failed or completed-with-errors backup's stretch: how many of its
+    /// plan's backups in a row, this one the last, ended the same way for
+    /// the same cause (`fillingProblemStretches`). Stored as the record is
+    /// appended, before the history cap trims those before it. Nil for any
+    /// other run.
+    var problemStretch: Int?
+
     init(
         kind: Kind = .backup,
         planID: UUID? = nil,
@@ -219,6 +226,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
+        problemStretch = c.optional(.problemStretch)
     }
 
     var duration: TimeInterval { max(0, finishedAt.timeIntervalSince(startedAt)) }

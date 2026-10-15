@@ -88,6 +88,9 @@ extension AppModel {
             record = merged
         }
         configuration.runs.insert(record, at: 0)
+        // Counted while the backups before it are still here: the cap below
+        // can trim them.
+        configuration.runs = RunRecord.fillingProblemStretches(configuration.runs)
         let limit = max(20, configuration.settings.maxRunHistory)
         if configuration.runs.count > limit {
             // Past the cap by count, except what a standing problem still

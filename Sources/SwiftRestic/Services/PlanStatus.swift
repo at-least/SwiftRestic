@@ -52,15 +52,16 @@ enum PlanStatus {
     /// folder macOS blocked in bulk is a diagnosis, not a list.
     static let listedItemLimit = 5
 
-    /// A Recent problems row's when-line: how many runs of the week ended
-    /// this way (`OverviewMetrics.problemGroups`), then the newest one's
-    /// moment ("3 times · 2 days ago"), else the moment alone.
+    /// A Recent problems row's when-line: how many of the week's records
+    /// ended this way (`OverviewMetrics.problemGroups` — a failure merged
+    /// into a standing one is one record), then the newest one's moment
+    /// ("3 times · 2 days ago"), else the moment alone.
     static func problemWhen(count: Int, ago: String) -> String {
         count > 1 ? "\(count) times · \(ago)" : ago
     }
 
     /// The plan page's problem card's when-line: how many backups in a row
-    /// ended this way for this cause (`AppModel.problemStretch`), then the
+    /// ended this way for this cause (`RunRecord.problemStretch`), then the
     /// newest one's moment ("3 times in a row · 2 days ago"), else the
     /// moment alone — "in a row", as a success in between starts the count
     /// over, where Recent problems counts the week.

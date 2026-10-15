@@ -115,7 +115,7 @@ struct SettingsView: View {
                 // What it gates (`AppModel.notify(about:)`), in the alert
                 // channels' own event words.
                 Toggle("Notify when a backup fails or finishes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
-                // `AppModel.repeatsProblem`: the rule said where it is set.
+                // `RunRecord.problemStretch`: the rule said where it is set.
                 Text("Once for each cause: a backup that fails the same way again stays quiet until one succeeds or the cause changes.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
