@@ -332,7 +332,12 @@ struct NotificationChannelsTab: View {
     var body: some View {
         @Bindable var model = model
 
-        VSplitView {
+        // A stack, not a VSplitView: the split sized itself from its
+        // panes' ideal sizes, so the empty state's 400 pt left bars beside
+        // it in the 560 pt window, and a channel's Form — a scroll view,
+        // ideal height next to nothing — got 16 pt under the list. The list
+        // keeps a few rows; the channel's settings get the rest.
+        VStack(spacing: 0) {
             VStack(spacing: 6) {
                 List(selection: $selection) {
                     ForEach($model.configuration.settings.notificationChannels) { $channel in
@@ -357,7 +362,7 @@ struct NotificationChannelsTab: View {
                         .tag(channel.id)
                     }
                 }
-                .frame(minHeight: 110)
+                .frame(height: 120)
 
                 HStack {
                     Button("Add") {
@@ -374,7 +379,9 @@ struct NotificationChannelsTab: View {
                 .padding(.bottom, 6)
             }
 
+            Divider()
             detail(model: model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .confirmationDialog(
             "Remove this alert channel?",

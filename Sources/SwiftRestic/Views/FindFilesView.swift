@@ -326,8 +326,10 @@ struct FindFilesView: View {
             HStack {
                 if !rows.isEmpty {
                     VStack(alignment: .leading, spacing: 1) {
-                        let snapshotCount = Set(rows.map(\.snapshotID)).count
-                        Text("\(Format.plural(rows.count, "match", "matches")) across \(Format.plural(snapshotCount, "snapshot"))")
+                        // How many, not "across N snapshots": each row is
+                        // its path at the newest backup holding it, so that
+                        // count — 1 beside a row's "of 78" — said nothing.
+                        Text(Format.plural(rows.count, "match", "matches"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         // When the listing was read: results carry snapshot
