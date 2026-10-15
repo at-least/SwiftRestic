@@ -55,7 +55,7 @@ struct PlanEditorSheet: View {
     /// draft the user may have edited since.
     private let adoptDefaultedToManual: Bool
 
-    private enum Tab: Hashable { case files, schedule, retention, hooks }
+    private enum Tab: CaseIterable { case files, schedule, retention, hooks }
 
     init(plan: BackupPlan, mode: Mode? = nil, onAdopted: ((UUID) -> Void)? = nil) {
         var plan = plan
@@ -98,16 +98,20 @@ struct PlanEditorSheet: View {
                 adoptHeader(briefing)
             }
             identityHeader(briefing)
-            TabView(selection: $tab) {
-                sourcesTab.tabItem { Label("Files", systemImage: "folder") }
-                    .tag(Tab.files)
-                scheduleTab.tabItem { Label("Schedule", systemImage: "calendar") }
-                    .tag(Tab.schedule)
-                retentionTab.tabItem { Label("Retention", systemImage: "clock.arrow.circlepath") }
-                    .tag(Tab.retention)
-                HookEditor(hooks: $draft.hooks)
-                    .tabItem { Label("Hooks", systemImage: "terminal") }
-                    .tag(Tab.hooks)
+            SheetTabs(selection: $tab, tabs: Tab.allCases, title: { tab in
+                switch tab {
+                case .files: "Files"
+                case .schedule: "Schedule"
+                case .retention: "Retention"
+                case .hooks: "Hooks"
+                }
+            }) { tab in
+                switch tab {
+                case .files: sourcesTab
+                case .schedule: scheduleTab
+                case .retention: retentionTab
+                case .hooks: HookEditor(hooks: $draft.hooks)
+                }
             }
             .padding(12)
 

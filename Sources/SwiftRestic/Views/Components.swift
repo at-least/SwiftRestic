@@ -60,6 +60,60 @@ struct SheetHeader: View {
     }
 }
 
+// MARK: - Sheet tabs
+
+/// An editor sheet's tabs: a segmented picker over the chosen pane, where a
+/// SwiftUI `TabView` would be an `NSTabView`. That one sizes its tab control
+/// only when its own frame changes size. In a sheet held below its ideal
+/// height by a short window — the main window at its 652 pt minimum — the
+/// last change comes before the control can size itself, and the control
+/// stays 0×0, drawn as a box reading "R…": `NSTabViewSegmentedControl` at
+/// 0×0 beside an intrinsic 160.5×24 (macOS 27.0.1, 2026-10-15). A relayout
+/// left it so; only another size change of the tab view fixed it.
+///
+/// A pane is built when first shown and kept after, as a `TabView` keeps its
+/// tabs: a pane's task starts on its first visit, and a half-typed field
+/// survives a look at another tab. A hidden pane is disabled, so the Tab key
+/// cannot walk into it.
+struct SheetTabs<Tab: Hashable, Pane: View>: View {
+    @Binding var selection: Tab
+    let tabs: [Tab]
+    let title: (Tab) -> String
+    @ViewBuilder let pane: (Tab) -> Pane
+
+    @State private var shown: Set<Tab> = []
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Picker("Tab", selection: $selection) {
+                ForEach(tabs, id: \.self) { tab in
+                    Text(title(tab)).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+
+            ZStack {
+                ForEach(tabs, id: \.self) { tab in
+                    if tab == selection || shown.contains(tab) {
+                        let isSelected = tab == selection
+                        pane(tab)
+                            .opacity(isSelected ? 1 : 0)
+                            .allowsHitTesting(isSelected)
+                            .disabled(!isSelected)
+                            .accessibilityHidden(!isSelected)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onChange(of: selection, initial: true) { _, tab in
+            shown.insert(tab)
+        }
+    }
+}
+
 // MARK: - Banner
 
 /// Dismissible message strip shown above a detail pane. Banners built in

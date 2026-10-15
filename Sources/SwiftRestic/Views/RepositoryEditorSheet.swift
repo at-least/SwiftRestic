@@ -44,7 +44,7 @@ struct RepositoryEditorSheet: View {
     /// page that offers its first plan.
     private let onCreated: (UUID) -> Void
 
-    private enum Tab: Hashable { case repository, hooks }
+    private enum Tab: CaseIterable { case repository, hooks }
 
     private struct Edit: Equatable {
         var draft: Repository
@@ -109,14 +109,16 @@ struct RepositoryEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TabView(selection: $tab) {
-                settingsForm
-                    .tabItem { Label("Repository", systemImage: "externaldrive") }
-                    .tag(Tab.repository)
-                HookEditor(hooks: $draft.hooks, events: BackupHook.Event.maintenanceEvents)
-                    .padding(12)
-                    .tabItem { Label("Hooks", systemImage: "terminal") }
-                    .tag(Tab.hooks)
+            SheetTabs(selection: $tab, tabs: Tab.allCases, title: { tab in
+                switch tab {
+                case .repository: "Repository"
+                case .hooks: "Hooks"
+                }
+            }) { tab in
+                switch tab {
+                case .repository: settingsForm
+                case .hooks: HookEditor(hooks: $draft.hooks, events: BackupHook.Event.maintenanceEvents)
+                }
             }
             .padding(12)
             // Held while restic is asked: the probe checks the fields as
