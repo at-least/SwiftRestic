@@ -63,6 +63,14 @@ struct BackupRunEngineTests {
         func makeHookRunner() -> HookRunner {
             HookRunner(runner: ResticRunner())
         }
+
+        /// The canned answer to a reconnect; every ask is logged.
+        var reconnectAnswer: [ShareReconnect] = []
+
+        func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
+            log.append("reconnect:\(volumes.joined(separator: ","))")
+            return reconnectAnswer
+        }
     }
 
     private func makePlan(retentionEnabled: Bool = true) -> BackupPlan {
@@ -106,6 +114,52 @@ struct BackupRunEngineTests {
         #expect(sink.deliveredRecords.count == 1)
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
         #expect(sink.deliveredRecords[0].snapshotID == "cafe0000")
+    }
+
+    @Test("a repository on a network share that is away is reconnected first; a failed reconnect says why in the skip")
+    func awayRepositoryShareIsReconnected() async throws {
+        let sink = RecordingSink()
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        let reason = "the share did not accept the user name and password"
+        sink.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .failed(reason))]
+        let client = MockResticClient().onBackup(.success(successOutcome()))
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/Volumes/\(volume)/restic"
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
+
+        // Asked once, before the run is decided.
+        #expect(sink.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(volume)"], "log was \(sink.log)")
+        #expect(try #require(sink.log.firstIndex(of: "reconnect:\(volume)")) < (try #require(sink.log.firstIndex(of: "mark:nothing"))))
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .skipped)
+        #expect(record.detailText == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: \(reason).")
+        #expect(sink.deliveredNotes.contains("Could not reconnect the network share smb://me@nas.local/\(volume): \(reason)."))
+    }
+
+    @Test("away folders' drives are asked about once each, in the order the plan names them, and a run with nothing away asks nothing")
+    func awaySourcesAskedOnce() async throws {
+        let first = "SwiftResticAbsentA-\(UUID().uuidString)"
+        let second = "SwiftResticAbsentB-\(UUID().uuidString)"
+        let sink = RecordingSink()
+        sink.reconnectAnswer = [ShareReconnect(volumeName: second, url: "smb://nas.local/\(second)", outcome: .failed("the server could not be reached"))]
+        let client = MockResticClient().onBackup(.failure(ResticError.commandFailed(exitCode: 1, message: RunRecord.everySourceMissingMessage)))
+        var plan = makePlan()
+        plan.sources = ["/Volumes/\(first)/a", "/Volumes/\(first)/b", "/Volumes/\(second)/c"]
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        #expect(sink.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(first),\(second)"], "log was \(sink.log)")
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .skipped)
+        #expect(record.detailText
+            == "“\(first)” and “\(second)” are not connected. Reconnecting “\(second)” failed: the server could not be reached.")
+
+        let here = RecordingSink()
+        await BackupRunEngine.perform(
+            plan: makePlan(), repository: Repository(),
+            sink: StubServiceSink(client: MockResticClient().onBackup(.success(successOutcome())), base: here)
+        )
+        #expect(!here.log.contains { $0.hasPrefix("reconnect") }, "log was \(here.log)")
     }
 
     @Test("no snapshot written means retention never runs")
@@ -807,6 +861,7 @@ private final class StubServiceSink: BackupRunEngine.Sink {
         await base.deliver(record: record, plan: plan, transcript: transcript)
     }
     func makeHookRunner() -> HookRunner { base.makeHookRunner() }
+    func reconnectShares(volumes: [String]) async -> [ShareReconnect] { await base.reconnectShares(volumes: volumes) }
 }
 
 @MainActor

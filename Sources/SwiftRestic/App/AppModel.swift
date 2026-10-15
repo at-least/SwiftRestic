@@ -203,6 +203,12 @@ final class AppModel {
 
     let store: ConfigStore
     let secrets: SecretStore
+    /// Mounts a network share before a backup that needs it (`reconnectShares`).
+    let shareMounter: ShareMounter
+    /// Each share's reconnect in flight, by volume name: a second run that
+    /// needs it at the same tick awaits the first's answer rather than
+    /// mounting it twice.
+    @ObservationIgnored var shareReconnects: [String: Task<ShareReconnect, Never>] = [:]
     /// Resolved restic contexts per repository (repo string + credentials +
     /// settings), so a restic call does not re-read the Keychain. Entries are
     /// rebuilt when the repository value or rate limits change
@@ -291,11 +297,13 @@ final class AppModel {
     init(
         store: ConfigStore = ConfigStore(),
         secrets: SecretStore = .standard,
+        shareMounter: ShareMounter = .netFS,
         defaults: UserDefaults = .standard,
         localHostname: String = ResticService.localHostname
     ) {
         self.store = store
         self.secrets = secrets
+        self.shareMounter = shareMounter
         self.localHostname = localHostname
         self.indexCoordinator = IndexCoordinator(directory: store.directory)
         self.viewDefaults = defaults

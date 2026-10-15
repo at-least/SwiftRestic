@@ -15,6 +15,10 @@ struct SecretStore: Sendable {
     var load: @Sendable (UUID) async throws -> (password: String?, providerSecret: String?)
     var save: @Sendable (UUID, String?, String?) async throws -> Void
     var remove: @Sendable (UUID) async -> Void
+    /// A network share's password, by the share's ID (`NetworkShare`).
+    var loadSharePassword: @Sendable (UUID) async throws -> String?
+    /// Stores a share's password; nil or empty removes it.
+    var saveSharePassword: @Sendable (UUID, String?) async throws -> Void
 
     /// `SecItem*` calls block and macOS may put an authorisation dialog in front
     /// of them, so every one of them is pushed off the caller's actor.
@@ -22,24 +26,34 @@ struct SecretStore: Sendable {
         load: { repositoryID in
             try await Task.detached(priority: .userInitiated) {
                 (
-                    try KeychainStore.read(repositoryID: repositoryID, slot: .repositoryPassword),
-                    try KeychainStore.read(repositoryID: repositoryID, slot: .providerSecret)
+                    try KeychainStore.read(ownerID: repositoryID, slot: .repositoryPassword),
+                    try KeychainStore.read(ownerID: repositoryID, slot: .providerSecret)
                 )
             }.value
         },
         save: { repositoryID, password, providerSecret in
             try await Task.detached(priority: .userInitiated) {
                 if let password, !password.isEmpty {
-                    try KeychainStore.write(password, repositoryID: repositoryID, slot: .repositoryPassword)
+                    try KeychainStore.write(password, ownerID: repositoryID, slot: .repositoryPassword)
                 }
                 if let providerSecret {
-                    try KeychainStore.write(providerSecret, repositoryID: repositoryID, slot: .providerSecret)
+                    try KeychainStore.write(providerSecret, ownerID: repositoryID, slot: .providerSecret)
                 }
             }.value
         },
         remove: { repositoryID in
             await Task.detached(priority: .userInitiated) {
                 KeychainStore.deleteAll(repositoryID: repositoryID)
+            }.value
+        },
+        loadSharePassword: { shareID in
+            try await Task.detached(priority: .userInitiated) {
+                try KeychainStore.read(ownerID: shareID, slot: .sharePassword)
+            }.value
+        },
+        saveSharePassword: { shareID, password in
+            try await Task.detached(priority: .userInitiated) {
+                try KeychainStore.write(password, ownerID: shareID, slot: .sharePassword)
             }.value
         }
     )
@@ -61,18 +75,23 @@ struct SecretStore: Sendable {
     /// silently feed the wrong password to a normal debug run; nil
     /// otherwise. One store for every reader of "what password this
     /// repository has" — the run path and the repository editor — which
-    /// would otherwise disagree about whether a password exists. Saves and
-    /// removals go nowhere: a scratch run never touches the login Keychain.
+    /// would otherwise disagree about whether a password exists. A network
+    /// share's password is `SWIFTRESTIC_SHARE_PASSWORD`, none when unset.
+    /// Saves and removals go nowhere: a scratch run never touches the login
+    /// Keychain.
     static var injectedForCapture: SecretStore? {
         let environment = ProcessInfo.processInfo.environment
         guard let password = environment["SWIFTRESTIC_REPO_PASSWORD"], !password.isEmpty,
               environment["SWIFTRESTIC_CONFIG_DIR"] != nil
         else { return nil }
         let providerSecret = environment["SWIFTRESTIC_REPO_SECRET"]
+        let sharePassword = environment["SWIFTRESTIC_SHARE_PASSWORD"]
         return SecretStore(
             load: { _ in (password, providerSecret) },
             save: { _, _, _ in },
-            remove: { _ in }
+            remove: { _ in },
+            loadSharePassword: { _ in sharePassword },
+            saveSharePassword: { _, _ in }
         )
     }
     #endif
@@ -85,7 +104,9 @@ struct SecretStore: Sendable {
             // non-throwing closure satisfies the throwing requirement.
             load: { await box.load($0) },
             save: { await box.save($0, $1, $2) },
-            remove: { await box.remove($0) }
+            remove: { await box.remove($0) },
+            loadSharePassword: { await box.sharePassword($0) },
+            saveSharePassword: { await box.saveSharePassword($0, $1) }
         )
     }
 }
@@ -109,4 +130,12 @@ private actor InMemorySecrets {
     }
 
     func remove(_ id: UUID) { storage[id] = nil }
+
+    private var sharePasswords: [UUID: String] = [:]
+
+    func sharePassword(_ id: UUID) -> String? { sharePasswords[id] }
+
+    func saveSharePassword(_ id: UUID, _ password: String?) {
+        sharePasswords[id] = password.flatMap { $0.isEmpty ? nil : $0 }
+    }
 }

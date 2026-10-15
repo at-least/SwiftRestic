@@ -24,6 +24,8 @@ struct AppSettings: Codable, Sendable, Hashable {
     var schedulePause: SchedulePause?
     /// Webhook, chat and dead-man's-switch destinations.
     var notificationChannels: [NotificationChannel] = []
+    /// The network shares reconnected before a backup that needs them.
+    var networkShares: [NetworkShare] = []
     /// The console's last commands, newest first. Persisted so a command
     /// that worked survives closing the sheet.
     var consoleHistory: [String] = []
@@ -46,6 +48,7 @@ struct AppSettings: Codable, Sendable, Hashable {
         // not paused and says so — never as a pause without end.
         schedulePause = c.optional(.schedulePause)
         notificationChannels = c.value(.notificationChannels, default: [])
+        networkShares = c.value(.networkShares, default: [])
         consoleHistory = c.value(.consoleHistory, default: [])
     }
 }

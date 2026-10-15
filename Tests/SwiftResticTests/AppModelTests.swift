@@ -1682,7 +1682,9 @@ struct KeychainFailureHonestyTests {
         let secrets = SecretStore(
             load: { (_: UUID) in throw KeychainStore.KeychainError.unexpectedStatus(errSecInteractionNotAllowed) },
             save: { _, _, _ in },
-            remove: { _ in }
+            remove: { _ in },
+            loadSharePassword: { _ in nil },
+            saveSharePassword: { _, _ in }
         )
         var repository = Repository()
         repository.kind = .local
@@ -1711,7 +1713,9 @@ struct KeychainFailureHonestyTests {
             save: { (_: UUID, _: String?, _: String?) in
                 throw KeychainStore.KeychainError.unexpectedStatus(errSecInteractionNotAllowed)
             },
-            remove: { (_: UUID) in }
+            remove: { (_: UUID) in },
+            loadSharePassword: { _ in nil },
+            saveSharePassword: { _, _ in }
         )
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticKeychainSave-\(UUID().uuidString)")

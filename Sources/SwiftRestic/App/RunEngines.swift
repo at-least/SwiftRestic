@@ -92,6 +92,9 @@ enum BackupRunEngine {
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
         /// Runs the plan's shell hooks around the run.
         func makeHookRunner() -> HookRunner
+        /// Mounts the saved network shares among `volumes` — volumes this
+        /// run needs that are away (`AppModel.reconnectShares`).
+        func reconnectShares(volumes: [String]) async -> [ShareReconnect]
     }
 
     static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
@@ -116,6 +119,9 @@ enum BackupRunEngine {
             repositoryID: repository.id.uuidString,
             outcome: "starting"
         )
+        // Why each away share this run needed could not be reconnected, by
+        // volume name, for the skip's words.
+        var reconnectFailures: [String: String] = [:]
 
         do {
             let service = try sink.service()
@@ -144,12 +150,25 @@ enum BackupRunEngine {
                 }
             }
 
+            // Network shares this run needs that are away — the repository's
+            // folder, the plan's — mounted with their saved passwords before
+            // the checks below read them as drives that are away. After the
+            // hooks, which may have mounted them.
+            reconnectFailures = await reconnectShares(
+                for: (repository.kind == .local ? [repository.resolvedLocalPath] : [])
+                    + plan.sources.map(ResticService.expandTilde),
+                sink: sink,
+                transcript: transcript
+            )
+
             // The repository's drive away (after the hooks, which may mount
             // it): skipped as for the folders' drive, never asking restic,
             // whose "does not exist" could not tell it from a moved folder.
             if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
                 record.outcome = .skipped
-                record.detailText = RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
+                record.detailText = RunRecord.skippedReason(
+                    sources: [repository.resolvedLocalPath], reconnectFailures: reconnectFailures
+                )
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
                 // The listing learns it now, not at the next launch: the
                 // refresh answers from the same check, without restic.
@@ -212,7 +231,7 @@ enum BackupRunEngine {
                     : .completedWithErrors
             } else {
                 record.outcome = .skipped
-                record.detailText = RunRecord.partlySkippedReason(sources: awaySources)
+                record.detailText = RunRecord.partlySkippedReason(sources: awaySources, reconnectFailures: reconnectFailures)
             }
 
             // The snapshot exists from here on. Mark the run before doing anything
@@ -271,7 +290,7 @@ enum BackupRunEngine {
             // again every tick.
             if plan.sources.allSatisfy({ VolumePresence.isMounted(volumeOf: ResticService.expandTilde($0)) == false }) {
                 record.outcome = .skipped
-                record.detailText = RunRecord.skippedReason(sources: plan.sources)
+                record.detailText = RunRecord.skippedReason(sources: plan.sources, reconnectFailures: reconnectFailures)
             } else {
                 record.outcome = .failed
                 record.missingSources = plan.sources
@@ -293,6 +312,25 @@ enum BackupRunEngine {
             record: &record, plan: plan, hooks: hooks, context: hookContext,
             transcript: transcript, sink: sink
         )
+    }
+
+    /// The away volumes among `paths`, each once, handed to the sink to
+    /// reconnect — nothing asked when none is away. Each answer goes to the
+    /// run's log; what failed comes back by volume name.
+    private static func reconnectShares(
+        for paths: [String], sink: Sink, transcript: RunTranscript
+    ) async -> [String: String] {
+        var away: [String] = []
+        for path in paths where VolumePresence.isMounted(volumeOf: path) == false {
+            if let volume = VolumePresence.volumeName(of: path), !away.contains(volume) { away.append(volume) }
+        }
+        guard !away.isEmpty else { return [:] }
+        var failures: [String: String] = [:]
+        for reconnect in await sink.reconnectShares(volumes: away) {
+            transcript.note(reconnect.logLine)
+            if case let .failed(reason) = reconnect.outcome { failures[reconnect.volumeName] = reason }
+        }
+        return failures
     }
 
     /// Runs the after-backup hooks (`runAfterHooks`), then hands the finished

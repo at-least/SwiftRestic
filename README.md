@@ -657,6 +657,8 @@ plan cannot fire mid-capture.
   it) hands repositories a password, so the login Keychain is neither read
   nor written: saving a repository editor or a Change Password stores no
   secret. Without it the Keychain is the store, as in a normal run.
+  `SWIFTRESTIC_SHARE_PASSWORD` is then every saved network share's
+  password, and none is saved when it is unset.
 - `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits.
 - `SWIFTRESTIC_CAPTURE_PANE` picks the screen: `plan`, `repository`,
   `restore`, `activity`, `find`, `console`; `files` — the first plan's page

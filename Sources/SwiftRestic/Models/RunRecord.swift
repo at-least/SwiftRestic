@@ -327,11 +327,26 @@ extension RunRecord {
     static let everySourceMissingMessage = "Fatal: all source directories/files do not exist"
 
     /// Why a backup was skipped, for Activity's Detail: the drives its
-    /// folders — or the repository — live on, every one away. A folder
-    /// missing from this Mac is no skip (`folderGoneMessage(sources:)`).
-    static func skippedReason(sources: [String]) -> String {
+    /// folders — or the repository — live on, every one away, and why each
+    /// network share among them could not be reconnected
+    /// (`ShareReconnect`). A folder missing from this Mac is no skip
+    /// (`folderGoneMessage(sources:)`).
+    static func skippedReason(sources: [String], reconnectFailures: [String: String] = [:]) -> String {
         guard let drives = notConnected(sources) else { preconditionFailure("a skip with a source not on a volume: \(sources)") }
-        return drives + "."
+        return drives + "." + reconnectClauses(reconnectFailures, sources: sources)
+    }
+
+    /// " Reconnecting “NAS” failed: the server could not be reached." for
+    /// each drive of `sources` whose share failed, in the order they name
+    /// them; empty when none did.
+    private static func reconnectClauses(_ failures: [String: String], sources: [String]) -> String {
+        var volumes: [String] = []
+        for source in sources {
+            if let volume = VolumePresence.volumeName(of: (source as NSString).expandingTildeInPath), !volumes.contains(volume) {
+                volumes.append(volume)
+            }
+        }
+        return volumes.compactMap { volume in failures[volume].map { " Reconnecting “\(volume)” failed: \($0)." } }.joined()
     }
 
     /// Why a backup failed when none of its folders is on this Mac and no
@@ -372,9 +387,9 @@ extension RunRecord {
         kind == .backup && outcome == .skipped && snapshotID != nil
     }
 
-    static func partlySkippedReason(sources: [String]) -> String {
+    static func partlySkippedReason(sources: [String], reconnectFailures: [String: String] = [:]) -> String {
         guard let drives = notConnected(sources) else { preconditionFailure("a skipped source not on a volume: \(sources)") }
-        return drives + "; the other folders were backed up."
+        return drives + "; the other folders were backed up." + reconnectClauses(reconnectFailures, sources: sources)
     }
 
     /// "“Archive SSD” is not connected", naming each drive once, or nil

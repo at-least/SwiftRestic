@@ -1,10 +1,11 @@
 import Foundation
 import Security
 
-/// Stores repository passwords and provider secret keys in the login Keychain.
+/// Stores repository passwords, provider secret keys and network share
+/// passwords in the login Keychain.
 ///
-/// Secrets never touch `config.json`; the repository UUID stored there is the
-/// base of the Keychain account name.
+/// Secrets never touch `config.json`; the repository's or share's UUID
+/// stored there is the base of the Keychain account name.
 enum KeychainStore {
     static let service = "com.newlix.SwiftRestic"
 
@@ -13,6 +14,8 @@ enum KeychainStore {
         case repositoryPassword = "repository-password"
         /// The backend secret: AWS secret access key, B2 application key, …
         case providerSecret = "provider-secret"
+        /// A network share's password (`NetworkShare`).
+        case sharePassword = "share-password"
     }
 
     enum KeychainError: Error, LocalizedError {
@@ -27,15 +30,15 @@ enum KeychainStore {
         }
     }
 
-    static func account(for repositoryID: UUID, slot: Slot) -> String {
-        "\(repositoryID.uuidString).\(slot.rawValue)"
+    static func account(for ownerID: UUID, slot: Slot) -> String {
+        "\(ownerID.uuidString).\(slot.rawValue)"
     }
 
-    static func read(repositoryID: UUID, slot: Slot) throws -> String? {
+    static func read(ownerID: UUID, slot: Slot) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account(for: repositoryID, slot: slot),
+            kSecAttrAccount as String: account(for: ownerID, slot: slot),
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -53,10 +56,10 @@ enum KeychainStore {
     }
 
     /// Writes a secret, or removes it when `value` is `nil` or empty.
-    static func write(_ value: String?, repositoryID: UUID, slot: Slot) throws {
-        let account = account(for: repositoryID, slot: slot)
+    static func write(_ value: String?, ownerID: UUID, slot: Slot) throws {
+        let account = account(for: ownerID, slot: slot)
         guard let value, !value.isEmpty else {
-            try delete(repositoryID: repositoryID, slot: slot)
+            try delete(ownerID: ownerID, slot: slot)
             return
         }
 
@@ -85,11 +88,11 @@ enum KeychainStore {
         }
     }
 
-    static func delete(repositoryID: UUID, slot: Slot) throws {
+    static func delete(ownerID: UUID, slot: Slot) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account(for: repositoryID, slot: slot),
+            kSecAttrAccount as String: account(for: ownerID, slot: slot),
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -100,7 +103,7 @@ enum KeychainStore {
     /// Removes every secret belonging to a repository that is being deleted.
     static func deleteAll(repositoryID: UUID) {
         for slot in [Slot.repositoryPassword, .providerSecret] {
-            try? delete(repositoryID: repositoryID, slot: slot)
+            try? delete(ownerID: repositoryID, slot: slot)
         }
     }
 }

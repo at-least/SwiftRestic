@@ -38,7 +38,9 @@ struct ContextCacheTests {
                 return try await backing.load(id)
             },
             save: backing.save,
-            remove: backing.remove
+            remove: backing.remove,
+            loadSharePassword: backing.loadSharePassword,
+            saveSharePassword: backing.saveSharePassword
         )
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticContextCache-\(UUID().uuidString)")
