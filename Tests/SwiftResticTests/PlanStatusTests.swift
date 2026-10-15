@@ -513,7 +513,10 @@ struct PlanStatusTests {
         #expect(twoSummary.message == nil)
         #expect(twoSummary.facts == ["2 unreadable items"])
 
-        // The when-line: the week's count in the Recent problems card's words.
+        // The card's when-line: the problem's stretch, said as one; the
+        // Recent problems card's row counts the week in its own words.
+        #expect(PlanStatus.standingProblemWhen(inARow: 1, ago: "2 days ago") == "2 days ago")
+        #expect(PlanStatus.standingProblemWhen(inARow: 3, ago: "2 days ago") == "3 times in a row · 2 days ago")
         #expect(PlanStatus.problemWhen(count: 1, ago: "2 days ago") == "2 days ago")
         #expect(PlanStatus.problemWhen(count: 3, ago: "2 days ago") == "3 times · 2 days ago")
     }

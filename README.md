@@ -216,10 +216,13 @@ the generator after editing it; the PNGs are checked in.
   (none for a manual plan); *Configuration* (folders, exclude patterns,
   hooks) with *Edit*. While the newest backup failed or completed with
   errors and none succeeded since, a problem card sits under *Backups*: the
-  outcome, the week's count ("3 times · 2 days ago"), restic's message, the
-  facts, the drawer's diagnosis, and up to five unreadable items with the
-  drawer's *Reveal in Finder* and *Exclude from “Documents”…* menu, then "…
-  and N more in Activity"; *Show in Activity* opens the run. The editor
+  outcome, how many backups in a row ended that way for the same cause ("3
+  times in a row · 2 days ago" — a success, a skip, a cancel or another
+  cause starts the count over, as it does a notification; the repository
+  page's Recent problems counts the week), restic's message, the facts, the
+  drawer's diagnosis, and up to five unreadable items with the drawer's
+  *Reveal in Finder* and *Exclude from “Documents”…* menu, then "… and N
+  more in Activity"; *Show in Activity* opens the run. The editor
   preselects the repository only when there is just one, says when a folder
   is not on this Mac, takes excludes chosen in a panel or dropped from Finder
   as their own paths (glob characters escaped), and shows *Next backup* for

@@ -147,15 +147,6 @@ enum OverviewMetrics {
         return groups.values.sorted { $0.newest.finishedAt > $1.newest.finishedAt }
     }
 
-    /// How many runs of the week ended like `problem` — the count the
-    /// Recent problems card's row for it carries (`problemGroups`), so the
-    /// plan page's card and the repository page say one number. One when
-    /// the problem stands alone, or is older than the week's window.
-    static func recurrences(of problem: RunRecord, in runs: [RunRecord], now: Date) -> Int {
-        let key = ProblemKey(problem)
-        return max(1, problems(in: runs, since: problemWindowStart(from: now)).count { ProblemKey($0) == key })
-    }
-
     /// What one Recent problems row collects: a plan's (or a repository's
     /// upkeep's) runs of one kind that ended the same way.
     private struct ProblemKey: Hashable {

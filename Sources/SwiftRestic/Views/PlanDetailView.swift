@@ -131,8 +131,8 @@ struct PlanDetailView: View {
         let summary: PlanProblemSummary
         /// The run the summary describes, for the fix its items need.
         let run: RunRecord
-        /// The week's count of this problem (`OverviewMetrics.recurrences`).
-        let recurrences: Int
+        /// How many backups in a row ended this way (`AppModel.problemStretch`).
+        let inARow: Int
         var onShowInActivity: (() -> Void)?
 
         var body: some View {
@@ -148,9 +148,9 @@ struct PlanDetailView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(summary.headline)
                                 .font(.headline)
-                            // The week's count in the Recent problems
-                            // card's words, then the newest run's moment.
-                            Text(PlanStatus.problemWhen(count: recurrences, ago: Format.ago(summary.finishedAt, now: now)))
+                            // The backups in a row it stands for, then the
+                            // newest run's moment.
+                            Text(PlanStatus.standingProblemWhen(inARow: inARow, ago: Format.ago(summary.finishedAt, now: now)))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                                 .help(Format.timestamp(summary.finishedAt))
@@ -242,7 +242,7 @@ struct PlanDetailView: View {
                 PlanProblemRow(
                     summary: PlanStatus.summary(of: problem),
                     run: problem,
-                    recurrences: OverviewMetrics.recurrences(of: problem, in: model.configuration.runs, now: now),
+                    inARow: AppModel.problemStretch(of: problem, in: model.configuration.runs),
                     onShowInActivity: showInActivity(problem)
                 )
             }

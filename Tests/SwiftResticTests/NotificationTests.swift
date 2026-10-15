@@ -406,6 +406,47 @@ struct RepeatedProblemNotificationTests {
         #expect(!AppModel.repeatsProblem(success, previous: success))
     }
 
+    private func ended(_ minutes: Double, _ outcome: RunRecord.Outcome) -> RunRecord {
+        var run = RunRecord(kind: .backup, planID: planID, planName: "Documents", startedAt: now.addingTimeInterval(minutes * 60))
+        run.outcome = outcome
+        return run
+    }
+
+    @Test("the plan page's card counts the problem's stretch — the backups in a row the notification rule calls one problem")
+    func stretch() {
+        func count(_ newestFirst: [RunRecord], of problem: RunRecord? = nil) -> Int {
+            AppModel.problemStretch(of: problem ?? newestFirst[0], in: newestFirst)
+        }
+        // Three warnings for the same file since a success, two before it.
+        #expect(count([warned(600), warned(540), warned(480), ended(420, .succeeded), warned(360), warned(300)]) == 3)
+        // A skip or a cancel in between ends it too, as it re-arms the notification.
+        #expect(count([warned(600), ended(540, .skipped), warned(480)]) == 1)
+        #expect(count([warned(600), ended(540, .cancelled), warned(480)]) == 1)
+        // Another cause, or another outcome, is another problem.
+        #expect(count([warned(600, items: ["/b: open /b: permission denied"]), warned(540)]) == 1)
+        #expect(count([failed(600), warned(540)]) == 1)
+        // The numbers in restic's words change from run to run; the cause does not.
+        #expect(count([
+            failed(600, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 4242 on nas by u (UID 501, GID 20)"),
+            failed(540, exit: 11, message: "Fatal: unable to create lock in backend: repository is already locked by PID 517 on nas by u (UID 501, GID 20)"),
+        ]) == 2)
+        // Another plan's runs neither end it nor add to it.
+        var otherSuccess = ended(570, .succeeded)
+        otherSuccess.planID = UUID()
+        var otherWarning = warned(560)
+        otherWarning.planID = UUID()
+        #expect(count([warned(600), otherSuccess, otherWarning, warned(540)]) == 2)
+        // A failure merged into a standing one for the same folders gone
+        // counts the runs it stands for.
+        var standing = failed(600)
+        standing.skipCount = 3
+        #expect(count([standing, ended(300, .succeeded)]) == 3)
+        // The card's problem need not be the newest record: a plain skip
+        // after it heals nothing, and the count starts from the problem.
+        let problem = warned(540)
+        #expect(count([ended(600, .skipped), problem, warned(480), ended(420, .succeeded)], of: problem) == 2)
+    }
+
     @MainActor
     @Test("a run's notification follows the setting, and a problem's only the first time in a stretch")
     func wantsNotification() {
