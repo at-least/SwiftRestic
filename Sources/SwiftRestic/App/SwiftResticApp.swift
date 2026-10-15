@@ -207,9 +207,10 @@ struct SwiftResticApp: App {
             // ⌘N is macOS's reflex for "new thing" — an emptied group would
             // make adding a repository a mouse trip to the sidebar footer.
             CommandGroup(replacing: .newItem) {
+                // With no repository yet, through adding one
+                // (`RootView.startNewPlan`).
                 Button("New Backup Plan…") { ask(.newPlan) }
                     .keyboardShortcut("n", modifiers: .command)
-                    .disabled(model.configuration.repositories.isEmpty)
 
                 Button("Add Repository…") {
                     // Through the router's pending intent: the ask survives

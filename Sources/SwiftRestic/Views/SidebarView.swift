@@ -161,9 +161,9 @@ struct SidebarView: View {
     private var sidebarFooter: some View {
         HStack(spacing: 8) {
             Menu {
-                // Into the repository on screen, as ⌘N does.
+                // Into the repository on screen, as ⌘N does — with none
+                // yet, through adding one.
                 Button("New Backup Plan…") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
-                    .disabled(model.configuration.repositories.isEmpty)
                 Button("Add Repository…") { onNewRepository() }
             } label: {
                 Label("Add", systemImage: "plus")

@@ -17,6 +17,10 @@ struct RootView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var editingPlan: BackupPlan?
     @State private var editingRepository: Repository?
+    /// "New Backup Plan…" asked with no repository yet: the repository
+    /// editor is up for it, and once it has saved one the plan editor
+    /// follows, in it (`startNewPlan`, `continuePlanAfterRepository`).
+    @State private var planAfterRepository: PlanAfterRepository?
     @State private var isShowingFind = false
     /// What the Restore pane's "Search All Backups…" hands Find Files. Only
     /// that button sets it; the sheet's dismissal clears it, so ⇧⌘F and
@@ -70,7 +74,7 @@ struct RootView: View {
         SidebarView(
             folds: $sidebarFolds,
             onEditPlan: { editingPlan = $0 },
-            onNewPlan: { editingPlan = newPlan(in: $0) },
+            onNewPlan: startNewPlan(in:),
             onEditRepository: { editingRepository = $0 },
             onNewRepository: { editingRepository = Repository() },
             onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
@@ -86,7 +90,7 @@ struct RootView: View {
             onEditPlan: { editingPlan = $0 },
             onEditRepository: { editingRepository = $0 },
             onAddRepository: { editingRepository = Repository() },
-            onAddPlan: { editingPlan = newPlan(in: $0) },
+            onAddPlan: startNewPlan(in:),
             onAdoptGroup: adoptGroup,
             onRevalidateSelection: revalidateSelection,
             onSearchAllBackups: { repositoryID, query in
@@ -116,12 +120,13 @@ struct RootView: View {
             PlanEditorSheet(plan: plan)
                 .environment(model)
         }
-        .sheet(item: $editingRepository) { repository in
+        .sheet(item: $editingRepository, onDismiss: continuePlanAfterRepository) { repository in
             // A new repository lands on its own page, where "New Backup
             // Plan…" is the first thing it offers — the next step after
-            // adding one.
+            // adding one, taken for the user when that was what they asked.
             RepositoryEditorSheet(repository: repository, onCreated: { id in
                 router.selection = .repository(id)
+                if planAfterRepository == .awaiting { planAfterRepository = .created(id) }
             })
             .environment(model)
         }
@@ -251,6 +256,33 @@ struct RootView: View {
         var plan = BackupPlan()
         plan.repositoryID = repositoryID
         return plan
+    }
+
+    private enum PlanAfterRepository: Equatable {
+        case awaiting
+        case created(UUID)
+    }
+
+    /// "New Backup Plan…", from whichever control: the plan editor — or,
+    /// with no repository to back up to yet, the repository editor first,
+    /// as Arq asks where before what. Adding one is the plan's first step,
+    /// not a reason to sit disabled.
+    private func startNewPlan(in repositoryID: UUID?) {
+        guard model.configuration.repositories.isEmpty else {
+            editingPlan = newPlan(in: repositoryID)
+            return
+        }
+        planAfterRepository = .awaiting
+        editingRepository = Repository()
+    }
+
+    /// The repository editor closed: opened for a plan and saved, the plan
+    /// editor follows in the new repository — from its dismissal, so one
+    /// sheet is gone before the next is asked for.
+    private func continuePlanAfterRepository() {
+        defer { planAfterRepository = nil }
+        guard case let .created(id) = planAfterRepository else { return }
+        editingPlan = newPlan(in: id)
     }
 
     /// Opens the adopt sheet for a group — the one presentation both the
@@ -486,7 +518,7 @@ struct RootView: View {
         case .newPlan:
             // Into the repository on screen — the one the Repository menu
             // acts on — or the editor's own default when there is none.
-            editingPlan = newPlan(in: model.commandRepositoryID(for: router.selection))
+            startNewPlan(in: model.commandRepositoryID(for: router.selection))
         case .newRepository:
             editingRepository = Repository()
         case .showFind:

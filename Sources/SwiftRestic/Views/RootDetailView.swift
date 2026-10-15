@@ -214,21 +214,13 @@ struct WelcomeView: View {
                     Button("Add a Repository…", action: onAddRepository)
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                    Button("New Backup Plan…") {
-                        // The plan's first requirement is where backups go:
-                        // with no repository yet, this button starts there
-                        // rather than sitting disabled with an invisible
-                        // reason.
-                        if model.configuration.repositories.isEmpty {
-                            onAddRepository()
-                        } else {
-                            onAddPlan()
-                        }
-                    }
-                    .controlSize(.large)
+                    // With no repository yet it starts there and carries
+                    // on to the plan (`RootView.startNewPlan`).
+                    Button("New Backup Plan…", action: onAddPlan)
+                        .controlSize(.large)
                 }
                 if model.configuration.repositories.isEmpty {
-                    Text("A backup plan backs up to a repository — add the repository first.")
+                    Text("A backup plan backs up to a repository — New Backup Plan… sets one up first.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

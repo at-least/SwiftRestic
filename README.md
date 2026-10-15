@@ -154,7 +154,9 @@ the generator after editing it; the PNGs are checked in.
   cannot hide a stopped plan (a manual plan gets no line). The card carries
   *New Backup Plan…* while the repository has no plan; after that a plan
   starts from the sidebar's + or ⌘N (into the repository on screen) or the
-  repository row's menu. Then the *Other backups* card; the week's problems
+  repository row's menu. With no repository yet, *New Backup Plan…* — the
+  welcome screen's, ⌘N, the sidebar's + — adds one first, then opens the
+  plan editor in it. Then the *Other backups* card; the week's problems
   — a repeating cause (one unreadable file every run) is one row with its
   count ("7 times · 19 hours ago") opening the newest, and past five rows a
   last "… and N more in Activity" row opens Activity's Problems; then
@@ -652,9 +654,9 @@ plan cannot fire mid-capture.
 
 - `SWIFTRESTIC_CONFIG_DIR` points the app at a throwaway configuration
   instead of your real one; `SWIFTRESTIC_REPO_PASSWORD` (honoured only with
-  it) hands repositories a password, so the login Keychain is never read.
-  Writes are not redirected: saving a repository editor or a Change Password
-  writes to the login Keychain.
+  it) hands repositories a password, so the login Keychain is neither read
+  nor written: saving a repository editor or a Change Password stores no
+  secret. Without it the Keychain is the store, as in a normal run.
 - `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits.
 - `SWIFTRESTIC_CAPTURE_PANE` picks the screen: `plan`, `repository`,
   `restore`, `activity`, `find`, `console`; `files` — the first plan's page

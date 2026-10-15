@@ -93,10 +93,17 @@ points @2x), light mode.
 ### Rules
 
 - **Never point a capture run at the real configuration.** Set
-  `SWIFTRESTIC_CONFIG_DIR=/tmp/...` so the run cannot see or refresh the
-  user's repositories nor read the login Keychain for a password. Keychain
-  writes still go through: never save a repository editor or press Change
-  Password in a scratch run.
+  `SWIFTRESTIC_CONFIG_DIR=/tmp/...` and `SWIFTRESTIC_REPO_PASSWORD` so the
+  run can neither see nor refresh the user's repositories, nor touch the
+  login Keychain: together they make the secret store the environment's
+  (`SecretStore.injectedForCapture`, since 7bff71c), whose saves go nowhere.
+  On 2026-10-15 three repositories added through the editor in scratch runs
+  left no Keychain item (`security find-generic-password -s
+  com.newlix.SwiftRestic -a <uuid>.repository-password`: not found, while
+  the same query by service alone finds the user's own). Without the
+  password variable the Keychain is the store, read and written. Change
+  Password still re-keys the scratch repository itself, which that password
+  then no longer opens (code-read).
 - **One output directory per agent and run** — a shared filename is
   overwritten by the next agent before the first reads it.
 - **Never substitute a full-screen capture for the window capture**: that is
