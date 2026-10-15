@@ -936,7 +936,8 @@ private struct RestoreRecordHeader: View {
         let heading = RestoreRecordHeading(
             record: record,
             label: model.recordLabel(of: record, repositoryID: repositoryID),
-            comparison: comparison
+            comparison: comparison,
+            unread: model.unreadItems(inBackup: record.id)
         )
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
@@ -973,14 +974,14 @@ private struct RestoreRecordHeader: View {
             // line's too.
             // Each name opens the item's versions at the backup compared
             // with, which has it.
-            if let removed = heading.removed {
-                RemovedNamesLine(names: removed.names, help: removed.detail, before: removed.baseline.time) { item in
+            ForEach([heading.removed, heading.notRead].compactMap { $0 }, id: \.names.label) { removals in
+                RemovedNamesLine(names: removals.names, help: removals.detail, before: removals.baseline.time) { item in
                     router.showVersions(
                         path: item.path,
                         isDirectory: item.isDirectory,
-                        in: removed.baseline,
+                        in: removals.baseline,
                         repositoryID: repositoryID,
-                        page: model.shelves(for: repositoryID).page(of: removed.baseline, repositoryID: repositoryID)
+                        page: model.shelves(for: repositoryID).page(of: removals.baseline, repositoryID: repositoryID)
                     )
                 }
             }
@@ -1050,7 +1051,7 @@ private struct IncompleteSnapshotStrip: View {
                             )
                         } label: {
                             HStack(spacing: 4) {
-                                Text(line)
+                                Text(words(for: line, in: run))
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                                 Image(systemName: "chevron.forward")
@@ -1062,9 +1063,9 @@ private struct IncompleteSnapshotStrip: View {
                             .foregroundStyle(.secondary)
                         }
                         .buttonStyle(HoverableButtonStyle())
-                        .help("Not in this backup — the backup of \(Format.timestamp(baseline.time)) has it. Show its versions.")
+                        .help("\(line)\nNot read by this backup — the backup of \(Format.timestamp(baseline.time)) has it. Show its versions.")
                     } else {
-                        Text(line)
+                        Text(words(for: line, in: run))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -1102,6 +1103,16 @@ private struct IncompleteSnapshotStrip: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.warning.opacity(0.08))
         .accessibilityElement(children: .contain)
+    }
+
+    /// An item by name, why and where (`RunRecordPresentation.unreadableItemWords`);
+    /// restic's own line, which the tooltip keeps, where the run stored no
+    /// path.
+    private func words(for line: String, in run: RunRecord) -> String {
+        let sources = run.planID.flatMap { model.plan(id: $0) }?.sources ?? []
+        guard let words = RunRecordPresentation.unreadableItemWords(line: line, path: run.unreadableItemPaths?[line], sources: sources)
+        else { return line }
+        return "\(words.name) — \(words.reason) · \(words.location)"
     }
 }
 

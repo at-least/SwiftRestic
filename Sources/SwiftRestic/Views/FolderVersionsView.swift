@@ -128,9 +128,10 @@ struct FolderVersionsView: View {
     }
 
     /// What changed in the folder itself since the backup before — the gone
-    /// items by name, since the listing below is the chosen backup's — or,
-    /// when the index cannot say, why. Nothing for the oldest backup holding
-    /// it, nor while the index has yet to read both.
+    /// items by name, since the listing below is the chosen backup's, and
+    /// apart from them what its own run could not read — or, when the index
+    /// cannot say, why. Nothing for the oldest backup holding it, nor while
+    /// the index has yet to read both.
     @ViewBuilder
     private var changeSummary: some View {
         if let changesError {
@@ -138,24 +139,36 @@ struct FolderVersionsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .help(changesError)
-        } else if let changes, let previous {
+        } else if let all = changes, let chosen, let previous {
+            let (changes, notRead) = all.separatingUnread(model.unreadItems(inBackup: chosen.id))
             VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: changes.summary(since: previous.time))
+                Text(verbatim: changes.summary(since: previous.time, notRead: notRead.count))
                     .help("Compared with the backup before that holds this folder — what changed inside its folders is theirs to say, and a change of a file's dates or permissions alone is not counted")
                 // Each name opens the item in the tree at the backup
                 // before, which has it.
                 if let removed = changes.removedNames {
-                    RemovedNamesLine(names: RemovedNames(changes.removedItems), help: removed, before: previous.time) { item in
-                        onOpen(
-                            FileNode(repositoryID: node.repositoryID, chainKey: node.chainKey, path: item.path, isDirectory: item.isDirectory),
-                            previous.id
-                        )
-                    }
+                    RemovedNamesLine(names: RemovedNames(changes.removedItems), help: removed, before: previous.time) { openGone($0, at: previous) }
+                }
+                if !notRead.isEmpty {
+                    RemovedNamesLine(
+                        names: RemovedNames(notRead, label: "Not read: "),
+                        help: "Not read by this backup — restic could not read them, and they may still be on this Mac: "
+                            + notRead.map(\.name).joined(separator: ", "),
+                        before: previous.time
+                    ) { openGone($0, at: previous) }
                 }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
+    }
+
+    /// Opens a gone item in the tree at the backup before, which has it.
+    private func openGone(_ item: RemovedItem, at previous: IndexVersion) {
+        onOpen(
+            FileNode(repositoryID: node.repositoryID, chainKey: node.chainKey, path: item.path, isDirectory: item.isDirectory),
+            previous.id
+        )
     }
 
     @ViewBuilder

@@ -322,6 +322,33 @@ struct SnapshotLineageTests {
             + "folders from the same Mac, and this is the first.")
     }
 
+    @Test("the restore header calls what this backup's own run could not read not read, not removed")
+    func restoreHeaderNotRead() throws {
+        let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/src"])
+        let record = try snapshot("abf72899aaaaaaaa", time: "2026-09-26T02:00:00Z", paths: ["/src"])
+        let since = Format.timestamp(baseline.time)
+        let unread = UnreadItems(lines: ["/src/locked.pdf": "/src/locked.pdf: open /src/locked.pdf: permission denied"])
+        func heading(_ removals: [ResticDiffChange]) -> RestoreRecordHeading {
+            RestoreRecordHeading(record: record, label: nil, comparison: .compared(
+                baseline: baseline, changeCount: removals.count, removed: removals
+            ), unread: unread)
+        }
+        let old = ResticDiffChange(path: "/src/old.txt", modifier: "-")
+        let locked = ResticDiffChange(path: "/src/locked.pdf", modifier: "-")
+        let both = heading([locked, old])
+        #expect(both.removed?.names.line == "Removed: old.txt")
+        #expect(both.notRead?.names.line == "Not read: locked.pdf")
+        #expect(both.notRead?.names.items.map(\.reason) == ["permission denied"])
+        #expect(both.removed?.names.items.map(\.reason) == [nil])
+        #expect(both.notRead?.detail
+            == "Not read by this backup — restic could not read them; the backup of \(since) has them:\n/src/locked.pdf")
+        #expect(both.notRead?.baseline == baseline)
+        let onlyLocked = heading([locked])
+        #expect(onlyLocked.removed == nil)
+        #expect(onlyLocked.notRead?.names.line == "Not read: locked.pdf")
+        #expect(heading([old]).notRead == nil)
+    }
+
     @Test("the restore header names what the backup no longer holds — removals the tree, being this backup's, cannot show")
     func restoreHeaderRemovals() throws {
         let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/src"])

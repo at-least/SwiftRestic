@@ -29,7 +29,12 @@ struct FilesPaneView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                FilesPaneHeader(node: node, newestHolder: versions.first, chainNewest: chainNewest)
+                FilesPaneHeader(
+                    node: node,
+                    newestHolder: versions.first,
+                    chainNewest: chainNewest,
+                    notRead: chainNewest.flatMap { model.unreadItems(inBackup: $0.id).reason(for: node.path) }
+                )
                 if !indexComplete {
                     Label(FilesSearchAnswer.indexStillReading, systemImage: "clock.arrow.circlepath")
                         .font(.caption)
@@ -162,6 +167,9 @@ struct FilesPaneHeader: View {
     /// The newest backup holding it.
     let newestHolder: IndexVersion?
     let chainNewest: Snapshot?
+    /// Why the chain's newest backup lacks it, when that backup's own run
+    /// could not read it (`UnreadItems.reason`).
+    let notRead: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -192,9 +200,10 @@ struct FilesPaneHeader: View {
     }
 
     /// For an item the chain's newest backup lacks, when it was last backed
-    /// up — the tree row's tooltip, in the same words.
+    /// up and, when that backup could not read it, why — the tree row's
+    /// tooltip, in the same words.
     private var standing: String? {
         guard let newestHolder, let chainNewest, newestHolder.id != chainNewest.id else { return nil }
-        return "Not in the newest backup — last backed up \(Format.timestamp(newestHolder.time))"
+        return FilesTree.Entry.standing(notRead: notRead, lastBackedUp: newestHolder.time)
     }
 }

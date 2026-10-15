@@ -13,19 +13,35 @@ extension FolderChanges {
 
     /// "Since Oct 3, 2026 at 2:05 PM, in this folder: 1 added, 2 removed" —
     /// or that nothing in it changed since then. Its subfolders' contents
-    /// are theirs to say, so the line says where it looked.
-    func summary(since previous: Date) -> String {
+    /// are theirs to say, so the line says where it looked. `notRead`
+    /// counts what `separatingUnread(_:)` took out of the removals.
+    func summary(since previous: Date, notRead: Int = 0) -> String {
         let since = Format.timestamp(previous)
-        guard !isEmpty else { return "No changes in this folder since \(since)" }
+        guard !isEmpty || notRead > 0 else { return "No changes in this folder since \(since)" }
         let counts = [
             (added.count, "added"),
             (modified.count, "modified"),
             (removed.count, "removed"),
+            (notRead, "not read"),
             (uncertain.count, "may have changed"),
         ]
         .filter { $0.0 > 0 }
         .map { "\(Format.count($0.0)) \($0.1)" }
         return "Since \(since), in this folder: \(counts.joined(separator: ", "))"
+    }
+
+    /// The removals the chosen backup's own run could not read
+    /// (`AppModel.unreadItems(inBackup:)`), taken out, each with why:
+    /// restic left them out for want of reading them, and the disk may
+    /// still hold them — not read, not removed. The rest stays as it was.
+    func separatingUnread(_ unread: UnreadItems) -> (changes: FolderChanges, notRead: [RemovedItem]) {
+        let notRead = removedItems.compactMap { item in
+            unread.reason(for: item.path).map { RemovedItem(path: item.path, isDirectory: item.isDirectory, reason: $0) }
+        }
+        guard !notRead.isEmpty else { return (self, []) }
+        var changes = self
+        changes.removed.removeAll { unread.item(holding: $0) != nil }
+        return (changes, notRead)
     }
 
     /// What is gone since the backup before, by name, in the order the

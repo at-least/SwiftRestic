@@ -263,10 +263,8 @@ enum RunRecordPresentation {
     }
 
     /// One unreadable item as the app says it: its name, where it is —
-    /// inside the plan folder that holds it, else on disk — and why: the
-    /// cause `ItemErrorDiagnosis` reads off the line's end, a top folder
-    /// restic skipped, or any other cause in restic's words after the
-    /// item's own name. From the path the run stored
+    /// inside the plan folder that holds it, else on disk — and why
+    /// (`unreadableReason`). From the path the run stored
     /// (`RunRecord.unreadableItemPaths`); nil for a line with none, which
     /// stays restic's own.
     static func unreadableItemWords(line: String, path: String?, sources: [String]) -> UnreadableItemWords? {
@@ -282,7 +280,17 @@ enum RunRecordPresentation {
         } else {
             (parent as NSString).abbreviatingWithTildeInPath
         }
-        let reason = switch ItemErrorDiagnosis.kind(of: line) {
+        return UnreadableItemWords(
+            name: (path as NSString).lastPathComponent, location: location, reason: unreadableReason(line: line, path: path)
+        )
+    }
+
+    /// Why restic could not read the item at `path`, from its line: the
+    /// cause `ItemErrorDiagnosis` reads off the line's end, a top folder
+    /// restic skipped, or any other cause in restic's words after the
+    /// item's own name.
+    static func unreadableReason(line: String, path: String) -> String {
+        switch ItemErrorDiagnosis.kind(of: line) {
         case .deniedByFilePermissions: "permission denied"
         case .blockedByMacOS: "blocked by macOS"
         case .other:
@@ -296,7 +304,6 @@ enum RunRecordPresentation {
                 line
             }
         }
-        return UnreadableItemWords(name: (path as NSString).lastPathComponent, location: location, reason: reason)
     }
 
     /// The in-app banner's message for a backup that finished with

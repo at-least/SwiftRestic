@@ -45,6 +45,17 @@ final class AppModel {
         backupRunsBySnapshot[id]
     }
 
+    /// What a backup's own run could not read (`RunRecord.unreadableItemPaths`,
+    /// turned around): empty when the history no longer holds the run, or
+    /// it named no path.
+    func unreadItems(inBackup id: String) -> UnreadItems {
+        var items = UnreadItems()
+        for (line, path) in backupRun(forSnapshot: id)?.unreadableItemPaths ?? [:] {
+            items.lines[PathKey(ResticPath.normalized(path))] = line
+        }
+        return items
+    }
+
     // MARK: Runtime state
 
     var resticVersion: String = ""

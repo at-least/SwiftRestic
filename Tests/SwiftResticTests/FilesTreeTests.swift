@@ -281,6 +281,21 @@ struct FilesTreeTests {
         #expect(entries[3].node == node("/Docs/Notes"))
     }
 
+    @Test("an item the newest backup lacks says when it was last backed up, and why when that backup could not read it")
+    func standingWords() {
+        let when = Date(timeIntervalSince1970: 1_790_904_600)
+        let stamp = Format.timestamp(when)
+        let gone = FilesTree.Entry(node: node("/Docs/old.txt", folder: false), newest: IndexVersion(id: "s1", time: when), isInNewest: false)
+        #expect(gone.help(notRead: nil) == "Not in the newest backup — last backed up \(stamp)")
+        #expect(gone.help(notRead: "permission denied")
+            == "Not read by the newest backup (permission denied) — last backed up \(stamp)")
+        #expect(FilesTree.Entry.spokenStanding(notRead: "permission denied", lastBackedUp: when)
+            == "not read by the newest backup, permission denied, last backed up \(stamp)")
+        #expect(FilesTree.Entry.spokenStanding(notRead: nil, lastBackedUp: when) == "not in the newest backup, last backed up \(stamp)")
+        let here = FilesTree.Entry(node: node("/Docs/new.txt", folder: false), newest: IndexVersion(id: "s2", time: when), isInNewest: true)
+        #expect(here.help(notRead: nil) == "/Docs/new.txt")
+    }
+
     @Test("a search's footer says the ceiling first, then the index still reading, else nothing")
     func searchHitsNote() {
         #expect(FilesSearchAnswer.note(isTruncated: false, isComplete: true) == nil)

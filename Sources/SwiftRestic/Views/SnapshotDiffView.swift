@@ -315,15 +315,20 @@ struct SnapshotDiffView: View {
             if rows.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
+                let unread = model.unreadItems(inBackup: newer.id)
                 List(rows, selection: $selection) { change in
+                    // Gone because the newer backup's own run could not
+                    // read it, not because it left the disk.
+                    let notRead = change.category == .removed ? unread.reason(for: change.path) : nil
+                    let explanation = notRead.map { "not read by this backup (\($0)) — it may still be on this Mac" } ?? change.explanation
                     HStack(spacing: 8) {
-                        Text(glyph(for: change))
+                        Text(notRead == nil ? glyph(for: change) : "!")
                             .font(.system(.body, design: .monospaced).weight(.semibold))
-                            .foregroundStyle(color(for: change.category))
+                            .foregroundStyle(notRead == nil ? color(for: change.category) : Theme.warning)
                             .frame(width: 22, alignment: .center)
-                            .help(change.explanation)
+                            .help(explanation)
                             // VoiceOver reads "plus"; the explanation says "added".
-                            .accessibilityLabel(change.explanation)
+                            .accessibilityLabel(explanation)
                         Image(systemName: change.isDirectory ? "folder" : "doc")
                             .foregroundStyle(.secondary)
                             .frame(width: 16)
@@ -512,6 +517,11 @@ struct SnapshotDiffView: View {
         var text = shown == diff.changes.count
             ? Format.plural(diff.changes.count, "change")
             : "\(Format.count(shown)) of \(Format.plural(diff.changes.count, "change"))"
+        let unread = model.unreadItems(inBackup: newer.id)
+        let notRead = diff.changes.count(where: { $0.category == .removed && unread.item(holding: $0.path) != nil })
+        if notRead > 0 {
+            text += " · \(Format.count(notRead)) not read by this backup"
+        }
         if diff.isTruncated {
             text += " — list cut off at \(Format.count(SnapshotDiff.changeLimit)); the totals above are complete"
         }

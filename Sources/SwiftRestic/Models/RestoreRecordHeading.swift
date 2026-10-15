@@ -80,11 +80,40 @@ extension ChangeComparison {
 struct RemovedItem: Hashable, Sendable {
     var path: String
     var isDirectory: Bool
+    /// Why the backup's own run could not read it (`UnreadItems.reason`):
+    /// set on a "Not read:" line's items, nil on a removal.
+    var reason: String? = nil
 
     /// The last component; the root reads as "/".
     var name: String {
         let last = ResticPath.basename(of: path)
         return last.isEmpty ? path : last
+    }
+}
+
+/// What a backup's own run could not read (`AppModel.unreadItems(inBackup:)`),
+/// each item with restic's line, by its normalized path's bytes. restic
+/// leaves such an item — a folder with all it holds — out of the snapshot,
+/// so the backup lacks it while the disk may still have it: not read, not
+/// removed.
+struct UnreadItems: Equatable, Sendable {
+    var lines: [PathKey: String] = [:]
+
+    /// The unreadable item that is `path` or a folder above it, with
+    /// restic's line; nil when the run read it.
+    func item(holding path: String) -> (path: String, line: String)? {
+        guard !lines.isEmpty else { return nil }
+        let path = ResticPath.normalized(path)
+        for candidate in [path] + ResticPath.ancestors(of: path) {
+            if let line = lines[PathKey(candidate)] { return (candidate, line) }
+        }
+        return nil
+    }
+
+    /// Why the run could not read `path`, in the app's words
+    /// (`RunRecordPresentation.unreadableReason`); nil when it read it.
+    func reason(for path: String) -> String? {
+        item(holding: path).map { RunRecordPresentation.unreadableReason(line: $0.line, path: $0.path) }
     }
 }
 
@@ -96,16 +125,20 @@ struct RemovedNames: Equatable, Sendable {
 
     var items: [RemovedItem]
     var more: Int
+    /// "Removed: ", or "Not read: " for what the backup's own run could
+    /// not read (`AppModel.unreadItems(inBackup:)`).
+    var label: String
 
-    init(_ all: [RemovedItem]) {
+    init(_ all: [RemovedItem], label: String = "Removed: ") {
         items = Array(all.prefix(Self.shown))
         more = all.count - items.count
+        self.label = label
     }
 
     /// "Removed: old.txt, sub, and 2 more" — the line as one string, for
     /// VoiceOver and the tests.
     var line: String {
-        "Removed: " + (items.map(\.name) + (more > 0 ? ["and \(Format.count(more)) more"] : [])).joined(separator: ", ")
+        label + (items.map(\.name) + (more > 0 ? ["and \(Format.count(more)) more"] : [])).joined(separator: ", ")
     }
 }
 
@@ -135,6 +168,9 @@ struct RestoreRecordHeading: Equatable, Sendable {
     /// "1 change" could point at nothing on screen. Only for a finished
     /// comparison: a partial one's list would pass for the whole.
     var removed: Removals?
+    /// What this backup's own run could not read, taken out of `removed`:
+    /// restic left it out, and the disk may still hold it.
+    var notRead: Removals?
 
     struct Removals: Equatable, Sendable {
         /// The names the line shows, each a route to its versions at
@@ -152,7 +188,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
     /// Enough paths for a tooltip that still fits on screen.
     private static let removedPaths = 20
 
-    init(record: Snapshot, label: SnapshotLineage.Label?, comparison: ChangeComparison?) {
+    init(record: Snapshot, label: SnapshotLineage.Label?, comparison: ChangeComparison?, unread: UnreadItems = UnreadItems()) {
         name = SnapshotLineage.displayName(of: record, label: label)
         time = Format.timestamp(record.time)
 
@@ -186,17 +222,31 @@ struct RestoreRecordHeading: Equatable, Sendable {
         detail = [label?.detail, why].compactMap { $0 }.joined(separator: "\n")
         if case .failed = comparison { isProblem = true } else { isProblem = false }
 
-        if case let .compared(baseline, _, removals) = comparison, !removals.isEmpty {
-            let names = RemovedNames(removals.map { RemovedItem(path: ResticPath.normalized($0.path), isDirectory: $0.isDirectory) })
-            let paths = removals.prefix(Self.removedPaths).map { change in
-                let path = ResticPath.normalized(change.path)
-                return change.isDirectory ? "\(path) and everything in it" : path
-            }
-            let rest = removals.count - paths.count
-            let detail = (["Removed since \(Format.timestamp(baseline.time)):"] + paths
-                + (rest > 0 ? ["and \(Format.count(rest)) more"] : [])).joined(separator: "\n")
-            removed = Removals(names: names, baseline: baseline, detail: detail)
+        if case let .compared(baseline, _, all) = comparison {
+            let isUnread = { (change: ResticDiffChange) in unread.item(holding: change.path) != nil }
+            let since = Format.timestamp(baseline.time)
+            removed = Self.removals(all.filter { !isUnread($0) }, baseline: baseline, unread: unread,
+                                    label: "Removed: ", heading: "Removed since \(since):")
+            notRead = Self.removals(all.filter(isUnread), baseline: baseline, unread: unread,
+                                    label: "Not read: ", heading: "Not read by this backup — restic could not read them; the backup of \(since) has them:")
         }
+    }
+
+    private static func removals(
+        _ changes: [ResticDiffChange], baseline: Snapshot, unread: UnreadItems, label: String, heading: String
+    ) -> Removals? {
+        guard !changes.isEmpty else { return nil }
+        let names = RemovedNames(changes.map { change in
+            let path = ResticPath.normalized(change.path)
+            return RemovedItem(path: path, isDirectory: change.isDirectory, reason: unread.reason(for: path))
+        }, label: label)
+        let paths = changes.prefix(removedPaths).map { change in
+            let path = ResticPath.normalized(change.path)
+            return change.isDirectory ? "\(path) and everything in it" : path
+        }
+        let rest = changes.count - paths.count
+        let detail = ([heading] + paths + (rest > 0 ? ["and \(Format.count(rest)) more"] : [])).joined(separator: "\n")
+        return Removals(names: names, baseline: baseline, detail: detail)
     }
 
     private static func comparedWith(_ record: Snapshot, _ baseline: Snapshot) -> String {

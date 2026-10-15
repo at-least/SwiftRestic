@@ -397,6 +397,28 @@ final class FilesTree {
     }
 }
 
+extension FilesTree.Entry {
+    /// The row's tooltip, the tree's and a search hit's: the item's whole
+    /// path, or for one the chain's newest backup lacks, its standing.
+    func help(notRead: String?) -> String {
+        isInNewest ? node.path : Self.standing(notRead: notRead, lastBackedUp: newest.time)
+    }
+
+    /// For an item the chain's newest backup lacks: when it was last backed
+    /// up, and why that backup lacks it when its own run could not read it
+    /// (`UnreadItems.reason`) — the rows' tooltip and the Files pane's line.
+    static func standing(notRead: String?, lastBackedUp: Date) -> String {
+        let when = "last backed up \(Format.timestamp(lastBackedUp))"
+        return notRead.map { "Not read by the newest backup (\($0)) — \(when)" } ?? "Not in the newest backup — \(when)"
+    }
+
+    /// `standing` as VoiceOver reads it after the name.
+    static func spokenStanding(notRead: String?, lastBackedUp: Date) -> String {
+        let when = "last backed up \(Format.timestamp(lastBackedUp))"
+        return notRead.map { "not read by the newest backup, \($0), \(when)" } ?? "not in the newest backup, \(when)"
+    }
+}
+
 /// What a Files view's load task is keyed by (`FilesTree.loadKey`): a
 /// change restarts it.
 struct FilesLoadKey: Equatable {

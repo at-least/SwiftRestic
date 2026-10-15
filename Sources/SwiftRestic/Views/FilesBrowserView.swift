@@ -67,6 +67,14 @@ struct FilesBrowserView: View {
         (router.filesSearchText[roots] ?? "").trimmingCharacters(in: .whitespaces)
     }
 
+    /// What the chain's newest backup's own run could not read: an item
+    /// that backup lacks for that reason says so (`FilesTree.Entry.standing`).
+    private var newestUnread: UnreadItems {
+        model.snapshots(for: roots.repositoryID)
+            .first { SnapshotIndex.chainKey(for: $0) == roots.chainKey }
+            .map { model.unreadItems(inBackup: $0.id) } ?? UnreadItems()
+    }
+
     /// The roots level's folders, once read.
     private var rootEntries: [FileNode] {
         guard case let .loaded(level)? = filesTree.state(of: roots) else { return [] }
@@ -152,10 +160,11 @@ struct FilesBrowserView: View {
 
     private var tree: some View {
         let rows = filesTree.rows(under: roots, open: router.openFolders)
+        let unread = newestUnread
         return ScrollViewReader { proxy in
             List(selection: selection) {
                 ForEach(rows) { row in
-                    treeRow(row)
+                    treeRow(row, unread: unread)
                 }
             }
             .listStyle(.inset)
@@ -210,10 +219,11 @@ struct FilesBrowserView: View {
                         .help("Search every backup in this repository with Find Files, other plans' included")
                 }
             case let .hits(entries):
+                let unread = newestUnread
                 VStack(spacing: 0) {
                     List(selection: selection) {
                         ForEach(entries) { entry in
-                            FilesSearchRow(entry: entry)
+                            FilesSearchRow(entry: entry, notRead: entry.isInNewest ? nil : unread.reason(for: entry.node.path))
                                 .tag(entry.node)
                         }
                     }
@@ -286,11 +296,12 @@ struct FilesBrowserView: View {
     }
 
     @ViewBuilder
-    private func treeRow(_ row: FilesTree.Row) -> some View {
+    private func treeRow(_ row: FilesTree.Row, unread: UnreadItems) -> some View {
         switch row {
         case let .entry(entry, depth):
             FilesTreeRow(
                 entry: entry,
+                notRead: entry.isInNewest ? nil : unread.reason(for: entry.node.path),
                 title: depth == 0 ? (entry.node.path as NSString).abbreviatingWithTildeInPath : entry.node.name,
                 isExpanded: router.openFolders.contains(entry.node),
                 onToggle: { toggle(entry.node) }
@@ -442,6 +453,9 @@ private struct FilesSearchKey: Equatable {
 /// in the tree row's words.
 struct FilesSearchRow: View {
     let entry: FilesTree.Entry
+    /// Why the chain's newest backup lacks it, when that backup's own run
+    /// could not read it (`UnreadItems.reason`).
+    let notRead: String?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -461,11 +475,11 @@ struct FilesSearchRow: View {
             if !entry.isInNewest {
                 Text(Format.until(entry.newest.time))
                     .font(.caption)
-                    .accessibilityLabel("not in the newest backup, last backed up \(Format.timestamp(entry.newest.time))")
+                    .accessibilityLabel(FilesTree.Entry.spokenStanding(notRead: notRead, lastBackedUp: entry.newest.time))
             }
         }
         .foregroundStyle(entry.isInNewest ? .primary : .secondary)
-        .help(FilesTreeRow.help(for: entry))
+        .help(entry.help(notRead: notRead))
         .accessibilityElement(children: .combine)
     }
 }
@@ -505,6 +519,9 @@ struct FilesTreeRow: View {
     static let foldWidth: CGFloat = 14
 
     let entry: FilesTree.Entry
+    /// Why the chain's newest backup lacks it, when that backup's own run
+    /// could not read it (`UnreadItems.reason`).
+    let notRead: String?
     /// The name, or for a root its whole path, tilde-abbreviated.
     let title: String
     let isExpanded: Bool
@@ -564,10 +581,10 @@ struct FilesTreeRow: View {
             Image(systemName: entry.node.isDirectory ? "folder" : "doc")
         }
         .foregroundStyle(entry.isInNewest ? .primary : .secondary)
-        .help(Self.help(for: entry))
+        .help(entry.help(notRead: notRead))
         .accessibilityLabel(entry.isInNewest
             ? title
-            : "\(title), not in the newest backup, last backed up \(Format.timestamp(entry.newest.time))")
+            : "\(title), \(FilesTree.Entry.spokenStanding(notRead: notRead, lastBackedUp: entry.newest.time))")
     }
 
     /// The day it was last backed up, on the row: what made it dim,
@@ -579,15 +596,6 @@ struct FilesTreeRow: View {
             .lineLimit(1)
             .fixedSize()
             .accessibilityHidden(true)
-    }
-
-    /// The row's tooltip — a search's hit row wears it too: the item's
-    /// whole path, or for one the newest backup no longer holds, when it
-    /// was last backed up.
-    static func help(for entry: FilesTree.Entry) -> String {
-        entry.isInNewest
-            ? entry.node.path
-            : "Not in the newest backup — last backed up \(Format.timestamp(entry.newest.time))"
     }
 }
 

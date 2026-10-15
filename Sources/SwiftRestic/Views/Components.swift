@@ -261,8 +261,9 @@ struct HoverableButtonStyle: ButtonStyle {
 
 // MARK: - Removed names
 
-/// A "Removed:" line whose names are routes: each opens the item's versions
-/// at the backup before, which still holds it — the incomplete strip's
+/// A "Removed:" line — or "Not read:", for what the backup's own run could
+/// not read — whose names are routes: each opens the item's versions at
+/// the backup before, which still holds it — the incomplete strip's
 /// grammar, inline. The names wear the accent, as a link does; the words
 /// around them stay secondary. Each tooltip is its own: one on the line
 /// would cover the names'.
@@ -276,7 +277,7 @@ struct RemovedNamesLine: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Text("Removed: ")
+            Text(names.label)
                 .help(help)
             ForEach(Array(names.items.enumerated()), id: \.element) { index, item in
                 Button { open(item) } label: {
@@ -286,7 +287,9 @@ struct RemovedNamesLine: View {
                         .foregroundStyle(.tint)
                 }
                 .buttonStyle(HoverableButtonStyle())
-                .help("Not in this backup — the backup of \(Format.timestamp(before)) has it. Show its versions.")
+                .help(item.reason.map {
+                    "Not read by this backup — \($0); it may still be on this Mac. The backup of \(Format.timestamp(before)) has it. Show its versions."
+                } ?? "Not in this backup — the backup of \(Format.timestamp(before)) has it. Show its versions.")
                 if index < names.items.count - 1 || names.more > 0 {
                     Text(verbatim: ", ")
                 }

@@ -58,9 +58,11 @@ the generator after editing it; the PNGs are checked in.
   right; a first visit opens at the plan's first folder. Items the newest
   backup no longer holds are dimmed with the day they were last backed up
   (*until Oct 2*) where the whole name fits beside it; the tooltip and the
-  pane's header say it in full. A folder lists at most 200 items in the tree,
-  then a row that opens it in the pane. Each page keeps its tab, open folders
-  and selection while the app runs, and opens on Overview after a launch.
+  pane's header say it in full, and why when the newest backup's own run
+  could not read it (*Not read by the newest backup (permission denied)*).
+  A folder lists at most 200 items in the tree, then a row that opens it in
+  the pane. Each page keeps its tab, open folders and selection while the
+  app runs, and opens on Overview after a launch.
   - *A folder* lists as a backup held it, each file with its size. *As
     backed up* picks which backup, newest first, grouped by month once they
     span more than one — as the Compare sheet's picker and the sidebar's
@@ -71,10 +73,13 @@ the generator after editing it; the PNGs are checked in.
     holds it (*Since Oct 1, 2026 at 9:15 AM, in this folder: 2 modified*),
     naming what is gone and marking each item *Added*, *Modified* or *May
     have changed* — from the index's record of the diffs, no restic, and
-    nothing of its subfolders or of metadata alone. Items select several at
-    a time and restore together, drag to Finder, or open in the tree with a
-    double-click, keeping the chosen time where they existed then; with
-    nothing selected, *Restore Folder…* restores the whole folder.
+    nothing of its subfolders or of metadata alone. What the chosen
+    backup's own run could not read is counted and named as *not read*,
+    not removed: restic left it out, and the disk may still have it. Items
+    select several at a time and restore together, drag to Finder, or open
+    in the tree with a double-click, keeping the chosen time where they
+    existed then; with nothing selected, *Restore Folder…* restores the
+    whole folder.
   - *A file* lists its versions, from the index: a version starts where
     restic's diff said the file changed, or where no diff compared two
     backups or the file was absent between them. A row gives its
@@ -334,6 +339,8 @@ the generator after editing it; the PNGs are checked in.
     ("Removed: old.txt, sub" — a removed folder once, not its contents), the
     full paths in its tooltip; each name there and in a Files folder's
     "Removed:" line links to the previous backup's copy on the Files tab.
+    What this backup's own run could not read is on a "Not read:" line of
+    its own, with the reason in each name's tooltip.
   - *Into the Files view.* *Show Versions*, in an item's right-click menu
     here and on Find Files' results, opens it on the Files tab of the plan
     or group the backup belongs to, at that backup; on Find Files' index
@@ -376,6 +383,8 @@ the generator after editing it; the PNGs are checked in.
   menu has *Show Versions* (also a double-click), closing the sheet onto its
   Files tab, and *Restore “…”…* — both from whichever of the two backups
   holds the item (the newer for added or changed, the older for removed);
+  an item the newer backup's own run could not read is marked *!*, not
+  read rather than removed, and the footer counts them;
   the restore lists the node with restic first, since a diff names only a
   path and a kind. Several rows restore together as in Find Files:
   *Restore Selected…* (Return) or the right-click *Restore N Items…*, one
