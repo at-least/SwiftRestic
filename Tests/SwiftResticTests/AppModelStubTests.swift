@@ -1399,6 +1399,44 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
+    @Test("a restore from a repository on a saved share that is away reconnects it first, and fails in the share's words when it stays away")
+    func restoreReconnectsTheShare() async throws {
+        let mounts = MountCount()
+        let harness = try await makeHarness(mode: "default", shareMounter: ShareMounter { _, _ in
+            await mounts.add()
+            return .failed(ETIMEDOUT)
+        })
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
+        try await model.saveNetworkShare(MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)"), password: "pw")
+        let node = try ResticMessageDecoder.jsonDecoder.decode(
+            SnapshotNode.self,
+            from: Data(#"{"name":"a.txt","type":"file","path":"/src/a.txt","size":12}"#.utf8)
+        )
+
+        model.restore(
+            repositoryID: id,
+            snapshotID: "latest",
+            node: node,
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
+        )
+        await waitUntilRestoreFinishes(in: model)
+
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.kind == .restore)
+        #expect(record.outcome == .failed)
+        #expect(record.failureMessage
+            == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the server could not be reached.")
+        #expect(await mounts.calls == 1)
+
+        await model.shutdown()
+    }
+
     @Test("a backup skipped for its repository's share out of reach tells the listing why in its own words, without reconnecting again")
     func skippedBackupTellsTheListing() async throws {
         let mounts = MountCount()

@@ -400,8 +400,8 @@ extension AppModel {
             guard let repository = repository(id: repositoryID) else {
                 throw ResticError.repositoryMissing
             }
-            let service = try service()
-            let context = try await context(for: repository)
+            // Its saved network share reconnected first, as for any read.
+            let (service, context) = try await resticContext(for: repository)
             let summary = try await RunTranscript.$current.withValue(transcript) {
                 try await step.operation(service, context)
             }
