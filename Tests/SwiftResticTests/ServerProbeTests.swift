@@ -1,7 +1,6 @@
 import Foundation
 import Network
 import Testing
-@testable import SwiftRestic
 
 @Suite("server probe")
 struct ServerProbeTests {

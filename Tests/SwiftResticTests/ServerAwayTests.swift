@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-@testable import SwiftRestic
 
 /// A probe answer the test changes mid-run: the server going and coming.
 private actor ProbeAnswer {
