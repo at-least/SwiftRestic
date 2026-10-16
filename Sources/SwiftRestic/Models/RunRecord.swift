@@ -274,6 +274,13 @@ extension RunRecord {
     /// these exact bytes.
     static let retentionSkippedPrefix = "Retention skipped: "
 
+    /// A network repository's server out of reach (`ServerProbe`): "“Home
+    /// Server” cannot be reached (connection refused)." — a skipped run's
+    /// reason and its listing's words.
+    static func serverUnreachableReason(repositoryName: String, why: String) -> String {
+        "“\(repositoryName)” cannot be reached (\(why))."
+    }
+
     /// What a completed-with-errors backup says when nothing more specific
     /// explains it — restic exited 3 and named nothing. The in-app banner and
     /// the plan page's status row both fall back to it, so the two agree

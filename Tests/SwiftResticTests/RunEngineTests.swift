@@ -75,6 +75,14 @@ struct BackupRunEngineTests {
             log.append("reconnect:\(volumes.joined(separator: ","))")
             return reconnectAnswer
         }
+
+        /// The canned answer to a server probe; every ask is logged.
+        var probeAnswer: ServerProbe.Outcome? = .reachable
+
+        func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
+            log.append("probe")
+            return probeAnswer
+        }
     }
 
     private func makePlan(retentionEnabled: Bool = true) -> BackupPlan {
@@ -305,6 +313,46 @@ struct BackupRunEngineTests {
         #expect(record.itemErrors == ["Retention skipped: another backup or job held the repository's lock — retention runs again after the next backup."])
         // The snapshot was written; the run itself stays marked successful.
         #expect(sink.log.contains("mark:whole"))
+    }
+
+    @Test("a server out of reach skips the backup within seconds, its slot stamped, restic never asked")
+    func unreachableServerSkipsTheBackup() async throws {
+        let sink = RecordingSink()
+        sink.probeAnswer = .unreachable("connection refused")
+        let client = MockResticClient().onBackup(.success(successOutcome()))
+        var repository = Repository()
+        repository.name = "Home Server"
+        repository.kind = .rest
+        repository.restURL = "http://127.0.0.1:18000/app"
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .skipped)
+        #expect(record.detailText == "“Home Server” cannot be reached (connection refused).")
+        #expect(client.callLog.isEmpty)
+        // Stamped, as a drive away is, so an hourly plan does not retry
+        // every minute; the listing learns why at once; no start ping.
+        #expect(sink.log.contains("mark:nothing"))
+        #expect(sink.log.contains("away:“Home Server” cannot be reached (connection refused)."))
+        #expect(!sink.log.contains { $0.hasPrefix("ping:") })
+    }
+
+    @Test("a server that answers is backed up to; a local repository is never probed")
+    func reachableServerAndLocalRepository() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onBackup(.success(successOutcome())).onForget(.success(0))
+        var repository = Repository()
+        repository.kind = .rest
+        repository.restURL = "http://127.0.0.1:18000/app"
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
+        #expect(sink.log.contains("probe"))
+        #expect(client.callLog.first == "backup")
+
+        let localSink = RecordingSink()
+        let localClient = MockResticClient().onBackup(.success(successOutcome())).onForget(.success(0))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: localClient, base: localSink))
+        #expect(!localSink.log.contains("probe"))
+        #expect(localClient.callLog.first == "backup")
     }
 
     @Test("a retention the repository refused is a warning that says so, with the count stored for its fix")
@@ -660,6 +708,18 @@ struct MaintenanceRunEngineTests {
             log.append("drive-away")
         }
 
+        func markServerAway(repositoryID: UUID) {
+            log.append("server-away")
+        }
+
+        /// The canned answer to a server probe; every ask is logged.
+        var probeAnswer: ServerProbe.Outcome? = .reachable
+
+        func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
+            log.append("probe")
+            return probeAnswer
+        }
+
         func noteAuthFailure(_ error: Error, repositoryID: UUID) {
             log.append("auth-noted")
         }
@@ -709,6 +769,29 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
         #expect(sink.deliveredRecords[0].detailText == "No errors found.")
         #expect(sink.log.contains("stamp:check"))
+    }
+
+    @Test("a check of a server out of reach waits for it: Skipped in its words, restic not asked, nothing stamped")
+    func checkWaitsForAnUnreachableServer() async throws {
+        let sink = RecordingSink()
+        sink.probeAnswer = .unreachable("it did not answer within 10 seconds")
+        let client = MockResticClient().onCheck(.success(ResticSummary()))
+        var repository = Repository()
+        repository.name = "Home Server"
+        repository.kind = .sftp
+        repository.sftpHost = "nas"
+        await MaintenanceRunEngine.perform(
+            repository: repository,
+            task: .check,
+            readDataPercentOverride: nil,
+            sink: StubMaintenanceServiceSink(client: client, base: sink)
+        )
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .skipped)
+        #expect(record.detailText == "“Home Server” cannot be reached (it did not answer within 10 seconds).")
+        #expect(client.callLog.isEmpty)
+        #expect(sink.log.contains("server-away"))
+        #expect(!sink.log.contains { $0.hasPrefix("stamp:") })
     }
 
     @Test("a check whose repository's drive is away waits for it: Skipped in the skip's words, restic not asked, nothing stamped, and the hooks for any end run")
@@ -1063,6 +1146,7 @@ private final class StubServiceSink: BackupRunEngine.Sink {
     }
     func makeHookRunner() -> HookRunner { base.makeHookRunner() }
     func reconnectShares(volumes: [String]) async -> [ShareReconnect] { await base.reconnectShares(volumes: volumes) }
+    func probeServer(of repository: Repository) async -> ServerProbe.Outcome? { await base.probeServer(of: repository) }
 }
 
 @MainActor
@@ -1087,6 +1171,7 @@ private final class StubMaintenanceServiceSink: MaintenanceRunEngine.Sink {
     }
     func markPasswordMissing(repositoryID: UUID) { base.markPasswordMissing(repositoryID: repositoryID) }
     func markDriveAway(repositoryID: UUID) { base.markDriveAway(repositoryID: repositoryID) }
+    func markServerAway(repositoryID: UUID) { base.markServerAway(repositoryID: repositoryID) }
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
         base.noteAuthFailure(error, repositoryID: repositoryID)
     }
@@ -1097,4 +1182,5 @@ private final class StubMaintenanceServiceSink: MaintenanceRunEngine.Sink {
     func scheduleSnapshotRefresh(repositoryID: UUID) { base.scheduleSnapshotRefresh(repositoryID: repositoryID) }
     func makeHookRunner() -> HookRunner { base.makeHookRunner() }
     func reconnectShares(volumes: [String]) async -> [ShareReconnect] { await base.reconnectShares(volumes: volumes) }
+    func probeServer(of repository: Repository) async -> ServerProbe.Outcome? { await base.probeServer(of: repository) }
 }

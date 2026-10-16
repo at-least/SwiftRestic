@@ -120,6 +120,9 @@ enum BackupRunEngine {
         /// Mounts the saved network shares among `volumes` — volumes this
         /// run needs that are away (`AppModel.reconnectShares`).
         func reconnectShares(volumes: [String]) async -> [ShareReconnect]
+        /// One connection attempt to a network repository's server
+        /// (`ServerProbe`); nil when there is nothing to ask first.
+        func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
     }
 
     static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
@@ -223,6 +226,23 @@ enum BackupRunEngine {
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
                 // The listing learns it now, not at the next launch, and
                 // why: a refresh would reconnect the share again.
+                sink.noteRepositoryAway(repositoryID: repository.id, reason: reason)
+                await finish(
+                    record: &record, plan: plan, hooks: hooks, context: hookContext,
+                    transcript: transcript, sink: sink
+                )
+                return
+            }
+
+            // A network repository's server out of reach (after the hooks,
+            // which may bring up the way to it): skipped as a drive that is
+            // away is, within seconds, never asking restic — which retries
+            // such a server for about a quarter of an hour, then fails.
+            if repository.kind != .local, case let .unreachable(why)? = await sink.probeServer(of: repository) {
+                let reason = RunRecord.serverUnreachableReason(repositoryName: repository.name, why: why)
+                record.outcome = .skipped
+                record.detailText = reason
+                sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
                 sink.noteRepositoryAway(repositoryID: repository.id, reason: reason)
                 await finish(
                     record: &record, plan: plan, hooks: hooks, context: hookContext,
@@ -432,6 +452,12 @@ enum MaintenanceRunEngine {
         /// The repository's drive is away: its upkeep, unstamped, waits for
         /// the drive (`AppModel.upkeepAwaitingDrive`).
         func markDriveAway(repositoryID: UUID)
+        /// The repository's server is out of reach: its upkeep, unstamped,
+        /// waits for it (`AppModel.upkeepAwaitingServer`).
+        func markServerAway(repositoryID: UUID)
+        /// One connection attempt to a network repository's server
+        /// (`ServerProbe`); nil when there is nothing to ask first.
+        func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
         func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async
         func makeHookRunner() -> HookRunner
@@ -540,6 +566,18 @@ enum MaintenanceRunEngine {
                     )
                     return
                 }
+            } else if case let .unreachable(why)? = await sink.probeServer(of: repository) {
+                // Its server out of reach: the task waits for it as for a
+                // drive — Skipped, unstamped, left alone until the network
+                // changes or a listing reads the repository again.
+                record.outcome = .skipped
+                record.detailText = RunRecord.serverUnreachableReason(repositoryName: repository.name, why: why)
+                sink.markServerAway(repositoryID: repository.id)
+                await finish(
+                    record: &record, repository: repository, hooks: hooks, context: hookContext,
+                    transcript: transcript, sink: sink
+                )
+                return
             }
 
             switch task {

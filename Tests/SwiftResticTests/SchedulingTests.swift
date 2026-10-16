@@ -816,6 +816,19 @@ struct MaintenanceSchedulingTests {
         // Not due yet: its date, as for any repository.
         repository.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: nil, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
+
+        // A server out of reach: its due check waits for it in the same way.
+        var server = self.repository {
+            $0.name = "Home Server"
+            $0.kind = .rest
+            $0.restURL = "http://nas.local:8000/backups"
+            $0.maintenance.checkIntervalDays = 7
+            $0.maintenance.lastCheckAt = self.date("2026-09-02 12:00:00")
+        }
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, hold: nil, awaitingServer: true, now: now) == "When “Home Server” can be reached")
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, hold: nil, awaitingServer: false, now: now) == "Due now")
+        server.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, hold: nil, awaitingServer: true, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
     }
 
     @Test("the schedule summarises itself for the plan list")

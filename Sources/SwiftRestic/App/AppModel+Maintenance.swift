@@ -163,6 +163,10 @@ extension AppModel: MaintenanceRunEngine.Sink {
         repositoriesMissingPassword.insert(repositoryID)
     }
 
+    func markServerAway(repositoryID: UUID) {
+        upkeepAwaitingServer.insert(repositoryID)
+    }
+
     func markDriveAway(repositoryID: UUID) {
         upkeepAwaitingDrive.insert(repositoryID)
     }

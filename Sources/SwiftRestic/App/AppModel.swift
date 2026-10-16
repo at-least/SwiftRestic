@@ -129,6 +129,11 @@ final class AppModel {
     /// leaves it alone while the drive is still away — then it runs on the
     /// next tick.
     var upkeepAwaitingDrive: Set<UUID> = []
+    /// Network repositories whose check or prune found their server out of
+    /// reach (`markServerAway`): unstamped, the task stays due, and the
+    /// scheduler leaves it alone until the network changes
+    /// (`networkPathChanged`) or a listing reads the repository again.
+    var upkeepAwaitingServer: Set<UUID> = []
     var isLoaded = false
     /// True while `bootstrap` is still reading the configuration and locating
     /// restic. The views show a loading state instead of the empty states:
@@ -165,6 +170,9 @@ final class AppModel {
     /// the battery flag's rule.
     var isOnMeteredNetwork = false
     @ObservationIgnored var networkMonitor: NWPathMonitor?
+    /// The last network path seen — whether it is up, through which
+    /// interfaces — so only a change calls `networkPathChanged`.
+    @ObservationIgnored var networkSignature: String?
     /// The volume-mount observer (`startMountWatcher`).
     @ObservationIgnored var mountObserver: (any NSObjectProtocol)?
     /// Plans whose running backup Pause and Stop ended. Such a run is
@@ -210,6 +218,7 @@ final class AppModel {
     let secrets: SecretStore
     /// Mounts a network share before a backup that needs it (`reconnectShares`).
     let shareMounter: ShareMounter
+    let serverProbe: ServerProbe
     /// Each share's reconnect in flight, by volume name: a second run that
     /// needs it at the same tick awaits the first's answer rather than
     /// mounting it twice.
@@ -303,12 +312,14 @@ final class AppModel {
         store: ConfigStore = ConfigStore(),
         secrets: SecretStore = .standard,
         shareMounter: ShareMounter = .netFS,
+        serverProbe: ServerProbe = .network,
         defaults: UserDefaults = .standard,
         localHostname: String = ResticService.localHostname
     ) {
         self.store = store
         self.secrets = secrets
         self.shareMounter = shareMounter
+        self.serverProbe = serverProbe
         self.localHostname = localHostname
         self.indexCoordinator = IndexCoordinator(directory: store.directory)
         self.viewDefaults = defaults

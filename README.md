@@ -294,6 +294,28 @@ the generator after editing it; the PNGs are checked in.
     SSD” is not connected.", earlier rows staying. A skipped run shows on the
     listing at once, and a mount re-reads the listings of the repositories
     on it, paused or not.
+  - *The repository's server.* A REST, SFTP or cloud repository's server is
+    asked first — one TCP connection to its host and port, ten seconds at
+    most — before a backup, check, prune or listing reads it: the REST URL's
+    host, `ssh -G`'s HostName and Port for an SFTP host (an alias in
+    ~/.ssh/config included, nothing asked through a ProxyJump or
+    ProxyCommand), the provider's endpoint for S3, B2, Azure and Google
+    Cloud Storage. An rclone remote, or a repository restic reaches through
+    a proxy variable, is not asked. Out of reach — connection refused, no
+    route, a name that does not resolve, no answer — a backup is Skipped
+    within seconds, "“Home Server” cannot be reached (connection
+    refused).", without asking restic, which retries such a server for
+    about a quarter of an hour before it fails (restic 0.19.1: 891 s
+    refused, 927 s unroutable, 841 s for a `.local` name that did not
+    resolve). Until 2026-10-17 each slot held the repository, the menu
+    bar's busy face and the Mac's idle sleep that long, then failed red,
+    and the launch's listing held every plan's schedule for its 300 s
+    ceiling. The slot is stamped as a drive away's is; a check or prune
+    waits unstamped — *Next check* "When “Home Server” can be reached" —
+    until the network changes or a listing reads the repository; the
+    listing says the skip's words, with no banner. When the network changes
+    and is up, the failed listings of network repositories are read again
+    and the plans whose newest backup was skipped run again, as on a mount.
   - *Network shares.* A repository's folder or a plan's folders on a
     mounted network share (SMB) show which share in the repository editor,
     under *Folder*, and on the plan editor's Files tab — "On the network

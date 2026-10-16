@@ -219,6 +219,7 @@ enum Scheduler {
         _ task: MaintenanceTask,
         of repository: Repository,
         hold: ScheduleHold?,
+        awaitingServer: Bool = false,
         now: Date = .now
     ) -> String {
         guard let due = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt) else {
@@ -229,6 +230,9 @@ enum Scheduler {
            let volume = VolumePresence.volumeName(of: repository.resolvedLocalPath)
         {
             return "When “\(volume)” is connected"
+        }
+        if due <= now, awaitingServer {
+            return "When “\(repository.name)” can be reached"
         }
         let date = max(due, hold?.resumesAt ?? .distantPast)
         guard date > now else { return hold == nil ? "Due now" : "Waiting" }

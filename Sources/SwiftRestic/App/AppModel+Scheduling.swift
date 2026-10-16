@@ -52,9 +52,11 @@ extension AppModel {
         // repository with no stored password has nothing runnable; treat it
         // as busy so upkeep is skipped rather than failing on every tick.
         var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(upkeepStillAwaitingDrive())
+        // A server out of reach holds its upkeep only: a backup due to it
+        // still runs, and skips in seconds with its own record.
         for due in Scheduler.dueMaintenance(
             in: configuration.repositories,
-            busyRepositoryIDs: busy
+            busyRepositoryIDs: busy.union(upkeepAwaitingServer)
         ) {
             runMaintenance(repositoryID: due.repository.id, task: due.task, askedByUser: false)
             busy.insert(due.repository.id)
@@ -191,13 +193,36 @@ extension AppModel {
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
             let metered = path.isExpensive || path.isConstrained
+            let isUp = path.status == .satisfied
+            let signature = "\(isUp) " + path.availableInterfaces.map(\.name).sorted().joined(separator: ",")
             Task { @MainActor in
-                guard let self, self.isOnMeteredNetwork != metered else { return }
-                self.isOnMeteredNetwork = metered
+                guard let self else { return }
+                if self.isOnMeteredNetwork != metered { self.isOnMeteredNetwork = metered }
+                // The first path is where the app starts, not a change.
+                let previous = self.networkSignature
+                self.networkSignature = signature
+                if let previous, previous != signature, isUp { self.networkPathChanged() }
             }
         }
         monitor.start(queue: DispatchQueue(label: "com.newlix.SwiftRestic.network"))
         networkMonitor = monitor
+    }
+
+    /// The network changed and is up — another Wi-Fi, a cable, a VPN, back
+    /// online — so a server out of reach may answer now: upkeep waiting for
+    /// one may run, network repositories whose listing failed are read
+    /// again (each probing its server first), and plans whose newest backup
+    /// was skipped run again, as a mount brings back a drive's.
+    func networkPathChanged() {
+        guard !isShuttingDown else { return }
+        upkeepAwaitingServer.removeAll()
+        for repository in configuration.repositories where repository.kind != .local {
+            guard case .failed = snapshotListingOutcomes[repository.id] else { continue }
+            tasks.addBackground(Task { [weak self] in
+                await self?.refreshSnapshots(repositoryID: repository.id)
+            })
+        }
+        runSkippedPlansAfterMount()
     }
 
     /// Pause Backups: holds every scheduled backup, check and prune for

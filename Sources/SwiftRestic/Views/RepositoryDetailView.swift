@@ -216,7 +216,10 @@ struct RepositoryDetailView: View {
                     // As the scheduler will start them: the hold holds upkeep
                     // too, so a due task reads "Waiting", never "Due now".
                     let hold = model.scheduleHold
-                    DetailRow("Next check", Scheduler.nextMaintenanceText(.check, of: repository, hold: hold, now: now))
+                    let awaitingServer = model.upkeepAwaitingServer.contains(repositoryID)
+                    DetailRow("Next check", Scheduler.nextMaintenanceText(
+                        .check, of: repository, hold: hold, awaitingServer: awaitingServer, now: now
+                    ))
                     if repository.maintenance.pruneEnabled {
                         DetailRow("Last prune") {
                             MaintenanceRunValue(
@@ -224,7 +227,9 @@ struct RepositoryDetailView: View {
                                 run: prune
                             )
                         }
-                        DetailRow("Next prune", Scheduler.nextMaintenanceText(.prune, of: repository, hold: hold, now: now))
+                        DetailRow("Next prune", Scheduler.nextMaintenanceText(
+                            .prune, of: repository, hold: hold, awaitingServer: awaitingServer, now: now
+                        ))
                     } else {
                         // Off is a fact the page states beside the disk bar,
                         // not two rows that vanish; Edit is its fix.

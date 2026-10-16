@@ -79,6 +79,19 @@ extension AppModel {
             }
         }
 
+        // A network repository's server out of reach is not asked about
+        // either: restic retries such a server for about a quarter of an
+        // hour, and the launch's scheduler waits for this listing. Its words
+        // are a skipped backup's, with no banner; a network change reads it
+        // again (`networkPathChanged`).
+        if case let .unreachable(why)? = await probeServer(of: repository) {
+            guard configuration.repository(id: repositoryID) != nil else { return }
+            snapshotListingOutcomes[repositoryID] = .failed(
+                RunRecord.serverUnreachableReason(repositoryName: repository.name, why: why)
+            )
+            return
+        }
+
         do {
             let service = try service()
             let context = try await context(for: repository)
@@ -116,6 +129,8 @@ extension AppModel {
             repositoryStats[repositoryID] = stats
             snapshotListingOutcomes[repositoryID] = .loaded
             snapshotsLoadedAt[repositoryID] = .now
+            // Read, so its server answers: upkeep waiting for it may run.
+            upkeepAwaitingServer.remove(repositoryID)
             repositoriesMissingPassword.remove(repositoryID)
             indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
         } catch ResticError.cancelled {
