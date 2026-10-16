@@ -829,9 +829,15 @@ locked, a region capture (`-R`) failed, and this capture was not tried
 - `config.json` is rewritten whole on every edit, so the two previous
   generations are kept next to it (`config.json.1`, `config.json.2`) — a bad
   write or an edit gone wrong is never more than two saves deep.
-- Snapshots and repository stats are refreshed with a five-minute ceiling, and
-  all repositories refresh concurrently: one unreachable remote cannot stall
-  every other repository's upkeep, nor the scheduler arming at launch.
+- Snapshots and repository stats are refreshed with a five-minute ceiling,
+  all repositories concurrently, and the scheduler arms after the launch's
+  listing: a network repository's server out of reach answers within ten
+  seconds (*The repository's server*, under *Skipped backups*), while one
+  that answers and then stalls holds the first tick up to the ceiling —
+  until 2026-10-17 a stopped server held it the full 300 s. A command
+  stopped at its ceiling says what restic was retrying, "Timed out after
+  300s and was stopped — restic kept retrying: connection refused.", the
+  cause restic printed from its first second.
 - The password is passed to the child process through `RESTIC_PASSWORD`, so it is
   visible to another process running as the same user via `ps -E`. Acceptable on
   a single-user Mac; a password-command or file-descriptor handoff would close it.

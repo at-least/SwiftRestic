@@ -15,8 +15,10 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// No password is stored for the repository.
     case passwordMissing(repositoryName: String)
     case processLaunchFailed(String)
-    /// The child outlived its timeout and was terminated.
-    case timedOut(seconds: TimeInterval)
+    /// The child outlived its timeout and was terminated. `cause` is what
+    /// restic was retrying when it was stopped — "connection refused" —
+    /// or empty (`ResticRunResult.retryCause`).
+    case timedOut(seconds: TimeInterval, cause: String = "")
     /// The child produced no output at all for `seconds` and was terminated
     /// as hung. The distinction from `timedOut` matters to the reader: a
     /// total-runtime cap kills work that was merely slow, an idle cap only
@@ -95,8 +97,9 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "No password is stored for the repository “\(name)”."
         case let .processLaunchFailed(reason):
             return "Could not start restic: \(reason)"
-        case let .timedOut(seconds):
-            return "Timed out after \(Int(seconds))s and was stopped."
+        case let .timedOut(seconds, cause):
+            let stopped = "Timed out after \(Int(seconds))s and was stopped"
+            return cause.isEmpty ? "\(stopped)." : "\(stopped) — restic kept retrying: \(cause)."
         case let .idleStalled(seconds):
             return "Stopped reporting any progress for \(Int(seconds))s and was stopped as hung — check the repository's connection and try again."
         case let .malformedOutput(detail):

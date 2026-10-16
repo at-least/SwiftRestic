@@ -89,6 +89,17 @@ struct ResticRunResult: Sendable {
         return ([Self.withoutGoStackTrace(fatal)] + subprocess + rclone).joined(separator: "\n")
     }
 
+    /// What restic was retrying, from its last "… returned error, retrying
+    /// after …" line on stderr — "Stat(<config/>) returned error, retrying
+    /// after 38.6s: Head "http://…/config": dial tcp 127.0.0.1:18000:
+    /// connect: connection refused" gives "connection refused" — or empty.
+    /// A timed-out listing said only that it timed out, while restic had
+    /// named the cause from its first second (restic 0.19.1, 2026-10-17).
+    static func retryCause(in stderr: String) -> String {
+        guard let line = stderr.split(separator: "\n").last(where: { $0.contains(" returned error, retrying after ") }) else { return "" }
+        return line.components(separatedBy: ": ").last ?? ""
+    }
+
     /// restic's message without the Go stack restic 0.19.1 appends to an
     /// error that is not one of its fatal ones (`%+v` in its main.go) —
     /// "failed to remove one or more snapshots\nmain.init\n\tgithub.com/
@@ -399,7 +410,7 @@ actor ResticRunner {
         if box.timedOut {
             let seconds = invocation.timeout ?? 0
             transcript?.note("Stopped: timed out after \(Int(seconds)) s")
-            throw ResticError.timedOut(seconds: seconds)
+            throw ResticError.timedOut(seconds: seconds, cause: ResticRunResult.retryCause(in: result.stderr))
         }
 
         // Before the verdict below, so a failing exit is logged too.

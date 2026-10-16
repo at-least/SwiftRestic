@@ -654,13 +654,34 @@ struct StubResticTests {
         do {
             _ = try await fixture.service.snapshots(fixture.context, timeout: 1)
             Issue.record("snapshots against a hung stub should have timed out")
-        } catch let ResticError.timedOut(seconds) {
+        } catch let ResticError.timedOut(seconds, _) {
             #expect(seconds == 1)
         }
         #expect(
             await StubRestic.processVanishes(matching: fixture.stub.sleepMarker, within: 10),
             "the watchdog left the stub process alive"
         )
+    }
+
+    @Test("a timeout names what restic was retrying when it was stopped")
+    func timeoutNamesTheRetriedCause() async throws {
+        // restic 0.19.1's own line against a stopped rest-server
+        // (2026-10-17), then a hang the timeout ends.
+        let retrying = #"Stat(<config/>) returned error, retrying after 38.601553609s: Head "http://:***@127.0.0.1:18000/demo/config": "#
+            + "dial tcp 127.0.0.1:18000: connect: connection refused"
+        do {
+            _ = try await ResticRunner().run(
+                binary: URL(fileURLWithPath: "/bin/sh"),
+                invocation: ResticInvocation(arguments: ["-c", "echo '\(retrying)' >&2; sleep 30"], timeout: 1)
+            )
+            Issue.record("a hung command must be stopped as timed out")
+        } catch let ResticError.timedOut(seconds, cause) {
+            #expect(seconds == 1)
+            #expect(cause == "connection refused")
+        }
+        #expect(ResticError.timedOut(seconds: 300, cause: "connection refused").errorDescription
+            == "Timed out after 300s and was stopped — restic kept retrying: connection refused.")
+        #expect(ResticError.timedOut(seconds: 300, cause: "").errorDescription == "Timed out after 300s and was stopped.")
     }
 
     @Test("a child that ignores SIGTERM is killed after the grace and still reported")
@@ -679,7 +700,7 @@ struct StubResticTests {
                 )
             )
             Issue.record("a command that ignores SIGTERM must be stopped as timed out")
-        } catch let ResticError.timedOut(seconds) {
+        } catch let ResticError.timedOut(seconds, _) {
             #expect(seconds == 1)
             // The kill grace is measured from the SIGTERM, not the start, so
             // the whole stop takes at least the grace — and its arrival at
