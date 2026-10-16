@@ -25,7 +25,9 @@ struct AppModelStubTests {
         password: String? = "test-password",
         maxRunHistory: Int? = nil,
         planHooks: [BackupHook] = [],
-        channels: [NotificationChannel] = []
+        channels: [NotificationChannel] = [],
+        // Never the real NetFS: a saved share's reconnect is refused.
+        shareMounter: ShareMounter = ShareMounter { _, _ in .failed(EAUTH) }
     ) async throws -> Harness {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticStubModel-\(UUID().uuidString)")
@@ -69,7 +71,7 @@ struct AppModelStubTests {
         // password is expressed.
         var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
         if let password { secrets[repository.id] = (password: password, providerSecret: nil) }
-        let model = AppModel(store: store, secrets: .inMemory(secrets))
+        let model = AppModel(store: store, secrets: .inMemory(secrets), shareMounter: shareMounter)
         await model.bootstrap()
 
         return Harness(model: model, root: root, repository: repository, plan: plan, stub: stub)
@@ -1312,6 +1314,50 @@ struct AppModelStubTests {
         #expect(banner.message == "“\(volume)” is not connected.")
         #expect(!banner.isError)
         #expect(model.repository(id: id)?.maintenance.lastCheckAt == nil)
+
+        await model.shutdown()
+    }
+
+    @Test("a backup whose network share refuses its saved password fails with the editor holding that password as its fix, once a problem, its repeats one record")
+    func refusedShareFailsTheBackup() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let planID = harness.plan.id
+        let repositoryIndex = try #require(model.configuration.repositories.firstIndex { $0.id == harness.repository.id })
+        let here = model.configuration.repositories[repositoryIndex].localPath
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        model.configuration.repositories[repositoryIndex].localPath = "/Volumes/\(volume)/restic"
+        try await model.saveNetworkShare(MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)"), password: "stale")
+
+        model.runBackup(planID: planID)
+        await model.waitForRun(planID: planID)
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.outcome == .failed)
+        #expect(record.refusedShares == [volume])
+        #expect(record.failureMessage
+            == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the share did not accept the user name and password.")
+        #expect(model.fix(for: record) == .editRepositoryShare(harness.repository.id))
+        #expect(record.problemStretch == 1)
+        #expect(model.currentProblem(for: planID) != nil)
+
+        // Refused again: one record for both runs, the stretch counting them.
+        model.runBackup(planID: planID)
+        await model.waitForRun(planID: planID)
+        let backups = model.configuration.runs.filter { $0.kind == .backup }
+        #expect(backups.count == 1)
+        #expect(backups.first?.skipCount == 2)
+        #expect(backups.first?.problemStretch == 2)
+
+        // A share holding the plan's folders: the plan's editor.
+        model.configuration.repositories[repositoryIndex].localPath = here
+        let planIndex = try #require(model.configuration.plans.firstIndex { $0.id == planID })
+        model.configuration.plans[planIndex].sources = ["/Volumes/\(volume)/Projects"]
+        model.runBackup(planID: planID)
+        await model.waitForRun(planID: planID)
+        let folderRecord = try #require(model.configuration.runs.first)
+        #expect(folderRecord.refusedShares == [volume])
+        #expect(model.fix(for: folderRecord) == .editPlanShare(planID))
 
         await model.shutdown()
     }

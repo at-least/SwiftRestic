@@ -116,25 +116,55 @@ struct BackupRunEngineTests {
         #expect(sink.deliveredRecords[0].snapshotID == "cafe0000")
     }
 
-    @Test("a repository on a network share that is away is reconnected first; a failed reconnect says why in the skip")
+    @Test("a repository on a network share that is away is reconnected first: out of reach the run is skipped saying why, refused it fails in those words without asking restic")
     func awayRepositoryShareIsReconnected() async throws {
-        let sink = RecordingSink()
         let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
-        let reason = "the share did not accept the user name and password"
-        sink.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .refused(reason))]
-        let client = MockResticClient().onBackup(.success(successOutcome()))
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/Volumes/\(volume)/restic"
-        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
 
+        let outOfReach = RecordingSink()
+        let unreachable = "the server could not be reached"
+        outOfReach.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .unreachable(unreachable))]
+        let client = MockResticClient().onBackup(.success(successOutcome()))
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: outOfReach))
         // Asked once, before the run is decided.
-        #expect(sink.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(volume)"], "log was \(sink.log)")
-        #expect(try #require(sink.log.firstIndex(of: "reconnect:\(volume)")) < (try #require(sink.log.firstIndex(of: "mark:nothing"))))
+        #expect(outOfReach.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(volume)"], "log was \(outOfReach.log)")
+        #expect(try #require(outOfReach.log.firstIndex(of: "reconnect:\(volume)")) < (try #require(outOfReach.log.firstIndex(of: "mark:nothing"))))
+        let skipped = try #require(outOfReach.deliveredRecords.first)
+        #expect(skipped.outcome == .skipped)
+        #expect(skipped.detailText == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: \(unreachable).")
+        #expect(skipped.refusedShares == nil)
+        #expect(outOfReach.deliveredNotes.contains("Could not reconnect the network share smb://me@nas.local/\(volume): \(unreachable)."))
+
+        let refusing = RecordingSink()
+        let refused = "the share did not accept the user name and password"
+        refusing.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .refused(refused))]
+        let untouched = MockResticClient().onBackup(.success(successOutcome()))
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: untouched, base: refusing))
+        #expect(untouched.callLog.isEmpty)
+        #expect(refusing.log.contains("mark:nothing"), "log was \(refusing.log)")
+        let failed = try #require(refusing.deliveredRecords.first)
+        #expect(failed.outcome == .failed)
+        #expect(failed.failureMessage == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: \(refused).")
+        #expect(failed.refusedShares == [volume])
+    }
+
+    @Test("a share holding the plan's folders that refuses fails the run in those words before restic is asked, naming that share")
+    func refusedFolderShareFails() async throws {
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        let sink = RecordingSink()
+        let refused = "the server has no share by that name"
+        sink.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .refused(refused))]
+        let untouched = MockResticClient().onBackup(.success(successOutcome()))
+        var plan = makePlan()
+        plan.sources = ["/Volumes/\(volume)/Projects", "/tmp/engine-source"]
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: untouched, base: sink))
+        #expect(untouched.callLog.isEmpty)
         let record = try #require(sink.deliveredRecords.first)
-        #expect(record.outcome == .skipped)
-        #expect(record.detailText == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: \(reason).")
-        #expect(sink.deliveredNotes.contains("Could not reconnect the network share smb://me@nas.local/\(volume): \(reason)."))
+        #expect(record.outcome == .failed)
+        #expect(record.failureMessage == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: \(refused).")
+        #expect(record.refusedShares == [volume])
     }
 
     @Test("away folders' drives are asked about once each, in the order the plan names them, and a run with nothing away asks nothing")
@@ -710,6 +740,7 @@ struct MaintenanceRunEngineTests {
         #expect(failed.failureMessage == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: \(refused).")
         #expect(refusing.log.contains("stamp:check"))
         #expect(!refusing.log.contains("drive-away"))
+        #expect(failed.refusedShares == [volume])
         // A share reconnected is mounted, and the run reads it as here — the
         // presence check the backup engine makes too; seen live against Samba.
     }
@@ -890,6 +921,7 @@ struct RetentionRunEngineTests {
         #expect(client.callLog.isEmpty)
         #expect(sink.deliveredRecords.first?.failureMessage
             == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the share did not accept the user name and password.")
+        #expect(sink.deliveredRecords.first?.refusedShares == [volume])
     }
 
     @Test("a clean run records a forget under the plan and refreshes the listing")

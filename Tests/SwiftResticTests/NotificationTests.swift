@@ -429,6 +429,15 @@ struct RepeatedProblemNotificationTests {
         #expect(!gone("/Users/me/Photos 2024").isSameProblem(as: gone("/Users/me/Photos 2023")))
         #expect(!gone("/Users/me/New/Photos").isSameProblem(as: gone("/Users/me/Old/Photos")))
         #expect(gone("/Users/me/Photos 2023").isSameProblem(as: gone("/Users/me/Photos 2023")))
+        // Shares that refused, by their volumes: the message names them, and
+        // would lose its digits.
+        func refused(_ volume: String) -> RunRecord {
+            var run = failed(0, message: "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the share did not accept the user name and password.")
+            run.refusedShares = [volume]
+            return run
+        }
+        #expect(!refused("Photos 2024").isSameProblem(as: refused("Photos 2023")))
+        #expect(refused("NAS").isSameProblem(as: refused("NAS")))
         // A warning's other lines and hook complaints with their numbers
         // aside; its unreadable items exactly — two files are two problems.
         var timedOut = warned(60)

@@ -302,17 +302,26 @@ the generator after editing it; the PNGs are checked in.
     Settings › General lists the saved shares, *Remove* forgetting one.
     Before a backup, after the before-backup hooks, a share the run needs
     that is not mounted is mounted with that password, with no dialog, and
-    the log says "Reconnected the network share … at /Volumes/NAS."; if it
-    cannot be, the run is Skipped as above, saying why: "“NAS” is not
-    connected. Reconnecting “NAS” failed: the share did not accept the user
-    name and password." Two runs needing one share mount it once, and a
-    share macOS mounts beside a leftover /Volumes folder ("NAS-1") is no
-    reconnect. *Check…*, *Prune Now…* and *Apply Retention Now…* — its
-    preview too — reconnect the repository's share the same way. Out of
-    reach, a check or prune waits for it as for a drive that is away (see
-    *Maintenance*); a share that refused, or one still away when *Apply
-    Retention Now…* runs, fails the run in those words rather than restic's
-    "repository does not exist". A share mounted with no user name offers no
+    the log says "Reconnected the network share … at /Volumes/NAS."; out of
+    reach — the server off, the Mac elsewhere, or an error macOS does not
+    explain — the run is Skipped as above, saying why: "“NAS” is not
+    connected. Reconnecting “NAS” failed: the server could not be reached."
+    A share that refused — the password, the share's name, access, a
+    leftover /Volumes folder macOS mounts it beside ("NAS-1"), no password
+    from the Keychain — comes back only when the user acts, so the run
+    fails in the same words without asking restic ("… failed: the share did
+    not accept the user name and password."): a problem like any failure,
+    with its card, dot and one notification, and *Edit Repository…* or
+    *Edit Plan…* beside it, whichever editor holds that share's password;
+    repeats merge into one record as a folder gone's do. Until 2026-10-16 a
+    refusal was Skipped too, silent until the quiet-plan alert. Two runs
+    needing one share mount it once. *Check…*, *Prune Now…* and *Apply
+    Retention Now…* — its preview too — reconnect the repository's share the
+    same way. Out of reach, a check or prune waits for it as for a drive that
+    is away (see *Maintenance*); a share that refused, or one still away
+    when *Apply Retention Now…* runs, fails the run in those words rather
+    than restic's "repository does not exist", a refusal with *Edit
+    Repository…*. A share mounted with no user name offers no
     password, and each reconnect adds the server to macOS's Recent Servers,
     as Finder's do. Tried against Samba 4.23.8 on 2026-10-16, the password
     both injected and kept in the Keychain.

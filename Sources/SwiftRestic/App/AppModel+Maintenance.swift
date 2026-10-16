@@ -36,11 +36,13 @@ extension AppModel {
 
     /// The fix a failed run offers here and now (`RunRecordPresentation.fix`).
     func fix(for run: RunRecord) -> RunFix? {
-        RunRecordPresentation.fix(
+        let repository = repository(id: run.repositoryID)
+        return RunRecordPresentation.fix(
             for: run,
-            repositoryExists: repository(id: run.repositoryID) != nil,
+            repositoryExists: repository != nil,
             repositoryBusy: run.repositoryID.map { busyRepositoryIDs.contains($0) } ?? false,
-            planExists: plan(id: run.planID) != nil
+            planExists: plan(id: run.planID) != nil,
+            repositoryVolume: repository.flatMap { $0.kind == .local ? VolumePresence.volumeName(of: $0.resolvedLocalPath) : nil }
         )
     }
 

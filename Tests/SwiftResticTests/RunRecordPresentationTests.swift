@@ -259,6 +259,30 @@ struct RunRecordPresentationTests {
         #expect(RunFix.editRepositoryPath(repository).help == "No repository is at its saved path — point it at the folder that holds the repository")
     }
 
+    @Test("a failure for a network share that refused offers the editor holding its password: the repository's for its own share, the plan's for a folder's")
+    func refusedShareFixes() {
+        let repository = UUID()
+        let plan = UUID()
+        var refused = backup {
+            $0.repositoryID = repository
+            $0.planID = plan
+            $0.outcome = .failed
+            $0.refusedShares = ["NAS"]
+        }
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: "NAS")
+            == .editRepositoryShare(repository))
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: nil)
+            == .editPlanShare(plan))
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, planExists: false, repositoryVolume: "Backups") == nil)
+        // A check or prune refused its repository's share.
+        refused.kind = .check
+        refused.planID = nil
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: "NAS")
+            == .editRepositoryShare(repository))
+        #expect(RunFix.editRepositoryShare(repository).title == "Edit Repository…")
+        #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
+    }
+
     @Test("a check or prune that did not end clean offers itself again; nothing else does")
     func maintenanceRetry() {
         let repository = UUID()

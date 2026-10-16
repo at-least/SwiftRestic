@@ -175,12 +175,37 @@ enum BackupRunEngine {
             // folder, the plan's — mounted with their saved passwords before
             // the checks below read them as drives that are away. After the
             // hooks, which may have mounted them.
-            reconnectFailures = await reconnectAwayShares(
-                of: (repository.kind == .local ? [repository.resolvedLocalPath] : [])
-                    + plan.sources.map(ResticService.expandTilde),
+            let neededPaths = (repository.kind == .local ? [repository.resolvedLocalPath] : [])
+                + plan.sources.map(ResticService.expandTilde)
+            let shareFailures = await reconnectAwayShares(
+                of: neededPaths,
                 transcript: transcript,
                 reconnect: { await sink.reconnectShares(volumes: $0) }
-            ).reasonsByVolume
+            )
+            reconnectFailures = shareFailures.reasonsByVolume
+
+            // A share that refused — its password, its name, access, a
+            // leftover folder, the Keychain — comes back only when the user
+            // acts, so the run fails in the skip's words, without asking
+            // restic: a problem like any failure, with the editor that holds
+            // the share's password as its fix (`refusedShares`). One out of
+            // reach is a drive that is away: the checks below skip the run.
+            let refused = shareFailures.filter(\.isRefusal)
+            if !refused.isEmpty {
+                let volumes = refused.map(\.volumeName)
+                record.outcome = .failed
+                record.refusedShares = volumes
+                record.failureMessage = RunRecord.skippedReason(
+                    sources: neededPaths.filter { VolumePresence.volumeName(of: $0).map(volumes.contains) == true },
+                    reconnectFailures: refused.reasonsByVolume
+                )
+                sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
+                await finish(
+                    record: &record, plan: plan, hooks: hooks, context: hookContext,
+                    transcript: transcript, sink: sink
+                )
+                return
+            }
 
             // The repository's drive away (after the hooks, which may mount
             // it): skipped as for the folders' drive, never asking restic,
@@ -477,6 +502,7 @@ enum MaintenanceRunEngine {
                 )
                 if failures.contains(where: \.isRefusal) {
                     record.outcome = .failed
+                    record.refusedShares = failures.filter(\.isRefusal).map(\.volumeName)
                     record.failureMessage = RunRecord.skippedReason(
                         sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
                     )
@@ -659,6 +685,8 @@ enum RetentionRunEngine {
                 record.detailText = RetentionPreview.appliedSummary(removed: removed, pruned: plan.retention.runPrune)
             } else {
                 record.outcome = .failed
+                let refused = failures.filter(\.isRefusal).map(\.volumeName)
+                if !refused.isEmpty { record.refusedShares = refused }
                 record.failureMessage = RunRecord.skippedReason(
                     sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
                 )

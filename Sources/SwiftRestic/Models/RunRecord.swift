@@ -150,9 +150,15 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// (`folderGoneMessage(sources:)`). Nil for any other run.
     var missingSources: [String]?
 
+    /// The network shares a backup, check or prune needed that refused to
+    /// reconnect for a cause only the user clears
+    /// (`ShareReconnect.Outcome.refused`), by volume name: the run failed
+    /// for them. Nil for any other run.
+    var refusedShares: [String]?
+
     // A standing skip (`continuingSkip(of:)`), or a standing failure for the
-    // same folders gone (`continuingFolderGone(of:)`): one record for every
-    // run it lasted. Nil for a run that stands alone.
+    // same folders gone or shares refused (`continuingStandingFailure(of:)`):
+    // one record for every run it lasted. Nil for a run that stands alone.
 
     /// How many runs the record stands for.
     var skipCount: Int?
@@ -223,6 +229,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         filesRestored = c.value(.filesRestored, default: 0)
         filesSkipped = c.value(.filesSkipped, default: 0)
         missingSources = c.optional(.missingSources)
+        refusedShares = c.optional(.refusedShares)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
@@ -366,17 +373,20 @@ extension RunRecord {
             : "\(Format.list(names)) are not on this Mac — they were moved, renamed or deleted. Edit the plan to back up where they are now."
     }
 
-    /// This folder-gone failure as the continuation of `previous`, the
-    /// plan's newest backup before it, failed for the same folders gone and
-    /// carrying no hook's complaint: one record, this run's, counting the
-    /// runs as a standing skip does (`continuingSkip(of:)`, whose fields it
-    /// shares). An hourly plan whose folder was deleted is one row and one
-    /// notification, not one an hour. Nil when it does not continue it.
-    func continuingFolderGone(of previous: RunRecord) -> RunRecord? {
+    /// This failure as the continuation of `previous`, the plan's newest
+    /// backup before it, failed for the same cause only the user clears —
+    /// the same folders gone (`missingSources`) or network shares refused
+    /// (`refusedShares`) — and carrying no hook's complaint: one record,
+    /// this run's, counting the runs as a standing skip does
+    /// (`continuingSkip(of:)`, whose fields it shares). An hourly plan whose
+    /// folder was deleted, or whose share's password changed, is one row and
+    /// one notification, not one an hour. Nil when it does not continue it.
+    func continuingStandingFailure(of previous: RunRecord) -> RunRecord? {
         guard kind == .backup, previous.kind == .backup,
               let planID, previous.planID == planID, previous.repositoryID == repositoryID,
               outcome == .failed, previous.outcome == .failed,
-              let missingSources, missingSources == previous.missingSources,
+              missingSources != nil || refusedShares != nil,
+              missingSources == previous.missingSources, refusedShares == previous.refusedShares,
               previous.hookMessages.isEmpty
         else { return nil }
         var merged = self

@@ -19,12 +19,18 @@ enum RunFix: Equatable {
     case removeStaleLocks(UUID)
     /// None of the plan's folders is on this Mac (`RunRecord.missingSources`).
     case editPlan(UUID)
+    /// The repository's network share refused to reconnect
+    /// (`RunRecord.refusedShares`): its editor holds the share's password.
+    case editRepositoryShare(UUID)
+    /// A network share holding the plan's folders refused to reconnect: the
+    /// plan editor's Files tab holds the share's password.
+    case editPlanShare(UUID)
 
     var title: String {
         switch self {
-        case .editRepository, .editRepositoryPath: "Edit Repository…"
+        case .editRepository, .editRepositoryPath, .editRepositoryShare: "Edit Repository…"
         case .removeStaleLocks: "Remove Stale Locks…"
-        case .editPlan: "Edit Plan…"
+        case .editPlan, .editPlanShare: "Edit Plan…"
         }
     }
 
@@ -35,6 +41,8 @@ enum RunFix: Equatable {
         case .editRepositoryPath: ResticError.noRepositoryAtPath
         case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
         case .editPlan: "Point the plan at where its folders are now"
+        case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
+        case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan's Files tab"
         }
     }
 }
@@ -93,10 +101,23 @@ enum RunRecordPresentation {
         return run.repositoryID
     }
 
-    static func fix(for run: RunRecord, repositoryExists: Bool, repositoryBusy: Bool, planExists: Bool = true) -> RunFix? {
+    static func fix(
+        for run: RunRecord,
+        repositoryExists: Bool,
+        repositoryBusy: Bool,
+        planExists: Bool = true,
+        repositoryVolume: String? = nil
+    ) -> RunFix? {
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
         if run.missingSources != nil, let planID = run.planID {
             return planExists ? .editPlan(planID) : nil
+        }
+        // A network share that refused: whichever editor holds its password
+        // — the repository's for its own folder's share, else the plan's.
+        if let refusedShares = run.refusedShares {
+            if let repositoryVolume, refusedShares.contains(repositoryVolume) { return .editRepositoryShare(repositoryID) }
+            guard let planID = run.planID, planExists else { return nil }
+            return .editPlanShare(planID)
         }
         if run.exitCode == 12 { return .editRepository(repositoryID) }
         if run.exitCode == 10 { return .editRepositoryPath(repositoryID) }

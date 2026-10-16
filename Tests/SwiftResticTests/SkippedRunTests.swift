@@ -26,6 +26,28 @@ struct SkippedRunTests {
             == "“Projects” and “Notes” are not on this Mac — they were moved, renamed or deleted. Edit the plan to back up where they are now.")
     }
 
+    @Test("a failure for the same shares refused continues the plan's last one, as one for folders gone does; another cause stands alone")
+    func refusedShareRepeatsMerge() throws {
+        let planID = UUID()
+        func refused(_ minutes: Double, _ volumes: [String] = ["NAS"]) -> RunRecord {
+            var run = RunRecord(kind: .backup, planID: planID, planName: "Documents", startedAt: now.addingTimeInterval(minutes * 60))
+            run.outcome = .failed
+            run.refusedShares = volumes
+            run.failureMessage = "“NAS” is not connected. Reconnecting “NAS” failed: the share did not accept the user name and password."
+            return run
+        }
+        let first = refused(0)
+        let second = try #require(refused(60).continuingStandingFailure(of: first))
+        #expect(second.skipCount == 2)
+        #expect(second.skippedSince == first.startedAt)
+        #expect(refused(60, ["Photos"]).continuingStandingFailure(of: first) == nil)
+        var gone = first
+        gone.refusedShares = nil
+        gone.missingSources = ["/Users/me/Documents"]
+        #expect(refused(60).continuingStandingFailure(of: gone) == nil)
+        #expect(gone.continuingStandingFailure(of: first) == nil)
+    }
+
     @Test("a failure for the same folders gone continues the plan's last one; any other failure stands alone")
     func folderGoneRepeatsMerge() throws {
         let planID = UUID()
@@ -37,25 +59,25 @@ struct SkippedRunTests {
             return run
         }
         let first = gone(0)
-        let second = try #require(gone(60).continuingFolderGone(of: first))
+        let second = try #require(gone(60).continuingStandingFailure(of: first))
         #expect(second.skipCount == 2)
         #expect(second.skippedSince == first.startedAt)
-        let third = try #require(gone(120).continuingFolderGone(of: second))
+        let third = try #require(gone(120).continuingStandingFailure(of: second))
         #expect(third.skipCount == 3)
         #expect(third.skippedSince == first.startedAt)
 
-        #expect(gone(60, ["/Users/me/Elsewhere"]).continuingFolderGone(of: first) == nil)
+        #expect(gone(60, ["/Users/me/Elsewhere"]).continuingStandingFailure(of: first) == nil)
         var otherFailure = first
         otherFailure.missingSources = nil
         otherFailure.failureMessage = "Fatal: unable to open config file"
-        #expect(gone(60).continuingFolderGone(of: otherFailure) == nil)
-        #expect(otherFailure.continuingFolderGone(of: first) == nil)
+        #expect(gone(60).continuingStandingFailure(of: otherFailure) == nil)
+        #expect(otherFailure.continuingStandingFailure(of: first) == nil)
         var complained = first
         complained.hookMessages = ["“mount” exited with 1"]
-        #expect(gone(60).continuingFolderGone(of: complained) == nil)
+        #expect(gone(60).continuingStandingFailure(of: complained) == nil)
         var otherPlan = first
         otherPlan.planID = UUID()
-        #expect(gone(60).continuingFolderGone(of: otherPlan) == nil)
+        #expect(gone(60).continuingStandingFailure(of: otherPlan) == nil)
 
         // Read once, with how long it has stood, as a standing skip is.
         let since = Format.timestamp(first.startedAt)
