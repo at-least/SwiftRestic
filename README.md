@@ -530,7 +530,15 @@ the generator after editing it; the PNGs are checked in.
   saved path — point it at the folder that holds the repository." (*Edit
   Repository…*), exit 11 "The repository is locked — if no other Mac is
   using it, remove the stale locks." (*Remove Stale Locks…*) — each followed
-  by restic's first sentence. Every surface naming a run names its
+  by restic's first sentence. A backup that fills its local repository's
+  disk says so instead of restic's line, which names a pack file by its
+  hash and stays in the log: "“TinyDisk” is full — the backup needed more
+  room than it has free. What it uploaded before it stopped stays in the
+  repository until a prune frees it." (this Mac's disk for a repository on
+  it), with *Prune Now…* — checked on 2026-10-16 with a 40 MB disk image: a
+  57 MB backup failed with 35 MB of it left behind, which `restic prune`
+  freed. A full disk anywhere else — restic's cache on this Mac — keeps
+  restic's words. Every surface naming a run names its
   repository too: the log sheet's header, notifications and failure alerts,
   the menu bar, Settings. The history keeps the newest *Keep runs* records
   (Settings › General › History), trimming the oldest with their logs —

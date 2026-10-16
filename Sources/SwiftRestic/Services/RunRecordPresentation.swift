@@ -25,12 +25,17 @@ enum RunFix: Equatable {
     /// A network share holding the plan's folders refused to reconnect: the
     /// plan editor's Files tab holds the share's password.
     case editPlanShare(UUID)
+    /// The repository's disk filled up during a backup
+    /// (`RunRecord.repositoryFull`): a prune frees what the failed run
+    /// uploaded.
+    case pruneNow(UUID)
 
     var title: String {
         switch self {
         case .editRepository, .editRepositoryPath, .editRepositoryShare: "Edit Repository…"
         case .removeStaleLocks: "Remove Stale Locks…"
         case .editPlan, .editPlanShare: "Edit Plan…"
+        case .pruneNow: "Prune Now…"
         }
     }
 
@@ -43,6 +48,7 @@ enum RunFix: Equatable {
         case .editPlan: "Point the plan at where its folders are now"
         case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
         case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan's Files tab"
+        case .pruneNow: "What the failed backup uploaded stays in the repository until a prune — prune it to free the space"
         }
     }
 }
@@ -119,6 +125,7 @@ enum RunRecordPresentation {
             guard let planID = run.planID, planExists else { return nil }
             return .editPlanShare(planID)
         }
+        if run.repositoryFull == true { return .pruneNow(repositoryID) }
         if run.exitCode == 12 { return .editRepository(repositoryID) }
         if run.exitCode == 10 { return .editRepositoryPath(repositoryID) }
         let locked = run.exitCode == 11 || run.failureMessage?.contains("already locked") == true

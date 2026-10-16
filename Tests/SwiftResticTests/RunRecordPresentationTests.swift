@@ -283,6 +283,49 @@ struct RunRecordPresentationTests {
         #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
     }
 
+    @Test("a backup that filled its repository's disk says so in plain words and offers Prune Now…; a write anywhere else keeps restic's")
+    func repositoryFull() {
+        let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the repository until a prune frees it."
+        var onDrive = Repository()
+        onDrive.kind = .local
+        onDrive.localPath = "/Volumes/TinyDisk/repo"
+        let line = "Fatal: unable to save snapshot: write /Volumes/TinyDisk/repo/data/52/526d738f-tmp-77604366: no space left on device"
+        #expect(RunRecord.repositoryFullMessage(resticMessage: line, repository: onDrive) == "“TinyDisk” \(words)")
+        onDrive.localPath = "/Volumes/TinyDisk/repo/"
+        #expect(RunRecord.repositoryFullMessage(resticMessage: line, repository: onDrive) == "“TinyDisk” \(words)")
+        var onThisMac = Repository()
+        onThisMac.kind = .local
+        onThisMac.localPath = "/Users/me/Backups/repo"
+        #expect(RunRecord.repositoryFullMessage(
+            resticMessage: "Fatal: unable to save snapshot: write /Users/me/Backups/repo/data/aa/aa11-tmp-1: no space left on device",
+            repository: onThisMac
+        ) == "This Mac's disk \(words)")
+        // Written elsewhere — restic's cache on this Mac, a folder beside the
+        // repository's — or another error, or a remote repository: restic's
+        // words stand.
+        #expect(RunRecord.repositoryFullMessage(
+            resticMessage: "Fatal: unable to save snapshot: write /Users/me/Library/Caches/restic/abc/data/x: no space left on device",
+            repository: onDrive
+        ) == nil)
+        onDrive.localPath = "/Volumes/TinyDisk/repo"
+        #expect(RunRecord.repositoryFullMessage(resticMessage: "Fatal: write /Volumes/TinyDisk/repo2/data/x: no space left on device", repository: onDrive) == nil)
+        #expect(RunRecord.repositoryFullMessage(resticMessage: "Fatal: write /Volumes/TinyDisk/repo/data/x: input/output error", repository: onDrive) == nil)
+        var remote = Repository()
+        remote.kind = .sftp
+        #expect(RunRecord.repositoryFullMessage(resticMessage: line, repository: remote) == nil)
+
+        let repository = UUID()
+        let full = backup {
+            $0.repositoryID = repository
+            $0.outcome = .failed
+            $0.exitCode = 1
+            $0.repositoryFull = true
+        }
+        #expect(RunRecordPresentation.fix(for: full, repositoryExists: true, repositoryBusy: false) == .pruneNow(repository))
+        #expect(RunRecordPresentation.fix(for: full, repositoryExists: false, repositoryBusy: false) == nil)
+        #expect(RunFix.pruneNow(repository).title == "Prune Now…")
+    }
+
     @Test("a check or prune that did not end clean offers itself again; nothing else does")
     func maintenanceRetry() {
         let repository = UUID()

@@ -156,6 +156,11 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// for them. Nil for any other run.
     var refusedShares: [String]?
 
+    /// True when a backup failed because the repository's disk filled up
+    /// (`repositoryFullMessage`): what it uploaded before it stopped stays
+    /// until a prune. Nil for any other run.
+    var repositoryFull: Bool?
+
     // A standing skip (`continuingSkip(of:)`), or a standing failure for the
     // same folders gone or shares refused (`continuingStandingFailure(of:)`):
     // one record for every run it lasted. Nil for a run that stands alone.
@@ -230,6 +235,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         filesSkipped = c.value(.filesSkipped, default: 0)
         missingSources = c.optional(.missingSources)
         refusedShares = c.optional(.refusedShares)
+        repositoryFull = c.optional(.repositoryFull)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
@@ -362,6 +368,21 @@ extension RunRecord {
             }
         }
         return volumes.compactMap { volume in failures[volume].map { " Reconnecting “\(volume)” failed: \($0)." } }.joined()
+    }
+
+    /// A backup's failure in plain words when restic could not write into
+    /// the local repository's folder for want of space — "“TinyDisk” is
+    /// full — …", naming the drive, or this Mac's disk — and what the failed
+    /// run left behind; nil for any other failure, restic's words standing.
+    static func repositoryFullMessage(resticMessage: String, repository: Repository) -> String? {
+        guard repository.kind == .local, resticMessage.contains("no space left on device") else { return nil }
+        var root = repository.resolvedLocalPath
+        while root.count > 1, root.hasSuffix("/") { root.removeLast() }
+        // restic names the file it was writing: "write <repository>/data/…".
+        guard resticMessage.contains("write \(root)/") else { return nil }
+        let disk = VolumePresence.volumeName(of: root).map { "“\($0)”" } ?? "This Mac's disk"
+        return "\(disk) is full — the backup needed more room than it has free. "
+            + "What it uploaded before it stopped stays in the repository until a prune frees it."
     }
 
     /// Why a backup failed when none of its folders is on this Mac and no

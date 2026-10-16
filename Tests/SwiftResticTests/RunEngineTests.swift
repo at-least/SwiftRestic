@@ -196,6 +196,22 @@ struct BackupRunEngineTests {
         #expect(!here.log.contains { $0.hasPrefix("reconnect") }, "log was \(here.log)")
     }
 
+    @Test("a backup that fills its repository's disk fails in plain words, marked for Prune Now…")
+    func repositoryDiskFull() async throws {
+        let sink = RecordingSink()
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/Users/Shared/engine-repo"
+        let line = "Fatal: unable to save snapshot: write /Users/Shared/engine-repo/data/52/526d-tmp-1: no space left on device"
+        let client = MockResticClient().onBackup(.failure(ResticError.commandFailed(exitCode: 1, message: line)))
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .failed)
+        #expect(record.failureMessage == RunRecord.repositoryFullMessage(resticMessage: line, repository: repository))
+        #expect(record.failureMessage?.hasPrefix("This Mac's disk is full") == true)
+        #expect(record.repositoryFull == true)
+    }
+
     @Test("no snapshot written means retention never runs")
     func retentionNeedsASnapshot() async throws {
         let sink = RecordingSink()

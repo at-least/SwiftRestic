@@ -350,6 +350,15 @@ enum BackupRunEngine {
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
+            // The repository's disk full: said plainly, with what the run left
+            // behind — restic's line, naming a pack file by its hash, stays in
+            // the log — and Prune Now… as its fix (`repositoryFull`).
+            if case let ResticError.commandFailed(_, message) = error,
+               let full = RunRecord.repositoryFullMessage(resticMessage: message, repository: repository)
+            {
+                record.failureMessage = full
+                record.repositoryFull = true
+            }
             sink.noteAuthFailure(error, repositoryID: repository.id)
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         }
