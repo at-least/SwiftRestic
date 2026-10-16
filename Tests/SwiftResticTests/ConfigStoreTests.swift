@@ -29,6 +29,7 @@ struct ConfigStoreTests {
         repository.kind = .sftp
         repository.sftpHost = "nas.local"
         repository.sftpPath = "/volume1/restic"
+        repository.uploadLimitKiBps = 512
 
         var plan = BackupPlan()
         plan.name = "Documents"
@@ -40,16 +41,70 @@ struct ConfigStoreTests {
         configuration.repositories = [repository]
         configuration.plans = [plan]
         configuration.runs = [RunRecord(planID: plan.id, planName: plan.name)]
-        configuration.settings.uploadLimitKiBps = 512
 
         try await store.save(configuration)
         let loaded = try await store.load().configuration
 
         #expect(loaded.repositories.first?.sftpHost == "nas.local")
+        #expect(loaded.repositories.first?.uploadLimitKiBps == 512)
         #expect(loaded.plans.first?.name == "Documents")
         #expect(loaded.plans.first?.lastRunAt == plan.lastRunAt)
         #expect(loaded.runs.count == 1)
-        #expect(loaded.settings.uploadLimitKiBps == 512)
+    }
+
+    @Test("an app-wide rate limit saved by an earlier build moves to the repositories reached over a network, once")
+    func appWideRateLimitsMove() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        // Before 2026-10-17 one pair in Settings held back every
+        // repository, a disk on this Mac too.
+        let json = """
+        {
+          "repositories": [
+            {"name": "Desk Drive", "kind": "local", "localPath": "/Volumes/Archive SSD/restic"},
+            {"name": "Home Folder", "kind": "local", "localPath": "~/restic"},
+            {"name": "NAS Share", "kind": "local", "localPath": "/Volumes/NAS/restic"},
+            {"name": "NAS", "kind": "sftp", "sftpHost": "nas.local", "sftpPath": "/volume1/restic"},
+            {"name": "Cloud", "kind": "b2", "b2Bucket": "photos"}
+          ],
+          "plans": [],
+          "runs": [],
+          "settings": {"uploadLimitKiBps": 512, "downloadLimitKiBps": 2048,
+                       "networkShares": [{"id": "6A1E1A2B-0000-4000-8000-000000000001",
+                                          "volumeName": "NAS", "url": "smb://me@nas.local/NAS"}]}
+        }
+        """
+        let file = directory.appendingPathComponent("config.json")
+        try Data(json.utf8).write(to: file)
+
+        func limits(_ configuration: AppConfiguration) -> [String: [Int]] {
+            Dictionary(uniqueKeysWithValues: configuration.repositories.map {
+                ($0.name, [$0.uploadLimitKiBps, $0.downloadLimitKiBps])
+            })
+        }
+        let store = ConfigStore(directory: directory)
+        let loaded = try await store.load()
+        var expected = [
+            "Desk Drive": [0, 0], "Home Folder": [0, 0],
+            "NAS Share": [512, 2048], "NAS": [512, 2048], "Cloud": [512, 2048],
+        ]
+        #expect(limits(loaded.configuration) == expected)
+        #expect(loaded.decodeNotes.isEmpty)
+
+        // Saved by this build, the pair is gone from the settings, so a
+        // limit lifted afterwards stays lifted.
+        var edited = loaded.configuration
+        let cloud = try #require(edited.repositories.firstIndex { $0.name == "Cloud" })
+        edited.repositories[cloud].uploadLimitKiBps = 0
+        try await store.save(edited)
+        let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+        let settings = try #require(saved?["settings"] as? [String: Any])
+        #expect(settings["uploadLimitKiBps"] == nil)
+        #expect(settings["downloadLimitKiBps"] == nil)
+        expected["Cloud"] = [0, 2048]
+        #expect(limits(try await store.load().configuration) == expected)
     }
 
     @Test("a hand-written config decodes: every stored key must be accepted")

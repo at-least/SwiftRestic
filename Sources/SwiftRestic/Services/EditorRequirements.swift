@@ -36,7 +36,7 @@ enum EditorRequirements {
     /// Whether an edit's Save asks restic first: when it changes what
     /// reaches restic — the location, a credential, the environment — or
     /// the password, any of which a typo turns into every plan failing. A
-    /// rename, a maintenance setting or a hook saves at once.
+    /// rename, a rate limit, a maintenance setting or a hook saves at once.
     static func editReachesRestic(
         draft: Repository,
         initial: Repository,

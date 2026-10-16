@@ -224,14 +224,14 @@ final class AppModel {
     /// mounting it twice.
     @ObservationIgnored var shareReconnects: [String: Task<ShareReconnect, Never>] = [:]
     /// Resolved restic contexts per repository (repo string + credentials +
-    /// settings), so a restic call does not re-read the Keychain. Entries are
-    /// rebuilt when the repository value or rate limits change
-    /// (`AppModel.context(for:)`'s key), and dropped on secret edits
+    /// rate limits), so a restic call does not re-read the Keychain. Entries
+    /// are rebuilt when the repository value changes (`AppModel.context(for:)`
+    /// keeps the value it was built from), and dropped on secret edits
     /// (`upsert`), repository removal, and auth-class failures
     /// (`noteAuthFailure`). Holds secrets no longer than the app already
     /// holds them in each child's environment.
     @ObservationIgnored var resolvedContexts:
-        [UUID: (key: ResolvedContextKey, context: RepositoryContext)] = [:]
+        [UUID: (repository: Repository, context: RepositoryContext)] = [:]
     /// What `fileHistory` has read of a file in a backup — its node, with
     /// the size and modification time a Files pane's version row shows —
     /// for the session; the index keeps it across launches. A backup ID is

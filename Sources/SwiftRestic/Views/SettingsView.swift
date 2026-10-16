@@ -253,22 +253,6 @@ struct SettingsView: View {
             Section("Cache") {
                 resticCacheRows(model: model)
             }
-
-            Section("Bandwidth") {
-                // Typeable, not steppers. Values are clamped on commit; the
-                // assignment itself refreshes the field even when the clamp
-                // lands on the value it already held.
-                TextField(
-                    "Upload limit (KiB/s, 0 for unlimited)",
-                    value: clampedLimit($model.configuration.settings.uploadLimitKiBps),
-                    format: .number.grouping(.never)
-                )
-                TextField(
-                    "Download limit (KiB/s, 0 for unlimited)",
-                    value: clampedLimit($model.configuration.settings.downloadLimitKiBps),
-                    format: .number.grouping(.never)
-                )
-            }
         }
         .formStyle(.grouped)
     }
@@ -325,15 +309,6 @@ struct SettingsView: View {
             }
             .task { await model.measureResticCache() }
         }
-    }
-
-    /// Keeps the typed value inside restic's accepted range: out-of-range
-    /// input is corrected on commit, never mid-keystroke.
-    private func clampedLimit(_ binding: Binding<Int>) -> Binding<Int> {
-        Binding(
-            get: { binding.wrappedValue },
-            set: { binding.wrappedValue = min(1_000_000, max(0, $0)) }
-        )
     }
 }
 

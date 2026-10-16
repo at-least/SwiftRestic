@@ -466,6 +466,24 @@ struct PasswordPrecedenceTests {
     }
 }
 
+@Suite("Rate limits")
+struct RateLimitTests {
+    @Test("a repository's own rate limits go on every command against it; none add no flag")
+    func repositoryLimits() {
+        var repository = Repository()
+        repository.name = "Cloud"
+        repository.kind = .b2
+        #expect(RepositoryContext(repository: repository, password: "p").globalArguments.isEmpty)
+
+        repository.uploadLimitKiBps = 512
+        repository.downloadLimitKiBps = 2048
+        #expect(
+            RepositoryContext(repository: repository, password: "p").globalArguments
+                == ["--limit-upload", "512", "--limit-download", "2048"]
+        )
+    }
+}
+
 /// The `stdoutFile` path — single-file restores through `restic dump`. The
 /// destination is user data: a failed or cancelled dump must leave whatever
 /// was there before exactly as it was, and no partial sibling behind.

@@ -181,11 +181,11 @@ the generator after editing it; the PNGs are checked in.
   environment, the password — runs the same check and saves only on
   "Connected", else says why and offers *Save Anyway* (for a server down
   while its path is being fixed); the form waits during either check, so
-  Save stores what was checked. A rename, a maintenance setting or a hook
-  saves at once. The check gives up after 60 seconds: against a REST server
-  refusing connections, restic 0.19.1 retried for over ten minutes. A REST
-  server's login goes in *User* and *Server password* (Keychain, like every
-  backend secret) and reaches restic as
+  Save stores what was checked. A rename, a rate limit, a maintenance
+  setting or a hook saves at once. The check gives up after 60 seconds:
+  against a REST server refusing connections, restic 0.19.1 retried for
+  over ten minutes. A REST server's login goes in *User* and *Server
+  password* (Keychain, like every backend secret) and reaches restic as
   `RESTIC_REST_USERNAME`/`RESTIC_REST_PASSWORD`, so the stored and shown URL
   holds no password; a pasted URL sheds its login into those fields, and one
   saved with it keeps working, since restic prefers a URL's own credentials.
@@ -206,6 +206,17 @@ the generator after editing it; the PNGs are checked in.
   (its refusal and `--insecure-no-password` advice are for a terminal), and
   until one is entered the repository cannot be renamed or re-hooked, by
   design.
+  *Bandwidth* holds restic to an upload and a download rate for this
+  repository alone (`--limit-upload`, `--limit-download`, KiB/s, none by
+  default) on every command, and restic 0.19.1 holds a disk attached to
+  this Mac to them too: at 1024 KiB/s an 8 MiB backup to a local
+  repository took 7.8 s against 0.8 s, its restore the same, and at
+  64 KiB/s a first `ls` of a backup 7.4 s against 0.6 s — a download limit
+  slows every restore, a check that reads data and a backup's first
+  opening. Until 2026-10-17 one pair in Settings held back every
+  repository; a configuration that carries it moves it to the repositories
+  reached over a network — every kind but a local folder, and a local
+  folder on a saved network share — and the rest go unlimited.
 - **Backup plans** — a set of folders, exclude patterns, a schedule and a
   retention policy, pointed at one repository. Each plan stamps its snapshots
   with a private tag so retention can only ever touch its own. A plan's page
@@ -669,10 +680,11 @@ A few seams worth knowing by name:
   it two ways: a scriptable mock (`MockResticClient`, for the run engines)
   and a fake shell-script restic (fault paths: hangs, torn writes, exit codes).
 - **Resolved contexts are cached** per repository (`AppModel.resolvedContexts`)
-  so a restic call does not re-read the Keychain; the key covers the
-  repository value and rate limits, secret edits invalidate in `upsert`, and
-  exit 12 — or exit 1, which is how a rejected provider secret surfaces —
-  drops the entry so a fixed password takes effect without a restart.
+  so a restic call does not re-read the Keychain; the key is the
+  repository value, rate limits included; secret edits invalidate in
+  `upsert`, and exit 12 — or exit 1, which is how a rejected provider
+  secret surfaces — drops the entry so a fixed password takes effect
+  without a restart.
 - **Streaming commands wear an idle stall cap** (15 min with no output at all
   ends the run as hung) — measured on `systemUptime`, so a closed lid is not
   "silence". Legitimately quiet commands (`prune`, `forget`, `dump`, the

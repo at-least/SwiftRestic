@@ -148,7 +148,6 @@ struct AppModelTests {
             service: try model.service(),
             secrets: model.secrets,
             repository: harness.repository,
-            settings: model.configuration.settings,
             snapshotID: snapshot.id,
             node: node
         )
@@ -1691,11 +1690,7 @@ struct KeychainFailureHonestyTests {
         repository.localPath = "/tmp/some-repo"
 
         do {
-            _ = try await AppModel.dragContext(
-                repository: repository,
-                settings: AppSettings(),
-                secrets: secrets
-            )
+            _ = try await AppModel.dragContext(repository: repository, secrets: secrets)
             Issue.record("expected the keychain failure to surface")
         } catch ResticError.passwordMissing {
             Issue.record("a keychain failure must not masquerade as a missing password")

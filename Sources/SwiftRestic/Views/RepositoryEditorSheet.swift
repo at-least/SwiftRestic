@@ -344,6 +344,29 @@ struct RepositoryEditorSheet: View {
                 }
             }
 
+            Section("Bandwidth") {
+                // Typeable, not steppers. Values are clamped on commit; the
+                // assignment itself refreshes the field even when the clamp
+                // lands on the value it already held.
+                TextField(
+                    "Upload limit (KiB/s, 0 for unlimited)",
+                    value: clampedLimit($draft.uploadLimitKiBps),
+                    format: .number.grouping(.never)
+                )
+                TextField(
+                    "Download limit (KiB/s, 0 for unlimited)",
+                    value: clampedLimit($draft.downloadLimitKiBps),
+                    format: .number.grouping(.never)
+                )
+                Text(
+                    "Every restic command on this repository keeps to them, on a disk attached to this Mac too: "
+                        + "backups upload, while restores, a check that reads data and opening a backup for the first time download."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Maintenance") {
                 Toggle("Check integrity periodically", isOn: $draft.maintenance.checkEnabled)
                 Stepper(value: $draft.maintenance.checkIntervalDays, in: 1 ... 365) {
@@ -671,8 +694,7 @@ struct RepositoryEditorSheet: View {
             let context = RepositoryContext(
                 repository: draft,
                 password: try effectivePassword(),
-                providerSecret: providerSecret.isEmpty ? nil : providerSecret,
-                settings: model.configuration.settings
+                providerSecret: providerSecret.isEmpty ? nil : providerSecret
             )
 
             if try await service.repositoryExists(context, timeout: Self.probeTimeout) {
@@ -696,6 +718,15 @@ struct RepositoryEditorSheet: View {
             status = .failure(error.localizedDescription)
             return false
         }
+    }
+
+    /// Keeps the typed value inside restic's accepted range: out-of-range
+    /// input is corrected on commit, never mid-keystroke.
+    private func clampedLimit(_ binding: Binding<Int>) -> Binding<Int> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: { binding.wrappedValue = min(1_000_000, max(0, $0)) }
+        )
     }
 
     /// What the chosen depth verifies, and what the structure alone does not.

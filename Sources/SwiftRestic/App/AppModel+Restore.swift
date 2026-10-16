@@ -482,7 +482,6 @@ extension AppModel {
             return provider
         }
         let secrets = self.secrets
-        let settings = configuration.settings
 
         // The promise is typed by *content*, not as a file URL:
         // `public.file-url` declares the file's contents are a URL bookmark
@@ -502,7 +501,6 @@ extension AppModel {
                         service: service,
                         secrets: secrets,
                         repository: repository,
-                        settings: settings,
                         snapshotID: snapshotID,
                         node: node
                     )
@@ -550,14 +548,13 @@ extension AppModel {
         service: any ResticClient,
         secrets: SecretStore,
         repository: Repository,
-        settings: AppSettings,
         snapshotID: String,
         node: SnapshotNode
     ) async throws -> URL {
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(dragRestorePrefix)\(UUID().uuidString)")
         _ = try await service.restore(
-            await Self.dragContext(repository: repository, settings: settings, secrets: secrets),
+            await Self.dragContext(repository: repository, secrets: secrets),
             snapshotID: snapshotID,
             node: node,
             destinationDirectory: destination,
@@ -578,7 +575,6 @@ extension AppModel {
     /// drag path above and the instance `context(for:)`.
     nonisolated static func dragContext(
         repository: Repository,
-        settings: AppSettings,
         secrets: SecretStore
     ) async throws -> RepositoryContext {
         // A Keychain failure surfaces as itself — reading it as nil would
@@ -598,8 +594,7 @@ extension AppModel {
         return RepositoryContext(
             repository: repository,
             password: password,
-            providerSecret: stored.providerSecret,
-            settings: settings
+            providerSecret: stored.providerSecret
         )
     }
 

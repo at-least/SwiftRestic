@@ -6,7 +6,6 @@ struct RepositoryContext: Sendable {
     var repository: Repository
     var password: String
     var providerSecret: String?
-    var settings = AppSettings()
 
     /// Keys the app itself owns — see `ResticRunner.protectedEnvironmentKeys`,
     /// which strips the same set from every child's inherited environment.
@@ -35,14 +34,15 @@ struct RepositoryContext: Sendable {
             .sorted()
     }
 
-    /// Flags that apply to every command, not just one.
+    /// Flags that apply to every command, not just one: the repository's
+    /// own rate limits.
     var globalArguments: [String] {
         var args: [String] = []
-        if settings.uploadLimitKiBps > 0 {
-            args += ["--limit-upload", String(settings.uploadLimitKiBps)]
+        if repository.uploadLimitKiBps > 0 {
+            args += ["--limit-upload", String(repository.uploadLimitKiBps)]
         }
-        if settings.downloadLimitKiBps > 0 {
-            args += ["--limit-download", String(settings.downloadLimitKiBps)]
+        if repository.downloadLimitKiBps > 0 {
+            args += ["--limit-download", String(repository.downloadLimitKiBps)]
         }
         return args
     }

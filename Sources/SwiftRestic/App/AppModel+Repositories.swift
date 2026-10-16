@@ -176,22 +176,17 @@ extension AppModel {
     /// Builds everything a restic command needs, or explains what is missing.
     /// The password rules live once, in the drag path's main-actor-free
     /// variant (`AppModel.dragContext`) — this delegates to it, and caches
-    /// the answer. The cache key carries the repository value and the rate
-    /// limits (everything except the secrets, which the key cannot see);
-    /// secret edits are covered by `upsert`'s explicit invalidation, and a
-    /// stale credential by `noteAuthFailure`. Failures are never cached;
-    /// only a fully resolved context is.
+    /// the answer beside the repository value it was built from, which
+    /// holds everything but the secrets, rate limits included; secret
+    /// edits are covered by `upsert`'s explicit invalidation, and a stale
+    /// credential by `noteAuthFailure`. Failures are never cached; only a
+    /// fully resolved context is.
     func context(for repository: Repository) async throws -> RepositoryContext {
-        let key = ResolvedContextKey(repository: repository, settings: configuration.settings)
-        if let cached = resolvedContexts[repository.id], cached.key == key {
+        if let cached = resolvedContexts[repository.id], cached.repository == repository {
             return cached.context
         }
-        let context = try await Self.dragContext(
-            repository: repository,
-            settings: configuration.settings,
-            secrets: secrets
-        )
-        resolvedContexts[repository.id] = (key, context)
+        let context = try await Self.dragContext(repository: repository, secrets: secrets)
+        resolvedContexts[repository.id] = (repository, context)
         return context
     }
 
@@ -266,23 +261,6 @@ extension AppModel {
             supportsRestoreOverwrite: version?.supportsRestoreOverwrite ?? true,
             excludesCloudFiles: version?.excludesCloudFilesOnMac ?? true
         )
-    }
-}
-
-/// Everything a cached `RepositoryContext` depends on, carried beside it so
-/// any relevant edit invalidates by comparison — see `AppModel.context(for:)`.
-/// Not the whole `AppSettings`: only the rate limits reach a context, and
-/// settings like the console history change far more often than the limits
-/// do.
-struct ResolvedContextKey: Equatable, Sendable {
-    var repository: Repository
-    var uploadLimitKiBps: Int
-    var downloadLimitKiBps: Int
-
-    init(repository: Repository, settings: AppSettings) {
-        self.repository = repository
-        self.uploadLimitKiBps = settings.uploadLimitKiBps
-        self.downloadLimitKiBps = settings.downloadLimitKiBps
     }
 }
 

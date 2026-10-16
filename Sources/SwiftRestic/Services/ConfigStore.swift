@@ -11,9 +11,6 @@ struct AppSettings: Codable, Sendable, Hashable {
     var staleAlertDays: Int = 7
     /// How many run records to keep before the oldest are dropped.
     var maxRunHistory: Int = 300
-    /// 0 means unlimited. Passed to restic as `--limit-upload` / `--limit-download`.
-    var uploadLimitKiBps: Int = 0
-    var downloadLimitKiBps: Int = 0
     /// Skip scheduled runs while on battery power.
     var pauseOnBattery: Bool = false
     /// Skip scheduled runs while the network is metered — one macOS reports
@@ -40,8 +37,6 @@ struct AppSettings: Codable, Sendable, Hashable {
         notifyOnFailure = c.value(.notifyOnFailure, default: true)
         staleAlertDays = c.value(.staleAlertDays, default: 7)
         maxRunHistory = c.value(.maxRunHistory, default: 300)
-        uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
-        downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)
         pauseOnBattery = c.value(.pauseOnBattery, default: false)
         pauseOnMeteredNetwork = c.value(.pauseOnMeteredNetwork, default: false)
         // A pause whose date does not read throws inside, so this reads as
@@ -69,12 +64,57 @@ struct AppConfiguration: Codable, Sendable {
         // Records written before stretches were stored get theirs here, so
         // every backup problem in memory has one.
         runs = RunRecord.fillingProblemStretches(c.value(.runs, default: []))
-        settings = c.value(.settings, default: AppSettings())
+        let stored = c.value(.settings, default: StoredSettings())
+        settings = stored.settings
+        moveAppWideRateLimits(upload: stored.uploadLimitKiBps, download: stored.downloadLimitKiBps)
+    }
+
+    /// Builds before 2026-10-17 held one pair of rate limits in the
+    /// settings, for every repository, a disk on this Mac too. It stays
+    /// with the repositories reached over a network — every kind but a
+    /// local folder, and a local folder on a saved network share — which it
+    /// was set for; the settings no longer write it, so it moves once.
+    private mutating func moveAppWideRateLimits(upload: Int, download: Int) {
+        guard upload > 0 || download > 0 else { return }
+        let shares = Set(settings.networkShares.map(\.volumeName))
+        for index in repositories.indices {
+            let repository = repositories[index]
+            if repository.kind == .local,
+               VolumePresence.volumeName(of: repository.resolvedLocalPath).map(shares.contains) != true
+            {
+                continue
+            }
+            if upload > 0 { repositories[index].uploadLimitKiBps = upload }
+            if download > 0 { repositories[index].downloadLimitKiBps = download }
+        }
     }
 
     func repository(id: UUID?) -> Repository? {
         guard let id else { return nil }
         return repositories.first { $0.id == id }
+    }
+}
+
+/// `settings` as a configuration holds it, with the rate limits builds
+/// before 2026-10-17 kept there for every repository
+/// (`AppConfiguration.moveAppWideRateLimits`) — read in the same decode,
+/// so a settings object that does not read is noted once.
+private struct StoredSettings: Decodable {
+    var settings = AppSettings()
+    var uploadLimitKiBps = 0
+    var downloadLimitKiBps = 0
+
+    private enum AppWideKeys: String, CodingKey {
+        case uploadLimitKiBps, downloadLimitKiBps
+    }
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        settings = try AppSettings(from: decoder)
+        let c = try decoder.container(keyedBy: AppWideKeys.self)
+        uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
+        downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)
     }
 }
 

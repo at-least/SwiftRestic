@@ -92,6 +92,11 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// Extra `KEY=value` pairs handed to the restic child process verbatim.
     var extraEnvironment: [String: String] = [:]
 
+    /// KiB/s, 0 for unlimited: `--limit-upload` and `--limit-download` on
+    /// every restic command against this repository.
+    var uploadLimitKiBps: Int = 0
+    var downloadLimitKiBps: Int = 0
+
     /// Periodic `check` and `prune` for this repository.
     var maintenance = MaintenancePolicy()
     /// Shell commands run around this repository's check and prune.
@@ -131,6 +136,8 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         rcloneRemote = c.value(.rcloneRemote, default: "")
         rclonePath = c.value(.rclonePath, default: "")
         extraEnvironment = c.value(.extraEnvironment, default: [:])
+        uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
+        downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)
         maintenance = c.value(.maintenance, default: MaintenancePolicy())
         hooks = c.value(.hooks, default: [])
     }
