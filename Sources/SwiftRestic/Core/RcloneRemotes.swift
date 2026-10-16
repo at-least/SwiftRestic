@@ -13,7 +13,7 @@ struct RcloneRemote: Sendable, Hashable {
 
 /// Lists the remotes configured in the user's rclone installation.
 ///
-/// Asks `rclone listremotes -l` instead of reading the config file: the file's
+/// Asks `rclone listremotes --long` instead of reading the config file: the file's
 /// location is rclone's business (XDG directories, `--config`, `RCLONE_CONFIG`
 /// all move it), and parsing it would drag rclone's obscured secrets past the
 /// app. The binary answers with authoritative names and types and never prints
@@ -21,13 +21,18 @@ struct RcloneRemote: Sendable, Hashable {
 struct RcloneRemoteLister: Sendable {
     var runner: ResticRunner
 
+    /// `--long`, not `-l`: that is rclone's global `--links`, and with it
+    /// listremotes printed names alone on every rclone tried, 1.50.2 to
+    /// 1.75.2 (2026-10-16).
+    static let arguments = ["listremotes", "--long"]
+
     /// Empty on any failure — a missing or misbehaving rclone degrades the
     /// editor to a plain text field, never to an error the user must dismiss.
     func list(binary: URL) async -> [RcloneRemote] {
         guard let result = try? await runner.run(
             binary: binary,
             invocation: ResticInvocation(
-                arguments: ["listremotes", "-l"],
+                arguments: Self.arguments,
                 // rclone reads its config up front, but a backend that dials out
                 // on startup must not pin the editor open.
                 timeout: 5,
@@ -37,18 +42,20 @@ struct RcloneRemoteLister: Sendable {
         return Self.parse(result.stdout)
     }
 
-    /// `-l` prints one `name: type` per line; a line without a colon is
+    /// `--long` prints one `name: type` per line — rclone 1.75.2 adds the
+    /// remote's description after the type, 1.50.2 does not — so the type
+    /// is the first word after the colon; a line without a colon is
     /// dropped. Splitting at the first colon is safe because remote names
     /// may not contain colons — which is exactly what makes `remote:path`
-    /// unambiguous. Lines split on any newline character: Swift reads `\r\n`
-    /// as one grapheme, so a literal `"\n"` split would leave the `\r`
-    /// glued to the previous line.
+    /// unambiguous. Lines split on any newline character: Swift reads
+    /// `\r\n` as one grapheme, so a literal `"\n"` split would leave the
+    /// `\r` glued to the previous line.
     static func parse(_ output: String) -> [RcloneRemote] {
         output.split(whereSeparator: \.isNewline).compactMap { rawLine in
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let colon = line.firstIndex(of: ":") else { return nil }
             let name = String(line[..<colon]).trimmingCharacters(in: .whitespaces)
-            let type = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            let type = line[line.index(after: colon)...].split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
             guard !name.isEmpty else { return nil }
             return RcloneRemote(name: name, type: type)
         }

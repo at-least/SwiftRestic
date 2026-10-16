@@ -3,12 +3,18 @@ import Testing
 
 @Suite("rclone remote listing")
 struct RcloneRemotesTests {
-    @Test("`listremotes -l` output parses into names and types")
+    @Test("`listremotes --long` output parses into names and types, a remote's description aside")
     func longOutput() {
-        let remotes = RcloneRemoteLister.parse("mydrive: drive\nnas-box: sftp\n")
+        // `-l` is rclone's global --links, not --long: listremotes -l printed
+        // names alone on every rclone tried, 1.50.2 to 1.75.2 (2026-10-16).
+        #expect(RcloneRemoteLister.arguments == ["listremotes", "--long"])
+        // rclone 1.50.2 prints "name: type"; 1.75.2 pads the type and adds
+        // the remote's description after it.
+        let remotes = RcloneRemoteLister.parse("mydrive: drive\nnas-box: sftp  Home box\ns3:      s3\n")
         #expect(remotes == [
             RcloneRemote(name: "mydrive", type: "drive"),
             RcloneRemote(name: "nas-box", type: "sftp"),
+            RcloneRemote(name: "s3", type: "s3"),
         ])
     }
 
