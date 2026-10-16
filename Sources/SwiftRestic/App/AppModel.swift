@@ -124,6 +124,11 @@ final class AppModel {
     /// for these: there is nothing to run, and stamping a "last checked" time for
     /// a check that never happened would be a lie on the repository screen.
     var repositoriesMissingPassword: Set<UUID> = []
+    /// Repositories whose check or prune found their drive away
+    /// (`markDriveAway`): unstamped, the task stays due, and the scheduler
+    /// leaves it alone while the drive is still away — then it runs on the
+    /// next tick.
+    var upkeepAwaitingDrive: Set<UUID> = []
     var isLoaded = false
     /// True while `bootstrap` is still reading the configuration and locating
     /// restic. The views show a loading state instead of the empty states:

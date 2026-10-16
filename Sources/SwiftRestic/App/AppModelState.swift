@@ -43,6 +43,8 @@ struct PlanActivity: Sendable, Equatable {
 /// Live state of one repository's check or prune.
 struct MaintenanceActivity: Sendable, Equatable {
     var task: MaintenanceTask
+    /// False for the scheduler's runs: a skip nobody asked for posts nothing.
+    var askedByUser = true
     var startedAt: Date = .now
     /// The last line the command printed. `prune` narrates in plain text, so
     /// this distinguishes "working" from "hung"; `check --json` stays silent

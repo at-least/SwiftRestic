@@ -30,6 +30,15 @@ struct ShareMounter: Sendable {
         }.value
     }
 
+    /// A failed mount's status as a reconnect's outcome: `describe(status:)`'s
+    /// words, refused for what only the user clears.
+    static func failure(status: Int32) -> ShareReconnect.Outcome {
+        switch status {
+        case EAUTH, ENOENT, EACCES, EPERM: .refused(describe(status: status))
+        default: .unreachable(describe(status: status))
+        }
+    }
+
     /// NetFS's status as the clause after "Reconnecting “NAS” failed: ".
     static func describe(status: Int32) -> String {
         switch status {

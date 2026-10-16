@@ -43,25 +43,23 @@ private func runAfterHooks(
 
 /// The away volumes among `paths`, each once, handed to `reconnect` — an
 /// engine's sink, `AppModel.reconnectShares` — and nothing asked when none
-/// is away. Each answer goes to the run's log; what failed comes back by
-/// volume name, for the run's words.
+/// is away. Each answer goes to the run's log; the shares that stayed away
+/// come back, for the run's words (`reasonsByVolume`) and whether one
+/// refused (`isRefusal`).
 @MainActor
 private func reconnectAwayShares(
     of paths: [String],
     transcript: RunTranscript,
     reconnect: ([String]) async -> [ShareReconnect]
-) async -> [String: String] {
+) async -> [ShareReconnect] {
     var away: [String] = []
     for path in paths where VolumePresence.isMounted(volumeOf: path) == false {
         if let volume = VolumePresence.volumeName(of: path), !away.contains(volume) { away.append(volume) }
     }
-    guard !away.isEmpty else { return [:] }
-    var failures: [String: String] = [:]
-    for answer in await reconnect(away) {
-        transcript.note(answer.logLine)
-        if case let .failed(reason) = answer.outcome { failures[answer.volumeName] = reason }
-    }
-    return failures
+    guard !away.isEmpty else { return [] }
+    let answers = await reconnect(away)
+    for answer in answers { transcript.note(answer.logLine) }
+    return answers.filter { $0.failureReason != nil }
 }
 
 /// One backup run's lifecycle, so the sequencing — hooks → start ping →
@@ -182,7 +180,7 @@ enum BackupRunEngine {
                     + plan.sources.map(ResticService.expandTilde),
                 transcript: transcript,
                 reconnect: { await sink.reconnectShares(volumes: $0) }
-            )
+            ).reasonsByVolume
 
             // The repository's drive away (after the hooks, which may mount
             // it): skipped as for the folders' drive, never asking restic,
@@ -391,6 +389,9 @@ enum MaintenanceRunEngine {
         func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date)
         /// Not-yet-configured repositories record nothing and stamp nothing.
         func markPasswordMissing(repositoryID: UUID)
+        /// The repository's drive is away: its upkeep, unstamped, waits for
+        /// the drive (`AppModel.upkeepAwaitingDrive`).
+        func markDriveAway(repositoryID: UUID)
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
         func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async
         func makeHookRunner() -> HookRunner
@@ -461,21 +462,37 @@ enum MaintenanceRunEngine {
             }
 
             // The repository's network share, away and saved: mounted with
-            // its saved password before restic is asked, as for a backup. A
-            // share that stays away fails the run in those words rather
-            // than restic's "repository does not exist".
+            // its saved password before restic is asked, as for a backup.
+            // A share that refused fails the run in those words rather than
+            // restic's "repository does not exist". Its drive still away —
+            // no share saved, or one out of reach — the run waits for it,
+            // as a backup does: Skipped, unstamped, so the task stays due,
+            // and the scheduler leaves it alone until the drive is back
+            // (`markDriveAway`). After the hooks, which may mount it.
             if repository.kind == .local {
                 let failures = await reconnectAwayShares(
                     of: [repository.resolvedLocalPath],
                     transcript: transcript,
                     reconnect: { await sink.reconnectShares(volumes: $0) }
                 )
-                if !failures.isEmpty {
+                if failures.contains(where: \.isRefusal) {
                     record.outcome = .failed
                     record.failureMessage = RunRecord.skippedReason(
-                        sources: [repository.resolvedLocalPath], reconnectFailures: failures
+                        sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
                     )
                     sink.stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
+                    await finish(
+                        record: &record, repository: repository, hooks: hooks, context: hookContext,
+                        transcript: transcript, sink: sink
+                    )
+                    return
+                }
+                if VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+                    record.outcome = .skipped
+                    record.detailText = RunRecord.skippedReason(
+                        sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
+                    )
+                    sink.markDriveAway(repositoryID: repository.id)
                     await finish(
                         record: &record, repository: repository, hooks: hooks, context: hookContext,
                         transcript: transcript, sink: sink
@@ -561,8 +578,10 @@ enum MaintenanceRunEngine {
         let events: [BackupHook.Event] = switch record.outcome {
         case .succeeded: [.afterMaintenanceSuccess, .afterAnyMaintenance]
         case .completedWithErrors, .failed: [.afterMaintenanceFailure, .afterAnyMaintenance]
-        // A check or prune is never skipped.
-        case .cancelled, .skipped: []
+        // The drive away, nothing failed: only the hooks for any end, as
+        // for a skipped backup.
+        case .skipped: [.afterAnyMaintenance]
+        case .cancelled: []
         }
         await runAfterHooks(
             repository.hooks, events: events, context: hookContext,
@@ -631,7 +650,7 @@ enum RetentionRunEngine {
                     transcript: transcript,
                     reconnect: { await sink.reconnectShares(volumes: $0) }
                 )
-                : [:]
+                : []
             if failures.isEmpty {
                 let removed = try await RunTranscript.$current.withValue(transcript) {
                     try await service.forget(context, plan: plan)
@@ -640,7 +659,9 @@ enum RetentionRunEngine {
                 record.detailText = RetentionPreview.appliedSummary(removed: removed, pruned: plan.retention.runPrune)
             } else {
                 record.outcome = .failed
-                record.failureMessage = RunRecord.skippedReason(sources: [repository.resolvedLocalPath], reconnectFailures: failures)
+                record.failureMessage = RunRecord.skippedReason(
+                    sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
+                )
             }
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))

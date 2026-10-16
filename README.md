@@ -308,8 +308,10 @@ the generator after editing it; the PNGs are checked in.
     name and password." Two runs needing one share mount it once, and a
     share macOS mounts beside a leftover /Volumes folder ("NAS-1") is no
     reconnect. *Check…*, *Prune Now…* and *Apply Retention Now…* — its
-    preview too — reconnect the repository's share the same way; one that
-    stays away fails the run in those words rather than restic's
+    preview too — reconnect the repository's share the same way. Out of
+    reach, a check or prune waits for it as for a drive that is away (see
+    *Maintenance*); a share that refused, or one still away when *Apply
+    Retention Now…* runs, fails the run in those words rather than restic's
     "repository does not exist". A share mounted with no user name offers no
     password, and each reconnect adds the server to macOS's Recent Servers,
     as Finder's do. Tried against Samba 4.23.8 on 2026-10-16, the password
@@ -436,7 +438,18 @@ the generator after editing it; the PNGs are checked in.
   Repository menu's command, same confirmation, grey while the repository is
   busy. The scheduler's own stamp, written for every attempt so a failing
   check is not retried every minute, is read only when the history holds no
-  run as new. A repository added from 2026-10-09 on prunes by default, every
+  run as new. A local repository whose drive is away is the exception: a
+  check or prune that falls due then, or is asked for, never reaches restic,
+  whose "repository does not exist" cannot tell it from a moved folder —
+  until 2026-10-16 it ran, failed with "No repository is at its saved path —
+  point it at the folder that holds the repository." and *Edit
+  Repository…*, and stamped the next check a whole interval ahead. It is
+  *Skipped* in a backup's words, "“Archive SSD” is not connected.", and
+  unstamped, so the task stays due: *Next check* reads "When “Archive SSD” is
+  connected", *Last check* passes over the skip, the scheduler leaves the
+  repository alone while the drive is still away, and the task runs within
+  a minute of its return. Only *Check…* or *Prune Now…* asked by hand gets a
+  passing banner. A repository added from 2026-10-09 on prunes by default, every
   30 days starting 30 days after it is added, since retention runs after
   every backup and only a prune frees the space; one saved before keeps its
   setting. With prune off the Maintenance card says "Prune — Off — the data
@@ -817,7 +830,8 @@ marks the run as *completed with errors* but never turns a written snapshot into
 a failed run. Only a before hook can be set to cancel the run; one that does
 still stamps the schedule, so a hook that always refuses is not retried every
 minute. Repositories have hooks of their own around `check` and `prune`
-(*before*, *after success*, *after failure*, *after every*), with the same
+(*before*, *after success*, *after failure*, *after every* — the only ones
+after a check or prune skipped for a drive that is away), with the same
 variables — the plan ones present but empty, never the snapshot one — plus
 `SWIFTRESTIC_TASK` (`check` or `prune`). A check that finds errors counts as
 a failure for them, the outcome they exist to report, and a failing hook

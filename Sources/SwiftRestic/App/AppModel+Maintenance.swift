@@ -54,7 +54,8 @@ extension AppModel {
     func runMaintenance(
         repositoryID: UUID,
         task: MaintenanceTask,
-        readDataPercent: Int? = nil
+        readDataPercent: Int? = nil,
+        askedByUser: Bool = true
     ) {
         guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.maintenance(repositoryID)) else { return }
@@ -68,7 +69,7 @@ extension AppModel {
             return
         }
 
-        installMaintenanceActivity(repositoryID: repositoryID, task: task)
+        installMaintenanceActivity(repositoryID: repositoryID, task: task, askedByUser: askedByUser)
         tasks.install(Task { [weak self] in
             if let self {
                 await MaintenanceRunEngine.perform(
@@ -90,9 +91,9 @@ extension AppModel {
     /// The maintenance mirror of `installPlanActivity`: a fresh activity
     /// carries a new run token, so a line still in flight from the previous
     /// job drops instead of writing into this one.
-    func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask) {
+    func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask, askedByUser: Bool = true) {
         maintenanceRunTokens[repositoryID] = UUID()
-        maintenance[repositoryID] = MaintenanceActivity(task: task)
+        maintenance[repositoryID] = MaintenanceActivity(task: task, askedByUser: askedByUser)
         reconcileSleepAssertion()
     }
 
@@ -160,19 +161,37 @@ extension AppModel: MaintenanceRunEngine.Sink {
         repositoriesMissingPassword.insert(repositoryID)
     }
 
+    func markDriveAway(repositoryID: UUID) {
+        upkeepAwaitingDrive.insert(repositoryID)
+    }
+
     /// Stores a finished maintenance run with its log, announces a failure
     /// — a check that found errors is a failure where hooks are concerned —
-    /// and notifies the external channels.
+    /// and a skip the user asked for, and notifies the external channels.
     func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
         var record = record
         await seal(&record, transcript: transcript)
         append(record: record)
-        if record.outcome == .failed {
+        switch record.outcome {
+        case .failed:
             post(Banner(
                 title: "\(record.kind.displayName) failed on “\(repository.name)”",
                 message: record.failureMessage ?? "",
                 isError: true
             ))
+        case .skipped:
+            // The drive away: Check… or Prune Now… is answered, as Back Up
+            // Now is; a scheduled one waits in silence, Next check saying
+            // for what.
+            guard maintenance[repository.id]?.askedByUser == true else { break }
+            post(Banner(
+                title: "\(record.kind.displayName) of “\(repository.name)” skipped",
+                message: record.detailText ?? "",
+                isError: false,
+                symbolName: RunRecord.Outcome.skipped.symbolName
+            ))
+        case .succeeded, .completedWithErrors, .cancelled:
+            break
         }
         await broadcast(record: record, plan: nil)
     }

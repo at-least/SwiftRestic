@@ -51,12 +51,12 @@ extension AppModel {
         // backup, which will simply still be due on the next tick. A
         // repository with no stored password has nothing runnable; treat it
         // as busy so upkeep is skipped rather than failing on every tick.
-        var busy = busyRepositoryIDs.union(repositoriesMissingPassword)
+        var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(upkeepStillAwaitingDrive())
         for due in Scheduler.dueMaintenance(
             in: configuration.repositories,
             busyRepositoryIDs: busy
         ) {
-            runMaintenance(repositoryID: due.repository.id, task: due.task)
+            runMaintenance(repositoryID: due.repository.id, task: due.task, askedByUser: false)
             busy.insert(due.repository.id)
         }
 
@@ -68,6 +68,18 @@ extension AppModel {
         ) {
             runBackup(planID: plan.id, askedByUser: false)
         }
+    }
+
+    /// The repositories whose upkeep waits for its drive (`markDriveAway`)
+    /// while the drive is still away; one whose drive is back — mounted by
+    /// the user, a backup's hook or reconnect, a read — leaves the set, and
+    /// its task, unstamped and so still due, starts on this tick.
+    private func upkeepStillAwaitingDrive() -> Set<UUID> {
+        upkeepAwaitingDrive = upkeepAwaitingDrive.filter { id in
+            guard let repository = repository(id: id), repository.kind == .local else { return false }
+            return VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false
+        }
+        return upkeepAwaitingDrive
     }
 
     /// The battery check is a synchronous IOKit round-trip to powerd — quick,

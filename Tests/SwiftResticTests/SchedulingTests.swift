@@ -790,6 +790,34 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.nextMaintenanceText(.check, of: off, hold: .paused(until: nil), now: now) == "Off")
     }
 
+    @Test("a check waiting for its repository's drive is no last check, and Next check says what it waits for")
+    func upkeepWaitingForItsDrive() {
+        let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
+        var repository = repository {
+            $0.kind = .local
+            $0.localPath = "/Volumes/\(volume)/restic"
+            $0.maintenance.checkIntervalDays = 7
+            $0.maintenance.lastCheckAt = self.date("2026-09-02 12:00:00")
+        }
+        let now = date("2026-09-10 12:00:00")
+        var failed = RunRecord(kind: .check, planName: repository.name, repositoryID: repository.id, startedAt: date("2026-09-02 12:00:00"))
+        failed.outcome = .failed
+        var waited = RunRecord(kind: .check, planName: repository.name, repositoryID: repository.id, startedAt: date("2026-09-10 11:00:00"))
+        waited.outcome = .skipped
+        waited.detailText = "“\(volume)” is not connected."
+        // The skip is no check: the last one is still the failure before it.
+        #expect(Scheduler.newestMaintenanceRun(.check, of: repository, runs: [waited, failed])?.id == failed.id)
+        #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [waited, failed], now: now)
+            == "\(Format.ago(date("2026-09-02 12:00:00"), now: now)) · failed")
+        // Due: it waits for the drive, not "Due now" — under a hold too,
+        // which the drive would outlast.
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: nil, now: now) == "When “\(volume)” is connected")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: .onBattery, now: now) == "When “\(volume)” is connected")
+        // Not due yet: its date, as for any repository.
+        repository.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: nil, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
+    }
+
     @Test("the schedule summarises itself for the plan list")
     func scheduleSummary() {
         var manual = Schedule()

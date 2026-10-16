@@ -62,7 +62,7 @@ struct NetworkShareTests {
         #expect(await mounts.calls.map(\.password) == ["share-pass"])
         #expect(results == [ShareReconnect(
             volumeName: volume, url: "smb://me@nas.local/\(volume)",
-            outcome: .failed("the share did not accept the user name and password")
+            outcome: .refused("the share did not accept the user name and password")
         )])
     }
 
@@ -71,7 +71,7 @@ struct NetworkShareTests {
         let (model, _, volume) = try await makeModel(answer: .mounted(["/Volumes/X-1"]))
         let results = await model.reconnectShares(volumes: [volume])
         #expect(results.map(\.outcome) == [
-            .failed("macOS mounted it as /Volumes/X-1 — a folder named “\(volume)” is in the way in /Volumes"),
+            .refused("macOS mounted it as /Volumes/X-1 — a folder named “\(volume)” is in the way in /Volumes"),
         ])
     }
 
@@ -80,7 +80,7 @@ struct NetworkShareTests {
         let (model, mounts, volume) = try await makeModel(answer: .mounted([]), password: nil)
         let results = await model.reconnectShares(volumes: [volume])
         #expect(await mounts.calls.isEmpty)
-        #expect(results.map(\.outcome) == [.failed("no password is saved for it")])
+        #expect(results.map(\.outcome) == [.refused("no password is saved for it")])
     }
 
     @Test("two runs needing the same share at once mount it once and read the same answer")
@@ -109,7 +109,7 @@ struct NetworkShareTests {
         let (a, b) = (await first.value, await second.value)
         #expect(await mounts.calls.count == 1)
         #expect(a == b)
-        #expect(a.map(\.outcome) == [.failed("the share did not accept the user name and password")])
+        #expect(a.map(\.outcome) == [.refused("the share did not accept the user name and password")])
     }
 
     private func makeEditorModel(secrets: SecretStore) -> AppModel {
@@ -191,6 +191,16 @@ struct NetworkShareTests {
         #expect(await mounts.calls.map(\.url) == ["smb://me@nas.local/\(volume)"])
     }
 
+    @Test("a refusal only the user clears is told from a server out of reach, which may come back by itself")
+    func refusalOrUnreachable() {
+        for refused in [EAUTH, ENOENT, EACCES, EPERM] {
+            #expect(ShareMounter.failure(status: refused) == .refused(ShareMounter.describe(status: refused)), "status \(refused)")
+        }
+        for passing in [ETIMEDOUT, ECONNREFUSED, EHOSTDOWN, EHOSTUNREACH, ENETUNREACH, ENETDOWN, -6600, EIO] {
+            #expect(ShareMounter.failure(status: passing) == .unreachable(ShareMounter.describe(status: passing)), "status \(passing)")
+        }
+    }
+
     @Test("NetFS's status reads as the reason a reconnect failed")
     func statusWords() {
         #expect(ShareMounter.describe(status: EAUTH) == "the share did not accept the user name and password")
@@ -231,7 +241,7 @@ struct NetworkShareTests {
     func logLines() {
         let reconnected = ShareReconnect(volumeName: "NAS", url: "smb://me@nas.local/NAS", outcome: .reconnected)
         #expect(reconnected.logLine == "Reconnected the network share smb://me@nas.local/NAS at /Volumes/NAS.")
-        let failed = ShareReconnect(volumeName: "NAS", url: "smb://me@nas.local/NAS", outcome: .failed("the server could not be reached"))
+        let failed = ShareReconnect(volumeName: "NAS", url: "smb://me@nas.local/NAS", outcome: .unreachable("the server could not be reached"))
         #expect(failed.logLine == "Could not reconnect the network share smb://me@nas.local/NAS: the server could not be reached.")
     }
 }

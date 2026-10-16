@@ -18,21 +18,48 @@ struct NetworkShare: Codable, Sendable, Hashable, Identifiable {
 
 /// What reconnecting one share before a backup came to.
 struct ShareReconnect: Equatable, Sendable {
+    /// Why not, in a clause that follows "Reconnecting “NAS” failed: ".
     enum Outcome: Equatable, Sendable {
         case reconnected
-        /// Why not, in a clause that follows "Reconnecting “NAS” failed: ".
-        case failed(String)
+        /// A cause that may pass by itself — the server out of reach, or an
+        /// error macOS did not explain: a run waits for the share as for a
+        /// drive that is away.
+        case unreachable(String)
+        /// A cause only the user clears — the share refused the saved
+        /// password, has no share by that name, refused access, mounted
+        /// beside a leftover folder, or no password came from the Keychain.
+        case refused(String)
     }
 
     var volumeName: String
     var url: String
     var outcome: Outcome
 
+    /// Why it stayed away; nil when it was reconnected.
+    var failureReason: String? {
+        switch outcome {
+        case .reconnected: nil
+        case let .unreachable(reason), let .refused(reason): reason
+        }
+    }
+
+    var isRefusal: Bool {
+        if case .refused = outcome { true } else { false }
+    }
+
     /// The run log's line.
     var logLine: String {
-        switch outcome {
-        case .reconnected: "Reconnected the network share \(url) at /Volumes/\(volumeName)."
-        case let .failed(reason): "Could not reconnect the network share \(url): \(reason)."
-        }
+        guard let failureReason else { return "Reconnected the network share \(url) at /Volumes/\(volumeName)." }
+        return "Could not reconnect the network share \(url): \(failureReason)."
+    }
+}
+
+extension [ShareReconnect] {
+    /// Each share's reason by volume name — what a run's words read
+    /// (`RunRecord.skippedReason(sources:reconnectFailures:)`).
+    var reasonsByVolume: [String: String] {
+        var reasons: [String: String] = [:]
+        for answer in self { reasons[answer.volumeName] = answer.failureReason }
+        return reasons
     }
 }

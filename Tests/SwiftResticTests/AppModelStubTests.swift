@@ -1254,6 +1254,68 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a check due while its repository's drive is away is Skipped and unstamped; the next tick leaves it alone, and once the drive is back it runs")
+    func dueCheckWaitsForItsDrive() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
+        let here = model.configuration.repositories[index].localPath
+        let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
+        model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
+        model.configuration.repositories[index].maintenance.checkEnabled = true
+        // Last checked ten days ago: due on the tick.
+        let lastChecked = Date.now.addingTimeInterval(-10 * 86400)
+        model.configuration.repositories[index].maintenance.lastCheckAt = lastChecked
+        func checks() -> [RunRecord] { model.configuration.runs.filter { $0.kind == .check } }
+
+        await model.runDuePlans()
+        await model.waitForMaintenance(repositoryID: id)
+        #expect(checks().map(\.outcome) == [.skipped])
+        #expect(checks().first?.detailText == "“\(volume)” is not connected.")
+        #expect(model.repository(id: id)?.maintenance.lastCheckAt == lastChecked)
+        // Nobody asked: no banner, as for a scheduled skip.
+        #expect(!model.banners.contains { $0.title.hasPrefix("Check of") })
+
+        // Still away: the next tick leaves it alone.
+        await model.runDuePlans()
+        await model.waitForMaintenance(repositoryID: id)
+        #expect(checks().count == 1)
+
+        // The drive back: the next tick runs the check that stayed due.
+        model.configuration.repositories[index].localPath = here
+        await model.runDuePlans()
+        await model.waitForMaintenance(repositoryID: id)
+        #expect(checks().map(\.outcome) == [.succeeded, .skipped])
+        #expect(try #require(model.repository(id: id)?.maintenance.lastCheckAt) > lastChecked)
+
+        await model.shutdown()
+    }
+
+    @Test("Check… while the repository's drive is away answers in a passing banner, in the skip's words, and stamps nothing")
+    func askedCheckWithTheDriveAway() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
+        let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
+        model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
+
+        model.runMaintenance(repositoryID: id, task: .check, readDataPercent: 0)
+        await model.waitForMaintenance(repositoryID: id)
+
+        #expect(model.configuration.runs.first?.outcome == .skipped)
+        // Found by its title: the launch's listing posts its own banners.
+        let banner = try #require(model.banners.first { $0.title == "Check of “Stub Repo” skipped" })
+        #expect(banner.message == "“\(volume)” is not connected.")
+        #expect(!banner.isError)
+        #expect(model.repository(id: id)?.maintenance.lastCheckAt == nil)
+
+        await model.shutdown()
+    }
+
     @Test("cancelling a check still stamps the schedule and records the cancellation")
     func cancellingCheckStampsAndRecords() async throws {
         // hang-check hangs only the check command, so launch-time snapshot

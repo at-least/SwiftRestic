@@ -41,12 +41,9 @@ extension AppModel {
         guard repository.kind == .local, VolumePresence.isMounted(volumeOf: path) == false,
               let volume = VolumePresence.volumeName(of: path)
         else { return }
-        var failures: [String: String] = [:]
-        for answer in await reconnectShares(volumes: [volume]) {
-            if case let .failed(reason) = answer.outcome { failures[answer.volumeName] = reason }
-        }
+        let failures = await reconnectShares(volumes: [volume]).filter { $0.failureReason != nil }
         guard failures.isEmpty else {
-            throw ShareNotReconnected(message: RunRecord.skippedReason(sources: [path], reconnectFailures: failures))
+            throw ShareNotReconnected(message: RunRecord.skippedReason(sources: [path], reconnectFailures: failures.reasonsByVolume))
         }
     }
 
@@ -71,25 +68,25 @@ extension AppModel {
                 ShareReconnect(volumeName: share.volumeName, url: share.url, outcome: outcome)
             }
             guard let url = URL(string: share.url) else {
-                return result(.failed("its address “\(share.url)” is not a URL"))
+                return result(.refused("its address “\(share.url)” is not a URL"))
             }
             let password: String?
             do {
                 password = try await secrets.loadSharePassword(share.id)
             } catch {
-                return result(.failed("the Keychain did not give its password: \(error.localizedDescription)"))
+                return result(.refused("the Keychain did not give its password: \(error.localizedDescription)"))
             }
-            guard let password else { return result(.failed("no password is saved for it")) }
+            guard let password else { return result(.refused("no password is saved for it")) }
             switch await shareMounter.mount(url, password) {
             case let .failed(status):
-                return result(.failed(ShareMounter.describe(status: status)))
+                return result(ShareMounter.failure(status: status))
             case let .mounted(mountpoints):
                 // A folder of that name left in /Volumes by an unclean
                 // disconnect makes macOS mount the share beside it, as
                 // "NAS-1", where the plan's and repository's paths still
                 // miss it.
                 guard VolumePresence.isVolumeRoot("/Volumes/\(share.volumeName)") else {
-                    return result(.failed(
+                    return result(.refused(
                         "macOS mounted it as \(mountpoints.first ?? "another folder") — a folder named “\(share.volumeName)” is in the way in /Volumes"
                     ))
                 }

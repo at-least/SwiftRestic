@@ -200,8 +200,9 @@ enum Scheduler {
     static func newestMaintenanceRun(_ task: MaintenanceTask, of repository: Repository, runs: [RunRecord]) -> RunRecord? {
         let kind: RunRecord.Kind = task == .check ? .check : .prune
         let stamp = task == .check ? repository.maintenance.lastCheckAt : repository.maintenance.lastPruneAt
+        // A skip — the drive away — checked nothing.
         let newest = runs
-            .filter { $0.kind == kind && $0.repositoryID == repository.id }
+            .filter { $0.kind == kind && $0.repositoryID == repository.id && $0.outcome != .skipped }
             .max { $0.startedAt < $1.startedAt }
         guard let newest, newest.startedAt >= stamp ?? .distantPast else { return nil }
         return newest
@@ -212,7 +213,8 @@ enum Scheduler {
     /// the date to its end and a due task under an open-ended one (Until I
     /// Resume, the battery) reads "Waiting", as a due plan's Next backup
     /// value does — never
-    /// "Due now".
+    /// "Due now". A due task whose local repository's drive is away waits
+    /// for the drive, hold or not: "When “Archive SSD” is connected".
     static func nextMaintenanceText(
         _ task: MaintenanceTask,
         of repository: Repository,
@@ -221,6 +223,12 @@ enum Scheduler {
     ) -> String {
         guard let due = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt) else {
             return "Off"
+        }
+        if due <= now, repository.kind == .local,
+           VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false,
+           let volume = VolumePresence.volumeName(of: repository.resolvedLocalPath)
+        {
+            return "When “\(volume)” is connected"
         }
         let date = max(due, hold?.resumesAt ?? .distantPast)
         guard date > now else { return hold == nil ? "Due now" : "Waiting" }
