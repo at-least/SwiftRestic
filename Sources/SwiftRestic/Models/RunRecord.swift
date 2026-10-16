@@ -161,6 +161,12 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// until a prune. Nil for any other run.
     var repositoryFull: Bool?
 
+    /// How many snapshots the repository refused to delete when the run's
+    /// retention ran (`ResticError.snapshotsNotRemoved`) — an append-only
+    /// server, a locked bucket: the plan's editor is the fix. Nil for any
+    /// other run.
+    var retentionRefused: Int?
+
     // A standing skip (`continuingSkip(of:)`), or a standing failure for the
     // same folders gone or shares refused (`continuingStandingFailure(of:)`):
     // one record for every run it lasted. Nil for a run that stands alone.
@@ -236,6 +242,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         missingSources = c.optional(.missingSources)
         refusedShares = c.optional(.refusedShares)
         repositoryFull = c.optional(.repositoryFull)
+        retentionRefused = c.optional(.retentionRefused)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)

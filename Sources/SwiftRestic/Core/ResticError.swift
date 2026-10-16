@@ -40,6 +40,13 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// file. restic fails on it — after taking away the folder's permissions —
     /// so it is refused before restic runs.
     case folderInTheWay(path: String)
+    /// `forget` could not delete every snapshot retention chose: restic's
+    /// exit 3, "failed to remove one or more snapshots", one "unable to
+    /// remove snapshot/<id>" line per snapshot the repository kept (restic
+    /// 0.19.1). An append-only server or a locked bucket refuses them all.
+    /// `reason` is the end of restic's first "Remove(…) failed:" line —
+    /// "403 Forbidden", "permission denied".
+    case snapshotsNotRemoved(removed: Int, refused: Int, reason: String)
 
     var errorDescription: String? {
         switch self {
@@ -98,6 +105,15 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
         case let .keepNeedsNewerRestic(path):
             return "Keeping the files already at \(path) needs restic 0.17 or later — this restic would replace them, so nothing was restored. Update restic, restore into an empty folder, or choose “Replace it with the backed-up version”."
+        case let .snapshotsNotRemoved(removed, refused, reason):
+            let cause = reason.isEmpty ? "" : " (\(reason))"
+            let advice = "Thin it where deletions are allowed, or turn retention off."
+            guard removed > 0 else {
+                return "The repository refused to delete \(Format.plural(refused, "snapshot"))\(cause) — it may be append-only or locked. \(advice)"
+            }
+            let others = removed == 1 ? "the other one was removed" : "the other \(removed) were removed"
+            return "The repository refused to delete \(refused) of the \(removed + refused) snapshots retention chose\(cause); \(others). "
+                + "It may be append-only or locked — thin it where deletions are allowed, or turn retention off."
         case let .folderInTheWay(path):
             return "A folder is already at \(path), where a restored file would go, so nothing was restored. Move it aside, or restore somewhere else."
         }
@@ -160,9 +176,10 @@ enum ResticError: Error, LocalizedError, Equatable {
         }
     }
 
-    /// `backup` and `forget` return 3 when they finished but hit data access
-    /// issues (an unreadable source file, say). That is a warning, not a failure,
-    /// and must not abort a scheduled run.
+    /// `backup` returns 3 when it finished but could not read some source
+    /// data (an unreadable file, say). That is a warning, not a failure, and
+    /// must not abort a scheduled run. `forget`'s 3 is another matter: it
+    /// could not delete snapshots (`snapshotsNotRemoved`).
     static let backupPartialSuccessCode: Int32 = 3
 
     /// Whether an error is a stop — Swift's task cancellation or restic's

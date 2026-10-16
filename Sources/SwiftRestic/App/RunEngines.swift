@@ -323,6 +323,7 @@ enum BackupRunEngine {
                     } else {
                         error.localizedDescription
                     }
+                    if case let ResticError.snapshotsNotRemoved(_, refused, _) = error { record.retentionRefused = refused }
                     let line = RunRecord.retentionSkippedPrefix + reason
                     record.itemErrors.append(line)
                     transcript.note(line)
@@ -707,6 +708,7 @@ enum RetentionRunEngine {
             }
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
+            if case let ResticError.snapshotsNotRemoved(_, refused, _) = error { record.retentionRefused = refused }
             sink.noteAuthFailure(error, repositoryID: repository.id)
         }
         record.finishedAt = .now

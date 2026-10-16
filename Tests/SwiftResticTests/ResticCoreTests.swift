@@ -174,6 +174,35 @@ struct ResticErrorTests {
             == "restic reported a fatal error — \(fatal)")
     }
 
+    @Test("restic's Go stack trace never reaches a message; a second line of restic's own stays")
+    func goStackTraceIsCut() {
+        // restic 0.19.1's forget on an append-only server, as its exit_error
+        // carried it (2026-10-17): an error with no message of its own is
+        // formatted with %+v, which appends the stack it was made on.
+        let traced = "failed to remove one or more snapshots\nmain.init\n\tgithub.com/restic/restic/cmd/restic/cmd_forget.go:67\n"
+            + "runtime.doInit1\n\truntime/proc.go:8103\nruntime.doInit\n\truntime/proc.go:8070\nruntime.main\n\truntime/proc.go:258\n"
+            + "runtime.goexit\n\truntime/asm_arm64.s:1447"
+        func result(_ message: String) -> ResticRunResult {
+            ResticRunResult(exitCode: 3, messages: [.exitError(ResticExitError(code: 3, message: message))], stdout: "", stderr: "")
+        }
+        #expect(result(traced).failureMessage == "failed to remove one or more snapshots")
+        // A server that refused connections, the same day: the line after
+        // restic's sentence names the repository, and stays.
+        let located = "Fatal: unable to open config file: Head \"http://:***@127.0.0.1:18000/app/config\": dial tcp 127.0.0.1:18000: "
+            + "connect: connection refused\nrest:http://127.0.0.1:18000/app/"
+        #expect(result(located).failureMessage == located)
+    }
+
+    @Test("a forget the repository refused says so, and how many went")
+    func refusedSnapshotsWords() {
+        #expect(ResticError.snapshotsNotRemoved(removed: 0, refused: 1, reason: "403 Forbidden").errorDescription
+            == "The repository refused to delete 1 snapshot (403 Forbidden) — it may be append-only or locked. "
+            + "Thin it where deletions are allowed, or turn retention off.")
+        #expect(ResticError.snapshotsNotRemoved(removed: 2, refused: 1, reason: "operation not permitted").errorDescription
+            == "The repository refused to delete 1 of the 3 snapshots retention chose (operation not permitted); the other 2 were removed. "
+            + "It may be append-only or locked — thin it where deletions are allowed, or turn retention off.")
+    }
+
     @Test("the other failure shapes name what the user can do about them")
     func otherDescriptions() {
         #expect(

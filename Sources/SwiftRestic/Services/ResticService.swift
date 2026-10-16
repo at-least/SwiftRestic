@@ -715,12 +715,31 @@ struct ResticService: ResticClient {
             invocation: ResticInvocation(
                 arguments: args,
                 environment: context.environment,
-                // `forget`, like `backup`, uses 3 for "finished with data access issues".
-                allowedExitCodes: [0, ResticError.backupPartialSuccessCode],
+                // 3 is forget's "failed to remove one or more snapshots", read
+                // below — never a success.
+                allowedExitCodes: [0, 3],
                 retainFullOutput: true
             )
         )
+        guard result.exitCode == 0 else { throw Self.removalFailure(result) }
         return try Self.countRemoved(forgetOutput: result.stdout)
+    }
+
+    /// A forget that exited 3. restic 0.19.1 prints its JSON first — every
+    /// snapshot retention chose under "remove", deleted or not — then one
+    /// "unable to remove snapshot/<id> from the repository" line per
+    /// snapshot it could not delete, so the ones that went are the
+    /// difference. An exit 3 without those lines stays restic's failure.
+    static func removalFailure(_ result: ResticRunResult) -> ResticError {
+        let lines = result.stderr.split(separator: "\n")
+        let refused = lines.filter { $0.hasPrefix("unable to remove snapshot/") }.count
+        guard refused > 0 else { return .commandFailed(exitCode: result.exitCode, message: result.failureMessage) }
+        let chosen = (try? countRemoved(forgetOutput: result.stdout)) ?? refused
+        // "Remove(<snapshot/860f8ac74b>) failed: unexpected HTTP response
+        // (403): 403 Forbidden" — its last part names the cause.
+        let reason = lines.first { $0.hasPrefix("Remove(") && $0.contains(") failed: ") }
+            .flatMap { $0.components(separatedBy: ": ").last } ?? ""
+        return .snapshotsNotRemoved(removed: max(0, chosen - refused), refused: refused, reason: reason)
     }
 
     /// What the plan's retention would remove right now, without removing

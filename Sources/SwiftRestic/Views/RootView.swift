@@ -16,6 +16,9 @@ struct RootView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.openWindow) private var openWindow
     @State private var editingPlan: BackupPlan?
+    /// The tab `editingPlan` opens on: Files, except for a refused
+    /// retention's fix. Back to Files when the sheet goes.
+    @State private var editingPlanTab: PlanEditorSheet.Tab = .files
     @State private var editingRepository: Repository?
     /// "New Backup Plan…" asked with no repository yet: the repository
     /// editor is up for it, and once it has saved one the plan editor
@@ -116,8 +119,8 @@ struct RootView: View {
             selection: router.selection
         )
         return content
-        .sheet(item: $editingPlan) { plan in
-            PlanEditorSheet(plan: plan)
+        .sheet(item: $editingPlan, onDismiss: { editingPlanTab = .files }) { plan in
+            PlanEditorSheet(plan: plan, initialTab: editingPlanTab)
                 .environment(model)
         }
         .sheet(item: $editingRepository, onDismiss: continuePlanAfterRepository) { repository in
@@ -548,6 +551,9 @@ struct RootView: View {
                 model.resumePlanSchedule(id: id)
             }
         case let .editPlan(id):
+            editingPlan = model.plan(id: id)
+        case let .editPlanRetention(id):
+            editingPlanTab = .retention
             editingPlan = model.plan(id: id)
         case let .editRepository(id):
             editingRepository = model.repository(id: id)

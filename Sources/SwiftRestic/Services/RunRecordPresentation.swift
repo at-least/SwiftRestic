@@ -29,12 +29,16 @@ enum RunFix: Equatable {
     /// (`RunRecord.repositoryFull`): a prune frees what the failed run
     /// uploaded.
     case pruneNow(UUID)
+    /// The repository refused to delete what the plan's retention chose
+    /// (`RunRecord.retentionRefused`): the plan editor's Retention tab
+    /// turns it off.
+    case editPlanRetention(UUID)
 
     var title: String {
         switch self {
         case .editRepository, .editRepositoryPath, .editRepositoryShare: "Edit Repository…"
         case .removeStaleLocks: "Remove Stale Locks…"
-        case .editPlan, .editPlanShare: "Edit Plan…"
+        case .editPlan, .editPlanShare, .editPlanRetention: "Edit Plan…"
         case .pruneNow: "Prune Now…"
         }
     }
@@ -49,6 +53,7 @@ enum RunFix: Equatable {
         case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
         case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan's Files tab"
         case .pruneNow: "What the failed backup uploaded stays in the repository until a prune — prune it to free the space"
+        case .editPlanRetention: "The repository refuses to delete snapshots — turn this plan's retention off, or thin it where deletions are allowed"
         }
     }
 }
@@ -114,6 +119,11 @@ enum RunRecordPresentation {
         planExists: Bool = true,
         repositoryVolume: String? = nil
     ) -> RunFix? {
+        // A refused retention: after a backup the snapshot stands, so the run
+        // is a warning, and the fix is offered all the same.
+        if run.retentionRefused != nil, repositoryExists, let planID = run.planID {
+            return planExists ? .editPlanRetention(planID) : nil
+        }
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
         if run.missingSources != nil, let planID = run.planID {
             return planExists ? .editPlan(planID) : nil

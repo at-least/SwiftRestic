@@ -203,6 +203,56 @@ struct ResticIntegrationTests {
         #expect(try await fixture.service.snapshots(fixture.context).count == 2)
     }
 
+    @Test("a forget the repository refuses reads as refused, never as removed")
+    func refusedForgetIsNotARemoval() async throws {
+        let fixture = try makeFixture()
+        let snapshotsFolder = URL(fileURLWithPath: fixture.context.repository.localPath).appendingPathComponent("snapshots")
+        var lockedFile: URL?
+        defer {
+            // Undone before the cleanup, which neither can get past.
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshotsFolder.path)
+            if let lockedFile { try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: lockedFile.path) }
+            try? FileManager.default.removeItem(at: fixture.root)
+        }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+        for index in 0 ..< 3 {
+            try "change \(index)".write(
+                to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+            _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        }
+        var plan = fixture.plan
+        plan.retention = RetentionPolicy(
+            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
+            keepWeekly: 0, keepMonthly: 0, keepYearly: 0, runPrune: false
+        )
+
+        // Every deletion refused, as an append-only server's 403 refuses
+        // them: restic 0.19.1 prints its JSON, which still lists both as
+        // removed, then exits 3, "failed to remove one or more snapshots".
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: snapshotsFolder.path)
+        await #expect(throws: ResticError.snapshotsNotRemoved(removed: 0, refused: 2, reason: "permission denied")) {
+            try await fixture.service.forget(fixture.context, plan: plan)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshotsFolder.path)
+        #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
+
+        // One of the two refused, as an object lock keeps a recent snapshot:
+        // the other goes, and the count says so.
+        let oldest = try #require(
+            try await fixture.service.snapshots(fixture.context, planID: plan.id).min { $0.time < $1.time }
+        )
+        lockedFile = snapshotsFolder.appendingPathComponent(oldest.id)
+        try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: snapshotsFolder.appendingPathComponent(oldest.id).path)
+        await #expect(throws: ResticError.snapshotsNotRemoved(removed: 1, refused: 1, reason: "operation not permitted")) {
+            try await fixture.service.forget(fixture.context, plan: plan)
+        }
+        #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).map(\.id).contains(oldest.id))
+        #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 2)
+    }
+
     @Test("keep-last 1 per plan keeps exactly each plan's newest snapshot ID")
     func retentionKeepsExactIDs() async throws {
         let fixture = try makeFixture()

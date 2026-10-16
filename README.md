@@ -470,6 +470,21 @@ the generator after editing it; the PNGs are checked in.
   setting. With prune off the Maintenance card says "Prune — Off — the data
   retention removes stays in the repository until a prune" rather than
   hiding its rows.
+  A repository that refuses deletions — an append-only REST server
+  (`rest-server --append-only`), a bucket under an object lock, snapshot
+  files restic may not remove — makes `forget` print its JSON, which lists
+  every snapshot retention chose as removed, then one "unable to remove
+  snapshot/…" line per snapshot it kept, and exit 3, "failed to remove one
+  or more snapshots" (restic 0.19.1, its `--prune` then skipped). Until
+  2026-10-17 that read as success: a backup's retention logged "Retention
+  removed 1 snapshot" and *Apply Retention Now…* "Removed 1 snapshot." while
+  the server kept them all. The snapshots restic names now count as
+  refused, the rest as removed: "The repository refused to delete 1
+  snapshot (403 Forbidden) — it may be append-only or locked. Thin it where
+  deletions are allowed, or turn retention off." — a warning after a backup,
+  whose snapshot stands, a failure for *Apply Retention Now…*, each with
+  *Edit Plan…* opening the plan editor on its Retention tab. The Go stack
+  trace restic appends to that error's message stays in the run's log.
 - **restic's cache** — restic keeps a cache folder per repository it has
   opened here (`~/Library/Caches/restic`), keeps it after the repository is
   removed, and never cleans up: past 30 days unused it only prints, at the

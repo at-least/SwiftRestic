@@ -307,6 +307,25 @@ struct BackupRunEngineTests {
         #expect(sink.log.contains("mark:whole"))
     }
 
+    @Test("a retention the repository refused is a warning that says so, with the count stored for its fix")
+    func refusedRetentionIsAWarning() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient()
+            .onBackup(.success(successOutcome()))
+            .onForget(.failure(ResticError.snapshotsNotRemoved(removed: 0, refused: 1, reason: "403 Forbidden")))
+        let plan = makePlan()
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+
+        let record = sink.deliveredRecords[0]
+        #expect(record.outcome == .completedWithErrors)
+        #expect(record.itemErrors == [
+            "Retention skipped: The repository refused to delete 1 snapshot (403 Forbidden) — it may be append-only or locked. "
+                + "Thin it where deletions are allowed, or turn retention off.",
+        ])
+        #expect(record.retentionRefused == 1)
+        #expect(sink.log.contains("mark:whole"))
+    }
+
     @Test("stopping a backup during its own retention step reads as cancelled, not a warning")
     func stopDuringRetentionIsACancellation() async throws {
         // The Plan menu's and the tray's "Stop Applying Retention", Pause
@@ -963,6 +982,23 @@ struct RetentionRunEngineTests {
         #expect(sink.log == ["context", "deliver:succeeded", "schedule-refresh"], "log was \(sink.log)")
         #expect(client.callLog == ["forget"])
         #expect(client.transcriptBound["forget"] == true)
+    }
+
+    @Test("a forget the repository refused fails the run in those words, never as a removal")
+    func refusedForgetFailsTheRun() async throws {
+        let refusal = ResticError.snapshotsNotRemoved(removed: 1, refused: 1, reason: "403 Forbidden")
+        let client = MockResticClient().onForget(.failure(refusal)).onExit("forget", 3)
+        let sink = RecordingSink(client: client)
+        let plan = makePlan()
+        await RetentionRunEngine.perform(plan: plan, repository: Repository(), sink: sink)
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .failed)
+        #expect(record.failureMessage == refusal.errorDescription)
+        #expect(record.detailText == nil)
+        #expect(record.retentionRefused == 1)
+        #expect(record.exitCode == 3)
+        #expect(sink.log.last == "schedule-refresh")
     }
 
     @Test("a locked repository fails the run, and a stop reads cancelled")

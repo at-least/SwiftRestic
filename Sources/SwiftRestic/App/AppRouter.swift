@@ -34,6 +34,9 @@ final class AppRouter {
         case pauseSchedule(UUID, PauseLength)
         case resumeSchedule(UUID)
         case editPlan(UUID)
+        /// A refused retention's fix (`RunFix.editPlanRetention`): the plan
+        /// editor, on its Retention tab.
+        case editPlanRetention(UUID)
         case editRepository(UUID)
         case applyRetention(UUID)
         case confirm(CommandConfirmation)

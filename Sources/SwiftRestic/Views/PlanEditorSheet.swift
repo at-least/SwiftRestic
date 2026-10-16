@@ -61,15 +61,16 @@ struct PlanEditorSheet: View {
     /// draft the user may have edited since.
     private let adoptDefaultedToManual: Bool
 
-    private enum Tab: CaseIterable { case files, schedule, retention, hooks }
+    enum Tab: CaseIterable { case files, schedule, retention, hooks }
 
-    init(plan: BackupPlan, mode: Mode? = nil, onAdopted: ((UUID) -> Void)? = nil) {
+    init(plan: BackupPlan, mode: Mode? = nil, initialTab: Tab = .files, onAdopted: ((UUID) -> Void)? = nil) {
         var plan = plan
         let mode = mode ?? (plan.name.isEmpty && plan.sources.isEmpty ? .new : .editing)
         self.mode = mode
         self.onAdopted = onAdopted
         isNew = mode != .editing
         adoptDefaultedToManual = mode == .adopt && plan.schedule.frequency == .manual
+        _tab = State(initialValue: initialTab)
         #if DEBUG
         // Debug-only: lets a capture run land on the Retention tab.
         let sheet = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"]

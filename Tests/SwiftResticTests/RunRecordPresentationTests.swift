@@ -283,6 +283,35 @@ struct RunRecordPresentationTests {
         #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
     }
 
+    @Test("a retention the repository refused offers the plan's editor on its Retention tab, a warning's as a failure's")
+    func refusedRetentionFix() {
+        let repository = UUID()
+        let plan = UUID()
+        // A backup whose retention the repository refused: the snapshot
+        // stands, so the run is a warning — and still has its fix.
+        var refused = backup {
+            $0.repositoryID = repository
+            $0.planID = plan
+            $0.outcome = .completedWithErrors
+            $0.retentionRefused = 1
+        }
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == .editPlanRetention(plan))
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, planExists: false) == nil)
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: false, repositoryBusy: false) == nil)
+        // Apply Retention Now…'s own run, failed for it.
+        refused.kind = .forget
+        refused.outcome = .failed
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == .editPlanRetention(plan))
+        // Any other warning still offers nothing.
+        refused.retentionRefused = nil
+        refused.kind = .backup
+        refused.outcome = .completedWithErrors
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == nil)
+        #expect(RunFix.editPlanRetention(plan).title == "Edit Plan…")
+        #expect(RunFix.editPlanRetention(plan).help
+            == "The repository refuses to delete snapshots — turn this plan's retention off, or thin it where deletions are allowed")
+    }
+
     @Test("a backup that filled its repository's disk says so in plain words and offers Prune Now…; a write anywhere else keeps restic's")
     func repositoryFull() {
         let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the repository until a prune frees it."

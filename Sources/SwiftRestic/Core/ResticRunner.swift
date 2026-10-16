@@ -86,7 +86,24 @@ struct ResticRunResult: Sendable {
         let lines = stderr.split(separator: "\n")
         let subprocess = lines.filter { $0.hasPrefix("subprocess ") }.suffix(3).map(String.init)
         let rclone = lines.compactMap(Self.rcloneComplaint).suffix(3)
-        return ([fatal] + subprocess + rclone).joined(separator: "\n")
+        return ([Self.withoutGoStackTrace(fatal)] + subprocess + rclone).joined(separator: "\n")
+    }
+
+    /// restic's message without the Go stack restic 0.19.1 appends to an
+    /// error that is not one of its fatal ones (`%+v` in its main.go) —
+    /// "failed to remove one or more snapshots\nmain.init\n\tgithub.com/
+    /// restic/restic/cmd/restic/cmd_forget.go:67\n…". It ends before the
+    /// first frame: a line followed by a tab-indented "….go:<line>". The
+    /// run's log keeps the whole line.
+    static func withoutGoStackTrace(_ message: String) -> String {
+        let lines = message.split(separator: "\n", omittingEmptySubsequences: false)
+        for index in lines.indices.dropLast() {
+            let next = lines[index + 1]
+            if next.hasPrefix("\t"), next.range(of: #"\.go:\d+$"#, options: .regularExpression) != nil {
+                return lines[..<index].joined(separator: "\n")
+            }
+        }
+        return message
     }
 
     /// "rclone: Failed to create file system for …" for one of rclone's
