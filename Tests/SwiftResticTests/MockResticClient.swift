@@ -18,6 +18,8 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     /// Order of arrival across every method, for sequencing assertions.
     private var log: [String] = []
+    /// What each check was asked to read of the data, in order.
+    private var checkSubsetLog: [CheckDataSubset?] = []
     /// Whether a run's transcript was bound when each transcribed method
     /// ran — the engines bind one around restic calls only.
     private var bound: [String: Bool] = [:]
@@ -149,6 +151,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     }
 
     var callLog: [String] { locked { log } }
+    var checkSubsets: [CheckDataSubset?] { locked { checkSubsetLog } }
     var transcriptBound: [String: Bool] { locked { bound } }
 
     // MARK: - ResticClient
@@ -188,9 +191,10 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     func check(
         _ context: RepositoryContext,
-        readDataSubsetPercent: Int?
+        readDataSubset: CheckDataSubset?
     ) async throws -> ResticSummary? {
         record("check")
+        locked { checkSubsetLog.append(readDataSubset) }
         transcribe("check")
         return try locked { checkScript }.get()
     }

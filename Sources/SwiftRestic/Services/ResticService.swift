@@ -294,10 +294,10 @@ struct ResticService: ResticClient {
         return try ResticMessageDecoder.jsonDecoder.decode(RepositoryStats.self, from: data)
     }
 
-    func check(_ context: RepositoryContext, readDataSubsetPercent: Int?) async throws -> ResticSummary? {
+    func check(_ context: RepositoryContext, readDataSubset: CheckDataSubset?) async throws -> ResticSummary? {
         var args = context.globalArguments + ["check", "--json"]
-        if let percent = readDataSubsetPercent, percent > 0 {
-            args += ["--read-data-subset=\(percent)%"]
+        if let readDataSubset {
+            args += ["--read-data-subset=\(readDataSubset.argument)"]
         }
         let result = try await runner.run(
             binary: binary,

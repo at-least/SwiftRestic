@@ -167,6 +167,13 @@ extension AppModel: MaintenanceRunEngine.Sink {
         upkeepAwaitingServer.insert(repositoryID)
     }
 
+    func advanceCheckDataSlice(repositoryID: UUID) {
+        guard let index = configuration.repositories.firstIndex(where: { $0.id == repositoryID }) else { return }
+        let maintenance = configuration.repositories[index].maintenance
+        guard maintenance.checkDataSlices > 0 else { return }
+        configuration.repositories[index].maintenance.nextCheckDataSlice = maintenance.nextCheckDataSlice % maintenance.checkDataSlices + 1
+    }
+
     func markDriveAway(repositoryID: UUID) {
         upkeepAwaitingDrive.insert(repositoryID)
     }

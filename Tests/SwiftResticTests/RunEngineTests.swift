@@ -712,6 +712,10 @@ struct MaintenanceRunEngineTests {
             log.append("server-away")
         }
 
+        func advanceCheckDataSlice(repositoryID: UUID) {
+            log.append("advance-slice")
+        }
+
         /// The canned answer to a server probe; every ask is logged.
         var probeAnswer: ServerProbe.Outcome? = .reachable
 
@@ -769,6 +773,41 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
         #expect(sink.deliveredRecords[0].detailText == "No errors found.")
         #expect(sink.log.contains("stamp:check"))
+    }
+
+    @Test("a scheduled check reads the rotation's next slice, says so and moves it on; one asked for by hand reads what it was asked")
+    func checkReadsTheRotation() async throws {
+        var repository = Repository()
+        repository.maintenance = .forNewRepository(kind: .local)
+        repository.maintenance.nextCheckDataSlice = 3
+        func check(override: Int?, answer: Result<ResticSummary?, Error> = .success(ResticSummary())) async -> (RecordingSink, MockResticClient) {
+            let sink = RecordingSink()
+            let client = MockResticClient().onCheck(answer)
+            await MaintenanceRunEngine.perform(
+                repository: repository, task: .check, readDataPercentOverride: override,
+                sink: StubMaintenanceServiceSink(client: client, base: sink)
+            )
+            return (sink, client)
+        }
+
+        let (scheduled, scheduledClient) = await check(override: nil)
+        #expect(scheduledClient.checkSubsets == [.slice(3, of: 12)])
+        #expect(scheduled.deliveredRecords.first?.checkRead == "data slice 3 of 12")
+        #expect(scheduled.log.contains("advance-slice"))
+
+        // By hand: what was asked, the rotation left where it was.
+        let (byHand, byHandClient) = await check(override: 5)
+        #expect(byHandClient.checkSubsets == [.percent(5)])
+        #expect(byHand.deliveredRecords.first?.checkRead == "5% of data")
+        #expect(!byHand.log.contains("advance-slice"))
+        let (structure, structureClient) = await check(override: 0)
+        #expect(structureClient.checkSubsets == [nil])
+        #expect(structure.deliveredRecords.first?.checkRead == "structure only")
+
+        // A check restic could not finish read nothing: the slice waits.
+        let (failed, _) = await check(override: nil, answer: .failure(ResticError.commandFailed(exitCode: 1, message: "Fatal: boom")))
+        #expect(failed.deliveredRecords.first?.outcome == .failed)
+        #expect(!failed.log.contains("advance-slice"))
     }
 
     @Test("a check of a server out of reach waits for it: Skipped in its words, restic not asked, nothing stamped")
@@ -1172,6 +1211,7 @@ private final class StubMaintenanceServiceSink: MaintenanceRunEngine.Sink {
     func markPasswordMissing(repositoryID: UUID) { base.markPasswordMissing(repositoryID: repositoryID) }
     func markDriveAway(repositoryID: UUID) { base.markDriveAway(repositoryID: repositoryID) }
     func markServerAway(repositoryID: UUID) { base.markServerAway(repositoryID: repositoryID) }
+    func advanceCheckDataSlice(repositoryID: UUID) { base.advanceCheckDataSlice(repositoryID: repositoryID) }
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
         base.noteAuthFailure(error, repositoryID: repositoryID)
     }

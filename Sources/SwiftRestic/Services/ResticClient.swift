@@ -38,7 +38,7 @@ protocol ResticClient: Sendable {
 
     func stats(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> RepositoryStats
 
-    func check(_ context: RepositoryContext, readDataSubsetPercent: Int?) async throws -> ResticSummary?
+    func check(_ context: RepositoryContext, readDataSubset: CheckDataSubset?) async throws -> ResticSummary?
 
     func prune(
         _ context: RepositoryContext,

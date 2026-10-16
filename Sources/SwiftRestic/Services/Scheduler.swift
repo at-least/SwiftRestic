@@ -185,7 +185,10 @@ enum Scheduler {
         guard let newest else { return Format.ago(stamp, now: now) }
         let ago = Format.ago(newest.startedAt, now: now)
         switch newest.outcome {
-        case .succeeded: return ago
+        // A check names what it read — "· data slice 3 of 12", "· structure
+        // only" — so a clean check of the structure alone does not read as
+        // the data verified.
+        case .succeeded: return newest.checkRead.map { "\(ago) · \($0)" } ?? ago
         // The record's own verdict, the Detail column's words — "2 errors —
         // `restic repair` can recover some damage" — so the page spells the
         // fact once.

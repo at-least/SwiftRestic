@@ -492,6 +492,23 @@ the generator after editing it; the PNGs are checked in.
   setting. With prune off the Maintenance card says "Prune — Off — the data
   retention removes stays in the repository until a prune" rather than
   hiding its rows.
+  A check verifies the repository's structure and reads back as much of
+  the backed-up data as its *Depth* says. Until 2026-10-17 every scheduled
+  check read the structure alone, which passes a damaged pack: with one
+  bit flipped in a pack's data, `restic check` said "no errors were found"
+  while `--read-data-subset` found it (restic 0.19.1). A repository added
+  since checks *A twelfth of the data each check* when it is on this Mac,
+  a network share or an SFTP server — `--read-data-subset=n/12`, n moving
+  on after each scheduled check that read its slice, so every pack is read
+  once every 12 checks, every 84 days at the weekly default — and the
+  structure only on a REST server, in a cloud or behind rclone, where
+  reading may be billed, until a depth is chosen in the editor; one saved
+  before keeps its depth. *Last check* names what the newest check read
+  ("3 days ago · data slice 3 of 12", "· structure only"); a check asked
+  for by hand reads what it was asked and leaves the rotation where it
+  was. Arq's *Back up and validate* reads its objects back too, and
+  re-uploads what is missing or damaged; here a check that finds damage
+  offers the console for `restic repair`.
   A repository that refuses deletions — an append-only REST server
   (`rest-server --append-only`), a bucket under an object lock, snapshot
   files restic may not remove — makes `forget` print its JSON, which lists

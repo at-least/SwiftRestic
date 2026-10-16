@@ -1010,7 +1010,7 @@ struct ResticIntegrationTests {
         _ = try await fixture.service.initializeRepository(fixture.context)
         _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
 
-        let summary = try await fixture.service.check(fixture.context, readDataSubsetPercent: 100)
+        let summary = try await fixture.service.check(fixture.context, readDataSubset: .percent(100))
         #expect(summary?.numErrors == 0)
 
         let stats = try await fixture.service.stats(fixture.context)
@@ -1072,7 +1072,7 @@ struct ResticMaintenanceTests {
         #expect(after.totalSize < before.totalSize)
 
         // The repository must still be sound afterwards.
-        let check = try await service.check(context, readDataSubsetPercent: 100)
+        let check = try await service.check(context, readDataSubset: .percent(100))
         #expect(check?.numErrors == 0)
     }
 }
@@ -1140,11 +1140,21 @@ struct ResticCheckDamageTests {
         contents[contents.count / 2] ^= 0xFF
         try contents.write(to: pack)
 
-        let summary = try await service.check(context, readDataSubsetPercent: 100)
+        let summary = try await service.check(context, readDataSubset: .percent(100))
         #expect(
             (summary?.numErrors ?? 0) > 0,
             "check exited 1 on damage but named no errors: \(String(describing: summary))"
         )
+
+        // The structure alone passes the same damage — the default a
+        // repository had before 2026-10-17 — while a rotation of slices
+        // reads the damaged pack in exactly one of them.
+        #expect((try await service.check(context, readDataSubset: nil)?.numErrors ?? 0) == 0)
+        var slicesFindingIt = 0
+        for slice in 1 ... 2 where (try await service.check(context, readDataSubset: .slice(slice, of: 2))?.numErrors ?? 0) > 0 {
+            slicesFindingIt += 1
+        }
+        #expect(slicesFindingIt == 1)
     }
 }
 

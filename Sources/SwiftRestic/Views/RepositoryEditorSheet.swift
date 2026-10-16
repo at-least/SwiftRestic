@@ -34,6 +34,9 @@ struct RepositoryEditorSheet: View {
     @State private var isConfirmingPasswordChange = false
     @State private var isConfirmingDiscard = false
     @State private var tab: Tab = .repository
+    /// Whether the user picked a check depth: until then a new
+    /// repository's depth follows its kind (`MaintenancePolicy.defaultCheckDepth`).
+    @State private var depthChosen = false
     /// Remotes reported by the user's own rclone, or `nil` when unknown or
     /// unavailable — the Remote field then stays a plain text field.
     @State private var rcloneRemotes: [RcloneRemote]?
@@ -69,9 +72,9 @@ struct RepositoryEditorSheet: View {
     init(repository: Repository, onCreated: @escaping (UUID) -> Void = { _ in }) {
         isNew = repository.name.isEmpty && repository.localPath.isEmpty
         var repository = repository
-        // A new repository prunes by default; one being edited keeps what
-        // was saved for it.
-        if isNew { repository.maintenance = .forNewRepository }
+        // A new repository prunes by default and checks at its kind's depth;
+        // one being edited keeps what was saved for it.
+        if isNew { repository.maintenance = .forNewRepository(kind: repository.kind) }
         _draft = State(initialValue: repository)
         self.onCreated = onCreated
         #if DEBUG
@@ -347,13 +350,26 @@ struct RepositoryEditorSheet: View {
                     LabeledContent("Every", value: "\(draft.maintenance.checkIntervalDays) day(s)")
                 }
                 .disabled(!draft.maintenance.checkEnabled)
-                Picker("Depth", selection: $draft.maintenance.checkReadDataPercent) {
-                    Text("Structure only (fast)").tag(0)
-                    Text("Read 5% of data").tag(5)
-                    Text("Read 25% of data").tag(25)
-                    Text("Read all data (slow)").tag(100)
+                Picker("Depth", selection: Binding(
+                    get: { draft.maintenance.checkDepth },
+                    set: { draft.maintenance.checkDepth = $0; depthChosen = true }
+                )) {
+                    Text("Structure only (fast)").tag(MaintenancePolicy.CheckDepth.structure)
+                    Text("A twelfth of the data each check").tag(MaintenancePolicy.CheckDepth.rotating)
+                    Text("Read 5% of data").tag(MaintenancePolicy.CheckDepth.percent(5))
+                    Text("Read 25% of data").tag(MaintenancePolicy.CheckDepth.percent(25))
+                    Text("Read all data (slow)").tag(MaintenancePolicy.CheckDepth.percent(100))
                 }
                 .disabled(!draft.maintenance.checkEnabled)
+                .onChange(of: draft.kind) { _, kind in
+                    if isNew, !depthChosen { draft.maintenance.checkDepth = MaintenancePolicy.defaultCheckDepth(for: kind) }
+                }
+                if draft.maintenance.checkEnabled {
+                    Text(Self.depthCaption(draft.maintenance))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 Toggle("Prune periodically", isOn: $draft.maintenance.pruneEnabled)
                 Stepper(value: $draft.maintenance.pruneIntervalDays, in: 1 ... 365) {
@@ -679,6 +695,21 @@ struct RepositoryEditorSheet: View {
         } catch {
             status = .failure(error.localizedDescription)
             return false
+        }
+    }
+
+    /// What the chosen depth verifies, and what the structure alone does not.
+    static func depthCaption(_ maintenance: MaintenancePolicy) -> String {
+        switch maintenance.checkDepth {
+        case .structure:
+            "Checks the repository's structure only — a damaged pack of backed-up data passes it."
+        case .rotating:
+            "Each check reads the next twelfth of the backed-up data, so all of it is read every "
+                + "\(MaintenancePolicy.rotatingSlices) checks — every \(maintenance.checkIntervalDays * MaintenancePolicy.rotatingSlices) days at this interval."
+        case .percent(100):
+            "Each check reads all of the backed-up data back."
+        case let .percent(percent):
+            "Each check reads \(percent)% of the backed-up data, picked at random."
         }
     }
 

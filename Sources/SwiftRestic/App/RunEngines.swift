@@ -455,6 +455,9 @@ enum MaintenanceRunEngine {
         /// The repository's server is out of reach: its upkeep, unstamped,
         /// waits for it (`AppModel.upkeepAwaitingServer`).
         func markServerAway(repositoryID: UUID)
+        /// A scheduled check read its slice of the data: the next one reads
+        /// the slice after (`MaintenancePolicy.nextCheckDataSlice`).
+        func advanceCheckDataSlice(repositoryID: UUID)
         /// One connection attempt to a network repository's server
         /// (`ServerProbe`); nil when there is nothing to ask first.
         func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
@@ -582,9 +585,20 @@ enum MaintenanceRunEngine {
 
             switch task {
             case .check:
-                let percent = readDataPercentOverride ?? repository.maintenance.checkReadDataPercent
+                // Asked for by hand, what was asked; scheduled, the
+                // repository's depth — a rotation's next slice, moved on
+                // once the check has read it.
+                let subset: CheckDataSubset? = if let readDataPercentOverride {
+                    readDataPercentOverride > 0 ? .percent(readDataPercentOverride) : nil
+                } else {
+                    repository.maintenance.scheduledDataSubset
+                }
                 let summary = try await RunTranscript.$current.withValue(transcript) {
-                    try await service.check(context, readDataSubsetPercent: percent)
+                    try await service.check(context, readDataSubset: subset)
+                }
+                record.checkRead = subset?.words ?? "structure only"
+                if readDataPercentOverride == nil, case .slice = subset {
+                    sink.advanceCheckDataSlice(repositoryID: repository.id)
                 }
                 let errors = summary?.numErrors ?? 0
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors

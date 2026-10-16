@@ -947,7 +947,7 @@ struct StubResticTests {
         // point of the run. The engine turns this into completed-with-errors;
         // here the contract under test is that the service hands the summary
         // up rather than throwing over it.
-        let summary = try await fixture.service.check(fixture.context, readDataSubsetPercent: nil)
+        let summary = try await fixture.service.check(fixture.context, readDataSubset: nil)
         #expect(summary?.numErrors == 2)
         #expect(summary?.suggestPrune == true)
     }
@@ -1010,7 +1010,7 @@ struct StubResticTests {
         // "checked, nothing found": the run record would lie about the one
         // thing a check exists to report.
         do {
-            _ = try await fixture.service.check(fixture.context, readDataSubsetPercent: nil)
+            _ = try await fixture.service.check(fixture.context, readDataSubset: nil)
             Issue.record("expected exit 1 without a summary to fail the check")
         } catch let error as ResticError {
             guard case let .commandFailed(code, _) = error, code == 1 else {

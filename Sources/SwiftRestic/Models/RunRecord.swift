@@ -167,6 +167,12 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// other run.
     var retentionRefused: Int?
 
+    /// What a check read besides the structure, in the repository page's
+    /// words — "data slice 3 of 12", "5% of data", "all data" — or
+    /// "structure only". Nil for any other run, and for a check recorded
+    /// before 2026-10-17.
+    var checkRead: String?
+
     // A standing skip (`continuingSkip(of:)`), or a standing failure for the
     // same folders gone or shares refused (`continuingStandingFailure(of:)`):
     // one record for every run it lasted. Nil for a run that stands alone.
@@ -243,6 +249,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         refusedShares = c.optional(.refusedShares)
         repositoryFull = c.optional(.repositoryFull)
         retentionRefused = c.optional(.retentionRefused)
+        checkRead = c.optional(.checkRead)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
