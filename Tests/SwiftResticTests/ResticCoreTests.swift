@@ -121,6 +121,59 @@ struct ResticErrorTests {
             == "restic reported a fatal error — \(fatal)")
     }
 
+    @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic could not get from it")
+    func rcloneWords() {
+        // restic 0.19.1 with rclone 1.75.2, as seen 2026-10-16: rclone's own
+        // verdict reaches stderr as "rclone: <date> <time> CRITICAL: …", and
+        // the exit_error JSON carries only "error talking HTTP to rclone".
+        let fatal = "Fatal: unable to open repository at rclone:sftp:backups/restic: error talking HTTP to rclone: exit status 1"
+        func result(_ rcloneLines: [String]) -> ResticRunResult {
+            let json = #"{"message_type":"exit_error","code":1,"message":"\#(fatal)"}"#
+            return ResticRunResult(
+                exitCode: 1,
+                messages: [.exitError(ResticExitError(code: 1, message: fatal))],
+                stdout: "",
+                stderr: (rcloneLines.map { "rclone: \($0)" } + [json]).joined(separator: "\n") + "\n"
+            )
+        }
+        let refused = result([
+            "2026/10/16 02:54:34 NOTICE: sftp: No host key validation is being performed. Set known_hosts_file (to \"none\" to silence this notice)",
+            "2026/10/16 02:54:34 CRITICAL: Failed to create file system for \"sftp:backups/restic\": NewFs: couldn't connect SSH: ssh: handshake failed: ssh: unexpected message type 51 (expected 60)",
+        ])
+        // Its errors only, without the date and the level; a NOTICE is no verdict.
+        #expect(refused.failureMessage == fatal
+            + "\nrclone: Failed to create file system for \"sftp:backups/restic\": NewFs: couldn't connect SSH: ssh: handshake failed: ssh: unexpected message type 51 (expected 60)")
+        #expect(result(["2026/10/16 02:55:12 ERROR : sftp: can't stat: permission denied"]).failureMessage
+            == fatal + "\nrclone: sftp: can't stat: permission denied")
+        #expect(result(["2026/10/16 02:54:34 NOTICE: sftp: No host key validation is being performed."]).failureMessage == fatal)
+
+        // rclone's verdict leads — the first sentence, which captions show
+        // — and restic's keeps the detail.
+        #expect(ResticError.commandFailed(exitCode: 1, message: refused.failureMessage).errorDescription
+            == "rclone: Failed to create file system for \"sftp:backups/restic\": NewFs: couldn't connect SSH: ssh: handshake failed: "
+            + "ssh: unexpected message type 51 (expected 60). restic reported: \(fatal)")
+        let typo = result(["2026/10/16 02:55:12 CRITICAL: Failed to create file system for \"sftpx:backups/restic\": didn't find section in config file (\"sftpx\")"])
+        let typoText = ResticError.commandFailed(exitCode: 1, message: typo.failureMessage).errorDescription ?? ""
+        #expect(Format.firstSentence(typoText)
+            == "rclone: Failed to create file system for \"sftpx:backups/restic\": didn't find section in config file (\"sftpx\")")
+
+        // A remote that never answered: restic gave up waiting on rclone
+        // after a minute, before rclone said anything.
+        let waited = "Fatal: unable to open repository at rclone:sftp:backups/restic: error talking HTTP to rclone: "
+            + "Get \"http://localhost/file-6043080322775398060\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+        #expect(ResticError.commandFailed(exitCode: 1, message: waited).errorDescription
+            == "rclone did not answer within a minute — its remote may be unreachable. restic reported: \(waited)")
+
+        // No rclone to run: the repository editor's own words.
+        let missing = "Fatal: unable to open repository at rclone:sftp:backups/restic: exec: \"rclone\": executable file not found in $PATH"
+        #expect(ResticError.commandFailed(exitCode: 1, message: missing).errorDescription == ResticError.rcloneMissing)
+        #expect(ResticError.rcloneMissing == "rclone is not installed. Install it with `brew install rclone`.")
+
+        // Any other fatal error keeps its wording.
+        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription
+            == "restic reported a fatal error — \(fatal)")
+    }
+
     @Test("the other failure shapes name what the user can do about them")
     func otherDescriptions() {
         #expect(

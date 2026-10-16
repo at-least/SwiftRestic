@@ -646,7 +646,7 @@ struct RepositoryEditorSheet: View {
         if draft.requiresRcloneBinary,
            await Task.detached { ResticBinary.locateHelper(named: "rclone") }.value == nil
         {
-            status = .failure("rclone is not installed. Install it with `brew install rclone`.")
+            status = .failure(ResticError.rcloneMissing)
             return false
         }
 

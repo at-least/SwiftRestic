@@ -76,13 +76,29 @@ struct ResticRunResult: Sendable {
     /// stderr — what a failed command's error carries. Under `--json` the
     /// fatal line can lose the cause: what ssh or rclone said reaches
     /// stderr only as plain lines restic prefixes "subprocess " ("subprocess
-    /// ssh: Host key verification failed.", restic 0.19.1), so the last of
-    /// those follow the fatal line — ssh's verdict is its last lines, after
-    /// a warning banner that runs to a dozen.
+    /// ssh: Host key verification failed.", restic 0.19.1) or "rclone: "
+    /// ("rclone: 2026/10/16 02:54:34 CRITICAL: Failed to create file system
+    /// for …", rclone 1.75.2), so the last of those follow the fatal line —
+    /// ssh's verdict is its last lines, after a warning banner that runs to
+    /// a dozen; rclone's are its errors, not its notices.
     var failureMessage: String {
         guard let fatal = exitError?.message else { return ResticRunner.tail(of: stderr, limit: 2000) }
-        let subprocess = stderr.split(separator: "\n").filter { $0.hasPrefix("subprocess ") }.suffix(3)
-        return ([fatal] + subprocess.map(String.init)).joined(separator: "\n")
+        let lines = stderr.split(separator: "\n")
+        let subprocess = lines.filter { $0.hasPrefix("subprocess ") }.suffix(3).map(String.init)
+        let rclone = lines.compactMap(Self.rcloneComplaint).suffix(3)
+        return ([fatal] + subprocess + rclone).joined(separator: "\n")
+    }
+
+    /// "rclone: Failed to create file system for …" for one of rclone's
+    /// errors as restic passes it on — "rclone: <date> <time> CRITICAL: …"
+    /// or "… ERROR : …" — without the date and the level; nil for any other
+    /// line, rclone's notices among them.
+    static func rcloneComplaint(_ line: Substring) -> String? {
+        guard line.hasPrefix("rclone: ") else { return nil }
+        for level in [" CRITICAL: ", " ERROR : "] {
+            if let range = line.range(of: level) { return "rclone: " + line[range.upperBound...] }
+        }
+        return nil
     }
 
     /// Non-fatal per-item errors, in order.

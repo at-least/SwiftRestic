@@ -538,7 +538,16 @@ the generator after editing it; the PNGs are checked in.
   it), with *Prune Now…* — checked on 2026-10-16 with a 40 MB disk image: a
   57 MB backup failed with 35 MB of it left behind, which `restic prune`
   freed. A full disk anywhere else — restic's cache on this Mac — keeps
-  restic's words. Every surface naming a run names its
+  restic's words. An rclone repository's failure leads with rclone's own
+  verdict, which restic passes on only as a stderr line — "rclone: Failed
+  to create file system for "nas:restic": didn't find section in config
+  file ("nas"). restic reported: … error talking HTTP to rclone: exit status
+  1" — where until 2026-10-16 a wrong password, a mistyped remote and a
+  server gone all read as that last line alone; a remote that never answers
+  reads "rclone did not answer within a minute — its remote may be
+  unreachable." (restic's own wait), and a missing rclone the repository
+  editor's "rclone is not installed. Install it with `brew install
+  rclone`." — checked against SFTP through rclone 1.75.2 in Docker. Every surface naming a run names its
   repository too: the log sheet's header, notifications and failure alerts,
   the menu bar, Settings. The history keeps the newest *Keep runs* records
   (Settings › General › History), trimming the oldest with their logs —

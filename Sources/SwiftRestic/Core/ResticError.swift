@@ -76,6 +76,7 @@ enum ResticError: Error, LocalizedError, Equatable {
             if let advice = Self.sshHostKeyAdvice(message) {
                 return "\(advice) restic reported: \(Format.firstSentence(message))"
             }
+            if let words = Self.rcloneWords(message) { return words }
             let known = ResticError.knownExitCodeDescription(code)
             if message.isEmpty { return known ?? "restic exited with code \(code)." }
             return known.map { "\($0) — \(message)" } ?? message
@@ -116,6 +117,30 @@ enum ResticError: Error, LocalizedError, Equatable {
         return "SSH does not know this server's key yet, and restic runs SSH without a terminal to confirm it. "
             + "Connect to it once in Terminal with ssh and accept the key, then try again."
     }
+
+    /// rclone's failures in its own verdict, or in plain words where it
+    /// said none; nil for a failure that is not rclone's.
+    static func rcloneWords(_ message: String) -> String? {
+        if message.contains(#"exec: "rclone": executable file not found"#) { return rcloneMissing }
+        // restic's line says only "error talking HTTP to rclone"; rclone's
+        // own verdict (`ResticRunResult.rcloneComplaint`) leads, as exit
+        // 12's fix does, restic's first sentence keeping the detail.
+        let restic = Format.firstSentence(message)
+        if let complaint = message.split(separator: "\n").last(where: { $0.hasPrefix("rclone: ") }) {
+            let verdict = complaint.hasSuffix(".") ? String(complaint.dropLast()) : String(complaint)
+            return "\(verdict). restic reported: \(restic)"
+        }
+        // restic waits a minute (its rclone.timeout) for rclone to answer,
+        // and a remote that never answers gives rclone nothing to say yet.
+        if message.contains("error talking HTTP to rclone"), message.contains("context deadline exceeded") {
+            return "rclone did not answer within a minute — its remote may be unreachable. restic reported: \(restic)"
+        }
+        return nil
+    }
+
+    /// What a missing rclone is called everywhere: the repository editor's
+    /// check before restic runs, and a run's failure after.
+    static let rcloneMissing = "rclone is not installed. Install it with `brew install rclone`."
 
     /// Exit 10's cause and fix, the failure's message and its button's
     /// tooltip alike.
