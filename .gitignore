@@ -4,3 +4,4 @@ SwiftRestic.xcodeproj/
 *.xcuserstate
 .DS_Store
 .zcode/
+targets/
