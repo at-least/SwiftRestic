@@ -227,6 +227,10 @@ extension AppModel {
     func resticContext(
         for repository: Repository
     ) async throws -> (service: any ResticClient, context: RepositoryContext) {
+        // A read of a repository on a saved network share that is away —
+        // the Files tab, Find Files, a restore, the console — reconnects it
+        // first, as a run does; still away, it throws in the run's words.
+        try await reconnectShare(before: repository)
         let service = try service()
         let context = try await context(for: repository)
         return (service, context)

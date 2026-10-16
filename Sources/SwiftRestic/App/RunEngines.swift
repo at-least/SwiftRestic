@@ -108,6 +108,10 @@ enum BackupRunEngine {
         /// stay after retention: it reads the listing the forget left, which
         /// the index then takes.
         func refreshSnapshots(repositoryID: UUID) async
+        /// The listing of a repository whose drive the run found away, in
+        /// the run's words — its share's reconnect already tried, and not
+        /// tried again by a refresh.
+        func noteRepositoryAway(repositoryID: UUID, reason: String)
         /// Stores and announces a finished run: its log, run history,
         /// banner, user notification, external channels.
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
@@ -211,14 +215,15 @@ enum BackupRunEngine {
             // it): skipped as for the folders' drive, never asking restic,
             // whose "does not exist" could not tell it from a moved folder.
             if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
-                record.outcome = .skipped
-                record.detailText = RunRecord.skippedReason(
+                let reason = RunRecord.skippedReason(
                     sources: [repository.resolvedLocalPath], reconnectFailures: reconnectFailures
                 )
+                record.outcome = .skipped
+                record.detailText = reason
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
-                // The listing learns it now, not at the next launch: the
-                // refresh answers from the same check, without restic.
-                await sink.refreshSnapshots(repositoryID: repository.id)
+                // The listing learns it now, not at the next launch, and
+                // why: a refresh would reconnect the share again.
+                sink.noteRepositoryAway(repositoryID: repository.id, reason: reason)
                 await finish(
                     record: &record, plan: plan, hooks: hooks, context: hookContext,
                     transcript: transcript, sink: sink

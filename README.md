@@ -317,7 +317,13 @@ the generator after editing it; the PNGs are checked in.
     refusal was Skipped too, silent until the quiet-plan alert. Two runs
     needing one share mount it once. *Check…*, *Prune Now…* and *Apply
     Retention Now…* — its preview too — reconnect the repository's share the
-    same way. Out of reach, a check or prune waits for it as for a drive that
+    same way, and so does reading the repository: its listing at launch,
+    *Refresh* and *Try Again*, the Files tab, Find Files, a restore, the
+    console. A saved share therefore mounts when SwiftRestic starts; until
+    2026-10-16 only a backup, check, prune or retention run reconnected it,
+    and the listing said "“NAS” is not connected." until one did. Still
+    away, the listing says why in the run's words — a skipped backup's own,
+    without a second try — and a read fails in them. Out of reach, a check or prune waits for it as for a drive that
     is away (see *Maintenance*); a share that refused, or one still away
     when *Apply Retention Now…* runs, fails the run in those words rather
     than restic's "repository does not exist", a refusal with *Edit

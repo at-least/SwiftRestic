@@ -335,8 +335,8 @@ struct NetworkSharePasswordRows: View {
                 .labelsHidden()
         }
         Text(isSaved
-            ? "SwiftRestic reconnects the share before a backup when it isn't mounted. Type a password to replace the saved one."
-            : "SwiftRestic reconnects the share before a backup when it isn't mounted.")
+            ? "SwiftRestic reconnects the share when it needs it and the share isn't mounted. Type a password to replace the saved one."
+            : "SwiftRestic reconnects the share when it needs it and the share isn't mounted.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)

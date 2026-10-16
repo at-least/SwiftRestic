@@ -49,6 +49,10 @@ struct BackupRunEngineTests {
             log.append("refresh")
         }
 
+        func noteRepositoryAway(repositoryID: UUID, reason: String) {
+            log.append("away:\(reason)")
+        }
+
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
             log.append("deliver:\(record.outcome)")
             deliveredRecords.append(record)
@@ -1001,6 +1005,7 @@ private final class StubServiceSink: BackupRunEngine.Sink {
     }
     func addStartPing(_ event: NotificationEvent) { base.addStartPing(event) }
     func refreshSnapshots(repositoryID: UUID) async { await base.refreshSnapshots(repositoryID: repositoryID) }
+    func noteRepositoryAway(repositoryID: UUID, reason: String) { base.noteRepositoryAway(repositoryID: repositoryID, reason: reason) }
     func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
         await base.deliver(record: record, plan: plan, transcript: transcript)
     }

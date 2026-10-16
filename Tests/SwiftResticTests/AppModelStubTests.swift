@@ -1362,6 +1362,68 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
+    /// Counts the stub mounter's calls.
+    private actor MountCount {
+        var calls = 0
+        func add() { calls += 1 }
+    }
+
+    @Test("a read of a repository on a saved share that is away reconnects it first — its listing and any other restic read — and says why when it stays away")
+    func readsReconnectTheShare() async throws {
+        let mounts = MountCount()
+        let harness = try await makeHarness(mode: "default", shareMounter: ShareMounter { _, _ in
+            await mounts.add()
+            return .failed(ETIMEDOUT)
+        })
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
+        try await model.saveNetworkShare(MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)"), password: "pw")
+        let words = "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the server could not be reached."
+
+        await model.refreshSnapshots(repositoryID: id)
+        #expect(await mounts.calls == 1)
+        #expect(model.snapshotListingOutcomes[id] == .failed(words))
+
+        let repository = try #require(model.repository(id: id))
+        await #expect {
+            _ = try await model.resticContext(for: repository)
+        } throws: { error in
+            error.localizedDescription == words
+        }
+        #expect(await mounts.calls == 2)
+
+        await model.shutdown()
+    }
+
+    @Test("a backup skipped for its repository's share out of reach tells the listing why in its own words, without reconnecting again")
+    func skippedBackupTellsTheListing() async throws {
+        let mounts = MountCount()
+        let harness = try await makeHarness(mode: "default", shareMounter: ShareMounter { _, _ in
+            await mounts.add()
+            return .failed(EHOSTDOWN)
+        })
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
+        try await model.saveNetworkShare(MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)"), password: "pw")
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.outcome == .skipped)
+        #expect(await mounts.calls == 1)
+        #expect(model.snapshotListingOutcomes[id] == .failed(try #require(record.detailText)))
+
+        await model.shutdown()
+    }
+
     @Test("cancelling a check still stamps the schedule and records the cancellation")
     func cancellingCheckStampsAndRecords() async throws {
         // hang-check hangs only the check command, so launch-time snapshot

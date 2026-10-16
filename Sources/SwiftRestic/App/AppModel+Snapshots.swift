@@ -36,16 +36,6 @@ extension AppModel {
             pendingSnapshotRefreshes.insert(repositoryID)
             return
         }
-        // The run engine's own check: a local repository whose drive is away
-        // is not asked about — restic's "does not exist" could not tell it
-        // from a moved folder — and its listing says what a skipped backup
-        // says, with no banner: the repository's row, the caveat and the
-        // Protection card already state it. Earlier rows stay, as for any
-        // failed read. A mount re-reads it (`refreshRepositories(onVolume:)`).
-        if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
-            snapshotListingOutcomes[repositoryID] = .failed(RunRecord.skippedReason(sources: [repository.resolvedLocalPath]))
-            return
-        }
         loadingSnapshots.insert(repositoryID)
         defer {
             loadingSnapshots.remove(repositoryID)
@@ -57,6 +47,35 @@ extension AppModel {
                 tasks.addBackground(Task { [weak self] in
                     await self?.refreshSnapshots(repositoryID: repositoryID)
                 })
+            }
+        }
+
+        // The run engine's own check: a local repository whose drive is away
+        // is not asked about — restic's "does not exist" could not tell it
+        // from a moved folder — and its listing says what a skipped backup
+        // says, with no banner: the repository's row, the caveat and the
+        // Protection card already state it. Its saved network share is
+        // reconnected first, as a run does — at launch too, so the share
+        // mounts when the app starts; still away, the words say why. Earlier
+        // rows stay, as for any failed read. A mount re-reads it
+        // (`refreshRepositories(onVolume:)`).
+        if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+            let stayedAway: String?
+            do {
+                try await reconnectShare(before: repository)
+                stayedAway = nil
+            } catch {
+                stayedAway = error.localizedDescription
+            }
+            // The repository can be deleted while its share reconnects.
+            guard configuration.repository(id: repositoryID) != nil else { return }
+            if let stayedAway {
+                snapshotListingOutcomes[repositoryID] = .failed(stayedAway)
+                return
+            }
+            if VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+                snapshotListingOutcomes[repositoryID] = .failed(RunRecord.skippedReason(sources: [repository.resolvedLocalPath]))
+                return
             }
         }
 

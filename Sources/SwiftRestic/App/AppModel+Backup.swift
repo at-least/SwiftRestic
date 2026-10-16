@@ -136,6 +136,10 @@ extension AppModel: BackupRunEngine.Sink {
         }
     }
 
+    func noteRepositoryAway(repositoryID: UUID, reason: String) {
+        snapshotListingOutcomes[repositoryID] = .failed(reason)
+    }
+
     func addStartPing(_ event: NotificationEvent) {
         let channels = configuration.settings.notificationChannels
         tasks.addBackground(Task.detached {
