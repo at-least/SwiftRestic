@@ -31,6 +31,22 @@ if grep -rnE "import (AppKit|SwiftUI|Cocoa)" "${portable[@]}"; then
     exit 1
 fi
 
+# The test target compiles the app's sources itself (project.yml) and has no
+# SwiftRestic module to import. Such an import resolves only against the
+# app's module an earlier build left in DerivedData — xcodebuild warns that
+# the tests are "missing a dependency on 'SwiftRestic'" and the build passes —
+# while a clean checkout fails: CI's build of 189ba91 stopped at "Unable to
+# resolve module dependency: 'SwiftRestic'" (3e844ab took the imports out).
+tests=Tests/SwiftResticTests
+if [ ! -d "$tests" ]; then
+    echo "error: test-import lint path is missing: $tests (update the path in build.sh)" >&2
+    exit 1
+fi
+if grep -rnE "^[[:space:]]*(@testable[[:space:]]+)?import[[:space:]]+SwiftRestic([[:space:]]|$)" "$tests"; then
+    echo "error: a test file imports SwiftRestic (see lines above); the test target compiles the app's sources and has no such module" >&2
+    exit 1
+fi
+
 # SwiftUI recurses without end when an accessibility client reads a Text
 # that has both .textSelection(.enabled) and .accessibilityLabel: the app
 # dies of a stack overflow the moment VoiceOver (or any AX client) reaches
