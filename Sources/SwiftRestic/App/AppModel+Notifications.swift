@@ -58,8 +58,7 @@ extension AppModel {
             latestSnapshotTimes: latest,
             thresholdDays: configuration.settings.staleAlertDays,
             running: runningPlanIDs,
-            now: now,
-            awayDrives: { StaleAlert.awayDrives(of: $0) }
+            now: now
         )
         for alert in alerts {
             guard let index = configuration.plans.firstIndex(where: { $0.id == alert.planID }) else { continue }

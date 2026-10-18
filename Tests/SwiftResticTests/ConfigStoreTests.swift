@@ -156,7 +156,6 @@ struct ConfigStoreTests {
         let date = ISO8601DateFormatter()
         #expect(original.id == UUID(uuidString: "340CA842-C653-4E2D-B61F-D7653D70A521"))
         #expect(original.lastSuccessAt == date.date(from: "2026-10-17T03:31:00Z"))
-        #expect(original.lastCompleteBackupAt == date.date(from: "2026-10-10T03:31:00Z"))
         #expect(original.staleAlertedFor == date.date(from: "2026-10-10T03:31:00Z"))
 
         // The other folders: new plans with the settings copied. Their slot
@@ -175,7 +174,6 @@ struct ConfigStoreTests {
             #expect(copy.retention == original.retention)
             #expect(copy.lastRunAt == original.lastRunAt)
             #expect(copy.lastSuccessAt == nil)
-            #expect(copy.lastCompleteBackupAt == nil)
             #expect(copy.staleAlertedFor == nil)
         }
         #expect(plans[3].id == UUID(uuidString: "5B0E7C2D-0000-4000-8000-000000000002"))

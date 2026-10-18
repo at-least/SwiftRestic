@@ -220,10 +220,6 @@ struct NetworkShareTests {
             "NAS": "the server could not be reached", "Photos": "no password is saved for it",
         ]) == "“Photos” and “NAS” are not connected. Reconnecting “Photos” failed: no password is saved for it."
             + " Reconnecting “NAS” failed: the server could not be reached.")
-        #expect(RunRecord.partlySkippedReason(sources: ["/Volumes/NAS/Projects"], reconnectFailures: [
-            "NAS": "the share did not accept the user name and password",
-        ]) == "“NAS” is not connected; the other folders were backed up."
-            + " Reconnecting “NAS” failed: the share did not accept the user name and password.")
     }
 
     @Test("saved shares round-trip in the configuration, and an older file without them reads as none")

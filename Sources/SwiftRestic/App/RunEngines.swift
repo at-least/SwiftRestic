@@ -72,11 +72,10 @@ private func reconnectAwayShares(
 /// friends remain the facade the views and the scheduler call — this type is
 /// not reachable from outside the model layer.
 /// What a finished backup left for the plan's stamps: nothing (a failure, a
-/// cancel, a skip around every folder), a snapshot of the folders not on an
-/// away drive, or a snapshot of every folder
-/// (`BackupPlan.lastSuccessAt` / `lastCompleteBackupAt`).
+/// cancel, a skip), or a snapshot of the plan's path
+/// (`BackupPlan.lastSuccessAt`).
 enum BackupStamp: Equatable, Sendable {
-    case nothing, partial, whole
+    case nothing, whole
 }
 
 @MainActor
@@ -262,18 +261,13 @@ enum BackupRunEngine {
             sink.addStartPing(startEvent)
 
             sink.setActivityPhase(.backingUp, for: plan.id)
-            var outcome = try await RunTranscript.$current.withValue(transcript) {
+            let outcome = try await RunTranscript.$current.withValue(transcript) {
                 try await service.backup(
                     context,
                     plan: plan,
                     onProgress: sink.progressReporter(planID: plan.id)
                 )
             }
-
-            // Folders on a drive that is away, when they are all restic
-            // could not read: the rest is backed up, and the run reads as
-            // skipped for the drive, as when every folder is on it.
-            let awaySources = outcome.setAsideAwaySources { VolumePresence.isMounted(volumeOf: $0) == false }
 
             record.snapshotID = outcome.summary?.snapshotID
             record.filesNew = outcome.summary?.filesNew ?? 0
@@ -296,19 +290,14 @@ enum BackupRunEngine {
             if let decodingWarning = outcome.decodingWarning {
                 record.itemErrors.append(decodingWarning)
             }
-            if awaySources.isEmpty {
-                record.outcome = record.itemErrors.isEmpty && !outcome.completedWithErrors
-                    ? .succeeded
-                    : .completedWithErrors
-            } else {
-                record.outcome = .skipped
-                record.detailText = RunRecord.partlySkippedReason(sources: awaySources, reconnectFailures: reconnectFailures)
-            }
+            record.outcome = record.itemErrors.isEmpty && !outcome.completedWithErrors
+                ? .succeeded
+                : .completedWithErrors
 
             // The snapshot exists from here on. Mark the run before doing anything
             // else, so nothing that follows can make a good backup look like a
             // failed one.
-            sink.markPlanRun(plan.id, at: startedAt, wrote: awaySources.isEmpty ? .whole : .partial)
+            sink.markPlanRun(plan.id, at: startedAt, wrote: .whole)
 
             // Retention runs only after a backup that actually produced a
             // snapshot, so a failed run can never trigger a forget against stale

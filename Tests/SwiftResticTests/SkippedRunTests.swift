@@ -166,54 +166,18 @@ struct SkippedRunTests {
         #expect(due == [back.id])
     }
 
-    @Test("sources restic skipped are set aside only when each is on a drive that is away and nothing else went unread")
-    func awaySourcesSetAside() {
-        let photos = "/Volumes/Archive SSD/Photos does not exist, skipping"
-        let music = "/Volumes/Archive SSD/Music cannot be accessed, skipping"
-        func outcome(_ lines: [String]) -> BackupOutcome {
-            var outcome = BackupOutcome(summary: nil, itemErrors: lines, exitCode: 3)
-            for line in lines {
-                outcome.itemPaths[line] = line.components(separatedBy: " does not exist").first?
-                    .components(separatedBy: " cannot be accessed").first
-            }
-            return outcome
-        }
-        let away: (String) -> Bool = { $0.hasPrefix("/Volumes/Archive SSD/") }
-
-        var both = outcome([photos, music])
-        #expect(both.setAsideAwaySources(isAway: away) == ["/Volumes/Archive SSD/Photos", "/Volumes/Archive SSD/Music"])
-        #expect(both.itemErrors.isEmpty)
-        #expect(both.itemPaths.isEmpty)
-
-        // Anything else unread keeps every line an unreadable item.
-        var mixed = outcome([photos, "/Users/me/Mail: permission denied"])
-        mixed.itemPaths["/Users/me/Mail: permission denied"] = "/Users/me/Mail"
-        #expect(mixed.setAsideAwaySources(isAway: away).isEmpty)
-        #expect(mixed.itemErrors.count == 2)
-        // A skipped folder whose drive is here is gone or blocked: unreadable.
-        var here = outcome([photos])
-        #expect(here.setAsideAwaySources(isAway: { _ in false }).isEmpty)
-        #expect(here.itemErrors == [photos])
-        // A reporting gap is not explained by a drive.
-        var gap = outcome([photos])
-        gap.decodingWarning = "1 restic message could not be read"
-        #expect(gap.setAsideAwaySources(isAway: away).isEmpty)
-        #expect(gap.itemErrors == [photos])
-    }
-
-    @Test("a backup that skipped only an away drive's folders says so, and that the rest was backed up")
+    @Test("a backup an earlier build skipped around an away drive's folders still reads so, and that the rest was backed up")
     @MainActor
     func partlySkippedWords() throws {
-        #expect(RunRecord.partlySkippedReason(sources: ["/Volumes/Archive SSD/Photos"])
-            == "“Archive SSD” is not connected; the other folders were backed up.")
-
+        // Recorded by a build whose plans held several folders; the history
+        // keeps it.
         var run = RunRecord(kind: .backup, planName: "Documents", startedAt: now)
         run.outcome = .skipped
         run.snapshotID = "6d7f8d20"
         run.filesNew = 2
         run.dataAdded = 120
         run.exitCode = 3
-        run.detailText = RunRecord.partlySkippedReason(sources: ["/Volumes/Archive SSD/Photos"])
+        run.detailText = "“Archive SSD” is not connected; the other folders were backed up."
         #expect(RunRecordPresentation.detail(for: run) == "“Archive SSD” is not connected; the other folders were backed up.")
         // Copy Details carries the reason and the numbers.
         let details = RunRecordPresentation.detailsText(
@@ -302,46 +266,37 @@ struct SkippedRunTests {
         #expect(roundTrip.skippedSince == third.skippedSince)
     }
 
-    @Test("a backup around an away drive continues the plan's last such one, and the earlier snapshots still resolve to the record")
-    func partialSkipMerges() throws {
+    @Test("a merged skip an earlier build wrote around an away drive keeps its record: its snapshots resolve to it, and a new skip does not continue it")
+    func partialSkipRecordsStand() throws {
         let planID = UUID()
-        func partial(_ minutes: Double, snapshot: String) -> RunRecord {
-            var run = RunRecord(kind: .backup, planID: planID, planName: "Archive", startedAt: now.addingTimeInterval(minutes * 60))
-            run.outcome = .skipped
-            run.snapshotID = snapshot
-            run.exitCode = ResticError.backupPartialSuccessCode
-            run.detailText = "“Archive SSD” is not connected; the other folders were backed up."
-            return run
-        }
-        let first = partial(0, snapshot: "aaaa1111")
-        let second = try #require(partial(60, snapshot: "bbbb2222").continuingSkip(of: first))
-        #expect(second.skipCount == 2)
-        #expect(second.skippedSince == first.startedAt)
-        #expect(second.snapshotID == "bbbb2222", "the newest run's own snapshot")
-        #expect(second.continuedSnapshotIDs == ["aaaa1111"])
-        let third = try #require(partial(120, snapshot: "cccc3333").continuingSkip(of: second))
-        #expect(third.continuedSnapshotIDs == ["bbbb2222", "aaaa1111"])
-        // The earlier backups keep their incomplete mark through the record.
-        let bySnapshot = RunRecord.backupRunsBySnapshot([third])
-        #expect(bySnapshot["aaaa1111"]?.id == third.id)
-        #expect(bySnapshot["aaaa1111"]?.snapshotCompleteness == .incomplete)
-        #expect(bySnapshot["cccc3333"]?.id == third.id)
-        #expect(RunRecordPresentation.detail(for: third)
-            == "“Archive SSD” is not connected; the other folders were backed up. Skipped 3 times since \(Format.timestamp(first.startedAt)).")
+        var stored = RunRecord(kind: .backup, planID: planID, planName: "Archive", startedAt: now.addingTimeInterval(7200))
+        stored.outcome = .skipped
+        stored.snapshotID = "cccc3333"
+        stored.exitCode = ResticError.backupPartialSuccessCode
+        stored.detailText = "“Archive SSD” is not connected; the other folders were backed up."
+        stored.skipCount = 3
+        stored.skippedSince = now
+        stored.continuedSnapshotIDs = ["bbbb2222", "aaaa1111"]
 
-        // A whole skip after a partial one is its own news, and so is a
-        // retention line.
-        var whole = partial(60, snapshot: "dddd4444")
-        whole.snapshotID = nil
-        #expect(whole.continuingSkip(of: first) == nil)
-        var retentionSkipped = partial(60, snapshot: "eeee5555")
-        retentionSkipped.itemErrors = [RunRecord.retentionSkippedPrefix + "repository is already locked"]
-        #expect(retentionSkipped.continuingSkip(of: first) == nil)
+        // The earlier backups keep their incomplete mark through the record.
+        let bySnapshot = RunRecord.backupRunsBySnapshot([stored])
+        #expect(bySnapshot["aaaa1111"]?.id == stored.id)
+        #expect(bySnapshot["aaaa1111"]?.snapshotCompleteness == .incomplete)
+        #expect(bySnapshot["cccc3333"]?.id == stored.id)
+        #expect(RunRecordPresentation.detail(for: stored)
+            == "“Archive SSD” is not connected; the other folders were backed up. Skipped 3 times since \(Format.timestamp(now)).")
+
+        // A skip now writes no snapshot: its own news, never folded into
+        // the record that holds one.
+        var whole = RunRecord(kind: .backup, planID: planID, planName: "Archive", startedAt: now.addingTimeInterval(10800))
+        whole.outcome = .skipped
+        whole.detailText = stored.detailText
+        #expect(whole.continuingSkip(of: stored) == nil)
 
         // Older records carry no list; a merged one round-trips.
         let older = try JSONDecoder().decode(RunRecord.self, from: Data(#"{"outcome":"skipped"}"#.utf8))
         #expect(older.continuedSnapshotIDs == nil)
-        let roundTrip = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(third))
+        let roundTrip = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(stored))
         #expect(roundTrip.continuedSnapshotIDs == ["bbbb2222", "aaaa1111"])
     }
 

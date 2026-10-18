@@ -108,8 +108,7 @@ extension AppModel {
         if stamp == .nothing, pauseStoppedPlanIDs.contains(planID) { return }
         guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
         configuration.plans[index].lastRunAt = date
-        if stamp != .nothing { configuration.plans[index].lastSuccessAt = date }
-        if stamp == .whole { configuration.plans[index].lastCompleteBackupAt = date }
+        if stamp == .whole { configuration.plans[index].lastSuccessAt = date }
     }
 }
 

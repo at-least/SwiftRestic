@@ -286,28 +286,20 @@ the generator after editing it; the PNGs are checked in.
   image attached with `-nobrowse` counted); if the drive stays away the
   quiet-plan alert speaks.
   - *Repeats merge.* A skip that continues the plan's last one — same
-    reason, both writing a snapshot of the other folders or neither, same
-    stored lines, the earlier without a hook's complaint — replaces it and
-    its log: one record reading "“Archive SSD” is not connected. Skipped 24
-    times since …", with a *Since* row in the drawer and a "Skipped since:"
-    line in Copy Details; the earlier runs' snapshots still resolve to it,
-    keeping their incomplete mark. A week away is one row, not 168, and
-    "Keep runs" stays for real runs.
-  - *Partial skips.* Some folders missing is restic's exit 3 with a snapshot
-    of the rest. When every folder skipped is on an unmounted volume and
-    everything else was read, the run is Skipped too — "“Archive SSD” is not
-    connected; the other folders were backed up." — keeping its snapshot,
-    numbers and *Last backup*: it heals an older failure, pings Healthchecks
-    alive, and the mount reruns it in full. It is not a whole backup: the
-    quiet-plan alert counts from the last backup that read every folder, so
-    it still speaks for the away drive — "“Archive SSD” has not been backed
-    up in 14 days — the last backup that included it was …; the plan's other
-    folders are still backed up." — and the repository page's Protection
-    card names the standing skip under its count with Activity's skip glyph.
-    A plan stamped only before this build counts from its last backup until
-    its next whole one. A skipped folder whose drive is here, or any other
-    unreadable item, keeps the run *Completed with errors*, every skipped
-    folder among its items.
+    reason, same stored lines, the earlier without a hook's complaint —
+    replaces it and its log: one record reading "“Archive SSD” is not
+    connected. Skipped 24 times since …", with a *Since* row in the drawer
+    and a "Skipped since:" line in Copy Details. A week away is one row, not
+    168, and "Keep runs" stays for real runs.
+  - *Partial skips, from earlier builds.* Before 2026-10-18 a plan could
+    hold several folders, and a run that left out only those on an away
+    drive was Skipped with a snapshot of the rest — "“Archive SSD” is not
+    connected; the other folders were backed up." A plan of one path is
+    backed up or skipped whole, so no run is one now; such records stay in
+    the history with their meaning — the snapshot, the healed failure, the
+    Protection card's line, merged runs' snapshots resolving to the record —
+    and a new skip never merges into one. The quiet-plan alert counts from
+    the plan's last backup.
   - *The repository's side.* A backup to a local repository under /Volumes
     whose volume is not mounted (checked after the before-backup hooks,
     which may mount it) is Skipped with "“Travel SSD” is not connected."

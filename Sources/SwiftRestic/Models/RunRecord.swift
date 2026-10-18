@@ -182,10 +182,11 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// When the first of them started.
     var skippedSince: Date?
     /// The snapshots the runs this record counts wrote before its own,
-    /// newest first — a backup around an away drive writes one per run
-    /// (`partlySkippedReason`). Each resolves to this record
-    /// (`backupRunsBySnapshot`), so an earlier backup keeps its incomplete
-    /// mark and its drawer after the merge. Nil for a whole skip's record.
+    /// newest first — a backup around an away drive wrote one per run, in
+    /// builds before 2026-10-18 whose plans held several folders. Each
+    /// resolves to this record (`backupRunsBySnapshot`), so an earlier
+    /// backup keeps its incomplete mark and its drawer after the merge. Nil
+    /// for a whole skip's record; no run writes it now.
     var continuedSnapshotIDs: [String]?
 
     /// A failed or completed-with-errors backup's stretch: how many of its
@@ -436,19 +437,14 @@ extension RunRecord {
         return merged
     }
 
-    /// Why a backup that wrote a snapshot was still skipped: restic left
-    /// out only folders on drives that are away (`setAsideAwaySources`,
-    /// which hands over paths under /Volumes alone).
     /// A backup that went around an away drive's folders and wrote a
     /// snapshot of the rest: the rest is backed up, the drive's folders are
     /// not, which the Protection card names and a later whole backup heals.
+    /// Only builds before 2026-10-18, whose plans held several folders,
+    /// recorded one — a plan of one path is backed up or skipped whole —
+    /// and the history keeps them.
     var isPartialSkip: Bool {
         kind == .backup && outcome == .skipped && snapshotID != nil
-    }
-
-    static func partlySkippedReason(sources: [String], reconnectFailures: [String: String] = [:]) -> String {
-        guard let drives = notConnected(sources) else { preconditionFailure("a skipped source not on a volume: \(sources)") }
-        return drives + "; the other folders were backed up." + reconnectClauses(reconnectFailures, sources: sources)
     }
 
     /// "“Archive SSD” is not connected", naming each drive once, or nil
@@ -465,14 +461,15 @@ extension RunRecord {
     }
 
     /// This skipped backup as the continuation of `previous` — the plan's
-    /// newest backup before it, skipped for the same reason, both runs
-    /// writing a snapshot of the other folders or neither, the same stored
-    /// lines (a retention skip is news) and `previous` carrying no hook's
-    /// complaint: one record, this run's, counting `previous`'s runs and
-    /// keeping when the skips began — and the snapshots they wrote
-    /// (`continuedSnapshotIDs`). An hourly plan whose drive is away a week
-    /// is one row, not 168, and leaves the history cap to real runs. Nil
-    /// when it does not continue it.
+    /// newest backup before it, skipped for the same reason, the same
+    /// stored lines (a retention skip is news) and `previous` carrying no
+    /// hook's complaint: one record, this run's, counting `previous`'s runs
+    /// and keeping when the skips began. An hourly plan whose drive is away
+    /// a week is one row, not 168, and leaves the history cap to real runs.
+    /// A skip writes no snapshot; one an earlier build stored with a
+    /// snapshot of the other folders (`isPartialSkip`) stays its own
+    /// record, keeping that snapshot's run. Nil when it does not continue
+    /// it.
     func continuingSkip(of previous: RunRecord) -> RunRecord? {
         guard kind == .backup, previous.kind == .backup,
               let planID, previous.planID == planID, previous.repositoryID == repositoryID,
@@ -483,9 +480,6 @@ extension RunRecord {
         var merged = self
         merged.skipCount = (previous.skipCount ?? 1) + 1
         merged.skippedSince = previous.skippedSince ?? previous.startedAt
-        if let earlier = previous.snapshotID {
-            merged.continuedSnapshotIDs = [earlier] + (previous.continuedSnapshotIDs ?? [])
-        }
         return merged
     }
 

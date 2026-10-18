@@ -1247,8 +1247,8 @@ struct UpsertStampTests {
         #expect(model.configuration.plans[0].schedule.intervalHours == 7)
     }
 
-    @Test("a run stamps the last whole backup only when it read every folder")
-    func markPlanRunStampsWholeBackups() {
+    @Test("a run that wrote a snapshot stamps the last backup; one that wrote nothing stamps only its slot")
+    func markPlanRunStampsBackups() {
         let model = makeModel()
         var plan = BackupPlan()
         plan.name = "Archive"
@@ -1256,19 +1256,14 @@ struct UpsertStampTests {
         plan.path = "/Volumes/Archive SSD/Photos"
         model.upsert(plan: plan)
 
-        // The drive away: the rest backed up, the whole-backup stamp untouched.
-        let around = Date.now.addingTimeInterval(-7200)
-        model.markPlanRun(plan.id, at: around, wrote: .partial)
-        #expect(model.configuration.plans[0].lastSuccessAt == around)
-        #expect(model.configuration.plans[0].lastCompleteBackupAt == nil)
-        // Every folder read: both stamps.
         let whole = Date.now.addingTimeInterval(-3600)
         model.markPlanRun(plan.id, at: whole, wrote: .whole)
-        #expect(model.configuration.plans[0].lastCompleteBackupAt == whole)
-        // A failure stamps neither.
-        model.markPlanRun(plan.id, at: .now, wrote: .nothing)
+        #expect(model.configuration.plans[0].lastRunAt == whole)
         #expect(model.configuration.plans[0].lastSuccessAt == whole)
-        #expect(model.configuration.plans[0].lastCompleteBackupAt == whole)
+        let failed = Date.now
+        model.markPlanRun(plan.id, at: failed, wrote: .nothing)
+        #expect(model.configuration.plans[0].lastRunAt == failed)
+        #expect(model.configuration.plans[0].lastSuccessAt == whole)
     }
 
     @Test("a stale plan draft keeps the plan's timed pause")

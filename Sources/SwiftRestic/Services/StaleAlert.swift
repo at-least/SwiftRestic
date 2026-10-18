@@ -4,20 +4,11 @@ import Foundation
 /// window, not yet named for this stretch.
 struct StalePlanAlert: Equatable, Sendable {
     let planID: UUID
-    /// The last backup the stretch counts from: the plan's last whole one
-    /// (`BackupPlan.lastCompleteBackupAt`), else `PlanStatus.lastBackupAt`.
+    /// The last backup the stretch counts from (`PlanStatus.lastBackupAt`).
     /// Stored on the plan once named (`BackupPlan.staleAlertedFor`), so the
-    /// plan's next whole backup — a newer moment — re-arms the alert.
+    /// plan's next backup — a newer moment — re-arms the alert.
     let lastBackupAt: Date
     let days: Int
-    /// Whether the plan went on backing up its other folders through the
-    /// stretch — its `lastSuccessAt` is newer than the moment counted from
-    /// — so the alert speaks for a drive, not the plan.
-    var isPartial = false
-    /// The drives of the plan's folders that are away now, named as the
-    /// skip names them, for a partial stretch; empty when none is away now
-    /// or the stretch had no backup at all.
-    var awayDrives: [String] = []
 }
 
 /// The quiet-plan alert. Every other problem surface is driven by a run
@@ -50,69 +41,32 @@ enum StaleAlert {
     /// choice. `latestSnapshotTimes`: each plan's newest snapshot, for a
     /// plan whose history has no run of its own (the one derivation of a
     /// plan's last backup, `PlanStatus.lastBackupAt`); a plan with neither
-    /// has no moment to count from and is not named. The stretch counts
-    /// from the plan's last whole backup where it has stamped one: a run
-    /// that backed up the other folders around an away drive advanced
-    /// `lastSuccessAt` and not that, and the alert then speaks for the
-    /// drive — `awayDrives` names the plan's drives away now.
+    /// has no moment to count from and is not named.
     static func due(
         plans: [BackupPlan],
         latestSnapshotTimes: [UUID: Date],
         thresholdDays: Int,
         running: Set<UUID>,
-        now: Date,
-        awayDrives: (BackupPlan) -> [String] = { _ in [] }
+        now: Date
     ) -> [StalePlanAlert] {
         guard thresholdDays > 0 else { return [] }
         return plans.compactMap { plan in
             guard plan.isScheduleActive(at: now), plan.schedule.frequency != .manual,
                   plan.isConfigurationComplete, !running.contains(plan.id),
-                  let any = plan.lastSuccessAt ?? latestSnapshotTimes[plan.id]
+                  let last = plan.lastSuccessAt ?? latestSnapshotTimes[plan.id],
+                  plan.staleAlertedFor != last
             else { return nil }
-            let last = plan.lastCompleteBackupAt ?? any
-            guard plan.staleAlertedFor != last else { return nil }
             let quiet = now.timeIntervalSince(last)
             guard quiet > window(thresholdDays: thresholdDays, schedule: plan.schedule) else { return nil }
-            let partial = any > last
-            return StalePlanAlert(
-                planID: plan.id, lastBackupAt: last, days: Int(quiet / 86400),
-                isPartial: partial, awayDrives: partial ? awayDrives(plan) : []
-            )
+            return StalePlanAlert(planID: plan.id, lastBackupAt: last, days: Int(quiet / 86400))
         }
-    }
-
-    /// The drives of a plan's folders that are not mounted now, each once,
-    /// as the skip names them (`VolumePresence.volumeName`); a folder on
-    /// the startup disk is on no drive that can be away.
-    static func awayDrives(
-        of plan: BackupPlan,
-        isMounted: (String) -> Bool? = VolumePresence.isMounted(volumeOf:)
-    ) -> [String] {
-        var names: [String] = []
-        for source in [plan.path] {
-            let path = (source as NSString).expandingTildeInPath
-            guard isMounted(path) == false, let name = VolumePresence.volumeName(of: path), !names.contains(name)
-            else { continue }
-            names.append(name)
-        }
-        return names
     }
 
     /// The notification: the plan as every notification names it, then how
-    /// long and since when. A partial stretch speaks for the drive in the
-    /// skip's own words, and says the rest is fine — the plan is not quiet,
-    /// one drive is; with no drive known to be away now, for the folders.
+    /// long and since when.
     static func notification(planTitle: String, alert: StalePlanAlert) -> (title: String, body: String) {
         let days = Format.plural(alert.days, "day")
         let last = Format.timestamp(alert.lastBackupAt)
-        guard alert.isPartial else {
-            return (planTitle, "No successful backup in \(days) — the last one was \(last).")
-        }
-        guard !alert.awayDrives.isEmpty else {
-            return (planTitle, "Some folders have not been backed up in \(days) — the last backup that included every folder was \(last); the others are still backed up.")
-        }
-        let names = alert.awayDrives.map { "“\($0)”" }
-        let (have, them) = names.count == 1 ? ("has", "it") : ("have", "them")
-        return (planTitle, "\(Format.list(names)) \(have) not been backed up in \(days) — the last backup that included \(them) was \(last); the plan's other folders are still backed up.")
+        return (planTitle, "No successful backup in \(days) — the last one was \(last).")
     }
 }

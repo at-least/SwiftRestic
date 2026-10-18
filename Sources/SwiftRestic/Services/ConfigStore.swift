@@ -126,7 +126,6 @@ private struct StoredPlan: Decodable {
             copy.id = UUID()
             copy.path = source
             copy.lastSuccessAt = nil
-            copy.lastCompleteBackupAt = nil
             copy.staleAlertedFor = nil
             return copy
         }
