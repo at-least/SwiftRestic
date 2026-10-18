@@ -70,6 +70,10 @@ struct RestoreDestinationSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let request: RestoreDestinationRequest
+    /// Set when the form stands in another sheet's place — Compare's,
+    /// which shows it as its next step rather than stack a second sheet:
+    /// Cancel and Restore call it instead of dismissing.
+    var onClose: (() -> Void)?
 
     @State private var kind: RestoreDestinationKind
     @State private var otherFolder: URL?
@@ -91,8 +95,9 @@ struct RestoreDestinationSheet: View {
     static let kindKey = "RestoreDestinationKind"
     static let folderKey = "RestoreOtherFolderPath"
 
-    init(request: RestoreDestinationRequest) {
+    init(request: RestoreDestinationRequest, onClose: (() -> Void)? = nil) {
         self.request = request
+        self.onClose = onClose
         let defaults = UserDefaults.standard
         let remembered = defaults.string(forKey: Self.kindKey).flatMap(RestoreDestinationKind.init(rawValue:))
         _kind = State(initialValue: remembered == .otherFolder ? .otherFolder : .desktop)
@@ -163,7 +168,7 @@ struct RestoreDestinationSheet: View {
                 Spacer()
                 Button("Cancel") {
                     confirmation?.cancel()
-                    dismiss()
+                    close()
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("Restore") { restore() }
@@ -437,8 +442,12 @@ struct RestoreDestinationSheet: View {
 
     private func commit(_ directories: [URL], _ policy: RestoreOverwritePolicy, kind: RestoreDestinationKind) {
         remember(kind, folder: directories[0])
-        dismiss()
+        close()
         request.perform(directories, policy)
+    }
+
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
     }
 
     /// Desktop or Other folder, written only when it differs from what the

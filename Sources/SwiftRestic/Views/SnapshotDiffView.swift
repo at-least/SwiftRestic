@@ -46,7 +46,8 @@ struct SnapshotDiffView: View {
     /// when its filter and needle read the same as the last one's.
     @State private var diffLoad = 0
     @State private var selection = Set<ResticDiffChange.ID>()
-    /// The restore waiting in the destination sheet.
+    /// The restore waiting for its destination — asked in this sheet's
+    /// place, not in a second sheet on top of it.
     @State private var destinationRequest: RestoreDestinationRequest?
 
     private var newer: Snapshot { target.snapshot }
@@ -73,12 +74,25 @@ struct SnapshotDiffView: View {
         // at every access — this sheet re-renders on every keystroke in its
         // filter field.
         let candidates = self.candidates
-        return VStack(spacing: 0) {
-            header(candidates)
-            Divider()
-            content(candidates, rows: filteredRows)
-            Divider()
-            footer(filteredRows)
+        return Group {
+            if let request = destinationRequest {
+                // The restore's destination is the sheet's next step, in its
+                // place: the HIG's Sheets — "Display only one sheet at a
+                // time… close the first sheet before displaying the new
+                // one" — where it had stacked a second sheet on this one.
+                // Cancel brings the comparison back as it was: its state is
+                // this view's, kept across the step.
+                RestoreDestinationSheet(request: request, onClose: { destinationRequest = nil })
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 0) {
+                    header(candidates)
+                    Divider()
+                    content(candidates, rows: filteredRows)
+                    Divider()
+                    footer(filteredRows)
+                }
+            }
         }
         .frame(minWidth: 760, minHeight: 500)
         .onAppear {
@@ -100,10 +114,6 @@ struct SnapshotDiffView: View {
         }
         .task(id: RowFilterKey(load: diffLoad, category: filter, needle: appliedSearchText)) {
             await computeRows()
-        }
-        .sheet(item: $destinationRequest) { request in
-            RestoreDestinationSheet(request: request)
-                .environment(model)
         }
     }
 

@@ -532,10 +532,13 @@ the generator after editing it; the PNGs are checked in.
   the restore lists the node with restic first, since a diff names only a
   path and a kind. Several rows restore together as in Find Files:
   *Restore Selected…* (Return) or the right-click *Restore N Items…*, one
-  sheet and one run ("from 2 backups, each item from the one it was found
-  in"), a row inside a selected folder of the same backup coming with the
-  folder (the sheet says so), while a file the newer backup removed
-  restores on its own. Choosing another backup or including metadata
+  destination and one run ("from 2 backups, each item from the one it was
+  found in"), a row inside a selected folder of the same backup coming with
+  the folder (the destination says so), while a file the newer backup
+  removed restores on its own. The destination takes the comparison's place
+  inside its sheet, and *Cancel* brings the comparison back as it was left;
+  until 2026-10-18 it was a second sheet stacked on the first, which the HIG
+  rules out ("Display only one sheet at a time from the main interface"). Choosing another backup or including metadata
   changes clears the selection, since the same path may now be held by
   another backup.
 - **Start at login** — the scheduler only runs while the app runs, so SwiftRestic
