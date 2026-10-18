@@ -590,7 +590,11 @@ the generator after editing it; the PNGs are checked in.
 - **Hooks** — shell commands before a backup and after success, warnings or
   failure, and per repository before and after a check or prune. Context arrives
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
-  run off.
+  run off. An editor's Hooks tab, like Settings › Alerts for the channels below,
+  lists them in a frame with + and − attached beneath it; empty, the frame
+  says "No Hooks" and what + adds, and while there are some, one is always
+  open in the form under the list (the first on arrival, a neighbour after a
+  removal, which asks first).
 - **Alerts** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
   Locally, a notification when a backup fails or finishes with warnings
   (*Notify when a backup fails or finishes with warnings*, the channels' own

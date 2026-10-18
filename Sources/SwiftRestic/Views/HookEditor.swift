@@ -19,12 +19,20 @@ struct HookEditor: View {
         // view's divider has no visible affordance in a sheet, and its
         // initial split gives the list — usually one or two rows — most of
         // the height, pushing the Command field the user has to fill out of
-        // view.
+        // view. With no hook yet, the list is all there is: its frame fills
+        // the tab and says what + adds.
         VStack(spacing: 0) {
             list
-                .frame(height: 180)
-            Divider()
-            detail
+                .frame(maxHeight: hooks.isEmpty ? .infinity : 180)
+            if !hooks.isEmpty {
+                detail
+            }
+        }
+        // A hook is always open below the list while there is one, so the
+        // form never stands empty: the first on arrival, a neighbour after
+        // a removal.
+        .onAppear {
+            if selection == nil { selection = hooks.first?.id }
         }
         .confirmationDialog(
             "Remove this hook?",
@@ -32,8 +40,9 @@ struct HookEditor: View {
             titleVisibility: .visible
         ) {
             Button("Remove", role: .destructive) {
-                hooks.removeAll { $0.id == selection }
-                selection = nil
+                guard let index = hooks.firstIndex(where: { $0.id == selection }) else { return }
+                hooks.remove(at: index)
+                selection = hooks.indices.contains(index) ? hooks[index].id : hooks.last?.id
             }
         } message: {
             Text("The script and its settings are removed from this editor. Nothing is deleted on disk.")
@@ -42,57 +51,67 @@ struct HookEditor: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 6) {
-            List(selection: $selection) {
-                ForEach($hooks) { $hook in
-                    HStack(spacing: 8) {
-                        Toggle("", isOn: $hook.isEnabled)
-                            .labelsHidden()
-                            .controlSize(.mini)
-                            .accessibilityLabel("Enable \(hook.displayName)")
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(hook.displayName)
-                            Text(hook.event.displayName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+            EditableListFrame(
+                isEmpty: hooks.isEmpty,
+                emptyTitle: "No Hooks",
+                emptyHint: isForMaintenance
+                    ? "Click + to run a script before or after this repository's checks and prunes."
+                    : "Click + to run a script before or after this plan's backups.",
+                addTitle: "Add Hook",
+                removeTitle: "Remove Hook",
+                canRemove: selection != nil,
+                onAdd: addHook,
+                onRemove: { isConfirmingRemove = true }
+            ) {
+                List(selection: $selection) {
+                    ForEach($hooks) { $hook in
+                        HStack(spacing: 8) {
+                            Toggle("", isOn: $hook.isEnabled)
+                                .labelsHidden()
+                                .controlSize(.mini)
+                                .accessibilityLabel("Enable \(hook.displayName)")
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(hook.displayName)
+                                Text(hook.event.displayName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if hook.abortsRunOnFailure {
+                                Image(systemName: "exclamationmark.octagon")
+                                    .foregroundStyle(Theme.warning)
+                                    .help(isForMaintenance ? "Cancels the check or prune if it fails" : "Cancels the backup if it fails")
+                            }
                         }
-                        Spacer()
-                        if hook.abortsRunOnFailure {
-                            Image(systemName: "exclamationmark.octagon")
-                                .foregroundStyle(Theme.warning)
-                                .help(isForMaintenance ? "Cancels the check or prune if it fails" : "Cancels the backup if it fails")
-                        }
+                        .tag(hook.id)
                     }
-                    .tag(hook.id)
+                    .onMove { indices, destination in
+                        hooks.move(fromOffsets: indices, toOffset: destination)
+                    }
                 }
-                .onMove { indices, destination in
-                    hooks.move(fromOffsets: indices, toOffset: destination)
-                }
+                .listStyle(.inset)
+                // The frame is the list's edge; the stock white list
+                // background inside it read as a broken empty pane.
+                .scrollContentBackground(.hidden)
             }
-            .listStyle(.inset)
-            // The stock white list background reads as a broken empty pane in
-            // the sheet; rows straight on the sheet background match the
-            // grouped forms in these editors.
-            .scrollContentBackground(.hidden)
-
-            HStack {
-                Button("Add Hook") {
-                    var hook = BackupHook()
-                    hook.name = "New hook"
-                    // The most likely reason to script a repository is to hear
-                    // about a failed check; a plan's is to act on a good backup.
-                    hook.event = isForMaintenance ? .afterMaintenanceFailure : .afterSuccess
-                    hooks.append(hook)
-                    selection = hook.id
-                }
-                Button("Remove") { isConfirmingRemove = true }
-                    .disabled(selection == nil)
-                Spacer()
+            if hooks.count > 1 {
                 Text("Hooks run in the order listed; drag to reorder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.bottom, 6)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+    }
+
+    private func addHook() {
+        var hook = BackupHook()
+        hook.name = "New hook"
+        // The most likely reason to script a repository is to hear about a
+        // failed check; a plan's is to act on a good backup.
+        hook.event = isForMaintenance ? .afterMaintenanceFailure : .afterSuccess
+        hooks.append(hook)
+        selection = hook.id
     }
 
     @ViewBuilder
@@ -154,14 +173,12 @@ struct HookEditor: View {
             }
             .formStyle(.grouped)
         } else {
+            // Only while a click in the list's empty space has cleared the
+            // selection.
             ContentUnavailableView(
-                "No hook selected",
+                "No Hook Selected",
                 systemImage: "terminal",
-                description: Text(
-                    isForMaintenance
-                        ? "Add a hook to run a script before or after this repository's checks and prunes."
-                        : "Add a hook to run a script before or after this plan's backups."
-                )
+                description: Text("Select a hook in the list to change it.")
             )
         }
     }

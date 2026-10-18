@@ -844,6 +844,77 @@ struct PathListEditor: View {
     }
 }
 
+// MARK: - Editable list
+
+/// A list people add rows to and take rows from, the Mac's way — the
+/// Hooks tab's and the Alerts tab's: framed, with + and − attached beneath
+/// it, symbols and not words (the HIG's square buttons, "adding or removing
+/// rows in a table"). Empty, the frame says so and what + does, rather than
+/// standing as a blank box.
+struct EditableListFrame<Content: View>: View {
+    let isEmpty: Bool
+    let emptyTitle: String
+    /// The next step, naming the + it starts from.
+    let emptyHint: String
+    /// The buttons' names, for their tooltips and VoiceOver: "Add Hook".
+    let addTitle: String
+    let removeTitle: String
+    let canRemove: Bool
+    let onAdd: () -> Void
+    let onRemove: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Group {
+                if isEmpty {
+                    VStack(spacing: 4) {
+                        Text(emptyTitle)
+                            .font(.headline)
+                        Text(emptyHint)
+                            .font(.callout)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    content()
+                }
+            }
+            Divider()
+            HStack(spacing: 0) {
+                squareButton("plus", title: addTitle, action: onAdd)
+                Divider()
+                    .frame(height: 14)
+                squareButton("minus", title: removeTitle, action: onRemove)
+                    .disabled(!canRemove)
+                Spacer()
+            }
+            .padding(.horizontal, 2)
+            .frame(height: 24)
+        }
+        // The exclude list's hairline frame, so the editors' lists match.
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+        )
+    }
+
+    private func squareButton(_ symbol: String, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}
+
 // MARK: - File picker
 
 /// Thin wrapper over `NSOpenPanel`, which SwiftUI's `fileImporter` cannot fully

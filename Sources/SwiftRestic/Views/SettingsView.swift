@@ -357,9 +357,26 @@ struct NotificationChannelsTab: View {
         // panes' ideal sizes, so the empty state's 400 pt left bars beside
         // it in the 560 pt window, and a channel's Form — a scroll view,
         // ideal height next to nothing — got 16 pt under the list. The list
-        // keeps a few rows; the channel's settings get the rest.
+        // keeps a few rows; the channel's settings get the rest. With no
+        // channel yet, the list is all there is: its frame fills the tab
+        // and says what + adds.
+        let channels = model.configuration.settings.notificationChannels
         VStack(spacing: 0) {
-            VStack(spacing: 6) {
+            EditableListFrame(
+                isEmpty: channels.isEmpty,
+                emptyTitle: "No Alerts",
+                emptyHint: "Click + to add a webhook, a Slack or Discord channel, or a Healthchecks.io ping URL.",
+                addTitle: "Add Alert",
+                removeTitle: "Remove Alert",
+                canRemove: selection != nil,
+                onAdd: {
+                    var channel = NotificationChannel()
+                    channel.name = "New alert"
+                    model.configuration.settings.notificationChannels.append(channel)
+                    selection = channel.id
+                },
+                onRemove: { isConfirmingRemove = true }
+            ) {
                 List(selection: $selection) {
                     ForEach($model.configuration.settings.notificationChannels) { $channel in
                         HStack(spacing: 8) {
@@ -383,26 +400,23 @@ struct NotificationChannelsTab: View {
                         .tag(channel.id)
                     }
                 }
-                .frame(height: 120)
-
-                HStack {
-                    Button("Add") {
-                        var channel = NotificationChannel()
-                        channel.name = "New alert"
-                        model.configuration.settings.notificationChannels.append(channel)
-                        selection = channel.id
-                    }
-                    Button("Remove") { isConfirmingRemove = true }
-                        .disabled(selection == nil)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 6)
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
+            .frame(maxHeight: channels.isEmpty ? .infinity : 130)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
 
-            Divider()
-            detail(model: model)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if !channels.isEmpty {
+                detail(model: model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        // A channel is always open below the list while there is one, so
+        // its settings never stand empty: the first on arrival, a neighbour
+        // after a removal.
+        .onAppear {
+            if selection == nil { selection = channels.first?.id }
         }
         .confirmationDialog(
             "Remove this alert channel?",
@@ -410,8 +424,11 @@ struct NotificationChannelsTab: View {
             titleVisibility: .visible
         ) {
             Button("Remove", role: .destructive) {
-                model.configuration.settings.notificationChannels.removeAll { $0.id == selection }
-                selection = nil
+                let channels = model.configuration.settings.notificationChannels
+                guard let index = channels.firstIndex(where: { $0.id == selection }) else { return }
+                model.configuration.settings.notificationChannels.remove(at: index)
+                let rest = model.configuration.settings.notificationChannels
+                selection = rest.indices.contains(index) ? rest[index].id : rest.last?.id
                 testOutcome = nil
             }
         } message: {
@@ -528,10 +545,12 @@ struct NotificationChannelsTab: View {
             }
             .formStyle(.grouped)
         } else {
+            // Only while a click in the list's empty space has cleared the
+            // selection.
             ContentUnavailableView(
-                "No alert selected",
+                "No Alert Selected",
                 systemImage: "bell",
-                description: Text("Add a webhook, a Slack or Discord channel, or a Healthchecks.io ping URL.")
+                description: Text("Select an alert in the list to change it.")
             )
         }
     }
