@@ -43,8 +43,8 @@ the generator after editing it; the PNGs are checked in.
   for backups no plan made, by restic's own `host,paths` grouping. Each
   group's caption says which kind — *not set up here*, *now backs up to
   “Offsite”*, *outside SwiftRestic* — and names the Mac its newest backup came
-  from when that isn't this one. A plan's row gives its last backup (*“Last
-  backup 1 hour ago”*); its page, the tray and Settings say when it runs next,
+  from when that isn't this one. A plan's row wears a folder, as in Arq's
+  tree, and gives its last backup (*“Last backup 1 hour ago”*); its page, the tray and Settings say when it runs next,
   and the tray's menu carries each repository's Protection line (*“Home NAS —
   3 of 3 plans protected · Last backup 3 hours ago”*), so the window need not
   open. A repository wears a warning, its tooltip naming the plan, while a

@@ -336,18 +336,22 @@ struct SidebarView: View {
     }
 
     /// The way to a repository's first plan, where its plans would be. An
-    /// action, not a place: no tag, no chevron — its plus fills the fold
-    /// column, so its title starts where plan names do. It leaves once a
-    /// plan exists; the footer's + and the row's menu keep offering the
-    /// next one.
+    /// action, not a place: no tag, no chevron — its fold column stays empty
+    /// and its plus fills the icon column, so its title starts where plan
+    /// names do. It leaves once a plan exists; the footer's + and the row's
+    /// menu keep offering the next one.
     private func addPlanRow(_ repository: Repository) -> some View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
-                Image(systemName: "plus.circle")
-                    .foregroundStyle(Theme.tint)
-                    .frame(width: Indent.fold)
-                    .accessibilityHidden(true)
-                Text("New Backup Plan…")
+                Color.clear
+                    .frame(width: Indent.fold, height: 1)
+                Label {
+                    Text("New Backup Plan…")
+                } icon: {
+                    Image(systemName: "plus.circle")
+                        .foregroundStyle(Theme.tint)
+                        .accessibilityHidden(true)
+                }
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
@@ -363,13 +367,23 @@ struct SidebarView: View {
 
     /// A plan: the row opens its page, and the chevron ahead of it folds
     /// the plan's backups open beneath it — Arq's RESTORE tree, where a
-    /// backup plan's records sit under the plan. The row pads by `child`
-    /// and the chevron fills the shared fold column, so the plan's title
-    /// starts where every repository child's does.
+    /// backup plan's records sit under the plan. A plan is its folder and
+    /// wears one, as there; a file wears it too, decoration whose SF label
+    /// ("Move") would only mislead. The row pads by `child`, the chevron
+    /// fills the shared fold column and the folder the icon column, so the
+    /// plan's title starts where every repository child's does.
     private func planRow(_ plan: BackupPlan, latestSnapshot: Snapshot?) -> some View {
         HStack(spacing: 4) {
             planFold(plan)
-            PlanSidebarRow(plan: plan, latestSnapshot: latestSnapshot)
+            // A Label, so the folder takes the sidebar's icon tint as the
+            // repository's icon does: grey in an inactive window, white
+            // under the selection, where an explicit accent would vanish.
+            Label {
+                PlanSidebarRow(plan: plan, latestSnapshot: latestSnapshot)
+            } icon: {
+                Image(systemName: "folder.fill")
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.leading, Indent.child)
         .tag(SidebarItem.plan(plan.id))
@@ -528,8 +542,9 @@ struct SidebarView: View {
     /// The backups in the repository none of its plans made — another
     /// Mac's, the console's, a deleted plan's, or a plan's that now backs up
     /// elsewhere. Only there while it holds some, so it never reads as
-    /// empty; it carries no tag, so a click only folds it. Its chevron sits
-    /// where a plan's does, so its title starts where plan names do.
+    /// empty; it carries no tag, so a click only folds it. Its chevron and
+    /// box sit where a plan's chevron and folder do, so its title starts
+    /// where plan names do.
     private func otherBackupsRow(_ repository: Repository, shelves: BackupShelves) -> some View {
         let isExpanded = folds.otherBackups.contains(repository.id)
         let title = SidebarTree.otherBackupsTitle(repositoryHasPlans: !shelves.plans.isEmpty)
@@ -540,13 +555,18 @@ struct SidebarView: View {
             HStack(spacing: 4) {
                 FoldChevron(isExpanded: isExpanded)
                     .frame(width: Indent.fold)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .lineLimit(1)
-                    Text(count)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                Label {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title)
+                            .lineLimit(1)
+                        Text(count)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                } icon: {
+                    Image(systemName: "archivebox")
+                        .accessibilityHidden(true)
                 }
                 Spacer(minLength: 0)
             }
@@ -761,32 +781,33 @@ struct SidebarView: View {
 }
 
 /// The tree's levels, as the leading indentation of top-level List rows.
-/// A repository's children keep one shared column ahead of their titles —
-/// a plan's or Other backups' fold chevron, the plus of "New Backup
-/// Plan…" — so every child's title starts at one x, level with the
-/// repository's own title. A backup record sits one fold-step (a
-/// chevron column plus the row spacing) past its parent's title, and no
-/// further.
+/// A repository's children keep two shared columns ahead of their titles —
+/// the fold column (a plan's or Other backups' chevron) and the icon column
+/// (a plan's folder, Other backups' box, the plus of "New Backup Plan…") —
+/// so every child's title starts at one x. Each level below starts one
+/// fold-step (a chevron column plus the row spacing) further in, so a
+/// child's own rows — a plan's records, the groups under Other backups —
+/// sit under its icon, as an outline's children do (Arq's restore tree),
+/// and a group's records one fold-step past its title.
 private enum Indent {
     /// A repository's children: plan rows, "New Backup Plan…" and the
     /// Other backups node. With `fold` and the row's spacing it puts the
-    /// fold column under the repository's icon and the titles at the
-    /// repository title's x.
+    /// fold column under the repository's icon and the icon column where
+    /// the repository's title starts.
     static let child: CGFloat = 12
-    /// The chevron / plus column those children share. plus.circle's
-    /// canvas is a point wider; only its empty margin overhangs — the
-    /// drawn circle fits.
+    /// The chevron column those children share, empty on "New Backup
+    /// Plan…".
     static let fold: CGFloat = 14
     /// A group under Other backups, of either kind: its chevron column
-    /// starts where the plan family's titles do, putting its title one
-    /// fold deeper than theirs.
+    /// starts where the box above it does, its title one fold-step further
+    /// in.
     static let groupPad: CGFloat = child + fold + 4
     /// A group's chevron column, either kind. With the row spacing it is
-    /// the fold-step a record sits past its parent's title.
+    /// the fold-step between levels.
     static let lineageSlot: CGFloat = 14
     /// A record under a plan, and the status rows an open plan's fold
-    /// shows: one fold-step past the plan's title, the x a group's title
-    /// starts at.
+    /// shows: one fold-step past where the plan's folder starts, the x a
+    /// group's title starts at.
     static let planRecord: CGFloat = groupPad + lineageSlot + 4
     /// A record under an Other-backups group, plan-UUID or lineage
     /// alike: one fold-step past the group's title.
