@@ -20,8 +20,6 @@ struct RootDetailView: View {
     /// call site free of `#if` argument-list gymnastics.
     @Binding var pendingCaptureRestore: Bool
 
-    let onEditPlan: (BackupPlan) -> Void
-    let onEditRepository: (Repository) -> Void
     let onAddRepository: () -> Void
     /// Opens the plan editor, with the repository preset when one is given.
     let onAddPlan: (_ repositoryID: UUID?) -> Void
@@ -74,7 +72,6 @@ struct RootDetailView: View {
                     if let plan = model.plan(id: id) {
                         PlanDetailView(
                             planID: plan.id,
-                            onEdit: { onEditPlan(plan) },
                             onShowRun: { router.selection = .activity },
                             onSearchAllBackups: onSearchAllBackups
                         )
@@ -85,7 +82,6 @@ struct RootDetailView: View {
                     if let repository = model.repository(id: id) {
                         RepositoryDetailView(
                             repositoryID: repository.id,
-                            onEdit: { onEditRepository(repository) },
                             onAddPlan: { onAddPlan(repository.id) },
                             onAdoptGroup: onAdoptGroup
                         )

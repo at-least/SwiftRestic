@@ -1146,7 +1146,7 @@ struct UnreadableItemLine: View {
                 Button("Exclude") { model.exclude(path: path, fromPlan: plan.id) }
             }
         } message: {
-            Text("Its next backups skip \(path ?? "") — backups already made keep it. The plan's exclude patterns list it, and Edit takes it out again.")
+            Text("Its next backups skip \(path ?? "") — backups already made keep it. The plan's exclude patterns list it, and Edit Plan… takes it out again.")
         }
         .task(id: path) {
             guard let path else { return }

@@ -29,8 +29,8 @@ extension FocusedValues {
 
 extension View {
     /// The pane's Restore…: a prominent button at the toolbar's trailing
-    /// side, ahead of the page's Edit and the search field, and File ▸
-    /// Restore… while the pane is on screen.
+    /// side, ahead of the search field, and File ▸ Restore… while the pane
+    /// is on screen.
     func restoreCommand(_ command: RestoreCommand) -> some View {
         toolbar {
             ToolbarItem(placement: .primaryAction) {

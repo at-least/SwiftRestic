@@ -56,7 +56,7 @@ the generator after editing it; the PNGs are checked in.
   else the orange triangle (until 2026-10-19 the triangle beside a failure
   too).
 - **Overview | Backups | Files** — a plan's page has the three in the middle
-  of the window toolbar, *Edit* at its right.
+  of the window toolbar.
   Overview is its cards. Backups lists the backups the plan made there,
   newest first, a section per month once they span more than one, beside
   the open one's files (its tree, as *Browsing and restore* below says); the
@@ -175,8 +175,12 @@ the generator after editing it; the PNGs are checked in.
   — a repeating cause (one unreadable file every run) is one row with its
   count ("7 times · 19 hours ago") opening the newest, and past five rows a
   last "… and N more in Activity" row opens Activity's Problems; then
-  location, size and maintenance, with *Refresh* and *Edit* apart at the
-  toolbar's right, *Edit* last as on a plan's page. The *Backups* row
+  location, size and maintenance. Its toolbar holds the search field alone:
+  *Edit Repository…* is the Repository menu's and the repository row's
+  (*Edit…*), *Refresh* the row's and the menu's *Refresh All Backups* (⌘R),
+  as the HIG has it on the Mac: "it doesn't make sense to provide a toolbar
+  item for every menu item" (until 2026-10-19 *Refresh* and *Edit* sat at
+  the toolbar's right). The *Backups* row
   splits off backups no
   plan here made (“11 · 6 from no plan here”, or “all”) and says how far
   back the history reaches (“509 · 3 from no plan here · since Jun 1, 2025”,
@@ -271,8 +275,10 @@ the generator after editing it; the PNGs are checked in.
   stored is dropped at the next save; a run record keeps what it was called
   then. Each plan stamps its snapshots with a private tag so retention can
   only ever touch its own. A plan's page
-  is three cards, the first two each with its verb in its corner and *Edit*
-  at the toolbar's right, all also in the Plan menu and the row's menu:
+  is three cards, the first two each with its verb in its corner, both also
+  in the Plan menu and the row's menu, which open the editor too (*Edit
+  Plan…*, *Edit…* on the row; until 2026-10-19 also *Edit* at the toolbar's
+  right):
   *Backups* (last backup, count, retention) with *Back Up Now* — *Stop*
   while it runs; *Schedule* (and when it runs next) with *Pause Schedule*,
   its arrow offering the lengths, or *Resume Schedule* (none for a manual
@@ -440,7 +446,7 @@ the generator after editing it; the PNGs are checked in.
   off idle sleep (`pmset -g assertions` lists "SwiftRestic is running a
   backup"); the display may still sleep, and a closed lid sleeps the Mac.
 - **Browsing and restore** — a page's restore is its toolbar's *Restore…*,
-  at the trailing side beside *Edit* and the search field, and *File ▸
+  at the trailing side beside the search field, and *File ▸
   Restore…*; until 2026-10-18 it sat in the pane's bottom bar, which the HIG
   warns a moved window can hide. The bottom bar keeps words only — what a
   drag does, how many matches only other backups hold. Every *Browse* (a backup run in Activity),

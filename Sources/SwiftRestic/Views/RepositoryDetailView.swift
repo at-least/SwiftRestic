@@ -13,7 +13,6 @@ struct RepositoryDetailView: View {
     /// The window's minute clock: the maintenance dates are as of it.
     @Environment(\.now) private var now
     let repositoryID: UUID
-    let onEdit: () -> Void
     /// Opens the plan editor with this repository preset.
     let onAddPlan: () -> Void
     /// Opens the adopt sheet for a group row on this page — the root owns
@@ -37,35 +36,21 @@ struct RepositoryDetailView: View {
             }
         }
         .navigationTitle(repository.map { model.label(of: $0) } ?? "Repository")
-        .toolbar {
-            // The page's verbs at its trailing corner: Refresh, a symbol,
-            // then Edit, a word — the HIG writes edit out, a symbol saying it
-            // poorly — last, as on a plan's page. A fixed space keeps them
-            // apart: the HIG warns that a text-labelled action beside a
-            // symbol one reads as one control, and macOS 26 puts adjacent
-            // buttons on one glass piece. A new plan in this repository
-            // starts from the sidebar's + or ⌘N, both into the repository on
-            // screen, or from its sidebar row's menu — and from the
-            // Protection card while it has none. Getting files back starts
-            // from a plan's Backups or Files tab, or from the search field
-            // at the corner's end. Check, Prune, the lock and index repairs and Remove
-            // from SwiftRestic… are the Repository menu's (all of them,
-            // acting on this page's repository) and the sidebar row's (all
-            // but the two repairs), each through the one shared confirmation.
-            ToolbarItem {
-                Button("Refresh", systemImage: "arrow.clockwise") {
-                    Task { await model.refreshSnapshots(repositoryID: repositoryID) }
-                }
-                .help("Re-read backups and statistics")
-            }
-            if #available(macOS 26.0, *) {
-                ToolbarSpacer(.fixed)
-            }
-            ToolbarItem {
-                Button("Edit", action: onEdit)
-                    .help("Change this repository's credentials, bandwidth, maintenance and hooks")
-            }
-        }
+        // The toolbar holds the search field alone; the page's verbs are the
+        // menus' — the HIG's macOS toolbars: "it doesn't make sense to
+        // provide a toolbar item for every menu item". Edit Repository… is
+        // the Repository menu's and the sidebar row's (Edit… there); Check,
+        // Prune, the lock and index repairs and Remove from SwiftRestic…
+        // are the Repository menu's (all acting on this page's repository)
+        // and the row's (all but the two repairs), each through the one
+        // shared confirmation; Refresh is the row's, and the menu's Refresh
+        // All Backups (⌘R). Until 2026-10-19
+        // Refresh and Edit sat at the toolbar's trailing corner. A new plan
+        // in this repository starts from the sidebar's + or ⌘N, both into
+        // the repository on screen, or from its sidebar row's menu — and
+        // from the Protection card while it has none. Getting files back
+        // starts from a plan's Backups or Files tab, or from the search
+        // field.
         // Every backup in the repository, the toolbar's search on the page
         // that stands for it: Return carries the query into Find Files, the
         // page that lists what matches, and leaves this field empty for the

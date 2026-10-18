@@ -398,7 +398,7 @@ extension View {
     /// A page's Overview | Backups | Files, in the middle of the window
     /// toolbar: Apple's guidance for switching a main window's view (the
     /// HIG's center area holds the common controls), clear of the trailing
-    /// corner, where a plan page's Edit sits.
+    /// corner, where Restore… and the search field sit.
     func pageTabPicker(_ selection: Binding<PageTab>) -> some View {
         toolbar {
             ToolbarItem(placement: .principal) {

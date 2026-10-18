@@ -6,7 +6,6 @@ struct PlanDetailView: View {
     /// The window's minute clock: Last backup and Next backup are as of it.
     @Environment(\.now) private var now
     let planID: UUID
-    let onEdit: () -> Void
     /// Sends the pane to Activity — the "Last backup" value's destination,
     /// wired by RootView so this view owns no navigation of its own.
     var onShowRun: (() -> Void)? = nil
@@ -38,17 +37,12 @@ struct PlanDetailView: View {
             roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
             filesPrompt: "Search this plan's files"
         )
-        .toolbar {
-            // The trailing corner's one item, a word: the HIG writes edit
-            // out, a symbol saying it poorly — as the repository page's.
-            // Deleting is rare and final, so it is not here: Plan ▸ Delete
-            // Plan… and the sidebar row's menu, through the one shared
-            // confirmation.
-            ToolbarItem {
-                Button("Edit", action: onEdit)
-                    .help("Change this plan's schedule, retention, what it leaves out and its hooks")
-            }
-        }
+        // The toolbar holds the tabs, the search field and, on Backups and
+        // Files, Restore…; the editor is Plan ▸ Edit Plan… and the sidebar
+        // row's Edit…, deleting Plan ▸ Delete Plan… and the row's menu —
+        // the HIG's macOS toolbars: "it doesn't make sense to provide a
+        // toolbar item for every menu item". Until 2026-10-19 Edit sat at
+        // the toolbar's trailing corner.
         // Opening the page marks the plan's problem seen — honestly, since
         // the problem row under the Backups card shows the failure for as
         // long as it stands. Keyed on the plan, not on appearing: moving
@@ -472,7 +466,7 @@ struct PlanDetailView: View {
     /// folder itself is the page's subtitle. When is the Schedule card's,
     /// what it keeps the Backups card's, where the sidebar's (the plan sits
     /// under its repository); the rest of how it runs, its hooks among it,
-    /// is the editor's, which the toolbar's Edit opens.
+    /// is the editor's, which Plan ▸ Edit Plan… and the row's Edit… open.
     private func excludingCard(_ plan: BackupPlan) -> some View {
         Card("Excluding") {
             VStack(alignment: .leading, spacing: 10) {
