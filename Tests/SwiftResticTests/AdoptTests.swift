@@ -450,49 +450,6 @@ struct AdoptTests {
             == "The plan and its schedule are removed. Its 1 snapshot stays in “Home Disk”,"
                 + " under Backups, and can be adopted back.")
     }
-
-    @Test("moving a plan says what stays behind, and only when something does")
-    func moveConsequenceCountsWhatStays() throws {
-        let model = makeModel()
-        let home = makeRepository()
-        let offsite = makeRepository("Offsite")
-        var plan = BackupPlan()
-        plan.name = "Music"
-        plan.repositoryID = home.id
-        model.configuration.repositories = [home, offsite]
-        model.configuration.plans = [plan]
-
-        // Nothing stays behind: the line stays silent.
-        var moved = plan
-        moved.repositoryID = offsite.id
-        #expect(model.moveConsequence(for: moved) == nil)
-        // The draft keeping its saved repository says nothing either.
-        #expect(model.moveConsequence(for: plan) == nil)
-        // A plan that is not saved yet — a new plan's draft — cannot move.
-        var fresh = BackupPlan()
-        fresh.repositoryID = offsite.id
-        #expect(model.moveConsequence(for: fresh) == nil)
-
-        let listing = try [
-            snapshot("m1", time: "2026-10-02T02:00:00Z", tags: [ResticService.planTag(plan.id)]),
-            snapshot("m2", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(plan.id)]),
-        ]
-        model.snapshots[home.id] = listing
-        // Music is Home Disk's only plan, so the shelf its backups stay on
-        // reads "Backups" once it has left.
-        #expect(model.moveConsequence(for: moved)
-            == "Moving this plan leaves its 2 backups in “Home Disk” under Backups"
-                + " — they are never thinned; retention runs against the plan's current repository only.")
-
-        // A plan that stays behind keeps the shelf's "Other" title.
-        var sibling = BackupPlan()
-        sibling.name = "Documents"
-        sibling.repositoryID = home.id
-        model.configuration.plans = [plan, sibling]
-        #expect(model.moveConsequence(for: moved)
-            == "Moving this plan leaves its 2 backups in “Home Disk” under Other backups"
-                + " — they are never thinned; retention runs against the plan's current repository only.")
-    }
 }
 
 /// The adopt header's date span, pinned on a fixed calendar so the pins read

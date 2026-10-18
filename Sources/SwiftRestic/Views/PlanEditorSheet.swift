@@ -374,47 +374,42 @@ struct PlanEditorSheet: View {
     }
 
     /// The plan's identity, above the tabs and so on screen from every one
-    /// of them — Arq's place for it, with our live controls: the sheet often
-    /// opens over a repository's page or Activity, where nothing else names the
-    /// plan being edited, and the repository stays changeable here. An adopt
-    /// draft is the exception: its history lives in this one repository, and
-    /// a picker is the one control that could silently point the plan at
-    /// another — moving a plan is the editor's own guarded act, with its
-    /// consequence said below.
+    /// of them — Arq's place for it: the sheet often opens over a
+    /// repository's page or Activity, where nothing else names the plan
+    /// being edited. Only a new plan chooses its repository. A saved plan
+    /// sits under its repository in the sidebar, and its history is there:
+    /// a picker here would move the plan and leave every backup it made
+    /// behind, so its repository reads as text — and an adopt draft's
+    /// history lives in the one repository it is adopted in.
     private func identityHeader(_ briefing: AdoptBriefing?) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
-                GridRow {
-                    Text("Name")
-                        .gridColumnAlignment(.trailing)
-                    TextField("Name", text: $draft.name, prompt: Text("Documents to NAS"))
-                        .labelsHidden()
-                        .focused($isNameFocused)
-                }
-                GridRow {
-                    Text("Repository")
-                    if mode == .adopt {
-                        // Locked, and the briefing's own words. While the
-                        // group is gone — its page revalidating away — the
-                        // bare name still says where this draft points.
-                        Text(briefing?.repositoryLine ?? model.repository(id: draft.repositoryID)?.name ?? "")
-                    } else {
-                        Picker("Repository", selection: $draft.repositoryID) {
-                            Text("Choose…").tag(UUID?.none)
-                            ForEach(model.configuration.repositories) { repository in
-                                Text(repository.name).tag(UUID?.some(repository.id))
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                    }
-                }
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
+            GridRow {
+                Text("Name")
+                    .gridColumnAlignment(.trailing)
+                TextField("Name", text: $draft.name, prompt: Text("Documents to NAS"))
+                    .labelsHidden()
+                    .focused($isNameFocused)
             }
-            if let consequence = model.moveConsequence(for: draft) {
-                Text(consequence)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            GridRow {
+                Text("Repository")
+                switch mode {
+                case .new:
+                    Picker("Repository", selection: $draft.repositoryID) {
+                        Text("Choose…").tag(UUID?.none)
+                        ForEach(model.configuration.repositories) { repository in
+                            Text(repository.name).tag(UUID?.some(repository.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                case .editing:
+                    Text(model.repository(id: draft.repositoryID)?.name ?? "")
+                case .adopt:
+                    // The briefing's own words. While the group is gone —
+                    // its page revalidating away — the bare name still says
+                    // where this draft points.
+                    Text(briefing?.repositoryLine ?? model.repository(id: draft.repositoryID)?.name ?? "")
+                }
             }
         }
         .padding(.horizontal, 20)

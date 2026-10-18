@@ -73,10 +73,9 @@ struct OtherGroupView: View {
 
     /// What the history is, in the summary's one sentence — and the way on
     /// from it: adopting, for a plan no configuration sets up, or the plan
-    /// itself, for one that now backs up elsewhere. Moving a plan back is
-    /// the plan editor's guarded path, so this page offers the plan, not a
-    /// second way to move it. Backups no plan made have no way on: the
-    /// sentence says why.
+    /// itself, for one that now backs up elsewhere — a history left by a
+    /// move earlier builds allowed; a saved plan's repository no longer
+    /// changes. Backups no plan made have no way on: the sentence says why.
     private func explanationCard(_ summary: OtherGroupPageSummary) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(summary.explanation)

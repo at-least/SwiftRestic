@@ -119,8 +119,7 @@ struct OtherGroupPageSummary: Equatable {
 extension BackupShelves {
     /// The group under this repository's Other backups whose plan tag names
     /// `planID` — the page's and the selection revalidation's one lookup.
-    /// Nil when it is gone: adopted, its plan moved by the editor, or
-    /// refreshed away.
+    /// Nil when it is gone: adopted, or refreshed away.
     func orphanPlanGroup(_ planID: UUID) -> OtherBackupsGroup? {
         others.first { $0.id == .plan(planID) }
     }

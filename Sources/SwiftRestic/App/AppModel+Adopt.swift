@@ -193,20 +193,4 @@ extension AppModel {
             FileManager.default.fileExists(atPath: ($0 as NSString).expandingTildeInPath)
         }
     }
-
-    /// What saving an existing plan against a different repository does to
-    /// the backups it already made — said while the picker is being moved,
-    /// not after. Nil while the draft keeps its saved repository, and for a
-    /// plan that is not saved yet (an adopt draft's repository is locked,
-    /// so it never moves either).
-    func moveConsequence(for draft: BackupPlan) -> String? {
-        guard let saved = plan(id: draft.id),
-              let oldRepositoryID = saved.repositoryID,
-              draft.repositoryID != oldRepositoryID,
-              let oldRepository = repository(id: oldRepositoryID)
-        else { return nil }
-        guard let left = backupsLeftBehind(planID: draft.id, in: oldRepositoryID) else { return nil }
-        return "Moving this plan leaves its \(Format.plural(left.count, "backup")) in “\(oldRepository.name)”"
-            + " under \(left.shelfTitle) — they are never thinned; retention runs against the plan's current repository only."
-    }
 }
