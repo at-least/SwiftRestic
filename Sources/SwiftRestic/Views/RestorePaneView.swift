@@ -19,6 +19,8 @@ struct RestorePaneView: View {
 
     let repositoryID: UUID
     let snapshotID: String
+    /// The open backup's search, as typed in the page's toolbar field.
+    @Binding var searchText: String
     /// "Search All Backups…": the host opens Find Files on this repository
     /// with the query filled in.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
@@ -33,7 +35,6 @@ struct RestorePaneView: View {
     /// the map in `loadLevel`, never re-derived — the header must name the
     /// comparison whose marks are on screen.
     @State private var comparison: ChangeComparison?
-    @State private var searchText = ""
     /// The search's answer for the open backup; nil while not searching.
     @State private var searchResult: RestorePaneSearch?
     /// The selected rows' ids — paths in the tree, `SearchHit.id` among
@@ -106,6 +107,9 @@ struct RestorePaneView: View {
         // tree already holds their rows, and re-running the diff on every
         // chevron click would make a large repository feel broken.
         .task(id: snapshotID) { await loadLevel() }
+        .onChange(of: searchText) { _, newValue in
+            searchChanged(newValue)
+        }
         .previewSession(previewer)
         // The copy belongs to the backup on screen.
         .onChange(of: snapshotID) { previewer.end() }
@@ -150,11 +154,11 @@ struct RestorePaneView: View {
 
     // MARK: - Toolbar (top)
 
-    /// The open backup's name and what its Change column is compared with,
-    /// then the search field, which searches the open backup — Repository ▸
-    /// Find Files in Snapshots… (⇧⌘F) searches every backup. Nothing else
-    /// tells a blank Change column's meanings apart: first backup, no
-    /// changes, still comparing, failed.
+    /// The open backup's name and what its Change column is compared with —
+    /// nothing else tells a blank Change column's meanings apart: first
+    /// backup, no changes, still comparing, failed. The search is the
+    /// toolbar's field, which searches the open backup on the Backups tab;
+    /// Find Files searches every backup.
     private func toolbar(record: Snapshot?) -> some View {
         HStack(alignment: .center, spacing: 12) {
             if let record {
@@ -169,11 +173,6 @@ struct RestorePaneView: View {
                 .layoutPriority(1)
             }
             Spacer(minLength: 0)
-            SearchField(placeholder: "Search this backup", text: $searchText)
-                .frame(width: 230)
-                .onChange(of: searchText) { _, newValue in
-                    searchChanged(newValue)
-                }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)

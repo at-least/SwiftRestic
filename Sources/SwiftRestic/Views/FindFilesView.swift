@@ -1,44 +1,38 @@
 import SwiftUI
 
-/// Searches every snapshot for a file, and restores what it finds.
+/// Find Files: searches every backup of a repository for a file, and
+/// restores what it finds — a page of the main window, as the console is,
+/// with its query in the toolbar's search field, where the HIG puts search
+/// ("Put a search field at the trailing side of the toolbar for many
+/// common uses"). It was a sheet until 2026-10-18, its restores stacking a
+/// second sheet on it ("Display only one sheet at a time").
 ///
 /// This is the "I deleted something months ago and don't know which backup has
-/// it" case, which browsing snapshot by snapshot does not solve.
+/// it" case, which browsing backup by backup does not solve.
 ///
 /// Two engines sit behind one table. When the repository's index has finished
 /// its backfill, the search runs against the local FTS index — instant, every
-/// snapshot, no network. Otherwise the search falls back to `restic find`,
-/// which walks the trees and takes as long as the history is deep.
+/// backup, no network — as the query is typed. Otherwise the search falls
+/// back to `restic find`, which walks the trees and takes as long as the
+/// history is deep, so it runs on Return or Search, not per keystroke.
 struct FindFilesView: View {
-    /// A search to start on arrival: the Restore pane's "Search All
-    /// Backups…" carries its repository and query here.
-    struct Prefill: Equatable, Sendable {
-        let repositoryID: UUID
-        let pattern: String
-    }
-
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.now) private var now
-
-    private let prefill: Prefill?
 
     /// A file's Preview: its copy and its Quick Look panel.
     @State private var previewer = PreviewSession()
-    @State private var repositoryID: UUID?
-    @State private var pattern = ""
     @State private var latestOnly = false
     /// The table's rows, built once when a search's results land. A computed
     /// property would rebuild the snapshot-time dictionary and re-sort on
-    /// every re-render — every keystroke in the pattern field — though a
-    /// row's snapshot id (and therefore its time) is fixed by the search
-    /// that produced it.
+    /// every re-render — every keystroke in the field — though a row's
+    /// snapshot id (and therefore its time) is fixed by the search that
+    /// produced it.
     @State private var rows: [Row] = []
     /// Whether the repository's index has finished its backfill. nil = not
     /// known yet for the selected repository.
     @State private var indexComplete: Bool?
-    /// Several at a time, as in the Restore pane: Restore Selected…
+    /// Several at a time, as in a backup's tree: Restore Selected…
     /// (Return) restores them together, each from its row's backup.
     @State private var selection = Set<String>()
     @State private var isSearching = false
@@ -50,25 +44,20 @@ struct FindFilesView: View {
     /// The footer says so; a truncated list must not pass for the whole
     /// answer.
     @State private var resultsTruncated = false
-    /// The sheet exists to answer one question, so the field that receives it
-    /// takes focus on arrival — typing starts immediately.
-    @FocusState private var patternFieldIsFocused: Bool
+    /// The toolbar field, focused on arrival — the page exists to answer one
+    /// question — and by ⇧⌘F.
+    @FocusState private var searchIsFocused: Bool
     /// Taken by a click in the results (`focusOnClick`): left in the
-    /// pattern field, Return would search again — clearing the selection —
-    /// instead of reaching Restore Selected….
+    /// field, Return would search again — clearing the selection — instead
+    /// of reaching Restore Selected….
     @FocusState private var resultsAreFocused: Bool
-    /// The restore waiting in the destination sheet, over this one.
+    /// The restore waiting in the destination sheet — over the window, the
+    /// one sheet up.
     @State private var destinationRequest: RestoreDestinationRequest?
 
-    /// `initialRepositoryID` starts the picker when no prefill names a
-    /// repository — the window selection's repository
-    /// (`AppModel.findFilesRepositoryID`), read by the root, which can see
-    /// the selection from where the sheet hangs.
-    init(prefill: Prefill? = nil, initialRepositoryID: UUID? = nil) {
-        self.prefill = prefill
-        _repositoryID = State(initialValue: prefill?.repositoryID ?? initialRepositoryID)
-        _pattern = State(initialValue: prefill?.pattern ?? "")
-    }
+    private var repositoryID: UUID? { router.findRepositoryID }
+
+    private var pattern: String { router.findQuery }
 
     private struct Row: Identifiable {
         /// Byte-exact in the path (`PathKey.hex`): two paths whose names
@@ -98,27 +87,50 @@ struct FindFilesView: View {
     }
 
     var body: some View {
+        @Bindable var router = router
         VStack(spacing: 0) {
             controls
             Divider()
+            // The page's height, whatever stands in for the table: an empty
+            // state alone would hug its text and float the page mid-window.
             resultsPane(rows)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             footer(rows)
         }
-        .frame(minWidth: 760, minHeight: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle("Find Files")
+        .navigationSubtitle(repositoryID.flatMap { model.repository(id: $0) }.map { model.label(of: $0) } ?? "")
+        // The prompt has to be verbatim: a literal string is a
+        // LocalizedStringKey, which SwiftUI parses as Markdown — the
+        // asterisks in a glob would be eaten as emphasis markers.
+        .searchable(
+            text: $router.findQuery,
+            placement: .toolbar,
+            prompt: Text(verbatim: indexComplete == true ? "File name, e.g. invoice or keynote" : "File name or pattern, e.g. invoice or *.key")
+        )
+        .searchFocused($searchIsFocused)
+        .onSubmit(of: .search) { search() }
         .previewSession(previewer)
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)
         }
+        .onChange(of: router.searchFocus, initial: true) { _, page in
+            guard page == .findFiles else { return }
+            router.searchFocus = nil
+            searchIsFocused = true
+        }
         .onAppear {
-            patternFieldIsFocused = true
             // A handed-over search runs at once; `search` picks the engine.
-            if prefill != nil, canSearch { search() }
+            if router.findRunsOnArrival {
+                router.findRunsOnArrival = false
+                search()
+            }
         }
         // The index-state check re-runs when the repository changes and is
-        // cancelled when the sheet leaves, so a late answer cannot write
-        // into state the sheet no longer owns. The previous repository's
+        // cancelled when the page leaves, so a late answer cannot write
+        // into state the page no longer owns. The previous repository's
         // answer goes first: it is not this one's.
         .task(id: repositoryID) {
             indexComplete = nil
@@ -127,59 +139,70 @@ struct FindFilesView: View {
             guard !Task.isCancelled else { return }
             indexComplete = ready
         }
+        // Search as it is typed, the HIG's "If possible, start search
+        // immediately when a person types" — against the index only, whose
+        // answer is instant; restic's walk waits for Return. A pause of a
+        // keystroke's length first, so a word typed is one search.
+        .task(id: TypingKey(pattern: pattern, repositoryID: repositoryID, indexIsComplete: indexComplete == true)) {
+            guard indexComplete == true else { return }
+            guard !pattern.trimmingCharacters(in: .whitespaces).isEmpty else {
+                cancelSearch()
+                return
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(200))
+            } catch {
+                return
+            }
+            search()
+        }
         .onDisappear { searchTask?.cancel() }
     }
 
+    /// What a search as typed is keyed by: the query, the repository, and
+    /// whether the index answers.
+    private struct TypingKey: Equatable {
+        let pattern: String
+        let repositoryID: UUID?
+        let indexIsComplete: Bool
+    }
+
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SheetHeader(
-                title: "Find Files",
-                subtitle: "Search every snapshot for a file, then restore what you find"
-            )
-
-            Picker("Repository", selection: $repositoryID) {
-                Text("Choose…").tag(UUID?.none)
-                ForEach(model.configuration.repositories) { repository in
-                    Text(model.label(of: repository)).tag(UUID?.some(repository.id))
-                }
-            }
-            .onChange(of: repositoryID) { _, _ in
-                // Results belong to the repository they were found in; keeping
-                // them under a different picker would offer a restore against
-                // the wrong one.
-                cancelSearch()
-            }
-            // The listing landing after a search ran ahead of it: the
-            // Snapshot column's short IDs become times (`fillLateTimes`).
-            .onChange(of: repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) }) { _, _ in
-                fillLateTimes()
-            }
-
+        @Bindable var router = router
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                // The prompt has to be verbatim: a literal string title is a
-                // LocalizedStringKey, and SwiftUI parses those as Markdown — the
-                // asterisks in a glob would be eaten as emphasis markers.
-                TextField(
-                    "Pattern",
-                    text: $pattern,
-                    prompt: Text(verbatim: indexComplete == true ? "File name, e.g. invoice or keynote" : "File name or pattern, e.g. invoice or *.key")
-                )
-                .textFieldStyle(.roundedBorder)
-                .focused($patternFieldIsFocused)
-                .onSubmit(search)
-                // Meaningless against the index engine, which always searches
-                // every version — so not offered until the engine is known:
-                // ticked while the answer is pending, it would silently stop
-                // applying when the answer is the index.
+                Picker("Repository", selection: $router.findRepositoryID) {
+                    Text("Choose…").tag(UUID?.none)
+                    ForEach(model.configuration.repositories) { repository in
+                        Text(model.label(of: repository)).tag(UUID?.some(repository.id))
+                    }
+                }
+                .fixedSize()
+                .onChange(of: repositoryID) { _, _ in
+                    // Results belong to the repository they were found in;
+                    // keeping them under a different picker would offer a
+                    // restore against the wrong one.
+                    cancelSearch()
+                }
+                // The listing landing after a search ran ahead of it: the
+                // Backup column's short IDs become times (`fillLateTimes`).
+                .onChange(of: repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) }) { _, _ in
+                    fillLateTimes()
+                }
+                Spacer()
+                // restic's walk runs when asked — Return in the field, or
+                // here. Meaningless against the index engine, which answers
+                // as typed and always searches every version — so not
+                // offered until the engine is known.
                 if indexComplete == false {
                     Toggle("Latest snapshot only", isOn: $latestOnly)
                         .toggleStyle(.checkbox)
+                    Button("Search", action: search)
+                        .disabled(!canSearch)
                 }
-                Button("Search", action: search)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canSearch)
-                // Occupying their space whether or not a search runs: appearing
-                // here would shift the row at the exact moment of a click.
+                // Occupying their space whether or not a search runs:
+                // appearing here would shift the row at the exact moment of
+                // a click.
                 Button("Stop") { cancelSearch() }
                     .disabled(!isSearching)
                     .opacity(isSearching ? 1 : 0)
@@ -193,9 +216,9 @@ struct FindFilesView: View {
             ExpandableCaption(
                 summary: indexComplete == true
                     ? FilesSearchAnswer.matchRule
-                    : "Matching is case-insensitive and supports shell globs.",
+                    : "Matching is case-insensitive and supports shell globs. Press Return to search.",
                 detail: indexComplete == true
-                    ? "This repository's index has finished reading, so the search runs locally against every snapshot at once — instant, however deep the history."
+                    ? "This repository's index has finished reading, so the search runs locally against every snapshot at once, as you type — instant, however deep the history."
                     : "Searching every snapshot walks each one, so it takes longer the more history a repository holds. “Latest snapshot only” searches the repository's single newest snapshot — that snapshot may span other plans' folders, so it is not the newest per plan."
             )
         }
@@ -359,9 +382,6 @@ struct FindFilesView: View {
                         .help(failure)
                 }
                 Spacer()
-                Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                    .help(model.isRestoring ? "The restore keeps running" : "Close")
                 let selected = rows.filter { selection.contains($0.id) }
                 Button("Restore Selected…") { restoreSelection(selected) }
                     .buttonStyle(.borderedProminent)
@@ -377,9 +397,9 @@ struct FindFilesView: View {
 
     // MARK: - Data
 
-    /// Show Versions for a row — out of the sheet, onto the Files tab that
-    /// holds the match's history, at this match's backup — or nil when the
-    /// row's backup is no longer listed. The row is passed directly: a click
+    /// Show Versions for a row — onto the Files tab that holds the match's
+    /// history, at this match's backup — or nil when the row's backup is no
+    /// longer listed. The row is passed directly: a click
     /// on an unselected row must not depend on selection state.
     private func showVersions(of row: Row) -> (() -> Void)? {
         guard let repositoryID,
@@ -393,18 +413,18 @@ struct FindFilesView: View {
                 repositoryID: repositoryID,
                 page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
             )
-            dismiss()
         }
     }
 
     private var canSearch: Bool {
-        repositoryID != nil
-            && !isSearching
-            && !pattern.trimmingCharacters(in: .whitespaces).isEmpty
+        repositoryID != nil && !pattern.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// Runs the search the field holds, in place of any still running: a
+    /// query typed on asks again, and the older answer must not land last.
     private func search() {
         guard let repositoryID, canSearch else { return }
+        searchTask?.cancel()
         // Snapshot what was asked for: the fields can change while the search
         // walks the repository, and the results must answer to what was typed.
         let searchedRepository = repositoryID
@@ -418,8 +438,8 @@ struct FindFilesView: View {
         resultsTruncated = false
         selection = []
         searchTask = Task {
-            // The engine is chosen per search, not per sheet: a backfill that
-            // finished while the sheet sat open upgrades the next search.
+            // The engine is chosen per search, not per visit: a backfill that
+            // finished while the page sat open upgrades the next search.
             let ready = await model.indexIsComplete(repositoryID: searchedRepository)
             guard !Task.isCancelled else { return }
             indexComplete = ready
@@ -477,7 +497,7 @@ struct FindFilesView: View {
     /// Sorted newest-first by that snapshot, matching the restic engine's
     /// row order.
     private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> [Row] {
-        // A thrown index failure propagates to the sheet's own error message.
+        // A thrown index failure propagates to the page's own error message.
         let found = try await model.searchIndexWithSummaries(pattern: pattern, repositoryID: repositoryID)
         var rows: [Row] = []
         var dropped = 0

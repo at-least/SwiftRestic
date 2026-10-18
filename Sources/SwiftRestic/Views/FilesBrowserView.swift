@@ -7,10 +7,10 @@ import SwiftUI
 /// at the page's edge rather than under a repository and a plan, and its
 /// divider drags: a deep folder keeps its names.
 ///
-/// A search field heads the tree: while it holds a query, the column lists
-/// the chain's items named like it instead — from the index, items the
-/// newest backup no longer holds included — and a hit selects as a tree row
-/// does, so its versions open beside it.
+/// While the page's search field — the toolbar's — holds a query, the
+/// column lists the chain's items named like it instead of the tree — from
+/// the index, items the newest backup no longer holds included — and a hit
+/// selects as a tree row does, so its versions open beside it.
 ///
 /// What is open, selected and searched for is the router's, per chain, so
 /// leaving the page — for a backup's record, Activity, another plan — and
@@ -21,9 +21,6 @@ struct FilesBrowserView: View {
     @Environment(FilesTree.self) private var filesTree
     /// The chain's roots (`FileNode.roots`).
     let roots: FileNode
-    /// The search field's prompt: what it searches, a plan's files or a
-    /// group's.
-    let searchPrompt: String
     /// A search with no match offers Find Files over the whole repository,
     /// prefilled — other plans' backups included. The root presents it.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
@@ -127,35 +124,20 @@ struct FilesBrowserView: View {
         }
     }
 
-    /// The leading column: the search field over the tree, or over the
-    /// search's hits while it holds a query — one list at a time, sharing
-    /// the selection.
+    /// The leading column: the tree, or the search's hits while the
+    /// toolbar's field holds a query — one list at a time, sharing the
+    /// selection.
     private var navigator: some View {
-        VStack(spacing: 0) {
-            SearchField(
-                placeholder: searchPrompt,
-                text: Binding(
-                    get: { router.filesSearchText[roots] ?? "" },
-                    set: { router.filesSearchText[roots] = $0 }
-                ),
-                takesFocus: router.filesSearchFocus == roots,
-                onFocus: { router.filesSearchFocus = nil }
-            )
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            Divider()
-            Group {
-                if query.isEmpty {
-                    tree
-                } else {
-                    hits
-                }
+        Group {
+            if query.isEmpty {
+                tree
+            } else {
+                hits
             }
-            // The column's height whatever it shows: an empty state alone
-            // would hug its text, and the field above it would float down to
-            // the middle.
-            .frame(maxHeight: .infinity)
         }
+        // The column's height whatever it shows: an empty state alone would
+        // hug its text.
+        .frame(maxHeight: .infinity)
     }
 
     private var tree: some View {
@@ -430,6 +412,66 @@ extension View {
                 .help("The overview; the backups, each one's files beside the list; or the folders and files across every backup, each by version")
             }
         }
+    }
+}
+
+extension View {
+    /// A plan's or a group's page's search, in the window toolbar's trailing
+    /// field — the HIG's place for it ("Put a search field at the trailing
+    /// side of the toolbar for many common uses"), where each tab had carried
+    /// a field of its own above its list. Its scope follows the tab: on
+    /// Backups, the open backup; on Files and Overview, the page's files
+    /// across every backup — typed on Overview, the page turns to Files,
+    /// where the hits list. ⇧⌘F focuses it (`AppRouter.searchFocus`).
+    func pageSearch(page: SidebarItem, roots: FileNode?, filesPrompt: String) -> some View {
+        modifier(PageSearch(page: page, roots: roots, filesPrompt: filesPrompt))
+    }
+}
+
+private struct PageSearch: ViewModifier {
+    @Environment(AppRouter.self) private var router
+    let page: SidebarItem
+    /// The chain the Files tab lists; nil for a plan with no repository,
+    /// which has nothing to search.
+    let roots: FileNode?
+    let filesPrompt: String
+    @FocusState private var isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .searchable(text: text, placement: .toolbar, prompt: Text(verbatim: prompt))
+            .searchFocused($isFocused)
+            .onChange(of: router.searchFocus, initial: true) { _, asked in
+                guard asked == page else { return }
+                router.searchFocus = nil
+                // A turn later: ⇧⌘F may have switched the tab in this
+                // update, and the field takes the focus once it is there.
+                Task { @MainActor in isFocused = true }
+            }
+    }
+
+    private var onBackups: Bool { router.tab(of: page) == .backups }
+
+    private var prompt: String { onBackups ? "Search this backup" : filesPrompt }
+
+    private var text: Binding<String> {
+        Binding(
+            get: {
+                if onBackups { return router.backupsSearchText[page] ?? "" }
+                return roots.flatMap { router.filesSearchText[$0] } ?? ""
+            },
+            set: { newValue in
+                if onBackups {
+                    router.backupsSearchText[page] = newValue
+                    return
+                }
+                guard let roots else { return }
+                router.filesSearchText[roots] = newValue
+                if !newValue.isEmpty, router.tab(of: page) == .overview {
+                    router.setTab(.files, of: page)
+                }
+            }
+        )
     }
 }
 

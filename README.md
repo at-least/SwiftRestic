@@ -115,10 +115,10 @@ the generator after editing it; the PNGs are checked in.
     at 1 GB. *Show in Backups* opens the chosen backup at that place on the
     page's Backups tab, scrolling the list sixteen months long to its row,
     as the tree scrolls to a revealed item.
-  - *The search field* heading the tree lists, in its place, the items of
-    this plan's (or group's) backups whose names have words starting like
-    the query — from the index, instant, dropped items dimmed as in the
-    tree — each under its folder. A hit selects as a tree row does; Return
+  - *The search field*, the toolbar's at the window's trailing edge, lists
+    in the tree's place the items of this plan's (or group's) backups whose
+    names have words starting like the query — from the index, instant,
+    dropped items dimmed as in the tree — each under its folder. A hit selects as a tree row does; Return
     or Esc ends the search on the tree with the hit's folders opened and
     its row in view. While the index still reads, the search says older
     backups may be missing, and one with no match offers *Search All
@@ -471,8 +471,9 @@ the generator after editing it; the PNGs are checked in.
     here and on Find Files' results, opens it on the Files tab of the plan
     or group the backup belongs to, at that backup; on Find Files' index
     results the version count ("of 12 ›") is a button to the same place.
-    The search covers the open backup, says how many matches only other
-    backups hold, and *Search All Backups…* carries it on in Find Files; a
+    The search — the toolbar's field on the Backups tab — covers the open
+    backup, says how many matches only other backups hold, and *Search All
+    Backups…* carries it on in Find Files; a
     hit drags to Finder as a row does. A file's right-click menu here, in its
     hits and on Find Files' results has the Files tab's *Preview*, gated by
     the same size (a hit, which the index keeps no size for, is listed by
@@ -480,12 +481,22 @@ the generator after editing it; the PNGs are checked in.
 - **Find files across snapshots** — search every snapshot for a name or glob
   when you do not know which backup still has the file, then restore the
   match (while the index still reads, a word with no glob character is
-  looked for inside names, as `*word*`). *Repository › Find Files in
-  Snapshots…* (⇧⌘F) opens it on the repository in view — the selected
-  repository's or backup record's, else the first (Activity, the console,
-  nothing) — or on the repository a *Search All Backups…* handed over (the
-  Restore pane's, or a Files tab's with no match). On a plan's or group's
-  page ⇧⌘F instead turns the page to Files and focuses its search field.
+  looked for inside names, as `*word*`). Find Files is a page of the window,
+  with no sidebar row (as the console has none), its query in the toolbar's
+  search field and a repository picker above the results; once the
+  repository's index has read every backup it searches as you type, and
+  until then restic's walk runs on Return or *Search*. Until 2026-10-18 it
+  was a sheet, and its restores stacked a second sheet on it. *Repository ›
+  Find Files in Snapshots…* (⇧⌘F) opens it, the field focused, on the
+  repository in view — the selected repository's or plan's or group's, else
+  the first (Activity, the console, nothing); a repository page's own search
+  field (*Search all backups*) carries its query there on Return, and a
+  *Search All Backups…* (a backup's tree's, or a Files tab's with no match)
+  carries its query and repository and runs it. On a plan's or group's page
+  ⇧⌘F instead turns the page to Files and focuses the toolbar's search
+  field, whose scope follows the page's tab: on Overview and Files the
+  page's files across every backup (typed on Overview, the page turns to
+  Files), on Backups the open backup.
   Each path is one row at the newest backup holding it, with how many
   backups of that backup's plan or group do ("of 4 ›", Show Versions) — the
   count its Files tab lists, so a copy a Home plan holds beside a Documents
@@ -875,11 +886,11 @@ plan cannot fire mid-capture.
   `SWIFTRESTIC_CAPTURE_SEARCH` that query in its search field; `orphanGroup`,
   `movedGroup`, `lineage` — the page of the first adoptable group, moved
   plan's group or untagged lineage (all three wait for the listing that
-  builds group rows, as `restore` does); `findMoved` —
-  Find Files on the page of the first plan whose repository is not the
-  first, so the picker shows it starting on the selection's repository (a
+  builds group rows, as `restore` does); `findMoved` — ⇧⌘F from the
+  repository page of the first plan whose repository is not the first, so
+  Find Files' picker shows it starting on the selection's repository (a
   configuration without one stops the run); `filesSearch` — ⇧⌘F's route on
-  the first plan's page, the Files tab with its search field focused
+  the first plan's page, the Files tab with the toolbar's search field focused
   (`SWIFTRESTIC_CAPTURE_VERBOSE=1` logs each window's first responder);
   `all` — every pane in one run, `SWIFTRESTIC_CAPTURE` naming a directory,
   each pane as `pane-<name>.png`, `SWIFTRESTIC_CAPTURE_DELAY` the settle

@@ -33,6 +33,11 @@ struct PlanDetailView: View {
         .navigationTitle(plan.map { model.label(of: $0) } ?? "Plan")
         .navigationSubtitle(plan.map(subtitle) ?? "")
         .pageTabPicker(router.tabBinding(for: .plan(planID)))
+        .pageSearch(
+            page: .plan(planID),
+            roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
+            filesPrompt: "Search this plan's files"
+        )
         .toolbar {
             // The trailing corner's one item, a word: the HIG writes edit
             // out, a symbol saying it poorly — as the repository page's.
@@ -308,7 +313,6 @@ struct PlanDetailView: View {
         if let repositoryID = plan.repositoryID {
             FilesBrowserView(
                 roots: FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id)),
-                searchPrompt: "Search this plan's files",
                 onSearchAllBackups: onSearchAllBackups
             )
         } else {

@@ -142,17 +142,15 @@ extension AppModel {
         case let .plan(planID): plan(id: planID)?.repositoryID
         case let .orphanPlan(id, _): id
         case let .lineage(id, _): id
-        case .console, .activity, nil: nil
+        case .console, .findFiles, .activity, nil: nil
         }
         return repository(id: id)?.id
     }
 
-    /// The repository Find Files opens on: the Restore pane's "Search All
-    /// Backups…" hand-off wins; otherwise the window's selection by the
-    /// Repository menu's own rule — and the first repository only when that
-    /// names none to look at (Activity, the console, nothing). The root
-    /// reads this beside the prefill and hands the answer over, so
-    /// FindFilesView needs no router.
+    /// The repository Find Files opens on: a "Search All Backups…" hand-off's
+    /// wins; otherwise the window's selection by the Repository menu's own
+    /// rule — and the first repository only when that names none to look at
+    /// (Activity, the console, nothing).
     func findFilesRepositoryID(prefillRepositoryID: UUID?, selection: SidebarItem?) -> UUID? {
         prefillRepositoryID ?? commandRepositoryID(for: selection) ?? configuration.repositories.first?.id
     }
@@ -175,7 +173,7 @@ extension AppModel {
             return group(repositoryID, .plan(planID))
         case let .lineage(repositoryID, key):
             return group(repositoryID, .lineage(key))
-        case .repository, .console, .activity, nil:
+        case .repository, .console, .findFiles, .activity, nil:
             return nil
         }
     }

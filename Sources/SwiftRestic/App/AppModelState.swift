@@ -146,6 +146,12 @@ enum SidebarItem: Hashable {
     /// selection revalidates to the repository's page once it is gone.
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     case console
+    /// Find Files: a page with no row, as the console has none — reached
+    /// from Repository ▸ Find Files in Snapshots… (⇧⌘F) off a page with a
+    /// Files tab, a repository page's search field, and Search All
+    /// Backups…. Until 2026-10-18 a sheet, whose restores stacked a second
+    /// sheet on it.
+    case findFiles
     case activity
 }
 

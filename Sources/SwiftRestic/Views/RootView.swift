@@ -24,11 +24,6 @@ struct RootView: View {
     /// editor is up for it, and once it has saved one the plan editor
     /// follows, in it (`startNewPlan`, `continuePlanAfterRepository`).
     @State private var planAfterRepository: PlanAfterRepository?
-    @State private var isShowingFind = false
-    /// What the Restore pane's "Search All Backups…" hands Find Files. Only
-    /// that button sets it; the sheet's dismissal clears it, so ⇧⌘F and
-    /// every other way in still open an empty search.
-    @State private var findPrefill: FindFilesView.Prefill?
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a pane's toolbar, a sidebar menu. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
@@ -91,8 +86,7 @@ struct RootView: View {
             onAdoptGroup: adoptGroup,
             onRevalidateSelection: revalidateSelection,
             onSearchAllBackups: { repositoryID, query in
-                findPrefill = FindFilesView.Prefill(repositoryID: repositoryID, pattern: query)
-                isShowingFind = true
+                router.openFind(repositoryID: repositoryID, query: query, run: true)
             }
         )
         .environment(filesTree)
@@ -102,17 +96,7 @@ struct RootView: View {
     /// Its own chain for the type-check limit, like the others — see the
     /// type doc.
     private func presented<V: View>(over content: V) -> some View {
-        // Read here, not inside the sheet's closure: read only there, the
-        // prefill set together with `isShowingFind` never reaches the sheet,
-        // and Find Files opens with an empty pattern. The opening repository
-        // is derived the same way, beside the prefill, and handed over as a
-        // parameter.
-        let prefill = findPrefill
-        let findFilesRepositoryID = model.findFilesRepositoryID(
-            prefillRepositoryID: prefill?.repositoryID,
-            selection: router.selection
-        )
-        return content
+        content
         .sheet(item: $editingPlan, onDismiss: { editingPlanTab = .files }) { plan in
             PlanEditorSheet(plan: plan, initialTab: editingPlanTab)
                 .environment(model)
@@ -126,11 +110,6 @@ struct RootView: View {
                 if planAfterRepository == .awaiting { planAfterRepository = .created(id) }
             })
             .environment(model)
-        }
-        .sheet(isPresented: $isShowingFind, onDismiss: { findPrefill = nil }) {
-            FindFilesView(prefill: prefill, initialRepositoryID: findFilesRepositoryID)
-                .environment(model)
-                .environment(router)
         }
         // The adopt sheet, from a group's context menu or its page. Adopt's
         // landing is the new plan's own page on its Backups tab — the
@@ -307,17 +286,14 @@ struct RootView: View {
         case "find":
             // SWIFTRESTIC_CAPTURE_FIND: a search to run on arrival in the
             // first repository, as Search All Backups… hands one over.
-            if let pattern = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_FIND"],
-               let repositoryID = model.configuration.repositories.first?.id {
-                findPrefill = FindFilesView.Prefill(repositoryID: repositoryID, pattern: pattern)
-            }
-            isShowingFind = true
-        // The Find pane over a non-first repository: the first plan whose
-        // repository is not the landing pane's (a plan's own page searches
-        // its Files tab instead). Plain `find` cannot tell the opening rule
-        // from the first-repository fallback — the landing selection IS the
-        // first repository — so a configuration without such a plan stops
-        // the run rather than photographing that fallback.
+            let pattern = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_FIND"]
+            router.openFind(repositoryID: model.configuration.repositories.first?.id, query: pattern, run: pattern != nil)
+        // Find Files over a non-first repository, by ⇧⌘F's own route from
+        // the repository page of the first plan whose repository is not the
+        // first. Plain `find` cannot tell the opening rule from the
+        // first-repository fallback — the landing selection IS the first
+        // repository — so a configuration without such a plan stops the run
+        // rather than photographing that fallback.
         case "findMoved":
             guard let repositoryID = model.configuration.plans.lazy.compactMap(\.repositoryID).first(where: {
                 $0 != model.configuration.repositories.first?.id
@@ -325,7 +301,7 @@ struct RootView: View {
                 preconditionFailure("findMoved needs a plan whose repository is not the first")
             }
             router.selection = .repository(repositoryID)
-            isShowingFind = true
+            router.request(.showFind)
         // ⇧⌘F on the first plan's page, through the menu's own route: the
         // page turns to its Files tab, the search field focused.
         case "filesSearch":
@@ -471,7 +447,7 @@ struct RootView: View {
     /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
-        let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFind
+        let sheetsUp = editingPlan != nil || editingRepository != nil
             || pendingConfirmation != nil || retentionTarget != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
         guard !sheetsUp else {
@@ -488,13 +464,14 @@ struct RootView: View {
         case .newRepository:
             editingRepository = Repository()
         case .showFind:
-            // A plan's or a group's page searches its own history in its
-            // Files tab's field; every other pane, the whole repository in
-            // Find Files.
-            if let page = router.selection, let roots = model.filesSearchRoots(for: page) {
-                router.searchFiles(on: page, roots: roots)
+            // A plan's or a group's page searches its own history on its
+            // Files tab, the toolbar's field focused; every other pane, the
+            // whole repository in Find Files — on the repository the
+            // selection names, else the first.
+            if let page = router.selection, model.filesSearchRoots(for: page) != nil {
+                router.searchFiles(on: page)
             } else {
-                isShowingFind = true
+                router.openFind(repositoryID: model.findFilesRepositoryID(prefillRepositoryID: nil, selection: router.selection))
             }
         case .showConsole:
             router.selection = .console
@@ -556,9 +533,10 @@ struct RootView: View {
             router.selection = model.repository(id: repositoryID) == nil
                 ? landing
                 : .repository(repositoryID)
-        case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable:
-            // The console menu item is disabled here; a selection parked on
-            // the pane must not outlive the menu item that opens it.
+        case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable,
+             .findFiles where model.configuration.repositories.isEmpty || !model.isResticAvailable:
+            // Their menu items are disabled here; a selection parked on
+            // either pane must not outlive the menu item that opens it.
             router.selection = nil
         default:
             break

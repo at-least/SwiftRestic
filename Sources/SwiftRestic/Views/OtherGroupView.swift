@@ -49,7 +49,6 @@ struct OtherGroupView: View {
                 case .files:
                     FilesBrowserView(
                         roots: FileNode.roots(repositoryID: repositoryID, chainKey: summary.chainKey),
-                        searchPrompt: "Search these backups' files",
                         onSearchAllBackups: onSearchAllBackups
                     )
                 }
@@ -64,6 +63,11 @@ struct OtherGroupView: View {
         // On the Backups tab, the moment of the backup open there.
         .navigationSubtitle(subtitle)
         .pageTabPicker(router.tabBinding(for: page))
+        .pageSearch(
+            page: page,
+            roots: summary.map { FileNode.roots(repositoryID: repositoryID, chainKey: $0.chainKey) },
+            filesPrompt: "Search these backups' files"
+        )
     }
 
     /// The group's backups, newest first.

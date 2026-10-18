@@ -107,7 +107,15 @@ struct BackupsBrowserView: View {
     @ViewBuilder
     private var pane: some View {
         if let open {
-            RestorePaneView(repositoryID: repositoryID, snapshotID: open.id, onSearchAllBackups: onSearchAllBackups)
+            RestorePaneView(
+                repositoryID: repositoryID,
+                snapshotID: open.id,
+                searchText: Binding(
+                    get: { router.backupsSearchText[page] ?? "" },
+                    set: { router.backupsSearchText[page] = $0 }
+                ),
+                onSearchAllBackups: onSearchAllBackups
+            )
                 // Folder state belongs to one repository: another
                 // repository's page must not carry paths or history over —
                 // the pane's own @State resets with the identity.

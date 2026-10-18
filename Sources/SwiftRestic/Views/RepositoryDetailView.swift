@@ -7,6 +7,9 @@ import SwiftUI
 /// Details and Maintenance.
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
+    /// The toolbar field's query, until Return hands it to Find Files.
+    @State private var searchText = ""
     /// The window's minute clock: the maintenance dates are as of it.
     @Environment(\.now) private var now
     let repositoryID: UUID
@@ -44,8 +47,8 @@ struct RepositoryDetailView: View {
             // starts from the sidebar's + or ⌘N, both into the repository on
             // screen, or from its sidebar row's menu — and from the
             // Protection card while it has none. Getting files back starts
-            // from the sidebar, where the backups sit under the plans that
-            // made them. Check, Prune, the lock and index repairs and Remove
+            // from a plan's Backups or Files tab, or from the search field
+            // at the corner's end. Check, Prune, the lock and index repairs and Remove
             // from SwiftRestic… are the Repository menu's (all of them,
             // acting on this page's repository) and the sidebar row's (all
             // but the two repairs), each through the one shared confirmation.
@@ -62,6 +65,15 @@ struct RepositoryDetailView: View {
                 Button("Edit", action: onEdit)
                     .help("Change this repository's credentials, bandwidth, maintenance and hooks")
             }
+        }
+        // Every backup in the repository, the toolbar's search on the page
+        // that stands for it: Return carries the query into Find Files, the
+        // page that lists what matches, and leaves this field empty for the
+        // next visit.
+        .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search all backups"))
+        .onSubmit(of: .search) {
+            router.openFind(repositoryID: repositoryID, query: searchText, run: true)
+            searchText = ""
         }
     }
 

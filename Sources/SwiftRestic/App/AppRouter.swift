@@ -96,20 +96,51 @@ final class AppRouter {
     var filesSelection: [FileNode: FileNode] = [:]
 
     /// What each chain's Files view is searching for, by the chain's roots,
-    /// as typed; empty or absent shows the tree. Transient, as the
-    /// selection is: a search left on a page is there when the page is
-    /// shown again.
+    /// as typed in the toolbar's search field; empty or absent shows the
+    /// tree. Transient, as the selection is: a search left on a page is
+    /// there when the page is shown again.
     var filesSearchText: [FileNode: String] = [:]
 
-    /// The Files view whose search field takes the keyboard focus next, by
-    /// its chain's roots — ⇧⌘F on a plan's or a group's page. The field
-    /// spends it once it has the focus.
-    var filesSearchFocus: FileNode?
+    /// What each page's Backups tab is searching the open backup for, by
+    /// the page, as typed in the toolbar's search field. Transient; a
+    /// record switch clears it, the search belonging to the backup it ran
+    /// in.
+    var backupsSearchText: [SidebarItem: String] = [:]
+
+    /// The page whose toolbar search field takes the keyboard focus next —
+    /// ⇧⌘F, and Find Files on arrival. The page spends it once its field
+    /// has the focus.
+    var searchFocus: SidebarItem?
 
     /// ⇧⌘F on a page with a Files tab: the tab, its search field focused.
-    func searchFiles(on page: SidebarItem, roots: FileNode) {
+    func searchFiles(on page: SidebarItem) {
         pageTabs[page] = .files
-        filesSearchFocus = roots
+        searchFocus = page
+    }
+
+    /// Find Files' search as typed in its toolbar field — and in a
+    /// repository page's, which hands it over on Return. Transient, kept
+    /// while the app runs: coming back to Find Files finds it.
+    var findQuery = ""
+
+    /// The repository Find Files searches. Transient.
+    var findRepositoryID: UUID?
+
+    /// A search Find Files runs as it arrives — Search All Backups…'s and a
+    /// repository page's Return, which asked for it — whichever engine
+    /// answers. Find Files spends it.
+    var findRunsOnArrival = false
+
+    /// Find Files, the pane: on `repositoryID`, with `query` in its field
+    /// when one is handed over (Search All Backups…, a repository page's
+    /// Return) and run as it arrives when `run` says so — the field
+    /// focused, its "area dedicated to discovery", as the HIG puts it.
+    func openFind(repositoryID: UUID?, query: String? = nil, run: Bool = false) {
+        findRepositoryID = repositoryID
+        if let query { findQuery = query }
+        findRunsOnArrival = run
+        searchFocus = .findFiles
+        selection = .findFiles
     }
 
     /// The backup a folder's listing was read from when one of its items

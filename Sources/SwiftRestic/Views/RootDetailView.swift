@@ -108,6 +108,8 @@ struct RootDetailView: View {
                     )
                 case .console:
                     ResticConsoleView()
+                case .findFiles:
+                    FindFilesView()
                 case .activity:
                     ActivityView()
                 case .none:

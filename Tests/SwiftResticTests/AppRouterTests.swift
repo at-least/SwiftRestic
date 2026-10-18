@@ -139,16 +139,34 @@ struct AppRouterTests {
         #expect(router.tab(of: group) == .files)
     }
 
-    @Test("⇧⌘F on a page turns it to its Files tab and asks that tab's field, and no other, for the focus")
+    @Test("⇧⌘F on a page turns it to its Files tab and asks that page's toolbar field, and no other, for the focus")
     func searchFilesFocusesThePagesField() {
         let router = AppRouter()
         let page = SidebarItem.plan(UUID())
-        let roots = FileNode.roots(repositoryID: UUID(), chainKey: "swiftrestic-plan-aaaa")
         router.selection = page
-        router.searchFiles(on: page, roots: roots)
+        router.searchFiles(on: page)
         #expect(router.tab(of: page) == .files)
         #expect(router.selection == page)
-        #expect(router.filesSearchFocus == roots)
+        #expect(router.searchFocus == page)
+    }
+
+    @Test("Find Files opens as a page on its repository, its field focused, a handed-over search kept and run on arrival")
+    func openFindIsAPage() {
+        let router = AppRouter()
+        let repository = UUID()
+        router.findQuery = "older"
+        router.openFind(repositoryID: repository)
+        #expect(router.selection == .findFiles)
+        #expect(router.findRepositoryID == repository)
+        #expect(router.searchFocus == .findFiles)
+        // ⇧⌘F keeps what was typed; nothing runs until asked.
+        #expect(router.findQuery == "older")
+        #expect(!router.findRunsOnArrival)
+
+        // Search All Backups… hands its query over and asks for the run.
+        router.openFind(repositoryID: repository, query: "invoice", run: true)
+        #expect(router.findQuery == "invoice")
+        #expect(router.findRunsOnArrival)
     }
 
     @Test("a search's hit opens the folders above it down from the deepest top holding it, and a whole-disk top ends the walk")
