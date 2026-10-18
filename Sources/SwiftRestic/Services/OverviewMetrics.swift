@@ -79,7 +79,7 @@ struct ProtectionSummary: Equatable, Sendable {
     var skippedLines: [String] = []
     /// One line per protected plan that will not run by itself now — its
     /// pause, or "Not scheduled" — in the sidebar's words ("Photos: Paused
-    /// — Sunday at 03:00"), so "all protected" cannot hide a plan that has
+    /// — Sunday at 3:00 AM"), so "all protected" cannot hide a plan that has
     /// stopped. A pause is a choice, not a problem: the card gives these
     /// the pause glyph, not the warning's.
     var heldLines: [String] = []

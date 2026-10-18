@@ -593,14 +593,14 @@ struct PlanEditorSheet: View {
                     in: 1 ... 24
                 )
             case .daily:
-                timeOfDayPickers
+                timeOfDayPicker
             case .weekly:
                 Picker("On", selection: $draft.schedule.weekday) {
                     ForEach(1 ... 7, id: \.self) { day in
                         Text(Calendar.current.weekdaySymbols[day - 1]).tag(day)
                     }
                 }
-                timeOfDayPickers
+                timeOfDayPicker
             }
 
             if draft.schedule.frequency != .manual {
@@ -644,37 +644,23 @@ struct PlanEditorSheet: View {
         .formStyle(.grouped)
     }
 
-    /// "At 02 : 05" on one line, in the 24-hour form every schedule summary
-    /// uses; the pickers' hidden labels reach VoiceOver only.
-    private var timeOfDayPickers: some View {
-        LabeledContent("At") {
-            HStack(spacing: 4) {
-                Picker("Hour", selection: $draft.schedule.hour) {
-                    ForEach(0 ... 23, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
+    /// macOS's own time field: the Mac's 12- or 24-hour clock, typed or
+    /// stepped, in the form the summary and the Next backup value say it
+    /// in. Any minute, not a hidden 15-minute grid: a typed :05 or :20
+    /// works.
+    private var timeOfDayPicker: some View {
+        DatePicker(
+            "At",
+            selection: Binding(
+                get: { Schedule.moment(hour: draft.schedule.hour, minute: draft.schedule.minute) },
+                set: { date in
+                    let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                    draft.schedule.hour = parts.hour!
+                    draft.schedule.minute = parts.minute!
                 }
-                // Hidden labels still name the controls to VoiceOver; an
-                // added accessibilityLabel read "Hour, Hour".
-                .labelsHidden()
-                .fixedSize()
-                Text(verbatim: ":")
-                    .accessibilityHidden(true)
-                // Any minute, not a hidden 15-minute grid: a typed :05 or
-                // :20 must work. Bordered, so "00" reads as a field and not
-                // as a label beside the popup.
-                TextField(
-                    "Minute",
-                    value: Binding(
-                        get: { draft.schedule.minute },
-                        set: { draft.schedule.minute = min(59, max(0, $0)) }
-                    ),
-                    format: Schedule.minuteStyle
-                )
-                .labelsHidden()
-                .textFieldStyle(.roundedBorder)
-                .multilineTextAlignment(.center)
-                .frame(width: 40)
-            }
-        }
+            ),
+            displayedComponents: .hourAndMinute
+        )
     }
 
     private var retentionTab: some View {

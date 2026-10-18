@@ -16,15 +16,43 @@ struct SchedulingTests {
         return formatter.date(from: string)!
     }
 
-    @Test("the minute field shows two digits")
-    func minuteShowsTwoDigits() throws {
-        // The locale is pinned: under ar_EG the style renders 5 as '٠٥'.
-        let style = Schedule.minuteStyle.locale(Locale(identifier: "en_US"))
-        #expect(style.format(0) == "00")
-        #expect(style.format(5) == "05")
-        #expect(style.format(59) == "59")
-        #expect(try style.parseStrategy.parse("7") == 7)
-        #expect(try style.parseStrategy.parse("07") == 7)
+    @Test("a schedule's time reads in the Mac's own clock, 12- or 24-hour")
+    func summaryFollowsTheClock() {
+        // Locales pinned: en_US keeps a 12-hour clock, en_GB a 24-hour one.
+        // AppKit spells AM and PM after a narrow no-break space.
+        func flat(_ text: String) -> String { text.replacingOccurrences(of: "\u{202F}", with: " ") }
+        let us = Locale(identifier: "en_US")
+        let gb = Locale(identifier: "en_GB")
+        var schedule = Schedule()
+        schedule.frequency = .daily
+        schedule.hour = 14
+        schedule.minute = 5
+        #expect(flat(schedule.summary(calendar: calendar, locale: us)) == "Daily at 2:05 PM")
+        #expect(schedule.summary(calendar: calendar, locale: gb) == "Daily at 14:05")
+        schedule.frequency = .weekly
+        schedule.weekday = 1
+        schedule.hour = 3
+        schedule.minute = 0
+        #expect(flat(schedule.summary(calendar: calendar, locale: us)) == "Sunday at 3:00 AM")
+        #expect(schedule.summary(calendar: calendar, locale: gb) == "Sunday at 03:00")
+    }
+
+    @Test("every time of day exists on the editor's anchor day, whatever the zone or calendar")
+    func anchorHoldsEveryTime() {
+        for (identifier, zone) in [
+            (Calendar.Identifier.gregorian, "UTC"), (.gregorian, "America/Santiago"), (.gregorian, "Australia/Lord_Howe"),
+            (.gregorian, "Asia/Kathmandu"), (.buddhist, "Asia/Bangkok"), (.japanese, "Asia/Tokyo"),
+        ] {
+            var calendar = Calendar(identifier: identifier)
+            calendar.timeZone = TimeZone(identifier: zone)!
+            for hour in 0 ..< 24 {
+                for minute in [0, 1, 30, 59] {
+                    let moment = Schedule.moment(hour: hour, minute: minute, calendar: calendar)
+                    let parts = calendar.dateComponents([.hour, .minute], from: moment)
+                    #expect(parts.hour == hour && parts.minute == minute, "\(identifier) \(zone) \(hour):\(minute)")
+                }
+            }
+        }
     }
 
     @Test("a manual plan is never due")
@@ -886,18 +914,18 @@ struct MaintenanceSchedulingTests {
         hourly.intervalHours = 1
         #expect(hourly.summary == "Every hour")
 
+        // The time's words are the Mac's (`summaryFollowsTheClock` pins
+        // them); the summary puts them in place.
         var daily = Schedule()
         daily.frequency = .daily
         daily.hour = 2
         daily.minute = 5
-        #expect(daily.summary == "Daily at 02:05")
+        #expect(daily.summary == "Daily at \(daily.timeOfDay())")
 
-        // The weekday name comes from Calendar.current, so the words depend on
-        // the machine's locale — assert only the shape.
         var weekly = Schedule()
         weekly.frequency = .weekly
         weekly.hour = 3
-        #expect(weekly.summary.hasSuffix(" at 03:00"))
+        #expect(weekly.summary.hasSuffix(" at \(weekly.timeOfDay())"))
     }
 }
 

@@ -23,10 +23,6 @@ struct Schedule: Codable, Sendable, Hashable {
     /// 1 = Sunday, matching `Calendar.component(.weekday:)`.
     var weekday: Int = 2
 
-    /// The editor's minute field: two digits, as every summary states the
-    /// time ("Daily at 02:05") — a bare "0" beside the hour reads as a count.
-    static let minuteStyle: IntegerFormatStyle<Int> = .number.grouping(.never).precision(.integerLength(2...))
-
     init() {}
 
     init(from decoder: any Decoder) throws {
@@ -52,15 +48,41 @@ struct Schedule: Codable, Sendable, Hashable {
         return nearest
     }
 
-    var summary: String {
+    var summary: String { summary() }
+
+    /// "Daily at 2:00 AM", "Sunday at 03:00": the time in the Mac's own
+    /// clock — 12- or 24-hour, as Language & Region sets it — the way the
+    /// Next backup value beside it reads (`Format.tileTimestamp`), never a
+    /// fixed 24-hour form of its own. The locale is pinned by tests only.
+    func summary(calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
         switch frequency {
         case .manual: return "Manually"
         case .hourly: return intervalHours == 1 ? "Every hour" : "Every \(intervalHours) hours"
-        case .daily: return String(format: "Daily at %02d:%02d", hour, minute)
+        case .daily: return "Daily at \(timeOfDay(calendar: calendar, locale: locale))"
         case .weekly:
-            let name = Calendar.current.weekdaySymbols[max(0, min(6, weekday - 1))]
-            return String(format: "%@ at %02d:%02d", name, hour, minute)
+            var named = calendar
+            named.locale = locale
+            let name = named.weekdaySymbols[max(0, min(6, weekday - 1))]
+            return "\(name) at \(timeOfDay(calendar: calendar, locale: locale))"
         }
+    }
+
+    /// The time of day a daily or weekly schedule runs at, in the Mac's
+    /// clock.
+    func timeOfDay(calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
+        Self.moment(hour: hour, minute: minute, calendar: calendar)
+            .formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone).hour().minute())
+    }
+
+    /// `hour` and `minute` as a moment in `calendar`'s zone, on a fixed day
+    /// no clock change falls on anywhere — 1 January 2001, Gregorian
+    /// whatever the Mac's calendar, so a Buddhist or Japanese year never
+    /// lands in an era of odd local offsets — so every time of day exists
+    /// on it. What the editor's time field edits.
+    static func moment(hour: Int, minute: Int, calendar: Calendar = .current) -> Date {
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        return gregorian.date(from: DateComponents(year: 2001, month: 1, day: 1, hour: hour, minute: minute))!
     }
 
     /// The next moment this schedule is due, given when it last ran.

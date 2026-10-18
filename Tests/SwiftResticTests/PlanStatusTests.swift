@@ -329,7 +329,7 @@ struct PlanStatusTests {
         )
         #expect(caption.text == "Failed — 5 minutes ago")
         #expect(caption.outcome == .failed)
-        #expect(caption.pauseNote == "Paused — Daily at 02:00")
+        #expect(caption.pauseNote == "Paused — \(plan.schedule.summary)")
 
         // Unpaused, the problem stands alone.
         plan.isEnabled = true
@@ -427,7 +427,7 @@ struct PlanStatusTests {
             PlanStatus.sidebarCaption(
                 for: fresh, activity: nil, problem: nil,
                 existingRepositoryIDs: [repositoryID], now: now, relative: relative
-            ).text == "Daily at 02:00"
+            ).text == fresh.schedule.summary
         )
         var manual = fresh
         manual.schedule.frequency = .manual

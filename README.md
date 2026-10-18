@@ -153,7 +153,7 @@ the generator after editing it; the PNGs are checked in.
   Backups*. Under it each unprotected plan is named with its warning, and
   each protected plan that will not run by itself — paused, or "Not
   scheduled" for an incomplete setup — with a pause glyph in the sidebar's
-  words ("Photos: Paused — Sunday at 03:00"), so "2 of 2 plans protected"
+  words ("Photos: Paused — Sunday at 3:00 AM"), so "2 of 2 plans protected"
   cannot hide a stopped plan (a manual plan gets no line). The card carries
   *New Backup Plan…* while the repository has no plan; after that a plan
   starts from the sidebar's + or ⌘N (into the repository on screen) or the
@@ -283,7 +283,11 @@ the generator after editing it; the PNGs are checked in.
   cannot hold sheds them at load; patterns typed in stay), says when a folder
   is not on this Mac, takes excludes chosen in a panel or dropped from Finder
   as their own paths (glob characters escaped), and shows *Next backup* for
-  the schedule being chosen, as Save would store it. *Skip online-only cloud
+  the schedule being chosen, as Save would store it. A daily or weekly
+  schedule's *At* is macOS's own time field, in the Mac's 12- or 24-hour
+  clock, as every schedule then reads ("Daily at 2:00 AM", "Daily at 02:00"
+  under a 24-hour clock) — the form of the *Next backup* value beside it,
+  where it had been a fixed 24-hour "02:00". *Skip online-only cloud
   files (iCloud Drive, OneDrive)* passes restic's `--exclude-cloud-files`: on
   for new plans, off for plans saved before the option (their backups do not
   change under it), and only with restic 0.19 or later, which brought the
