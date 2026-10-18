@@ -1,9 +1,9 @@
 name: CI
 
+# Run by hand only — Actions › CI › Run workflow, or `gh workflow run CI` —
+# the owner's call (2026-10-18); a push or a pull request no longer starts it.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
