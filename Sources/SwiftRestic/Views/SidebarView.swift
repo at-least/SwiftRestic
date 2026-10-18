@@ -1,23 +1,23 @@
 import SwiftUI
 
 /// The split view's sidebar: each repository with its plans always in view
-/// beneath it, then Activity. The repository's row opens its page, which is
-/// its overview, and never collapses; beneath it sit its plans — each folds
-/// open to the dated backups it made there — "New Backup Plan…" while it has
-/// none, and Other backups while the repository holds backups none of its
-/// plans made (`BackupShelves`), grouped by the plan that made them when a
-/// plan tag says which, by folders and Mac otherwise. A group's row, either
-/// kind, is a page like a plan's is — the row selects, the chevron ahead of
-/// it folds — while the Other backups node stays a fold only. The context
-/// menus and the Add footer ride along.
+/// beneath it, then Activity — two levels, the HIG's most for a sidebar
+/// ("When a data hierarchy is deeper than two levels, consider using a
+/// split view interface that includes a content list between the sidebar
+/// items and detail view"). The repository's row opens its page, which is
+/// its overview, and never collapses; beneath it sit its plans, "New Backup
+/// Plan…" while it has none, and — under an Other backups caption while the
+/// repository holds backups none of its plans made (`BackupShelves`) — their
+/// groups, by the plan that made them when a plan tag says which, by folders
+/// and Mac otherwise. A plan's or a group's row is a page whose Backups tab
+/// lists its backups beside the one open: the content list, where until
+/// 2026-10-18 each folded open here, a year of rows deep. The context menus
+/// and the Add footer ride along.
 ///
-/// Every row is a top-level List row, and the tree's levels are leading
-/// indentation (`Indent`): a DisclosureGroup draws its triangle at the
-/// row's outer edge, which an indented child would leave stranded far to
-/// the left of its title. Only places carry a tag — a repository, a plan,
-/// a group under Other backups, a backup record — so selection stays
-/// unique; a plan's or a group's chevron and the Other backups node are
-/// folds, and "New Backup Plan…" is an action.
+/// Every row is a top-level List row, and a repository's children are
+/// leading indentation (`Indent`). Only places carry a tag — a repository,
+/// a plan, a group under Other backups — so selection stays unique; the
+/// Other backups caption is text, and "New Backup Plan…" is an action.
 ///
 /// The sidebar's list is its own view so it type-checks on its own: the
 /// root's modifier chain sits at the compiler's type-check budget. The
@@ -29,19 +29,8 @@ struct SidebarView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.now) private var now
 
-    /// Which plans and Other backups are open — the backup records
-    /// underneath are the restore pane's entry points. Shared with the detail
-    /// column: selecting a record from anywhere must find its fold open.
-    @Binding var folds: SidebarFolds
-
-    /// Untagged lineage groups under Other backups that the user folded
-    /// shut. They start open, as Arq's tree does, and a record selected from
-    /// anywhere reopens its group — the promise `folds` keeps one level up.
-    /// The plan-UUID groups follow the plan folds' syntax instead: closed
-    /// until opened, in `folds.otherGroups`.
-    @State private var collapsedLineages: Set<LineageFoldID> = []
     /// Taken back by a click in the sidebar (`focusOnClick`), once a click
-    /// in the restore tree has taken it away.
+    /// in a page's list has taken it away.
     @FocusState private var isFocused: Bool
 
     let onEditPlan: (BackupPlan) -> Void
@@ -58,12 +47,6 @@ struct SidebarView: View {
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     var body: some View {
-        ScrollViewReader { proxy in
-            sidebarList(proxy: proxy)
-        }
-    }
-
-    private func sidebarList(proxy: ScrollViewProxy) -> some View {
         List(selection: Binding(
             get: { router.selection },
             set: { router.selection = $0 }
@@ -121,37 +104,6 @@ struct SidebarView: View {
         .focusOnClick($isFocused)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         .safeAreaInset(edge: .bottom) { sidebarFooter }
-        // The keyboard an outline gives its disclosure rows: with a plan or
-        // a plan-UUID group selected, → shows its backups and ← hides them.
-        // Plain arrows only: a modified arrow keeps its system meaning, the
-        // restore pane's rule for its own folds.
-        .onKeyPress(.rightArrow, phases: .down) { press in
-            isPlain(press) ? foldSelection(open: true) : .ignored
-        }
-        .onKeyPress(.leftArrow, phases: .down) { press in
-            isPlain(press) ? foldSelection(open: false) : .ignored
-        }
-        .onChange(of: router.selection) {
-            guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection else { return }
-            // A record picked from elsewhere — Show in Backups on a version,
-            // a run's Browse — lands in a fold that may be sixteen months
-            // long: its row is brought into view, a turn later because the
-            // fold the same change opens lists the row in this update (the
-            // Files tree's own rule). A click's row is in view already, and
-            // the minimal scroll leaves it where it is.
-            let item = SidebarItem.restoreSnapshot(repositoryID, snapshotID)
-            Task { @MainActor in proxy.scrollTo(item) }
-            // A lineage's fold is the sidebar's own view state, so an
-            // unowned record with no plan tag reopens it here; plan-UUID
-            // groups reopen through RootDetailView's SidebarFolds.reveal on
-            // the same change (a plan's record must not reopen a lineage,
-            // and a tagged record's group is a plan fold, closed until
-            // opened).
-            guard let snapshot = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }),
-                  case let .lineage(_, key) = model.shelves(for: repositoryID).page(of: snapshot, repositoryID: repositoryID)
-            else { return }
-            collapsedLineages.remove(LineageFoldID(repositoryID: repositoryID, key: key))
-        }
     }
 
     /// Arq's bare + in the corner. A missing restic is not repeated here: the
@@ -316,35 +268,27 @@ struct SidebarView: View {
         switch child {
         case let .plan(id):
             if let plan = model.plan(id: id) {
-                // The newest snapshot from the same shelf the fold below
-                // shows — one dictionary hit — rather than re-filtering the
-                // repository's whole listing inside the row, whose body
-                // re-runs on every minute tick and selection change.
+                // The newest snapshot from the plan's own shelf — one
+                // dictionary hit — rather than re-filtering the repository's
+                // whole listing inside the row, whose body re-runs on every
+                // minute tick and selection change.
                 planRow(plan, latestSnapshot: shelves.byPlan[plan.id]?.first)
-                if folds.plans.contains(plan.id) {
-                    planBackups(shelves.byPlan[plan.id] ?? [], of: plan, in: repository)
-                }
             }
         case .addPlan:
             addPlanRow(repository)
         case .otherBackups:
-            otherBackupsRow(repository, shelves: shelves)
-            if folds.otherBackups.contains(repository.id) {
-                otherBackups(repository, shelves: shelves)
-            }
+            otherBackupsCaption(repository, shelves: shelves)
+            otherBackups(repository, shelves: shelves)
         }
     }
 
     /// The way to a repository's first plan, where its plans would be. An
-    /// action, not a place: no tag, no chevron — its fold column stays empty
-    /// and its plus fills the icon column, so its title starts where plan
-    /// names do. It leaves once a plan exists; the footer's + and the row's
-    /// menu keep offering the next one.
+    /// action, not a place: no tag — its plus fills the icon column, so its
+    /// title starts where plan names do. It leaves once a plan exists; the
+    /// footer's + and the row's menu keep offering the next one.
     private func addPlanRow(_ repository: Repository) -> some View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
-                Color.clear
-                    .frame(width: Indent.fold, height: 1)
                 Label {
                     Text("New Backup Plan…")
                 } icon: {
@@ -365,225 +309,49 @@ struct SidebarView: View {
 
     // MARK: - Plans
 
-    /// A plan: the row opens its page, and the chevron ahead of it folds
-    /// the plan's backups open beneath it — Arq's RESTORE tree, where a
-    /// backup plan's records sit under the plan. A plan is its folder and
-    /// wears one, as there; a file wears it too, decoration whose SF label
-    /// ("Move") would only mislead. The row pads by `child`, the chevron
-    /// fills the shared fold column and the folder the icon column, so the
-    /// plan's title starts where every repository child's does.
+    /// A plan: the row opens its page, whose Backups tab lists what it
+    /// made here. A plan is its folder and wears one; a file wears it too,
+    /// decoration whose SF label ("Move") would only mislead. The row pads
+    /// by `child` and the folder fills the icon column, so the plan's title
+    /// starts where every repository child's does.
     private func planRow(_ plan: BackupPlan, latestSnapshot: Snapshot?) -> some View {
-        HStack(spacing: 4) {
-            planFold(plan)
-            // A Label, so the folder takes the sidebar's icon tint as the
-            // repository's icon does: grey in an inactive window, white
-            // under the selection, where an explicit accent would vanish.
-            Label {
-                PlanSidebarRow(plan: plan, latestSnapshot: latestSnapshot)
-            } icon: {
-                Image(systemName: "folder.fill")
-                    .accessibilityHidden(true)
-            }
+        // A Label, so the folder takes the sidebar's icon tint as the
+        // repository's icon does: grey in an inactive window, white under
+        // the selection, where an explicit accent would vanish.
+        Label {
+            PlanSidebarRow(plan: plan, latestSnapshot: latestSnapshot)
+        } icon: {
+            Image(systemName: "folder.fill")
+                .accessibilityHidden(true)
         }
         .padding(.leading, Indent.child)
         .tag(SidebarItem.plan(plan.id))
         .contextMenu { planContextMenu(plan) }
     }
 
-    private func planFold(_ plan: BackupPlan) -> some View {
-        let isExpanded = folds.plans.contains(plan.id)
-        return Button { togglePlan(plan) } label: {
-            FoldChevron(isExpanded: isExpanded)
-                .frame(width: Indent.fold)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(planFoldHelp(isExpanded: isExpanded))
-        .accessibilityLabel(planFoldName(plan))
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-    }
-
-    private func planFoldHelp(isExpanded: Bool) -> String {
-        isExpanded ? "Hide this plan's backups" : "Show this plan's backups"
-    }
-
-    /// Named for its plan: every plan has a fold, and as flat rows they
-    /// have no outline parent to tell them apart.
-    private func planFoldName(_ plan: BackupPlan) -> String {
-        "Backups of “\(model.label(of: plan))”"
-    }
-
-    private func isPlain(_ press: KeyPress) -> Bool {
-        press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
-    }
-
-    /// The keyboard fold for whatever selectable row holds a fold: a plan,
-    /// or a group under Other backups. Other rows ignore the key.
-    private func foldSelection(open: Bool) -> KeyPress.Result {
-        switch router.selection {
-        case let .plan(id):
-            guard let plan = model.plan(id: id) else { return .ignored }
-            if open != folds.plans.contains(id) { togglePlan(plan) }
-            return .handled
-        case let .orphanPlan(repositoryID, planID):
-            // The group's title, by the same label derivation the row read
-            // it from — also how a selection the shelves no longer hold is
-            // told apart from one to fold.
-            guard let title = model.shelves(for: repositoryID)
-                .otherLabels(repositories: model.configuration.repositories, localHost: model.localHostname)[.plan(planID)]?.title
-            else { return .ignored }
-            let id = OtherGroupFoldID(repositoryID: repositoryID, planID: planID)
-            if open != folds.otherGroups.contains(id) { toggleOtherGroup(id, title: title) }
-            // The group's rows render only inside the repository's Other
-            // backups node, so opening one whose node is folded shut would
-            // move a fold nobody can see — reveal the node too, the same
-            // reveal a record's selection performs.
-            if open { folds.otherBackups.insert(repositoryID) }
-            return .handled
-        case let .lineage(repositoryID, key):
-            guard let title = model.shelves(for: repositoryID)
-                .otherLabels(repositories: model.configuration.repositories, localHost: model.localHostname)[.lineage(key)]?.title
-            else { return .ignored }
-            let id = LineageFoldID(repositoryID: repositoryID, key: key)
-            // Open is "not folded shut": a lineage starts open.
-            if open == collapsedLineages.contains(id) { toggleLineage(id, title: title) }
-            if open { folds.otherBackups.insert(repositoryID) }
-            return .handled
-        case let .restoreSnapshot(repositoryID, snapshotID):
-            // ← on a backup row: the outline convention — a child's ← selects
-            // its parent — so a record two hundred rows into a fold has a way
-            // back: the fold's row, from which a second ← folds it. → has
-            // nothing to open on a record.
-            guard !open, let record = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
-            else { return .ignored }
-            router.selection = model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
-            return .handled
-        default:
-            return .ignored
-        }
-    }
-
-    /// The first opening loads the record list; later refreshes come from
-    /// the launch sweep and the repository's own Refresh.
-    /// Spoken when it folds, as a disclosure row was: the fold is a button,
-    /// whose changed value VoiceOver does not read out by itself.
-    private func togglePlan(_ plan: BackupPlan) {
-        let opened = folds.plans.remove(plan.id) == nil
-        if opened {
-            folds.plans.insert(plan.id)
-            if let repositoryID = plan.repositoryID, model.snapshotListingOutcome(for: repositoryID) == .idle {
-                Task { await model.refreshSnapshots(repositoryID: repositoryID) }
-            }
-        }
-        announceFold(planFoldName(plan), opened: opened)
-    }
-
-    private func announceFold(_ name: String, opened: Bool) {
-        AccessibilityNotification.Announcement("\(name) \(opened ? "expanded" : "collapsed")").post()
-    }
-
-    /// An open plan's backups, newest first — flat, even when the plan's
-    /// folders changed: each record's Change column still compares within
-    /// its own folders, and the restore pane's header says which. Past one
-    /// month, each month opens with an inert caption row (the Compare
-    /// sheet's months), so a deep history has landmarks.
-    @ViewBuilder
-    private func planBackups(_ records: [Snapshot], of plan: BackupPlan, in repository: Repository) -> some View {
-        if records.isEmpty {
-            BackupsStatusRow(repositoryID: repository.id)
-                .padding(.leading, Indent.planRecord)
-        } else if let months = DiffCandidateGrouping.landmarks(in: records, time: \.time) {
-            ForEach(months, id: \.label) { month in
-                // No tag: a caption, never a selection.
-                Text(month.label)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.leading, Indent.planRecord)
-                    .accessibilityAddTraits(.isHeader)
-                recordRows(month.items, of: plan, in: repository)
-            }
-        } else {
-            recordRows(records, of: plan, in: repository)
-        }
-    }
-
-    private func recordRows(_ records: [Snapshot], of plan: BackupPlan, in repository: Repository) -> some View {
-        ForEach(records) { snapshot in
-            recordRow(snapshot, in: repository.id, indent: Indent.planRecord, hideTitle: "Hide This Plan's Backups") {
-                togglePlan(plan)
-            }
-        }
-    }
-
-    /// A backup's row under a fold: the scroll target a reveal names (the
-    /// selection's own value), and the fold's chevron's own verb in its
-    /// menu, reachable from any depth of the fold — the row at its top may
-    /// be a year of rows away.
-    private func recordRow(
-        _ snapshot: Snapshot,
-        in repositoryID: UUID,
-        indent: CGFloat,
-        hideTitle: String,
-        hide: @escaping () -> Void
-    ) -> some View {
-        let item = SidebarItem.restoreSnapshot(repositoryID, snapshot.id)
-        return RestoreRecordRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
-            .padding(.leading, indent)
-            .tag(item)
-            .id(item)
-            .contextMenu {
-                Button(hideTitle) { hide() }
-            }
-    }
-
     // MARK: - Other backups
 
-    /// The backups in the repository none of its plans made — another
-    /// Mac's, the console's, a deleted plan's, or a plan's that now backs up
-    /// elsewhere. Only there while it holds some, so it never reads as
-    /// empty; it carries no tag, so a click only folds it. Its chevron and
-    /// box sit where a plan's chevron and folder do, so its title starts
-    /// where plan names do.
-    private func otherBackupsRow(_ repository: Repository, shelves: BackupShelves) -> some View {
-        let isExpanded = folds.otherBackups.contains(repository.id)
+    /// The caption over the backups in the repository none of its plans
+    /// made — another Mac's, the console's, a deleted plan's, or a plan's
+    /// that now backs up elsewhere. Only there while it holds some, so it
+    /// never reads as empty. Text, not a level: no tag, no fold — the
+    /// groups under it sit at the plans' level, as a list's month captions
+    /// stand over its rows.
+    private func otherBackupsCaption(_ repository: Repository, shelves: BackupShelves) -> some View {
         let title = SidebarTree.otherBackupsTitle(repositoryHasPlans: !shelves.plans.isEmpty)
         // The one count every surface reads — the page's Protection line,
         // its Other backups card and its Snapshots split included.
         let count = Format.plural(shelves.otherBackupsCount, "backup")
-        return Button { toggleOtherBackups(repository, title: title) } label: {
-            HStack(spacing: 4) {
-                FoldChevron(isExpanded: isExpanded)
-                    .frame(width: Indent.fold)
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(title)
-                            .lineLimit(1)
-                        Text(count)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                } icon: {
-                    Image(systemName: "archivebox")
-                        .accessibilityHidden(true)
-                }
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.leading, Indent.child)
-        .help("Backups in “\(model.label(of: repository))” that none of its plans made — from another Mac or the restic console, a deleted plan, or a plan that now backs up elsewhere")
-        // Named for its repository, as a plan's fold is for its plan.
-        .accessibilityLabel("\(title) in “\(model.label(of: repository))”, \(count)")
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-    }
-
-    private func toggleOtherBackups(_ repository: Repository, title: String) {
-        let opened = folds.otherBackups.remove(repository.id) == nil
-        if opened { folds.otherBackups.insert(repository.id) }
-        announceFold("\(title) in “\(model.label(of: repository))”", opened: opened)
+        return Text("\(title) · \(count)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.leading, Indent.child)
+            .padding(.top, 4)
+            .help("Backups in “\(model.label(of: repository))” that none of its plans made — from another Mac or the restic console, a deleted plan, or a plan that now backs up elsewhere")
+            // Named for its repository: every repository can have one.
+            .accessibilityLabel("\(title) in “\(model.label(of: repository))”, \(count)")
+            .accessibilityAddTraits(.isHeader)
     }
 
     /// Both kinds of group, interleaved newest-first: a plan's history here
@@ -598,107 +366,65 @@ struct SidebarView: View {
         ForEach(shelves.others) { group in
             switch group {
             case let .plan(id, snapshots):
-                planGroupRows(
-                    id: id,
+                groupRow(
+                    page: .orphanPlan(repositoryID: repository.id, planID: id),
                     snapshots: snapshots,
                     label: labels[.plan(id)],
-                    repository: repository,
-                    formerPlan: shelves.formerPlan(of: group),
-                    isAdoptable: shelves.adoptablePath(of: group, localHost: model.localHostname) != nil
+                    repository: repository
                 )
+                .contextMenu {
+                    planGroupMenu(
+                        planID: id, snapshots: snapshots, repository: repository,
+                        formerPlan: shelves.formerPlan(of: group),
+                        isAdoptable: shelves.adoptablePath(of: group, localHost: model.localHostname) != nil
+                    )
+                }
             case let .lineage(lineage):
-                lineageRows(lineage, label: labels[.lineage(lineage.key)], repository: repository)
+                let page = SidebarItem.lineage(repositoryID: repository.id, key: lineage.key)
+                groupRow(page: page, snapshots: lineage.snapshots, label: labels[.lineage(lineage.key)], repository: repository)
+                    // Its backups and its files: no plan to open or adopt.
+                    .contextMenu { showMenuItems(page, snapshots: lineage.snapshots, repository: repository) }
             }
         }
     }
 
-    /// One plan's history in this repository that none of the repository's
-    /// plans owns — a deleted plan's, or a plan that now backs up elsewhere.
-    /// A page, the plan row's own grammar: the row selects, the chevron
-    /// ahead of it folds, and its records sit one fold-step under its
-    /// title, the way a plan's sit under it, so the group reads as the
-    /// plan's history and not a folder's. The label's caption and tooltip
-    /// say which of the three kinds it is.
-    @ViewBuilder
-    private func planGroupRows(
-        id planID: UUID,
+    /// One group under Other backups, either kind — a plan's history in
+    /// this repository that none of its plans owns, or the backups of one
+    /// Mac's folders that no plan made. A page, a plan row's grammar: the
+    /// row selects, and its page lists the group's backups. Its box sits in
+    /// the icon column, so its title starts where plan names do; the
+    /// label's caption and tooltip say which kind it is.
+    private func groupRow(
+        page: SidebarItem,
         snapshots: [Snapshot],
         label: SnapshotLineage.Label?,
-        repository: Repository,
-        formerPlan: BackupPlan?,
-        isAdoptable: Bool
+        repository: Repository
     ) -> some View {
-        let id = OtherGroupFoldID(repositoryID: repository.id, planID: planID)
-        let isExpanded = folds.otherGroups.contains(id)
         let title = label?.title ?? "Backups"
         let caption = label?.caption ?? .init(count: Format.plural(snapshots.count, "backup"))
-        HStack(spacing: 4) {
-            groupFold(title: title, isExpanded: isExpanded) { toggleOtherGroup(id, title: title) }
+        return Label {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .lineLimit(1)
                 GroupCaptionLine(caption: caption)
             }
-            Spacer(minLength: 0)
+        } icon: {
+            Image(systemName: "archivebox")
+                .accessibilityHidden(true)
         }
-        .padding(.leading, Indent.groupPad)
-        .tag(SidebarItem.orphanPlan(repositoryID: repository.id, planID: planID))
+        .padding(.leading, Indent.child)
+        .tag(page)
         .help(label?.detail ?? "")
-        .contextMenu {
-            groupContextMenu(
-                planID: planID, snapshots: snapshots, repository: repository,
-                formerPlan: formerPlan, isAdoptable: isAdoptable
-            )
-        }
-        // The same plan can have left backups in two repositories.
+        // The same plan, or the same folders from the same Mac, can have
+        // left backups in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(model.label(of: repository))”")
-        if isExpanded {
-            ForEach(snapshots) { snapshot in
-                recordRow(snapshot, in: repository.id, indent: Indent.groupRecord, hideTitle: "Hide This Group's Backups") {
-                    toggleOtherGroup(id, title: title)
-                }
-            }
-        }
-    }
-
-    /// A group's fold, either kind, the plan fold's own grammar: a chevron
-    /// column that toggles, named for what it holds.
-    private func groupFold(title: String, isExpanded: Bool, toggle: @escaping () -> Void) -> some View {
-        Button(action: toggle) {
-            FoldChevron(isExpanded: isExpanded)
-                .frame(width: Indent.lineageSlot)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(groupFoldHelp(isExpanded: isExpanded))
-        .accessibilityLabel("Backups of “\(title)”")
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-    }
-
-    private func groupFoldHelp(isExpanded: Bool) -> String {
-        isExpanded ? "Hide this group's backups" : "Show this group's backups"
-    }
-
-    /// The plan folds' open/closed idiom, for a group under Other backups.
-    private func toggleOtherGroup(_ id: OtherGroupFoldID, title: String) {
-        let opened = folds.otherGroups.remove(id) == nil
-        if opened { folds.otherGroups.insert(id) }
-        announceFold(title, opened: opened)
-    }
-
-    /// A lineage's fold: open unless the user folded it shut.
-    private func toggleLineage(_ id: LineageFoldID, title: String) {
-        let opened = collapsedLineages.remove(id) != nil
-        if !opened { collapsedLineages.insert(id) }
-        announceFold(title, opened: opened)
     }
 
     /// A plan-UUID group's menu: an adoptable group's verb first, a moved
     /// plan's history opens that plan, and every group gets its two ways in
-    /// — its newest backup, and its page's Files.
+    /// — its page's Backups and Files.
     @ViewBuilder
-    private func groupContextMenu(
+    private func planGroupMenu(
         planID: UUID,
         snapshots: [Snapshot],
         repository: Repository,
@@ -715,162 +441,28 @@ struct SidebarView: View {
                 router.selection = .plan(formerPlan.id)
             }
         }
-        restoreFromGroupItem(snapshots, repository: repository)
-        Button("Show Files") {
-            router.showFiles(of: .orphanPlan(repositoryID: repository.id, planID: planID))
-        }
+        showMenuItems(.orphanPlan(repositoryID: repository.id, planID: planID), snapshots: snapshots, repository: repository)
     }
 
-    /// Restore Files…, the one entry an untagged lineage's menu has — and
-    /// the group row's other one: the history's newest record, selected in
-    /// the sidebar, which opens the fold it sits in. A group exists only
-    /// around backups, so it always has a newest one.
-    private func restoreFromGroupItem(_ snapshots: [Snapshot], repository: Repository) -> some View {
-        Button("Restore Files…") {
-            router.showRestore(repositoryID: repository.id, snapshotID: snapshots[0].id)
-        }
-    }
-
-    /// One lineage's records — Arq's backed-up-folder level, so the row
-    /// below a record is the one its Change column compares against. A
-    /// page, the plan-UUID group's grammar: the row selects, the chevron ahead of it folds —
-    /// its host and folders are identity enough for a page that browses
-    /// and restores, though not for a plan to adopt. The label's caption
-    /// carries the qualifier and the "outside SwiftRestic" kind; the
-    /// tooltip names the console escape hatch.
+    /// Show Backups — the page's Backups tab, its newest backup open — and
+    /// Show Files, the two ways into a group from its row.
     @ViewBuilder
-    private func lineageRows(
-        _ lineage: SnapshotLineage,
-        label: SnapshotLineage.Label?,
-        repository: Repository
-    ) -> some View {
-        let repositoryID = repository.id
-        let id = LineageFoldID(repositoryID: repositoryID, key: lineage.key)
-        let isExpanded = !collapsedLineages.contains(id)
-        let title = label?.title ?? "Backups"
-        let caption = label?.caption ?? .init(count: Format.plural(lineage.snapshots.count, "backup"))
-        HStack(spacing: 4) {
-            groupFold(title: title, isExpanded: isExpanded) { toggleLineage(id, title: title) }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .lineLimit(1)
-                GroupCaptionLine(caption: caption)
-            }
-            Spacer(minLength: 0)
+    private func showMenuItems(_ page: SidebarItem, snapshots: [Snapshot], repository: Repository) -> some View {
+        Button("Show Backups") {
+            router.showBackup(snapshots[0].id, on: page, repositoryID: repository.id)
         }
-        .padding(.leading, Indent.groupPad)
-        .tag(SidebarItem.lineage(repositoryID: repositoryID, key: lineage.key))
-        .help(label?.detail ?? "")
-        // Its newest record and its files: no plan to open or adopt.
-        .contextMenu {
-            restoreFromGroupItem(lineage.snapshots, repository: repository)
-            Button("Show Files") {
-                router.showFiles(of: .lineage(repositoryID: repositoryID, key: lineage.key))
-            }
-        }
-        // The same folders from the same Mac can sit in two repositories.
-        .accessibilityLabel("\(title), \(caption.text), in “\(model.label(of: repository))”")
-        if isExpanded {
-            ForEach(lineage.snapshots) { snapshot in
-                recordRow(snapshot, in: repositoryID, indent: Indent.groupRecord, hideTitle: "Hide This Group's Backups") {
-                    toggleLineage(id, title: title)
-                }
-            }
+        Button("Show Files") {
+            router.showFiles(of: page)
         }
     }
 }
 
-/// The tree's levels, as the leading indentation of top-level List rows.
-/// A repository's children keep two shared columns ahead of their titles —
-/// the fold column (a plan's or Other backups' chevron) and the icon column
-/// (a plan's folder, Other backups' box, the plus of "New Backup Plan…") —
-/// so every child's title starts at one x. Each level below starts one
-/// fold-step (a chevron column plus the row spacing) further in, so a
-/// child's own rows — a plan's records, the groups under Other backups —
-/// sit under its icon, as an outline's children do (Arq's restore tree),
-/// and a group's records one fold-step past its title.
+/// A repository's children, as the leading indentation of top-level List
+/// rows: plans, "New Backup Plan…", the Other backups caption and its
+/// groups all start one step in, their icons under the repository's icon
+/// and their titles where its title starts.
 private enum Indent {
-    /// A repository's children: plan rows, "New Backup Plan…" and the
-    /// Other backups node. With `fold` and the row's spacing it puts the
-    /// fold column under the repository's icon and the icon column where
-    /// the repository's title starts.
     static let child: CGFloat = 12
-    /// The chevron column those children share, empty on "New Backup
-    /// Plan…".
-    static let fold: CGFloat = 14
-    /// A group under Other backups, of either kind: its chevron column
-    /// starts where the box above it does, its title one fold-step further
-    /// in.
-    static let groupPad: CGFloat = child + fold + 4
-    /// A group's chevron column, either kind. With the row spacing it is
-    /// the fold-step between levels.
-    static let lineageSlot: CGFloat = 14
-    /// A record under a plan, and the status rows an open plan's fold
-    /// shows: one fold-step past where the plan's folder starts, the x a
-    /// group's title starts at.
-    static let planRecord: CGFloat = groupPad + lineageSlot + 4
-    /// A record under an Other-backups group, plan-UUID or lineage
-    /// alike: one fold-step past the group's title.
-    static let groupRecord: CGFloat = planRecord + lineageSlot + 4
-}
-
-/// A fold's disclosure mark, the restore pane's own: chevron right when
-/// closed, down when open. The row around it is the button.
-struct FoldChevron: View {
-    let isExpanded: Bool
-
-    var body: some View {
-        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
-    }
-}
-
-/// A lineage group under Other backups, per repository: the same folders
-/// from the same host can live in two repositories, and each group folds on
-/// its own.
-private struct LineageFoldID: Hashable {
-    let repositoryID: UUID
-    let key: SnapshotLineage.Key
-}
-
-/// One dated backup record under a plan or Other backups — the row whose
-/// selection fills the detail pane with that record's files. One line, like Arq's: the
-/// completeness mark and the moment are the whole record at sidebar size.
-private struct RestoreRecordRow: View {
-    let snapshot: Snapshot
-    /// The backup run that wrote it, when the history still holds one.
-    let run: RunRecord?
-
-    var body: some View {
-        Text(Format.timestamp(snapshot.time))
-            .lineLimit(1)
-            // The row's help sits on the timestamp, not the row: a help on
-            // the row overwrites the mark's own ("Incomplete: …") in the
-            // accessibility tree.
-            .help("Browse this backup's files and restore from it")
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // State trails identity, PlanSidebarRow's rule: the mark sits at
-            // the row's right end, and only a visible one claims room there —
-            // a reserved slot on every row would truncate group records'
-            // dates at the default sidebar width.
-            .padding(.trailing, run?.snapshotCompleteness == .incomplete ? Self.markWidth + 6 : 0)
-            // An overlay, so the clear "Complete" text and the hidden
-            // slot-holder stay in the row — VoiceOver keeps its
-            // Complete/Incomplete word — without taking the date's width.
-            .overlay(alignment: .trailing) {
-                SnapshotCompletenessMark(run: run)
-                    .font(.caption)
-                    .frame(width: Self.markWidth)
-            }
-            // One utterance per record: the mark's label, when it has one,
-            // merges with the date, so there is no second row label to keep
-            // in step with it.
-            .accessibilityElement(children: .combine)
-    }
-
-    private static let markWidth: CGFloat = 14
 }
 
 /// An Other backups group's second line. The count and the kind keep their
@@ -902,10 +494,9 @@ private struct PlanSidebarRow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.now) private var now
     let plan: BackupPlan
-    /// The plan's newest snapshot, from the same shelf the fold beneath
-    /// this row shows. It is what the moment falls back to when the app
-    /// never ran the plan: history adopted with the repository counts as
-    /// its last backup.
+    /// The plan's newest snapshot, from the plan's own shelf. It is what
+    /// the moment falls back to when the app never ran the plan: history
+    /// adopted with the repository counts as its last backup.
     let latestSnapshot: Snapshot?
 
     var body: some View {
@@ -1012,9 +603,10 @@ private struct PlanSidebarRow: View {
     }
 }
 
-/// What an open plan says while it holds no record — and a Files tab whose
-/// chain has none. "No backups yet" only once a listing has succeeded:
-/// before that it is still being read, and after a failure it says why.
+/// What a page's Backups tab says while it lists no backup — and a Files
+/// tab whose chain has none. "No backups yet" only once a listing has
+/// succeeded: before that it is still being read, and after a failure it
+/// says why.
 struct BackupsStatusRow: View {
     @Environment(AppModel.self) private var model
     let repositoryID: UUID

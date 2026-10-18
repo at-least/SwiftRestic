@@ -104,10 +104,6 @@ final class AppModel {
     /// When the listing last succeeded. A freshness stamp the surfaces show
     /// so a number can always be traced to the moment it was read.
     var snapshotsLoadedAt: [UUID: Date] = [:]
-    /// Repositories whose first completed listing the add-with-history
-    /// landing has already been considered for — model state, not window
-    /// state, so a closed and reopened main window cannot re-arm the reveal.
-    @ObservationIgnored var adoptionLandingsConsidered: Set<UUID> = []
     /// The last listing generation handed out, one counter for every
     /// repository — see `nextListingGeneration`. Only the index reads these
     /// numbers, and it compares them only within one repository.

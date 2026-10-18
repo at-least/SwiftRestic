@@ -61,7 +61,7 @@ final class AppRouter {
     /// run (the plan page's Last backup) turns it off.
     var activityShowsProblemsOnly = false
 
-    /// A folder the Restore pane should open and select when it next loads
+    /// A folder a backup's tree should open and select when it next loads
     /// this exact record — the Files view's Show in Backups, which leaves
     /// the folder or file the user was reading and must not lose their place.
     struct RestoreFocus: Equatable {
@@ -75,15 +75,20 @@ final class AppRouter {
     private(set) var restoreFocus: RestoreFocus?
 
     /// The view each page shows, by the page's selection — the toolbar's
-    /// Overview | Files. Transient: a page keeps the view it was left on for
-    /// the session, so a trip to a backup's record and back finds it there,
-    /// and every page opens on its overview after a launch, where "is it
-    /// backing up" is answered.
+    /// Overview | Backups | Files. Transient: a page keeps the view it was
+    /// left on for the session, so a trip to Activity and back finds it
+    /// there, and every page opens on its overview after a launch, where "is
+    /// it backing up" is answered.
     private(set) var pageTabs: [SidebarItem: PageTab] = [:]
+
+    /// The backup each page's Backups tab has open, by the page. Transient,
+    /// as the tabs are: a page keeps its pick for the session, and its tab
+    /// opens on the newest backup after a launch.
+    var backupSelection: [SidebarItem: String] = [:]
 
     /// The folders open in the Files views' trees, every chain's together:
     /// a node names its chain, so one set serves them all. Transient, as the
-    /// sidebar's folds are.
+    /// tabs are.
     var openFolders: Set<FileNode> = []
 
     /// The folder or file each chain's Files view has selected, by the
@@ -209,21 +214,23 @@ final class AppRouter {
         return pendingIntent
     }
 
-    /// The one route into a backup's contents from outside the sidebar —
-    /// the run drawer's Browse, Restore Files…, a Files tab's Show in
-    /// Backups: select the record in the sidebar, where the Change column,
-    /// search, drag and whole-backup restore all live, whichever button was
-    /// pressed. A plain route clears an older focus request rather than
-    /// inheriting it. The page it was asked from keeps its tab, so going
-    /// back to it finds the Files tab where it was left.
-    func showRestore(repositoryID: UUID, snapshotID: String, focusPath: String? = nil) {
+    /// The one route into a backup's contents from outside its page's
+    /// Backups tab — the run drawer's Browse, a Files tab's Show in Backups,
+    /// a group's Show Backups: `page`, the one whose Backups tab lists the
+    /// record (`AppModel.page(ofBackup:in:)`), on that tab with the record
+    /// open, where the Change column, search, drag and whole-backup restore
+    /// all live, whichever button was pressed. A plain route clears an older
+    /// focus request rather than inheriting it.
+    func showBackup(_ snapshotID: String, on page: SidebarItem, repositoryID: UUID, focusPath: String? = nil) {
         restoreFocus = focusPath.map {
             RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
         }
-        selection = .restoreSnapshot(repositoryID, snapshotID)
+        backupSelection[page] = snapshotID
+        pageTabs[page] = .backups
+        selection = page
     }
 
-    /// The Restore pane's consumption half: the focus path, only when it was
+    /// A backup's tree's consumption half: the focus path, only when it was
     /// asked for this record. Spent either way — a load of another record
     /// means the request is stale.
     func takeRestoreFocus(repositoryID: UUID, snapshotID: String) -> String? {
@@ -236,11 +243,15 @@ final class AppRouter {
     }
 }
 
-/// A page's two views — the toolbar's Overview | Files on a plan's page and
-/// on a group's under Other backups: its overview, and its folders and
-/// files across every backup, each by version.
-enum PageTab: Hashable {
+/// A page's three views — the toolbar's Overview | Backups | Files on a
+/// plan's page and on a group's under Other backups: its overview; its
+/// backups, each one's files beside the list; and its folders and files
+/// across every backup, each by version. The backups were the sidebar's,
+/// folded under their plan, until the HIG review of 2026-10-18: a sidebar
+/// shows no more than two levels.
+enum PageTab: Hashable, CaseIterable {
     case overview
+    case backups
     case files
 }
 

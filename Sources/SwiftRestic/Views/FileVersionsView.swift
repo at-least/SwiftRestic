@@ -95,7 +95,7 @@ struct FileVersionsView: View {
         } else {
             List(selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) {
                 // A history past one month is grouped by month, as the
-                // folder pane's picker and the sidebar's fold are, so a year
+                // folder pane's picker and the Backups tab's list are, so a year
                 // of hourly versions is not one flat scroll. Each version
                 // falls under the month of the first backup that held it —
                 // the backup after its change, so the month its "Modified"
@@ -152,15 +152,18 @@ struct FileVersionsView: View {
                         .help("Copying the chosen version out of the repository for the preview")
                 }
                 Button("Show in Backups") {
-                    guard let backup = chosen?.snapshots.first else { return }
-                    router.showRestore(
+                    guard let backup = chosen?.snapshots.first,
+                          let page = model.page(ofBackup: backup.id, in: node.repositoryID)
+                    else { return }
+                    router.showBackup(
+                        backup.id,
+                        on: page,
                         repositoryID: node.repositoryID,
-                        snapshotID: backup.id,
                         focusPath: ResticPath.parent(of: node.path)
                     )
                 }
                 .disabled(chosen == nil)
-                .help("Open the chosen version's newest backup at this file's folder, in the sidebar's list of backups")
+                .help("Open the chosen version's newest backup at this file's folder on the Backups tab")
                 let blocked = chosen.flatMap { previewBlock(for: $0) }
                 Button("Preview") { preview() }
                     .disabled(chosen == nil || blocked != nil || previewer.isCopying)

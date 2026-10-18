@@ -32,13 +32,16 @@ the generator after editing it; the PNGs are checked in.
 ## What it does
 
 - **Repositories in the sidebar** — each repository is a row with its plans
-  always in view beneath it (or *New Backup Plan…* while it has none), and
-  each plan folds open to its backups there. → and ← on a plan's row show and
-  hide them; on a backup row ← goes to the row its fold hangs from (a plan's
-  or a group's) and a second ← folds it, and the row's menu offers *Hide This
-  Plan's Backups*. Backups no plan of the repository made — from another Mac
-  or the restic console, a deleted plan, a plan that now backs up elsewhere —
-  sit under *Other backups*, grouped by the plan that made them (its
+  always in view beneath it (or *New Backup Plan…* while it has none): two
+  levels, the most Apple's guidelines give a sidebar ("When a data hierarchy
+  is deeper than two levels, consider using a split view interface that
+  includes a content list between the sidebar items and detail view"). A
+  plan's backups are its page's *Backups* tab, that content list, where until
+  2026-10-18 each plan folded open to them here — a third level, and a
+  fourth under Other backups. Backups no plan of the repository made — from
+  another Mac or the restic console, a deleted plan, a plan that now backs up
+  elsewhere — sit at the plans' level under an *Other backups* caption
+  (*Other backups · 2 backups*), grouped by the plan that made them (its
   `swiftrestic-plan-` tag, so a deleted plan's history stays one group), or,
   for backups no plan made, by restic's own `host,paths` grouping. Each
   group's caption says which kind — *not set up here*, *now backs up to
@@ -50,9 +53,13 @@ the generator after editing it; the PNGs are checked in.
   open. A repository wears a warning, its tooltip naming the plan, while a
   plan is not protected — backups unreadable, none yet, or the last one
   failed.
-- **Overview | Files** — a plan's page has both in the middle of the window
-  toolbar, *Edit* at its right.
-  Overview is its cards. Files is a tree on the left (drag its edge to widen
+- **Overview | Backups | Files** — a plan's page has the three in the middle
+  of the window toolbar, *Edit* at its right.
+  Overview is its cards. Backups lists the backups the plan made there,
+  newest first, a section per month once they span more than one, beside
+  the open one's files (its tree, as *Browsing and restore* below says); the
+  list's edge drags, and the window's subtitle is the open backup's moment.
+  Files is a tree on the left (drag its edge to widen
   it) of the folders and files of every backup the plan made, from the
   snapshot index — filling in while the index still reads, the newest backup
   alone for a plan it holds nothing of yet — and the picked item on the
@@ -62,14 +69,14 @@ the generator after editing it; the PNGs are checked in.
   pane's header say it in full, and why when the newest backup's own run
   could not read it (*Not read by the newest backup (permission denied)*).
   A folder lists at most 200 items in the tree, then a row that opens it in
-  the pane. Each page keeps its tab, open folders and selection while the
-  app runs, and opens on Overview after a launch.
+  the pane. Each page keeps its tab, open backup, open folders and selection
+  while the app runs, and opens on Overview after a launch.
   - *A folder* lists as a backup held it, each file with its size. *As
     backed up* picks which backup, newest first, grouped by month once they
-    span more than one — as the Compare sheet's picker and the sidebar's
-    backups are (an inert month caption above each month's rows; past three
-    months both pickers fold each older month into a submenu, the newest
-    month staying in reach, while the sidebar keeps its captions). One line
+    span more than one — as the Compare sheet's picker and the Backups tab
+    are (past three months both pickers fold each older month into a
+    submenu, the newest month staying in reach, while the Backups tab keeps
+    a section per month). One line
     says what changed in the folder itself since the backup before that
     holds it (*Since Oct 1, 2026 at 9:15 AM, in this folder: 2 modified*),
     naming what is gone and marking each item *Added*, *Modified* or *May
@@ -105,9 +112,9 @@ the generator after editing it; the PNGs are checked in.
     it, read-only, into a temporary folder of its own, deleted when the
     preview closes, another version is chosen or the pane goes (a quit
     leaves it to the next launch's sweep); it waits for the size and stops
-    at 1 GB. *Show in Backups* opens the chosen backup at that place under
-    its plan in the sidebar, scrolling a fold sixteen months long to its
-    row, as the tree scrolls to a revealed item.
+    at 1 GB. *Show in Backups* opens the chosen backup at that place on the
+    page's Backups tab, scrolling the list sixteen months long to its row,
+    as the tree scrolls to a revealed item.
   - *The search field* heading the tree lists, in its place, the items of
     this plan's (or group's) backups whose names have words starting like
     the query — from the index, instant, dropped items dimmed as in the
@@ -116,15 +123,15 @@ the generator after editing it; the PNGs are checked in.
     its row in view. While the index still reads, the search says older
     backups may be missing, and one with no match offers *Search All
     Backups…*, Find Files over the whole repository.
-- **A group under Other backups is a page** — its row selects like a plan's
-  (the chevron folds), with the same Overview | Files. Overview says what
+- **A group under Other backups is a page** — its row selects like a plan's,
+  with the same Overview | Backups | Files. Overview says what
   the history is: a plan not set up here (deleted, or running on another
   Mac), a plan that now backs up elsewhere (*Open the “Music” Plan*), or
   backups no plan made, which can't be adopted. Its Backups card brackets
   the history (newest, oldest), names the Macs and folder sets, carries the
   exclude patterns and user tags, and shows the plan tag when there is one —
-  selectable, the one honest identifier. *Restore Files…* opens the newest
-  backup; the context menu has it and *Show Files*. An untagged lineage's
+  selectable, the one honest identifier. Its row's menu has *Show Backups*,
+  the Backups tab on the newest backup, and *Show Files*. An untagged lineage's
   files come from the index's chain of its host and folders. A folder
   backed up by a relative path (`restic backup Documents` from the console,
   in the home folder) shows where restic put it, `/Documents`, though the
@@ -426,9 +433,10 @@ the generator after editing it; the PNGs are checked in.
   real hotspot not. While a backup, check or prune runs, SwiftRestic holds
   off idle sleep (`pmset -g assertions` lists "SwiftRestic is running a
   backup"); the display may still sleep, and a closed lid sleeps the Mac.
-- **Browsing and restore** — every *Browse*, *Restore Files…* and *Show in
-  Backups* opens the one browser at that backup in the sidebar: its folders
-  as a tree with a Change column and search. Restore by dragging to Finder,
+- **Browsing and restore** — every *Browse* (a backup run in Activity),
+  *Show Backups* (a group's menu) and *Show in Backups* (the Files tab) opens
+  the one browser at that backup, on its page's Backups tab beside the list:
+  its folders as a tree with a Change column and search. Restore by dragging to Finder,
   by *Restore…* (or Return) on a selection, or by *Restore Entire Backup…*,
   which recreates the full original paths inside the chosen folder;
   per-node restores land in the chosen folder with no path rebuilt above
@@ -859,14 +867,15 @@ plan cannot fire mid-capture.
   password, and none is saved when it is unset.
 - `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits.
 - `SWIFTRESTIC_CAPTURE_PANE` picks the screen: `plan`, `repository`,
-  `restore`, `activity`, `find`, `console`; `files` — the first plan's page
+  `restore` (the first repository's newest backup, open on its page's
+  Backups tab), `activity`, `find`, `console`; `files` — the first plan's page
   on its Files tab, its path open and selected, or the item
   `SWIFTRESTIC_CAPTURE_ITEM` names (an absolute path under it, a
   folder with a trailing `/`) with every folder above it open, and with
   `SWIFTRESTIC_CAPTURE_SEARCH` that query in its search field; `orphanGroup`,
   `movedGroup`, `lineage` — the page of the first adoptable group, moved
-  plan's group or untagged lineage, its sidebar fold open (all three wait
-  for the listing that builds group rows, as `restore` does); `findMoved` —
+  plan's group or untagged lineage (all three wait for the listing that
+  builds group rows, as `restore` does); `findMoved` —
   Find Files on the page of the first plan whose repository is not the
   first, so the picker shows it starting on the selection's repository (a
   configuration without one stops the run); `filesSearch` — ⇧⌘F's route on
@@ -877,8 +886,8 @@ plan cannot fire mid-capture.
   time per pane. The sweep is the whole-window regression check: a defect
   like macOS 26's floating title-bar material shows on every pane, including
   the ones nobody was looking at.
-- `SWIFTRESTIC_CAPTURE_TAB=files` puts the plan or group page a run selects
-  on its Files tab.
+- `SWIFTRESTIC_CAPTURE_TAB=files` (or `backups`) puts the plan or group page
+  a run selects on its Files (or Backups) tab.
 - `SWIFTRESTIC_CAPTURE_SHEET` opens a sheet: `diff`, Activity's compare sheet
   (with pane `activity`); `retention`, the plan editor on its Retention tab;
   `adopt`/`adoptRetention`, the first adoptable group's adopt sheet (with
@@ -932,8 +941,8 @@ locked, a region capture (`-R`) failed, and this capture was not tried
 - Grant **Full Disk Access** in System Settings › Privacy & Security. Without
   it macOS silently withholds `~/Documents`, `~/Desktop` and the like, and
   restic writes an *incomplete* snapshot (exit code 3), marked with a warning
-  triangle in the sidebar and Activity's drawer; the Restore pane lists what
-  could not be read. The grant is detected at launch, on activation and
+  triangle in the Backups tab's list and Activity's drawer; the backup's tree
+  lists what could not be read. The grant is detected at launch, on activation and
   after every backup, and shown first in Settings › General; an
   ad-hoc-signed build (Release) may need it again after each rebuild or
   update. "operation not permitted" on an item is macOS withholding it,

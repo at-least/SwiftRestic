@@ -407,11 +407,12 @@ private struct RunSnapshotRow: View {
 
     private func browseButton(_ snapshotID: String) -> some View {
         Button("Browse") {
-            if let repositoryID = run.repositoryID {
-                router.showRestore(repositoryID: repositoryID, snapshotID: snapshotID)
+            if let repositoryID = run.repositoryID,
+               let page = model.page(ofBackup: snapshotID, in: repositoryID) {
+                router.showBackup(snapshotID, on: page, repositoryID: repositoryID)
             }
         }
-        .help("Show this snapshot's files in the Restore pane")
+        .help("Show this backup's files on its page's Backups tab")
     }
 }
 

@@ -222,11 +222,13 @@ struct FolderVersionsView: View {
             RestoreProgressStrip()
             HStack {
                 Button("Show in Backups") {
-                    guard let chosen else { return }
-                    router.showRestore(repositoryID: node.repositoryID, snapshotID: chosen.id, focusPath: node.path)
+                    guard let chosen,
+                          let page = model.page(ofBackup: chosen.id, in: node.repositoryID)
+                    else { return }
+                    router.showBackup(chosen.id, on: page, repositoryID: node.repositoryID, focusPath: node.path)
                 }
                 .disabled(chosen == nil)
-                .help("Open this backup at this folder, in the sidebar's list of backups — see what changed, search it, or restore the whole backup")
+                .help("Open this backup at this folder on the Backups tab — see what changed, search it, or restore the whole backup")
                 Spacer()
                 // By the rows selected in this listing, not the ids kept
                 // across a flip: while a backup's listing is read, or after

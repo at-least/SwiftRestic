@@ -224,7 +224,7 @@ The index, the menu bar and a locked screen:
 
 ### Not verified
 
-- **Input the accessibility API cannot give** — posting real events would land in whatever app is in front: double-click or Return opening an item at the pane's backup time; ← on a sidebar backup row and the row's *Hide This Plan's Backups* menu; Return and Esc in the Files tab's search hits; right-click menus (Show Versions on the Restore pane and Find Files, Show Files on a group); dragging the tree's edge or items to Finder. The router, `preferredVersion` and `BackupShelves.page(of:)` behind them are unit-tested.
+- **Input the accessibility API cannot give** — posting real events would land in whatever app is in front: double-click or Return opening an item at the pane's backup time; Return and Esc in the Files tab's search hits; right-click menus (Show Versions on a backup's tree and Find Files, Show Backups and Show Files on a group); dragging the tree's or the Backups list's edge, or items to Finder. The router, `preferredVersion` and `BackupShelves.page(of:)` behind them are unit-tested.
 - **A group's or a lineage's Files tab by click**: captured, not pressed (the plan page's toolbar picker).
 - **Restore… and Restore Folder… through the destination sheet** — into a scratch folder, never the real Desktop.
 - **Try Again on a failed level** (only the load key's change is unit-tested).

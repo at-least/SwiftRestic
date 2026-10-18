@@ -261,7 +261,6 @@ struct CommandStateTests {
         model.configuration.plans = [plan, orphan, unset]
 
         #expect(model.commandRepositoryID(for: .repository(repository.id)) == repository.id)
-        #expect(model.commandRepositoryID(for: .restoreSnapshot(repository.id, "abc")) == repository.id)
         #expect(model.commandRepositoryID(for: .plan(plan.id)) == repository.id)
         #expect(model.commandRepositoryID(for: .plan(orphan.id)) == nil)
         #expect(model.commandRepositoryID(for: .plan(unset.id)) == nil)
@@ -309,7 +308,6 @@ struct CommandStateTests {
         // Every selection kind the Repository menu acts through.
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(second.id)) == second.id)
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .plan(plan.id)) == second.id)
-        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .restoreSnapshot(second.id, "abc")) == second.id)
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .orphanPlan(repositoryID: second.id, planID: UUID())) == second.id)
 
         // Nothing to look at — Activity, the console, nothing selected, or a
@@ -360,10 +358,33 @@ struct CommandStateTests {
         // chain the listing does not hold, and every page with no Files tab.
         for selection: SidebarItem? in [
             .plan(homeless.id), .orphanPlan(repositoryID: repository.id, planID: UUID()),
-            .repository(repository.id), .restoreSnapshot(repository.id, tagged.id), .activity, .console, nil,
+            .repository(repository.id), .activity, .console, nil,
         ] {
             #expect(model.filesSearchRoots(for: selection) == nil, "selection \(String(describing: selection))")
         }
+    }
+
+    @Test("a backup's page is its plan's, or its group's under Other backups, and none once the listing drops it")
+    func backupPageFollowsTheShelf() throws {
+        let model = makeModel()
+        let repository = makeRepository()
+        let plan = makePlan(on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan]
+        let own = try IndexTestData.snapshot(
+            IndexTestData.hexID(1), micros: 1_000_000, tags: [ResticService.planTag(plan.id)], paths: ["/Data"])
+        let deleted = UUID()
+        let orphan = try IndexTestData.snapshot(
+            IndexTestData.hexID(2), micros: 2_000_000, tags: [ResticService.planTag(deleted)], paths: ["/Data"])
+        let untagged = try IndexTestData.snapshot(IndexTestData.hexID(3), micros: 3_000_000, paths: ["/Music"])
+        model.snapshots[repository.id] = [untagged, orphan, own]
+
+        // Where a run's Browse and a Files tab's Show in Backups land: the
+        // one page whose Backups tab lists it.
+        #expect(model.page(ofBackup: own.id, in: repository.id) == .plan(plan.id))
+        #expect(model.page(ofBackup: orphan.id, in: repository.id) == .orphanPlan(repositoryID: repository.id, planID: deleted))
+        #expect(model.page(ofBackup: untagged.id, in: repository.id) == .lineage(repositoryID: repository.id, key: untagged.lineageKey))
+        #expect(model.page(ofBackup: IndexTestData.hexID(9), in: repository.id) == nil)
     }
 
     @Test("a busy repository holds maintenance and retention back, never its removal")

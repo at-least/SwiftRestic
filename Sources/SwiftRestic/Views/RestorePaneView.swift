@@ -1,14 +1,18 @@
 import SwiftUI
 
-/// The restore pane: one backup record's file tree. The app's one
-/// snapshot-first browser — the run drawer's Browse, a group's Restore
-/// Files… and the Files view's Show in Backups all land here
-/// (`AppRouter.showRestore`) — so the Change column, search, drag-to-Finder
-/// and whole-backup restore never depend on which button you came through.
+/// The restore pane: one backup record's file tree, beside a page's Backups
+/// tab's list. The app's one snapshot-first browser — the run drawer's
+/// Browse, a group's Show Backups and the Files view's Show in Backups all
+/// land here (`AppRouter.showBackup`) — so the Change column, search,
+/// drag-to-Finder and whole-backup restore never depend on which button you
+/// came through.
 ///
-/// The sidebar owns the timeline; a record is identified, not chosen, here.
-/// Switching records keeps the folder you are in, and the restore progress
-/// strip lives on the window above every pane, so it outlives a pane switch.
+/// The list beside it owns the timeline; a record is identified, not
+/// chosen, here. Switching records keeps the folder you are in, and the
+/// restore progress strip lives on the window above every pane, so it
+/// outlives a pane switch. The window's title is the page's, its subtitle
+/// the open backup's moment: the pane sets neither — it once titled the
+/// window "Restore".
 struct RestorePaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -93,11 +97,10 @@ struct RestorePaneView: View {
                 ContentUnavailableView {
                     Label("Backup not found", systemImage: "questionmark.folder")
                 } description: {
-                    Text("This backup is no longer in the repository. Pick another one in the sidebar.")
+                    Text("This backup is no longer in the repository. Pick another one in the list.")
                 }
             }
         }
-        .navigationTitle("Restore")
         // The heavy reload — diff, tree rebuild, folder re-walk — belongs to
         // record switches only: folder moves change `currentPath` alone, the
         // tree already holds their rows, and re-running the diff on every
@@ -135,11 +138,13 @@ struct RestorePaneView: View {
             Divider()
             footer(record: record)
         }
-        // Fits the narrowest detail column the window allows: its 940-pt
-        // minimum less the sidebar at its 340-pt maximum and the split's
-        // 8 pt (SwiftResticApp.swift, SidebarView.swift). Still a minimum:
-        // it also bounds the split view's zero-width sizing query.
-        .frame(minWidth: 592)
+        // Fits the narrowest detail column the window allows beside the
+        // Backups tab's list: its 940-pt minimum less the sidebar at its
+        // 340-pt maximum, the split's 8 pt and the list at its 150-pt
+        // narrowest (SwiftResticApp.swift, SidebarView.swift,
+        // BackupsBrowserView.swift). Still a minimum: it also bounds the
+        // split view's zero-width sizing query.
+        .frame(minWidth: 400)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -147,10 +152,9 @@ struct RestorePaneView: View {
 
     /// The open backup's name and what its Change column is compared with,
     /// then the search field, which searches the open backup — Repository ▸
-    /// Find Files in Snapshots… (⇧⌘F) searches every backup. With the
-    /// sidebar hidden nothing else names the open backup or tells a blank
-    /// Change column's meanings apart: first backup, no changes, still
-    /// comparing, failed.
+    /// Find Files in Snapshots… (⇧⌘F) searches every backup. Nothing else
+    /// tells a blank Change column's meanings apart: first backup, no
+    /// changes, still comparing, failed.
     private func toolbar(record: Snapshot?) -> some View {
         HStack(alignment: .center, spacing: 12) {
             if let record {
@@ -206,7 +210,7 @@ struct RestorePaneView: View {
             ContentUnavailableView {
                 Label("Not in this backup", systemImage: "folder.badge.questionmark")
             } description: {
-                Text("This folder does not exist in the selected backup. Pick another backup in the sidebar, or go up a level.")
+                Text("This folder does not exist in the selected backup. Pick another backup in the list, or go up a level.")
             }
         } else if tree.rows.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
@@ -866,7 +870,7 @@ struct RestorePaneView: View {
         )
     }
 
-    /// The whole record, named the way the header and the sidebar name it
+    /// The whole record, named the way the header and its page name it
     /// and dated; the sheet says the layout restic will produce: `restore
     /// <id> --target` recreates every absolute path under the target.
     private func restoreWholeRecord() {

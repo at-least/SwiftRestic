@@ -264,31 +264,6 @@ struct SidebarTreeTests {
         #expect(shelves.others.map { $0.snapshots.map(\.id) } == [["x2", "x1"], ["y1"]])
     }
 
-    @Test("picking a backup from anywhere opens the fold it sits in")
-    func revealOpensTheOwner() throws {
-        let nas = UUID()
-        let documents = plan("Documents", in: nas)
-        let mine = try snapshot("d1", time: "2026-09-30T02:00:00Z", tags: [ResticService.planTag(documents.id)])
-        let foreign = try snapshot("x1", time: "2026-09-29T02:00:00Z", host: "old-mac")
-        let deleted = UUID()
-        let tagged = try snapshot("g1", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(deleted)])
-
-        var folds = SidebarFolds()
-        folds.reveal(mine, in: nas, plans: [documents])
-        #expect(folds == SidebarFolds(plans: [documents.id], otherBackups: [], otherGroups: []))
-        folds.reveal(foreign, in: nas, plans: [documents])
-        #expect(folds == SidebarFolds(plans: [documents.id], otherBackups: [nas], otherGroups: []))
-        // A tagged orphan's group is a fold of its own, closed at launch —
-        // selecting one of its records must open it, or the record lands in
-        // a group the sidebar never shows.
-        folds.reveal(tagged, in: nas, plans: [documents])
-        #expect(folds == SidebarFolds(
-            plans: [documents.id],
-            otherBackups: [nas],
-            otherGroups: [OtherGroupFoldID(repositoryID: nas, planID: deleted)]
-        ))
-    }
-
     @Test("a backup is named for where it sits: its plan, or its group among the Other backups")
     func labelsFollowTheShelf() throws {
         let nas = UUID()
@@ -481,7 +456,7 @@ struct SidebarTreeTests {
         let tag = ResticService.planTag(planID)
         let record = try snapshot("b7", time: "2026-10-02T10:00:00Z", paths: ["/Data", "/Data/Photos/2026"], tags: [tag])
         let router = AppRouter()
-        router.selection = .restoreSnapshot(repositoryID, "b7")
+        router.showBackup("b7", on: .plan(planID), repositoryID: repositoryID)
         router.showVersions(
             path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false,
             in: record, repositoryID: repositoryID, page: .plan(planID)

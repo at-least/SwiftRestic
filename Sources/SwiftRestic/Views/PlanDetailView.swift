@@ -20,6 +20,7 @@ struct PlanDetailView: View {
             if let plan {
                 switch router.tab(of: .plan(planID)) {
                 case .overview: content(plan)
+                case .backups: backups(plan)
                 case .files: files(plan)
                 }
             } else {
@@ -27,9 +28,10 @@ struct PlanDetailView: View {
             }
         }
         // A plan is its path: the label names the page, the path under it
-        // says which folder that is.
+        // says which folder that is — or, on the Backups tab, the moment of
+        // the backup open there.
         .navigationTitle(plan.map { model.label(of: $0) } ?? "Plan")
-        .navigationSubtitle(plan.map { ($0.path as NSString).abbreviatingWithTildeInPath } ?? "")
+        .navigationSubtitle(plan.map(subtitle) ?? "")
         .pageTabPicker(router.tabBinding(for: .plan(planID)))
         .toolbar {
             // The trailing corner's one item, a word: the HIG writes edit
@@ -265,6 +267,40 @@ struct PlanDetailView: View {
         .detailPane()
     }
 
+    private func subtitle(_ plan: BackupPlan) -> String {
+        if router.tab(of: .plan(planID)) == .backups,
+           let open = BackupsBrowserView.openBackup(in: planBackups(plan), picked: router.backupSelection[.plan(planID)]) {
+            return Format.timestamp(open.time)
+        }
+        return (plan.path as NSString).abbreviatingWithTildeInPath
+    }
+
+    /// The backups the plan made in its repository, newest first — its
+    /// shelf, the one the Backups tab and the sidebar's caption read.
+    private func planBackups(_ plan: BackupPlan) -> [Snapshot] {
+        plan.repositoryID.flatMap { model.shelves(for: $0).byPlan[plan.id] } ?? []
+    }
+
+    /// The Backups tab: the plan's backups in the repository it backs up
+    /// to, each one's files beside the list.
+    @ViewBuilder
+    private func backups(_ plan: BackupPlan) -> some View {
+        if let repositoryID = plan.repositoryID {
+            BackupsBrowserView(
+                page: .plan(planID),
+                repositoryID: repositoryID,
+                backups: planBackups(plan),
+                onSearchAllBackups: onSearchAllBackups
+            )
+        } else {
+            ContentUnavailableView(
+                "No repository set",
+                systemImage: "questionmark.folder",
+                description: Text("Choose where this plan backs up in Edit; its backups appear here after its first one.")
+            )
+        }
+    }
+
     /// The Files tab: the plan's own history in the repository it backs up
     /// to, folders and files across every backup.
     @ViewBuilder
@@ -286,9 +322,9 @@ struct PlanDetailView: View {
 
     /// The page's answer, in Arq's label/value idiom: did this plan back
     /// up, how many backups it holds and which of them it keeps — with the
-    /// verb that makes the next one now. Its records are the sidebar's,
-    /// under the plan, and its files are this page's Files tab, so the card
-    /// neither lists them a second time nor offers a second way to open them.
+    /// verb that makes the next one now. Its backups are this page's
+    /// Backups tab and its files its Files tab, so the card neither lists
+    /// them a second time nor offers a second way to open them.
     private func backupsCard(_ plan: BackupPlan) -> some View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
         return Card("Backups") {

@@ -413,20 +413,21 @@ struct FilesBrowserView: View {
 }
 
 extension View {
-    /// A page's Overview | Files, in the middle of the window toolbar:
-    /// Apple's guidance for switching a main window's view (the HIG's
-    /// center area holds the common controls), clear of the trailing
+    /// A page's Overview | Backups | Files, in the middle of the window
+    /// toolbar: Apple's guidance for switching a main window's view (the
+    /// HIG's center area holds the common controls), clear of the trailing
     /// corner, where a plan page's Edit sits.
     func pageTabPicker(_ selection: Binding<PageTab>) -> some View {
         toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: selection) {
                     Text("Overview").tag(PageTab.overview)
+                    Text("Backups").tag(PageTab.backups)
                     Text("Files").tag(PageTab.files)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 160)
-                .help("The overview, or the folders and files across every backup, each by version")
+                .frame(width: 240)
+                .help("The overview; the backups, each one's files beside the list; or the folders and files across every backup, each by version")
             }
         }
     }
@@ -485,8 +486,9 @@ struct FilesSearchRow: View {
     }
 }
 
-/// The tree's edge: a hairline with a wider grip that drags the tree's width.
-private struct TreeEdge: View {
+/// A list's edge beside its pane — a Files tab's tree, a Backups tab's
+/// list: a hairline with a wider grip that drags the list's width.
+struct TreeEdge: View {
     @Binding var width: Double
     let bounds: ClosedRange<Double>
     @State private var startWidth: Double?
@@ -508,6 +510,19 @@ private struct TreeEdge: View {
                             .onEnded { _ in startWidth = nil }
                     )
             }
+    }
+}
+
+/// A fold's disclosure mark: chevron right when closed, down when open.
+/// The row around it is the button.
+struct FoldChevron: View {
+    let isExpanded: Bool
+
+    var body: some View {
+        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
     }
 }
 

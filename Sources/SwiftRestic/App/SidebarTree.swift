@@ -1,21 +1,24 @@
 import Foundation
 
-/// What the sidebar lists under one repository, in order. The repository's
-/// own row is not one of them: it is the parent, always shown, and never
-/// collapses — its children are always in view.
+/// What the sidebar lists under one repository, in order — the sidebar's
+/// second and last level (the HIG: "no more than two levels of hierarchy in
+/// a sidebar"). The repository's own row is not one of them: it is the
+/// parent, always shown, and never collapses — its children are always in
+/// view. A page's backups are its Backups tab's, not rows of their own.
 ///
 /// Each value is unique across the whole sidebar — the repository-wide
 /// rows carry their repository's ID — because the List gives every
 /// repository's children one identity space: a bare `otherBackups` case
 /// makes one repository's node show up, empty, under the others too.
 enum SidebarChild: Hashable {
-    /// A plan, which folds open to the backups it made here.
+    /// A plan.
     case plan(UUID)
     /// "New Backup Plan…", only while the repository has no plan: the place
     /// its plans would be names the way to its first one.
     case addPlan(repositoryID: UUID)
-    /// The node for the repository's backups no plan of it made — see
-    /// `BackupShelves.others`. Only while there are some.
+    /// The caption over the groups of the repository's backups no plan of
+    /// it made — see `BackupShelves.others` — and the groups themselves,
+    /// each a page at the plans' level. Only while there are some.
     case otherBackups(repositoryID: UUID)
 }
 
@@ -41,12 +44,12 @@ enum SidebarTree {
     }
 }
 
-/// One repository's backups, sorted to where the sidebar shows them: each
-/// under the plan of this repository that made it — the plan's tag
+/// One repository's backups, sorted to the page that lists them: each on
+/// the plan of this repository that made it — the plan's tag
 /// (`ResticService.planTag`) says which — and the rest under Other backups,
 /// grouped by the plan that made them when a plan tag says which, by lineage
-/// otherwise. Every backup has exactly one place, so its selection tag is
-/// unique.
+/// otherwise. Every backup has exactly one place, so one page's Backups tab
+/// lists it.
 ///
 /// Equatable so the root view can watch the shelves themselves: `reshelve`
 /// rewrites them on any change to the plans, which is the one signal that
@@ -174,11 +177,9 @@ struct BackupShelves: Equatable {
         return label
     }
 
-    /// The page whose Files tab holds `record`'s history: the plan of this
-    /// repository that made it, or its group under Other backups. Also the
-    /// row whose fold holds the record, where ← on it goes — the outline
-    /// convention that a child's ← selects its parent, from which a second
-    /// ← folds.
+    /// The page whose Backups tab lists `record` and whose Files tab holds
+    /// its history: the plan of this repository that made it, or its group
+    /// under Other backups.
     func page(of record: Snapshot, repositoryID: UUID) -> SidebarItem {
         if let planID = Self.owner(of: record, among: plans) { return .plan(planID) }
         return .otherGroup(repositoryID: repositoryID, id: record.otherGroupID)
@@ -193,39 +194,4 @@ struct BackupShelves: Equatable {
         guard case let .plan(id, _) = group else { return nil }
         return allPlans.first { $0.id == id }
     }
-}
-
-/// Which folds are open in the sidebar, fresh each launch. Held by the root
-/// view rather than the sidebar, so the detail column can open the fold a
-/// backup picked from anywhere sits in.
-struct SidebarFolds: Equatable {
-    /// Plans whose backups are showing.
-    var plans: Set<UUID> = []
-    /// Repositories whose Other backups are showing.
-    var otherBackups: Set<UUID> = []
-    /// Plan-UUID groups under Other backups whose records are showing — the
-    /// plan folds' own syntax (closed until opened), where the untagged
-    /// lineages' folds are the sidebar's view state and start open.
-    var otherGroups: Set<OtherGroupFoldID> = []
-
-    /// Opens the fold `record` sits in — its plan's, or its repository's
-    /// Other backups and, under it, the plan-UUID group that holds it.
-    /// `plans` are the repository's own.
-    mutating func reveal(_ record: Snapshot, in repositoryID: UUID, plans repositoryPlans: [BackupPlan]) {
-        if let planID = BackupShelves.owner(of: record, among: repositoryPlans) {
-            plans.insert(planID)
-        } else {
-            otherBackups.insert(repositoryID)
-            if let planID = record.planID {
-                otherGroups.insert(OtherGroupFoldID(repositoryID: repositoryID, planID: planID))
-            }
-        }
-    }
-}
-
-/// A plan-UUID group under one repository's Other backups: the same plan can
-/// have left backups in two repositories, and each group folds on its own.
-struct OtherGroupFoldID: Hashable {
-    let repositoryID: UUID
-    let planID: UUID
 }

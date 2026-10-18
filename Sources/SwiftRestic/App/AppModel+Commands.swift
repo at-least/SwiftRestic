@@ -130,8 +130,8 @@ extension AppModel {
     }
 
     /// The repository the Repository menu acts on: the selected one, the
-    /// one a selected Restore record belongs to, the selected plan's, or
-    /// the one a selected Other-backups group sits under (which is where
+    /// selected plan's, or the one a selected Other-backups group sits
+    /// under (which is where
     /// that menu acts even for a moved plan's group: the plan's own
     /// repository is the other one). Nil for a target that no longer exists
     /// and for every other pane. A group is no plan, so the Plan menu stays
@@ -139,7 +139,6 @@ extension AppModel {
     func commandRepositoryID(for selection: SidebarItem?) -> UUID? {
         let id: UUID? = switch selection {
         case let .repository(id): id
-        case let .restoreSnapshot(id, _): id
         case let .plan(planID): plan(id: planID)?.repositoryID
         case let .orphanPlan(id, _): id
         case let .lineage(id, _): id
@@ -176,7 +175,7 @@ extension AppModel {
             return group(repositoryID, .plan(planID))
         case let .lineage(repositoryID, key):
             return group(repositoryID, .lineage(key))
-        case .repository, .restoreSnapshot, .console, .activity, nil:
+        case .repository, .console, .activity, nil:
             return nil
         }
     }

@@ -34,15 +34,12 @@ struct RootView: View {
     @State private var pendingConfirmation: CommandConfirmation?
     /// Apply Retention Now…'s sheet, for the plan it previews.
     @State private var retentionTarget: RetentionTarget?
-    /// Which plans and Other backups are open in the sidebar — the backup
-    /// records underneath are the restore pane's entry points.
-    @State private var sidebarFolds = SidebarFolds()
     /// The Files views' levels, read once and shared by every page's Files
     /// tab: a level read for one is read for the next.
     @State private var filesTree = FilesTree()
     /// The adopt sheet, raised from a group's context menu or page — one
-    /// presentation for both, so selecting the new plan and revealing its
-    /// fold afterwards live here too.
+    /// presentation for both, so selecting the new plan afterwards lives
+    /// here too.
     @State private var adoptingPlan: BackupPlan?
     #if DEBUG
     @State private var didApplyCaptureOverride = false
@@ -74,7 +71,6 @@ struct RootView: View {
 
     private var sidebar: some View {
         SidebarView(
-            folds: $sidebarFolds,
             onEditPlan: { editingPlan = $0 },
             onNewPlan: startNewPlan(in:),
             onEditRepository: { editingRepository = $0 },
@@ -87,7 +83,6 @@ struct RootView: View {
 
     private var detail: some View {
         RootDetailView(
-            folds: $sidebarFolds,
             pendingCaptureRestore: $pendingCaptureRestore,
             onEditPlan: { editingPlan = $0 },
             onEditRepository: { editingRepository = $0 },
@@ -138,15 +133,15 @@ struct RootView: View {
                 .environment(router)
         }
         // The adopt sheet, from a group's context menu or its page. Adopt's
-        // landing is the new plan's own page with its records revealed under
-        // it — the click's whole result in one place.
+        // landing is the new plan's own page on its Backups tab — the
+        // click's whole result in one place: the history, now the plan's.
         .sheet(item: $adoptingPlan) { plan in
             PlanEditorSheet(
                 plan: plan,
                 mode: .adopt,
                 onAdopted: { planID in
+                    router.setTab(.backups, of: .plan(planID))
                     router.selection = .plan(planID)
-                    sidebarFolds.plans.insert(planID)
                 }
             )
             .environment(model)
@@ -220,11 +215,6 @@ struct RootView: View {
             consumeCaptureGroupPane()
             #endif
         }
-        // A listing completing is the add-with-history landing's one
-        // moment: the groups it builds are what that reveal opens.
-        .onChange(of: model.snapshots) {
-            considerAdoptionLandings()
-        }
         // The load finishing is what selects the landing pane: onAppear runs
         // before `bootstrap` has read anything, so without this a configured
         // app would sit on Welcome.
@@ -290,28 +280,6 @@ struct RootView: View {
     /// was on is revalidating away in the same breath.
     private func adoptGroup(repositoryID: UUID, planID: UUID) {
         adoptingPlan = model.adoptDraft(repositoryID: repositoryID, planID: planID)
-    }
-
-    /// The add-with-history landing: a repository whose first completed
-    /// listing holds no plan of its own and at least one adoptable group
-    /// opens the shelf that history sits on — Other backups, and the first
-    /// group's fold — so the groups are in view without hunting. A
-    /// repository whose first listing arrives beside plans never lands
-    /// here, and each repository is considered once however the listing
-    /// answers — the mark lives in the model, so a closed and reopened
-    /// window cannot re-arm the reveal.
-    private func considerAdoptionLandings() {
-        for repository in model.configuration.repositories {
-            guard model.snapshotsLoadedAt(for: repository.id) != nil,
-                  !model.adoptionLandingsConsidered.contains(repository.id)
-            else { continue }
-            model.adoptionLandingsConsidered.insert(repository.id)
-            guard model.plans(in: repository.id).isEmpty,
-                  case let .plan(planID, _)? = model.shelves(for: repository.id).adoptableGroups(localHost: model.localHostname).first
-            else { continue }
-            sidebarFolds.otherBackups.insert(repository.id)
-            sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: repository.id, planID: planID))
-        }
     }
 
     /// ⌘B: run whichever plan the sidebar is on — when the Plan menu's
@@ -432,33 +400,29 @@ struct RootView: View {
         applyCaptureTab()
     }
 
-    /// `SWIFTRESTIC_CAPTURE_TAB=files`: the page the run selected, on its
-    /// Files tab. A selection with no tabs ignores it.
+    /// `SWIFTRESTIC_CAPTURE_TAB=files` or `backups`: the page the run
+    /// selected, on that tab. A selection with no tabs ignores it.
     private func applyCaptureTab() {
-        guard ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_TAB"] == "files",
-              let page = router.selection
-        else { return }
-        router.setTab(.files, of: page)
+        let tab: PageTab? = switch ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_TAB"] {
+        case "files": .files
+        case "backups": .backups
+        default: nil
+        }
+        guard let tab, let page = router.selection else { return }
+        router.setTab(tab, of: page)
     }
 
     /// The parked group-pane ask, once the shelves hold a group of its
-    /// kind: selects its page and opens its fold beside it, so the capture
-    /// shows the page with its records in view. Keeps waiting while no
-    /// matching group exists — a later listing may still build one.
+    /// kind: selects its page. Keeps waiting while no matching group exists
+    /// — a later listing may still build one.
     private func consumeCaptureGroupPane() {
         guard let pane = pendingCaptureGroupPane,
               let target = captureGroupTarget(pane)
         else { return }
         pendingCaptureGroupPane = nil
         router.selection = .otherGroup(repositoryID: target.repositoryID, id: target.id)
-        sidebarFolds.otherBackups.insert(target.repositoryID)
-        // A lineage's fold starts open; a plan-UUID group's is opened here.
-        guard case let .plan(planID) = target.id else {
-            applyCaptureTab()
-            return
-        }
-        sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: target.repositoryID, planID: planID))
         applyCaptureTab()
+        guard case let .plan(planID) = target.id else { return }
         // The adopt sheet over the page it adopts: `adopt` opens it on the
         // Files tab, `adoptRetention` on the Retention tab, where the dry-run
         // preview and the anchored count live.
@@ -577,16 +541,6 @@ struct RootView: View {
         case .plan(let id) where model.plan(id: id) == nil,
              .repository(let id) where model.repository(id: id) == nil:
             router.selection = landing
-        case .restoreSnapshot(let repositoryID, _)
-            where model.repository(id: repositoryID) == nil:
-            router.selection = landing
-        case let .restoreSnapshot(repositoryID, snapshotID)
-            where model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID }) == nil:
-            // The record itself is gone; the repository's newest record (or
-            // its page, when none are left) is the nearest honest landing.
-            router.selection = model.snapshots(for: repositoryID).first
-                .map { .restoreSnapshot(repositoryID, $0.id) }
-                ?? .repository(repositoryID)
         case let .orphanPlan(repositoryID, planID)
             where model.shelves(for: repositoryID).orphanPlanGroup(planID) == nil:
             // The group is gone — adopted, its plan moved by the editor, or

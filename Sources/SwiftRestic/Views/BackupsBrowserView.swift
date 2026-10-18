@@ -1,0 +1,161 @@
+import SwiftUI
+
+/// A page's Backups tab: the page's backups, newest first, on the leading
+/// side — a section per month once the history passes one — and the open
+/// one's files on the trailing side (`RestorePaneView`), the Files tab's own
+/// layout. They were the sidebar's, folded under their plan, until the HIG
+/// review of 2026-10-18 (Sidebars: "In general, show no more than two
+/// levels of hierarchy in a sidebar. When a data hierarchy is deeper than
+/// two levels, consider using a split view interface that includes a
+/// content list between the sidebar items and detail view") — this list is
+/// that content list, and its edge drags.
+///
+/// Which backup is open is the router's, per page, so leaving the page and
+/// coming back finds it as it was left; a page opens on its newest backup.
+struct BackupsBrowserView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
+    /// The page whose backups these are.
+    let page: SidebarItem
+    let repositoryID: UUID
+    /// The page's backups, newest first.
+    let backups: [Snapshot]
+    /// "Search All Backups…": the host opens Find Files on this repository
+    /// with the query filled in.
+    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
+
+    /// The list's width, dragged at its edge — the window's, kept across
+    /// pages while it is open, as the Files tab's tree's is.
+    @SceneStorage("BackupsListWidth") private var listWidth: Double = 200
+    /// The view's own width, which bounds the drag: the pane keeps room for
+    /// its tree.
+    @State private var width: CGFloat = 0
+
+    /// The backup the tab has open: the page's pick while the listing still
+    /// holds it, else the newest — so a pick retention removed gives way to
+    /// the newest rather than to an empty pane.
+    static func openBackup(in backups: [Snapshot], picked: String?) -> Snapshot? {
+        backups.first { $0.id == picked } ?? backups.first
+    }
+
+    private var open: Snapshot? {
+        Self.openBackup(in: backups, picked: router.backupSelection[page])
+    }
+
+    var body: some View {
+        // An HStack, not HSplitView: the Files tab's reason — the split
+        // would not narrow the pane below the width it first laid out at.
+        HStack(spacing: 0) {
+            list
+                .frame(width: min(max(listWidth, listBounds.lowerBound), listBounds.upperBound))
+            TreeEdge(width: $listWidth, bounds: listBounds)
+            pane
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+
+    @ViewBuilder
+    private var list: some View {
+        if backups.isEmpty {
+            // "No backups yet" only once the listing says so; before that
+            // it is being read, and after a failure the row says why.
+            BackupsStatusRow(repositoryID: repositoryID)
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            let openID = open?.id
+            ScrollViewReader { proxy in
+                List(selection: Binding(
+                    get: { openID },
+                    set: { router.backupSelection[page] = $0 }
+                )) {
+                    // Past one month, a section per month (the Compare
+                    // sheet's months), so a deep history has landmarks.
+                    if let months = DiffCandidateGrouping.landmarks(in: backups, time: \.time) {
+                        ForEach(months, id: \.label) { month in
+                            Section(month.label) {
+                                rows(month.items)
+                            }
+                        }
+                    } else {
+                        rows(backups)
+                    }
+                }
+                .listStyle(.inset)
+                // A backup a route opened — a Files tab's Show in Backups, a
+                // run's Browse — may sit a year down the list: brought into
+                // view, a turn later because the list may gain its row in
+                // this update. A click's row is in view already, and the
+                // minimal scroll leaves it where it is.
+                .onChange(of: openID, initial: true) { _, id in
+                    guard let id else { return }
+                    Task { @MainActor in proxy.scrollTo(id) }
+                }
+            }
+        }
+    }
+
+    private func rows(_ snapshots: [Snapshot]) -> some View {
+        ForEach(snapshots) { snapshot in
+            BackupRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+                .tag(snapshot.id)
+                .id(snapshot.id)
+        }
+    }
+
+    @ViewBuilder
+    private var pane: some View {
+        if let open {
+            RestorePaneView(repositoryID: repositoryID, snapshotID: open.id, onSearchAllBackups: onSearchAllBackups)
+                // Folder state belongs to one repository: another
+                // repository's page must not carry paths or history over —
+                // the pane's own @State resets with the identity.
+                .id(repositoryID)
+        } else {
+            ContentUnavailableView(
+                "No backup open",
+                systemImage: "clock.arrow.circlepath",
+                description: Text("A backup's files show here once the page has one.")
+            )
+        }
+    }
+
+    /// How far the list's edge drags: no narrower than a backup's moment
+    /// needs, no wider than leaves the pane its tree.
+    private var listBounds: ClosedRange<Double> {
+        let lower = 150.0
+        return lower...max(lower, min(360, Double(width) - 400))
+    }
+}
+
+/// One backup in a Backups tab's list — its moment, and the completeness
+/// mark when restic could not read all of it: the whole record at list
+/// size, as Arq's is.
+private struct BackupRow: View {
+    let snapshot: Snapshot
+    /// The backup run that wrote it, when the history still holds one.
+    let run: RunRecord?
+
+    var body: some View {
+        Text(Format.timestamp(snapshot.time))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // State trails identity, the sidebar's rule: the mark sits at
+            // the row's right end, and only a visible one claims room there.
+            .padding(.trailing, run?.snapshotCompleteness == .incomplete ? Self.markWidth + 6 : 0)
+            // An overlay, so the clear "Complete" text and the hidden
+            // slot-holder stay in the row — VoiceOver keeps its
+            // Complete/Incomplete word — without taking the date's width.
+            .overlay(alignment: .trailing) {
+                SnapshotCompletenessMark(run: run)
+                    .font(.caption)
+                    .frame(width: Self.markWidth)
+            }
+            // One utterance per backup: the mark's label, when it has one,
+            // merges with the date.
+            .accessibilityElement(children: .combine)
+    }
+
+    private static let markWidth: CGFloat = 14
+}

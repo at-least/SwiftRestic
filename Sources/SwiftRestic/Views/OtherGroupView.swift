@@ -2,12 +2,10 @@ import SwiftUI
 
 /// The page of one group under a repository's Other backups — a plan's
 /// history in this repository that none of its plans owns, or the backups
-/// of one Mac's folders that no plan made. Overview | Files in the toolbar,
-/// as a plan's page has: the overview says what the history is and the
-/// facts that identify it, with its newest backup one click away; Files is
-/// its folders and files across every backup. The records themselves are
-/// the sidebar's, under the group — the plan page's own rule — so the page
-/// does not list them a second time.
+/// of one Mac's folders that no plan made. Overview | Backups | Files in the
+/// toolbar, as a plan's page has: the overview says what the history is and
+/// the facts that identify it; Backups lists them, each one's files beside
+/// the list; Files is its folders and files across every backup.
 ///
 /// Every fact comes from `OtherGroupPageSummary`, the one derivation the
 /// sidebar's labels already feed. No verbs in the toolbar: there is nothing
@@ -41,6 +39,13 @@ struct OtherGroupView: View {
             if let summary {
                 switch router.tab(of: page) {
                 case .overview: content(summary)
+                case .backups:
+                    BackupsBrowserView(
+                        page: page,
+                        repositoryID: repositoryID,
+                        backups: groupBackups,
+                        onSearchAllBackups: onSearchAllBackups
+                    )
                 case .files:
                     FilesBrowserView(
                         roots: FileNode.roots(repositoryID: repositoryID, chainKey: summary.chainKey),
@@ -56,7 +61,21 @@ struct OtherGroupView: View {
             }
         }
         .navigationTitle(summary?.title ?? "Backups")
+        // On the Backups tab, the moment of the backup open there.
+        .navigationSubtitle(subtitle)
         .pageTabPicker(router.tabBinding(for: page))
+    }
+
+    /// The group's backups, newest first.
+    private var groupBackups: [Snapshot] {
+        model.shelves(for: repositoryID).others.first { $0.id == groupID }?.snapshots ?? []
+    }
+
+    private var subtitle: String {
+        guard router.tab(of: page) == .backups,
+              let open = BackupsBrowserView.openBackup(in: groupBackups, picked: router.backupSelection[page])
+        else { return "" }
+        return Format.timestamp(open.time)
     }
 
     private func content(_ summary: OtherGroupPageSummary) -> some View {
@@ -139,15 +158,6 @@ struct OtherGroupView: View {
                     }
                 }
             }
-        } accessory: {
-            // The group's newest record, selected in the sidebar, which
-            // opens the group's fold. Its files across every backup are the
-            // toolbar's Files.
-            Button("Restore Files…") {
-                router.showRestore(repositoryID: repositoryID, snapshotID: summary.newestSnapshotID)
-            }
-            .controlSize(.small)
-            .help("Browse these backups and restore files — opens the group's newest record in the sidebar")
         }
     }
 }

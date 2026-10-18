@@ -82,13 +82,14 @@ extension AppDelegate {
         }
         if let repository = model.configuration.repositories.first {
             stops.append(("repository", { router.selection = .repository(repository.id) }))
-            // The restore pane needs record rows, which only exist after a
-            // listing; the same first-expand rule the sidebar uses.
+            // A backup's tree needs the listing, which a launch may not
+            // have read yet: the newest backup, on its page's Backups tab.
             if model.snapshots(for: repository.id).isEmpty {
                 await model.refreshSnapshots(repositoryID: repository.id)
             }
-            if let latest = model.snapshots(for: repository.id).first {
-                stops.append(("restore", { router.selection = .restoreSnapshot(repository.id, latest.id) }))
+            if let latest = model.snapshots(for: repository.id).first,
+               let page = model.page(ofBackup: latest.id, in: repository.id) {
+                stops.append(("restore", { router.showBackup(latest.id, on: page, repositoryID: repository.id) }))
             }
         }
         stops.append(("console", { router.selection = .console }))

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The diff sheet's picker grouping — and the months the Files pane's
-/// picker and the sidebar's backup fold read — as pure functions the test
+/// picker and the Backups tab's list read — as pure functions the test
 /// bundle can pin: the tests compile no views, so the bucketing the views
 /// render lives here with the model.
 ///

@@ -62,28 +62,31 @@ struct AppRouterTests {
         #expect(CommandConfirmation.check(a).id == .check(a))
     }
 
-    @Test("a Show in Restore focus steers only its own record's load, and only once")
-    func restoreFocusIsForItsRecordOnlyAndOnce() {
+    @Test("Show in Backups opens the page's Backups tab on its backup, and its focus steers only that record's load, once")
+    func showBackupOpensTheTabAndFocusesOnce() {
         let router = AppRouter()
         let repository = UUID()
+        let page = SidebarItem.plan(UUID())
 
-        router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
-        #expect(router.selection == .restoreSnapshot(repository, "s1"))
+        router.showBackup("s1", on: page, repositoryID: repository, focusPath: "/D/Taxes")
+        #expect(router.selection == page)
+        #expect(router.tab(of: page) == .backups)
+        #expect(router.backupSelection[page] == "s1")
         // Another record's load finds nothing — and spends the request, so a
         // stale ask can never steer a later, unrelated load.
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s2") == nil)
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
-        router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
+        router.showBackup("s1", on: page, repositoryID: repository, focusPath: "/D/Taxes")
         #expect(router.takeRestoreFocus(repositoryID: UUID(), snapshotID: "s1") == nil)
 
-        router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
+        router.showBackup("s1", on: page, repositoryID: repository, focusPath: "/D/Taxes")
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == "/D/Taxes")
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
 
         // A plain route afterwards clears an older focused ask.
-        router.showRestore(repositoryID: repository, snapshotID: "s1", focusPath: "/D/Taxes")
-        router.showRestore(repositoryID: repository, snapshotID: "s1")
-        #expect(router.selection == .restoreSnapshot(repository, "s1"))
+        router.showBackup("s1", on: page, repositoryID: repository, focusPath: "/D/Taxes")
+        router.showBackup("s2", on: page, repositoryID: repository)
+        #expect(router.backupSelection[page] == "s2")
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
     }
 
@@ -96,7 +99,7 @@ struct AppRouterTests {
         #expect(router.takeFilesVersionHint() == nil)
     }
 
-    @Test("a page opens on its overview and keeps the view it was left on; each page its own, a trip to a backup and back included")
+    @Test("a page opens on its overview and keeps the view it was left on; each page its own, a trip to another page's backup and back included")
     func pageTabsArePerPage() {
         let router = AppRouter()
         let plan = SidebarItem.plan(UUID())
@@ -108,7 +111,8 @@ struct AppRouterTests {
         #expect(router.tab(of: other) == .overview)
 
         router.selection = plan
-        router.showRestore(repositoryID: UUID(), snapshotID: "s1")
+        router.showBackup("s1", on: other, repositoryID: UUID())
+        #expect(router.tab(of: other) == .backups)
         router.selection = plan
         #expect(router.tab(of: plan) == .files)
 

@@ -145,9 +145,6 @@ enum SidebarItem: Hashable {
     /// folders are its identity, so the page survives regrouping and the
     /// selection revalidates to the repository's page once it is gone.
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
-    /// A backup record picked under its plan, or under a repository's Other
-    /// backups — the pane browses that record's file tree directly.
-    case restoreSnapshot(UUID, String)
     case console
     case activity
 }

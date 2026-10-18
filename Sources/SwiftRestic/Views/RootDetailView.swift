@@ -13,11 +13,6 @@ struct RootDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
 
-    /// Which plans and Other backups are open in the sidebar — selecting a
-    /// record from anywhere (a run's Browse, a group's Restore Files…)
-    /// must find its fold open.
-    @Binding var folds: SidebarFolds
-
     /// Debug-capture state: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record
     /// rows the pane needs land with the first listing, so the selection
     /// waits for it. Read and written only by the DEBUG capture paths, which
@@ -97,16 +92,6 @@ struct RootDetailView: View {
                     } else {
                         ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
                     }
-                case let .restoreSnapshot(repositoryID, snapshotID):
-                    RestorePaneView(
-                        repositoryID: repositoryID,
-                        snapshotID: snapshotID,
-                        onSearchAllBackups: onSearchAllBackups
-                    )
-                        // Folder state belongs to one repository: switching
-                        // to another must not carry paths or history over —
-                        // the pane's own @State resets with the identity.
-                        .id(repositoryID)
                 case let .orphanPlan(repositoryID, planID):
                     OtherGroupView(
                         repositoryID: repositoryID,
@@ -141,14 +126,6 @@ struct RootDetailView: View {
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }
-        // A record picked from anywhere (a run's Browse, a group's Restore
-        // Files…) must find its fold open — see `folds`.
-        .onChange(of: router.selection) {
-            guard case let .restoreSnapshot(repositoryID, snapshotID) = router.selection,
-                  let record = model.snapshots(for: repositoryID).first(where: { $0.id == snapshotID })
-            else { return }
-            folds.reveal(record, in: repositoryID, plans: model.plans(in: repositoryID))
-        }
         // A refresh can drop the selected record (retention ran, the
         // repository was re-initialised); the pane must not dead-end.
         .onChange(of: model.snapshots) {
@@ -156,14 +133,16 @@ struct RootDetailView: View {
         }
         #if DEBUG
         .onChange(of: model.snapshots) {
-            // SWIFTRESTIC_CAPTURE_PANE=restore: the rows the pane needs land
-            // with the first listing, so the selection happens here.
+            // SWIFTRESTIC_CAPTURE_PANE=restore: the first repository's
+            // newest backup, open on its page's Backups tab — the listing
+            // it needs lands after launch, so the selection happens here.
             guard pendingCaptureRestore,
                   let repository = model.configuration.repositories.first,
-                  let latest = model.snapshots(for: repository.id).first
+                  let latest = model.snapshots(for: repository.id).first,
+                  let page = model.page(ofBackup: latest.id, in: repository.id)
             else { return }
             pendingCaptureRestore = false
-            router.selection = .restoreSnapshot(repository.id, latest.id)
+            router.showBackup(latest.id, on: page, repositoryID: repository.id)
         }
         #endif
     }

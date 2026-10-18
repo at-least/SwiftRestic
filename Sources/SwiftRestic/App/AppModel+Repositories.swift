@@ -157,7 +157,6 @@ extension AppModel {
         repositoryStats[id] = nil
         snapshotListingOutcomes[id] = nil
         snapshotsLoadedAt[id] = nil
-        adoptionLandingsConsidered.remove(id)
         snapshotsGeneration[id] = nil
         indexTakenGeneration[id] = nil
         pendingSnapshotRefreshes.remove(id)

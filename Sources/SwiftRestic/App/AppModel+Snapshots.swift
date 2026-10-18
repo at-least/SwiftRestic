@@ -187,8 +187,8 @@ extension AppModel {
         return snapshotsLoadedAt[repositoryID]
     }
 
-    /// The repository's backups sorted to where the sidebar shows them:
-    /// under its plans, the rest under Other backups.
+    /// The repository's backups sorted to where they are listed: on their
+    /// plans' Backups tabs, the rest on their groups' under Other backups.
     func shelves(for repositoryID: UUID) -> BackupShelves {
         backupShelves[repositoryID]
             ?? BackupShelves(listing: [], plans: plans(in: repositoryID), allPlans: configuration.plans)
@@ -215,6 +215,15 @@ extension AppModel {
         shelves(for: repositoryID).label(
             of: record, repositories: configuration.repositories, localHost: localHostname
         )
+    }
+
+    /// The page whose Backups tab lists a backup — the plan of the
+    /// repository that made it, or its group under Other backups — for a
+    /// route that names a backup by its ID: the run drawer's Browse, a Files
+    /// tab's Show in Backups. Nil when the listing no longer holds it.
+    func page(ofBackup snapshotID: String, in repositoryID: UUID) -> SidebarItem? {
+        snapshots(for: repositoryID).first { $0.id == snapshotID }
+            .map { shelves(for: repositoryID).page(of: $0, repositoryID: repositoryID) }
     }
 
     func snapshots(for repositoryID: UUID?, planID: UUID? = nil) -> [Snapshot] {
