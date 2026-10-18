@@ -11,10 +11,11 @@ import Foundation
 enum RunFix: Equatable {
     /// restic exit 12: the stored password does not open the repository.
     case editRepository(UUID)
-    /// restic exit 10: no repository is at its saved path — a folder moved
+    /// restic exit 10: no repository is at its location — a folder moved
     /// or renamed on a drive that is here (a drive that is away skips the
-    /// run instead).
-    case editRepositoryPath(UUID)
+    /// run instead). A repository's location is fixed, so where it is now
+    /// takes a new repository.
+    case addRepository
     /// restic exit 11: a lock this app does not hold is in the way.
     case removeStaleLocks(UUID)
     /// The plan's folder is not on this Mac (`RunRecord.missingSources`):
@@ -38,7 +39,8 @@ enum RunFix: Equatable {
 
     var title: String {
         switch self {
-        case .editRepository, .editRepositoryPath, .editRepositoryShare: "Edit Repository…"
+        case .editRepository, .editRepositoryShare: "Edit Repository…"
+        case .addRepository: "Add Repository…"
         case .removeStaleLocks: "Remove Stale Locks…"
         case .newPlan: "New Backup Plan…"
         case .editPlanShare, .editPlanRetention: "Edit Plan…"
@@ -50,7 +52,7 @@ enum RunFix: Equatable {
     var help: String {
         switch self {
         case .editRepository: "The password doesn't open this repository — check it in the repository settings"
-        case .editRepositoryPath: ResticError.noRepositoryAtPath
+        case .addRepository: ResticError.noRepositoryAtLocation
         case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
         case .newPlan: "Back the folder up where it is now, with a new plan"
         case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
@@ -138,7 +140,7 @@ enum RunRecordPresentation {
         }
         if run.repositoryFull == true { return .pruneNow(repositoryID) }
         if run.exitCode == 12 { return .editRepository(repositoryID) }
-        if run.exitCode == 10 { return .editRepositoryPath(repositoryID) }
+        if run.exitCode == 10 { return .addRepository }
         let locked = run.exitCode == 11 || run.failureMessage?.contains("already locked") == true
         return locked && !repositoryBusy ? .removeStaleLocks(repositoryID) : nil
     }

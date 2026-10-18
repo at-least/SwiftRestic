@@ -221,14 +221,16 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == .editRepository(repository))
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: false, repositoryBusy: false) == nil)
 
-        // restic's "does not exist": the repository is not at its saved
-        // path — its folder moved or renamed on a drive that is here.
+        // restic's "does not exist": the repository is not at its
+        // location — its folder moved or renamed on a drive that is here.
+        // A repository's location is fixed, so where it is now is a new
+        // repository.
         let missing = backup {
             $0.repositoryID = repository
             $0.outcome = .failed
             $0.exitCode = 10
         }
-        #expect(RunRecordPresentation.fix(for: missing, repositoryExists: true, repositoryBusy: false) == .editRepositoryPath(repository))
+        #expect(RunRecordPresentation.fix(for: missing, repositoryExists: true, repositoryBusy: false) == .addRepository)
 
         var locked = backup {
             $0.repositoryID = repository
@@ -256,11 +258,11 @@ struct RunRecordPresentationTests {
         wrongPassword.repositoryID = nil
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == nil)
         #expect(RunFix.editRepository(repository).title == "Edit Repository…")
-        #expect(RunFix.editRepositoryPath(repository).title == "Edit Repository…")
+        #expect(RunFix.addRepository.title == "Add Repository…")
         #expect(RunFix.removeStaleLocks(repository).title == "Remove Stale Locks…")
         // Each says the cause it fixes.
         #expect(RunFix.editRepository(repository).help == "The password doesn't open this repository — check it in the repository settings")
-        #expect(RunFix.editRepositoryPath(repository).help == "No repository is at its saved path — point it at the folder that holds the repository")
+        #expect(RunFix.addRepository.help == "No repository is at its location — put it back, or add it where it is now as a new repository")
     }
 
     @Test("a failure for a network share that refused offers the editor holding its password: the repository's for its own share, the plan's for a folder's")

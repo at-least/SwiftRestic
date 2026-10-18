@@ -603,7 +603,8 @@ struct AppModelTests {
         #expect(model.currentProblem(for: harness.plan.id) == nil)
 
         // The drive is here and the folder is not: restic's exit 10 stays
-        // a failure, and the repository's editor is where the path is fixed.
+        // a failure, and since a repository's location is fixed, the fix is
+        // a new repository where it is now.
         model.configuration.repositories[index].localPath = harness.root.appendingPathComponent("moved").path
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
@@ -611,7 +612,7 @@ struct AppModelTests {
         #expect(failed.outcome == .failed)
         #expect(failed.exitCode == 10)
         #expect(RunRecordPresentation.fix(for: failed, repositoryExists: true, repositoryBusy: false)
-            == .editRepositoryPath(harness.repository.id))
+            == .addRepository)
 
         await model.shutdown()
     }

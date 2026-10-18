@@ -36,9 +36,9 @@ struct ResticErrorTests {
         #expect(ResticError.commandFailed(
             exitCode: 10,
             message: "Fatal: repository does not exist: unable to open config file: stat /Volumes/A/config: no such file or directory"
-        ).errorDescription == "No repository is at its saved path — point it at the folder that holds the repository. restic reported: Fatal: repository does not exist: unable to open config file: stat /Volumes/A/config: no such file or directory")
+        ).errorDescription == "No repository is at its location — put it back, or add it where it is now as a new repository. restic reported: Fatal: repository does not exist: unable to open config file: stat /Volumes/A/config: no such file or directory")
         #expect(ResticError.commandFailed(exitCode: 10, message: "").errorDescription
-            == "No repository is at its saved path — point it at the folder that holds the repository.")
+            == "No repository is at its location — put it back, or add it where it is now as a new repository.")
         #expect(ResticError.commandFailed(
             exitCode: 11,
             message: "Fatal: repository is locked"

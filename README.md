@@ -189,13 +189,16 @@ the generator after editing it; the PNGs are checked in.
   `restic init`; a repository that cannot be reached is not saved. *Test
   Connection* on a path with no repository says what Save will do: create
   one for a new repository; for an existing one nothing — "backups to it
-  would fail until one is created", so point it at the folder that holds it.
+  would fail until one is created". Only a new repository chooses its kind
+  and location; a saved one shows them as text, as a saved plan shows its
+  path — another place is another repository, so exit 10 offers *Add
+  Repository…*.
   The answer shows above the buttons on either tab, a new repository's empty
   location as information, not the red of a failure. An edit's *Save* that
-  changes what reaches restic — location, a credential, the extra
-  environment, the password — runs the same check and saves only on
+  changes what reaches restic — a credential, the extra environment, the
+  password — runs the same check and saves only on
   "Connected", else says why and offers *Save Anyway* (for a server down
-  while its path is being fixed); the form waits during either check, so
+  while a credential changes); the form waits during either check, so
   Save stores what was checked. A rate limit, a maintenance setting or a
   hook saves at once. The check gives up after 60 seconds:
   against a REST server refusing connections, restic 0.19.1 retried for
@@ -625,8 +628,8 @@ the generator after editing it; the PNGs are checked in.
   offers a fix for says the fix in its own words, so the banner and
   notification do too — exit 12 "The password doesn't open this repository
   — check it in the repository settings.", exit 10 "No repository is at its
-  saved path — point it at the folder that holds the repository." (*Edit
-  Repository…*), exit 11 "The repository is locked — if no other Mac is
+  location — put it back, or add it where it is now as a new repository."
+  (*Add Repository…*), exit 11 "The repository is locked — if no other Mac is
   using it, remove the stale locks." (*Remove Stale Locks…*) — each followed
   by restic's first sentence. A backup that fills its local repository's
   disk says so instead of restic's line, which names a pack file by its

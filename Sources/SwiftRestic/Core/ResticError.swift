@@ -70,14 +70,14 @@ enum ResticError: Error, LocalizedError, Equatable {
             }
             if code == 10 || code == 11 {
                 // Exit 12's grammar: the fix leads, restic's first sentence
-                // keeps the detail. Exit 10's are the Edit Repository…
+                // keeps the detail. Exit 10's are the Add Repository…
                 // button's own words, so the banner and the notification say
                 // what the drawer's button does. Exit 11's leave out the
                 // Remove Stale Locks… tooltip's "no run here holds it",
                 // checked when the button is offered: the stored message
                 // outlives that moment.
                 let base = code == 10
-                    ? Self.noRepositoryAtPath + "."
+                    ? Self.noRepositoryAtLocation + "."
                     : "The repository is locked — if no other Mac is using it, remove the stale locks."
                 let restic = Format.firstSentence(message)
                 return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
@@ -162,8 +162,9 @@ enum ResticError: Error, LocalizedError, Equatable {
     static let rcloneMissing = "rclone is not installed. Install it with `brew install rclone`."
 
     /// Exit 10's cause and fix, the failure's message and its button's
-    /// tooltip alike.
-    static let noRepositoryAtPath = "No repository is at its saved path — point it at the folder that holds the repository"
+    /// tooltip alike. A repository's location is fixed, so where it is now
+    /// is a new repository, as a moved plan folder is a new plan.
+    static let noRepositoryAtLocation = "No repository is at its location — put it back, or add it where it is now as a new repository"
 
     /// restic's documented exit codes.
     static func knownExitCodeDescription(_ code: Int32) -> String? {

@@ -300,10 +300,11 @@ struct RunFixButton: View {
     var body: some View {
         Button(fix.title) {
             switch fix {
-            case let .editRepository(id), let .editRepositoryPath(id), let .editRepositoryShare(id):
+            case let .editRepository(id), let .editRepositoryShare(id):
                 router.request(.editRepository(id))
             case let .removeStaleLocks(id): router.request(.confirm(.unlock(id)))
             case let .newPlan(id): router.request(.newPlanIn(id))
+            case .addRepository: router.request(.newRepository)
             case let .editPlanShare(id): router.request(.editPlan(id))
             case let .editPlanRetention(id): router.request(.editPlanRetention(id))
             case let .pruneNow(id): router.request(.confirm(.prune(id)))

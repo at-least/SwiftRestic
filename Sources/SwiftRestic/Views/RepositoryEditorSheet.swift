@@ -172,9 +172,9 @@ struct RepositoryEditorSheet: View {
                     .keyboardShortcut(.cancelAction)
                     .disabled(isWorking)
                 if !isNew, unverifiedEdit == currentEdit {
-                    // A server that is down while its path is being fixed
-                    // must not block the fix; the answer above says what
-                    // the check met.
+                    // A server that is down while a credential is being
+                    // fixed must not block the fix; the answer above says
+                    // what the check met.
                     Button("Save Anyway") { Task { await save(verifying: false) } }
                         .disabled(isWorking)
                 }
@@ -280,25 +280,12 @@ struct RepositoryEditorSheet: View {
                 // The eight kinds grouped by where the backup lives: the
                 // destination answers "where is it" as the section header
                 // above each kind, so one control carries both questions.
-                // The same grouping when the repository is edited — what the
-                // user knows of it is the place they picked it by.
-                Picker("Where is it?", selection: $draft.kind) {
-                    Section("On this Mac") {
-                        Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
-                    }
-                    Section("On another machine") {
-                        Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
-                        Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
-                    }
-                    Section("In the cloud") {
-                        Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
-                        Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
-                        Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
-                        Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
-                    }
-                    Section("Through a gateway") {
-                        Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
-                    }
+                // A saved repository's kind is part of where it is, fixed
+                // with its location (`locationFields`).
+                if isNew {
+                    kindPicker
+                } else {
+                    LabeledContent("Where is it?") { Text(draft.kind.displayName) }
                 }
                 Text(draft.kind.summary)
                     .font(.caption)
@@ -481,42 +468,75 @@ struct RepositoryEditorSheet: View {
 
     // MARK: - Fields
 
+    private var kindPicker: some View {
+        Picker("Where is it?", selection: $draft.kind) {
+            Section("On this Mac") {
+                Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
+            }
+            Section("On another machine") {
+                Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
+                Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
+            }
+            Section("In the cloud") {
+                Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
+                Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
+                Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
+                Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
+            }
+            Section("Through a gateway") {
+                Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
+            }
+        }
+    }
+
+    /// Where the repository is, chosen only while it is new. A saved one is
+    /// that place — its label, its index and its history are all of it —
+    /// so its location reads as text, as a saved plan's path does, and
+    /// another place is another repository (Add Repository…, exit 10's
+    /// fix). Fixed are the parts restic's repository string is made of and
+    /// Azure's account, which holds the container; what reaches the place
+    /// without being it — a key's ID, a project, a share's password —
+    /// stays editable.
     @ViewBuilder
     private var locationFields: some View {
+        if isNew {
+            whereFields
+        } else {
+            // The section's title names it.
+            Text(draft.displayLocation)
+                .textSelection(.enabled)
+                .lineLimit(2)
+                .truncationMode(.middle)
+            if draft.kind == .azure {
+                LabeledContent("Account name") { Text(draft.azureAccountName) }
+            }
+        }
+        accessFields
+        if isNew {
+            LabeledContent("restic will use") {
+                Text(draft.resticRepositoryString.isEmpty ? "—" : draft.resticRepositoryString)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+        }
+    }
+
+    /// The fields that reach the repository without being where it is.
+    @ViewBuilder
+    private var accessFields: some View {
         switch draft.kind {
         case .local:
-            HStack {
-                TextField("Folder", text: $draft.localPath, prompt: Text("/Volumes/Backup/restic"))
-                Button("Choose…") {
-                    if let url = FilePicker.chooseDirectory(message: "Choose the repository folder") {
-                        draft.localPath = url.path
-                    }
-                }
-            }
             if let folderShare {
                 NetworkSharePasswordRows(url: folderShare.share.url, isSaved: folderShare.isSaved, password: $sharePassword)
             }
-        case .sftp:
-            TextField("User", text: $draft.sftpUser, prompt: Text("backup"))
-            TextField("Host", text: $draft.sftpHost, prompt: Text("nas.local"))
-            TextField("Port", text: $draft.sftpPort, prompt: Text("22"))
-            TextField("Path", text: $draft.sftpPath, prompt: Text("/volume1/restic"))
         case .s3:
-            TextField("Endpoint", text: $draft.s3Endpoint, prompt: Text("s3.amazonaws.com"))
-            TextField("Bucket", text: $draft.s3Bucket)
-            TextField("Prefix (optional)", text: $draft.s3Prefix)
             TextField("Access key ID", text: $draft.s3AccessKeyID)
         case .b2:
-            TextField("Bucket", text: $draft.b2Bucket)
-            TextField("Prefix (optional)", text: $draft.b2Prefix)
             TextField("Account ID / key ID", text: $draft.b2AccountID)
-        case .azure:
-            TextField("Container", text: $draft.azureContainer)
-            TextField("Prefix (optional)", text: $draft.azurePrefix)
-            TextField("Account name", text: $draft.azureAccountName)
         case .gcs:
-            TextField("Bucket", text: $draft.gcsBucket)
-            TextField("Prefix (optional)", text: $draft.gcsPrefix)
             TextField("Project ID (optional)", text: $draft.gcsProjectID)
             HStack {
                 TextField(
@@ -534,6 +554,44 @@ struct RepositoryEditorSheet: View {
                 summary: "The key file's path is stored in your configuration, not the Keychain.",
                 detail: "restic reads the key file from disk itself. Keep the file readable only by you."
             )
+        case .sftp, .azure, .rest, .rclone:
+            EmptyView()
+        }
+    }
+
+    /// Where a new repository is: the parts restic's repository string is
+    /// made of, and Azure's account.
+    @ViewBuilder
+    private var whereFields: some View {
+        switch draft.kind {
+        case .local:
+            HStack {
+                TextField("Folder", text: $draft.localPath, prompt: Text("/Volumes/Backup/restic"))
+                Button("Choose…") {
+                    if let url = FilePicker.chooseDirectory(message: "Choose the repository folder") {
+                        draft.localPath = url.path
+                    }
+                }
+            }
+        case .sftp:
+            TextField("User", text: $draft.sftpUser, prompt: Text("backup"))
+            TextField("Host", text: $draft.sftpHost, prompt: Text("nas.local"))
+            TextField("Port", text: $draft.sftpPort, prompt: Text("22"))
+            TextField("Path", text: $draft.sftpPath, prompt: Text("/volume1/restic"))
+        case .s3:
+            TextField("Endpoint", text: $draft.s3Endpoint, prompt: Text("s3.amazonaws.com"))
+            TextField("Bucket", text: $draft.s3Bucket)
+            TextField("Prefix (optional)", text: $draft.s3Prefix)
+        case .b2:
+            TextField("Bucket", text: $draft.b2Bucket)
+            TextField("Prefix (optional)", text: $draft.b2Prefix)
+        case .azure:
+            TextField("Container", text: $draft.azureContainer)
+            TextField("Prefix (optional)", text: $draft.azurePrefix)
+            TextField("Account name", text: $draft.azureAccountName)
+        case .gcs:
+            TextField("Bucket", text: $draft.gcsBucket)
+            TextField("Prefix (optional)", text: $draft.gcsPrefix)
         case .rest:
             TextField("URL", text: $draft.restURL, prompt: Text("https://host:8000/"))
                 // A URL pasted with its login sheds it into User and the
@@ -571,15 +629,6 @@ struct RepositoryEditorSheet: View {
                 summary: "rclone has to be installed and its remote already configured.",
                 detail: "restic launches the rclone binary itself: install it (`brew install rclone`) and set the remote up with `rclone config`."
             )
-        }
-
-        LabeledContent("restic will use") {
-            Text(draft.resticRepositoryString.isEmpty ? "—" : draft.resticRepositoryString)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .lineLimit(2)
-                .truncationMode(.middle)
         }
     }
 
