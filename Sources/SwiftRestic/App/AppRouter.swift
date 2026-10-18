@@ -284,6 +284,15 @@ enum PageTab: Hashable, CaseIterable {
     case overview
     case backups
     case files
+
+    /// The View menu's words for it, the toolbar segment's own.
+    var menuTitle: String {
+        switch self {
+        case .overview: "Overview"
+        case .backups: "Backups"
+        case .files: "Files"
+        }
+    }
 }
 
 /// The destructive (or slow) actions that ask first, wherever they are

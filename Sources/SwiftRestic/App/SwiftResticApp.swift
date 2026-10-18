@@ -238,6 +238,11 @@ struct SwiftResticApp: App {
                 }
             }
             RestoreCommands()
+            // View ▸ Show/Hide Sidebar (⌃⌘S): with the sidebar hidden, its
+            // toolbar button had been the one way back (the HIG's Split
+            // views: "Provide multiple ways to reveal hidden panes").
+            SidebarCommands()
+            viewMenu
             planMenu
             repositoryMenu
         }
@@ -338,6 +343,35 @@ struct SwiftResticApp: App {
                 if let id = p.planID { ask(.confirm(.deletePlan(id))) }
             }
             .disabled(!p.canDelete)
+        }
+    }
+
+    /// The View menu's own items, after the sidebar's: what the toolbar
+    /// switches, each a command too (the HIG's Toolbars: "Make every
+    /// toolbar item available as a command in the menu bar") — a page's
+    /// Overview | Backups | Files with ⌘1–⌘3, Finder's keys for its views,
+    /// and Activity's problems filter. Greyed where the page has none.
+    private var viewMenu: some Commands {
+        CommandGroup(after: .sidebar) {
+            let page = router.selection.flatMap { $0.hasPageTabs ? $0 : nil }
+            Divider()
+            ForEach(Array(PageTab.allCases.enumerated()), id: \.element) { index, tab in
+                Toggle(tab.menuTitle, isOn: Binding(
+                    get: { page.map { router.tab(of: $0) == tab } ?? false },
+                    set: { isOn in
+                        if isOn, let page { router.setTab(tab, of: page) }
+                    }
+                ))
+                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                .disabled(page == nil)
+            }
+            Divider()
+            Toggle("Show Problems Only", isOn: Binding(
+                get: { router.activityShowsProblemsOnly },
+                set: { router.activityShowsProblemsOnly = $0 }
+            ))
+            .disabled(router.selection != .activity)
+            Divider()
         }
     }
 

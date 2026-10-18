@@ -403,9 +403,10 @@ extension View {
         toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: selection) {
-                    Text("Overview").tag(PageTab.overview)
-                    Text("Backups").tag(PageTab.backups)
-                    Text("Files").tag(PageTab.files)
+                    // The View menu's words too (⌘1–⌘3).
+                    ForEach(PageTab.allCases, id: \.self) { tab in
+                        Text(tab.menuTitle).tag(tab)
+                    }
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 240)

@@ -709,11 +709,19 @@ the generator after editing it; the PNGs are checked in.
   success's green check, news in grey; errors and warnings stay until
   dismissed.
 - **Menus** — *Plan* and *Repository* act on the sidebar's selection: a
-  plan, a repository, or the repository a selected plan, backup record or
-  Other-backups group belongs to; items with nothing to act on are grey.
+  plan, a repository, or the repository a selected plan or Other-backups
+  group belongs to; items with nothing to act on are grey.
   ⌘B backs up the selected plan, ⌘. stops it, ⇧⌘B backs up every plan, ⇧⌘F
   finds files, ⌘R refreshes every repository's snapshots; *Pause Backups* is
-  there as well as in the menu bar. While a sheet is up, a command that
+  there as well as in the menu bar. *View* has what the toolbar switches,
+  as the HIG asks of every toolbar item: *Show/Hide Sidebar* (⌃⌘S) — with
+  the sidebar hidden, the toolbar's button had been the one way back — a
+  page's *Overview*, *Backups* and *Files* (⌘1–⌘3, Finder's keys for its
+  views; grey off a plan's or group's page), and *Show Problems Only* for
+  Activity. *File ▸ Restore…* is the toolbar's Restore… of the page in view
+  (*Restore Backup…*, *Restore Folder…* by what it would restore), and
+  *Help ▸ SwiftRestic Help* (⌘?) opens the concepts in a window of their
+  own, where macOS's item had said "Help isn't available for SwiftRestic." While a sheet is up, a command that
   opens a sheet or the console, or acts on the selected plan or repository,
   beeps and does nothing; *Back Up All Plans Now*, *Pause Backups*, *Resume
   Backups*, *Pause and Stop Running Backups* and *Refresh All Snapshots*

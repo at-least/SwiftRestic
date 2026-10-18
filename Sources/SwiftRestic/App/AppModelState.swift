@@ -156,6 +156,15 @@ enum SidebarItem: Hashable {
 }
 
 extension SidebarItem {
+    /// Whether the page has the toolbar's Overview | Backups | Files: a
+    /// plan's, and a group's under Other backups.
+    var hasPageTabs: Bool {
+        switch self {
+        case .plan, .orphanPlan, .lineage: true
+        case .repository, .console, .findFiles, .activity: false
+        }
+    }
+
     /// The page of a group under `repositoryID`'s Other backups, either kind.
     static func otherGroup(repositoryID: UUID, id: OtherBackupsGroup.ID) -> SidebarItem {
         switch id {
