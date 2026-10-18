@@ -29,7 +29,6 @@ struct RootView: View {
     /// that button sets it; the sheet's dismissal clears it, so ⇧⌘F and
     /// every other way in still open an empty search.
     @State private var findPrefill: FindFilesView.Prefill?
-    @State private var isShowingConcepts = false
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a pane's toolbar, a sidebar menu. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
@@ -137,9 +136,6 @@ struct RootView: View {
             FindFilesView(prefill: prefill, initialRepositoryID: findFilesRepositoryID)
                 .environment(model)
                 .environment(router)
-        }
-        .sheet(isPresented: $isShowingConcepts) {
-            ConceptsView()
         }
         // The adopt sheet, from a group's context menu or its page. Adopt's
         // landing is the new plan's own page with its records revealed under
@@ -402,7 +398,7 @@ struct RootView: View {
             if let query = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SEARCH"] {
                 router.filesSearchText[roots] = query
             }
-        case "concepts": isShowingConcepts = true
+        case "concepts": openWindow(id: SwiftResticApp.helpWindowID)
         case "console": router.selection = .console
         // The restore pane needs a snapshot row to select, and those arrive
         // only after the launch refresh — the selection happens in
@@ -511,7 +507,7 @@ struct RootView: View {
     /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
-        let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFind || isShowingConcepts
+        let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFind
             || pendingConfirmation != nil || retentionTarget != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
         guard !sheetsUp else {
@@ -536,8 +532,6 @@ struct RootView: View {
             } else {
                 isShowingFind = true
             }
-        case .showConcepts:
-            isShowingConcepts = true
         case .showConsole:
             router.selection = .console
         case .runSelectedPlan:

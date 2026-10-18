@@ -179,6 +179,7 @@ struct SwiftResticApp: App {
     @Environment(\.openWindow) private var openWindow
 
     private static let mainWindowID = "main"
+    static let helpWindowID = "help"
 
     var body: some Scene {
         // `Window`, not `WindowGroup`: a group is multi-instance, so the menu
@@ -220,8 +221,14 @@ struct SwiftResticApp: App {
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
-            CommandGroup(after: .help) {
-                Button("SwiftRestic Concepts…") { ask(.showConcepts) }
+            // The menu's first item is the app's own help, as the HIG's Help
+            // menu has it. With no Help Book, macOS's own item only said
+            // "Help isn't available for SwiftRestic."; this one opens the
+            // concepts in a window of their own — not a sheet, so they read
+            // beside an open editor — and asks nothing of the main window.
+            CommandGroup(replacing: .help) {
+                Button("SwiftRestic Help") { openWindow(id: Self.helpWindowID) }
+                    .keyboardShortcut("?", modifiers: .command)
                 Divider()
                 Button("restic Documentation") {
                     NSWorkspace.shared.open(AppLinks.documentation)
@@ -239,6 +246,11 @@ struct SwiftResticApp: App {
                 .environment(model)
         }
 
+        // Help ▸ SwiftRestic Help: the restic vocabulary the app assumes.
+        Window("SwiftRestic Help", id: Self.helpWindowID) {
+            ConceptsView()
+        }
+        .defaultSize(width: 480, height: 600)
     }
 
     /// An ask for the root view, which also opens the window: an intent

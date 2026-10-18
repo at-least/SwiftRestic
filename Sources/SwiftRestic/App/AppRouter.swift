@@ -21,7 +21,6 @@ final class AppRouter {
         case newPlanIn(UUID)
         case newRepository
         case showFind
-        case showConcepts
         /// Repository ▸ restic Console…: a pane switch, not a sheet, but it
         /// waits out an open sheet like every other menu ask.
         case showConsole

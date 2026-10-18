@@ -2,10 +2,9 @@ import SwiftUI
 
 /// The restic vocabulary the app assumes, in one place: prune vs forget,
 /// blobs, locks and the rest, with the app's own framing and a link out to
-/// the real documentation.
+/// the real documentation. Help ▸ SwiftRestic Help's window, whose own close
+/// button and ⌘W close it.
 struct ConceptsView: View {
-    @Environment(\.dismiss) private var dismiss
-
     private struct Concept: Identifiable {
         let term: String
         let definition: String
@@ -58,7 +57,7 @@ struct ConceptsView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("SwiftRestic concepts")
+                Text("Concepts")
                     .font(.title2.weight(.semibold))
                 Text("The restic vocabulary the app assumes, in plain terms.")
                     .foregroundStyle(.secondary)
@@ -84,8 +83,6 @@ struct ConceptsView: View {
                 Text("The app pins its decoding to restic 0.19.1's output.")
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Close") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
             }
             .padding(12)
         }
