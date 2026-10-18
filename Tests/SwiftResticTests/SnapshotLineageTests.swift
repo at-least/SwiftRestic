@@ -83,7 +83,7 @@ struct SnapshotLineageTests {
     @Test("names a lineage after its plan, or its folders when no plan claims it")
     func labels() throws {
         var documentsPlan = BackupPlan()
-        documentsPlan.name = "Documents"
+        documentsPlan.path = "/Data/Documents"
         let tag = ResticService.planTag(documentsPlan.id)
         let deletedPlanTag = ResticService.planTag(UUID())
 
@@ -106,9 +106,7 @@ struct SnapshotLineageTests {
     @Test("two plans' interleaved backups of the same folders stay two groups, never one plan's name")
     func sharedLineageTitleIsStable() throws {
         var hourly = BackupPlan()
-        hourly.name = "Hourly Docs"
         var nightly = BackupPlan()
-        nightly.name = "Nightly Docs"
         let hourlyTag = ResticService.planTag(hourly.id)
         let nightlyTag = ResticService.planTag(nightly.id)
 
@@ -169,7 +167,7 @@ struct SnapshotLineageTests {
     @Test("a plan whose folders changed, or a second host, is told apart in the qualifier")
     func qualifiers() throws {
         var plan = BackupPlan()
-        plan.name = "Work"
+        plan.path = "/Data/Work"
         let tag = ResticService.planTag(plan.id)
         // The plan backed up one folder, then two: two lineages, one plan name.
         let before = try snapshot("w1", time: "2026-09-20T02:00:00Z", paths: ["/Data/Work"], tags: [tag])
@@ -196,23 +194,22 @@ struct SnapshotLineageTests {
     @Test("the restore header names the open backup the way the sidebar names its group")
     @MainActor
     func restoreHeaderName() throws {
-        // Named apart from its folder, so the plan's name — what the sidebar
-        // shows — is told apart from the folder the backup holds.
+        // What the sidebar shows: the plan, called by its folder.
         var documentsPlan = BackupPlan()
-        documentsPlan.name = "Paperwork"
+        documentsPlan.path = "/Data/Documents"
         let docs = try snapshot("d1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Documents"],
                                 tags: [ResticService.planTag(documentsPlan.id)])
         let docsLabels = SnapshotLineage.labels(for: SnapshotLineage.grouping([docs]), plans: [documentsPlan])
         let heading = RestoreRecordHeading(record: docs, label: docsLabels[docs.lineageKey], comparison: nil)
-        #expect(heading.name == "Paperwork")
-        #expect(SnapshotLineage.displayName(of: docs, label: docsLabels[docs.lineageKey]) == "Paperwork")
+        #expect(heading.name == "Documents")
+        #expect(SnapshotLineage.displayName(of: docs, label: docsLabels[docs.lineageKey]) == "Documents")
         // Computed, not a literal: the day reads the same in any locale or zone.
         #expect(heading.time == Format.timestamp(docs.time))
 
         // The `qualifiers` fixture: a plan whose folders changed. The older
         // lineage wears the qualifier the sidebar gives its group.
         var work = BackupPlan()
-        work.name = "Work"
+        work.path = "/Data/Work"
         let tag = ResticService.planTag(work.id)
         let before = try snapshot("w1", time: "2026-09-20T02:00:00Z", paths: ["/Data/Work"], tags: [tag])
         let after = try snapshot("w2", time: "2026-09-26T02:00:00Z", paths: ["/Data/Clients", "/Data/Work"], tags: [tag])
@@ -260,8 +257,8 @@ struct SnapshotLineageTests {
     func restoreHeaderNamesThePlan() throws {
         let repositoryID = UUID()
         var hourly = BackupPlan()
-        hourly.name = "Hourly Docs"
         hourly.repositoryID = repositoryID
+        hourly.path = "/Data/Docs"
         let h1 = try snapshot("h1", time: "2026-09-25T03:00:00Z", paths: ["/Data/Docs"],
                               tags: [ResticService.planTag(hourly.id)])
         // The console backed up the same folders: one lineage, which the
@@ -276,12 +273,15 @@ struct SnapshotLineageTests {
         model.configuration.plans = [hourly]
         model.snapshots[repositoryID] = [console, h1]
 
-        // The sidebar shows h1 under Hourly Docs, so the header says so.
-        #expect(SnapshotLineage.displayName(of: h1, label: model.recordLabel(of: h1, repositoryID: repositoryID))
-            == "Hourly Docs")
+        // The sidebar shows h1 under its plan, so the header names the plan
+        // — a plan's label, without the count an Other backups group wears.
+        let planLabel = model.recordLabel(of: h1, repositoryID: repositoryID)
+        #expect(SnapshotLineage.displayName(of: h1, label: planLabel) == "Docs")
+        #expect(planLabel?.caption == nil)
         // The console's backup sits under Other backups, named for its folders.
-        #expect(SnapshotLineage.displayName(of: console, label: model.recordLabel(of: console, repositoryID: repositoryID))
-            == "Docs")
+        let groupLabel = model.recordLabel(of: console, repositoryID: repositoryID)
+        #expect(SnapshotLineage.displayName(of: console, label: groupLabel) == "Docs")
+        #expect(groupLabel?.caption != nil)
     }
 
     @Test("the restore header says what the Change column compares against, and why it is blank")

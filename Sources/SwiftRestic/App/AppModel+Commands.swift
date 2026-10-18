@@ -190,7 +190,7 @@ extension AppModel {
         switch confirmation {
         case let .deletePlan(id):
             guard let plan = plan(id: id) else { return nil }
-            let name = plan.displayName
+            let name = label(of: plan)
             // Where the snapshots land, said when there are some: the count
             // and the shelf the sidebar will move them to, so the dialog and
             // what happens next cannot disagree. Deleting is the main source

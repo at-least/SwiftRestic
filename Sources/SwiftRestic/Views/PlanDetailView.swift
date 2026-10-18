@@ -26,7 +26,10 @@ struct PlanDetailView: View {
                 ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
             }
         }
-        .navigationTitle(plan?.name ?? "Plan")
+        // A plan is its path: the label names the page, the path under it
+        // says which folder that is.
+        .navigationTitle(plan.map { model.label(of: $0) } ?? "Plan")
+        .navigationSubtitle(plan.map { ($0.path as NSString).abbreviatingWithTildeInPath } ?? "")
         .pageTabPicker(router.tabBinding(for: .plan(planID)))
         // Opening the page marks the plan's problem seen — honestly, since
         // the problem row under the Backups card shows the failure for as
@@ -418,33 +421,17 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The plan's defining facts — the folder it backs up and the patterns
-    /// it leaves out — then its hooks,
-    /// with Edit in its corner. When is the Schedule card's, what it keeps
-    /// the Backups card's; where is the sidebar's: the plan sits under its
-    /// repository.
+    /// The plan's defining facts — the patterns it leaves out, the folder
+    /// itself being the page's subtitle — then its hooks, with Edit in its
+    /// corner. When is the Schedule card's, what it keeps the Backups
+    /// card's; where is the sidebar's: the plan sits under its repository.
     private func configurationCard(_ plan: BackupPlan) -> some View {
         Card("Configuration") {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Backing up")
-                    .font(.subheadline.weight(.medium))
-                if plan.path.isEmpty {
-                    Text("No folder chosen yet.")
+                if plan.excludePatterns.isEmpty && plan.hooks.isEmpty {
+                    Text("Nothing is left out, and no hooks run.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                } else {
-                    Label {
-                        Text((plan.path as NSString).abbreviatingWithTildeInPath)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    } icon: {
-                        // A file wears it too: decoration, whose SF label
-                        // ("Move") would only mislead.
-                        Image(systemName: "folder.fill")
-                            .foregroundStyle(Theme.tint)
-                            .accessibilityHidden(true)
-                    }
-                    .font(.callout)
                 }
                 // As the user typed them, tilde and all; none, no section —
                 // as Hooks below.

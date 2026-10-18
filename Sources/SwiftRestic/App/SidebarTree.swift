@@ -170,7 +170,7 @@ struct BackupShelves: Equatable {
         else { return otherLabels(repositories: repositories, localHost: localHost)[record.otherGroupID] }
         let lineages = SnapshotLineage.grouping(byPlan[planID] ?? [])
         var label = SnapshotLineage.labels(for: lineages, plans: [plan])[record.lineageKey]
-        label?.title = plan.displayName
+        label?.title = plan.label(among: allPlans)
         return label
     }
 

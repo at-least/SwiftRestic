@@ -179,7 +179,6 @@ struct NetworkShareTests {
         repository.localPath = "/Volumes/\(volume)/restic"
         model.configuration.repositories = [repository]
         var plan = BackupPlan()
-        plan.name = "Share Plan"
         plan.repositoryID = repository.id
         plan.path = "/tmp/share-plan-source"
         await #expect {

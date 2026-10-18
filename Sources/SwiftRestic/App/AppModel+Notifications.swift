@@ -66,7 +66,7 @@ extension AppModel {
             guard Self.supportsNotifications else { continue }
             let text = StaleAlert.notification(
                 planTitle: RunRecordPresentation.planWithRepository(
-                    configuration.plans[index], repositories: configuration.repositories
+                    configuration.plans[index], plans: configuration.plans, repositories: configuration.repositories
                 ),
                 alert: alert
             )

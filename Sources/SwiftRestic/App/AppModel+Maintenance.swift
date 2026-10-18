@@ -29,7 +29,7 @@ extension AppModel {
         for (planID, run) in activity where run.phase == .applyingRetention {
             guard let plan = plan(id: planID), let repositoryID = plan.repositoryID, reasons[repositoryID] == nil else { continue }
             let name = repository(id: repositoryID)?.name ?? "The repository"
-            reasons[repositoryID] = "\(name) is applying retention for “\(plan.displayName)” — backups wait until it finishes."
+            reasons[repositoryID] = "\(name) is applying retention for “\(label(of: plan))” — backups wait until it finishes."
         }
         return reasons
     }

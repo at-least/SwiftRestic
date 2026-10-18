@@ -196,6 +196,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             hasNoRepositories: hasNoRepositories,
             hold: hold,
             isResticAvailable: model.isResticAvailable,
+            plans: model.configuration.plans,
             repositories: model.configuration.repositories,
             nextRun: model.nextScheduledRun
         ) {

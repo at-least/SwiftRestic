@@ -397,7 +397,7 @@ struct SidebarView: View {
     /// Named for its plan: every plan has a fold, and as flat rows they
     /// have no outline parent to tell them apart.
     private func planFoldName(_ plan: BackupPlan) -> String {
-        "Backups of “\(plan.displayName)”"
+        "Backups of “\(model.label(of: plan))”"
     }
 
     private func isPlain(_ press: KeyPress) -> Bool {
@@ -691,7 +691,7 @@ struct SidebarView: View {
             }
         }
         if let formerPlan {
-            Button("Open the “\(formerPlan.displayName)” Plan") {
+            Button("Open the “\(model.label(of: formerPlan))” Plan") {
                 router.selection = .plan(formerPlan.id)
             }
         }
@@ -903,8 +903,11 @@ private struct PlanSidebarRow: View {
         )
         HStack(spacing: 4) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(plan.displayName)
+                // A plan is its path; the row shows its label and keeps the
+                // path for the tooltip, the rows staying one line each.
+                Text(model.label(of: plan))
                     .lineLimit(1)
+                    .help((plan.path as NSString).abbreviatingWithTildeInPath)
                 HStack(spacing: 3) {
                     // The glyph carries the severity — red for a failed run
                     // (restic exit 1, no snapshot), orange for one that

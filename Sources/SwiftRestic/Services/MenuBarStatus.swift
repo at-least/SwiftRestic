@@ -177,6 +177,7 @@ enum MenuBarStatus {
         hasNoRepositories: Bool = false,
         hold: ScheduleHold? = nil,
         isResticAvailable: Bool = true,
+        plans: [BackupPlan],
         repositories: [Repository],
         nextRun: (plan: BackupPlan, date: Date)?
     ) -> String? {
@@ -184,7 +185,7 @@ enum MenuBarStatus {
         guard hold == nil, isResticAvailable else { return nil }
         if hasNoRepositories { return "No repository set up yet" }
         guard let nextRun else { return "No backups scheduled" }
-        let name = RunRecordPresentation.planWithRepository(nextRun.plan, repositories: repositories)
+        let name = RunRecordPresentation.planWithRepository(nextRun.plan, plans: plans, repositories: repositories)
         // The plan page's Next backup tile spells the same moment in these
         // words; the scheduler clamps the date to now, so a due run reads
         // "Due now".
@@ -216,7 +217,7 @@ enum MenuBarStatus {
         lockedRepositories: [UUID: String] = [:]
     ) -> [PlanRow] {
         plans.map { plan in
-            let name = plan.displayName
+            let name = plan.label(among: plans)
             switch activity[plan.id]?.phase {
             case nil:
                 // The rule every Back Up Now follows: enabled only where the
@@ -276,6 +277,7 @@ enum MenuBarStatus {
     /// submenu opened by hover must read on its own.
     static func newsLines(
         for plan: BackupPlan,
+        among plans: [BackupPlan],
         activity: PlanActivity?,
         problem: RunRecord?,
         now: Date,
@@ -293,7 +295,7 @@ enum MenuBarStatus {
             relative: relative
         )
         return ([caption.text] + [caption.pauseNote].compactMap { $0 })
-            .map { "\(plan.displayName): \($0)" }
+            .map { "\(plan.label(among: plans)): \($0)" }
     }
 
     static func planGroups(
@@ -315,7 +317,7 @@ enum MenuBarStatus {
                 lockedRepositories: lockedRepositories
             )
             let news = members.flatMap { plan in
-                newsLines(for: plan, activity: activity[plan.id], problem: problem(plan.id), now: now, relative: relative)
+                newsLines(for: plan, among: members, activity: activity[plan.id], problem: problem(plan.id), now: now, relative: relative)
             }
             return rows.isEmpty ? nil : PlanGroup(
                 repositoryID: repository.id, title: repository.name, rows: rows, newsLines: news
@@ -341,7 +343,7 @@ enum MenuBarStatus {
         plans.filter { activity[$0.id] != nil }.map { plan in
             // The plan with its repository, like the idle headline — two
             // same-named plans can run at once.
-            let name = RunRecordPresentation.planWithRepository(plan, repositories: repositories)
+            let name = RunRecordPresentation.planWithRepository(plan, plans: plans, repositories: repositories)
             return RunningLine(
                 id: plan.id.uuidString,
                 text: "\(name) — \(progressText(activity: activity[plan.id], progress: progress[plan.id]))"

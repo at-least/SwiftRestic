@@ -36,6 +36,7 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     /// only the part that differs.
     init(
         plan: BackupPlan,
+        among plans: [BackupPlan],
         stateText: String,
         isKnown: Bool,
         isProtected: Bool,
@@ -44,7 +45,7 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
         isRunning: Bool = false
     ) {
         planID = plan.id
-        planName = plan.displayName
+        planName = plan.label(among: plans)
         repositoryID = plan.repositoryID
         self.stateText = stateText
         self.isKnown = isKnown
@@ -241,6 +242,7 @@ enum OverviewMetrics {
             .map { plan -> ProtectionRow in
                 let listed = listingRow(
                     plan: plan,
+                    among: plans,
                     latestSnapshot: latestSnapshot,
                     repositoryHasSnapshots: repositoryHasSnapshots,
                     listingOutcome: listingOutcome,
@@ -256,6 +258,7 @@ enum OverviewMetrics {
                 if let activity = activity(plan.id) {
                     return ProtectionRow(
                         plan: plan,
+                        among: plans,
                         stateText: activity.phase.displayName,
                         isKnown: listed.isKnown, isProtected: listed.isProtected,
                         didFail: false, lastBackupAt: listed.lastBackupAt, isRunning: true
@@ -264,6 +267,7 @@ enum OverviewMetrics {
                 if !listed.didFail, let problem = standingProblem(plan.id) {
                     return ProtectionRow(
                         plan: plan,
+                        among: plans,
                         stateText: "\(problem.outcome.displayName) — \(relative(problem.finishedAt))",
                         isKnown: listed.isKnown,
                         // A failed run wrote no snapshot, so the newest one
@@ -285,6 +289,7 @@ enum OverviewMetrics {
     /// A plan's row as its snapshot listing alone tells it.
     private static func listingRow(
         plan: BackupPlan,
+        among plans: [BackupPlan],
         latestSnapshot: (_ repositoryID: UUID, _ planID: UUID) -> Snapshot?,
         repositoryHasSnapshots: (UUID) -> Bool,
         listingOutcome: (UUID) -> SnapshotListingOutcome,
@@ -294,6 +299,7 @@ enum OverviewMetrics {
         guard let repositoryID = plan.repositoryID else {
             return ProtectionRow(
                 plan: plan,
+                among: plans,
                 stateText: "No repository set",
                 isKnown: true, isProtected: false, didFail: false
             )
@@ -322,12 +328,13 @@ enum OverviewMetrics {
                 line = "The repository has snapshots, but none from this plan yet."
             }
             return ProtectionRow(
-                plan: plan, stateText: line, isKnown: true,
+                plan: plan, among: plans, stateText: line, isKnown: true,
                 isProtected: latest != nil, didFail: false, lastBackupAt: moment
             )
         case let .failed(message):
             return ProtectionRow(
                 plan: plan,
+                among: plans,
                 stateText: listingFailureText(message),
                 isKnown: false, isProtected: false, didFail: true
             )
@@ -335,6 +342,7 @@ enum OverviewMetrics {
             let checking = isChecking(repositoryID)
             return ProtectionRow(
                 plan: plan,
+                among: plans,
                 stateText: checking ? "Checking…" : "Snapshot list not loaded yet",
                 isKnown: false, isProtected: false, didFail: false
             )

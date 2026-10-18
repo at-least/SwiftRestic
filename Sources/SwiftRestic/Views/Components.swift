@@ -1041,7 +1041,7 @@ struct UnreadableItemLine: View {
             if let path { actions(path: path, plan: plan) }
         }
         .confirmationDialog(
-            "Exclude “\(path.map { ($0 as NSString).lastPathComponent } ?? "")” from “\(plan?.displayName ?? "")”?",
+            "Exclude “\(path.map { ($0 as NSString).lastPathComponent } ?? "")” from “\(plan.map { model.label(of: $0) } ?? "")”?",
             isPresented: $isConfirmingExclude
         ) {
             if let path, let plan {
@@ -1068,7 +1068,7 @@ struct UnreadableItemLine: View {
         }
         .disabled(exists != true)
         if let plan {
-            Button("Exclude from “\(plan.displayName)”…") { isConfirmingExclude = true }
+            Button("Exclude from “\(model.label(of: plan))”…") { isConfirmingExclude = true }
                 .disabled(plan.excludePatterns.contains(ResticService.globEscaped(path)))
         }
     }

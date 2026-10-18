@@ -41,10 +41,11 @@ struct OverviewMetricsTests {
 
     // MARK: - Protection rows
 
+    /// A plan is called by its path's last component, so `name` ends it.
     private func plan(_ name: String, repository: UUID?) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = name
         plan.repositoryID = repository
+        plan.path = "/Users/someone/\(name)"
         return plan
     }
 
@@ -363,6 +364,7 @@ struct OverviewMetricsTests {
     ) -> ProtectionRow {
         ProtectionRow(
             plan: plan(name, repository: UUID()),
+            among: [],
             stateText: name,
             isKnown: isKnown,
             isProtected: isProtected,
@@ -433,14 +435,14 @@ struct OverviewMetricsTests {
         let repository = UUID()
         let now = date("2026-09-05 11:00:00")
         var photos = plan("Photos", repository: repository)
-        photos.path = "/Users/someone/Pictures"
         photos.schedule.frequency = .weekly
         photos.isEnabled = false
         var documents = plan("Documents", repository: repository)
         documents.path = "/Users/someone/Documents"
         documents.schedule.frequency = .daily
         documents.pausedUntil = date("2026-09-05 13:00:00")
-        var code = plan("Code", repository: repository)
+        // Its repository is gone, so the scheduler never runs it.
+        var code = plan("Code", repository: UUID())
         code.schedule.frequency = .hourly
         var manual = plan("Archive", repository: repository)
         manual.path = "/Users/someone/Archive"
@@ -465,7 +467,7 @@ struct OverviewMetricsTests {
 
         let rows = plans.map {
             ProtectionRow(
-                plan: $0, stateText: "Last backup 1 hour ago",
+                plan: $0, among: [], stateText: "Last backup 1 hour ago",
                 isKnown: true, isProtected: true, didFail: false, lastBackupAt: date("2026-09-05 10:00:00")
             )
         }
@@ -489,7 +491,7 @@ struct OverviewMetricsTests {
         ])
 
         // An unprotected plan's line is its warning, never a second one.
-        let exposed = ProtectionRow(plan: photos, stateText: "No snapshots yet", isKnown: true, isProtected: false, didFail: false)
+        let exposed = ProtectionRow(plan: photos, among: [], stateText: "No snapshots yet", isKnown: true, isProtected: false, didFail: false)
         let warned = OverviewMetrics.protectionSummary(
             rows: [exposed], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { byID[$0].flatMap(caption) },
@@ -504,11 +506,11 @@ struct OverviewMetricsTests {
         let repository = UUID()
         let now = date("2026-09-05 11:00:00")
         let documents = ProtectionRow(
-            plan: plan("Documents", repository: repository), stateText: "Last backup 1 hour ago",
+            plan: plan("Documents", repository: repository), among: [], stateText: "Last backup 1 hour ago",
             isKnown: true, isProtected: true, didFail: false, lastBackupAt: date("2026-09-05 10:00:00")
         )
         let code = ProtectionRow(
-            plan: plan("Code", repository: repository), stateText: "Failed — 3 hours ago",
+            plan: plan("Code", repository: repository), among: [], stateText: "Failed — 3 hours ago",
             isKnown: true, isProtected: false, didFail: false
         )
         let summary = OverviewMetrics.protectionSummary(
@@ -527,7 +529,7 @@ struct OverviewMetricsTests {
         // A first backup in flight is news, not an alarm: the line says the
         // run in the sidebar's words, and names no exposed plan.
         let photos = ProtectionRow(
-            plan: plan("Photos", repository: repository), stateText: "Backing up",
+            plan: plan("Photos", repository: repository), among: [], stateText: "Backing up",
             isKnown: true, isProtected: false, didFail: false, isRunning: true
         )
         let running = OverviewMetrics.protectionSummary(

@@ -73,8 +73,8 @@ struct OtherGroupPageTests {
         var offsite = Repository()
         offsite.name = "Offsite"
         var music = BackupPlan()
-        music.name = "Music"
         music.repositoryID = offsite.id
+        music.path = "/Data/Music"
         let tag = ResticService.planTag(music.id)
         let m2 = try snapshot("m2", time: "2026-10-02T02:00:00Z", paths: ["/Data/Music"], tags: [tag])
         let m1 = try snapshot("m1", time: "2026-09-28T02:00:00Z", paths: ["/Data/Music"], tags: [tag])

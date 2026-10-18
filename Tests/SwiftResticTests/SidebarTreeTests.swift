@@ -7,10 +7,11 @@ import Testing
 /// no plan of the repository made.
 @Suite("Sidebar tree")
 struct SidebarTreeTests {
+    /// A plan is called by its path's last component, so `name` ends it.
     private func plan(_ name: String, in repository: UUID?) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = name
         plan.repositoryID = repository
+        plan.path = "/Users/someone/\(name)"
         return plan
     }
 
@@ -435,6 +436,7 @@ struct SidebarTreeTests {
         func row(_ name: String, isKnown: Bool, isProtected: Bool, didFail: Bool = false, isRunning: Bool = false) -> ProtectionRow {
             ProtectionRow(
                 plan: plan(name, in: repository),
+                among: [],
                 stateText: name,
                 isKnown: isKnown,
                 isProtected: isProtected,

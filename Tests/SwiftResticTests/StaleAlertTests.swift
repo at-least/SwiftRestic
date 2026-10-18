@@ -13,7 +13,6 @@ struct StaleAlertTests {
 
     private func plan(_ frequency: Schedule.Frequency = .daily, lastSuccessDaysAgo: Double?) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = "Documents"
         plan.repositoryID = UUID()
         plan.path = "/Users/someone/Documents"
         plan.schedule.frequency = frequency

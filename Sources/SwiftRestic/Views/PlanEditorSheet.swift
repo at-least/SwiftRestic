@@ -11,11 +11,10 @@ struct PlanEditorSheet: View {
     /// a reflex must not silently throw away ten pasted exclude patterns.
     @State private var initial: BackupPlan?
     @State private var isConfirmingDiscard = false
-    /// Files first: what to back up is the first question a plan answers,
-    /// and the header above the tabs already holds the name and the
-    /// repository.
+    /// Files first: the header above the tabs already holds the path and
+    /// the repository, and what to leave out is the next question.
     @State private var tab: Tab = .files
-    @FocusState private var isNameFocused: Bool
+    @FocusState private var isPathFocused: Bool
     /// The retention tab's projection, computed off the render path under
     /// `RetentionProjection.key`: the simulation walks up to 30,000
     /// synthetic runs with Calendar decomposition — tens of milliseconds at
@@ -65,7 +64,7 @@ struct PlanEditorSheet: View {
 
     init(plan: BackupPlan, mode: Mode? = nil, initialTab: Tab = .files, onAdopted: ((UUID) -> Void)? = nil) {
         var plan = plan
-        let mode = mode ?? (plan.name.isEmpty && plan.path.isEmpty ? .new : .editing)
+        let mode = mode ?? (plan.path.isEmpty ? .new : .editing)
         self.mode = mode
         self.onAdopted = onAdopted
         isNew = mode != .editing
@@ -233,8 +232,8 @@ struct PlanEditorSheet: View {
             draft.repositoryID = EditorRequirements.initialRepositoryID(
                 draft.repositoryID, among: model.configuration.repositories
             )
-            // A new plan starts with its name; the Files tab below waits.
-            if isNew { isNameFocused = true }
+            // A new plan starts with its path; the Files tab below waits.
+            if mode == .new { isPathFocused = true }
             // Snapshot after the defaulting above, so an untouched sheet is
             // not born dirty.
             if initial == nil { initial = draft }
@@ -385,18 +384,13 @@ struct PlanEditorSheet: View {
     private func identityHeader(_ briefing: AdoptBriefing?) -> some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
-                Text("Name")
-                    .gridColumnAlignment(.trailing)
-                TextField("Name", text: $draft.name, prompt: Text("Documents to NAS"))
-                    .labelsHidden()
-                    .focused($isNameFocused)
-            }
-            GridRow {
                 Text("Back up")
+                    .gridColumnAlignment(.trailing)
                 if mode == .new {
                     HStack {
                         TextField("Back up", text: $draft.path, prompt: Text("/Users/you/Documents"))
                             .labelsHidden()
+                            .focused($isPathFocused)
                         Button("Choose…") {
                             if let url = FilePicker.chooseFolderOrFile(message: "Choose the folder or file this plan backs up") {
                                 draft.path = url.path

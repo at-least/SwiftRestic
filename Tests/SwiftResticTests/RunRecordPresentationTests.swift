@@ -17,10 +17,11 @@ struct RunRecordPresentationTests {
         return record
     }
 
+    /// A plan is called by its path's last component, so `name` ends it.
     private func plan(name: String, repositoryID: UUID) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = name
         plan.repositoryID = repositoryID
+        plan.path = "/Users/someone/\(name)"
         return plan
     }
 
@@ -71,9 +72,10 @@ struct RunRecordPresentationTests {
                 repositories: [home]
             ) == "Documents (Home Disk)"
         )
-        // The plan is called what it is called now.
+        // The plan is called what it is called now, not what the record
+        // stored.
         var renamed = documents
-        renamed.name = "Papers"
+        renamed.path = "/Users/someone/Papers"
         #expect(
             RunRecordPresentation.displayName(
                 for: run(.backup, planID: documents.id, planName: "Documents", repositoryID: home.id),
@@ -166,12 +168,12 @@ struct RunRecordPresentationTests {
         let date = Date(timeIntervalSince1970: 1_790_409_497) // RunLogTests' pinned instant
 
         #expect(
-            RunRecordPresentation.nextRunLine(plan: documents, date: date, repositories: [home])
+            RunRecordPresentation.nextRunLine(plan: documents, date: date, plans: [documents], repositories: [home])
                 == "Documents (Home Disk) — \(Format.timestamp(date))"
         )
         // A repository the list does not resolve leaves the plan's name alone.
         #expect(
-            RunRecordPresentation.nextRunLine(plan: documents, date: date, repositories: [])
+            RunRecordPresentation.nextRunLine(plan: documents, date: date, plans: [documents], repositories: [])
                 == "Documents — \(Format.timestamp(date))"
         )
     }
@@ -179,7 +181,7 @@ struct RunRecordPresentationTests {
     @Test("a Recent problems row names the run as it is called now and says why in the Detail column's words")
     func problemRowWording() {
         var plan = BackupPlan()
-        plan.name = "Documents"
+        plan.path = "/Users/someone/Documents"
         var renamed = backup {
             $0.planID = plan.id
             $0.planName = "Old name"

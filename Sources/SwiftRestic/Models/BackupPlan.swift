@@ -264,9 +264,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
 /// One folder or file backed up to one repository on a schedule.
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var id: UUID = UUID()
-    var name: String = ""
-    /// The name every surface shows: "Untitled Plan" when none was given.
-    var displayName: String { name.isEmpty ? "Untitled Plan" : name }
     var repositoryID: UUID?
     /// The folder or file the plan backs up, as typed or picked (a tilde
     /// expands at run time). Fixed once the plan is saved, like its
@@ -306,7 +303,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.value(.id, default: UUID())
-        name = c.value(.name, default: "")
         repositoryID = c.optional(.repositoryID)
         path = c.value(.path, default: "")
         // The string-list editor dedupes its own writes, so a duplicate
@@ -348,9 +344,27 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     }
 
     var isConfigurationComplete: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
-            && repositoryID != nil
-            && !path.trimmingCharacters(in: .whitespaces).isEmpty
+        repositoryID != nil && !path.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// What every surface calls the plan — it has no name of its own: the
+    /// last component of its path, the folder's or file's name. When
+    /// another of `plans` backs up, to the same repository, a path ending
+    /// in the same name, each reads as its path, tilde-abbreviated, so the
+    /// two never look alike. "Untitled Plan" while it has no path. Builds
+    /// before 2026-10-18 stored a name; a configuration's key is ignored.
+    func label(among plans: [BackupPlan]) -> String {
+        let name = Self.lastComponent(of: path)
+        guard !name.isEmpty else { return "Untitled Plan" }
+        let twin = plans.contains {
+            $0.id != id && $0.repositoryID == repositoryID && Self.lastComponent(of: $0.path) == name
+        }
+        return twin ? (ResticService.expandTilde(path) as NSString).abbreviatingWithTildeInPath : name
+    }
+
+    private static func lastComponent(of path: String) -> String {
+        let trimmed = path.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? "" : (ResticService.expandTilde(trimmed) as NSString).lastPathComponent
     }
 
     /// The end of a timed pause that is still in force; `nil` once it has

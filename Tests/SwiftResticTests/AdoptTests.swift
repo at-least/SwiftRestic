@@ -124,9 +124,9 @@ struct AdoptTests {
         let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(draft.id == planID)
         #expect(draft.repositoryID == repository.id)
-        // The group's label names the draft: the row, the page and the
-        // sheet's title are one word.
-        #expect(draft.name == "Movies")
+        // A plan is called by its path — this Mac's folder, not the
+        // newest backup the group's row is titled after.
+        #expect(model.label(of: draft) == "Docs")
         #expect(draft.path == "/Data/Docs")
         #expect(draft.excludePatterns == ["node_modules", ".env"])
         #expect(draft.tags == ["travel"])
@@ -174,7 +174,6 @@ struct AdoptTests {
     func movedGroupNeverAdopts() throws {
         let offsite = makeRepository("Offsite")
         var music = BackupPlan()
-        music.name = "Music"
         music.repositoryID = offsite.id
         let snapshot = try snapshot("m1", time: "2026-10-02T11:45:00Z", tags: [ResticService.planTag(music.id)])
         let model = makeModel()
@@ -215,7 +214,6 @@ struct AdoptTests {
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [newest])
         var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        draft.name = "Movies"
 
         let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.historyLine == "This backup becomes this plan's history.")
@@ -359,8 +357,7 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: listing)
-        var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        draft.path = existingFolder()
+        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
 
         model.adopt(draft: draft)
 
@@ -424,7 +421,6 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         var plan = BackupPlan()
-        plan.name = "Docs"
         plan.repositoryID = repository.id
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
@@ -448,7 +444,6 @@ struct AdoptTests {
         // Another plan survives the deletion: the shelf keeps its "Other"
         // title, and the dialog says that one.
         var sibling = BackupPlan()
-        sibling.name = "Photos"
         sibling.repositoryID = repository.id
         model.configuration.plans = [plan, sibling]
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message

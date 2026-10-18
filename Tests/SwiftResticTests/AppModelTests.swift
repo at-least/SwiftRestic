@@ -55,7 +55,6 @@ struct AppModelTests {
         }
 
         var plan = BackupPlan()
-        plan.name = "Test Plan"
         plan.repositoryID = repository.id
         plan.path = sourceDirectory.path
         plan.excludePatterns = []
@@ -1226,7 +1225,6 @@ struct UpsertStampTests {
     func planStampsSurviveStaleUpsert() {
         let model = makeModel()
         var plan = BackupPlan()
-        plan.name = "Nightly"
         plan.repositoryID = UUID()
         plan.path = "/tmp"
 
@@ -1251,7 +1249,6 @@ struct UpsertStampTests {
     func markPlanRunStampsBackups() {
         let model = makeModel()
         var plan = BackupPlan()
-        plan.name = "Archive"
         plan.repositoryID = UUID()
         plan.path = "/Volumes/Archive SSD/Photos"
         model.upsert(plan: plan)
@@ -1270,7 +1267,6 @@ struct UpsertStampTests {
     func planPauseSurvivesStaleUpsert() {
         let model = makeModel()
         var plan = BackupPlan()
-        plan.name = "Nightly"
         plan.repositoryID = UUID()
         plan.path = "/tmp"
         model.upsert(plan: plan)
@@ -1336,7 +1332,6 @@ struct PausingTests {
 
     private func plan(_ name: String) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = name
         plan.repositoryID = UUID()
         plan.path = "/tmp"
         return plan
@@ -1410,9 +1405,8 @@ struct StartAtLoginSurfaceTests {
         repository.kind = .local
         repository.localPath = "/tmp/somewhere"
         var plan = BackupPlan()
-        plan.name = "Documents"
         plan.repositoryID = repository.id
-        plan.path = "/tmp"
+        plan.path = "/Users/someone/Documents"
         plan.schedule.frequency = .daily
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
@@ -1424,7 +1418,7 @@ struct StartAtLoginSurfaceTests {
         let (model, plan) = makeModel()
         let chosen = try #require(model.quitConfirmation(userChoseQuit: true))
         #expect(!chosen.interruptsWork)
-        #expect(chosen.message.contains(plan.name))
+        #expect(chosen.message.contains(model.label(of: plan)))
         #expect(chosen.message.contains("nothing will run until you open it again"))
         // Logout, restart, shutdown, the Dock and AppleScript all arrive as
         // a quit the user did not choose here: an idle app never holds them.
@@ -1569,7 +1563,6 @@ struct RunReporterTokenTests {
     func lateBackupProgressHopDrops() async throws {
         let model = makeModel()
         var plan = BackupPlan()
-        plan.name = "Hop"
         model.upsert(plan: plan)
 
         // Run 1: a strip is installed and the engine captures its reporter.
@@ -1895,7 +1888,6 @@ struct OrphanPlanPurgeLaunchTests {
         repository.localPath = root.appendingPathComponent("repo").path
         func plan(_ name: String, repositoryID: UUID?) -> BackupPlan {
             var plan = BackupPlan()
-            plan.name = name
             plan.repositoryID = repositoryID
             plan.path = root.path
             plan.schedule.frequency = .manual

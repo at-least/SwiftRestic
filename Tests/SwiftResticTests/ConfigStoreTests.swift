@@ -32,7 +32,6 @@ struct ConfigStoreTests {
         repository.uploadLimitKiBps = 512
 
         var plan = BackupPlan()
-        plan.name = "Documents"
         plan.repositoryID = repository.id
         plan.path = "/Users/someone/Documents"
         plan.lastRunAt = Date(timeIntervalSince1970: 1_756_000_000)
@@ -40,14 +39,14 @@ struct ConfigStoreTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [plan]
-        configuration.runs = [RunRecord(planID: plan.id, planName: plan.name)]
+        configuration.runs = [RunRecord(planID: plan.id, planName: "Documents")]
 
         try await store.save(configuration)
         let loaded = try await store.load().configuration
 
         #expect(loaded.repositories.first?.sftpHost == "nas.local")
         #expect(loaded.repositories.first?.uploadLimitKiBps == 512)
-        #expect(loaded.plans.first?.name == "Documents")
+        #expect(loaded.plans.first?.path == "/Users/someone/Documents")
         #expect(loaded.plans.first?.lastRunAt == plan.lastRunAt)
         #expect(loaded.runs.count == 1)
     }
@@ -165,7 +164,6 @@ struct ConfigStoreTests {
         #expect(Set(copies.map(\.id)).count == 2)
         #expect(!copies.contains { $0.id == original.id })
         for copy in copies {
-            #expect(copy.name == "Projects")
             #expect(copy.repositoryID == original.repositoryID)
             #expect(copy.excludePatterns == ["*.log"])
             #expect(copy.tags == ["work"])
@@ -247,7 +245,7 @@ struct ConfigStoreTests {
         func save(generation: Int) async throws {
             var configuration = AppConfiguration()
             var plan = BackupPlan()
-            plan.name = "generation \(generation)"
+            plan.path = "/Users/someone/generation \(generation)"
             configuration.plans = [plan]
             try await store.save(configuration)
         }
@@ -446,7 +444,6 @@ struct TolerantDecodingTests {
         let store = ConfigStore(directory: directory)
         let until = Date(timeIntervalSince1970: 1_790_400_000)
         var plan = BackupPlan()
-        plan.name = "Docs"
         plan.pausedUntil = until.addingTimeInterval(3600)
         var configuration = AppConfiguration()
         configuration.plans = [plan]
@@ -592,9 +589,9 @@ struct TolerantDecodingTests {
         // keepLast is a string; keepDaily is untouched next to it.
         let plan = try decode(
             BackupPlan.self,
-            #"{"name":"Documents","retention":{"keepLast":"many"},"schedule":"not an object"}"#
+            #"{"path":"/Users/someone/Documents","retention":{"keepLast":"many"},"schedule":"not an object"}"#
         )
-        #expect(plan.name == "Documents")
+        #expect(plan.path == "/Users/someone/Documents")
         #expect(plan.retention.keepLast == 0)
         #expect(plan.retention.keepDaily == 7)
         #expect(plan.schedule == Schedule())
@@ -617,7 +614,7 @@ struct TolerantDecodingTests {
         let json = """
         {
           "repositories": [{"name": "NAS", "kind": "local", "localPath": "/tmp/repo"}],
-          "plans": [{"name": "Documents", "schedule": "corrupted"}],
+          "plans": [{"path": "/Users/someone/Documents", "schedule": "corrupted"}],
           "runs": []
         }
         """
@@ -626,7 +623,7 @@ struct TolerantDecodingTests {
         let loaded = try await ConfigStore(directory: directory).load()
         #expect(loaded.configuration.repositories.first?.localPath == "/tmp/repo")
         let plan = try #require(loaded.configuration.plans.first)
-        #expect(plan.name == "Documents")
+        #expect(plan.path == "/Users/someone/Documents")
         #expect(plan.schedule == Schedule())
         #expect(plan.retention == RetentionPolicy())
         // Tolerance is not silence: the substitution the plan's corrupted

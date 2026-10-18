@@ -131,9 +131,9 @@ the generator after editing it; the PNGs are checked in.
 - **Adopting** — a group whose ID no plan anywhere carries can be adopted:
   *Adopt as a Backup Plan…* (the page's explanation card, the group's
   context menu, or the repository page's *Other backups* card, listing each
-  adoptable group while there is one) opens the plan editor with the group's
-  name and, from the newest backup this Mac made — or the newest of all when
-  another Mac made them all — its folder, exclude patterns and user tags;
+  adoptable group while there is one) opens the plan editor with, from the
+  newest backup this Mac made — or the newest of all when another Mac made
+  them all — its folder, exclude patterns and user tags;
   the folder and the repository are the backups' own, the schedule is Daily
   only when the folder exists here, and retention is off. A group whose
   backup holds several folders — a plan of an earlier build — cannot be
@@ -233,9 +233,15 @@ the generator after editing it; the PNGs are checked in.
   several folders becomes one plan per folder at load: the first keeps the
   plan's id — its backups' tag, so its history stays its own — and its run
   stamps; each other folder gets a new plan with the same settings and slot,
-  waiting for that slot, with no last backup until its first run. Each plan
-  stamps its snapshots with a private tag so retention can only ever touch
-  its own. A plan's page
+  waiting for that slot, with no last backup until its first run. A plan has
+  no name: every surface — the sidebar, its page, the tray, notifications,
+  Activity, its hooks — calls it by its path's last component, and two plans
+  of one repository whose paths end alike each by its path, tilde and all
+  ("~/Documents", "/Volumes/Archive/Documents"); its page carries the path
+  under that title, the sidebar row in its tooltip. A name an earlier build
+  stored is dropped at the next save; a run record keeps what it was called
+  then. Each plan stamps its snapshots with a private tag so retention can
+  only ever touch its own. A plan's page
   is three cards, each with its verb in its corner, all also in the Plan
   menu and the row's menu: *Backups* (last backup, count, retention) with
   *Back Up Now* — *Stop* while it runs; *Schedule* (and when it runs next)
@@ -937,8 +943,11 @@ curl -fsS -X POST "$WEBHOOK" \
   -d "plan=$SWIFTRESTIC_PLAN_NAME&snapshot=$SWIFTRESTIC_SNAPSHOT_ID&added=$SWIFTRESTIC_DATA_ADDED"
 ```
 
-`SWIFTRESTIC_SNAPSHOT_ID` and `SWIFTRESTIC_ERROR` are *absent* rather than empty
-when they do not apply, so `[ -n "$SWIFTRESTIC_ERROR" ]` works. A failing hook
+`SWIFTRESTIC_PLAN_NAME` is what the app calls the plan — its folder's name,
+or its path when another plan of the repository ends alike, since a plan has
+no name of its own. `SWIFTRESTIC_SNAPSHOT_ID` and `SWIFTRESTIC_ERROR` are
+*absent* rather than empty when they do not apply, so
+`[ -n "$SWIFTRESTIC_ERROR" ]` works. A failing hook
 marks the run as *completed with errors* but never turns a written snapshot into
 a failed run. Only a before hook can be set to cancel the run; one that does
 still stamps the schedule, so a hook that always refuses is not retried every

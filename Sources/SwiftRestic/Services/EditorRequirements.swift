@@ -9,14 +9,11 @@ import Foundation
 enum EditorRequirements {
     /// The first requirement `BackupPlan.isConfigurationComplete` checks but
     /// does not name, in the order the plan sheet's header presents them —
-    /// Name, Back up, Repository — then the one a configuration checks: a
+    /// Back up, Repository — then the one a configuration checks: a
     /// repository holds one plan per path (`plans`, every configured plan,
     /// the draft's own saved entry among them), its history being restic's
     /// for that path.
     static func plan(_ draft: BackupPlan, among plans: [BackupPlan]) -> String? {
-        if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
-            return "Name the plan to save it."
-        }
         if draft.path.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Choose a folder to back up."
         }

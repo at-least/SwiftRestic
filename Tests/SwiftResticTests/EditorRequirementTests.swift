@@ -10,9 +10,6 @@ struct EditorRequirementTests {
     @Test("the plan editor names the first unmet requirement in the order the sheet shows its fields")
     func planRequirementOrdering() {
         var plan = BackupPlan()
-        #expect(EditorRequirements.plan(plan, among: []) == "Name the plan to save it.")
-
-        plan.name = "Documents"
         #expect(EditorRequirements.plan(plan, among: []) == "Choose a folder to back up.")
 
         plan.path = "/Users/demo/Documents"
@@ -24,21 +21,16 @@ struct EditorRequirementTests {
         // Whitespace is as absent as nothing.
         plan.path = "  "
         #expect(EditorRequirements.plan(plan, among: []) == "Choose a folder to back up.")
-        plan.path = "/Users/demo/Documents"
-        plan.name = "   "
-        #expect(EditorRequirements.plan(plan, among: []) == "Name the plan to save it.")
     }
 
     @Test("a path another plan already backs up to the repository cannot be saved again; another repository, or the plan itself, can")
     func planPathIsOncePerRepository() {
         let home = UUID()
         var saved = BackupPlan()
-        saved.name = "Documents"
         saved.repositoryID = home
         saved.path = "/Users/demo/Documents"
 
         var draft = BackupPlan()
-        draft.name = "Documents again"
         draft.repositoryID = home
         let taken = "This repository already has a plan for this folder."
         // Spelled the same, with a trailing slash, or padded: one path.

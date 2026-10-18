@@ -65,7 +65,6 @@ struct ResticIntegrationTests {
         repository.localPath = repositoryDirectory.path
 
         var plan = BackupPlan()
-        plan.name = "Integration plan"
         plan.repositoryID = repository.id
         plan.path = sourceDirectory.path
         plan.excludePatterns = []
@@ -181,7 +180,6 @@ struct ResticIntegrationTests {
         // …and one from a different plan, which retention must not touch.
         var otherPlan = fixture.plan
         otherPlan.id = UUID()
-        otherPlan.name = "Other"
         _ = try await fixture.service.backup(fixture.context, plan: otherPlan)
 
         var plan = fixture.plan
@@ -275,7 +273,6 @@ struct ResticIntegrationTests {
 
         var planB = fixture.plan
         planB.id = UUID()
-        planB.name = "Other"
         planB.tags = ["other"]
 
         var newest: [BackupPlan: String] = [:]
@@ -340,7 +337,6 @@ struct ResticIntegrationTests {
         }
         var otherPlan = fixture.plan
         otherPlan.id = UUID()
-        otherPlan.name = "Other"
         let otherOutcome = try await fixture.service.backup(fixture.context, plan: otherPlan)
         let other = try #require(otherOutcome.summary?.snapshotID)
 
@@ -439,7 +435,6 @@ struct ResticIntegrationTests {
         // Two backups one plan made, and no plan configured anywhere — the
         // group sits under Other backups waiting to be adopted.
         var plan = fixture.plan
-        plan.name = "Projects"
         for index in 0 ..< 2 {
             try "change \(index)".write(
                 to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
@@ -472,10 +467,8 @@ struct ResticIntegrationTests {
 
         #expect(model.shelves(for: repository.id).orphanPlanGroup(plan.id) != nil)
         let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: plan.id))
-        // No configuration holds the UUID, so the group's own label names it:
-        // the newest backup's folder, not the plan name the repository never
-        // knew.
-        #expect(draft.name == "source")
+        // A plan is called by its path: the backup's own folder.
+        #expect(model.label(of: draft) == "source")
         #expect(draft.path == fixture.sourceDirectory.path)
         // The folder exists on this Mac, so the schedule dares to be Daily.
         #expect(draft.schedule.frequency == .daily)
@@ -1040,7 +1033,6 @@ struct ResticMaintenanceTests {
         repository.localPath = root.appendingPathComponent("repo").path
 
         var plan = BackupPlan()
-        plan.name = "Prune plan"
         plan.repositoryID = repository.id
         plan.path = source.path
         plan.excludePatterns = []
@@ -1106,7 +1098,6 @@ struct ResticCheckDamageTests {
         repository.localPath = root.appendingPathComponent("repo").path
 
         var plan = BackupPlan()
-        plan.name = "Check damage plan"
         plan.repositoryID = repository.id
         plan.path = sourceDirectory.path
         plan.excludePatterns = []
@@ -1187,7 +1178,6 @@ struct ResticDiffTests {
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         var plan = BackupPlan()
-        plan.name = "Diff plan"
         plan.repositoryID = repository.id
         plan.path = source.path
         plan.excludePatterns = []
@@ -1259,7 +1249,6 @@ struct ResticFindTests {
         repository.localPath = root.appendingPathComponent("repo").path
 
         var plan = BackupPlan()
-        plan.name = "Find plan"
         plan.repositoryID = repository.id
         plan.path = source.path
         plan.excludePatterns = []
@@ -1322,7 +1311,6 @@ struct ResticFindTests {
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         var plan = BackupPlan()
-        plan.name = "Exact"
         plan.repositoryID = repository.id
         plan.path = source.path
         plan.excludePatterns = []

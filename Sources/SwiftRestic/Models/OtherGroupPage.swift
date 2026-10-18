@@ -52,11 +52,13 @@ struct OtherGroupPageSummary: Equatable {
 
     /// `snapshots` are the group's, newest first as `OtherBackupsGroup`
     /// sorts them, and never empty — a group exists only around backups.
-    /// `planID` is the plan tag's UUID, nil for an untagged lineage.
+    /// `planID` is the plan tag's UUID, nil for an untagged lineage;
+    /// `allPlans` every configured plan, which `formerPlan`'s label reads.
     init(
         snapshots: [Snapshot],
         title: String,
         formerPlan: BackupPlan?,
+        allPlans: [BackupPlan],
         isAdoptable: Bool,
         repositories: [Repository],
         planID: UUID?
@@ -77,7 +79,7 @@ struct OtherGroupPageSummary: Equatable {
                 ? "This backup carries no plan ID — it was made outside SwiftRestic — so it can't be adopted as a plan."
                 : "These \(Format.plural(snapshots.count, "backup")) carry no plan ID — they were made outside SwiftRestic — so they can't be adopted as a plan."
         } else if let formerPlan {
-            let name = formerPlan.displayName
+            let name = formerPlan.label(among: allPlans)
             // Where it went: the destination the sidebar's caption names,
             // read the same way. A plan that names no reachable repository
             // — its own page says "No repository set" — still left, which
@@ -164,6 +166,7 @@ extension BackupShelves {
             snapshots: group.snapshots,
             title: label.title,
             formerPlan: formerPlan(of: group),
+            allPlans: allPlans,
             isAdoptable: adoptablePath(of: group, localHost: localHost) != nil,
             repositories: repositories,
             planID: planID

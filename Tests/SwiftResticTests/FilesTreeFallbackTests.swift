@@ -43,7 +43,6 @@ struct ResticFilesFallbackTests {
         // A first backup lands in the listing; the index has not taken it —
         // the moment between a refresh's listing and its reconcile.
         var plan = BackupPlan()
-        plan.name = "Fallback plan"
         plan.repositoryID = repository.id
         plan.path = data.path
         plan.excludePatterns = []
@@ -117,7 +116,6 @@ struct ResticFilesFallbackTests {
             let context = RepositoryContext(repository: repository, password: password)
             _ = try await service.initializeRepository(context)
             var plan = BackupPlan()
-            plan.name = "Read-ahead plan"
             plan.repositoryID = repository.id
             plan.path = data.path
             plan.excludePatterns = []

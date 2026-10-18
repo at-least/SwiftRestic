@@ -59,11 +59,11 @@ extension AppModel {
     /// trail what removal actually does.
     func removalConsequences(for repositoryID: UUID) -> String {
         Self.removalConsequences(
-            removedPlanNames: plans(in: repositoryID).map(\.displayName),
+            removedPlanNames: plans(in: repositoryID).map { label(of: $0) },
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: configuration.plans
                 .filter { $0.repositoryID == repositoryID && activity[$0.id] != nil }
-                .map(\.displayName),
+                .map { label(of: $0) },
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID
         )

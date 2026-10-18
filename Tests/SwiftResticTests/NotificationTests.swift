@@ -151,8 +151,8 @@ struct NotificationTests {
         var home = Repository()
         home.name = "Home Disk"
         var documents = BackupPlan()
-        documents.name = "Documents"
         documents.repositoryID = home.id
+        documents.path = "/Users/someone/Documents"
 
         func title(for record: RunRecord) -> String {
             AppModel.notificationTitle(for: record, plans: [documents], repositories: [home])

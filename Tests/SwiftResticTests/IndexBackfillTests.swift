@@ -52,7 +52,6 @@ struct IndexBackfillTests {
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         var plan = BackupPlan()
-        plan.name = "\(label) plan"
         plan.repositoryID = repository.id
         plan.path = source.path
 

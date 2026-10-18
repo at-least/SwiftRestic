@@ -48,10 +48,13 @@ struct AppModelStubTests {
             "SWIFTRESTIC_TRACE": root.appendingPathComponent("stub-trace.log").path,
         ]
 
+        // A plan is called by its path's last component: the folder's name
+        // is the plan's in every banner and line below.
+        let source = root.appendingPathComponent("Stub Plan")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
         var plan = BackupPlan()
-        plan.name = "Stub Plan"
         plan.repositoryID = repository.id
-        plan.path = root.path
+        plan.path = source.path
         // Manual, so only the test decides when a backup happens and the
         // scheduler's 60 s tick cannot inject one mid-assertion.
         plan.schedule.frequency = .manual
@@ -151,7 +154,7 @@ struct AppModelStubTests {
         model.configuration.repositories[repositoryIndex].maintenance.checkEnabled = true
         model.configuration.repositories[repositoryIndex].maintenance.lastCheckAt = nil
         // A skipped run, which a mount would catch up.
-        var skipped = RunRecord(kind: .backup, planID: harness.plan.id, planName: harness.plan.name, repositoryID: harness.repository.id)
+        var skipped = RunRecord(kind: .backup, planID: harness.plan.id, planName: model.label(of: harness.plan), repositoryID: harness.repository.id)
         skipped.outcome = .skipped
         model.configuration.runs = [skipped]
         let bannersBefore = model.banners.count
@@ -1594,7 +1597,6 @@ struct AppModelStubTests {
         other.kind = .local
         other.localPath = harness.root.appendingPathComponent("other").path
         var kept = BackupPlan()
-        kept.name = "Kept Plan"
         kept.repositoryID = other.id
         kept.path = harness.root.path
         kept.schedule.frequency = .manual

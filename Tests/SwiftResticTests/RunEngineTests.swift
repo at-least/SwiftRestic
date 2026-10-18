@@ -17,6 +17,7 @@ struct BackupRunEngineTests {
 
         /// Per plan, so a test can tell the engine asked about its own run.
         func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
+        func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
 
         func service() throws -> any ResticClient { throw ResticError.repositoryMissing }
         func context(for repository: Repository) async throws -> RepositoryContext {
@@ -87,7 +88,6 @@ struct BackupRunEngineTests {
 
     private func makePlan(retentionEnabled: Bool = true) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = "Engine Plan"
         plan.repositoryID = Repository().id
         plan.path = "/tmp/engine-source"
         if !retentionEnabled { plan.retention.isEnabled = false }
@@ -1029,6 +1029,7 @@ struct RetentionRunEngineTests {
         init(client: MockResticClient) { self.client = client }
 
         func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
+        func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
         func service() throws -> any ResticClient { client }
         func context(for repository: Repository) async throws -> RepositoryContext {
             log.append("context")
@@ -1057,9 +1058,8 @@ struct RetentionRunEngineTests {
 
     private func makePlan() -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = "Retention Plan"
         plan.repositoryID = Repository().id
-        plan.path = "/tmp/engine-source"
+        plan.path = "/tmp/Retention Plan"
         return plan
     }
 
@@ -1160,6 +1160,7 @@ private final class StubServiceSink: BackupRunEngine.Sink {
     }
 
     func cancellationMessage(for planID: UUID) -> String { base.cancellationMessage(for: planID) }
+    func label(of plan: BackupPlan) -> String { base.label(of: plan) }
     func service() throws -> any ResticClient { client }
     func context(for repository: Repository) async throws -> RepositoryContext {
         try await base.context(for: repository)

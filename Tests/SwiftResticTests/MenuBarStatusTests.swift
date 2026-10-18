@@ -6,11 +6,11 @@ import Testing
 /// announced → backup starts → phases tick over → finishes → idle again.
 @Suite("Menu bar status")
 struct MenuBarStatusTests {
+    /// A plan is called by its path's last component, so `name` ends it.
     private func plan(name: String) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = name
         plan.repositoryID = UUID()
-        plan.path = "/tmp"
+        plan.path = "/Users/someone/\(name)"
         return plan
     }
 
@@ -45,11 +45,11 @@ struct MenuBarStatusTests {
     @Test("idle with nothing configured says there is no schedule")
     func idleNoPlans() {
         let next = Date.now.addingTimeInterval(3600)
-        #expect(MenuBarStatus.headline(activity: [:], repositories: [], nextRun: nil) == "No backups scheduled")
+        #expect(MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: nil) == "No backups scheduled")
 
         guard let headline = MenuBarStatus.headline(
             activity: [:],
-            repositories: [],
+            plans: [], repositories: [],
             nextRun: (plan(name: "Nightly"), next)
         ) else {
             Issue.record("idle state must have a headline")
@@ -70,7 +70,7 @@ struct MenuBarStatusTests {
         #expect(
             MenuBarStatus.headline(
                 activity: [:],
-                repositories: [home],
+                plans: [], repositories: [home],
                 nextRun: (nightly, next)
             ) == "Next: Nightly (Home Disk) — \(Format.tileTimestamp(next))"
         )
@@ -79,11 +79,11 @@ struct MenuBarStatusTests {
         var twin = plan(name: "Home Disk")
         twin.repositoryID = home.id
         #expect(
-            MenuBarStatus.headline(activity: [:], repositories: [home], nextRun: (twin, next))
+            MenuBarStatus.headline(activity: [:], plans: [], repositories: [home], nextRun: (twin, next))
                 == "Next: Home Disk — \(Format.tileTimestamp(next))"
         )
         #expect(
-            MenuBarStatus.headline(activity: [:], repositories: [], nextRun: (nightly, next))
+            MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (nightly, next))
                 == "Next: Nightly — \(Format.tileTimestamp(next))"
         )
     }
@@ -91,7 +91,7 @@ struct MenuBarStatusTests {
     @Test("with no repository configured, the headline sends the user to add one")
     func noRepositoriesHeadline() {
         #expect(
-            MenuBarStatus.headline(activity: [:], hasNoRepositories: true, repositories: [], nextRun: nil)
+            MenuBarStatus.headline(activity: [:], hasNoRepositories: true, plans: [], repositories: [], nextRun: nil)
                 == "No repository set up yet"
         )
         // Running work still holds the headline back even with no repository —
@@ -101,7 +101,7 @@ struct MenuBarStatusTests {
             MenuBarStatus.headline(
                 activity: [nightly.id: activity()],
                 hasNoRepositories: true,
-                repositories: [],
+                plans: [], repositories: [],
                 nextRun: nil
             ) == nil
         )
@@ -110,7 +110,7 @@ struct MenuBarStatusTests {
     @Test("a running plan replaces the headline with a progress line")
     func runningReplacesHeadline() {
         let nightly = plan(name: "Nightly")
-        #expect(MenuBarStatus.headline(activity: [nightly.id: activity()], repositories: [], nextRun: nil) == nil)
+        #expect(MenuBarStatus.headline(activity: [nightly.id: activity()], plans: [], repositories: [], nextRun: nil) == nil)
         #expect(
             MenuBarStatus.runningLines(
                 plans: [nightly],
@@ -222,20 +222,20 @@ struct MenuBarStatusTests {
     @Test("upkeep, restores and console work hold the idle headline back, like a backup does")
     func nonPlanWorkHoldsTheHeadline() {
         let next = Date.now.addingTimeInterval(3600)
-        #expect(MenuBarStatus.headline(activity: [:], repositories: [], nextRun: (plan(name: "Nightly"), next)) != nil)
+        #expect(MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (plan(name: "Nightly"), next)) != nil)
         #expect(
-            MenuBarStatus.headline(activity: [:], isRestoring: true, repositories: [], nextRun: (plan(name: "Nightly"), next))
+            MenuBarStatus.headline(activity: [:], isRestoring: true, plans: [], repositories: [], nextRun: (plan(name: "Nightly"), next))
                 == nil
         )
         #expect(
-            MenuBarStatus.headline(activity: [:], isConsoleRunning: true, repositories: [], nextRun: (plan(name: "Nightly"), next))
+            MenuBarStatus.headline(activity: [:], isConsoleRunning: true, plans: [], repositories: [], nextRun: (plan(name: "Nightly"), next))
                 == nil
         )
         #expect(
             MenuBarStatus.headline(
                 activity: [:],
                 maintenance: [UUID(): MaintenanceActivity(task: .prune)],
-                repositories: [],
+                plans: [], repositories: [],
                 nextRun: (plan(name: "Nightly"), next)
             ) == nil
         )
@@ -315,12 +315,12 @@ struct MenuBarStatusTests {
     func finishedReturnsToIdle() {
         let nightly = plan(name: "Nightly")
         let next = Date.now.addingTimeInterval(86_400)
-        let whileRunning = MenuBarStatus.headline(activity: [nightly.id: activity()], repositories: [], nextRun: nil)
+        let whileRunning = MenuBarStatus.headline(activity: [nightly.id: activity()], plans: [], repositories: [], nextRun: nil)
         #expect(whileRunning == nil)
         // Back to the next-run line — not the running line and not the
         // empty-state text. (The relative-date suffix has its own pins; the
         // prefix is what distinguishes this state from its neighbours.)
-        let restored = MenuBarStatus.headline(activity: [:], repositories: [], nextRun: (plan: nightly, date: next))
+        let restored = MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (plan: nightly, date: next))
         #expect(restored?.hasPrefix("Next: Nightly — ") == true)
     }
 
@@ -349,9 +349,8 @@ struct MenuBarStatusTests {
         home.name = "Home NAS"
         func plan(_ name: String) -> BackupPlan {
             var plan = BackupPlan()
-            plan.name = name
             plan.repositoryID = home.id
-            plan.path = "/tmp"
+            plan.path = "/Users/someone/\(name)"
             plan.schedule.frequency = .weekly
             return plan
         }
@@ -364,16 +363,17 @@ struct MenuBarStatusTests {
         failed.outcome = .failed
         failed.finishedAt = now.addingTimeInterval(-7_200)
 
-        #expect(MenuBarStatus.newsLines(for: code, activity: nil, problem: failed, now: now, relative: Self.ago)
+        let plans = [code, photos, quiet]
+        #expect(MenuBarStatus.newsLines(for: code, among: plans, activity: nil, problem: failed, now: now, relative: Self.ago)
             == ["Code: Failed — 2 hours ago"])
-        #expect(MenuBarStatus.newsLines(for: photos, activity: nil, problem: nil, now: now, relative: Self.ago)
+        #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago)
             == ["Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
         // A problem and a pause are both news: both lines, the problem first.
-        #expect(MenuBarStatus.newsLines(for: photos, activity: nil, problem: failed, now: now, relative: Self.ago)
+        #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: failed, now: now, relative: Self.ago)
             == ["Photos: Failed — 2 hours ago", "Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
         // Quiet success says nothing; a running plan's line leads the menu.
-        #expect(MenuBarStatus.newsLines(for: quiet, activity: nil, problem: nil, now: now, relative: Self.ago).isEmpty)
-        #expect(MenuBarStatus.newsLines(for: code, activity: PlanActivity(phase: .backingUp), problem: failed, now: now).isEmpty)
+        #expect(MenuBarStatus.newsLines(for: quiet, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago).isEmpty)
+        #expect(MenuBarStatus.newsLines(for: code, among: plans, activity: PlanActivity(phase: .backingUp), problem: failed, now: now).isEmpty)
 
         let groups = MenuBarStatus.planGroups(
             plans: [code, photos, quiet], repositories: [home], activity: [:], isResticAvailable: true,
@@ -387,9 +387,8 @@ struct MenuBarStatusTests {
         var repository = Repository()
         repository.name = "Home NAS"
         var plan = BackupPlan()
-        plan.name = "Documents"
         plan.repositoryID = repository.id
-        plan.path = "/tmp"
+        plan.path = "/Users/someone/Documents"
         let reason = "Home NAS is running a prune — backups wait until it finishes."
         let locked = MenuBarStatus.planRows(
             plans: [plan], activity: [:], isResticAvailable: true,
@@ -406,16 +405,15 @@ struct MenuBarStatusTests {
     @Test("while restic is missing the tray says the backups are held, promises no next run, and each grey row says why")
     func resticMissing() {
         var plan = BackupPlan()
-        plan.name = "Documents"
         plan.repositoryID = UUID()
-        plan.path = "/tmp"
+        plan.path = "/Users/someone/Documents"
         let next = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(MenuBarStatus.resticMissingLine(isResticAvailable: false) == "restic is missing — backups are on hold.")
         #expect(MenuBarStatus.resticMissingLine(isResticAvailable: true) == nil)
         #expect(MenuBarStatus.headline(
-            activity: [:], isResticAvailable: false, repositories: [], nextRun: (plan, next)
+            activity: [:], isResticAvailable: false, plans: [], repositories: [], nextRun: (plan, next)
         ) == nil)
-        #expect(MenuBarStatus.headline(activity: [:], repositories: [], nextRun: (plan, next)) != nil)
+        #expect(MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (plan, next)) != nil)
 
         let rows = MenuBarStatus.planRows(
             plans: [plan], activity: [:], isResticAvailable: false,
@@ -667,9 +665,9 @@ struct MenuBarStatusTests {
                 relative: Self.ago
             ) == "Documents (Home Disk) failed 2 hours ago"
         )
-        // The plan's name as it is called now, not as the record stored it.
+        // The plan as it is called now, not as the record stored it.
         var renamed = documents
-        renamed.name = "Papers"
+        renamed.path = "/Users/someone/Papers"
         #expect(
             MenuBarStatus.problemLine(
                 runs: [failedBackup(planID: documents.id, planName: "Documents", repositoryID: home.id)],
@@ -716,13 +714,13 @@ struct MenuBarStatusTests {
         let nightly = plan(name: "Nightly")
         // On battery with the setting on, a "Next:" headline would lie: the
         // scheduler will not fire it.
-        #expect(MenuBarStatus.headline(activity: [:], hold: .onBattery, repositories: [], nextRun: (nightly, future)) == nil)
-        #expect(MenuBarStatus.headline(activity: [:], hold: .paused(until: nil), repositories: [], nextRun: (nightly, future)) == nil)
+        #expect(MenuBarStatus.headline(activity: [:], hold: .onBattery, plans: [], repositories: [], nextRun: (nightly, future)) == nil)
+        #expect(MenuBarStatus.headline(activity: [:], hold: .paused(until: nil), plans: [], repositories: [], nextRun: (nightly, future)) == nil)
         #expect(
-            MenuBarStatus.headline(activity: [:], hold: nil, repositories: [], nextRun: (nightly, future))
-                == MenuBarStatus.headline(activity: [:], repositories: [], nextRun: (nightly, future))
+            MenuBarStatus.headline(activity: [:], hold: nil, plans: [], repositories: [], nextRun: (nightly, future))
+                == MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (nightly, future))
         )
-        #expect(MenuBarStatus.headline(activity: [:], hold: nil, repositories: [], nextRun: (nightly, future))?.hasPrefix("Next: Nightly") == true)
+        #expect(MenuBarStatus.headline(activity: [:], hold: nil, plans: [], repositories: [], nextRun: (nightly, future))?.hasPrefix("Next: Nightly") == true)
 
         let calendar = newYork
         func at(_ day: Int, _ hour: Int, _ minute: Int = 0) throws -> Date {
@@ -746,18 +744,19 @@ struct MenuBarStatusTests {
     @Test("plan rows back up when idle, stop while running, and stand disabled while stopping")
     func planRowsStopWhileRunning() {
         let nightly = plan(name: "Nightly")
+        // No path yet: incomplete, and nothing to be called.
         var incomplete = plan(name: "Half")
         incomplete.path = ""
-        var unnamed = plan(name: "")
-        unnamed.path = "/tmp"
+        let scans = plan(name: "Scans")
         let photos = plan(name: "Photos")
 
-        let idle = MenuBarStatus.planRows(plans: [nightly, incomplete, unnamed, photos], activity: [:], isResticAvailable: true)
-        #expect(idle.map(\.planID) == [nightly.id, incomplete.id, unnamed.id, photos.id])
+        let idle = MenuBarStatus.planRows(plans: [nightly, incomplete, scans, photos], activity: [:], isResticAvailable: true)
+        #expect(idle.map(\.planID) == [nightly.id, incomplete.id, scans.id, photos.id])
         #expect(idle[0] == MenuBarStatus.PlanRow(planID: nightly.id, title: "Back Up “Nightly” Now", action: .backUp, isEnabled: true))
         #expect(idle[1].action == .backUp)
         #expect(!idle[1].isEnabled)
-        #expect(idle[2].title == "Back Up “Untitled Plan” Now")
+        #expect(idle[1].title == "Back Up “Untitled Plan” Now")
+        #expect(idle[2].title == "Back Up “Scans” Now")
 
         // Back Up Now is enabled only where the plan could run: restic too.
         let noRestic = MenuBarStatus.planRows(plans: [nightly], activity: [:], isResticAvailable: false)

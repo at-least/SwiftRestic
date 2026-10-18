@@ -38,18 +38,10 @@ extension AppModel {
               plan(id: planID) == nil,
               let group = shelves.orphanPlanGroup(planID),
               let path = shelves.adoptablePath(of: group, localHost: localHostname),
-              // Uses the same label derivation that names the sidebar row
-              // and the page, so the sheet's title never argues with the
-              // row clicked.
-              let title = shelves.otherLabels(
-                  repositories: configuration.repositories,
-                  localHost: localHostname
-              )[group.id]?.title,
               let prefill = BackupShelves.prefillSnapshot(among: group.snapshots, localHost: localHostname)
         else { return nil }
         var draft = BackupPlan()
         draft.id = planID
-        draft.name = title
         draft.repositoryID = repositoryID
         draft.path = path
         draft.excludePatterns = prefill.excludes
@@ -122,7 +114,7 @@ extension AppModel {
         let madeLine = "Made \(Format.historySpan(oldest: snapshots[snapshots.count - 1].time, newest: newest.time))"
             + " from \(madeFrom). Nothing in “\(repository.name)” changes."
 
-        let name = draft.displayName
+        let name = label(of: draft)
         let becomes = snapshots.count == 1
             ? "This backup becomes the plan's history."
             : "These \(Format.plural(snapshots.count, "backup")) become the plan's history."
@@ -162,7 +154,7 @@ extension AppModel {
         // A group exists only around backups, so count zero means the group
         // left while the sheet was open — the banner says that, not a count.
         post(Banner(
-            title: "Adopted “\(draft.displayName)”",
+            title: "Adopted “\(label(of: draft))”",
             message: count == 0
                 ? "Its backups are no longer in the repository."
                 : count == 1

@@ -164,10 +164,10 @@ enum RunRecordPresentation {
         return "\(planName) (\(repositoryName))"
     }
 
-    /// `planWithRepository` for a plan, its repository looked up among
-    /// `repositories`.
-    static func planWithRepository(_ plan: BackupPlan, repositories: [Repository]) -> String {
-        planWithRepository(plan.name, repositoryName: repositories.first { $0.id == plan.repositoryID }?.name)
+    /// `planWithRepository` for a plan — its label read against `plans` —
+    /// its repository looked up among `repositories`.
+    static func planWithRepository(_ plan: BackupPlan, plans: [BackupPlan], repositories: [Repository]) -> String {
+        planWithRepository(plan.label(among: plans), repositoryName: repositories.first { $0.id == plan.repositoryID }?.name)
     }
 
     /// What a run is called by the surfaces that have one string for it:
@@ -188,10 +188,9 @@ enum RunRecordPresentation {
         let repositoryName = repositories.first { $0.id == run.repositoryID }?.name
         switch run.kind {
         case .backup, .forget, .restore:
-            // The plan's name as it is called now. A restore carries no
-            // planID, so its step label is the stored name — the label is
-            // its subject.
-            let planName = run.planID.flatMap { id in plans.first { $0.id == id }?.name } ?? run.planName
+            // The plan as it is called now. A restore carries no planID, so
+            // its step label is the stored name — the label is its subject.
+            let planName = run.planID.flatMap { id in plans.first { $0.id == id }?.label(among: plans) } ?? run.planName
             return planWithRepository(planName, repositoryName: repositoryName)
         case .check, .prune:
             // The repository is the subject; the stored planName already
@@ -207,7 +206,7 @@ enum RunRecordPresentation {
     static func problemRowTitle(for run: RunRecord, plans: [BackupPlan]) -> String {
         switch run.kind {
         case .backup, .forget, .restore:
-            let name = run.planID.flatMap { id in plans.first { $0.id == id }?.name } ?? run.planName
+            let name = run.planID.flatMap { id in plans.first { $0.id == id }?.label(among: plans) } ?? run.planName
             return name.isEmpty ? run.kind.displayName : name
         case .check, .prune:
             return run.kind.displayName
@@ -235,8 +234,8 @@ enum RunRecordPresentation {
 
     /// Settings ▸ General ▸ Scheduling's "Next backup" line, in the tray
     /// headline's words: the plan with its repository, then when.
-    static func nextRunLine(plan: BackupPlan, date: Date, repositories: [Repository]) -> String {
-        let name = planWithRepository(plan, repositories: repositories)
+    static func nextRunLine(plan: BackupPlan, date: Date, plans: [BackupPlan], repositories: [Repository]) -> String {
+        let name = planWithRepository(plan, plans: plans, repositories: repositories)
         return "\(name) — \(Format.timestamp(date))"
     }
 

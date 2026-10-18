@@ -29,7 +29,6 @@ struct ServerAwayTests {
         repository.extraEnvironment = ["SWIFTRESTIC_STUB": "default", "SWIFTRESTIC_TRACE": traceFile.path]
 
         var plan = BackupPlan()
-        plan.name = "Documents"
         plan.repositoryID = repository.id
         plan.path = root.path
         plan.retention.isEnabled = false

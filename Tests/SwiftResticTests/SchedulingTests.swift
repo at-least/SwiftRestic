@@ -136,9 +136,9 @@ struct SchedulingTests {
         let repositoryID = UUID()
         func makePlan(name: String, enabled: Bool, path: String) -> BackupPlan {
             var plan = BackupPlan()
-            plan.name = name
             plan.repositoryID = repositoryID
-            plan.path = path
+            // A plan is called by its path's last component: the name ends it.
+            plan.path = path.isEmpty ? "" : path + "/" + name
             plan.isEnabled = enabled
             plan.schedule.frequency = .hourly
             plan.schedule.intervalHours = 1
@@ -157,16 +157,15 @@ struct SchedulingTests {
             existingRepositoryIDs: [repositoryID],
             busyPlanIDs: [busy.id]
         )
-        #expect(due.map(\.name) == ["ready"])
+        #expect(due.map { $0.label(among: []) } == ["ready"])
     }
 
     @Test("a plan whose repository no longer exists is never due and never announced")
     func danglingRepositoryIsExcluded() {
         let missingRepositoryID = UUID()
         var plan = BackupPlan()
-        plan.name = "orphaned"
         plan.repositoryID = missingRepositoryID
-        plan.path = "/tmp"
+        plan.path = "/tmp/orphaned"
         plan.schedule.frequency = .hourly
         plan.schedule.intervalHours = 1
 
@@ -183,12 +182,12 @@ struct SchedulingTests {
             in: [plan],
             now: now,
             existingRepositoryIDs: [missingRepositoryID]
-        ).map(\.name) == ["orphaned"])
+        ).map { $0.label(among: []) } == ["orphaned"])
         #expect(Scheduler.nextScheduledRun(
             in: [plan],
             now: now,
             existingRepositoryIDs: [missingRepositoryID]
-        )?.plan.name == "orphaned")
+        )?.plan.label(among: []) == "orphaned")
     }
 
     @Test("upcomingRuns is the scheduler's own enumeration, shared with the plan page's Next backup value")
@@ -196,9 +195,9 @@ struct SchedulingTests {
         let repositoryID = UUID()
         func makePlan(name: String, enabled: Bool, path: String, lastRunAt: Date?) -> BackupPlan {
             var plan = BackupPlan()
-            plan.name = name
             plan.repositoryID = repositoryID
-            plan.path = path
+            // A plan is called by its path's last component: the name ends it.
+            plan.path = path.isEmpty ? "" : path + "/" + name
             plan.isEnabled = enabled
             plan.schedule.frequency = .hourly
             plan.schedule.intervalHours = 1
@@ -220,7 +219,7 @@ struct SchedulingTests {
             now: now,
             existingRepositoryIDs: [repositoryID]
         )
-        #expect(upcoming.map(\.plan.name) == ["overdue"])
+        #expect(upcoming.map { $0.plan.label(among: []) } == ["overdue"])
         #expect(upcoming.first?.date == date("2026-09-05 11:00:00"))
     }
 
@@ -228,15 +227,14 @@ struct SchedulingTests {
     func repositoryBusyDefersPlan() {
         let repositoryID = UUID()
         var plan = BackupPlan()
-        plan.name = "waiting"
         plan.repositoryID = repositoryID
-        plan.path = "/tmp"
+        plan.path = "/tmp/waiting"
         plan.schedule.frequency = .hourly
         plan.schedule.intervalHours = 1
 
         let now = date("2026-09-05 12:00:00")
         let existing: Set<UUID> = [repositoryID]
-        #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map(\.name) == ["waiting"])
+        #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map { $0.label(among: []) } == ["waiting"])
 
         // While a prune holds the repository, the plan must not start …
         #expect(Scheduler.duePlans(
@@ -244,7 +242,7 @@ struct SchedulingTests {
         ).isEmpty)
 
         // … and because nothing was recorded as run, it is still due afterwards.
-        #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map(\.name) == ["waiting"])
+        #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map { $0.label(among: []) } == ["waiting"])
     }
 
     @Test("plans due on one repository in the same tick start one at a time, the most overdue first")
@@ -253,9 +251,8 @@ struct SchedulingTests {
         let other = UUID()
         func makePlan(_ name: String, _ repositoryID: UUID, lastRunAt: String) -> BackupPlan {
             var plan = BackupPlan()
-            plan.name = name
             plan.repositoryID = repositoryID
-            plan.path = "/tmp"
+            plan.path = "/tmp/" + name
             plan.schedule.frequency = .daily
             plan.schedule.hour = 2
             plan.schedule.minute = 0
@@ -274,7 +271,7 @@ struct SchedulingTests {
 
         #expect(Scheduler.duePlans(
             in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing
-        ).map(\.name) == ["downloads", "elsewhere"])
+        ).map { $0.label(among: []) } == ["downloads", "elsewhere"])
 
         // Held back, not dropped: while the first runs its repository is busy,
         // and once it has run, the other is due on the next tick.
@@ -286,7 +283,7 @@ struct SchedulingTests {
         ran.lastRunAt = date("2026-09-05 02:00:40")
         #expect(Scheduler.duePlans(
             in: [ran, dotfiles], now: date("2026-09-05 02:01:30"), existingRepositoryIDs: existing
-        ).map(\.name) == ["dotfiles"])
+        ).map { $0.label(among: []) } == ["dotfiles"])
 
         // The plan whose slot passed longer ago goes first, whatever the
         // order: a daily plan's due date is its latest missed slot, so 01:00
@@ -295,7 +292,7 @@ struct SchedulingTests {
         early.schedule.hour = 1
         #expect(Scheduler.duePlans(
             in: [downloads, early], now: now, existingRepositoryIDs: existing
-        ).map(\.name) == ["early"])
+        ).map { $0.label(among: []) } == ["early"])
     }
 }
 
@@ -315,9 +312,8 @@ struct PauseSchedulingTests {
 
     private func dailyPlan(name: String = "Nightly", lastRunAt: Date?) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = name
         plan.repositoryID = repositoryID
-        plan.path = "/tmp"
+        plan.path = "/tmp/" + name
         plan.schedule.frequency = .daily
         plan.schedule.hour = 2
         plan.schedule.minute = 0
@@ -578,9 +574,8 @@ struct UpcomingRunTests {
         path: String = "/tmp"
     ) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = name
         plan.repositoryID = UUID()
-        plan.path = path
+        plan.path = path.isEmpty ? "" : path + "/" + name
         plan.isEnabled = enabled
         plan.schedule.frequency = frequency
         plan.schedule.intervalHours = 1
@@ -1281,7 +1276,6 @@ struct LoginItemTests {
     func editorOfferOnlyWhenScheduleTurnsOn() {
         func plan(_ frequency: Schedule.Frequency, enabled: Bool = true) -> BackupPlan {
             var plan = BackupPlan()
-            plan.name = "Documents"
             plan.repositoryID = UUID()
             plan.path = "/tmp"
             plan.schedule.frequency = frequency

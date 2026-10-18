@@ -14,7 +14,6 @@ struct PlanStatusTests {
     /// repository, with a folder, last run an hour ago.
     private func completeDailyPlan() -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = "Documents"
         plan.repositoryID = repositoryID
         plan.path = "/Users/someone/Documents"
         plan.schedule.frequency = .daily
@@ -588,5 +587,41 @@ struct PlanStatusTests {
         let summary = PlanStatus.summary(of: gap)
         #expect(summary.message == gap.itemErrors[0])
         #expect(summary.facts.isEmpty)
+    }
+}
+
+/// What every surface calls a plan, which has no name of its own.
+@Suite("Plan labels")
+struct PlanLabelTests {
+    @Test("a plan is called by its path's last component, and two in one repository ending alike by their paths")
+    func labels() {
+        let home = UUID()
+        var documents = BackupPlan()
+        documents.repositoryID = home
+        documents.path = "/Users/someone/Documents"
+        var file = BackupPlan()
+        file.repositoryID = home
+        file.path = "/Users/someone/notes.txt"
+        #expect(documents.label(among: [documents, file]) == "Documents")
+        #expect(file.label(among: [documents, file]) == "notes.txt")
+        var homeFolder = BackupPlan()
+        homeFolder.repositoryID = home
+        homeFolder.path = "~"
+        #expect(homeFolder.label(among: [homeFolder]) == (NSHomeDirectory() as NSString).lastPathComponent)
+        #expect(BackupPlan().label(among: []) == "Untitled Plan")
+
+        // Two Documents in one repository: each by its path.
+        var mine = documents
+        mine.path = NSHomeDirectory() + "/Documents"
+        var drive = BackupPlan()
+        drive.repositoryID = home
+        drive.path = "/Volumes/Archive/Documents"
+        #expect(mine.label(among: [mine, drive]) == "~/Documents")
+        #expect(drive.label(among: [mine, drive]) == "/Volumes/Archive/Documents")
+        // In another repository the name is free again.
+        var elsewhere = drive
+        elsewhere.repositoryID = UUID()
+        #expect(mine.label(among: [mine, elsewhere]) == "Documents")
+        #expect(elsewhere.label(among: [mine, elsewhere]) == "Documents")
     }
 }

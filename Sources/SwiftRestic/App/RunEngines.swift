@@ -87,6 +87,9 @@ enum BackupRunEngine {
         /// Why this plan's run was cancelled, for its record: the user's
         /// Stop, Pause and Stop, or the app quitting.
         func cancellationMessage(for planID: UUID) -> String
+        /// What every surface calls the plan (`AppModel.label(of:)`): the
+        /// run's record, hooks and notifications say it.
+        func label(of plan: BackupPlan) -> String
         func service() throws -> any ResticClient
         func context(for repository: Repository) async throws -> RepositoryContext
         /// Nil-anchored like the activity entry itself: a phase for a plan
@@ -126,10 +129,11 @@ enum BackupRunEngine {
 
     static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
         let startedAt = Date.now
+        let planLabel = sink.label(of: plan)
         var record = RunRecord(
             kind: .backup,
             planID: plan.id,
-            planName: plan.name,
+            planName: planLabel,
             repositoryID: repository.id,
             startedAt: startedAt
         )
@@ -140,7 +144,7 @@ enum BackupRunEngine {
         let transcript = RunTranscript()
         var hookContext = HookRunner.Context(
             event: .beforeBackup,
-            planName: plan.name,
+            planName: planLabel,
             planID: plan.id.uuidString,
             repositoryName: repository.name,
             repositoryID: repository.id.uuidString,
@@ -255,7 +259,7 @@ enum BackupRunEngine {
             // cannot delay the backup itself.
             let startEvent = NotificationEvent(
                 stage: .started,
-                planName: plan.name,
+                planName: planLabel,
                 repositoryName: repository.name
             )
             sink.addStartPing(startEvent)
@@ -696,6 +700,8 @@ enum RetentionRunEngine {
     @MainActor
     protocol Sink: AnyObject {
         func cancellationMessage(for planID: UUID) -> String
+        /// What every surface calls the plan (`AppModel.label(of:)`).
+        func label(of plan: BackupPlan) -> String
         func service() throws -> any ResticClient
         func context(for repository: Repository) async throws -> RepositoryContext
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
@@ -713,7 +719,7 @@ enum RetentionRunEngine {
         var record = RunRecord(
             kind: .forget,
             planID: plan.id,
-            planName: plan.name,
+            planName: sink.label(of: plan),
             repositoryID: repository.id,
             startedAt: .now
         )

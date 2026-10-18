@@ -136,7 +136,7 @@ extension SnapshotLineage {
             var detail = "\(folders) — from \(host)"
             if soleWriter(of: lineage, plans: plans) == nil, !lineage.planTags.isEmpty {
                 let named = plans.filter { lineage.planTags.contains(ResticService.planTag($0.id)) }
-                var writers = named.map(\.name)
+                var writers = named.map { $0.label(among: plans) }
                 if named.count < lineage.planTags.count { writers.append("a removed plan") }
                 if lineage.hasSnapshotsWithoutPlan { writers.append("outside SwiftRestic") }
                 detail += "\nBacked up by \(Format.list(writers))"
@@ -166,8 +166,8 @@ extension SnapshotLineage {
     }
 
     private static func title(of lineage: SnapshotLineage, plans: [BackupPlan]) -> String {
-        if let plan = soleWriter(of: lineage, plans: plans), !plan.name.isEmpty {
-            return plan.name
+        if let plan = soleWriter(of: lineage, plans: plans) {
+            return plan.label(among: plans)
         }
         let names = lineage.key.paths.map { ($0 as NSString).lastPathComponent }
         return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")
@@ -349,12 +349,11 @@ extension OtherBackupsGroup {
         }
     }
 
-    /// The plan's name when the group is a configured plan's, the newest
+    /// The plan's label when the group is a configured plan's, the newest
     /// backup's folders otherwise.
     private static func title(of group: OtherBackupsGroup, plans: [BackupPlan]) -> String {
-        if case let .plan(id, _) = group,
-           let plan = plans.first(where: { $0.id == id }), !plan.name.isEmpty {
-            return plan.name
+        if case let .plan(id, _) = group, let plan = plans.first(where: { $0.id == id }) {
+            return plan.label(among: plans)
         }
         let names = group.snapshots[0].lineageKey.paths.map { ($0 as NSString).lastPathComponent }
         return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")

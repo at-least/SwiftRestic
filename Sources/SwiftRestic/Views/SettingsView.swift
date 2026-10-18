@@ -175,6 +175,7 @@ struct SettingsView: View {
                         value: RunRecordPresentation.nextRunLine(
                             plan: next.plan,
                             date: next.date,
+                            plans: model.configuration.plans,
                             repositories: model.configuration.repositories
                         )
                     )

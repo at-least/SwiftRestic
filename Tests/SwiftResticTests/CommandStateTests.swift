@@ -36,9 +36,9 @@ struct CommandStateTests {
 
     private func makePlan(_ name: String = "Docs", on repository: Repository?) -> BackupPlan {
         var plan = BackupPlan()
-        plan.name = name
         plan.repositoryID = repository?.id
-        plan.path = "/tmp/command-state-source"
+        // A plan is called by its path's last component: the name ends it.
+        plan.path = "/tmp/" + name
         plan.schedule.frequency = .daily
         return plan
     }
@@ -473,9 +473,11 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .check(repository.id))?.message
             .contains("This repository currently holds \(Format.bytes(2_000_000)).") == true)
 
-        var unnamed = plan
-        unnamed.name = ""
-        model.configuration.plans = [unnamed]
+        // A plan is called by its folder; one with no path yet has nothing
+        // to be called.
+        var pathless = plan
+        pathless.path = ""
+        model.configuration.plans = [pathless]
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Delete “Untitled Plan”?")
 
         #expect(model.confirmationCopy(for: .deletePlan(UUID())) == nil)

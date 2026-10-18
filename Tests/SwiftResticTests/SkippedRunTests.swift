@@ -137,7 +137,6 @@ struct SkippedRunTests {
     func catchUpAfterMount() {
         func plan(_ frequency: Schedule.Frequency = .daily) -> BackupPlan {
             var plan = BackupPlan()
-            plan.name = "Archive"
             plan.repositoryID = UUID()
             plan.path = "/Volumes/Archive SSD/Documents"
             plan.schedule.frequency = frequency

@@ -79,6 +79,12 @@ extension AppModel {
         configuration.plans[index].excludePatterns.append(pattern)
     }
 
+    /// What every surface calls `plan` (`BackupPlan.label(among:)`), read
+    /// against the configured plans.
+    func label(of plan: BackupPlan) -> String {
+        plan.label(among: configuration.plans)
+    }
+
     func upsert(plan: BackupPlan) {
         if let index = configuration.plans.firstIndex(where: { $0.id == plan.id }) {
             configuration.plans[index] = configuration.plans[index].merging(draft: plan)

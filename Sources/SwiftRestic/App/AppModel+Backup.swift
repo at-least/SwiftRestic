@@ -9,7 +9,7 @@ extension AppModel {
         guard !tasks.isOccupied(.plan(planID)) else { return }
         guard let plan = plan(id: planID) else { return }
         if let reason = backupLockReason(for: plan) {
-            post(Banner(title: "“\(plan.displayName)” waits", message: reason, isError: false))
+            post(Banner(title: "“\(label(of: plan))” waits", message: reason, isError: false))
             return
         }
         guard plan.isConfigurationComplete, let repositoryID = plan.repositoryID,

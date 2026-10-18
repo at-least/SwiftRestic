@@ -59,7 +59,7 @@ struct ApplyRetentionSheet: View {
     private func content(_ plan: BackupPlan) -> some View {
         let state = model.planCommands(for: .plan(planID))
         VStack(alignment: .leading, spacing: 2) {
-            Text("Apply Retention to “\(plan.displayName)”")
+            Text("Apply Retention to “\(model.label(of: plan))”")
                 .font(.headline)
                 .lineLimit(2)
                 .truncationMode(.middle)
