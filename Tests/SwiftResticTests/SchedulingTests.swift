@@ -632,7 +632,6 @@ struct MaintenanceSchedulingTests {
 
     private func repository(_ configure: (inout Repository) -> Void) -> Repository {
         var repository = Repository()
-        repository.name = "Repo"
         repository.kind = .local
         repository.localPath = "/tmp/repo"
         repository.createdAt = date("2026-09-01 00:00:00")
@@ -709,7 +708,7 @@ struct MaintenanceSchedulingTests {
     func lastCheckNamesItsDepth() {
         let repository = repository { $0.maintenance.lastCheckAt = self.date("2026-09-08 12:00:00") }
         let now = date("2026-09-10 12:00:00")
-        var check = RunRecord(kind: .check, planName: repository.name, repositoryID: repository.id, startedAt: date("2026-09-08 12:00:00"))
+        var check = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: date("2026-09-08 12:00:00"))
         check.outcome = .succeeded
         check.checkRead = "data slice 3 of 12"
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now)
@@ -756,7 +755,7 @@ struct MaintenanceSchedulingTests {
         var repository = repository { $0.maintenance.checkIntervalDays = 7 }
         let now = date("2026-09-10 12:00:00")
         func check(_ outcome: RunRecord.Outcome, at stamp: String, repository id: UUID? = nil) -> RunRecord {
-            var run = RunRecord(kind: .check, planName: repository.name, repositoryID: id ?? repository.id, startedAt: date(stamp))
+            var run = RunRecord(kind: .check, planName: "repo", repositoryID: id ?? repository.id, startedAt: date(stamp))
             run.outcome = outcome
             return run
         }
@@ -815,23 +814,23 @@ struct MaintenanceSchedulingTests {
         let now = date("2026-09-10 00:00:00")
         let prune = date("2026-10-01 00:00:00")
         // The check fell due on the 8th.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: nil, now: now) == "Due now")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, now: now) == "Due now")
         // The hold holds checks and prunes too: due, but not now.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: .paused(until: nil), now: now) == "Waiting")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: .onBattery, now: now) == "Waiting")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: nil), now: now) == "Waiting")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, now: now) == "Waiting")
         // A timed hold moves it to the end, where the scheduler picks it up.
         let end = date("2026-09-10 01:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: .paused(until: end), now: now)
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: end), now: now)
             == Format.timestamp(end))
         // A date beyond the hold keeps its own.
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, hold: nil, now: now) == Format.timestamp(prune))
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, hold: .paused(until: end), now: now)
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: nil, now: now) == Format.timestamp(prune))
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .paused(until: end), now: now)
             == Format.timestamp(prune))
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, hold: .onBattery, now: now)
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .onBattery, now: now)
             == Format.timestamp(prune))
 
         let off = self.repository { $0.maintenance.checkEnabled = false }
-        #expect(Scheduler.nextMaintenanceText(.check, of: off, hold: .paused(until: nil), now: now) == "Off")
+        #expect(Scheduler.nextMaintenanceText(.check, of: off, among: [off], hold: .paused(until: nil), now: now) == "Off")
     }
 
     @Test("a check waiting for its repository's drive is no last check, and Next check says what it waits for")
@@ -844,9 +843,9 @@ struct MaintenanceSchedulingTests {
             $0.maintenance.lastCheckAt = self.date("2026-09-02 12:00:00")
         }
         let now = date("2026-09-10 12:00:00")
-        var failed = RunRecord(kind: .check, planName: repository.name, repositoryID: repository.id, startedAt: date("2026-09-02 12:00:00"))
+        var failed = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: date("2026-09-02 12:00:00"))
         failed.outcome = .failed
-        var waited = RunRecord(kind: .check, planName: repository.name, repositoryID: repository.id, startedAt: date("2026-09-10 11:00:00"))
+        var waited = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: date("2026-09-10 11:00:00"))
         waited.outcome = .skipped
         waited.detailText = "“\(volume)” is not connected."
         // The skip is no check: the last one is still the failure before it.
@@ -855,24 +854,23 @@ struct MaintenanceSchedulingTests {
             == "\(Format.ago(date("2026-09-02 12:00:00"), now: now)) · failed")
         // Due: it waits for the drive, not "Due now" — under a hold too,
         // which the drive would outlast.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: nil, now: now) == "When “\(volume)” is connected")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: .onBattery, now: now) == "When “\(volume)” is connected")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, now: now) == "When “\(volume)” is connected")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, now: now) == "When “\(volume)” is connected")
         // Not due yet: its date, as for any repository.
         repository.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, hold: nil, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
 
         // A server out of reach: its due check waits for it in the same way.
         var server = self.repository {
-            $0.name = "Home Server"
             $0.kind = .rest
             $0.restURL = "http://nas.local:8000/backups"
             $0.maintenance.checkIntervalDays = 7
             $0.maintenance.lastCheckAt = self.date("2026-09-02 12:00:00")
         }
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, hold: nil, awaitingServer: true, now: now) == "When “Home Server” can be reached")
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, hold: nil, awaitingServer: false, now: now) == "Due now")
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, awaitingServer: true, now: now) == "When “nas.local” can be reached")
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, awaitingServer: false, now: now) == "Due now")
         server.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, hold: nil, awaitingServer: true, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, awaitingServer: true, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
     }
 
     @Test("the schedule summarises itself for the plan list")
@@ -1181,7 +1179,9 @@ struct AdditionalBackendTests {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let repository = try decoder.decode(Repository.self, from: Data(json.utf8))
-        #expect(repository.name == "Old")
+        // The name an older build stored is no longer read: a repository
+        // is called by where it is.
+        #expect(repository.label(among: [repository]) == "repo")
         #expect(repository.localPath == "/tmp/repo")
         #expect(repository.s3Endpoint == "s3.amazonaws.com")
         #expect(repository.azureContainer.isEmpty)
@@ -1216,7 +1216,6 @@ struct RepositoryCompletenessTests {
             }
 
             var complete = Repository()
-            complete.name = "Repo"
             complete.kind = kind
             fill(&complete)
             #expect(complete.isConfigurationComplete, "\(kind) with every required field must be complete")
@@ -1225,19 +1224,9 @@ struct RepositoryCompletenessTests {
             // scheduler refuses to schedule incomplete repositories, so this
             // must never read as runnable.
             var bare = Repository()
-            bare.name = "Repo"
             bare.kind = kind
             #expect(!bare.isConfigurationComplete, "a fresh \(kind) repository must be incomplete")
         }
-    }
-
-    @Test("a blank name makes even a fully configured repository incomplete")
-    func blankNameIsIncomplete() {
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = "/Volumes/Backup"
-        repository.name = "   "
-        #expect(!repository.isConfigurationComplete)
     }
 }
 

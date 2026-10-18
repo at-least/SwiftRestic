@@ -85,6 +85,12 @@ extension AppModel {
         plan.label(among: configuration.plans)
     }
 
+    /// What every surface calls `repository` (`Repository.label(among:)`),
+    /// read against the configured repositories.
+    func label(of repository: Repository) -> String {
+        repository.label(among: configuration.repositories)
+    }
+
     func upsert(plan: BackupPlan) {
         if let index = configuration.plans.firstIndex(where: { $0.id == plan.id }) {
             configuration.plans[index] = configuration.plans[index].merging(draft: plan)

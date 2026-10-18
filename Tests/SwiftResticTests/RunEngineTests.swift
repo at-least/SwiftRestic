@@ -18,6 +18,7 @@ struct BackupRunEngineTests {
         /// Per plan, so a test can tell the engine asked about its own run.
         func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
         func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
+        func label(of repository: Repository) -> String { repository.label(among: [repository]) }
 
         func service() throws -> any ResticClient { throw ResticError.repositoryMissing }
         func context(for repository: Repository) async throws -> RepositoryContext {
@@ -320,19 +321,18 @@ struct BackupRunEngineTests {
         sink.probeAnswer = .unreachable("connection refused")
         let client = MockResticClient().onBackup(.success(successOutcome()))
         var repository = Repository()
-        repository.name = "Home Server"
         repository.kind = .rest
         repository.restURL = "http://127.0.0.1:18000/app"
         await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .skipped)
-        #expect(record.detailText == "“Home Server” cannot be reached (connection refused).")
+        #expect(record.detailText == "“127.0.0.1” cannot be reached (connection refused).")
         #expect(client.callLog.isEmpty)
         // Stamped, as a drive away is, so an hourly plan does not retry
         // every minute; the listing learns why at once; no start ping.
         #expect(sink.log.contains("mark:nothing"))
-        #expect(sink.log.contains("away:“Home Server” cannot be reached (connection refused)."))
+        #expect(sink.log.contains("away:“127.0.0.1” cannot be reached (connection refused)."))
         #expect(!sink.log.contains { $0.hasPrefix("ping:") })
     }
 
@@ -684,6 +684,7 @@ struct MaintenanceRunEngineTests {
         var deliveredRecords: [RunRecord] = []
         var deliveredTranscripts: [RunTranscript.Contents] = []
         var cancellationMessage = "cancelled in test"
+        func label(of repository: Repository) -> String { repository.label(among: [repository]) }
 
         func service() throws -> any ResticClient { throw ResticError.repositoryMissing }
         func context(for repository: Repository) async throws -> RepositoryContext {
@@ -815,7 +816,6 @@ struct MaintenanceRunEngineTests {
         sink.probeAnswer = .unreachable("it did not answer within 10 seconds")
         let client = MockResticClient().onCheck(.success(ResticSummary()))
         var repository = Repository()
-        repository.name = "Home Server"
         repository.kind = .sftp
         repository.sftpHost = "nas"
         await MaintenanceRunEngine.perform(
@@ -826,7 +826,7 @@ struct MaintenanceRunEngineTests {
         )
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .skipped)
-        #expect(record.detailText == "“Home Server” cannot be reached (it did not answer within 10 seconds).")
+        #expect(record.detailText == "“nas” cannot be reached (it did not answer within 10 seconds).")
         #expect(client.callLog.isEmpty)
         #expect(sink.log.contains("server-away"))
         #expect(!sink.log.contains { $0.hasPrefix("stamp:") })
@@ -1030,6 +1030,7 @@ struct RetentionRunEngineTests {
 
         func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
         func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
+        func label(of repository: Repository) -> String { repository.label(among: [repository]) }
         func service() throws -> any ResticClient { client }
         func context(for repository: Repository) async throws -> RepositoryContext {
             log.append("context")
@@ -1161,6 +1162,7 @@ private final class StubServiceSink: BackupRunEngine.Sink {
 
     func cancellationMessage(for planID: UUID) -> String { base.cancellationMessage(for: planID) }
     func label(of plan: BackupPlan) -> String { base.label(of: plan) }
+    func label(of repository: Repository) -> String { base.label(of: repository) }
     func service() throws -> any ResticClient { client }
     func context(for repository: Repository) async throws -> RepositoryContext {
         try await base.context(for: repository)
@@ -1198,6 +1200,7 @@ private final class StubMaintenanceServiceSink: MaintenanceRunEngine.Sink {
     }
 
     var cancellationMessage: String { base.cancellationMessage }
+    func label(of repository: Repository) -> String { base.label(of: repository) }
     func service() throws -> any ResticClient { client }
     func context(for repository: Repository) async throws -> RepositoryContext {
         try await base.context(for: repository)

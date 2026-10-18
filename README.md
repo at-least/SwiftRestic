@@ -171,6 +171,17 @@ the generator after editing it; the PNGs are checked in.
   its *Other backups* shelf — no modal, no wizard.
 - **Repositories** — local disk, SFTP, S3-compatible, Backblaze B2, Azure Blob
   Storage, Google Cloud Storage, an rclone remote, or a restic REST server.
+  A repository has no name: every surface calls it by where it is — a
+  folder on a drive by the drive's name (the name the drive-away and
+  drive-full words use), any other folder by its own name, SFTP and a REST
+  server by host, S3, B2 and Google Cloud Storage by bucket, Azure by
+  container, rclone by remote — and two that would read alike each by its
+  location, as its page shows it ("/Volumes/T7/restic-macbook"). The label
+  follows the location when an edit moves it. A location already added
+  cannot be added again ("“T7” is already at this location."): two entries
+  for one place would be two identical rows, and two sets of checks and
+  prunes on one repository. A name an earlier build stored is dropped at
+  the next save; a check's or prune's record keeps what it was called then.
   The editor asks *Where is it?* — on this Mac, on another machine, in the
   cloud, through a gateway — and groups the kinds that way. Creating one runs
   `restic init`; a repository that cannot be reached is not saved. *Test
@@ -183,8 +194,8 @@ the generator after editing it; the PNGs are checked in.
   environment, the password — runs the same check and saves only on
   "Connected", else says why and offers *Save Anyway* (for a server down
   while its path is being fixed); the form waits during either check, so
-  Save stores what was checked. A rename, a rate limit, a maintenance
-  setting or a hook saves at once. The check gives up after 60 seconds:
+  Save stores what was checked. A rate limit, a maintenance setting or a
+  hook saves at once. The check gives up after 60 seconds:
   against a REST server refusing connections, restic 0.19.1 retried for
   over ten minutes. A REST server's login goes in *User* and *Server
   password* (Keychain, like every backend secret) and reaches restic as
@@ -202,12 +213,11 @@ the generator after editing it; the PNGs are checked in.
   repository this Mac holds no password for — a configuration carried to
   another Mac (secrets never live in it), a Keychain item removed — says so
   in the editor's Encryption caption: "No password is stored for the
-  repository “Home NAS”. Enter it here to read it and back up to it."; *Save*
+  repository “nas.local”. Enter it here to read it and back up to it."; *Save*
   and *Test Connection* wait, the reason beside them, as the listing and the
   Maintenance card already report. restic is never handed an empty password
   (its refusal and `--insecure-no-password` advice are for a terminal), and
-  until one is entered the repository cannot be renamed or re-hooked, by
-  design.
+  until one is entered the repository cannot be re-hooked, by design.
   *Bandwidth* holds restic to an upload and a download rate for this
   repository alone (`--limit-upload`, `--limit-download`, KiB/s, none by
   default) on every command, and restic 0.19.1 holds a disk attached to
@@ -943,9 +953,10 @@ curl -fsS -X POST "$WEBHOOK" \
   -d "plan=$SWIFTRESTIC_PLAN_NAME&snapshot=$SWIFTRESTIC_SNAPSHOT_ID&added=$SWIFTRESTIC_DATA_ADDED"
 ```
 
-`SWIFTRESTIC_PLAN_NAME` is what the app calls the plan — its folder's name,
-or its path when another plan of the repository ends alike, since a plan has
-no name of its own. `SWIFTRESTIC_SNAPSHOT_ID` and `SWIFTRESTIC_ERROR` are
+`SWIFTRESTIC_PLAN_NAME` and `SWIFTRESTIC_REPO_NAME` are what the app calls
+the plan and the repository, which have no names of their own — the plan's
+folder name, the repository's drive, folder, host, bucket or remote (each by
+its whole path or location when another reads alike). `SWIFTRESTIC_SNAPSHOT_ID` and `SWIFTRESTIC_ERROR` are
 *absent* rather than empty when they do not apply, so
 `[ -n "$SWIFTRESTIC_ERROR" ]` works. A failing hook
 marks the run as *completed with errors* but never turns a written snapshot into

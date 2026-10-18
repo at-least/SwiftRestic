@@ -26,11 +26,12 @@ struct AdoptTests {
         )
     }
 
+    /// A repository is called by where it is: a folder off the startup
+    /// disk by its own name, so `name` ends the path.
     private func makeRepository(_ name: String = "Home Disk") -> Repository {
         var repository = Repository()
-        repository.name = name
         repository.kind = .local
-        repository.localPath = "/tmp/adopt-repo"
+        repository.localPath = "/Users/someone/\(name)"
         return repository
     }
 

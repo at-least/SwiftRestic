@@ -87,7 +87,7 @@ extension AppModel {
         if case let .unreachable(why)? = await probeServer(of: repository) {
             guard configuration.repository(id: repositoryID) != nil else { return }
             snapshotListingOutcomes[repositoryID] = .failed(
-                RunRecord.serverUnreachableReason(repositoryName: repository.name, why: why)
+                RunRecord.serverUnreachableReason(repositoryName: label(of: repository), why: why)
             )
             return
         }
@@ -115,7 +115,7 @@ extension AppModel {
                 if !statsFailureNoted.contains(repositoryID) {
                     statsFailureNoted.insert(repositoryID)
                     post(Banner(
-                        title: "Could not read “\(repository.name)”'s size",
+                        title: "Could not read “\(label(of: repository))”'s size",
                         message: error.localizedDescription,
                         isError: false
                     ))
@@ -161,7 +161,7 @@ extension AppModel {
                 : "Check its location in the repository settings."
             snapshotListingOutcomes[repositoryID] = .failed("Repository missing. \(advice)")
             post(Banner(
-                title: "Could not read “\(repository.name)”",
+                title: "Could not read “\(label(of: repository))”",
                 message: "The repository is missing at \(repository.resticRepositoryString).",
                 isError: true
             ))
@@ -173,7 +173,7 @@ extension AppModel {
             noteAuthFailure(error, repositoryID: repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(error.localizedDescription)
             post(Banner(
-                title: "Could not read “\(repository.name)”",
+                title: "Could not read “\(label(of: repository))”",
                 message: error.localizedDescription,
                 isError: true
             ))

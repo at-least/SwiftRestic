@@ -67,7 +67,7 @@ struct RunDetailPanel: View {
 
     // MARK: - Facts
 
-    private var repositoryName: String? { model.repository(id: run.repositoryID)?.name }
+    private var repositoryName: String? { model.repository(id: run.repositoryID).map { model.label(of: $0) } }
 
     @ViewBuilder
     private var rows: some View {

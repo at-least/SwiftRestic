@@ -423,7 +423,7 @@ extension AppModel {
             // started it. Removing the repository is one thing that cancels
             // a restore, and by then there is no name to say; the removal
             // dialog has already disclosed it.
-            let repositoryName = repository(id: repositoryID)?.name
+            let repositoryName = repository(id: repositoryID).map { label(of: $0) }
             if record.outcome == .cancelled {
                 // The strip vanishing is the only signal a cancelled
                 // restore otherwise leaves — including when it is the
@@ -482,6 +482,7 @@ extension AppModel {
             return provider
         }
         let secrets = self.secrets
+        let repositoryLabel = label(of: repository)
 
         // The promise is typed by *content*, not as a file URL:
         // `public.file-url` declares the file's contents are a URL bookmark
@@ -501,6 +502,7 @@ extension AppModel {
                         service: service,
                         secrets: secrets,
                         repository: repository,
+                        repositoryLabel: repositoryLabel,
                         snapshotID: snapshotID,
                         node: node
                     )
@@ -548,13 +550,14 @@ extension AppModel {
         service: any ResticClient,
         secrets: SecretStore,
         repository: Repository,
+        repositoryLabel: String,
         snapshotID: String,
         node: SnapshotNode
     ) async throws -> URL {
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(dragRestorePrefix)\(UUID().uuidString)")
         _ = try await service.restore(
-            await Self.dragContext(repository: repository, secrets: secrets),
+            await Self.dragContext(repository: repository, label: repositoryLabel, secrets: secrets),
             snapshotID: snapshotID,
             node: node,
             destinationDirectory: destination,
@@ -575,6 +578,7 @@ extension AppModel {
     /// drag path above and the instance `context(for:)`.
     nonisolated static func dragContext(
         repository: Repository,
+        label: String,
         secrets: SecretStore
     ) async throws -> RepositoryContext {
         // A Keychain failure surfaces as itself — reading it as nil would
@@ -589,7 +593,7 @@ extension AppModel {
             // the cancellation here keeps the run's record `.cancelled`
             // instead of a failure nobody can act on.
             try Task.checkCancellation()
-            throw ResticError.passwordMissing(repositoryName: repository.name)
+            throw ResticError.passwordMissing(repositoryName: label)
         }
         return RepositoryContext(
             repository: repository,

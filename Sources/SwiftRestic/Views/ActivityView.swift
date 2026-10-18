@@ -120,7 +120,7 @@ struct ActivityView: View {
                     // removed; the data cannot tell the two apart, so the
                     // tooltip says both and asserts neither.
                     TableColumn("Repository") { run in
-                        if let name = model.repository(id: run.repositoryID)?.name {
+                        if let name = model.repository(id: run.repositoryID).map({ model.label(of: $0) }) {
                             Text(name)
                                 .help(name)
                         } else {

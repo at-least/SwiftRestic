@@ -85,7 +85,7 @@ struct OtherGroupPageSummary: Equatable {
             // — its own page says "No repository set" — still left, which
             // is all the sentence can honestly say.
             let moved = repositories.first(where: { $0.id == formerPlan.repositoryID })
-                .map { " before it moved to “\($0.name)”" }
+                .map { " before it moved to “\($0.label(among: repositories))”" }
                 ?? " before it moved away"
             explanation = snapshots.count == 1
                 ? "This is the backup “\(name)” made here\(moved)."

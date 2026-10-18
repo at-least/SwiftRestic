@@ -242,7 +242,7 @@ struct SidebarView: View {
         Label {
             HStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(repository.name)
+                    Text(model.label(of: repository))
                         .lineLimit(1)
                     backupsCaption(repository, listing: model.snapshots(for: repository.id))
                 }
@@ -354,9 +354,9 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, Indent.child)
-        .help("Create a backup plan that backs up to “\(repository.name)”")
+        .help("Create a backup plan that backs up to “\(model.label(of: repository))”")
         // Every repository without a plan has one: the name tells them apart.
-        .accessibilityLabel("New Backup Plan for “\(repository.name)”…")
+        .accessibilityLabel("New Backup Plan for “\(model.label(of: repository))”…")
     }
 
     // MARK: - Plans
@@ -554,16 +554,16 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, Indent.child)
-        .help("Backups in “\(repository.name)” that none of its plans made — from another Mac or the restic console, a deleted plan, or a plan that now backs up elsewhere")
+        .help("Backups in “\(model.label(of: repository))” that none of its plans made — from another Mac or the restic console, a deleted plan, or a plan that now backs up elsewhere")
         // Named for its repository, as a plan's fold is for its plan.
-        .accessibilityLabel("\(title) in “\(repository.name)”, \(count)")
+        .accessibilityLabel("\(title) in “\(model.label(of: repository))”, \(count)")
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
     }
 
     private func toggleOtherBackups(_ repository: Repository, title: String) {
         let opened = folds.otherBackups.remove(repository.id) == nil
         if opened { folds.otherBackups.insert(repository.id) }
-        announceFold("\(title) in “\(repository.name)”", opened: opened)
+        announceFold("\(title) in “\(model.label(of: repository))”", opened: opened)
     }
 
     /// Both kinds of group, interleaved newest-first: a plan's history here
@@ -631,7 +631,7 @@ struct SidebarView: View {
             )
         }
         // The same plan can have left backups in two repositories.
-        .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
+        .accessibilityLabel("\(title), \(caption.text), in “\(model.label(of: repository))”")
         if isExpanded {
             ForEach(snapshots) { snapshot in
                 recordRow(snapshot, in: repository.id, indent: Indent.groupRecord, hideTitle: "Hide This Group's Backups") {
@@ -749,7 +749,7 @@ struct SidebarView: View {
             }
         }
         // The same folders from the same Mac can sit in two repositories.
-        .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
+        .accessibilityLabel("\(title), \(caption.text), in “\(model.label(of: repository))”")
         if isExpanded {
             ForEach(lineage.snapshots) { snapshot in
                 recordRow(snapshot, in: repositoryID, indent: Indent.groupRecord, hideTitle: "Hide This Group's Backups") {

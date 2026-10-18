@@ -23,7 +23,6 @@ struct ConsoleModelTests {
             secrets: .inMemory()
         )
         var repository = Repository()
-        repository.name = "Console Repo"
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         app.configuration.repositories = [repository]
@@ -35,7 +34,6 @@ struct ConsoleModelTests {
         let (app, console, root) = try makeHarness()
         defer { try? FileManager.default.removeItem(at: root) }
         var other = Repository()
-        other.name = "Damaged"
         app.configuration.repositories.append(other)
         app.consoleDidAppear()
         #expect(console.repositoryID == app.configuration.repositories.first?.id)

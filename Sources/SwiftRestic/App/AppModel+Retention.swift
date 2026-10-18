@@ -41,7 +41,7 @@ extension AppModel {
         else { return }
         guard !busyRepositoryIDs.contains(repository.id) else {
             post(Banner(
-                title: "“\(repository.name)” is busy",
+                title: "“\(label(of: repository))” is busy",
                 message: "A backup or another maintenance job is already using this repository.",
                 isError: false
             ))

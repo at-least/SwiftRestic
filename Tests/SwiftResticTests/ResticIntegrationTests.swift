@@ -60,7 +60,6 @@ struct ResticIntegrationTests {
         )
 
         var repository = Repository()
-        repository.name = "Integration"
         repository.kind = .local
         repository.localPath = repositoryDirectory.path
 
@@ -446,7 +445,6 @@ struct ResticIntegrationTests {
         }
 
         var repository = Repository()
-        repository.name = "Integration"
         repository.kind = .local
         repository.localPath = fixture.root.appendingPathComponent("repo").path
         let model = try await adoptableModel(fixture: fixture, repository: repository)
@@ -504,7 +502,6 @@ struct ResticIntegrationTests {
         }
 
         var repository = Repository()
-        repository.name = "Integration"
         repository.kind = .local
         repository.localPath = fixture.root.appendingPathComponent("repo").path
         let model = try await adoptableModel(fixture: fixture, repository: repository)
@@ -1093,7 +1090,6 @@ struct ResticCheckDamageTests {
         try Data(randomBytes: 200_000).write(to: sourceDirectory.appendingPathComponent("big.bin"))
 
         var repository = Repository()
-        repository.name = "Check damage"
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
 
@@ -1369,7 +1365,6 @@ struct ResticRelativePathTests {
         try "la".write(to: album.appendingPathComponent("song.txt"), atomically: true, encoding: .utf8)
 
         var repository = Repository()
-        repository.name = "Relative"
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         let password = "relative-test"

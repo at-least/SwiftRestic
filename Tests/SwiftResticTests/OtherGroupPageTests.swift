@@ -71,7 +71,7 @@ struct OtherGroupPageTests {
     @Test("a moved plan's page names the plan and where it went, and carries the plan to open")
     func movedExplanation() throws {
         var offsite = Repository()
-        offsite.name = "Offsite"
+        offsite.localPath = "/Users/someone/Offsite"
         var music = BackupPlan()
         music.repositoryID = offsite.id
         music.path = "/Data/Music"

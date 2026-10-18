@@ -174,7 +174,6 @@ struct NetworkShareTests {
     func previewReconnects() async throws {
         let (model, mounts, volume) = try await makeModel(answer: .failed(EAUTH))
         var repository = Repository()
-        repository.name = "Share Repo"
         repository.kind = .local
         repository.localPath = "/Volumes/\(volume)/restic"
         model.configuration.repositories = [repository]

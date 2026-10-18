@@ -406,7 +406,6 @@ struct RawLineStreamingTests {
 struct PasswordPrecedenceTests {
     private func context(extra: [String: String]) -> RepositoryContext {
         var repository = Repository()
-        repository.name = "Repo"
         repository.kind = .local
         repository.localPath = "/Volumes/Backup"
         repository.extraEnvironment = extra
@@ -437,7 +436,6 @@ struct PasswordPrecedenceTests {
         // The console can reach a repository the plan editor would call
         // incomplete; clobbering RESTIC_REPOSITORY with "" would break that.
         var repository = Repository()
-        repository.name = "Repo"
         repository.kind = .local
         repository.localPath = ""
         repository.extraEnvironment = ["RESTIC_REPOSITORY": "sftp:nas.local:/volume1/restic"]
@@ -471,7 +469,6 @@ struct RateLimitTests {
     @Test("a repository's own rate limits go on every command against it; none add no flag")
     func repositoryLimits() {
         var repository = Repository()
-        repository.name = "Cloud"
         repository.kind = .b2
         #expect(RepositoryContext(repository: repository, password: "p").globalArguments.isEmpty)
 

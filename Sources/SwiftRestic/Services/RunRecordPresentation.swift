@@ -167,7 +167,7 @@ enum RunRecordPresentation {
     /// `planWithRepository` for a plan — its label read against `plans` —
     /// its repository looked up among `repositories`.
     static func planWithRepository(_ plan: BackupPlan, plans: [BackupPlan], repositories: [Repository]) -> String {
-        planWithRepository(plan.label(among: plans), repositoryName: repositories.first { $0.id == plan.repositoryID }?.name)
+        planWithRepository(plan.label(among: plans), repositoryName: repositories.first { $0.id == plan.repositoryID }.map { $0.label(among: repositories) })
     }
 
     /// What a run is called by the surfaces that have one string for it:
@@ -185,7 +185,7 @@ enum RunRecordPresentation {
         plans: [BackupPlan],
         repositories: [Repository]
     ) -> String {
-        let repositoryName = repositories.first { $0.id == run.repositoryID }?.name
+        let repositoryName = repositories.first { $0.id == run.repositoryID }.map { $0.label(among: repositories) }
         switch run.kind {
         case .backup, .forget, .restore:
             // The plan as it is called now. A restore carries no planID, so

@@ -21,7 +21,6 @@ struct ServerAwayTests {
         let traceFile = root.appendingPathComponent("stub-trace.log")
 
         var repository = Repository()
-        repository.name = "Home Server"
         repository.kind = .rest
         // Never dialled: the probe below answers for it.
         repository.restURL = "http://127.0.0.1:9/app"
@@ -64,7 +63,7 @@ struct ServerAwayTests {
             }
         }
 
-        let words = "“Home Server” cannot be reached (connection refused)."
+        let words = "“127.0.0.1” cannot be reached (connection refused)."
         #expect(model.snapshotListingOutcomes[repository.id] == .failed(words))
 
         // The scheduler's first tick starts the due backup, which skips.

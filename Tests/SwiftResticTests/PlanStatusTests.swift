@@ -625,3 +625,59 @@ struct PlanLabelTests {
         #expect(elsewhere.label(among: [mine, elsewhere]) == "Documents")
     }
 }
+
+/// What every surface calls a repository, which has no name of its own.
+@Suite("Repository labels")
+struct RepositoryLabelTests {
+    private func local(_ path: String) -> Repository {
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = path
+        return repository
+    }
+
+    @Test("a repository is called by where it is: a drive's name, a folder's, a host, a bucket, a remote")
+    func labels() {
+        #expect(local("/Volumes/backup").label(among: []) == "backup")
+        #expect(local("/Volumes/T7/restic").label(among: []) == "T7")
+        #expect(local("~/Backups/restic").label(among: []) == "restic")
+        var sftp = Repository()
+        sftp.kind = .sftp
+        sftp.sftpHost = "nas.local"
+        sftp.sftpPath = "/volume1/restic"
+        #expect(sftp.label(among: []) == "nas.local")
+        var rest = Repository()
+        rest.kind = .rest
+        rest.restURL = "rest:https://backup.example.com:8000/me/"
+        #expect(rest.label(among: []) == "backup.example.com")
+        var b2 = Repository()
+        b2.kind = .b2
+        b2.b2Bucket = "photos-archive"
+        #expect(b2.label(among: []) == "photos-archive")
+        var rclone = Repository()
+        rclone.kind = .rclone
+        rclone.rcloneRemote = "gdrive:"
+        rclone.rclonePath = "restic"
+        #expect(rclone.label(among: []) == "gdrive")
+        #expect(Repository().label(among: []) == "Untitled Repository")
+    }
+
+    @Test("two repositories that would read alike each read as their location")
+    func twins() {
+        let t7 = local("/Volumes/T7/restic-macbook")
+        let t7Again = local("/Volumes/T7/restic-imac")
+        #expect(t7.label(among: [t7, t7Again]) == "/Volumes/T7/restic-macbook")
+        #expect(t7Again.label(among: [t7, t7Again]) == "/Volumes/T7/restic-imac")
+        var nas = Repository()
+        nas.kind = .sftp
+        nas.sftpHost = "nas.local"
+        nas.sftpPath = "/volume1/restic"
+        var nasAgain = nas
+        nasAgain.id = UUID()
+        nasAgain.sftpPath = "/volume2/restic"
+        #expect(nas.label(among: [nas, nasAgain]) == "sftp:nas.local:/volume1/restic")
+        // Another drive's folder of the same name is no twin.
+        let other = local("/Volumes/Samsung/restic")
+        #expect(t7.label(among: [t7, other]) == "T7")
+    }
+}

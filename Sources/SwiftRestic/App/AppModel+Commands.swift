@@ -201,7 +201,7 @@ extension AppModel {
                let left = backupsLeftBehind(planID: id, in: repositoryID)
             {
                 landing = "Its \(Format.plural(left.count, "snapshot")) \(left.count == 1 ? "stays" : "stay")"
-                    + " in “\(repository.name)”, under \(left.shelfTitle), and can be adopted back."
+                    + " in “\(label(of: repository))”, under \(left.shelfTitle), and can be adopted back."
             } else {
                 landing = "Snapshots already written to the repository are not deleted."
             }
@@ -214,7 +214,7 @@ extension AppModel {
         case let .removeRepository(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
-                title: "Remove “\(repository.name)” from SwiftRestic?",
+                title: "Remove “\(label(of: repository))” from SwiftRestic?",
                 // From the model, so the disclosed consequences cannot drift
                 // from what removal does.
                 message: removalConsequences(for: id)
@@ -227,23 +227,23 @@ extension AppModel {
             if let size = repositoryStats[id]?.totalSize {
                 message += " This repository currently holds \(Format.bytes(size))."
             }
-            return ConfirmationCopy(title: "Check the integrity of “\(repository.name)”?", message: message)
+            return ConfirmationCopy(title: "Check the integrity of “\(label(of: repository))”?", message: message)
         case let .prune(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
-                title: "Prune “\(repository.name)” now?",
+                title: "Prune “\(label(of: repository))” now?",
                 message: "Pruning permanently removes the data of deleted snapshots and locks the repository exclusively — backups to it are held back until it finishes."
             )
         case let .unlock(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
-                title: "Remove stale locks on “\(repository.name)”?",
+                title: "Remove stale locks on “\(label(of: repository))”?",
                 message: "This removes locks left behind by interrupted restic processes. If restic is running somewhere else right now, removing its lock can corrupt the repository."
             )
         case let .rebuildIndex(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
-                title: "Rebuild the search index for “\(repository.name)”?",
+                title: "Rebuild the search index for “\(label(of: repository))”?",
                 message: "The local search index, with its cached folder listings and comparisons, is deleted and read back from the repository, snapshot by snapshot. The repository itself is not touched. Until the rebuild finishes, folder version lists are incomplete, the Restore pane's search may miss matches, and Find Files searches through restic, which is slower."
             )
         }

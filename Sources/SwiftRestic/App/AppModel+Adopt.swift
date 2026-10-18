@@ -112,7 +112,7 @@ extension AppModel {
             ? "This backup becomes this plan's history."
             : "These \(Format.plural(snapshots.count, "backup")) become this plan's history."
         let madeLine = "Made \(Format.historySpan(oldest: snapshots[snapshots.count - 1].time, newest: newest.time))"
-            + " from \(madeFrom). Nothing in “\(repository.name)” changes."
+            + " from \(madeFrom). Nothing in “\(label(of: repository))” changes."
 
         let name = label(of: draft)
         let becomes = snapshots.count == 1
@@ -122,7 +122,7 @@ extension AppModel {
         return AdoptBriefing(
             historyLine: historyLine,
             madeLine: madeLine,
-            repositoryLine: "\(repository.name) — the backups live here",
+            repositoryLine: "\(label(of: repository)) — the backups live here",
             warnings: warnings,
             // Broader than the recent warning: a fresh backup this Mac made
             // gets the confirmation too.
@@ -130,7 +130,7 @@ extension AppModel {
             confirmation: ConfirmationCopy(
                 title: "Adopt “\(name)”?",
                 message: becomes
-                    + " Nothing is written to “\(repository.name)”."
+                    + " Nothing is written to “\(label(of: repository))”."
                     + " If another Mac still runs this plan, both Macs share one history and one retention policy"
                     + " — adopt only backups no other Mac is still making."
             )

@@ -26,7 +26,6 @@ struct ContextCacheTests {
 
     private func makeHarness() -> (model: AppModel, loads: LoadCounter, repository: Repository) {
         var repository = Repository()
-        repository.name = "Cache Test"
         repository.kind = .local
         repository.localPath = "/tmp/swiftrestic-cache-test-repo"
 

@@ -90,6 +90,8 @@ enum BackupRunEngine {
         /// What every surface calls the plan (`AppModel.label(of:)`): the
         /// run's record, hooks and notifications say it.
         func label(of plan: BackupPlan) -> String
+        /// What every surface calls the repository (`AppModel.label(of:)`).
+        func label(of repository: Repository) -> String
         func service() throws -> any ResticClient
         func context(for repository: Repository) async throws -> RepositoryContext
         /// Nil-anchored like the activity entry itself: a phase for a plan
@@ -146,7 +148,7 @@ enum BackupRunEngine {
             event: .beforeBackup,
             planName: planLabel,
             planID: plan.id.uuidString,
-            repositoryName: repository.name,
+            repositoryName: sink.label(of: repository),
             repositoryID: repository.id.uuidString,
             outcome: "starting"
         )
@@ -242,7 +244,7 @@ enum BackupRunEngine {
             // away is, within seconds, never asking restic — which retries
             // such a server for about a quarter of an hour, then fails.
             if repository.kind != .local, case let .unreachable(why)? = await sink.probeServer(of: repository) {
-                let reason = RunRecord.serverUnreachableReason(repositoryName: repository.name, why: why)
+                let reason = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
                 record.outcome = .skipped
                 record.detailText = reason
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
@@ -260,7 +262,7 @@ enum BackupRunEngine {
             let startEvent = NotificationEvent(
                 stage: .started,
                 planName: planLabel,
-                repositoryName: repository.name
+                repositoryName: sink.label(of: repository)
             )
             sink.addStartPing(startEvent)
 
@@ -433,6 +435,9 @@ enum MaintenanceRunEngine {
     @MainActor
     protocol Sink: AnyObject {
         var cancellationMessage: String { get }
+        /// What every surface calls the repository (`AppModel.label(of:)`):
+        /// the run's record and hooks say it.
+        func label(of repository: Repository) -> String
         func service() throws -> any ResticClient
         func context(for repository: Repository) async throws -> RepositoryContext
         /// Prune's live narration, hopped home by the sink itself (only it
@@ -476,7 +481,7 @@ enum MaintenanceRunEngine {
         let startedAt = Date.now
         var record = RunRecord(
             kind: task == .prune ? .prune : .check,
-            planName: repository.name,
+            planName: sink.label(of: repository),
             repositoryID: repository.id,
             startedAt: startedAt
         )
@@ -486,7 +491,7 @@ enum MaintenanceRunEngine {
         let transcript = RunTranscript()
         let hookContext = HookRunner.Context(
             event: .beforeMaintenance,
-            repositoryName: repository.name,
+            repositoryName: sink.label(of: repository),
             repositoryID: repository.id.uuidString,
             maintenanceTask: task.rawValue,
             outcome: "starting"
@@ -567,7 +572,7 @@ enum MaintenanceRunEngine {
                 // drive — Skipped, unstamped, left alone until the network
                 // changes or a listing reads the repository again.
                 record.outcome = .skipped
-                record.detailText = RunRecord.serverUnreachableReason(repositoryName: repository.name, why: why)
+                record.detailText = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
                 sink.markServerAway(repositoryID: repository.id)
                 await finish(
                     record: &record, repository: repository, hooks: hooks, context: hookContext,
@@ -702,6 +707,8 @@ enum RetentionRunEngine {
         func cancellationMessage(for planID: UUID) -> String
         /// What every surface calls the plan (`AppModel.label(of:)`).
         func label(of plan: BackupPlan) -> String
+        /// What every surface calls the repository (`AppModel.label(of:)`).
+        func label(of repository: Repository) -> String
         func service() throws -> any ResticClient
         func context(for repository: Repository) async throws -> RepositoryContext
         func noteAuthFailure(_ error: Error, repositoryID: UUID)

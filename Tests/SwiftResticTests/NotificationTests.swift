@@ -149,7 +149,7 @@ struct NotificationTests {
     @Test("the local notification's title is the run's display name")
     func notificationTitleNamesPlanAndRepository() {
         var home = Repository()
-        home.name = "Home Disk"
+        home.localPath = "/Users/someone/Home Disk"
         var documents = BackupPlan()
         documents.repositoryID = home.id
         documents.path = "/Users/someone/Documents"

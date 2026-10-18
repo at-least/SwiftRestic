@@ -93,67 +93,104 @@ struct EditorRequirementTests {
     @Test("the repository editor names the first unmet requirement per kind")
     func repositoryRequirementPerKind() {
         var draft = Repository()
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
-            == "Name the repository to save it.")
-
-        draft.name = "Vault"
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Choose a folder to save it.")
         draft.localPath = "/Volumes/Backup/restic"
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Set a repository password to save it.")
 
         // Each backend names its own required pair rather than the local one,
         // and every one is pinned so a field rename cannot desync its copy.
         draft.kind = .sftp
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the host and path to save it.")
         draft.kind = .s3
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the bucket and access key ID to save it.")
         draft.kind = .b2
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the bucket and account ID to save it.")
         draft.kind = .azure
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the container and account name to save it.")
         draft.kind = .gcs
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the bucket and service account file to save it.")
         draft.kind = .rest
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the server URL to save it.")
         draft.kind = .rclone
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the rclone remote to save it.")
+    }
+
+    @Test("a location already added cannot be added again — the two would be one repository under two rows")
+    func repositoryLocationIsOnce() {
+        var saved = Repository()
+        saved.kind = .local
+        saved.localPath = "/Volumes/T7/restic"
+        var draft = Repository()
+        draft.kind = .local
+        let taken = "“T7” is already at this location."
+        // Spelled the same, or with a trailing slash: one place.
+        for spelling in ["/Volumes/T7/restic", "/Volumes/T7/restic/"] {
+            draft.localPath = spelling
+            #expect(EditorRequirements.repository(
+                draft, password: "pw", confirmPassword: "pw", isNew: true, hasStoredPassword: nil, among: [saved]
+            ) == taken, "spelled \(spelling)")
+        }
+        // A tilde is the home folder.
+        var home = saved
+        home.localPath = NSHomeDirectory() + "/restic"
+        draft.localPath = "~/restic"
+        #expect(EditorRequirements.repository(
+            draft, password: "pw", confirmPassword: "pw", isNew: true, hasStoredPassword: nil, among: [home]
+        ) == "“restic” is already at this location.")
+        // A server's repository is its URL.
+        var server = Repository()
+        server.kind = .rest
+        server.restURL = "rest:http://nas.local:8000/"
+        var again = Repository()
+        again.kind = .rest
+        again.restURL = "rest:http://nas.local:8000"
+        #expect(EditorRequirements.repository(
+            again, password: "pw", confirmPassword: "pw", isNew: true, hasStoredPassword: nil, among: [server]
+        ) == "“nas.local” is already at this location.")
+        // Another folder on the drive is another repository, and a saved
+        // repository being edited is not in its own way.
+        draft.localPath = "/Volumes/T7/restic-imac"
+        #expect(EditorRequirements.repository(
+            draft, password: "pw", confirmPassword: "pw", isNew: true, hasStoredPassword: nil, among: [saved]
+        ) == nil)
+        #expect(EditorRequirements.repository(
+            saved, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true, among: [saved]
+        ) == nil)
     }
 
     @Test("an SFTP port goes in Port: one typed into Host, or a field that is no port, keeps Save grey")
     func sftpPortRequirement() {
         var draft = Repository()
-        draft.name = "NAS"
         draft.kind = .sftp
         draft.sftpPath = "/volume1/restic"
         // restic would dial 22 and read "2222:/volume1/restic" as the path.
         draft.sftpHost = "nas.local:2222"
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true, among: [])
             == "Put the port in Port, not in Host.")
         draft.sftpHost = "nas.local"
         for bad in ["0", "65536", "22a", " 22"] {
             draft.sftpPort = bad
-            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true)
+            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true, among: [])
                 == "Port is a number from 1 to 65535.", "\(bad)")
         }
         for good in ["", "22", "2222", "65535"] {
             draft.sftpPort = good
-            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true) == nil, "\(good)")
+            #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true, among: []) == nil, "\(good)")
         }
     }
 
     @Test("an edit's Save asks restic first only when the edit changes what reaches restic")
     func editReachesRestic() {
         var initial = Repository()
-        initial.name = "NAS"
         initial.kind = .sftp
         initial.sftpHost = "nas.local"
         initial.sftpPath = "/volume1/restic"
@@ -168,7 +205,6 @@ struct EditorRequirementTests {
         }
         // Saved at once: nothing restic sees changed.
         #expect(!reaches { _ in })
-        #expect(!reaches { $0.name = "Home NAS" })
         #expect(!reaches { $0.maintenance.checkEnabled.toggle() })
         #expect(!reaches { $0.hooks = [BackupHook()] })
         // Checked first.
@@ -189,41 +225,39 @@ struct EditorRequirementTests {
     @Test("the password rules only bind a new repository")
     func passwordRules() {
         var draft = Repository()
-        draft.name = "Vault"
         draft.localPath = "/Volumes/Backup/restic"
 
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Set a repository password to save it.")
-        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "no", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "no", isNew: true, hasStoredPassword: nil, among: [])
             == "The passwords do not match yet.")
-        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "secret", isNew: true, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "secret", isNew: true, hasStoredPassword: nil, among: [])
             == nil)
         // An existing repository keeps its Keychain password; blank fields are
         // how "unchanged" is spelled, not a gap.
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true, among: [])
             == nil)
     }
 
     @Test("an existing repository with no password on this Mac needs one typed before it can be saved")
     func missingStoredPassword() {
         var draft = Repository()
-        draft.name = "Vault"
         draft.localPath = "/Volumes/Backup/restic"
 
         // Known absent: the blank field is the gap the listing already names.
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: false)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: false, among: [])
             == "Enter the repository password to save it.")
-        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "", isNew: false, hasStoredPassword: false)
+        #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "", isNew: false, hasStoredPassword: false, among: [])
             == nil)
         // Stored, or not yet known (the Keychain still answering, or its
         // read failed): a blank field means unchanged.
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true, among: [])
             == nil)
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: nil)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: nil, among: [])
             == nil)
         // The location's gaps come first, in field order.
         draft.localPath = ""
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: false)
+        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: false, among: [])
             == "Choose a folder to save it.")
     }
 

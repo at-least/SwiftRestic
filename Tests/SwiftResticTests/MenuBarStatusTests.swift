@@ -14,9 +14,11 @@ struct MenuBarStatusTests {
         return plan
     }
 
+    /// A repository is called by where it is: a folder off the startup
+    /// disk by its own name, so `name` ends the path.
     private func repository(named name: String) -> Repository {
         var repository = Repository()
-        repository.name = name
+        repository.localPath = "/Users/someone/\(name)"
         return repository
     }
 
@@ -212,7 +214,7 @@ struct MenuBarStatusTests {
             repositories: [repository],
             maintenance: [repository.id: MaintenanceActivity(task: .check)]
         )
-        #expect(busy.map(\.text) == ["\(repository.name) — check running"])
+        #expect(busy.map(\.text) == ["\(repository.label(among: [repository])) — check running"])
 
         let console = MenuBarStatus.consoleLine(isRunning: true)
         #expect(console?.id == "console")
@@ -346,7 +348,7 @@ struct MenuBarStatusTests {
     func submenuNewsLines() {
         let now = Date.now
         var home = Repository()
-        home.name = "Home NAS"
+        home.localPath = "/Users/someone/Home NAS"
         func plan(_ name: String) -> BackupPlan {
             var plan = BackupPlan()
             plan.repositoryID = home.id
@@ -385,7 +387,7 @@ struct MenuBarStatusTests {
     @Test("Back Up Now waits while its repository is locked exclusively, and says why")
     func backUpWaitsForAnExclusiveLock() {
         var repository = Repository()
-        repository.name = "Home NAS"
+        repository.localPath = "/Users/someone/Home NAS"
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = "/Users/someone/Documents"

@@ -17,7 +17,7 @@ extension AppModel {
             // must not read as a problem with another's.
             post(Banner(
                 title: "Keychain",
-                message: "Could not save “\(repository.name)”'s password: \(error.localizedDescription)",
+                message: "Could not save “\(label(of: repository))”'s password: \(error.localizedDescription)",
                 isError: true
             ))
         }
@@ -45,7 +45,7 @@ extension AppModel {
         if !overridden.isEmpty {
             post(Banner(
                 title: "Ignored environment variables",
-                message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; an entry for it in “\(repository.name)”'s extra environment (configuration file) has no effect.",
+                message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; an entry for it in “\(label(of: repository))”'s extra environment (configuration file) has no effect.",
                 isError: false
             ))
         }
@@ -185,7 +185,7 @@ extension AppModel {
         if let cached = resolvedContexts[repository.id], cached.repository == repository {
             return cached.context
         }
-        let context = try await Self.dragContext(repository: repository, secrets: secrets)
+        let context = try await Self.dragContext(repository: repository, label: label(of: repository), secrets: secrets)
         resolvedContexts[repository.id] = (repository, context)
         return context
     }
@@ -211,7 +211,7 @@ extension AppModel {
         do {
             try await secrets.save(repositoryID, newPassword, nil)
         } catch {
-            throw PasswordNotStored(repositoryName: repository.name, reason: error.localizedDescription)
+            throw PasswordNotStored(repositoryName: label(of: repository), reason: error.localizedDescription)
         }
     }
 

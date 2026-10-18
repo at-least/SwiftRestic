@@ -221,6 +221,7 @@ enum Scheduler {
     static func nextMaintenanceText(
         _ task: MaintenanceTask,
         of repository: Repository,
+        among repositories: [Repository],
         hold: ScheduleHold?,
         awaitingServer: Bool = false,
         now: Date = .now
@@ -235,7 +236,7 @@ enum Scheduler {
             return "When “\(volume)” is connected"
         }
         if due <= now, awaitingServer {
-            return "When “\(repository.name)” can be reached"
+            return "When “\(repository.label(among: repositories))” can be reached"
         }
         let date = max(due, hold?.resumesAt ?? .distantPast)
         guard date > now else { return hold == nil ? "Due now" : "Waiting" }

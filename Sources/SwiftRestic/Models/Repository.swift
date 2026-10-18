@@ -40,7 +40,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     }
 
     var id: UUID = UUID()
-    var name: String = ""
     var kind: Kind = .local
     var createdAt: Date = .now
 
@@ -109,7 +108,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.value(.id, default: UUID())
-        name = c.value(.name, default: "")
         kind = c.value(.kind, default: .local)
         createdAt = c.value(.createdAt, default: .now)
         localPath = c.value(.localPath, default: "")
@@ -212,7 +210,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     /// Whether the required non-secret fields are filled in.
     var isConfigurationComplete: Bool {
-        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         switch kind {
         case .local: return !localPath.isEmpty
         case .sftp: return !sftpHost.isEmpty && !sftpPath.isEmpty
@@ -222,6 +219,47 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .gcs: return !gcsBucket.isEmpty && !gcsCredentialsPath.isEmpty
         case .rest: return !restURL.isEmpty
         case .rclone: return !rcloneRemote.isEmpty
+        }
+    }
+
+    /// What every surface calls the repository — it has no name of its
+    /// own: where it is, said short. A local folder on a drive is the
+    /// drive's name (`VolumePresence.volumeName`, the name the drive-away
+    /// and drive-full words use), any other local folder its own name; SFTP
+    /// and a REST server their host; S3, B2 and Google Cloud Storage their
+    /// bucket; Azure its container; rclone its remote. When another of
+    /// `repositories` would read the same, each reads as its location
+    /// (`displayLocation`). "Untitled Repository" while it has no location.
+    /// Builds before 2026-10-18 stored a name; a configuration's key is
+    /// ignored.
+    func label(among repositories: [Repository]) -> String {
+        let short = shortLabel
+        guard !short.isEmpty else { return "Untitled Repository" }
+        let twin = repositories.contains { $0.id != id && $0.shortLabel == short }
+        return twin ? displayLocation : short
+    }
+
+    /// The location as the repository page shows it: restic's repository
+    /// string, a local path tilde-abbreviated.
+    var displayLocation: String {
+        kind == .local ? (resolvedLocalPath as NSString).abbreviatingWithTildeInPath : resticRepositoryString
+    }
+
+    private var shortLabel: String {
+        switch kind {
+        case .local:
+            let path = resolvedLocalPath
+            guard !path.isEmpty else { return "" }
+            return VolumePresence.volumeName(of: path) ?? (path as NSString).lastPathComponent
+        case .sftp: return sftpHost
+        case .rest:
+            let url = restURL.hasPrefix("rest:") ? String(restURL.dropFirst("rest:".count)) : restURL
+            return URL(string: url)?.host ?? url
+        case .s3: return s3Bucket
+        case .b2: return b2Bucket
+        case .azure: return azureContainer
+        case .gcs: return gcsBucket
+        case .rclone: return rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
         }
     }
 

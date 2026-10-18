@@ -33,7 +33,7 @@ struct RepositoryDetailView: View {
                 ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
             }
         }
-        .navigationTitle(repository?.name ?? "Repository")
+        .navigationTitle(repository.map { model.label(of: $0) } ?? "Repository")
         .toolbar {
             // The page's verbs: read it again, change it. A new plan in
             // this repository starts from the sidebar's + or ⌘N, both into
@@ -218,7 +218,8 @@ struct RepositoryDetailView: View {
                     let hold = model.scheduleHold
                     let awaitingServer = model.upkeepAwaitingServer.contains(repositoryID)
                     DetailRow("Next check", Scheduler.nextMaintenanceText(
-                        .check, of: repository, hold: hold, awaitingServer: awaitingServer, now: now
+                        .check, of: repository, among: model.configuration.repositories,
+                        hold: hold, awaitingServer: awaitingServer, now: now
                     ))
                     if repository.maintenance.pruneEnabled {
                         DetailRow("Last prune") {
@@ -228,7 +229,8 @@ struct RepositoryDetailView: View {
                             )
                         }
                         DetailRow("Next prune", Scheduler.nextMaintenanceText(
-                            .prune, of: repository, hold: hold, awaitingServer: awaitingServer, now: now
+                            .prune, of: repository, among: model.configuration.repositories,
+                            hold: hold, awaitingServer: awaitingServer, now: now
                         ))
                     } else {
                         // Off is a fact the page states beside the disk bar,

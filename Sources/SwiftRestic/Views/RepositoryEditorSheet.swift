@@ -70,7 +70,9 @@ struct RepositoryEditorSheet: View {
     private static let probeTimeout: TimeInterval = 60
 
     init(repository: Repository, onCreated: @escaping (UUID) -> Void = { _ in }) {
-        isNew = repository.name.isEmpty && repository.localPath.isEmpty
+        // A new repository opens as `Repository()`: a local folder not yet
+        // chosen. A saved one always has its location (Save requires it).
+        isNew = repository.kind == .local && repository.localPath.isEmpty
         var repository = repository
         // A new repository prunes by default and checks at its kind's depth;
         // one being edited keeps what was saved for it.
@@ -275,7 +277,6 @@ struct RepositoryEditorSheet: View {
     private var settingsForm: some View {
         Form {
             Section {
-                TextField("Name", text: $draft.name, prompt: Text("Home backups"))
                 // The eight kinds grouped by where the backup lives: the
                 // destination answers "where is it" as the section header
                 // above each kind, so one control carries both questions.
@@ -436,7 +437,7 @@ struct RepositoryEditorSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .confirmationDialog(
-            "Change the password of “\(draft.name)”?",
+            "Change the password of “\(draftLabel)”?",
             isPresented: $isConfirmingPasswordChange,
             titleVisibility: .visible
         ) {
@@ -472,7 +473,7 @@ struct RepositoryEditorSheet: View {
             newPassword = ""
             confirmNewPassword = ""
             isChangingPassword = false
-            status = .ok("Password changed. The old password no longer opens “\(draft.name)”.")
+            status = .ok("Password changed. The old password no longer opens “\(draftLabel)”.")
         } catch {
             status = .failure(error.localizedDescription)
         }
@@ -594,7 +595,8 @@ struct RepositoryEditorSheet: View {
             password: password,
             confirmPassword: confirmPassword,
             isNew: isNew,
-            hasStoredPassword: hasStoredPassword
+            hasStoredPassword: hasStoredPassword,
+            among: model.configuration.repositories
         )
     }
 
@@ -609,7 +611,7 @@ struct RepositoryEditorSheet: View {
             return "restic encrypts everything with this password. There is no recovery if you lose it — store it in your password manager."
         }
         if hasStoredPassword == false {
-            return ResticError.passwordMissing(repositoryName: draft.name).localizedDescription
+            return ResticError.passwordMissing(repositoryName: draftLabel).localizedDescription
                 + " Enter it here to read it and back up to it."
         }
         return "Leave blank to keep the password already saved in your Keychain."
@@ -657,8 +659,14 @@ struct RepositoryEditorSheet: View {
         try EditorRequirements.probePassword(
             typed: password,
             stored: password.isEmpty ? storedSecrets?.password : nil,
-            repositoryName: draft.name
+            repositoryName: draftLabel
         )
+    }
+
+    /// What every surface calls the repository being edited — its location
+    /// as it stands in the form.
+    private var draftLabel: String {
+        draft.label(among: model.configuration.repositories)
     }
 
     private var hasStoredPassword: Bool? {

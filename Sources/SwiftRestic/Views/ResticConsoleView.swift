@@ -94,7 +94,7 @@ struct ResticConsoleView: View {
             Picker("Repository", selection: $console.repositoryID) {
                 Text("Choose…").tag(UUID?.none)
                 ForEach(model.configuration.repositories) { repository in
-                    Text(repository.name).tag(UUID?.some(repository.id))
+                    Text(model.label(of: repository)).tag(UUID?.some(repository.id))
                 }
             }
 

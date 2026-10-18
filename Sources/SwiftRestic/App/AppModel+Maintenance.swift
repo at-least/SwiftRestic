@@ -23,12 +23,12 @@ extension AppModel {
     var lockedRepositories: [UUID: String] {
         var reasons: [UUID: String] = [:]
         for (repositoryID, work) in maintenance {
-            let name = repository(id: repositoryID)?.name ?? "The repository"
+            let name = repository(id: repositoryID).map { label(of: $0) } ?? "The repository"
             reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
         }
         for (planID, run) in activity where run.phase == .applyingRetention {
             guard let plan = plan(id: planID), let repositoryID = plan.repositoryID, reasons[repositoryID] == nil else { continue }
-            let name = repository(id: repositoryID)?.name ?? "The repository"
+            let name = repository(id: repositoryID).map { label(of: $0) } ?? "The repository"
             reasons[repositoryID] = "\(name) is applying retention for “\(label(of: plan))” — backups wait until it finishes."
         }
         return reasons
@@ -64,7 +64,7 @@ extension AppModel {
         guard let repository = repository(id: repositoryID) else { return }
         guard !busyRepositoryIDs.contains(repositoryID) else {
             post(Banner(
-                title: "“\(repository.name)” is busy",
+                title: "“\(label(of: repository))” is busy",
                 message: "A backup or another maintenance job is already using this repository.",
                 isError: false
             ))
@@ -126,7 +126,7 @@ extension AppModel {
             do {
                 let service = try self.service()
                 try await service.unlock(self.context(for: repository))
-                self.post(Banner(title: "Removed stale locks", message: repository.name, isError: false))
+                self.post(Banner(title: "Removed stale locks", message: label(of: repository), isError: false))
             } catch {
                 self.noteAuthFailure(error, repositoryID: repositoryID)
                 // The queue is global: name the repository whose locks
@@ -134,7 +134,7 @@ extension AppModel {
                 self.post(
                     Banner(
                         title: "Unlock failed",
-                        message: "Could not remove “\(repository.name)”'s stale locks: \(error.localizedDescription)",
+                        message: "Could not remove “\(label(of: repository))”'s stale locks: \(error.localizedDescription)",
                         isError: true
                     )
                 )
@@ -188,7 +188,7 @@ extension AppModel: MaintenanceRunEngine.Sink {
         switch record.outcome {
         case .failed:
             post(Banner(
-                title: "\(record.kind.displayName) failed on “\(repository.name)”",
+                title: "\(record.kind.displayName) failed on “\(label(of: repository))”",
                 message: record.failureMessage ?? "",
                 isError: true
             ))
@@ -198,7 +198,7 @@ extension AppModel: MaintenanceRunEngine.Sink {
             // for what.
             guard maintenance[repository.id]?.askedByUser == true else { break }
             post(Banner(
-                title: "\(record.kind.displayName) of “\(repository.name)” skipped",
+                title: "\(record.kind.displayName) of “\(label(of: repository))” skipped",
                 message: record.detailText ?? "",
                 isError: false,
                 symbolName: RunRecord.Outcome.skipped.symbolName

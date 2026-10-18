@@ -18,10 +18,10 @@ struct RunLogTests {
 
     @Test("a rendered log leads with versions and the run, lists entries by time, and ends with the verdict")
     func renderedLog() {
+        // Called by its drive, the path itself kept out of the log.
         var repository = Repository()
-        repository.name = "Home NAS"
         repository.kind = .local
-        repository.localPath = "/Volumes/Secret/repo"
+        repository.localPath = "/Volumes/Home NAS/repo"
 
         var record = RunRecord(kind: .backup, planName: "Documents", repositoryID: repository.id, startedAt: at(0))
         record.finishedAt = at(2)
@@ -47,7 +47,7 @@ struct RunLogTests {
 
         let text = RunLog.render(
             record: record,
-            repositoryName: repository.name,
+            repositoryName: repository.label(among: [repository]),
             repositoryKind: repository.kind.displayName,
             versions: versions,
             transcript: contents,
@@ -71,7 +71,7 @@ struct RunLogTests {
         #expect(lines.contains("Files: 1 new, 0 changed, 2 unmodified · processed \(Format.bytes(5000)) · added \(Format.bytes(5300))"))
         // Named and kinded, never located: the location can carry a host,
         // a bucket or a user name the log has no business repeating.
-        #expect(!text.contains("/Volumes/Secret/repo"))
+        #expect(!text.contains("/Volumes/Home NAS/repo"))
         #expect(!text.contains("omitted"))
     }
 

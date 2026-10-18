@@ -48,7 +48,6 @@ struct IndexBackfillTests {
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
 
         var repository = Repository()
-        repository.name = label
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         var plan = BackupPlan()

@@ -38,10 +38,11 @@ struct AppModelStubTests {
         let root = base.resolvingSymlinksInPath()
         let stub = try StubRestic.install(in: root)
 
+        // A repository is called by where it is: this folder's name is the
+        // repository's in every banner and line below.
         var repository = Repository()
-        repository.name = "Stub Repo"
         repository.kind = .local
-        repository.localPath = root.appendingPathComponent("repo").path
+        repository.localPath = root.appendingPathComponent("Stub Repo").path
         repository.extraEnvironment = [
             "SWIFTRESTIC_STUB": mode,
             // Where the stub logs which lines of itself actually ran.
@@ -1313,7 +1314,8 @@ struct AppModelStubTests {
 
         #expect(model.configuration.runs.first?.outcome == .skipped)
         // Found by its title: the launch's listing posts its own banners.
-        let banner = try #require(model.banners.first { $0.title == "Check of “Stub Repo” skipped" })
+        // The repository is called by its drive now that it is on one.
+        let banner = try #require(model.banners.first { $0.title == "Check of “\(volume)” skipped" })
         #expect(banner.message == "“\(volume)” is not connected.")
         #expect(!banner.isError)
         #expect(model.repository(id: id)?.maintenance.lastCheckAt == nil)
@@ -1593,7 +1595,6 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
         var other = Repository()
-        other.name = "Other Repo"
         other.kind = .local
         other.localPath = harness.root.appendingPathComponent("other").path
         var kept = BackupPlan()

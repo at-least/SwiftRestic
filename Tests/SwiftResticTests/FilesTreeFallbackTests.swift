@@ -21,7 +21,6 @@ struct ResticFilesFallbackTests {
         try "a".write(to: data.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
 
         var repository = Repository()
-        repository.name = "Fallback"
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         let password = "fallback-test"
@@ -108,7 +107,6 @@ struct ResticFilesFallbackTests {
             let data = root.appendingPathComponent("Data")
             try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
             var repository = Repository()
-            repository.name = "Read-ahead"
             repository.kind = .local
             repository.localPath = root.appendingPathComponent("repo").path
             let password = "read-ahead-test"

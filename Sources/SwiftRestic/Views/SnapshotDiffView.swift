@@ -124,7 +124,7 @@ struct SnapshotDiffView: View {
                     // nothing to compare anyway.
                     Text(
                         "Changes in snapshot \(newer.shortID)"
-                            + (model.repository(id: target.repositoryID).map { " — \($0.name)" } ?? "")
+                            + (model.repository(id: target.repositoryID).map { " — \(model.label(of: $0))" } ?? "")
                     )
                         .font(.headline)
                     Text(Format.timestamp(newer.time))

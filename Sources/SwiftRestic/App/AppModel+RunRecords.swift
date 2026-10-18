@@ -34,7 +34,7 @@ extension AppModel {
         let versions = RunLogVersions.current(resticVersion: resticVersion)
         if !resticVersion.isEmpty { record.resticVersion = versions.restic }
         let repository = repository(id: record.repositoryID)
-        let name = repository?.name
+        let name = repository.map { label(of: $0) }
         let kind = repository?.kind.displayName
         let logs = runLogs
         let sealed = record
@@ -131,7 +131,7 @@ extension AppModel {
 
         if let planID = plan?.id { activity[planID]?.phase = .notifying }
 
-        let event = Self.notificationEvent(for: record, repositoryName: repository(id: record.repositoryID)?.name ?? "")
+        let event = Self.notificationEvent(for: record, repositoryName: repository(id: record.repositoryID).map { label(of: $0) } ?? "")
 
         let failures = await NotificationPoster.broadcast(event, to: channels)
         if !failures.isEmpty {

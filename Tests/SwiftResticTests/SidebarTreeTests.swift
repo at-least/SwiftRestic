@@ -15,9 +15,11 @@ struct SidebarTreeTests {
         return plan
     }
 
+    /// A repository is called by where it is: a folder off the startup
+    /// disk by its own name, so `name` ends the path.
     private func repository(_ name: String) -> Repository {
         var repository = Repository()
-        repository.name = name
+        repository.localPath = "/Users/someone/\(name)"
         return repository
     }
 

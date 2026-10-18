@@ -47,7 +47,7 @@ enum EditorRequirements {
     /// Whether an edit's Save asks restic first: when it changes what
     /// reaches restic — the location, a credential, the environment — or
     /// the password, any of which a typo turns into every plan failing. A
-    /// rename, a rate limit, a maintenance setting or a hook saves at once.
+    /// rate limit, a maintenance setting or a hook saves at once.
     static func editReachesRestic(
         draft: Repository,
         initial: Repository,
@@ -76,6 +76,13 @@ enum EditorRequirements {
         return nil
     }
 
+    /// A repository's location as restic reads it, for comparing two
+    /// spellings of one: a trailing slash dropped.
+    private static func comparableLocation(_ repository: Repository) -> String {
+        let location = repository.resticRepositoryString
+        return location.count > 1 && location.hasSuffix("/") ? String(location.dropLast()) : location
+    }
+
     /// The repository a plan editor opens on: the plan's own, else the
     /// only one there is. With two or more the picker says Choose… and the
     /// footer asks — a silent first pick lands the plan wherever the first
@@ -89,17 +96,16 @@ enum EditorRequirements {
     /// when this Mac holds no password for it — then a blank field is not
     /// "unchanged" but the gap every run already names. `hasStoredPassword`
     /// is nil until the Keychain has answered, and stays nil when the read
-    /// failed: an error must not be read as "nothing stored".
+    /// failed: an error must not be read as "nothing stored". `repositories`
+    /// is every configured one, the draft's saved entry among them.
     static func repository(
         _ draft: Repository,
         password: String,
         confirmPassword: String,
         isNew: Bool,
-        hasStoredPassword: Bool?
+        hasStoredPassword: Bool?,
+        among repositories: [Repository]
     ) -> String? {
-        if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
-            return "Name the repository to save it."
-        }
         switch draft.kind {
         case .local:
             if draft.localPath.isEmpty { return "Choose a folder to save it." }
@@ -123,6 +129,13 @@ enum EditorRequirements {
             if draft.restURL.isEmpty { return "Enter the server URL to save it." }
         case .rclone:
             if draft.rcloneRemote.isEmpty { return "Enter the rclone remote to save it." }
+        }
+        // Without a name of their own, two entries for one place would be
+        // two identical rows — and two schedulers' checks and prunes on one
+        // repository.
+        let location = comparableLocation(draft)
+        if let other = repositories.first(where: { $0.id != draft.id && comparableLocation($0) == location }) {
+            return "“\(other.label(among: repositories))” is already at this location."
         }
         if isNew {
             if password.isEmpty {

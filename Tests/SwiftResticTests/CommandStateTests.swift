@@ -26,11 +26,12 @@ struct CommandStateTests {
         return model
     }
 
+    /// A repository is called by where it is: a folder off the startup
+    /// disk by its own name, so `name` ends the path.
     private func makeRepository(_ name: String = "NAS") -> Repository {
         var repository = Repository()
-        repository.name = name
         repository.kind = .local
-        repository.localPath = "/tmp/command-state-repo"
+        repository.localPath = "/Users/someone/\(name)"
         return repository
     }
 

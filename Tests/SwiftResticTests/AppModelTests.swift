@@ -41,7 +41,6 @@ struct AppModelTests {
         try "two".write(to: sourceDirectory.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
 
         var repository = Repository()
-        repository.name = "Test Repo"
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         // In stub mode the model runs a fake restic whose `backup` hangs until
@@ -147,6 +146,7 @@ struct AppModelTests {
             service: try model.service(),
             secrets: model.secrets,
             repository: harness.repository,
+            repositoryLabel: model.label(of: harness.repository),
             snapshotID: snapshot.id,
             node: node
         )
@@ -1294,7 +1294,6 @@ struct UpsertStampTests {
     func repositoryStampsSurviveStaleUpsert() async {
         let model = makeModel()
         var repository = Repository()
-        repository.name = "NAS"
         repository.kind = .local
         repository.localPath = "/tmp/somewhere"
 
@@ -1305,12 +1304,12 @@ struct UpsertStampTests {
         model.configuration.repositories[0].maintenance.lastPruneAt = checkedAt
 
         var staleDraft = repository
-        staleDraft.name = "NAS (renamed)"
+        staleDraft.uploadLimitKiBps = 512
         await model.upsert(repository: staleDraft, password: nil, providerSecret: nil)
 
         #expect(model.configuration.repositories[0].maintenance.lastCheckAt == checkedAt)
         #expect(model.configuration.repositories[0].maintenance.lastPruneAt == checkedAt)
-        #expect(model.configuration.repositories[0].name == "NAS (renamed)")
+        #expect(model.configuration.repositories[0].uploadLimitKiBps == 512)
     }
 }
 
@@ -1401,9 +1400,8 @@ struct StartAtLoginSurfaceTests {
             secrets: .inMemory()
         )
         var repository = Repository()
-        repository.name = "NAS"
         repository.kind = .local
-        repository.localPath = "/tmp/somewhere"
+        repository.localPath = "/Users/someone/NAS"
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = "/Users/someone/Documents"
@@ -1460,8 +1458,9 @@ struct StartAtLoginSurfaceTests {
         model.configuration.plans[0].lastRunAt = now.addingTimeInterval(-3600 + 30)
         let imminent = try #require(model.quitScheduleNotice(now: now))
         #expect(imminent.hasPrefix("Documents (NAS) is due now."))
-        // A repository named like the plan is not said twice — the tray's rule.
-        model.configuration.repositories[0].name = "Documents"
+        // A repository called like the plan is not said twice — the tray's
+        // rule.
+        model.configuration.repositories[0].localPath = "/Users/someone/Backups/Documents"
         let sameName = try #require(model.quitScheduleNotice(now: now))
         #expect(sameName.hasPrefix("Documents is due now."))
     }
@@ -1599,7 +1598,6 @@ struct RunReporterTokenTests {
     func lateMaintenanceLineDrops() async throws {
         let model = makeModel()
         var repository = Repository()
-        repository.name = "NAS"
         repository.kind = .local
         repository.localPath = "/tmp/somewhere"
         try await model.upsert(repository: repository, password: nil, providerSecret: nil)
@@ -1643,7 +1641,7 @@ struct KeychainFailureHonestyTests {
         repository.localPath = "/tmp/some-repo"
 
         do {
-            _ = try await AppModel.dragContext(repository: repository, secrets: secrets)
+            _ = try await AppModel.dragContext(repository: repository, label: "some-repo", secrets: secrets)
             Issue.record("expected the keychain failure to surface")
         } catch ResticError.passwordMissing {
             Issue.record("a keychain failure must not masquerade as a missing password")
@@ -1781,7 +1779,6 @@ struct IndexOrphanSweepLaunchTests {
         try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
 
         var repository = Repository()
-        repository.name = "Kept"
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         var configuration = AppConfiguration()
@@ -1883,7 +1880,6 @@ struct OrphanPlanPurgeLaunchTests {
         try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
 
         var repository = Repository()
-        repository.name = "Kept"
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         func plan(_ name: String, repositoryID: UUID?) -> BackupPlan {

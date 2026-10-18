@@ -114,7 +114,7 @@ enum MenuBarStatus {
     /// nothing in its submenu.
     static func protectionLines(repositories: [Repository], summary: (UUID) -> ProtectionSummary?) -> [String] {
         repositories.compactMap { repository in
-            summary(repository.id).map { "\(repository.name) — \($0.text)" }
+            summary(repository.id).map { "\(repository.label(among: repositories)) — \($0.text)" }
         }
     }
 
@@ -320,7 +320,7 @@ enum MenuBarStatus {
                 newsLines(for: plan, among: members, activity: activity[plan.id], problem: problem(plan.id), now: now, relative: relative)
             }
             return rows.isEmpty ? nil : PlanGroup(
-                repositoryID: repository.id, title: repository.name, rows: rows, newsLines: news
+                repositoryID: repository.id, title: repository.label(among: repositories), rows: rows, newsLines: news
             )
         }
     }
@@ -360,7 +360,7 @@ enum MenuBarStatus {
             let task = maintenance[repository.id]?.task.displayName.lowercased() ?? "maintenance"
             return RunningLine(
                 id: "maintenance-\(repository.id.uuidString)",
-                text: "\(repository.name) — \(task) running"
+                text: "\(repository.label(among: repositories)) — \(task) running"
             )
         }
     }

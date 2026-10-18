@@ -25,7 +25,6 @@ struct ConfigStoreTests {
         let store = ConfigStore(directory: directory)
 
         var repository = Repository()
-        repository.name = "NAS"
         repository.kind = .sftp
         repository.sftpHost = "nas.local"
         repository.sftpPath = "/volume1/restic"
@@ -78,16 +77,18 @@ struct ConfigStoreTests {
         let file = directory.appendingPathComponent("config.json")
         try Data(json.utf8).write(to: file)
 
+        // Each repository by what the app calls it — where it is; the names
+        // that earlier build stored are not read.
         func limits(_ configuration: AppConfiguration) -> [String: [Int]] {
             Dictionary(uniqueKeysWithValues: configuration.repositories.map {
-                ($0.name, [$0.uploadLimitKiBps, $0.downloadLimitKiBps])
+                ($0.label(among: configuration.repositories), [$0.uploadLimitKiBps, $0.downloadLimitKiBps])
             })
         }
         let store = ConfigStore(directory: directory)
         let loaded = try await store.load()
         var expected = [
-            "Desk Drive": [0, 0], "Home Folder": [0, 0],
-            "NAS Share": [512, 2048], "NAS": [512, 2048], "Cloud": [512, 2048],
+            "Archive SSD": [0, 0], "restic": [0, 0],
+            "NAS": [512, 2048], "nas.local": [512, 2048], "photos": [512, 2048],
         ]
         #expect(limits(loaded.configuration) == expected)
         #expect(loaded.decodeNotes.isEmpty)
@@ -95,14 +96,14 @@ struct ConfigStoreTests {
         // Saved by this build, the pair is gone from the settings, so a
         // limit lifted afterwards stays lifted.
         var edited = loaded.configuration
-        let cloud = try #require(edited.repositories.firstIndex { $0.name == "Cloud" })
+        let cloud = try #require(edited.repositories.firstIndex { $0.kind == .b2 })
         edited.repositories[cloud].uploadLimitKiBps = 0
         try await store.save(edited)
         let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
         let settings = try #require(saved?["settings"] as? [String: Any])
         #expect(settings["uploadLimitKiBps"] == nil)
         #expect(settings["downloadLimitKiBps"] == nil)
-        expected["Cloud"] = [0, 2048]
+        expected["photos"] = [0, 2048]
         #expect(limits(try await store.load().configuration) == expected)
     }
 
@@ -498,7 +499,6 @@ struct TolerantDecodingTests {
             #"{"name":"NAS","kind":"invented-by-a-newer-build"}"#
         )
         #expect(repository.kind == .local)
-        #expect(repository.name == "NAS")
 
         let plan = try decode(BackupPlan.self, #"{"schedule":{"frequency":"invented"}}"#)
         #expect(plan.schedule.frequency == .daily)
@@ -639,7 +639,7 @@ struct TolerantDecodingTests {
 
         var configuration = AppConfiguration()
         var repository = Repository()
-        repository.name = "Survivor"
+        repository.localPath = "/Users/someone/Survivor"
         configuration.repositories = [repository]
         try await store.save(configuration)
         // A second save is what puts the "Survivor" generation into .1.
@@ -650,7 +650,7 @@ struct TolerantDecodingTests {
         try FileManager.default.removeItem(at: directory.appendingPathComponent("config.json"))
         let loaded = try await store.load()
         #expect(loaded.recoveredFrom == "config.json.1")
-        #expect(loaded.configuration.repositories.first?.name == "Survivor")
+        #expect(loaded.configuration.repositories.first?.localPath == "/Users/someone/Survivor")
     }
 
     @Test("a corrupt live file falls back to the newest generation that reads")
@@ -661,7 +661,7 @@ struct TolerantDecodingTests {
 
         var configuration = AppConfiguration()
         var repository = Repository()
-        repository.name = "Survivor"
+        repository.localPath = "/Users/someone/Survivor"
         configuration.repositories = [repository]
         try await store.save(configuration)
         try await store.save(AppConfiguration())  // generation .1: an empty config
@@ -673,7 +673,7 @@ struct TolerantDecodingTests {
         }
         let loaded = try await store.load()
         #expect(loaded.recoveredFrom == "config.json.2")
-        #expect(loaded.configuration.repositories.first?.name == "Survivor")
+        #expect(loaded.configuration.repositories.first?.localPath == "/Users/someone/Survivor")
     }
 
     @Test("no readable generation anywhere is an error naming the failure")

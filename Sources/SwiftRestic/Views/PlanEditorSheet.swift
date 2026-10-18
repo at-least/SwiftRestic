@@ -411,18 +411,18 @@ struct PlanEditorSheet: View {
                     Picker("Repository", selection: $draft.repositoryID) {
                         Text("Choose…").tag(UUID?.none)
                         ForEach(model.configuration.repositories) { repository in
-                            Text(repository.name).tag(UUID?.some(repository.id))
+                            Text(model.label(of: repository)).tag(UUID?.some(repository.id))
                         }
                     }
                     .labelsHidden()
                     .fixedSize()
                 case .editing:
-                    Text(model.repository(id: draft.repositoryID)?.name ?? "")
+                    Text(model.repository(id: draft.repositoryID).map { model.label(of: $0) } ?? "")
                 case .adopt:
                     // The briefing's own words. While the group is gone —
                     // its page revalidating away — the bare name still says
                     // where this draft points.
-                    Text(briefing?.repositoryLine ?? model.repository(id: draft.repositoryID)?.name ?? "")
+                    Text(briefing?.repositoryLine ?? model.repository(id: draft.repositoryID).map { model.label(of: $0) } ?? "")
                 }
             }
         }

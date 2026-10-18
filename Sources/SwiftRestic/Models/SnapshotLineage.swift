@@ -296,8 +296,8 @@ extension OtherBackupsGroup {
                 // removing a repository takes its plans — so a plan that
                 // names none says no destination rather than a wrong one.
                 if let plan, let destination = repositories.first(where: { $0.id == plan.repositoryID }) {
-                    caption.kind = ["now backs up to “\(destination.name)”"]
-                    detail += "\nThe “\(title)” plan backs up to “\(destination.name)” now; these are its earlier backups."
+                    caption.kind = ["now backs up to “\(destination.label(among: repositories))”"]
+                    detail += "\nThe “\(title)” plan backs up to “\(destination.label(among: repositories))” now; these are its earlier backups."
                 } else if plan == nil {
                     // No configuration holds this plan: it was deleted here,
                     // or is still running on another Mac — the two cannot be

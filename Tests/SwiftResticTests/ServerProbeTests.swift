@@ -8,7 +8,6 @@ struct ServerProbeTests {
 
     private func repository(_ kind: Repository.Kind, _ edit: (inout Repository) -> Void = { _ in }) -> Repository {
         var repository = Repository()
-        repository.name = "Home Server"
         repository.kind = kind
         edit(&repository)
         return repository
