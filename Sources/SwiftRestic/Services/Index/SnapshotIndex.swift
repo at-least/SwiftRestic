@@ -367,10 +367,13 @@ enum IndexError: Error, Equatable {
 /// serializes them too — hence `@unchecked Sendable`. Reads run async on
 /// pool readers, beside the writer.
 final class SnapshotIndex: @unchecked Sendable {
-    /// 3: version 2 had no `edit` or `blind`, and a file without them knows
-    /// nothing of content changes, so it is rebuilt rather than read as if
-    /// no file had ever changed. (1 is taken too: development builds wrote it.)
-    static let schemaVersion: Int32 = 3
+    /// 4: version 3 with the file-node cache in the creation script, where
+    /// an open had added it to every file since the cache came (2026-10-18:
+    /// the one such step, squashed, its files rebuilt once). 3: version 2
+    /// had no `edit` or `blind`, and a file without them knows nothing of
+    /// content changes, so it is rebuilt rather than read as if no file had
+    /// ever changed. (1 is taken too: development builds wrote it.)
+    static let schemaVersion: Int32 = 4
     /// Node ids per batched read: under SQLite's pre-3.32 variable limit of
     /// 999, whatever the system library.
     static let lookupChunk = 400
@@ -416,11 +419,10 @@ final class SnapshotIndex: @unchecked Sendable {
     init(path: String) throws {
         let pool = try DatabasePool(path: path, configuration: Self.configuration())
         do {
-            let (version, objects, hasAddedCaches) = try pool.read { db in
+            let (version, objects) = try pool.read { db in
                 (
                     try Int32.fetchOne(db, sql: "PRAGMA user_version") ?? 0,
-                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_schema") ?? 0,
-                    try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM sqlite_schema WHERE name = 'file_node')") ?? false
+                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_schema") ?? 0
                 )
             }
             switch (version, objects) {
@@ -430,12 +432,6 @@ final class SnapshotIndex: @unchecked Sendable {
                 break
             default:
                 throw IndexError.schemaMismatch(found: version)
-            }
-            // Only when missing: the write takes the writer lock, which
-            // another instance on this configuration folder may hold, and a
-            // store that cannot open is deleted and rebuilt.
-            if !hasAddedCaches {
-                try pool.write { try $0.execute(sql: SnapshotIndexSchema.addedCaches) }
             }
             try pool.writeWithoutTransaction { try $0.execute(sql: SnapshotIndexSchema.temporary) }
         } catch {

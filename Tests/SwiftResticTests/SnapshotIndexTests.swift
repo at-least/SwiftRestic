@@ -1167,23 +1167,24 @@ struct SnapshotIndexBrowseCacheTests {
         #expect(try fixture.index.snapStates()["s1"] != nil)
     }
 
-    @Test("a store from before the file-node cache gains it at its next open and keeps what it held")
-    func fileNodeCacheAddedToAnOlderStore() async throws {
+    @Test("a new file is schema 4, the file-node cache created with the rest; a schema-3 file, cache or not, is refused for the owner to rebuild")
+    func schemaFourHoldsTheFileNodeCache() async throws {
         let fixture = try IndexFixture()
         _ = try fixture.index.reconcile(listing: [try snapshot("s1", 1_000_000)])
-        try await fixture.index.recordListing(snapshotID: "s1", directory: "/src", nodes: [IndexTestData.cachedNode("/src/a.txt")])
         try fixture.index.close()
-        // What a schema-3 file written before the table existed looks like.
-        let queue = try DatabaseQueue(path: fixture.path)
-        try await queue.write { try $0.execute(sql: "DROP TABLE file_node") }
-        try queue.close()
-
-        try fixture.reopen()
-        // Opened, not rebuilt: the listing and the snapshot are still there.
-        #expect(try fixture.index.snapStates()["s1"] != nil)
-        #expect(try await fixture.index.listing(snapshotID: "s1", directory: "/src") != nil)
-        let file = IndexTestData.cachedNode("/src/a.txt")
-        try await fixture.index.recordFileNodes(["/src/a.txt": ["s1": file]])
-        #expect(try await fixture.index.fileNodes(path: "/src/a.txt", snapshotIDs: ["s1"]) == ["s1": file])
+        let side = try DatabaseQueue(path: fixture.path)
+        let (version, hasFileNode) = try await side.read { db in
+            (
+                try Int32.fetchOne(db, sql: "PRAGMA user_version"),
+                try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM sqlite_schema WHERE name = 'file_node')")
+            )
+        }
+        #expect(version == 4)
+        #expect(hasFileNode == true)
+        // Every file written before the squash says 3, whether an open had
+        // added the cache to it or not: another schema.
+        try await side.write { try $0.execute(sql: "PRAGMA user_version = 3") }
+        try side.close()
+        #expect(throws: IndexError.schemaMismatch(found: 3)) { _ = try SnapshotIndex(path: fixture.path) }
     }
 }

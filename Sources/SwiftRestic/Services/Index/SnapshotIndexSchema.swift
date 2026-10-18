@@ -131,13 +131,20 @@ enum SnapshotIndexSchema {
         PRIMARY KEY (older_id, newer_id)
     ) STRICT;
     CREATE INDEX diff_result_newer ON diff_result (newer_id);
+    -- One file's node in one snapshot, as `restic find` reported it: the size and modification
+    -- time a Files pane's version row shows.
+    CREATE TABLE file_node (
+        snapshot_id  TEXT NOT NULL,
+        path         TEXT NOT NULL,              -- the file's exact path, restic's bytes
+        node         TEXT NOT NULL,              -- JSON CachedListingNode
+        PRIMARY KEY (snapshot_id, path)
+    ) STRICT, WITHOUT ROWID;
     -- Every snapshot ID that has any cache row: makes the sweep keyed, not a table scan.
-    -- (file_node, a cache added after this version shipped, is created by `addedCaches`.)
     CREATE TABLE cache_owner (
         snapshot_id  TEXT PRIMARY KEY
     ) STRICT, WITHOUT ROWID;
 
-    PRAGMA user_version = 3;
+    PRAGMA user_version = 4;
     """
 
     /// Created on the pool's writer connection when the store opens. TEMP
@@ -156,24 +163,6 @@ enum SnapshotIndexSchema {
     -- Node ids queued for collection: housekeeping's and a discarded stage's fills queue the
     -- first level, collectNodes each next one, and it leaves the table empty.
     CREATE TEMP TABLE IF NOT EXISTS gc (id INTEGER PRIMARY KEY);
-    """
-
-    /// Browse caches added after schema 3 shipped, created at every open
-    /// rather than in `create`: a cache starts empty either way, and a
-    /// schema bump would delete and rebuild every repository's index — a
-    /// full restic re-read — only to add one. A store from before gains it
-    /// at its next open, a new one right after `create`. The open runs this
-    /// only when its probe finds no `file_node` table, so a cache added here
-    /// joins that probe.
-    static let addedCaches = """
-    -- One file's node in one snapshot, as `restic find` reported it: the size and modification
-    -- time a Files pane's version row shows. Owned through cache_owner and swept with the rest.
-    CREATE TABLE IF NOT EXISTS file_node (
-        snapshot_id  TEXT NOT NULL,
-        path         TEXT NOT NULL,              -- the file's exact path, restic's bytes
-        node         TEXT NOT NULL,              -- JSON CachedListingNode
-        PRIMARY KEY (snapshot_id, path)
-    ) STRICT, WITHOUT ROWID;
     """
 
     /// Every statement the store runs, one stored `let` each, named by its
