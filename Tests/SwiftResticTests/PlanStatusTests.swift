@@ -308,8 +308,8 @@ struct PlanStatusTests {
             for: plan, activity: nil, problem: run(.completedWithErrors),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
-        #expect(withErrors.text.hasPrefix("Completed with errors — "))
-        #expect(withErrors.shortText == "Errors — " + withErrors.text.dropFirst("Completed with errors — ".count))
+        #expect(withErrors.text.hasPrefix("Completed with warnings — "))
+        #expect(withErrors.shortText == "Warnings — " + withErrors.text.dropFirst("Completed with warnings — ".count))
         let failed = PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: run(.failed),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
@@ -493,7 +493,7 @@ struct PlanStatusTests {
         partial.itemErrorCount = 120
 
         let summary = PlanStatus.summary(of: partial)
-        #expect(summary.headline == "Backup completed with errors")
+        #expect(summary.headline == "Backup completed with warnings")
         // The card lists the first five items with their fixes and leaves
         // the rest — restic's count less the listed — to Activity; the
         // message explains what the items do not (here the retention line).

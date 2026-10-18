@@ -502,7 +502,7 @@ struct PlanEditorSheet: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(Theme.warning)
                             .accessibilityHidden(true)
-                        Text("Without Full Disk Access, macOS keeps parts of “\((source as NSString).abbreviatingWithTildeInPath)” from SwiftRestic, and backups of it finish with warnings.")
+                        Text("Without Full Disk Access, macOS keeps parts of “\((source as NSString).abbreviatingWithTildeInPath)” from SwiftRestic, and backups of it complete with warnings.")
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .font(.callout)
@@ -698,7 +698,7 @@ struct PlanEditorSheet: View {
                     // bucket arithmetic is impossible to eyeball, so project
                     // the outcome instead of restating the rules.
                     Label(
-                        "≈ \(projection.keptSnapshots) snapshots would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule.",
+                        "≈ \(projection.keptSnapshots) backups would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule.",
                         systemImage: "chart.bar.doc.horizontal"
                     )
                     .foregroundStyle(.secondary)
@@ -718,12 +718,12 @@ struct PlanEditorSheet: View {
                 {
                     let count = model.snapshots(for: repositoryID, planID: draft.id).count
                     if count > 0 {
-                        LabeledContent("Snapshots now", value: Format.count(count))
+                        LabeledContent("Backups now", value: Format.count(count))
                     }
                 }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
                     Label(
-                        "With every rule at zero, restic would delete all snapshots. Retention is skipped until at least one rule is set.",
+                        "With every rule at zero, restic would delete all backups. Retention is skipped until at least one rule is set.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(Theme.warning)

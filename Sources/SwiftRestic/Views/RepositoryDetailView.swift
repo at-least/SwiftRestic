@@ -56,7 +56,7 @@ struct RepositoryDetailView: View {
                 Button("Refresh", systemImage: "arrow.clockwise") {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
-                .help("Re-read snapshots and statistics")
+                .help("Re-read backups and statistics")
             }
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.fixed)
@@ -99,7 +99,7 @@ struct RepositoryDetailView: View {
                                 .truncationMode(.middle)
                         }
                         DetailRow("Size", Format.bytes(model.repositoryStats[repositoryID]?.totalSize))
-                        DetailRow("Snapshots") { snapshotsValue }
+                        DetailRow("Backups") { snapshotsValue }
                     }
                     volumeStrip(repository)
                 }
@@ -148,7 +148,7 @@ struct RepositoryDetailView: View {
         case let .failed(message):
             Text("—").help(message)
         case .idle:
-            Text("—").help("The snapshot list has not finished loading.")
+            Text("—").help("The list of backups has not finished loading.")
         }
     }
 

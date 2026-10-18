@@ -194,7 +194,7 @@ struct HookEditor: View {
     SWIFTRESTIC_REPO_NAME         repository name
     SWIFTRESTIC_REPO_ID           repository UUID
     SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed
-    SWIFTRESTIC_SNAPSHOT_ID       set once a snapshot exists
+    SWIFTRESTIC_SNAPSHOT_ID       set once the backup is written
     SWIFTRESTIC_ERROR             set only when something failed
     SWIFTRESTIC_FILES_NEW         file count
     SWIFTRESTIC_FILES_CHANGED     file count

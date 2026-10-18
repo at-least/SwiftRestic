@@ -38,7 +38,7 @@ struct RunLogTests {
                 .init(time: at(1), kind: .output(.stderr), text: "/src/gone does not exist, skipping"),
                 .init(time: at(1), kind: .output(.stdout), text: #"{"message_type":"summary","files_new":1}"#),
                 .init(time: at(1), kind: .exit(3), text: "3"),
-                .init(time: at(2), kind: .note, text: "Retention removed 0 snapshots"),
+                .init(time: at(2), kind: .note, text: "Retention removed 0 backups"),
             ],
             headCount: 5,
             omittedLineCount: 0,
@@ -65,9 +65,9 @@ struct RunLogTests {
         #expect(lines.contains("07:58:18 err  /src/gone does not exist, skipping"))
         #expect(lines.contains(#"07:58:18 out  {"message_type":"summary","files_new":1}"#))
         #expect(lines.contains("07:58:18 exit 3"))
-        #expect(lines.contains("07:58:19 note Retention removed 0 snapshots"))
-        #expect(lines.contains("Finished 2026-09-26 07:58:19 +0000 after 2s — Completed with errors"))
-        #expect(lines.contains("Snapshot 61b0f11423fd96e36f2fb2ddefdb4d41a4331adf2041828fcef2f679eaf97bfe"))
+        #expect(lines.contains("07:58:19 note Retention removed 0 backups"))
+        #expect(lines.contains("Finished 2026-09-26 07:58:19 +0000 after 2s — Completed with warnings"))
+        #expect(lines.contains("Backup 61b0f11423fd96e36f2fb2ddefdb4d41a4331adf2041828fcef2f679eaf97bfe"))
         #expect(lines.contains("Files: 1 new, 0 changed, 2 unmodified · processed \(Format.bytes(5000)) · added \(Format.bytes(5300))"))
         // Named and kinded, never located: the location can carry a host,
         // a bucket or a user name the log has no business repeating.

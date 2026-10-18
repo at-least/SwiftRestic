@@ -587,7 +587,7 @@ struct SnapshotListingCaveat: View {
             }
             .font(.caption)
         case .idle:
-            Label("The snapshot list has not finished loading.", systemImage: "clock.arrow.circlepath")
+            Label("The list of backups has not finished loading.", systemImage: "clock.arrow.circlepath")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .loaded:

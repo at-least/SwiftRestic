@@ -58,7 +58,7 @@ enum RunFix: Equatable {
         case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
         case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan's Files tab"
         case .pruneNow: "What the failed backup uploaded stays in the repository until a prune — prune it to free the space"
-        case .editPlanRetention: "The repository refuses to delete snapshots — turn this plan's retention off, or thin it where deletions are allowed"
+        case .editPlanRetention: "The repository refuses to delete backups — turn this plan's retention off, or thin it where deletions are allowed"
         }
     }
 }
@@ -411,7 +411,7 @@ enum RunRecordPresentation {
         }
         if let snapshotID = run.snapshotID {
             let made = run.kind == .restore ? run.snapshotTime.map { " (\(Format.timestamp($0)))" } ?? "" : ""
-            lines.append("Snapshot: \(snapshotID)\(made)")
+            lines.append("Backup: \(snapshotID)\(made)")
         }
         switch run.kind {
         case .backup:
@@ -438,7 +438,7 @@ enum RunRecordPresentation {
                 if let paths = run.sourcePaths {
                     lines.append("Items: \(paths.joined(separator: ", "))")
                 } else {
-                    lines.append("Item: \(run.sourcePath ?? "Entire snapshot")")
+                    lines.append("Item: \(run.sourcePath ?? "Entire backup")")
                 }
                 lines.append("\(run.outcome == .succeeded ? "Restored to" : "Destination"): \(destination)")
             }

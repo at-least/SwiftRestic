@@ -806,7 +806,7 @@ struct MaintenanceSchedulingTests {
         withVerdict.detailText = "2 errors — `restic repair` can recover some damage. restic suggests running prune."
         #expect(last([withVerdict]) == "\(ago) · 2 errors — `restic repair` can recover some damage")
         // A record from before the verdict was stored: the outcome itself.
-        #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · completed with errors")
+        #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · completed with warnings")
         #expect(last([check(.cancelled, at: "2026-09-09 12:00:00")]) == "\(ago) · cancelled")
         // The newest of the repository's own checks, never a prune's or
         // another repository's.

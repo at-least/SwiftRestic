@@ -112,10 +112,10 @@ enum ResticError: Error, LocalizedError, Equatable {
             let cause = reason.isEmpty ? "" : " (\(reason))"
             let advice = "Thin it where deletions are allowed, or turn retention off."
             guard removed > 0 else {
-                return "The repository refused to delete \(Format.plural(refused, "snapshot"))\(cause) — it may be append-only or locked. \(advice)"
+                return "The repository refused to delete \(Format.plural(refused, "backup"))\(cause) — it may be append-only or locked. \(advice)"
             }
             let others = removed == 1 ? "the other one was removed" : "the other \(removed) were removed"
-            return "The repository refused to delete \(refused) of the \(removed + refused) snapshots retention chose\(cause); \(others). "
+            return "The repository refused to delete \(refused) of the \(removed + refused) backups retention chose\(cause); \(others). "
                 + "It may be append-only or locked — thin it where deletions are allowed, or turn retention off."
         case let .folderInTheWay(path):
             return "A folder is already at \(path), where a restored file would go, so nothing was restored. Move it aside, or restore somewhere else."

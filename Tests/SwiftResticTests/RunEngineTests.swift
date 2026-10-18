@@ -366,7 +366,7 @@ struct BackupRunEngineTests {
         let record = sink.deliveredRecords[0]
         #expect(record.outcome == .completedWithErrors)
         #expect(record.itemErrors == [
-            "Retention skipped: The repository refused to delete 1 snapshot (403 Forbidden) — it may be append-only or locked. "
+            "Retention skipped: The repository refused to delete 1 backup (403 Forbidden) — it may be append-only or locked. "
                 + "Thin it where deletions are allowed, or turn retention off.",
         ])
         #expect(record.retentionRefused == 1)
@@ -437,7 +437,7 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
 
         let summary = PlanStatus.summary(of: try #require(sink.deliveredRecords.first))
-        #expect(summary.headline == "Backup completed with errors")
+        #expect(summary.headline == "Backup completed with warnings")
         // The card lists the item itself, with its fixes; no message repeats it.
         #expect(summary.items == ["/etc/x: permission denied"])
         #expect(summary.message == nil)
@@ -588,7 +588,7 @@ struct BackupRunEngineTests {
         let notes = sink.deliveredNotes
         #expect(notes.contains("Hook “prepare” succeeded."), "notes were \(notes)")
         #expect(notes.contains("Hook “celebrate” succeeded."), "notes were \(notes)")
-        #expect(notes.contains("Retention removed 0 snapshots"), "notes were \(notes)")
+        #expect(notes.contains("Retention removed 0 backups"), "notes were \(notes)")
     }
 
     @Test("a failed forget is noted in the log as a retention skip")
@@ -972,7 +972,7 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords.isEmpty)
     }
 
-    @Test("a successful check whose after-hook failed reads as completed with errors")
+    @Test("a successful check whose after-hook failed reads as completed with warnings")
     func failedMaintenanceHookUpgradesTheOutcome() async throws {
         let sink = RecordingSink()
         let client = MockResticClient().onCheck(.success(ResticSummary()))
@@ -1097,7 +1097,7 @@ struct RetentionRunEngineTests {
         #expect(record.planID == plan.id)
         #expect(record.planName == "Retention Plan")
         #expect(record.outcome == .succeeded)
-        #expect(record.detailText == "Removed 2 snapshots. Their data stays until the next prune.")
+        #expect(record.detailText == "Removed 2 backups. Their data stays until the next prune.")
         #expect(record.exitCode == 0)
         // The sink has no markPlanRun, so no stamp is possible; no hooks run
         // and no backup is asked for.

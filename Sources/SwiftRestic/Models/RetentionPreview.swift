@@ -39,7 +39,7 @@ struct RetentionPreview: Sendable, Equatable {
             groups = try ResticMessageDecoder.jsonDecoder.decode([Group]?.self, from: Data(trimmed.utf8)) ?? []
         } catch {
             throw ResticError.malformedOutput(
-                                detail: "could not read which snapshots the retention rules would remove"
+                                detail: "could not read which backups the retention rules would remove"
             )
         }
         self.init(
@@ -52,17 +52,17 @@ struct RetentionPreview: Sendable, Equatable {
     /// ones by date, and how many stay.
     var summary: String {
         let total = kept.count + removed.count
-        guard total > 0 else { return "This plan has no snapshots in the repository yet." }
+        guard total > 0 else { return "This plan has no backups in the repository yet." }
         guard let newest = removed.first, let oldest = removed.last else {
             return kept.count == 1
-                ? "Nothing to remove — this plan's only snapshot is within its rules."
-                : "Nothing to remove — all \(kept.count) of this plan's snapshots are within its rules."
+                ? "Nothing to remove — this plan's only backup is within its rules."
+                : "Nothing to remove — all \(kept.count) of this plan's backups are within its rules."
         }
         let stay = "\(kept.count) will stay."
         if removed.count == 1 {
-            return "1 of this plan's \(total) snapshots would be removed: the one from \(Format.timestamp(newest.time)). \(stay)"
+            return "1 of this plan's \(total) backups would be removed: the one from \(Format.timestamp(newest.time)). \(stay)"
         }
-        return "\(removed.count) of this plan's \(total) snapshots would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(newest.time)). \(stay)"
+        return "\(removed.count) of this plan's \(total) backups would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(newest.time)). \(stay)"
     }
 
     /// The adopt sheet's one line: what the rules the user just turned on
@@ -71,7 +71,7 @@ struct RetentionPreview: Sendable, Equatable {
     /// what the history would become.
     var adoptionLine: String {
         let total = kept.count + removed.count
-        guard total > 0 else { return "This plan has no snapshots in the repository yet." }
+        guard total > 0 else { return "This plan has no backups in the repository yet." }
         if removed.isEmpty {
             return "All \(Format.plural(total, "backup")) would stay."
         }
@@ -81,8 +81,8 @@ struct RetentionPreview: Sendable, Equatable {
     /// The run record's Detail after the real forget: what went, and
     /// whether its data went with it (the plan's "Also prune").
     static func appliedSummary(removed: Int, pruned: Bool) -> String {
-        guard removed > 0 else { return "No snapshots needed removing." }
-        let snapshots = Format.plural(removed, "snapshot")
+        guard removed > 0 else { return "No backups needed removing." }
+        let snapshots = Format.plural(removed, "backup")
         return pruned
             ? "Removed \(snapshots) and pruned their data."
             : "Removed \(snapshots). Their data stays until the next prune."

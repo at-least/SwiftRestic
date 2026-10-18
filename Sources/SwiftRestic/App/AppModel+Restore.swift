@@ -178,7 +178,7 @@ extension AppModel {
         let name = backup.map { SnapshotLineage.displayName(of: $0, label: recordLabel(of: $0, repositoryID: repositoryID)) }
         beginRestore(
             repositoryID: repositoryID,
-            label: "snapshot \(snapshotID.prefix(8))",
+            label: "backup \(snapshotID.prefix(8))",
             description: name.map { "Restoring the whole “\($0)” backup" } ?? "Restoring the whole backup",
             snapshotID: snapshotID,
             sourcePath: nil,

@@ -74,7 +74,7 @@ struct ApplyRetentionSheet: View {
             if isLoading {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Asking restic which snapshots these rules would remove…")
+                    Text("Asking restic which backups these rules would remove…")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -103,7 +103,7 @@ struct ApplyRetentionSheet: View {
                 if let preview, !preview.removed.isEmpty {
                     // No Return: removing snapshots is a deliberate click,
                     // the quit alert's rule for a destructive button.
-                    Button("Remove \(Format.plural(preview.removed.count, "Snapshot"))", role: .destructive) {
+                    Button("Remove \(Format.plural(preview.removed.count, "Backup"))", role: .destructive) {
                         model.applyRetention(planID: planID)
                         dismiss()
                     }

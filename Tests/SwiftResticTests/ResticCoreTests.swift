@@ -196,10 +196,10 @@ struct ResticErrorTests {
     @Test("a forget the repository refused says so, and how many went")
     func refusedSnapshotsWords() {
         #expect(ResticError.snapshotsNotRemoved(removed: 0, refused: 1, reason: "403 Forbidden").errorDescription
-            == "The repository refused to delete 1 snapshot (403 Forbidden) — it may be append-only or locked. "
+            == "The repository refused to delete 1 backup (403 Forbidden) — it may be append-only or locked. "
             + "Thin it where deletions are allowed, or turn retention off.")
         #expect(ResticError.snapshotsNotRemoved(removed: 2, refused: 1, reason: "operation not permitted").errorDescription
-            == "The repository refused to delete 1 of the 3 snapshots retention chose (operation not permitted); the other 2 were removed. "
+            == "The repository refused to delete 1 of the 3 backups retention chose (operation not permitted); the other 2 were removed. "
             + "It may be append-only or locked — thin it where deletions are allowed, or turn retention off.")
     }
 

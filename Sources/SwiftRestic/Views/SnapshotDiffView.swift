@@ -133,7 +133,7 @@ struct SnapshotDiffView: View {
                     // the repository was just removed and the load below has
                     // nothing to compare anyway.
                     Text(
-                        "Changes in snapshot \(newer.shortID)"
+                        "Changes in backup \(newer.shortID)"
                             + (model.repository(id: target.repositoryID).map { " — \(model.label(of: $0))" } ?? "")
                     )
                         .font(.headline)
@@ -164,7 +164,7 @@ struct SnapshotDiffView: View {
                         select: { olderID = $0 },
                         rowText: { comparisonLabel($0, sharedMinutes: sharedMinutes) }
                     ) {
-                        Text(older.map { comparisonLabel($0, sharedMinutes: sharedMinutes) } ?? "Choose a snapshot")
+                        Text(older.map { comparisonLabel($0, sharedMinutes: sharedMinutes) } ?? "Choose a backup")
                     }
                     .frame(maxWidth: 420)
                     .accessibilityLabel("Compared with")
@@ -173,7 +173,7 @@ struct SnapshotDiffView: View {
                         // The no-baseline state needs a row of its own, or the
                         // picker holds a selection none of its items carry.
                         if olderID == nil {
-                            Text("Choose a snapshot").tag(String?.none)
+                            Text("Choose a backup").tag(String?.none)
                         }
                         ForEach(grouped, id: \.label) { group in
                             Section(group.label) {
@@ -206,20 +206,20 @@ struct SnapshotDiffView: View {
             ContentUnavailableView(
                 "Nothing to compare against",
                 systemImage: "clock.arrow.circlepath",
-                description: Text("This is the oldest snapshot in the repository.")
+                description: Text("This is the oldest backup in the repository.")
             )
         } else if olderID == nil {
             ContentUnavailableView(
                 "No earlier backup of these folders",
                 systemImage: "clock.arrow.circlepath",
-                description: Text("This is the first snapshot of these folders from \(newer.hostname ?? "this host"). Choose another snapshot above to compare with it anyway.")
+                description: Text("This is the first backup of these folders from \(newer.hostname ?? "this host"). Choose another backup above to compare with it anyway.")
             )
         } else if isLoading {
             ProgressView("Comparing…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError {
             ContentUnavailableView {
-                Label("Could not compare these snapshots", systemImage: "exclamationmark.triangle")
+                Label("Could not compare these backups", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(loadError).textSelection(.enabled)
             }
@@ -285,7 +285,7 @@ struct SnapshotDiffView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Theme.Space.cardPadding)
             .cardSurface()
-            .help("Bytes written to the repository by this snapshot, and bytes the repository no longer holds because of it")
+            .help("Bytes written to the repository by this backup, and bytes the repository no longer holds because of it")
         }
         .padding(12)
     }
@@ -319,7 +319,7 @@ struct SnapshotDiffView: View {
             ContentUnavailableView(
                 "No differences",
                 systemImage: "equal.circle",
-                description: Text("The two snapshots contain the same files.")
+                description: Text("The two backups contain the same files.")
             )
         } else if let rows {
             if rows.isEmpty {

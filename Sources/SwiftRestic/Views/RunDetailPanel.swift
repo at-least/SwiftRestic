@@ -74,7 +74,7 @@ struct RunDetailPanel: View {
         switch run.kind {
         case .backup:
             if run.snapshotID != nil {
-                DetailRow("Snapshot") { RunSnapshotRow(run: run, onCompare: onCompare) }
+                DetailRow("Backup") { RunSnapshotRow(run: run, onCompare: onCompare) }
             }
             // Why there was nothing to back up — the Detail column's words.
             if run.outcome == .skipped, let reason = run.detailText {
@@ -95,7 +95,7 @@ struct RunDetailPanel: View {
             exitRow
         case .restore:
             if run.snapshotID != nil {
-                DetailRow("Snapshot") { RunSnapshotRow(run: run, onCompare: onCompare) }
+                DetailRow("Backup") { RunSnapshotRow(run: run, onCompare: onCompare) }
             }
             // Records that predate destination tracking have none; their
             // rows are left out rather than guessed.
@@ -113,11 +113,11 @@ struct RunDetailPanel: View {
                     }
                 } else {
                     DetailRow("Item") {
-                        Text(run.sourcePath ?? "Entire snapshot")
+                        Text(run.sourcePath ?? "Entire backup")
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .textSelection(.enabled)
-                            .help(run.sourcePath ?? "Every folder in the snapshot, under its full original path")
+                            .help(run.sourcePath ?? "Every folder in the backup, under its full original path")
                     }
                 }
                 DetailRow(run.outcome == .succeeded ? "Restored to" : "Destination") {
@@ -367,7 +367,7 @@ private struct RunSnapshotRow: View {
                     .textSelection(.enabled)
                     .help("Removed after this run — by retention, a prune, or another restic client.")
             case .unavailable?:
-                let help = "This repository's snapshot list isn't loaded right now."
+                let help = "This repository's list of backups isn't loaded right now."
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
                 completenessMark(for: snapshotID)
                 Button("Browse") {}

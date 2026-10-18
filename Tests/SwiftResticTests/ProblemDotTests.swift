@@ -105,7 +105,7 @@ struct ProblemDotTests {
     func unseenLabelNamesOutcome() {
         let model = makeModel()
         model.configuration.runs = [record(.completedWithErrors, finishedAt: hour1)]
-        #expect(model.unseenProblemLabel(for: planID) == "Completed with errors, not yet viewed")
+        #expect(model.unseenProblemLabel(for: planID) == "Completed with warnings, not yet viewed")
 
         model.configuration.runs = [record(.failed, finishedAt: hour1)]
         #expect(model.unseenProblemLabel(for: planID) == "Failed, not yet viewed")

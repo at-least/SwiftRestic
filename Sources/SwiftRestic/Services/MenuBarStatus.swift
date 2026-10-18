@@ -148,7 +148,7 @@ enum MenuBarStatus {
         }
         // The outcome's own words, as the sidebar, the plan card and Activity
         // say it. Notification bodies keep their count-bearing prose
-        // ("Finished with 2 unreadable items.") — a sentence about the run,
+        // ("Completed with 2 unreadable items.") — a sentence about the run,
         // not its label.
         return "\(subject) \(newest.outcome.displayName.lowercased()) \(relative(newest.finishedAt))"
     }

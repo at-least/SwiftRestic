@@ -428,7 +428,7 @@ struct AdoptTests {
 
         // Nothing backed up: today's sentence.
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Snapshots already written to the repository are not deleted.")
+            == "The plan and its schedule are removed. Backups already written to the repository are not deleted.")
 
         // Two backups under it: the landing is named, with the way back. Docs
         // is the repository's only plan, so the shelf the snapshots move to
@@ -439,7 +439,7 @@ struct AdoptTests {
         ]
         model.snapshots[repository.id] = listing
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Its 2 snapshots stay in “Home Disk”,"
+            == "The plan and its schedule are removed. Its 2 backups stay in “Home Disk”,"
                 + " under Backups, and can be adopted back.")
 
         // Another plan survives the deletion: the shelf keeps its "Other"
@@ -448,21 +448,21 @@ struct AdoptTests {
         sibling.repositoryID = repository.id
         model.configuration.plans = [plan, sibling]
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Its 2 snapshots stay in “Home Disk”,"
+            == "The plan and its schedule are removed. Its 2 backups stay in “Home Disk”,"
                 + " under Other backups, and can be adopted back.")
         model.configuration.plans = [plan]
 
         // The running variant keeps its own first sentence.
         model.activity[plan.id] = PlanActivity()
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The running backup will be stopped and recorded as cancelled. Its 2 snapshots stay in “Home Disk”,"
+            == "The running backup will be stopped and recorded as cancelled. Its 2 backups stay in “Home Disk”,"
                 + " under Backups, and can be adopted back.")
 
         // One backup agrees in number.
         model.activity[plan.id] = nil
         model.snapshots[repository.id] = [listing[0]]
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Its 1 snapshot stays in “Home Disk”,"
+            == "The plan and its schedule are removed. Its 1 backup stays in “Home Disk”,"
                 + " under Backups, and can be adopted back.")
     }
 }
@@ -521,6 +521,6 @@ struct AdoptionPreviewLineTests {
             == "All 1 backup would stay.")
         // Nothing to judge: the honest empty, not a claim of survival.
         #expect(RetentionPreview(kept: [], removed: []).adoptionLine
-            == "This plan has no snapshots in the repository yet.")
+            == "This plan has no backups in the repository yet.")
     }
 }

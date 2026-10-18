@@ -184,7 +184,7 @@ struct AppModelTests {
         )
         #expect(folder.isDirectory)
         await #expect(throws: ResticError.commandFailed(
-            exitCode: 0, message: "“gone.txt” is no longer listed in the chosen snapshot — refresh and try again."
+            exitCode: 0, message: "“gone.txt” is no longer listed in the chosen backup — refresh and try again."
         )) {
             try await model.listedNode(
                 repositoryID: harness.repository.id, snapshotID: snapshot.id,
@@ -310,7 +310,7 @@ struct AppModelTests {
         #expect(model.configuration.runs.allSatisfy { $0.kind != .restore })
         let banner = try #require(model.banners.first { $0.title == "Could not restore “gone.txt”" })
         #expect(banner.isError)
-        #expect(banner.message == "“gone.txt” is no longer listed in the chosen snapshot — refresh and try again.")
+        #expect(banner.message == "“gone.txt” is no longer listed in the chosen backup — refresh and try again.")
 
         await model.shutdown()
     }

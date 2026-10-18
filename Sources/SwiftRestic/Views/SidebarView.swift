@@ -536,7 +536,7 @@ private struct PlanSidebarRow: View {
                             .accessibilityHidden(true)
                     }
                     // The whole line when it fits, its shorter spelling when
-                    // one exists ("Errors — 2 days ago"), and only then the
+                    // one exists ("Warnings — 2 days ago"), and only then the
                     // middle cut: the trailing marker narrows the column,
                     // and a tail cut would take "ago" — when it happened.
                     // The tooltip and VoiceOver keep the whole line.

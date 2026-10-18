@@ -13,28 +13,28 @@ struct ConceptsView: View {
 
     private let concepts: [Concept] = [
         Concept(
-            term: "Snapshot",
-            definition: "One backup — a frozen copy of your folders at a moment in time. A failed run writes nothing, but a run that could not read some files still writes a snapshot without them: restic calls it incomplete (exit code 3), and SwiftRestic marks it with a warning triangle and lists what could not be read."
+            term: "Backup",
+            definition: "A frozen copy of your folders at a moment in time — what restic, its commands and its logs call a snapshot. A failed run writes nothing, but a run that could not read some files still writes a backup without them: restic calls it incomplete (exit code 3), and SwiftRestic marks it with a warning triangle and lists what could not be read."
         ),
         Concept(
             term: "Repository",
-            definition: "Where snapshots live: a local folder, another machine over SSH, or cloud storage. Everything restic restores comes from one."
+            definition: "Where backups live: a local folder, another machine over SSH, or cloud storage. Everything restic restores comes from one."
         ),
         Concept(
             term: "Plan",
-            definition: "What gets backed up, on what schedule, with what retention. Each plan stamps its snapshots with an ID tag so its history stays separate. A deleted plan's backups keep its tag and can be adopted back from Other backups."
+            definition: "What gets backed up, on what schedule, with what retention. Each plan stamps its backups with an ID tag so its history stays separate. A deleted plan's backups keep its tag and can be adopted back from Other backups."
         ),
         Concept(
             term: "Retention",
-            definition: "How much history to keep: the newest runs plus bucket rules by hour, day, week, month and year. The editor projects how many snapshots survive."
+            definition: "How much history to keep: the newest runs plus bucket rules by hour, day, week, month and year. The editor projects how many backups survive."
         ),
         Concept(
             term: "forget",
-            definition: "Removes snapshots from the repository's index. Their data stays on disk until prune reclaims it — deleting a snapshot is reversible until then."
+            definition: "Removes backups from the repository's index. Their data stays on disk until prune reclaims it — removing a backup is reversible until then."
         ),
         Concept(
             term: "Prune",
-            definition: "Rewrites the repository to reclaim the space of deleted snapshots. Slow, and it locks the repository exclusively — backups to it are held back until it finishes."
+            definition: "Rewrites the repository to reclaim the space of removed backups. Slow, and it locks the repository exclusively — backups to it are held back until it finishes."
         ),
         Concept(
             term: "Check",
@@ -50,7 +50,7 @@ struct ConceptsView: View {
         ),
         Concept(
             term: "Host and paths",
-            definition: "Snapshots remember which Mac and which folders they came from. Compare defaults to the same host and paths so a diff means something. Under Other backups, backups that carry no plan ID group by them."
+            definition: "Backups remember which Mac and which folders they came from. Compare defaults to the same host and paths so a diff means something. Under Other backups, backups that carry no plan ID group by them."
         ),
     ]
 

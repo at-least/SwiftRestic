@@ -207,7 +207,7 @@ struct RunRecordPresentationTests {
         renamed.outcome = .completedWithErrors
         renamed.itemErrors = ["/a: permission denied", "/b: permission denied"]
         renamed.itemErrorCount = 2
-        #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Completed with errors · 2 unreadable items")
+        #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Completed with warnings · 2 unreadable items")
     }
 
     @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path, or Remove Stale Locks… while nobody here holds the lock")
@@ -315,7 +315,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == nil)
         #expect(RunFix.editPlanRetention(plan).title == "Edit Plan…")
         #expect(RunFix.editPlanRetention(plan).help
-            == "The repository refuses to delete snapshots — turn this plan's retention off, or thin it where deletions are allowed")
+            == "The repository refuses to delete backups — turn this plan's retention off, or thin it where deletions are allowed")
     }
 
     @Test("a backup that filled its repository's disk says so in plain words and offers Prune Now…; a write anywhere else keeps restic's")
@@ -403,16 +403,16 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.detail(for: damaged) == "2 errors — `restic repair` can recover some damage")
         #expect(RunRecordPresentation.verdictClause(for: damaged) == "2 errors — `restic repair` can recover some damage")
         #expect(RunRecordPresentation.problemRowCaption(for: damaged)
-            == "Completed with errors · 2 errors — `restic repair` can recover some damage")
+            == "Completed with warnings · 2 errors — `restic repair` can recover some damage")
         // A verdict stored before 2026-10-09 put a period before the
         // command, which the sentence cut leaves alone: shown whole, its
         // own final period dropped like every entry's.
         let older = check(.completedWithErrors, "2 errors. `restic repair` can recover some damage.")
         #expect(RunRecordPresentation.detail(for: older) == "2 errors. `restic repair` can recover some damage")
         // No verdict at all: the outcome, as every kind without words.
-        #expect(RunRecordPresentation.detail(for: check(.completedWithErrors, nil)) == "Completed with errors")
-        #expect(RunRecordPresentation.verdictClause(for: check(.completedWithErrors, nil)) == "completed with errors")
-        #expect(RunRecordPresentation.problemRowCaption(for: check(.completedWithErrors, nil)) == "Completed with errors")
+        #expect(RunRecordPresentation.detail(for: check(.completedWithErrors, nil)) == "Completed with warnings")
+        #expect(RunRecordPresentation.verdictClause(for: check(.completedWithErrors, nil)) == "completed with warnings")
+        #expect(RunRecordPresentation.problemRowCaption(for: check(.completedWithErrors, nil)) == "Completed with warnings")
         #expect(RunRecordPresentation.detail(for: check(.succeeded, "No errors found.")) == "No errors found")
     }
 
@@ -524,7 +524,7 @@ struct RunRecordPresentationTests {
         #expect(detail(RunRecord(kind: .check, planName: "Home NAS")) == "Succeeded")
         var failedCheck = RunRecord(kind: .check, planName: "Home NAS")
         failedCheck.outcome = .completedWithErrors
-        #expect(detail(failedCheck) == "Completed with errors")
+        #expect(detail(failedCheck) == "Completed with warnings")
     }
 
     @Test("an unreadable item reads as its name, where it is and why — from the path the run stored, not restic's words taken apart")
@@ -558,9 +558,9 @@ struct RunRecordPresentationTests {
     @Test("a retention run's Detail says what it removed, or why it did not")
     func retentionRunDetail() {
         var applied = RunRecord(kind: .forget, planName: "Documents")
-        applied.detailText = "Removed 2 snapshots. Their data stays until the next prune."
+        applied.detailText = "Removed 2 backups. Their data stays until the next prune."
         #expect(RunRecordPresentation.detail(for: applied)
-            == "Removed 2 snapshots. Their data stays until the next prune.")
+            == "Removed 2 backups. Their data stays until the next prune.")
 
         var failed = RunRecord(kind: .forget, planName: "Documents")
         failed.outcome = .failed
@@ -618,9 +618,9 @@ struct RunRecordPresentationTests {
             versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2 (Build 25G83)", restic: "restic 0.20.0")
         )
         let lines = text.components(separatedBy: "\n")
-        #expect(lines.first == "Backup of “Documents” — Completed with errors")
+        #expect(lines.first == "Backup of “Documents” — Completed with warnings")
         #expect(lines.contains("Repository: Home NAS"))
-        #expect(lines.contains("Snapshot: \(snapshotID)"))
+        #expect(lines.contains("Backup: \(snapshotID)"))
         #expect(lines.contains("restic exit: 3 — Finished, but some data could not be read"))
         #expect(lines.contains("Unreadable items (1):"))
         #expect(lines.contains("  open /Users/me/Documents/Taxes/2025/locked.pdf: permission denied"))
@@ -636,7 +636,7 @@ struct RunRecordPresentationTests {
     func copyDetailsForARetentionRun() {
         var record = RunRecord(kind: .forget, planName: "Documents")
         record.outcome = .succeeded
-        record.detailText = "Removed 2 snapshots. Their data stays until the next prune."
+        record.detailText = "Removed 2 backups. Their data stays until the next prune."
         let text = RunRecordPresentation.detailsText(
             for: record,
             repositoryName: "Home NAS",
@@ -644,7 +644,7 @@ struct RunRecordPresentationTests {
         )
         let lines = text.components(separatedBy: "\n")
         #expect(lines.first == "Retention of “Documents” — Succeeded")
-        #expect(lines.contains("Result: Removed 2 snapshots. Their data stays until the next prune."), "details were \(lines)")
+        #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next prune."), "details were \(lines)")
     }
 
     @Test("Copy Details for a restore names the backup, the item and where it landed")
@@ -665,7 +665,7 @@ struct RunRecordPresentationTests {
         let lines = text.components(separatedBy: "\n")
         #expect(lines.first == "Restore of “Budget.numbers” — Succeeded")
         #expect(lines.contains("Repository: No longer set up in SwiftRestic"))
-        #expect(lines.contains("Snapshot: abf728998814d029"))
+        #expect(lines.contains("Backup: abf728998814d029"))
         #expect(lines.contains("Item: /src/Documents/Budget.numbers"))
         #expect(lines.contains("Restored to: /tmp/restored/Budget.numbers"))
         #expect(lines.contains("Files: 1 restored · 2 kept as they were · \(Format.bytes(14))"))
@@ -687,7 +687,7 @@ struct RunRecordPresentationTests {
         let lines = text.components(separatedBy: "\n")
         // The drawer keeps "snapshot" beside its Snapshot row; "backup" is
         // the Restore pane's word.
-        #expect(lines.contains("Item: Entire snapshot"), "details were \(lines)")
+        #expect(lines.contains("Item: Entire backup"), "details were \(lines)")
         #expect(lines.contains("Restored to: /tmp/restored"))
     }
 }

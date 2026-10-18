@@ -222,7 +222,7 @@ struct NotificationTests {
         record.itemErrorTally = ItemErrorDiagnosis.Tally(blockedByMacOS: 1, deniedByFilePermissions: 1)
         record.fullDiskAccessAtRun = .notGranted
         #expect(AppModel.notificationBody(for: record)
-            == "Finished with 2 unreadable items. macOS blocked 1 item: SwiftRestic needs Full Disk Access.")
+            == "Completed with 2 unreadable items. macOS blocked 1 item: SwiftRestic needs Full Disk Access.")
     }
 
     @MainActor
@@ -234,7 +234,7 @@ struct NotificationTests {
         record.outcome = .completedWithErrors
         record.itemErrors = ["/a: open /a: permission denied", RunRecord.retentionSkippedPrefix + "locked"]
         record.itemErrorCount = 1
-        #expect(AppModel.notificationBody(for: record).hasPrefix("Finished with 1 unreadable item."))
+        #expect(AppModel.notificationBody(for: record).hasPrefix("Completed with 1 unreadable item."))
 
         // A retention skip alone is not an unreadable item — not one, not zero.
         var retentionOnly = RunRecord(kind: .backup, planName: "Documents")
@@ -243,7 +243,7 @@ struct NotificationTests {
         retentionOnly.itemErrorCount = 0
         let body = AppModel.notificationBody(for: retentionOnly)
         #expect(!body.contains("unreadable"), "body was \(body)")
-        #expect(body == "Finished with warnings: Retention skipped.")
+        #expect(body == "Completed with warnings: Retention skipped.")
     }
 
     @MainActor

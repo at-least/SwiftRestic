@@ -26,7 +26,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         var displayName: String {
             switch self {
             case .succeeded: "Succeeded"
-            case .completedWithErrors: "Completed with errors"
+            case .completedWithErrors: "Completed with warnings"
             case .failed: "Failed"
             case .cancelled: "Cancelled"
             case .skipped: "Skipped"

@@ -87,7 +87,7 @@ enum RunLog {
             lines.append(reason)
         }
         if let snapshotID = record.snapshotID {
-            lines.append("Snapshot \(snapshotID)")
+            lines.append("Backup \(snapshotID)")
         }
         switch record.kind {
         case .backup where RunRecordPresentation.hasBackupNumbers(record):

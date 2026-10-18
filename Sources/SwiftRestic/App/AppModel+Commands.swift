@@ -197,10 +197,10 @@ extension AppModel {
                let repository = repository(id: repositoryID),
                let left = backupsLeftBehind(planID: id, in: repositoryID)
             {
-                landing = "Its \(Format.plural(left.count, "snapshot")) \(left.count == 1 ? "stays" : "stay")"
+                landing = "Its \(Format.plural(left.count, "backup")) \(left.count == 1 ? "stays" : "stay")"
                     + " in “\(label(of: repository))”, under \(left.shelfTitle), and can be adopted back."
             } else {
-                landing = "Snapshots already written to the repository are not deleted."
+                landing = "Backups already written to the repository are not deleted."
             }
             return ConfirmationCopy(
                 title: "Delete “\(name)”?",
@@ -229,7 +229,7 @@ extension AppModel {
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Prune “\(label(of: repository))” now?",
-                message: "Pruning permanently removes the data of deleted snapshots and locks the repository exclusively — backups to it are held back until it finishes."
+                message: "Pruning permanently removes the data of removed backups and locks the repository exclusively — backups to it are held back until it finishes."
             )
         case let .unlock(id):
             guard let repository = repository(id: id) else { return nil }
@@ -241,7 +241,7 @@ extension AppModel {
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Rebuild the search index for “\(label(of: repository))”?",
-                message: "The local search index, with its cached folder listings and comparisons, is deleted and read back from the repository, snapshot by snapshot. The repository itself is not touched. Until the rebuild finishes, folder version lists are incomplete, the Restore pane's search may miss matches, and Find Files searches through restic, which is slower."
+                message: "The local search index, with its cached folder listings and comparisons, is deleted and read back from the repository, backup by backup. The repository itself is not touched. Until the rebuild finishes, folder version lists are incomplete, the Restore pane's search may miss matches, and Find Files searches through restic, which is slower."
             )
         }
     }

@@ -78,7 +78,7 @@ struct SettingsView: View {
                 } else {
                     // Unknown is treated as missing, as the run hints do:
                     // nothing observable says the grant is there.
-                    Text("Without it, macOS keeps Mail, Messages, Safari and other apps' data away from SwiftRestic and the restic it runs. Backups that include them finish with warnings.")
+                    Text("Without it, macOS keeps Mail, Messages, Safari and other apps' data away from SwiftRestic and the restic it runs. Backups that include them complete with warnings.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -106,7 +106,7 @@ struct SettingsView: View {
                 )
                 ExpandableCaption(
                     summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing until you quit or log out.",
-                    detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), dims while backups are paused or waiting for power on battery, wears a warning mark while a run from the last seven days failed or completed with errors — a backup's until its plan's next backup succeeds — and asks with a question mark until a repository is set up."
+                    detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), dims while backups are paused or waiting for power on battery, wears a warning mark while a run from the last seven days failed or completed with warnings — a backup's until its plan's next backup succeeds — and asks with a question mark until a repository is set up."
                 )
             }
 
@@ -114,7 +114,7 @@ struct SettingsView: View {
                 Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
                 // What it gates (`AppModel.notify(about:)`), in the alert
                 // channels' own event words.
-                Toggle("Notify when a backup fails or finishes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
+                Toggle("Notify when a backup fails or completes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
                 // `RunRecord.problemStretch`: the rule said where it is set.
                 Text("Once for each cause: a backup that fails the same way again stays quiet until one succeeds or the cause changes.")
                     .font(.caption)
@@ -476,7 +476,7 @@ struct NotificationChannelsTab: View {
                         isOn: $model.configuration.settings.notificationChannels[index].notifyOnSuccess
                     )
                     Toggle(
-                        "Finishes with warnings",
+                        "Completes with warnings",
                         isOn: $model.configuration.settings.notificationChannels[index].notifyOnWarning
                     )
                     Toggle(

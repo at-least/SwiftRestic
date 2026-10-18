@@ -1738,7 +1738,7 @@ struct AppModelStubTests {
         #expect(record.kind == .forget)
         #expect(record.outcome == .succeeded)
         #expect(record.planID == planID)
-        #expect(record.detailText == "No snapshots needed removing.")
+        #expect(record.detailText == "No backups needed removing.")
         // Not a backup: the plan's run stamps stay where the backups left them.
         #expect(harness.model.plan(id: planID)?.lastRunAt == nil)
         #expect(harness.model.plan(id: planID)?.lastSuccessAt == nil)
@@ -2440,7 +2440,7 @@ struct AppModelStubTests {
         #expect(log.components(separatedBy: "exit 3").count - 1 == 2, "log was \(log)")
         #expect(log.contains("$    restic forget --json"))
         #expect(log.contains("note Retention skipped: "))
-        #expect(log.contains("Completed with errors"))
+        #expect(log.contains("Completed with warnings"))
         // The password and the repository's environment travel beside the
         // command line, never in it.
         #expect(!log.contains("test-password"))
@@ -2488,7 +2488,7 @@ struct AppModelStubTests {
         #expect(RunRecordPresentation.detail(for: record) == "1 unreadable item")
         let log = try logText(for: record, in: harness)
         #expect(log.contains("err  /src/gone does not exist, skipping"), "log was \(log)")
-        #expect(log.contains("note Retention removed 0 snapshots"))
+        #expect(log.contains("note Retention removed 0 backups"))
 
         await harness.model.shutdown()
     }
@@ -2566,8 +2566,8 @@ struct AppModelStubTests {
         // The strip sits over every pane, the Restore pane's included.
         #expect(harness.model.restoreDescription == "Restoring the whole “\(name)” backup")
         await waitUntilRestoreFinishes(in: harness.model)
-        // Activity keeps the drawer's snapshot vocabulary: the ID names it.
-        #expect(harness.model.configuration.runs.first?.planName == "snapshot abf72899")
+        // Activity names it in the drawer's words: the backup and its ID.
+        #expect(harness.model.configuration.runs.first?.planName == "backup abf72899")
 
         // Asked for by a name the listing does not hold, it still says what
         // it restores.

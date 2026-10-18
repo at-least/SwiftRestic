@@ -101,10 +101,10 @@ struct OverviewMetricsTests {
         // The protected line is relative-spelled and locale-owned, so it is
         // pinned by prefix below, not by literal.
         #expect(Array(rows.map(\.stateText).prefix(5)) == [
-            "Can't read snapshots — Repository /nas is not reachable",
+            "Can't read backups — Repository /nas is not reachable",
             "No repository set",
-            "No snapshots yet",
-            "The repository has snapshots, but none from this plan yet.",
+            "No backups yet",
+            "The repository has backups, but none from this plan yet.",
             "Checking…",
         ])
         #expect(rows.last?.stateText.hasPrefix("Last backup ") == true)
@@ -250,7 +250,7 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { _ in nil }
         )
-        #expect(rows.map(\.stateText) == ["Snapshot list not loaded yet"])
+        #expect(rows.map(\.stateText) == ["List of backups not loaded yet"])
         #expect(rows.first?.isKnown == false)
     }
 
@@ -309,7 +309,7 @@ struct OverviewMetricsTests {
         #expect(rows.first?.isProtected == false)
     }
 
-    @Test("a run that completed with errors still wrote a snapshot, so the plan stays protected")
+    @Test("a run that completed with warnings still wrote a backup, so the plan stays protected")
     func standingWarning() {
         let repository = UUID()
         let docs = plan("Docs", repository: repository)
@@ -352,7 +352,7 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { _ in failed }
         )
-        #expect(rows.map(\.stateText) == ["Can't read snapshots — Repository /nas is not reachable"])
+        #expect(rows.map(\.stateText) == ["Can't read backups — Repository /nas is not reachable"])
         #expect(rows.first?.didFail == true)
     }
 
@@ -491,13 +491,13 @@ struct OverviewMetricsTests {
         ])
 
         // An unprotected plan's line is its warning, never a second one.
-        let exposed = ProtectionRow(plan: photos, among: [], stateText: "No snapshots yet", isKnown: true, isProtected: false, didFail: false)
+        let exposed = ProtectionRow(plan: photos, among: [], stateText: "No backups yet", isKnown: true, isProtected: false, didFail: false)
         let warned = OverviewMetrics.protectionSummary(
             rows: [exposed], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { byID[$0].flatMap(caption) },
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(warned?.attentionLines == ["Photos: No snapshots yet"])
+        #expect(warned?.attentionLines == ["Photos: No backups yet"])
         #expect(warned?.heldLines == [])
     }
 
@@ -549,7 +549,7 @@ struct OverviewMetricsTests {
     @Test("an unreadable listing is said in one sentence by the rows and the caveat alike")
     func listingFailureHasOneSentence() {
         #expect(OverviewMetrics.listingFailureText("Repository /nas is not reachable. More detail.")
-            == "Can't read snapshots — Repository /nas is not reachable")
+            == "Can't read backups — Repository /nas is not reachable")
     }
 
     @Test("the Protection line waits for a succeeded listing")

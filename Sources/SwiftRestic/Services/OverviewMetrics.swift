@@ -319,13 +319,13 @@ enum OverviewMetrics {
                 moment = stamped
                 line = "Last backup \(relative(stamped))"
             } else if !repositoryHasSnapshots(repositoryID) {
-                line = "No snapshots yet"
+                line = "No backups yet"
             } else {
                 // The repository has snapshots but none from this plan —
                 // the same distinction the plan page's Snapshots row draws;
                 // a bare "No snapshots yet" would be false about a
                 // repository adopted with snapshots already in it.
-                line = "The repository has snapshots, but none from this plan yet."
+                line = "The repository has backups, but none from this plan yet."
             }
             return ProtectionRow(
                 plan: plan, among: plans, stateText: line, isKnown: true,
@@ -343,7 +343,7 @@ enum OverviewMetrics {
             return ProtectionRow(
                 plan: plan,
                 among: plans,
-                stateText: checking ? "Checking…" : "Snapshot list not loaded yet",
+                stateText: checking ? "Checking…" : "List of backups not loaded yet",
                 isKnown: false, isProtected: false, didFail: false
             )
         }
@@ -352,7 +352,7 @@ enum OverviewMetrics {
     /// An unreadable snapshot listing in one sentence — the rows behind the
     /// sidebar's warning and the caveat under a card say it alike.
     static func listingFailureText(_ message: String) -> String {
-        "Can't read snapshots — \(Format.firstSentence(message))"
+        "Can't read backups — \(Format.firstSentence(message))"
     }
 
     /// The repository page's Protection line: how many of the repository's

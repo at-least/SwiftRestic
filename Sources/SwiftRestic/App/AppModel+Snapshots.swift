@@ -245,7 +245,7 @@ extension AppModel {
         guard let node = siblings.first(where: { PathKey($0.path) == PathKey(path) }) else {
             throw ResticError.commandFailed(
                 exitCode: 0,
-                message: "“\(ResticPath.basename(of: path))” is no longer listed in the chosen snapshot — refresh and try again."
+                message: "“\(ResticPath.basename(of: path))” is no longer listed in the chosen backup — refresh and try again."
             )
         }
         return node

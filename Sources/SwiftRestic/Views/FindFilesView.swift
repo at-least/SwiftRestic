@@ -196,7 +196,7 @@ struct FindFilesView: View {
                 // as typed and always searches every version — so not
                 // offered until the engine is known.
                 if indexComplete == false {
-                    Toggle("Latest snapshot only", isOn: $latestOnly)
+                    Toggle("Latest backup only", isOn: $latestOnly)
                         .toggleStyle(.checkbox)
                     Button("Search", action: search)
                         .disabled(!canSearch)
@@ -219,8 +219,8 @@ struct FindFilesView: View {
                     ? FilesSearchAnswer.matchRule
                     : "Matching is case-insensitive and supports shell globs. Press Return to search.",
                 detail: indexComplete == true
-                    ? "This repository's index has finished reading, so the search runs locally against every snapshot at once, as you type — instant, however deep the history."
-                    : "Searching every snapshot walks each one, so it takes longer the more history a repository holds. “Latest snapshot only” searches the repository's single newest snapshot — that snapshot may span other plans' folders, so it is not the newest per plan."
+                    ? "This repository's index has finished reading, so the search runs locally against every backup at once, as you type — instant, however deep the history."
+                    : "Searching every backup walks each one, so it takes longer the more history a repository holds. “Latest backup only” searches the repository's single newest backup — that backup may span other plans' folders, so it is not the newest per plan."
             )
         }
         .padding(12)
@@ -242,8 +242,8 @@ struct FindFilesView: View {
                 systemImage: "magnifyingglass",
                 description: Text(
                     hasSearched
-                        ? "Nothing in this repository's snapshots matches that pattern."
-                        : "Find a file across every snapshot without knowing which one holds it."
+                        ? "Nothing in this repository's backups matches that pattern."
+                        : "Find a file across every backup without knowing which one holds it."
                 )
             )
         } else {
@@ -266,7 +266,7 @@ struct FindFilesView: View {
                         .truncationMode(.head)
                 }
 
-                TableColumn("Snapshot") { row in
+                TableColumn("Backup") { row in
                     Text(row.snapshotTime.map { Format.timestamp($0) } ?? String(row.snapshotID.prefix(8)))
                         .monospacedDigit()
                 }
@@ -361,7 +361,7 @@ struct FindFilesView: View {
                         // refresh in flight says so instead of passing as
                         // current.
                         if let loadedAt = repositoryID.flatMap({ model.snapshotsLoadedAt(for: $0) }) {
-                            Text("Snapshot list read \(Format.ago(loadedAt, now: now))")
+                            Text("List of backups read \(Format.ago(loadedAt, now: now))")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                                 .monospacedDigit()

@@ -91,22 +91,22 @@ struct RetentionPreviewTests {
         let newest = try Self.snapshot(String(repeating: "3", count: 64), "2026-09-23T10:00:00+08:00")
 
         #expect(RetentionPreview(kept: [], removed: []).summary
-            == "This plan has no snapshots in the repository yet.")
+            == "This plan has no backups in the repository yet.")
         #expect(RetentionPreview(kept: [newest], removed: []).summary
-            == "Nothing to remove — this plan's only snapshot is within its rules.")
+            == "Nothing to remove — this plan's only backup is within its rules.")
         #expect(RetentionPreview(kept: [newest, middle, oldest], removed: []).summary
-            == "Nothing to remove — all 3 of this plan's snapshots are within its rules.")
+            == "Nothing to remove — all 3 of this plan's backups are within its rules.")
         #expect(RetentionPreview(kept: [newest], removed: [oldest]).summary
-            == "1 of this plan's 2 snapshots would be removed: the one from \(Format.timestamp(oldest.time)). 1 will stay.")
+            == "1 of this plan's 2 backups would be removed: the one from \(Format.timestamp(oldest.time)). 1 will stay.")
         #expect(RetentionPreview(kept: [newest], removed: [middle, oldest]).summary
-            == "2 of this plan's 3 snapshots would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(middle.time)). 1 will stay.")
+            == "2 of this plan's 3 backups would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(middle.time)). 1 will stay.")
 
-        #expect(RetentionPreview.appliedSummary(removed: 0, pruned: false) == "No snapshots needed removing.")
-        #expect(RetentionPreview.appliedSummary(removed: 0, pruned: true) == "No snapshots needed removing.")
+        #expect(RetentionPreview.appliedSummary(removed: 0, pruned: false) == "No backups needed removing.")
+        #expect(RetentionPreview.appliedSummary(removed: 0, pruned: true) == "No backups needed removing.")
         #expect(RetentionPreview.appliedSummary(removed: 2, pruned: false)
-            == "Removed 2 snapshots. Their data stays until the next prune.")
+            == "Removed 2 backups. Their data stays until the next prune.")
         #expect(RetentionPreview.appliedSummary(removed: 1, pruned: true)
-            == "Removed 1 snapshot and pruned their data.")
+            == "Removed 1 backup and pruned their data.")
     }
 
     @Test("the preview's command differs from the real forget only by its dry-run flags")

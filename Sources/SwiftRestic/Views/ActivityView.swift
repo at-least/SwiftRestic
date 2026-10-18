@@ -42,7 +42,7 @@ struct ActivityView: View {
                 ContentUnavailableView(
                     "No problems recorded",
                     systemImage: "checkmark.circle",
-                    description: Text("No run in the history failed or finished with errors. Turn the filter off to see them all.")
+                    description: Text("No run in the history failed or completed with warnings. Turn the filter off to see them all.")
                 )
             } else {
                 Table(runs, selection: $selection, sortOrder: $sortOrder) {
@@ -194,7 +194,7 @@ struct ActivityView: View {
                 model.clearRunHistory()
             }
         } message: {
-            Text("This permanently removes all \(model.configuration.runs.count) run records and their logs. Backups and snapshots are not affected.")
+            Text("This permanently removes all \(model.configuration.runs.count) run records and their logs. The backups in your repositories are not affected.")
         }
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target)

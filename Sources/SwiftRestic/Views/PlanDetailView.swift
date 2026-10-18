@@ -334,7 +334,7 @@ struct PlanDetailView: View {
         return Card("Backups") {
             DetailGrid {
                 DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
-                DetailRow("Snapshots") { snapshotsValue(plan, snapshots: snapshots) }
+                DetailRow("Backups") { snapshotsValue(plan, snapshots: snapshots) }
                 // Applying it now is Plan ▸ Apply Retention Now… (and the
                 // sidebar row's menu); what it will keep is the editor's
                 // Retention tab.

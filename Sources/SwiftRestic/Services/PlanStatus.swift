@@ -34,8 +34,8 @@ struct PlanCaption: Equatable, Sendable {
     /// first one — so neither state hides the other.
     var pauseNote: String?
     /// A shorter spelling of `text` for a column too narrow for it —
-    /// "Errors — 2 days ago" for "Completed with errors — 2 days ago" —
-    /// tried before the middle cut that reads "Completed with…rors". Nil
+    /// "Warnings — 2 days ago" for "Completed with warnings — 2 days ago" —
+    /// tried before the middle cut that reads "Completed with…ings". Nil
     /// when no shorter form exists.
     var shortText: String? = nil
 }
@@ -358,7 +358,7 @@ enum PlanStatus {
                 pauseNote: pause,
                 // The one outcome whose words outgrow the column; the glyph
                 // beside them carries the severity either way.
-                shortText: problem.outcome == .completedWithErrors ? "Errors — \(when)" : nil
+                shortText: problem.outcome == .completedWithErrors ? "Warnings — \(when)" : nil
             )
         }
         if let pause {

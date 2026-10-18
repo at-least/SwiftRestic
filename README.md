@@ -173,7 +173,7 @@ the generator after editing it; the PNGs are checked in.
   count ("7 times · 19 hours ago") opening the newest, and past five rows a
   last "… and N more in Activity" row opens Activity's Problems; then
   location, size and maintenance, with *Refresh* and *Edit* apart at the
-  toolbar's right, *Edit* last as on a plan's page. The *Snapshots* row
+  toolbar's right, *Edit* last as on a plan's page. The *Backups* row
   splits off backups no
   plan here made (“11 · 6 from no plan here”, or “all”) and says how far
   back the history reaches (“509 · 3 from no plan here · since Jun 1, 2025”,
@@ -352,7 +352,7 @@ the generator after editing it; the PNGs are checked in.
     the volume here and the folder gone the run fails, fixed by *Edit
     Repository…*. The listing follows the same check: with the volume away
     restic is not asked, no banner posts, and the sidebar row reads "“Travel
-    SSD” is not connected." and the caveat "Can't read snapshots — “Travel
+    SSD” is not connected." and the caveat "Can't read backups — “Travel
     SSD” is not connected.", earlier rows staying. A skipped run shows on the
     listing at once, and a mount re-reads the listings of the repositories
     on it, paused or not.
@@ -485,7 +485,7 @@ the generator after editing it; the PNGs are checked in.
     hits and on Find Files' results has the Files tab's *Preview*, gated by
     the same size (a hit, which the index keeps no size for, is listed by
     restic first).
-- **Find files across snapshots** — search every snapshot for a name or glob
+- **Find files across backups** — search every backup for a name or glob
   when you do not know which backup still has the file, then restore the
   match (while the index still reads, a word with no glob character is
   looked for inside names, as `*word*`). Find Files is a page of the window,
@@ -494,7 +494,7 @@ the generator after editing it; the PNGs are checked in.
   repository's index has read every backup it searches as you type, and
   until then restic's walk runs on Return or *Search*. Until 2026-10-18 it
   was a sheet, and its restores stacked a second sheet on it. *Repository ›
-  Find Files in Snapshots…* (⇧⌘F) opens it, the field focused, on the
+  Find Files in Backups…* (⇧⌘F) opens it, the field focused, on the
   repository in view — the selected repository's or plan's or group's, else
   the first (Activity, the console, nothing); a repository page's own search
   field (*Search all backups*) carries its query there on Return, and a
@@ -509,7 +509,7 @@ the generator after editing it; the PNGs are checked in.
   count its Files tab lists, so a copy a Home plan holds beside a Documents
   plan's is that plan's to list — whether the index or `restic find`
   answered; a latest-snapshot-only search says "this one". Before the
-  listing lands, rows name their backup by short ID in the Snapshot column,
+  listing lands, rows name their backup by short ID in the Backup column,
   times filled in when it lands without moving the rows. ⌘- or ⇧-click
   selects several, and the toolbar's *Restore…* (Return) restores them in one
   destination sheet, each from its own row's backup ("from 2 backups, each
@@ -518,8 +518,8 @@ the generator after editing it; the PNGs are checked in.
   holds it, so a file found in an older backup than its folder's (deleted
   since) restores on its own: beside the folder in a chosen folder, back
   inside it at the original location.
-- **Compare snapshots** — *Compare with Previous…* on a backup run in Activity
-  runs `restic diff` against the previous snapshot of the same folders from
+- **Compare backups** — *Compare with Previous…* on a backup run in Activity
+  runs `restic diff` against the previous backup of the same folders from
   the same Mac (any earlier one can be chosen) and lists what was added,
   removed or modified, filterable by kind and path, with restic's byte
   totals, under a header naming the repository: "what did last night's
@@ -598,7 +598,8 @@ the generator after editing it; the PNGs are checked in.
   snapshot/…" line per snapshot it kept, and exit 3, "failed to remove one
   or more snapshots" (restic 0.19.1, its `--prune` then skipped). Until
   2026-10-17 that read as success: a backup's retention logged "Retention
-  removed 1 snapshot" and *Apply Retention Now…* "Removed 1 snapshot." while
+  removed 1 snapshot" and *Apply Retention Now…* "Removed 1 snapshot." (the
+  app's words then) while
   the server kept them all. The snapshots restic names now count as
   refused, the rest as removed: "The repository refused to delete 1
   snapshot (403 Forbidden) — it may be append-only or locked. Thin it where
@@ -625,8 +626,8 @@ the generator after editing it; the PNGs are checked in.
   open in the form under the list (the first on arrival, a neighbour after a
   removal, which asks first).
 - **Alerts** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
-  Locally, a notification when a backup fails or finishes with warnings
-  (*Notify when a backup fails or finishes with warnings*, the channels' own
+  Locally, a notification when a backup fails or completes with warnings
+  (*Notify when a backup fails or completes with warnings*, the channels' own
   event words), once per stretch: a run with its plan's last problem again —
   the same outcome for the same cause: the same folders gone from this Mac,
   by their paths; restic's exit and first sentence with its numbers aside;
@@ -708,11 +709,26 @@ the generator after editing it; the PNGs are checked in.
   palette's mark: a failure's red octagon, a warning's orange triangle, a
   success's green check, news in grey; errors and warnings stay until
   dismissed.
+- **Words** — one term per thing, the HIG's Writing rule ("Create a list of
+  common terms, and reference that list to keep your language consistent").
+  What a backup run writes is a *backup* — a plan's backups, the Backups
+  tab, *Find Files in Backups…*, the Backup column, "Removed 2 backups" —
+  which restic calls a snapshot; restic's word stays where restic itself
+  speaks: the console and the commands it runs, and the hook variable
+  `SWIFTRESTIC_SNAPSHOT_ID`. Help's Concepts says so under *Backup*. A run
+  that did its work but met trouble — a backup with unreadable files
+  (restic's exit 3), a failing after-hook, retention skipped, a check that
+  found errors — *completed with warnings* wherever it is named, beside the
+  orange triangle;
+  a check's own count stays restic's ("2 errors — `restic repair` can
+  recover some damage"). Until 2026-10-18 that outcome had three spellings
+  (*Completed with errors*, *Errors*, *finished with warnings*) and the two
+  nouns were mixed.
 - **Menus** — *Plan* and *Repository* act on the sidebar's selection: a
   plan, a repository, or the repository a selected plan or Other-backups
   group belongs to; items with nothing to act on are grey.
   ⌘B backs up the selected plan, ⌘. stops it, ⇧⌘B backs up every plan, ⇧⌘F
-  finds files, ⌘R refreshes every repository's snapshots; *Pause Backups* is
+  finds files, ⌘R re-reads every repository's backups; *Pause Backups* is
   there as well as in the menu bar. *View* has what the toolbar switches,
   as the HIG asks of every toolbar item: *Show/Hide Sidebar* (⌃⌘S) — with
   the sidebar hidden, the toolbar's button had been the one way back — a
@@ -724,7 +740,7 @@ the generator after editing it; the PNGs are checked in.
   own, where macOS's item had said "Help isn't available for SwiftRestic." While a sheet is up, a command that
   opens a sheet or the console, or acts on the selected plan or repository,
   beeps and does nothing; *Back Up All Plans Now*, *Pause Backups*, *Resume
-  Backups*, *Pause and Stop Running Backups* and *Refresh All Snapshots*
+  Backups*, *Pause and Stop Running Backups* and *Refresh All Backups*
   still act, since no sheet holds a draft of what they change.
 
 ## Architecture
@@ -1006,7 +1022,7 @@ restic's locks shape most of the scheduling. `backup` takes a shared lock;
 - `prune` is ordered ahead of `check` when both fall due, so the app does not
   race itself. A launch reads the repositories before arming the scheduler.
 - If retention still loses a lock race, the snapshot already exists: the run is
-  recorded as *completed with errors* with the reason, never as a failure.
+  recorded as *completed with warnings* with the reason, never as a failure.
 - A file's `find`, a folder's `ls`, *Compare with Previous*'s `diff`, the
   refresh's listing and `stats`, and the index's walks run with `--no-lock`.
   Locked, each paid restic's 200 ms wait after writing its lock; while `forget`
@@ -1031,7 +1047,7 @@ folder name, the repository's drive, folder, host, bucket or remote (each by
 its whole path or location when another reads alike). `SWIFTRESTIC_SNAPSHOT_ID` and `SWIFTRESTIC_ERROR` are
 *absent* rather than empty when they do not apply, so
 `[ -n "$SWIFTRESTIC_ERROR" ]` works. A failing hook
-marks the run as *completed with errors* but never turns a written snapshot into
+marks the run as *completed with warnings* but never turns a written snapshot into
 a failed run. Only a before hook can be set to cancel the run; one that does
 still stamps the schedule, so a hook that always refuses is not retried every
 minute. Repositories have hooks of their own around `check` and `prune`
@@ -1143,11 +1159,11 @@ opens SwiftRestic's entry in System Settings › Notifications.
   unless *Include metadata changes* is on, matching `restic diff --metadata`.
   Comparing snapshots of different folders or hosts is allowed but mostly shows
   everything as added and removed; the sheet says so when you pick one.
-- *Find files* with **Latest snapshot only** means the repository's newest
-  snapshot, not each plan's — with two Macs writing to one repository, maybe
-  the other one's (search all snapshots there). The box shows only once the
-  search will walk snapshots with restic, never while the index, which
-  covers every snapshot, answers.
+- *Find files* with **Latest backup only** means the repository's newest
+  backup, not each plan's — with two Macs writing to one repository, maybe
+  the other one's (search all backups there). The box shows only once the
+  search will walk backups with restic, never while the index, which
+  covers every backup, answers.
 - The UI is English only. Two strings (the find-pattern placeholder and the
   /bin/sh note that mentions `SWIFTRESTIC_*`) are `Text(verbatim:)` because
   SwiftUI parses literal titles as Markdown and ate the `*` in the glob

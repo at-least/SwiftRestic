@@ -444,7 +444,7 @@ struct MenuBarStatusTests {
         )
         #expect(
             MenuBarStatus.problemLine(runs: [warned], hasNoRepositories: false, relative: Self.ago)
-                == "Photos completed with errors 2 hours ago"
+                == "Photos completed with warnings 2 hours ago"
         )
         // Two problems: the one that finished later leads, whatever the
         // storage order.
