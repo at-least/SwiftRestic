@@ -272,7 +272,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// (`sources`), split into one plan per entry at load
     /// (`AppConfiguration`).
     var path: String = ""
-    var excludePatterns: [String] = BackupPlan.defaultExcludes
+    /// A new plan starts with the defaults that match anywhere; the editor
+    /// fits them to the path as it is chosen.
+    var excludePatterns: [String] = BackupPlan.defaultExcludes(for: "")
     var excludeCaches: Bool = true
     var oneFileSystem: Bool = false
     var tags: [String] = []
@@ -326,8 +328,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     /// Noise the Finder, package managers and caches regenerate on their own.
     /// Nothing here may be the only copy of anything — a restored Git working
-    /// copy without its object store is "not a git repository". Plans keep
-    /// the list they were saved with; the defaults reach new plans only.
+    /// copy without its object store is "not a git repository". A plan gets
+    /// the ones that can match under its path (`defaultExcludes(for:)`).
     static let defaultExcludes = [
         ".DS_Store",
         "**/node_modules",
@@ -336,6 +338,36 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         "~/.Trash",
         "~/Library/Application Support/Steam",
     ]
+
+    /// The defaults a plan of `path` gets: those that match anywhere, and
+    /// each one anchored at the root only when it lies inside the path —
+    /// all of them for the home folder, none of the home folder's for
+    /// `~/dotfiles`, where they could never match. One naming the path
+    /// itself or a folder above it would leave nothing to back up, so it is
+    /// not among them; with no path yet, neither is any anchored one.
+    static func defaultExcludes(for path: String) -> [String] {
+        defaultExcludes.filter { defaultApplies($0, under: path) }
+    }
+
+    /// `patterns` without the defaults that cannot match under `path`; a
+    /// pattern that is not a default stays, whatever it matches. The load
+    /// applies it (`AppConfiguration`): a plan's path is fixed, so such a
+    /// default never will match, and dropping it changes no backup.
+    static func withoutInapplicableDefaults(_ patterns: [String], path: String) -> [String] {
+        patterns.filter { !defaultExcludes.contains($0) || defaultApplies($0, under: path) }
+    }
+
+    /// For the default list's shapes: an anchored pattern's components match
+    /// the path's one for one, `*` within a component, as restic matches
+    /// them — none of the defaults spans components with `**`.
+    private static func defaultApplies(_ pattern: String, under path: String) -> Bool {
+        guard pattern.hasPrefix("/") || pattern.hasPrefix("~") else { return true }
+        guard !path.isEmpty else { return false }
+        let patternParts = ResticService.expandTilde(pattern).split(separator: "/")
+        let pathParts = ResticService.expandTilde(path).split(separator: "/")
+        return patternParts.count > pathParts.count
+            && zip(patternParts, pathParts).allSatisfy { fnmatch(String($0), String($1), 0) == 0 }
+    }
 
     /// First-occurrence-wins deduplication, order preserved.
     static func withoutDuplicates(_ values: [String]) -> [String] {

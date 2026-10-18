@@ -102,7 +102,10 @@ struct AppConfiguration: Codable, Sendable {
 /// its own — and its stamps. The others are new plans with its settings and
 /// its slot (`lastRunAt`), so they wait for it instead of all starting at
 /// launch; no backup carries their ids yet, so they have no last backup.
-/// The plans are saved one path each with the next save.
+/// The plans are saved one path each with the next save. Each plan, split
+/// or not, sheds the default excludes its path cannot hold — saved before
+/// the defaults followed the path — once the path is known
+/// (`BackupPlan.withoutInapplicableDefaults`).
 private struct StoredPlan: Decodable {
     var plan: BackupPlan
     var sources: [String] = []
@@ -118,6 +121,14 @@ private struct StoredPlan: Decodable {
     }
 
     var plans: [BackupPlan] {
+        split.map { plan in
+            var plan = plan
+            plan.excludePatterns = BackupPlan.withoutInapplicableDefaults(plan.excludePatterns, path: plan.path)
+            return plan
+        }
+    }
+
+    private var split: [BackupPlan] {
         guard plan.path.isEmpty, let first = sources.first else { return [plan] }
         var original = plan
         original.path = first

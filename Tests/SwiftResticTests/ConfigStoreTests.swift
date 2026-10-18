@@ -294,6 +294,90 @@ struct TolerantDecodingTests {
         }
     }
 
+    @Test("a plan's default excludes are the ones that can match under its path")
+    func defaultExcludesFollowThePath() {
+        let home = NSHomeDirectory()
+        let anywhere = [".DS_Store", "**/node_modules"]
+        // A folder none of the home-folder defaults is inside.
+        #expect(BackupPlan.defaultExcludes(for: "~/dotfiles") == anywhere)
+        #expect(BackupPlan.defaultExcludes(for: home + "/dotfiles") == anywhere)
+        // The home folder, and every folder above it, holds them all.
+        #expect(BackupPlan.defaultExcludes(for: "~") == BackupPlan.defaultExcludes)
+        #expect(BackupPlan.defaultExcludes(for: "~/") == BackupPlan.defaultExcludes)
+        #expect(BackupPlan.defaultExcludes(for: (home as NSString).deletingLastPathComponent) == BackupPlan.defaultExcludes)
+        #expect(BackupPlan.defaultExcludes(for: "/") == BackupPlan.defaultExcludes)
+        // Inside the home folder, the ones inside the path.
+        #expect(BackupPlan.defaultExcludes(for: "~/Library") == anywhere + [
+            "~/Library/Caches", "~/Library/Containers/*/Data/Library/Caches", "~/Library/Application Support/Steam",
+        ])
+        #expect(BackupPlan.defaultExcludes(for: home + "/Library/Containers/com.example.app")
+            == anywhere + ["~/Library/Containers/*/Data/Library/Caches"])
+        // A default naming the path itself, or a folder above it, would
+        // leave nothing to back up.
+        #expect(BackupPlan.defaultExcludes(for: "~/Library/Caches") == anywhere)
+        #expect(BackupPlan.defaultExcludes(for: "~/Library/Caches/com.example") == anywhere)
+        // No path yet: what matches anywhere — a new plan's start.
+        #expect(BackupPlan.defaultExcludes(for: "") == anywhere)
+        #expect(BackupPlan().excludePatterns == anywhere)
+    }
+
+    @Test("at load a plan drops the defaults that cannot match under its path, and keeps every pattern it was given")
+    func inapplicableDefaultsDropAtLoad() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let home = NSHomeDirectory()
+        let defaults = String(decoding: try JSONEncoder().encode(BackupPlan.defaultExcludes), as: UTF8.self)
+        let json = """
+        {
+          "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "kind": "local", "localPath": "/tmp/repo"}],
+          "plans": [
+            {"id": "5B0E7C2D-0000-4000-8000-000000000001", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "\(home)/dotfiles",
+             "excludePatterns": [".DS_Store", "**/node_modules", "~/Library/Caches", "~/elsewhere/cache", "~/.Trash", "*.log",
+                                 "~/Library/Containers/*/Data/Library/Caches", "~/Library/Application Support/Steam"]},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000002", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "~", "excludePatterns": \(defaults)},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000003", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "sources": ["~", "~/Documents"], "excludePatterns": \(defaults)},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000004", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "\(home)/Music"},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000005", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "\(home)/Library", "excludePatterns": []}
+          ],
+          "runs": [],
+          "settings": {}
+        }
+        """
+        let file = directory.appendingPathComponent("config.json")
+        try Data(json.utf8).write(to: file)
+        let store = ConfigStore(directory: directory)
+        let loaded = try await store.load()
+        #expect(loaded.decodeNotes.isEmpty)
+        let anywhere = [".DS_Store", "**/node_modules"]
+
+        #expect(loaded.configuration.plans.map(\.excludePatterns) == [
+            // The defaults ~/dotfiles cannot hold go; the patterns given
+            // stay, even one anchored elsewhere, in their order.
+            anywhere + ["~/elsewhere/cache", "*.log"],
+            // The home folder holds them all.
+            BackupPlan.defaultExcludes,
+            // A split plan's folders each keep the ones that apply to them.
+            BackupPlan.defaultExcludes,
+            anywhere,
+            // Saved without the key: the defaults, fitted to the path.
+            anywhere,
+            // A list emptied by hand stays empty.
+            [],
+        ])
+
+        // Saved fitted, and a second load changes nothing.
+        try await store.save(loaded.configuration)
+        #expect(try await store.load().configuration.plans.map(\.excludePatterns)
+            == loaded.configuration.plans.map(\.excludePatterns))
+    }
+
     @Test("a history saved before stretches were stored gets them at load; a stored one stands")
     func problemStretchesFilledAtLoad() throws {
         let plan = UUID()

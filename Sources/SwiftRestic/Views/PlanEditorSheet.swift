@@ -238,6 +238,14 @@ struct PlanEditorSheet: View {
             // not born dirty.
             if initial == nil { initial = draft }
         }
+        // A new plan's excludes follow its path while they are still the
+        // defaults for the path before — the home folder's caches appear for
+        // the home folder, not for ~/dotfiles — and stop once the list is
+        // edited, so a hand-made list is never replaced.
+        .onChange(of: draft.path) { oldPath, newPath in
+            guard mode == .new, draft.excludePatterns == BackupPlan.defaultExcludes(for: oldPath) else { return }
+            draft.excludePatterns = BackupPlan.defaultExcludes(for: newPath)
+        }
         .confirmationDialog(
             "Discard changes?",
             isPresented: $isConfirmingDiscard,

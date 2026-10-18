@@ -257,8 +257,8 @@ the generator after editing it; the PNGs are checked in.
   menu and the row's menu: *Backups* (last backup, count, retention) with
   *Back Up Now* — *Stop* while it runs; *Schedule* (and when it runs next)
   with *Pause Schedule*, its arrow offering the lengths, or *Resume Schedule*
-  (none for a manual plan); *Configuration* (folder, exclude patterns,
-  hooks) with *Edit*. While the plan's newest failed or completed-with-errors
+  (none for a manual plan); *Configuration* (exclude patterns, hooks) with
+  *Edit*. While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,
   how many backups in a row ended that way for the same cause ("3 times in
@@ -268,7 +268,12 @@ the generator after editing it; the PNGs are checked in.
   drawer's diagnosis, and up to five unreadable items with the drawer's
   *Reveal in Finder* and *Exclude from “Documents”…* menu, then "… and N
   more in Activity"; *Show in Activity* opens the run. The editor
-  preselects the repository only when there is just one, says when a folder
+  preselects the repository only when there is just one, starts a new
+  plan's excludes with the defaults its folder can hold — `.DS_Store` and
+  `**/node_modules` anywhere, `~/Library/Caches` and the home folder's
+  other three only for a folder they lie in — and keeps them following the
+  folder until the list is edited (a plan saved with defaults its folder
+  cannot hold sheds them at load; patterns typed in stay), says when a folder
   is not on this Mac, takes excludes chosen in a panel or dropped from Finder
   as their own paths (glob characters escaped), and shows *Next backup* for
   the schedule being chosen, as Save would store it. *Skip online-only cloud
