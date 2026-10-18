@@ -8,19 +8,33 @@ import Foundation
 /// while an earlier one exists is a regression.
 enum EditorRequirements {
     /// The first requirement `BackupPlan.isConfigurationComplete` checks but
-    /// does not name, in the order the plan sheet presents them: the
-    /// header's Name and Repository, then the Files tab's folders.
-    static func plan(_ draft: BackupPlan) -> String? {
+    /// does not name, in the order the plan sheet's header presents them —
+    /// Name, Back up, Repository — then the one a configuration checks: a
+    /// repository holds one plan per path (`plans`, every configured plan,
+    /// the draft's own saved entry among them), its history being restic's
+    /// for that path.
+    static func plan(_ draft: BackupPlan, among plans: [BackupPlan]) -> String? {
         if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Name the plan to save it."
+        }
+        if draft.path.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Choose a folder to back up."
         }
         if draft.repositoryID == nil {
             return "Choose a repository to save it."
         }
-        if draft.sources.isEmpty {
-            return "Add at least one folder to back up."
+        let path = comparable(draft.path)
+        if plans.contains(where: { $0.id != draft.id && $0.repositoryID == draft.repositoryID && comparable($0.path) == path }) {
+            return "This repository already has a plan for this folder."
         }
         return nil
+    }
+
+    /// A path as restic will read it, for comparing two spellings of one:
+    /// trimmed, a tilde expanded, a trailing slash dropped.
+    private static func comparable(_ path: String) -> String {
+        let expanded = PathListEntry.value(for: path, expandsTildeInPath: true, escapesGlobs: false) ?? ""
+        return expanded.count > 1 && expanded.hasSuffix("/") ? String(expanded.dropLast()) : expanded
     }
 
     /// Test Connection's answer when no repository is at the location: a

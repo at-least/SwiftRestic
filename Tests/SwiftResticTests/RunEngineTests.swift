@@ -89,7 +89,7 @@ struct BackupRunEngineTests {
         var plan = BackupPlan()
         plan.name = "Engine Plan"
         plan.repositoryID = Repository().id
-        plan.sources = ["/tmp/engine-source"]
+        plan.path = "/tmp/engine-source"
         if !retentionEnabled { plan.retention.isEnabled = false }
         return plan
     }
@@ -170,7 +170,7 @@ struct BackupRunEngineTests {
         sink.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .refused(refused))]
         let untouched = MockResticClient().onBackup(.success(successOutcome()))
         var plan = makePlan()
-        plan.sources = ["/Volumes/\(volume)/Projects", "/tmp/engine-source"]
+        plan.path = "/Volumes/\(volume)/Projects"
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: untouched, base: sink))
         #expect(untouched.callLog.isEmpty)
         let record = try #require(sink.deliveredRecords.first)
@@ -179,22 +179,21 @@ struct BackupRunEngineTests {
         #expect(record.refusedShares == [volume])
     }
 
-    @Test("away folders' drives are asked about once each, in the order the plan names them, and a run with nothing away asks nothing")
+    @Test("an away folder's drive is asked about once, and a run with nothing away asks nothing")
     func awaySourcesAskedOnce() async throws {
-        let first = "SwiftResticAbsentA-\(UUID().uuidString)"
-        let second = "SwiftResticAbsentB-\(UUID().uuidString)"
+        let away = "SwiftResticAbsent-\(UUID().uuidString)"
         let sink = RecordingSink()
-        sink.reconnectAnswer = [ShareReconnect(volumeName: second, url: "smb://nas.local/\(second)", outcome: .unreachable("the server could not be reached"))]
+        sink.reconnectAnswer = [ShareReconnect(volumeName: away, url: "smb://nas.local/\(away)", outcome: .unreachable("the server could not be reached"))]
         let client = MockResticClient().onBackup(.failure(ResticError.commandFailed(exitCode: 1, message: RunRecord.everySourceMissingMessage)))
         var plan = makePlan()
-        plan.sources = ["/Volumes/\(first)/a", "/Volumes/\(first)/b", "/Volumes/\(second)/c"]
+        plan.path = "/Volumes/\(away)/c"
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
 
-        #expect(sink.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(first),\(second)"], "log was \(sink.log)")
+        #expect(sink.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(away)"], "log was \(sink.log)")
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .skipped)
         #expect(record.detailText
-            == "“\(first)” and “\(second)” are not connected. Reconnecting “\(second)” failed: the server could not be reached.")
+            == "“\(away)” is not connected. Reconnecting “\(away)” failed: the server could not be reached.")
 
         let here = RecordingSink()
         await BackupRunEngine.perform(
@@ -1060,7 +1059,7 @@ struct RetentionRunEngineTests {
         var plan = BackupPlan()
         plan.name = "Retention Plan"
         plan.repositoryID = Repository().id
-        plan.sources = ["/tmp/engine-source"]
+        plan.path = "/tmp/engine-source"
         return plan
     }
 

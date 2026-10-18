@@ -183,7 +183,7 @@ enum BackupRunEngine {
             // the checks below read them as drives that are away. After the
             // hooks, which may have mounted them.
             let neededPaths = (repository.kind == .local ? [repository.resolvedLocalPath] : [])
-                + plan.sources.map(ResticService.expandTilde)
+                + [ResticService.expandTilde(plan.path)]
             let shareFailures = await reconnectAwayShares(
                 of: neededPaths,
                 transcript: transcript,
@@ -353,20 +353,20 @@ enum BackupRunEngine {
             // A cache must never delay, and never fail, the run that feeds it.
             await sink.refreshSnapshots(repositoryID: repository.id)
         } catch let ResticError.commandFailed(_, message) where message.hasPrefix(RunRecord.everySourceMissingMessage) {
-            // Every folder missing: restic wrote nothing and said so. On
-            // drives that are away the run is skipped — a mount brings it
+            // The plan's folder missing: restic wrote nothing and said so.
+            // On a drive that is away the run is skipped — a mount brings it
             // back sooner (`catchUpAfterMount`). Missing from this Mac — its
             // startup disk, or a drive that is here — nothing brings it
-            // back, so the run fails and the plan's editor is the fix. The
-            // slot is stamped either way, so an hourly plan does not try
-            // again every tick.
-            if plan.sources.allSatisfy({ VolumePresence.isMounted(volumeOf: ResticService.expandTilde($0)) == false }) {
+            // back, so the run fails, a new plan for where the folder is now
+            // its fix. The slot is stamped either way, so an hourly plan
+            // does not try again every tick.
+            if VolumePresence.isMounted(volumeOf: ResticService.expandTilde(plan.path)) == false {
                 record.outcome = .skipped
-                record.detailText = RunRecord.skippedReason(sources: plan.sources, reconnectFailures: reconnectFailures)
+                record.detailText = RunRecord.skippedReason(sources: [plan.path], reconnectFailures: reconnectFailures)
             } else {
                 record.outcome = .failed
-                record.missingSources = plan.sources
-                record.failureMessage = RunRecord.folderGoneMessage(sources: plan.sources)
+                record.missingSources = [plan.path]
+                record.failureMessage = RunRecord.folderGoneMessage(path: plan.path)
             }
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         } catch {

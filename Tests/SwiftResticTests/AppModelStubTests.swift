@@ -51,7 +51,7 @@ struct AppModelStubTests {
         var plan = BackupPlan()
         plan.name = "Stub Plan"
         plan.repositoryID = repository.id
-        plan.sources = [root.path]
+        plan.path = root.path
         // Manual, so only the test decides when a backup happens and the
         // scheduler's 60 s tick cannot inject one mid-assertion.
         plan.schedule.frequency = .manual
@@ -1352,7 +1352,7 @@ struct AppModelStubTests {
         // A share holding the plan's folders: the plan's editor.
         model.configuration.repositories[repositoryIndex].localPath = here
         let planIndex = try #require(model.configuration.plans.firstIndex { $0.id == planID })
-        model.configuration.plans[planIndex].sources = ["/Volumes/\(volume)/Projects"]
+        model.configuration.plans[planIndex].path = "/Volumes/\(volume)/Projects"
         model.runBackup(planID: planID)
         await model.waitForRun(planID: planID)
         let folderRecord = try #require(model.configuration.runs.first)
@@ -1596,7 +1596,7 @@ struct AppModelStubTests {
         var kept = BackupPlan()
         kept.name = "Kept Plan"
         kept.repositoryID = other.id
-        kept.sources = [harness.root.path]
+        kept.path = harness.root.path
         kept.schedule.frequency = .manual
         harness.model.configuration.repositories.append(other)
         harness.model.configuration.plans.append(kept)

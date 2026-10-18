@@ -60,7 +60,7 @@ struct AppConfiguration: Codable, Sendable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         repositories = c.value(.repositories, default: [])
-        plans = c.value(.plans, default: [])
+        plans = c.value(.plans, default: [StoredPlan]()).flatMap(\.plans)
         // Records written before stretches were stored get theirs here, so
         // every backup problem in memory has one.
         runs = RunRecord.fillingProblemStretches(c.value(.runs, default: []))
@@ -92,6 +92,44 @@ struct AppConfiguration: Codable, Sendable {
     func repository(id: UUID?) -> Repository? {
         guard let id else { return nil }
         return repositories.first { $0.id == id }
+    }
+}
+
+/// A plan as a configuration holds it. Builds before 2026-10-18 saved a
+/// list of folders per plan (`sources`); a plan is one path now, so a list
+/// becomes one plan per folder, in its order, each folder once. The first
+/// keeps the plan's id — the tag its backups carry, so its history stays
+/// its own — and its stamps. The others are new plans with its settings and
+/// its slot (`lastRunAt`), so they wait for it instead of all starting at
+/// launch; no backup carries their ids yet, so they have no last backup.
+/// The plans are saved one path each with the next save.
+private struct StoredPlan: Decodable {
+    var plan: BackupPlan
+    var sources: [String] = []
+
+    private enum LegacyKeys: String, CodingKey {
+        case sources
+    }
+
+    init(from decoder: any Decoder) throws {
+        plan = try BackupPlan(from: decoder)
+        let c = try decoder.container(keyedBy: LegacyKeys.self)
+        sources = BackupPlan.withoutDuplicates(c.value(.sources, default: []))
+    }
+
+    var plans: [BackupPlan] {
+        guard plan.path.isEmpty, let first = sources.first else { return [plan] }
+        var original = plan
+        original.path = first
+        return [original] + sources.dropFirst().map { source in
+            var copy = plan
+            copy.id = UUID()
+            copy.path = source
+            copy.lastSuccessAt = nil
+            copy.lastCompleteBackupAt = nil
+            copy.staleAlertedFor = nil
+            return copy
+        }
     }
 }
 

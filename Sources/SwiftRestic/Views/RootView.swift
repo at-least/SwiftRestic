@@ -311,7 +311,7 @@ struct RootView: View {
             else { continue }
             model.adoptionLandingsConsidered.insert(repository.id)
             guard model.plans(in: repository.id).isEmpty,
-                  case let .plan(planID, _)? = model.shelves(for: repository.id).adoptableGroups.first
+                  case let .plan(planID, _)? = model.shelves(for: repository.id).adoptableGroups(localHost: model.localHostname).first
             else { continue }
             sidebarFolds.otherBackups.insert(repository.id)
             sidebarFolds.otherGroups.insert(OtherGroupFoldID(repositoryID: repository.id, planID: planID))
@@ -367,14 +367,15 @@ struct RootView: View {
         case "filesSearch":
             router.selection = model.configuration.plans.first.map { .plan($0.id) }
             router.request(.showFind)
-        // The first plan's page on its Files tab, its first source open and
+        // The first plan's page on its Files tab, its path open and
         // selected — or SWIFTRESTIC_CAPTURE_ITEM, an absolute path under
-        // that source (a folder spelled with a trailing slash), with every
-        // folder above it open.
+        // it (a folder spelled with a trailing slash), with every folder
+        // above it open.
         case "files":
             guard let plan = model.configuration.plans.first, let repositoryID = plan.repositoryID,
-                  let source = plan.sources.first
-            else { preconditionFailure("files needs a plan with a repository and a source") }
+                  !plan.path.isEmpty
+            else { preconditionFailure("files needs a plan with a repository and a path") }
+            let source = plan.path
             router.selection = .plan(plan.id)
             router.setTab(.files, of: .plan(plan.id))
             let chain = ResticService.planTag(plan.id)
@@ -479,7 +480,7 @@ struct RootView: View {
             for group in shelves.others {
                 let matches = switch (pane, group) {
                 case (.lineage, .lineage): true
-                case (.adoptable, .plan): shelves.formerPlan(of: group) == nil
+                case (.adoptable, .plan): shelves.adoptablePath(of: group, localHost: model.localHostname) != nil
                 case (.moved, .plan): shelves.formerPlan(of: group) != nil
                 default: false
                 }
@@ -522,6 +523,8 @@ struct RootView: View {
             // Into the repository on screen — the one the Repository menu
             // acts on — or the editor's own default when there is none.
             startNewPlan(in: model.commandRepositoryID(for: router.selection))
+        case let .newPlanIn(id):
+            startNewPlan(in: model.repository(id: id)?.id)
         case .newRepository:
             editingRepository = Repository()
         case .showFind:

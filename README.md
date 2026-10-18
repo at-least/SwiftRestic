@@ -133,16 +133,18 @@ the generator after editing it; the PNGs are checked in.
   context menu, or the repository page's *Other backups* card, listing each
   adoptable group while there is one) opens the plan editor with the group's
   name and, from the newest backup this Mac made — or the newest of all when
-  another Mac made them all — its folders, exclude patterns and user tags;
-  the repository is locked to the backups' own, the schedule is Daily only
-  when every prefilled folder exists here, and retention is off. Adopting
+  another Mac made them all — its folder, exclude patterns and user tags;
+  the folder and the repository are the backups' own, the schedule is Daily
+  only when the folder exists here, and retention is off. A group whose
+  backup holds several folders — a plan of an earlier build — cannot be
+  adopted, since a plan backs up one; its page says so. Adopting
   writes one plan whose ID is the group's UUID and nothing else: no snapshot
   retagged, nothing written to the repository; the records move under the
   plan by themselves. A group with a backup from another Mac, or one less
   than 48 hours old, is asked once more. Deleting a plan says its snapshots
-  stay under Other backups and can be adopted back; moving one to another
-  repository says what stays behind — never thinned, since retention runs
-  against the plan's current repository only.
+  stay under Other backups and can be adopted back. A plan does not move
+  between repositories; a group a move by an earlier build left behind
+  offers its plan instead.
 - **A repository's page is its overview.** A *Protection* line (“2 of 2
   plans protected · Last backup 1 hour ago”; with no plans, the count of
   backups from no plan here) carries the hold's words while backups are held
@@ -217,14 +219,28 @@ the generator after editing it; the PNGs are checked in.
   repository; a configuration that carries it moves it to the repositories
   reached over a network — every kind but a local folder, and a local
   folder on a saved network share — and the rest go unlimited.
-- **Backup plans** — a set of folders, exclude patterns, a schedule and a
-  retention policy, pointed at one repository. Each plan stamps its snapshots
-  with a private tag so retention can only ever touch its own. A plan's page
+- **Backup plans** — one folder or file, exclude patterns, a schedule and a
+  retention policy, pointed at one repository. A plan is its path in its
+  repository: the editor asks for both only when the plan is new (*Back up*,
+  typed or chosen, and *Repository*), shows them as text afterwards, and
+  will not save a second plan for a path its repository already has — the
+  same folder to another repository is another plan. restic keeps one
+  history per set of paths: a backup takes as its parent the newest one of
+  the same host whose paths cover its own, and retention groups by host and
+  exact path set (`--group-by host,paths`, restic 0.19.1), so a list of
+  folders that changed, or lost one to an away drive for a run, split its
+  history and its retention. A plan saved by a build before 2026-10-18 with
+  several folders becomes one plan per folder at load: the first keeps the
+  plan's id — its backups' tag, so its history stays its own — and its run
+  stamps; each other folder gets a new plan with the same settings and slot,
+  waiting for that slot, with no last backup until its first run. Each plan
+  stamps its snapshots with a private tag so retention can only ever touch
+  its own. A plan's page
   is three cards, each with its verb in its corner, all also in the Plan
   menu and the row's menu: *Backups* (last backup, count, retention) with
   *Back Up Now* — *Stop* while it runs; *Schedule* (and when it runs next)
   with *Pause Schedule*, its arrow offering the lengths, or *Resume Schedule*
-  (none for a manual plan); *Configuration* (folders, exclude patterns,
+  (none for a manual plan); *Configuration* (folder, exclude patterns,
   hooks) with *Edit*. While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,
@@ -245,9 +261,9 @@ the generator after editing it; the PNGs are checked in.
   flag to macOS (restic's changelog) — the editor says when this restic is
   older. What restic does with an online-only file without the flag was not
   tried: it would mean reading a real iCloud Drive file.
-- **Skipped backups** — when every folder of a plan is missing, restic writes
+- **Skipped backups** — when a plan's folder is missing, restic writes
   nothing (exit 1, "Fatal: all source directories/files do not exist",
-  restic 0.19.1). When every one is on a drive that is away — a volume under
+  restic 0.19.1). When it is on a drive that is away — a volume under
   /Volumes that is not mounted — the run is recorded as *Skipped*, its
   reason in Activity's Detail column, the drawer and Copy Details: "“Archive
   SSD” is not connected." It is no failure — no dot, notification, banner or
@@ -255,9 +271,10 @@ the generator after editing it; the PNGs are checked in.
   and it stamps the slot, so an hourly plan does not retry every minute. A
   folder missing from this Mac — its startup disk, or a drive that is here —
   comes back with no mount, so that run fails: "“Projects” is not on this
-  Mac — it was moved, renamed or deleted. Edit the plan to back up where it
-  is now.", with *Edit Plan…* beside it in the drawer and on the plan page;
-  the plan counts as unprotected, and a failure for the same folders merges
+  Mac — it was moved, renamed or deleted. Put it back, or back it up where
+  it is now with a new plan.", with *New Backup Plan…* (in the plan's
+  repository) beside it in the drawer and on the plan page, a plan's path
+  being fixed; the plan counts as unprotected, and a failure for the same folder merges
   into the last one as a standing skip does ("… Failed 5 times since …", a
   "Failing since:" line in Copy Details). Until 2026-10-15 such a run was
   Skipped, "None of its folders are on this Mac.", and the plan read as
@@ -265,7 +282,7 @@ the generator after editing it; the PNGs are checked in.
   scheduled *Skipped* posts nothing, but a *Back Up Now*, which ends in
   milliseconds, gets a passing banner: "“Documents” skipped — “Travel SSD” is
   not connected." When a volume mounts, each scheduled plan whose newest
-  backup was skipped and whose folders are all back runs at once (a disk
+  backup was skipped and whose folder is back runs at once (a disk
   image attached with `-nobrowse` counted); if the drive stays away the
   quiet-plan alert speaks.
   - *Repeats merge.* A skip that continues the plan's last one — same
@@ -327,7 +344,7 @@ the generator after editing it; the PNGs are checked in.
     listing says the skip's words, with no banner. When the network changes
     and is up, the failed listings of network repositories are read again
     and the plans whose newest backup was skipped run again, as on a mount.
-  - *Network shares.* A repository's folder or a plan's folders on a
+  - *Network shares.* A repository's folder or a plan's folder on a
     mounted network share (SMB) show which share in the repository editor,
     under *Folder*, and on the plan editor's Files tab — "On the network
     share smb://me@nas.local/NAS", read from the mounted volume — with a
@@ -801,8 +818,8 @@ plan cannot fire mid-capture.
 - `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits.
 - `SWIFTRESTIC_CAPTURE_PANE` picks the screen: `plan`, `repository`,
   `restore`, `activity`, `find`, `console`; `files` — the first plan's page
-  on its Files tab, its first source open and selected, or the item
-  `SWIFTRESTIC_CAPTURE_ITEM` names (an absolute path under that source, a
+  on its Files tab, its path open and selected, or the item
+  `SWIFTRESTIC_CAPTURE_ITEM` names (an absolute path under it, a
   folder with a trailing `/`) with every folder above it open, and with
   `SWIFTRESTIC_CAPTURE_SEARCH` that query in its search field; `orphanGroup`,
   `movedGroup`, `lineage` — the page of the first adoptable group, moved

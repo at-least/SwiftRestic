@@ -743,10 +743,10 @@ struct SnapshotNodeRow: View {
 
 // MARK: - Path list editor
 
-/// A list of paths with add/remove buttons, used for sources and excludes.
+/// A list of paths with add/remove buttons: a plan's exclude patterns.
 ///
 /// Typing, pasting and dropping are first-class: the audience keeps paths on
-/// the clipboard, and an NSOpenPanel per source is the app's biggest
+/// the clipboard, and an NSOpenPanel per entry is the app's biggest
 /// efficiency tax.
 struct PathListEditor: View {
     let title: String
@@ -755,12 +755,8 @@ struct PathListEditor: View {
     var systemImage = "folder.badge.gearshape"
     @Binding var paths: [String]
     var placeholder = "Add a pattern"
-    /// Sources are real paths, so a leading `~` has to become the home
-    /// directory — restic never sees a shell. Excludes are match patterns
-    /// where `~` must stay literal.
-    var expandsTildeInPath = false
     /// Choose…'s panel: what it asks for and its button.
-    var browseMessage = "Choose folders and files to back up"
+    var browseMessage = "Choose folders and files to leave out of backups"
     var browsePrompt = "Add"
     /// Excludes: an item chosen in the panel or dropped from Finder is
     /// entered as its own path, matching itself alone (`PathListEntry`).
@@ -798,8 +794,8 @@ struct PathListEditor: View {
                     )
             )
             .dropDestination(for: URL.self) { urls, _ in
-                // Only file URLs are sources: a dragged web link's `.path`
-                // would silently become a nonexistent backup source.
+                // Only file URLs are paths: a dragged web link's `.path`
+                // would silently become a pattern matching nothing.
                 let filePaths = urls.filter(\.isFileURL).map(\.path)
                 guard !filePaths.isEmpty else { return false }
                 addPaths(filePaths, picked: true)
@@ -830,9 +826,11 @@ struct PathListEditor: View {
     /// `picked`: the paths came from the panel or a drop, not the field.
     private func addPaths(_ rawPaths: [String], picked: Bool) {
         for raw in rawPaths {
+            // Stored as typed, `~` and all: the run expands it
+            // (`ResticService.backup`).
             guard let value = PathListEntry.value(
                 for: raw,
-                expandsTildeInPath: expandsTildeInPath,
+                expandsTildeInPath: false,
                 escapesGlobs: picked && escapesPickedGlobs
             ), !paths.contains(value) else { continue }
             paths.append(value)
@@ -860,6 +858,18 @@ enum FilePicker {
         panel.message = message
         panel.prompt = prompt
         return panel.runModal() == .OK ? panel.urls : nil
+    }
+
+    /// One folder or file: a plan's path.
+    @MainActor
+    static func chooseFolderOrFile(message: String) -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.message = message
+        panel.prompt = "Choose"
+        return panel.runModal() == .OK ? panel.urls.first : nil
     }
 
     /// `directoryURL` is where the panel opens; nil leaves it to AppKit's
@@ -993,7 +1003,7 @@ struct UnreadableItemLine: View {
             // By name, where and why; restic's whole line in the tooltip,
             // Copy Details and the log. A line with no stored path stays
             // restic's own.
-            if let words = RunRecordPresentation.unreadableItemWords(line: line, path: path, sources: plan?.sources ?? []) {
+            if let words = RunRecordPresentation.unreadableItemWords(line: line, path: path, sources: plan.map { [$0.path] } ?? []) {
                 VStack(alignment: .leading, spacing: 1) {
                     (Text(words.name) + Text(" — \(words.reason)").foregroundStyle(.secondary))
                         .font(.callout)

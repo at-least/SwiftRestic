@@ -261,14 +261,20 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     }
 }
 
-/// A set of folders backed up to one repository on a schedule.
+/// One folder or file backed up to one repository on a schedule.
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var id: UUID = UUID()
     var name: String = ""
     /// The name every surface shows: "Untitled Plan" when none was given.
     var displayName: String { name.isEmpty ? "Untitled Plan" : name }
     var repositoryID: UUID?
-    var sources: [String] = []
+    /// The folder or file the plan backs up, as typed or picked (a tilde
+    /// expands at run time). Fixed once the plan is saved, like its
+    /// repository: restic keeps one history per set of paths, so another
+    /// path is another plan. Builds before 2026-10-18 saved a list
+    /// (`sources`), split into one plan per entry at load
+    /// (`AppConfiguration`).
+    var path: String = ""
     var excludePatterns: [String] = BackupPlan.defaultExcludes
     var excludeCaches: Bool = true
     var oneFileSystem: Bool = false
@@ -309,11 +315,11 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         id = c.value(.id, default: UUID())
         name = c.value(.name, default: "")
         repositoryID = c.optional(.repositoryID)
-        // The string-list editors dedupe their own writes, so a duplicate
+        path = c.value(.path, default: "")
+        // The string-list editor dedupes its own writes, so a duplicate
         // here means a hand-edited config — and duplicates would give the
-        // path lists' rows colliding identities. First occurrence wins,
-        // order preserved.
-        sources = Self.withoutDuplicates(c.value(.sources, default: []))
+        // list's rows colliding identities. First occurrence wins, order
+        // preserved.
         excludePatterns = Self.withoutDuplicates(c.value(.excludePatterns, default: BackupPlan.defaultExcludes))
         excludeCaches = c.value(.excludeCaches, default: true)
         oneFileSystem = c.value(.oneFileSystem, default: false)
@@ -352,7 +358,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var isConfigurationComplete: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
             && repositoryID != nil
-            && !sources.isEmpty
+            && !path.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     /// The end of a timed pause that is still in force; `nil` once it has

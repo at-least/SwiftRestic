@@ -422,7 +422,7 @@ struct RepeatedProblemNotificationTests {
         // Folders gone from this Mac, by their paths: the message names only
         // each one's last component, and loses its digits.
         func gone(_ path: String) -> RunRecord {
-            var run = failed(0, message: RunRecord.folderGoneMessage(sources: [path]))
+            var run = failed(0, message: RunRecord.folderGoneMessage(path: path))
             run.missingSources = [path]
             return run
         }
@@ -537,7 +537,7 @@ struct RepeatedProblemNotificationTests {
         // A run merged into a standing failure for the same folders gone:
         // the run it continued is gone from the history, its count is not.
         func gone(_ minutes: Double) -> RunRecord {
-            var run = failed(minutes, message: RunRecord.folderGoneMessage(sources: ["/Users/me/Projects"]))
+            var run = failed(minutes, message: RunRecord.folderGoneMessage(path: "/Users/me/Projects"))
             run.missingSources = ["/Users/me/Projects"]
             return run
         }

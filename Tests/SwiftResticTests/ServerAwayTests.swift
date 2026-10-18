@@ -31,7 +31,7 @@ struct ServerAwayTests {
         var plan = BackupPlan()
         plan.name = "Documents"
         plan.repositoryID = repository.id
-        plan.sources = [root.path]
+        plan.path = root.path
         plan.retention.isEnabled = false
         // Daily and never run: due at the scheduler's first tick.
         plan.schedule.frequency = .daily

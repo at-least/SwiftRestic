@@ -102,7 +102,7 @@ struct OtherBackupsCard: View {
     @ViewBuilder
     var body: some View {
         let shelves = model.shelves(for: repositoryID)
-        let groups = shelves.adoptableGroups
+        let groups = shelves.adoptableGroups(localHost: model.localHostname)
         // The same rule as the Protection line: adoptable rows beside a
         // failed read promise action on stale facts. The sidebar keeps its
         // old groups beside the failure sentence, under its own rule.

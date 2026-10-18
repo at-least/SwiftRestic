@@ -18,12 +18,10 @@ struct SkippedRunTests {
             == "“Archive SSD” and “Travel” are not connected.")
     }
 
-    @Test("a backup whose folders are gone from this Mac names them and says what to do")
+    @Test("a backup whose folder is gone from this Mac names it and says what to do")
     func folderGoneMessage() {
-        #expect(RunRecord.folderGoneMessage(sources: ["/Users/me/Projects"])
-            == "“Projects” is not on this Mac — it was moved, renamed or deleted. Edit the plan to back up where it is now.")
-        #expect(RunRecord.folderGoneMessage(sources: ["/Users/me/Projects", "~/Notes"])
-            == "“Projects” and “Notes” are not on this Mac — they were moved, renamed or deleted. Edit the plan to back up where they are now.")
+        #expect(RunRecord.folderGoneMessage(path: "/Users/me/Projects")
+            == "“Projects” is not on this Mac — it was moved, renamed or deleted. Put it back, or back it up where it is now with a new plan.")
     }
 
     @Test("a failure for the same shares refused continues the plan's last one, as one for folders gone does; another cause stands alone")
@@ -55,7 +53,7 @@ struct SkippedRunTests {
             var run = RunRecord(kind: .backup, planID: planID, planName: "Projects", startedAt: now.addingTimeInterval(minutes * 60))
             run.outcome = .failed
             run.missingSources = sources
-            run.failureMessage = RunRecord.folderGoneMessage(sources: sources)
+            run.failureMessage = RunRecord.folderGoneMessage(path: sources[0])
             return run
         }
         let first = gone(0)
@@ -141,7 +139,7 @@ struct SkippedRunTests {
             var plan = BackupPlan()
             plan.name = "Archive"
             plan.repositoryID = UUID()
-            plan.sources = ["/Volumes/Archive SSD/Documents"]
+            plan.path = "/Volumes/Archive SSD/Documents"
             plan.schedule.frequency = frequency
             return plan
         }

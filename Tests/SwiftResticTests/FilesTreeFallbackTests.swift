@@ -45,7 +45,7 @@ struct ResticFilesFallbackTests {
         var plan = BackupPlan()
         plan.name = "Fallback plan"
         plan.repositoryID = repository.id
-        plan.sources = [data.path]
+        plan.path = data.path
         plan.excludePatterns = []
         _ = try await service.backup(context, plan: plan)
         let listing = try await service.snapshots(context, planID: nil, timeout: 60)
@@ -119,7 +119,7 @@ struct ResticFilesFallbackTests {
             var plan = BackupPlan()
             plan.name = "Read-ahead plan"
             plan.repositoryID = repository.id
-            plan.sources = [data.path]
+            plan.path = data.path
             plan.excludePatterns = []
             plan.schedule.frequency = .manual
             for round in 0 ..< 3 {

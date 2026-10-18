@@ -75,6 +75,34 @@ struct AdoptTests {
 
     // MARK: - The draft
 
+    @Test("a history whose backup holds several folders is not offered for adoption — a plan backs up one")
+    func severalFoldersAreNotAdoptable() throws {
+        let planID = UUID()
+        let tag = ResticService.planTag(planID)
+        let both = try snapshot("both", time: "2026-09-28T10:00:00Z", paths: ["/Data/Docs", "/Data/Photos"], tags: [tag])
+        let model = makeModel()
+        let repository = makeRepository()
+        loadModel(model, repository: repository, listing: [both])
+
+        #expect(model.adoptDraft(repositoryID: repository.id, planID: planID) == nil)
+        let shelves = model.shelves(for: repository.id)
+        #expect(shelves.adoptableGroups(localHost: model.localHostname).isEmpty)
+        let page = try #require(shelves.otherGroupPage(.plan(planID), repositories: [repository], localHost: model.localHostname))
+        #expect(!page.isAdoptable)
+        #expect(page.explanation
+            == "This backup carries the ID of a plan that isn't set up in SwiftRestic — it was deleted here, or it's still running on another Mac."
+                + " It holds several folders and a plan backs up one, so it can't be adopted.")
+
+        // A newer backup of one folder is the history a plan continues.
+        let one = try snapshot("one", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag])
+        loadModel(model, repository: repository, listing: [one, both])
+        #expect(model.adoptDraft(repositoryID: repository.id, planID: planID)?.path == "/Data/Docs")
+        #expect(model.shelves(for: repository.id).adoptableGroups(localHost: model.localHostname).count == 1)
+        #expect(model.shelves(for: repository.id).otherGroupPage(
+            .plan(planID), repositories: [repository], localHost: model.localHostname
+        )?.isAdoptable == true)
+    }
+
     @Test("the draft prefills from the newest backup this Mac made, and adopts one plan either way")
     func prefillPrefersThisMac() throws {
         let planID = UUID()
@@ -86,7 +114,7 @@ struct AdoptTests {
             tags: [tag], excludes: ["*.iso"]
         )
         let local = try snapshot(
-            "local", time: "2026-09-28T10:00:00Z", paths: ["/Data/Docs", "/Data/Photos"],
+            "local", time: "2026-09-28T10:00:00Z", paths: ["/Data/Docs"],
             tags: [tag, "travel"], excludes: ["node_modules", ".env"]
         )
         let model = makeModel()
@@ -99,7 +127,7 @@ struct AdoptTests {
         // The group's label names the draft: the row, the page and the
         // sheet's title are one word.
         #expect(draft.name == "Movies")
-        #expect(draft.sources == ["/Data/Docs", "/Data/Photos"])
+        #expect(draft.path == "/Data/Docs")
         #expect(draft.excludePatterns == ["node_modules", ".env"])
         #expect(draft.tags == ["travel"])
         // The editor's own defaults keep what restic does not record.
@@ -110,7 +138,7 @@ struct AdoptTests {
         #expect(draft.lastRunAt == nil && draft.lastSuccessAt == nil)
     }
 
-    @Test("the schedule follows the folders: Daily when every one is here, Manual otherwise")
+    @Test("the schedule follows the folder: Daily when it is here, Manual otherwise")
     func scheduleFollowsTheFolders() throws {
         let here = existingFolder()
         let planID = UUID()
@@ -122,7 +150,7 @@ struct AdoptTests {
         loadModel(model, repository: repository, listing: [present])
         #expect(model.adoptDraft(repositoryID: repository.id, planID: planID)?.schedule.frequency == .daily)
 
-        let missing = try snapshot("b", time: "2026-10-02T11:45:00Z", paths: [here, "/Data/Gone"], tags: [tag])
+        let missing = try snapshot("b", time: "2026-10-02T11:45:00Z", paths: ["/Data/Gone"], tags: [tag])
         loadModel(model, repository: repository, listing: [missing])
         #expect(model.adoptDraft(repositoryID: repository.id, planID: planID)?.schedule.frequency == .manual)
     }
@@ -197,7 +225,7 @@ struct AdoptTests {
         #expect(briefing.repositoryLine == "Home Disk — the backups live here")
         #expect(briefing.warnings == [
             "The newest backup was made on “other-mac” on \(Format.timestamp(newest.time)).",
-            "The folders come from another Mac and may not exist here.",
+            "The folder comes from another Mac and may not exist here.",
             "These backups are recent — a plan on another Mac may still be writing them.",
         ])
         #expect(briefing.needsConfirmation)
@@ -208,38 +236,29 @@ struct AdoptTests {
                 + " — adopt only backups no other Mac is still making.")
     }
 
-    @Test("the folders warnings speak about the folders the sheet shows, not the prefill alone")
-    func foldersWarningsFollowTheDraft() throws {
+    @Test("the folder warning says where the folder came from, or that it isn't on this Mac")
+    func folderWarningFollowsThePrefill() throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
-        let here = existingFolder()
         let foreign = try snapshot(
             "f", time: "2026-09-20T11:00:00Z", paths: ["/Data/Movies"], host: "other-mac", tags: [tag]
         )
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [foreign])
-        var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        #expect(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z"))?.warnings == [
+            "The newest backup was made on “other-mac” on \(Format.timestamp(foreign.time)).",
+            "The folder comes from another Mac and may not exist here.",
+        ])
 
-        // Replacing the other Mac's folders with this Mac's own takes the
-        // another-Mac warning away — it spoke about folders no longer shown.
-        draft.sources = [here]
-        #expect(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z"))?.warnings
-            == ["The newest backup was made on “other-mac” on \(Format.timestamp(foreign.time))."])
-
-        // A missing folder the user themselves set is a missing folder,
-        // never another Mac's prefill.
-        draft.sources = [here, "/Data/Gone"]
-        #expect(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z"))?.warnings.last
-            == "Not all of these folders still exist on this Mac.")
-
-        // This Mac's own prefill with a missing folder says the same
-        // existence fact — whichever Mac the prefill came from.
+        // This Mac's own backup of a folder that is gone says the existence
+        // fact instead.
         let local = try snapshot("l", time: "2026-09-28T10:00:00Z", paths: ["/Data/Gone"], tags: [tag])
         loadModel(model, repository: repository, listing: [local])
         let localDraft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(model.adoptBriefing(for: localDraft, now: date("2026-10-03T12:00:00Z"))?.warnings
-            == ["Not all of these folders still exist on this Mac."])
+            == ["This folder isn't on this Mac."])
     }
 
     @Test("a clean old local group adopts in one click, once its folders are here")
@@ -341,7 +360,7 @@ struct AdoptTests {
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: listing)
         var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        draft.sources = [existingFolder()]
+        draft.path = existingFolder()
 
         model.adopt(draft: draft)
 
@@ -370,7 +389,7 @@ struct AdoptTests {
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: listing)
         var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        draft.sources = [existingFolder()]
+        draft.path = existingFolder()
 
         model.adopt(draft: draft)
 
@@ -385,7 +404,7 @@ struct AdoptTests {
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: listing)
         var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        draft.sources = [existingFolder()]
+        draft.path = existingFolder()
 
         // A listing refresh drops the group while the sheet is open: the
         // briefing is gone (the sheet's words already left with it), and

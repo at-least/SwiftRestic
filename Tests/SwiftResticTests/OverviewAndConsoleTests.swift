@@ -211,7 +211,7 @@ struct OverviewMetricsTests {
         // under an exact two-day delta — every surface must spell the same
         // moment, or a tick flips one of them.
         var adopted = plan("Docs", repository: repository)
-        adopted.sources = ["/Users/someone/Documents"]
+        adopted.path = "/Users/someone/Documents"
         adopted.schedule.frequency = .daily
         let adoptedSnapshotTime = tick.addingTimeInterval(-2 * 86_400 - 3_600)
         let adoptedWords = ago(adoptedSnapshotTime)
@@ -433,21 +433,21 @@ struct OverviewMetricsTests {
         let repository = UUID()
         let now = date("2026-09-05 11:00:00")
         var photos = plan("Photos", repository: repository)
-        photos.sources = ["/Users/someone/Pictures"]
+        photos.path = "/Users/someone/Pictures"
         photos.schedule.frequency = .weekly
         photos.isEnabled = false
         var documents = plan("Documents", repository: repository)
-        documents.sources = ["/Users/someone/Documents"]
+        documents.path = "/Users/someone/Documents"
         documents.schedule.frequency = .daily
         documents.pausedUntil = date("2026-09-05 13:00:00")
         var code = plan("Code", repository: repository)
         code.schedule.frequency = .hourly
         var manual = plan("Archive", repository: repository)
-        manual.sources = ["/Users/someone/Archive"]
+        manual.path = "/Users/someone/Archive"
         manual.schedule.frequency = .manual
         manual.isEnabled = false
         var running = plan("Music", repository: repository)
-        running.sources = ["/Users/someone/Music"]
+        running.path = "/Users/someone/Music"
         running.schedule.frequency = .daily
         let plans = [photos, documents, code, manual, running]
 

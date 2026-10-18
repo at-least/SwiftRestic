@@ -181,7 +181,7 @@ struct NetworkShareTests {
         var plan = BackupPlan()
         plan.name = "Share Plan"
         plan.repositoryID = repository.id
-        plan.sources = ["/tmp/share-plan-source"]
+        plan.path = "/tmp/share-plan-source"
         await #expect {
             _ = try await model.previewRetention(plan: plan)
         } throws: { error in

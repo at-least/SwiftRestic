@@ -10,20 +10,57 @@ struct EditorRequirementTests {
     @Test("the plan editor names the first unmet requirement in the order the sheet shows its fields")
     func planRequirementOrdering() {
         var plan = BackupPlan()
-        #expect(EditorRequirements.plan(plan) == "Name the plan to save it.")
+        #expect(EditorRequirements.plan(plan, among: []) == "Name the plan to save it.")
 
         plan.name = "Documents"
-        #expect(EditorRequirements.plan(plan) == "Choose a repository to save it.")
+        #expect(EditorRequirements.plan(plan, among: []) == "Choose a folder to back up.")
+
+        plan.path = "/Users/demo/Documents"
+        #expect(EditorRequirements.plan(plan, among: []) == "Choose a repository to save it.")
 
         plan.repositoryID = UUID()
-        #expect(EditorRequirements.plan(plan) == "Add at least one folder to back up.")
+        #expect(EditorRequirements.plan(plan, among: []) == nil, "a complete plan has nothing to name")
 
-        plan.sources = ["/Users/demo/Documents"]
-        #expect(EditorRequirements.plan(plan) == nil, "a complete plan has nothing to name")
-
-        // A whitespace name is as absent as an empty one.
+        // Whitespace is as absent as nothing.
+        plan.path = "  "
+        #expect(EditorRequirements.plan(plan, among: []) == "Choose a folder to back up.")
+        plan.path = "/Users/demo/Documents"
         plan.name = "   "
-        #expect(EditorRequirements.plan(plan) == "Name the plan to save it.")
+        #expect(EditorRequirements.plan(plan, among: []) == "Name the plan to save it.")
+    }
+
+    @Test("a path another plan already backs up to the repository cannot be saved again; another repository, or the plan itself, can")
+    func planPathIsOncePerRepository() {
+        let home = UUID()
+        var saved = BackupPlan()
+        saved.name = "Documents"
+        saved.repositoryID = home
+        saved.path = "/Users/demo/Documents"
+
+        var draft = BackupPlan()
+        draft.name = "Documents again"
+        draft.repositoryID = home
+        let taken = "This repository already has a plan for this folder."
+        // Spelled the same, with a trailing slash, or padded: one path.
+        for spelling in ["/Users/demo/Documents", "/Users/demo/Documents/", " /Users/demo/Documents"] {
+            draft.path = spelling
+            #expect(EditorRequirements.plan(draft, among: [saved]) == taken, "spelled \(spelling)")
+        }
+        // A tilde is the home folder.
+        var inHome = saved
+        inHome.path = NSHomeDirectory() + "/Documents"
+        draft.path = "~/Documents"
+        #expect(EditorRequirements.plan(draft, among: [inHome]) == taken)
+
+        // A folder inside it is another path.
+        draft.path = "/Users/demo/Documents/Taxes"
+        #expect(EditorRequirements.plan(draft, among: [saved]) == nil)
+        // The same folder to another repository is another plan.
+        draft.path = "/Users/demo/Documents"
+        draft.repositoryID = UUID()
+        #expect(EditorRequirements.plan(draft, among: [saved]) == nil)
+        // A saved plan's own entry is not another plan.
+        #expect(EditorRequirements.plan(saved, among: [saved]) == nil)
     }
 
     @Test("a new plan's repository is chosen for it only when there is one to choose")

@@ -134,11 +134,11 @@ struct SchedulingTests {
     @Test("only enabled, complete, non-busy plans are returned as due")
     func duePlanFiltering() {
         let repositoryID = UUID()
-        func makePlan(name: String, enabled: Bool, sources: [String]) -> BackupPlan {
+        func makePlan(name: String, enabled: Bool, path: String) -> BackupPlan {
             var plan = BackupPlan()
             plan.name = name
             plan.repositoryID = repositoryID
-            plan.sources = sources
+            plan.path = path
             plan.isEnabled = enabled
             plan.schedule.frequency = .hourly
             plan.schedule.intervalHours = 1
@@ -146,10 +146,10 @@ struct SchedulingTests {
             return plan
         }
 
-        let ready = makePlan(name: "ready", enabled: true, sources: ["/tmp"])
-        let disabled = makePlan(name: "disabled", enabled: false, sources: ["/tmp"])
-        let incomplete = makePlan(name: "incomplete", enabled: true, sources: [])
-        let busy = makePlan(name: "busy", enabled: true, sources: ["/tmp"])
+        let ready = makePlan(name: "ready", enabled: true, path: "/tmp")
+        let disabled = makePlan(name: "disabled", enabled: false, path: "/tmp")
+        let incomplete = makePlan(name: "incomplete", enabled: true, path: "")
+        let busy = makePlan(name: "busy", enabled: true, path: "/tmp")
 
         let due = Scheduler.duePlans(
             in: [ready, disabled, incomplete, busy],
@@ -166,7 +166,7 @@ struct SchedulingTests {
         var plan = BackupPlan()
         plan.name = "orphaned"
         plan.repositoryID = missingRepositoryID
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         plan.schedule.frequency = .hourly
         plan.schedule.intervalHours = 1
 
@@ -194,11 +194,11 @@ struct SchedulingTests {
     @Test("upcomingRuns is the scheduler's own enumeration, shared with the plan page's Next backup value")
     func upcomingRunsFiltering() {
         let repositoryID = UUID()
-        func makePlan(name: String, enabled: Bool, sources: [String], lastRunAt: Date?) -> BackupPlan {
+        func makePlan(name: String, enabled: Bool, path: String, lastRunAt: Date?) -> BackupPlan {
             var plan = BackupPlan()
             plan.name = name
             plan.repositoryID = repositoryID
-            plan.sources = sources
+            plan.path = path
             plan.isEnabled = enabled
             plan.schedule.frequency = .hourly
             plan.schedule.intervalHours = 1
@@ -209,11 +209,11 @@ struct SchedulingTests {
         let now = date("2026-09-05 12:00:00")
         // Ran at 10:00, hourly: next due 11:00 — already past, which is the
         // card's "Due now" case and proves the date comes back unclamped.
-        let overdue = makePlan(name: "overdue", enabled: true, sources: ["/tmp"], lastRunAt: date("2026-09-05 10:00:00"))
-        let disabled = makePlan(name: "disabled", enabled: false, sources: ["/tmp"], lastRunAt: nil)
+        let overdue = makePlan(name: "overdue", enabled: true, path: "/tmp", lastRunAt: date("2026-09-05 10:00:00"))
+        let disabled = makePlan(name: "disabled", enabled: false, path: "/tmp", lastRunAt: nil)
         // An incomplete plan must not be listed: the card would announce it
         // as due forever while the scheduler never fires it.
-        let incomplete = makePlan(name: "incomplete", enabled: true, sources: [], lastRunAt: nil)
+        let incomplete = makePlan(name: "incomplete", enabled: true, path: "", lastRunAt: nil)
 
         let upcoming = Scheduler.upcomingRuns(
             in: [overdue, disabled, incomplete],
@@ -230,7 +230,7 @@ struct SchedulingTests {
         var plan = BackupPlan()
         plan.name = "waiting"
         plan.repositoryID = repositoryID
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         plan.schedule.frequency = .hourly
         plan.schedule.intervalHours = 1
 
@@ -255,7 +255,7 @@ struct SchedulingTests {
             var plan = BackupPlan()
             plan.name = name
             plan.repositoryID = repositoryID
-            plan.sources = ["/tmp"]
+            plan.path = "/tmp"
             plan.schedule.frequency = .daily
             plan.schedule.hour = 2
             plan.schedule.minute = 0
@@ -317,7 +317,7 @@ struct PauseSchedulingTests {
         var plan = BackupPlan()
         plan.name = name
         plan.repositoryID = repositoryID
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         plan.schedule.frequency = .daily
         plan.schedule.hour = 2
         plan.schedule.minute = 0
@@ -575,12 +575,12 @@ struct UpcomingRunTests {
         frequency: Schedule.Frequency,
         lastRun: Date?,
         enabled: Bool = true,
-        sources: [String] = ["/tmp"]
+        path: String = "/tmp"
     ) -> BackupPlan {
         var plan = BackupPlan()
         plan.name = name
         plan.repositoryID = UUID()
-        plan.sources = sources
+        plan.path = path
         plan.isEnabled = enabled
         plan.schedule.frequency = frequency
         plan.schedule.intervalHours = 1
@@ -595,7 +595,7 @@ struct UpcomingRunTests {
         let later = plan(name: "daily", frequency: .daily, lastRun: date("2026-09-05 02:00:00"))
         let manual = plan(name: "manual", frequency: .manual, lastRun: nil)
         let disabled = plan(name: "disabled", frequency: .hourly, lastRun: nil, enabled: false)
-        let incomplete = plan(name: "incomplete", frequency: .hourly, lastRun: nil, sources: [])
+        let incomplete = plan(name: "incomplete", frequency: .hourly, lastRun: nil, path: "")
 
         let now = date("2026-09-05 12:00:00")
         let next = Scheduler.nextScheduledRun(
@@ -1283,7 +1283,7 @@ struct LoginItemTests {
             var plan = BackupPlan()
             plan.name = "Documents"
             plan.repositoryID = UUID()
-            plan.sources = ["/tmp"]
+            plan.path = "/tmp"
             plan.schedule.frequency = frequency
             plan.isEnabled = enabled
             return plan

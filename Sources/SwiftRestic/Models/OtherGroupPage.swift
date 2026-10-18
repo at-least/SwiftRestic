@@ -21,6 +21,8 @@ struct OtherGroupPageSummary: Equatable {
     /// one: the moved variant's "Open the … Plan" target. Nil for an
     /// adoptable group, whose page offers the adopt verb instead.
     var formerPlan: BackupPlan?
+    /// Whether the page offers Adopt (`BackupShelves.adoptablePath`).
+    var isAdoptable: Bool
     var newestAt: Date
     var oldestAt: Date
     /// Where the page's Restore Files… lands — the group's newest record.
@@ -55,11 +57,13 @@ struct OtherGroupPageSummary: Equatable {
         snapshots: [Snapshot],
         title: String,
         formerPlan: BackupPlan?,
+        isAdoptable: Bool,
         repositories: [Repository],
         planID: UUID?
     ) {
         self.title = title
         self.formerPlan = formerPlan
+        self.isAdoptable = isAdoptable
         newestAt = snapshots[0].time
         oldestAt = snapshots[snapshots.count - 1].time
         newestSnapshotID = snapshots[0].id
@@ -91,6 +95,14 @@ struct OtherGroupPageSummary: Equatable {
             let carries = snapshots.count == 1 ? "This backup carries" : "These \(Format.plural(snapshots.count, "backup")) carry"
             explanation = "\(carries) the ID of a plan that isn't set up in SwiftRestic"
                 + " — it was deleted here, or it's still running on another Mac."
+            // A history of several folders, from builds that let a plan
+            // hold a list: a plan is one path now, so there is no plan to
+            // adopt it into.
+            if !isAdoptable {
+                explanation += snapshots.count == 1
+                    ? " It holds several folders and a plan backs up one, so it can't be adopted."
+                    : " They hold several folders and a plan backs up one, so they can't be adopted."
+            }
         }
 
         let hosts = Snapshot.distinctHosts(of: snapshots)
@@ -152,6 +164,7 @@ extension BackupShelves {
             snapshots: group.snapshots,
             title: label.title,
             formerPlan: formerPlan(of: group),
+            isAdoptable: adoptablePath(of: group, localHost: localHost) != nil,
             repositories: repositories,
             planID: planID
         )

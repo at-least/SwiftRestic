@@ -85,17 +85,33 @@ struct BackupShelves: Equatable {
         others.reduce(0) { $0 + $1.snapshots.count }
     }
 
-    /// The groups a repository's page offers to adopt: plan-UUID groups no
-    /// configuration sets up — a deleted plan's history, or one still
-    /// running on another Mac. Not a moved plan's (its plan exists, so its
-    /// page offers that instead) and not an untagged lineage's (it has no
-    /// UUID to adopt). The same classification `AppModel.adoptDraft`'s
-    /// guard reads.
-    var adoptableGroups: [OtherBackupsGroup] {
-        others.filter { group in
-            guard case .plan = group else { return false }
-            return formerPlan(of: group) == nil
-        }
+    /// The groups a repository's page offers to adopt: those with an
+    /// `adoptablePath(of:localHost:)`.
+    func adoptableGroups(localHost: String) -> [OtherBackupsGroup] {
+        others.filter { adoptablePath(of: $0, localHost: localHost) != nil }
+    }
+
+    /// The path a plan adopting `group` would back up — nil when the group
+    /// cannot be adopted. A plan-UUID group no configuration sets up (a
+    /// deleted plan's history, or one still running on another Mac) whose
+    /// prefill backup holds one path, as a plan does. Not a moved plan's
+    /// (its plan exists, so its page offers that instead), not an untagged
+    /// lineage's (it has no UUID to adopt). The one rule the page, the
+    /// sidebar's menu and `AppModel.adoptDraft` read.
+    func adoptablePath(of group: OtherBackupsGroup, localHost: String) -> String? {
+        guard case let .plan(_, snapshots) = group, formerPlan(of: group) == nil,
+              let prefill = Self.prefillSnapshot(among: snapshots, localHost: localHost),
+              prefill.paths.count == 1
+        else { return nil }
+        return prefill.paths[0]
+    }
+
+    /// The snapshot an adopt draft prefills from: the newest this Mac made,
+    /// else the newest of all — the folder most likely to exist here, with
+    /// the other-Mac warning carried beside it when it is not this Mac's.
+    /// `snapshots` are the group's, newest first.
+    static func prefillSnapshot(among snapshots: [Snapshot], localHost: String) -> Snapshot? {
+        snapshots.first { $0.hostname == localHost } ?? snapshots.first
     }
 
     /// `listing` newest first, as `ResticService.snapshots` sorts it;

@@ -583,7 +583,8 @@ struct SidebarView: View {
                     snapshots: snapshots,
                     label: labels[.plan(id)],
                     repository: repository,
-                    formerPlan: shelves.formerPlan(of: group)
+                    formerPlan: shelves.formerPlan(of: group),
+                    isAdoptable: shelves.adoptablePath(of: group, localHost: model.localHostname) != nil
                 )
             case let .lineage(lineage):
                 lineageRows(lineage, label: labels[.lineage(lineage.key)], repository: repository)
@@ -604,7 +605,8 @@ struct SidebarView: View {
         snapshots: [Snapshot],
         label: SnapshotLineage.Label?,
         repository: Repository,
-        formerPlan: BackupPlan?
+        formerPlan: BackupPlan?,
+        isAdoptable: Bool
     ) -> some View {
         let id = OtherGroupFoldID(repositoryID: repository.id, planID: planID)
         let isExpanded = folds.otherGroups.contains(id)
@@ -623,7 +625,10 @@ struct SidebarView: View {
         .tag(SidebarItem.orphanPlan(repositoryID: repository.id, planID: planID))
         .help(label?.detail ?? "")
         .contextMenu {
-            groupContextMenu(planID: planID, snapshots: snapshots, repository: repository, formerPlan: formerPlan)
+            groupContextMenu(
+                planID: planID, snapshots: snapshots, repository: repository,
+                formerPlan: formerPlan, isAdoptable: isAdoptable
+            )
         }
         // The same plan can have left backups in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(repository.name)”")
@@ -677,9 +682,10 @@ struct SidebarView: View {
         planID: UUID,
         snapshots: [Snapshot],
         repository: Repository,
-        formerPlan: BackupPlan?
+        formerPlan: BackupPlan?,
+        isAdoptable: Bool
     ) -> some View {
-        if formerPlan == nil {
+        if isAdoptable {
             Button("Adopt as a Backup Plan…") {
                 onAdoptGroup(repository.id, planID)
             }

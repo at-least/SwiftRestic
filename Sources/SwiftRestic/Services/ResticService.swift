@@ -591,7 +591,7 @@ struct ResticService: ResticClient {
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> BackupOutcome {
         var args = context.globalArguments + ["backup", "--json"]
-        for source in plan.sources { args.append(Self.expandTilde(source)) }
+        args.append(Self.expandTilde(plan.path))
         for pattern in plan.excludePatterns where !pattern.trimmingCharacters(in: .whitespaces).isEmpty {
             args += ["--exclude", Self.expandTilde(pattern)]
         }

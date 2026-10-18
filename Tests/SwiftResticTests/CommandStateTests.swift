@@ -38,7 +38,7 @@ struct CommandStateTests {
         var plan = BackupPlan()
         plan.name = name
         plan.repositoryID = repository?.id
-        plan.sources = ["/tmp/command-state-source"]
+        plan.path = "/tmp/command-state-source"
         plan.schedule.frequency = .daily
         return plan
     }
@@ -86,7 +86,7 @@ struct CommandStateTests {
         model.exclude(path: "/Users/u/Taxes/a[1].pdf", fromPlan: plan.id)
         #expect(model.plan(id: plan.id)?.excludePatterns.count == 2)
         // Nothing else of the plan moves.
-        #expect(model.plan(id: plan.id)?.sources == plan.sources)
+        #expect(model.plan(id: plan.id)?.path == plan.path)
     }
 
     @Test("the Plan menu acts on the selected plan, and on nothing else")
@@ -244,7 +244,7 @@ struct CommandStateTests {
         model.activity[plan.id] = nil
 
         var incomplete = plan
-        incomplete.sources = []
+        incomplete.path = ""
         model.configuration.plans = [incomplete]
         #expect(!model.planCommands(for: nil).canBackUpAll)
     }

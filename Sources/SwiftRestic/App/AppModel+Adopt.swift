@@ -31,34 +31,34 @@ extension AppModel {
 
     /// The draft the adopt sheet edits for one plan-UUID group: the plan
     /// adopting builds, prefilled from the history it adopts. Nil unless the
-    /// group is adoptable — a UUID that names a configured plan anywhere in
-    /// the configuration is that plan's moved history, which never offers
-    /// Adopt, and an untagged group has no UUID to adopt.
+    /// group is adoptable (`BackupShelves.adoptablePath`).
     func adoptDraft(repositoryID: UUID, planID: UUID) -> BackupPlan? {
+        let shelves = self.shelves(for: repositoryID)
         guard repository(id: repositoryID) != nil,
               plan(id: planID) == nil,
-              let group = shelves(for: repositoryID).orphanPlanGroup(planID),
+              let group = shelves.orphanPlanGroup(planID),
+              let path = shelves.adoptablePath(of: group, localHost: localHostname),
               // Uses the same label derivation that names the sidebar row
               // and the page, so the sheet's title never argues with the
               // row clicked.
-              let title = shelves(for: repositoryID).otherLabels(
+              let title = shelves.otherLabels(
                   repositories: configuration.repositories,
                   localHost: localHostname
               )[group.id]?.title,
-              let prefill = Self.prefillSnapshot(among: group.snapshots, localHost: localHostname)
+              let prefill = BackupShelves.prefillSnapshot(among: group.snapshots, localHost: localHostname)
         else { return nil }
         var draft = BackupPlan()
         draft.id = planID
         draft.name = title
         draft.repositoryID = repositoryID
-        draft.sources = prefill.paths
+        draft.path = path
         draft.excludePatterns = prefill.excludes
         // Plan tags are the group's plumbing; what the user tagged is everything else.
         draft.tags = prefill.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
         // Daily — a new plan's default — only when every prefilled folder is
         // here to back up. Otherwise the folders are likely another Mac's,
         // and a plan that cannot run here must not start on a schedule.
-        draft.schedule.frequency = Self.allSourcesExist(draft.sources) ? .daily : .manual
+        draft.schedule.frequency = Self.allSourcesExist([draft.path]) ? .daily : .manual
         // The history is the point of adopting: nothing thins it until a
         // policy is chosen with the dry run's answer in view.
         draft.retention.isEnabled = false
@@ -72,7 +72,7 @@ extension AppModel {
         guard let repositoryID = draft.repositoryID,
               let repository = repository(id: repositoryID),
               let group = shelves(for: repositoryID).orphanPlanGroup(draft.id),
-              let prefill = Self.prefillSnapshot(among: group.snapshots, localHost: localHostname)
+              let prefill = BackupShelves.prefillSnapshot(among: group.snapshots, localHost: localHostname)
         else { return nil }
         // The group's snapshots, newest first — a group exists only around
         // backups, so both ends are always there.
@@ -94,12 +94,11 @@ extension AppModel {
             let lead = foreign == newest ? "The newest backup" : "The newest backup from another Mac"
             warnings.append("\(lead) was made on “\(foreign.hostname ?? "Unknown host")” on \(Format.timestamp(foreign.time)).")
         }
-        // The another-Mac line only while the draft still holds the prefilled
-        // folders — replaced folders are neither Mac's prefill — and the
-        // missing line about whichever set is in the box.
-        if prefill.hostname != localHostname, draft.sources == prefill.paths {
-            warnings.append("The folders come from another Mac and may not exist here.")
-        } else if !Self.allSourcesExist(draft.sources) {
+        // The adopt sheet shows the path, it does not change it: the folder
+        // came from another Mac, or — this Mac's own — it is gone.
+        if prefill.hostname != localHostname {
+            warnings.append("The folder comes from another Mac and may not exist here.")
+        } else if !Self.allSourcesExist([draft.path]) {
             warnings.append(Self.missingSourcesWarning)
         }
         // Both conditions: a stale foreign host is not another Mac still
@@ -173,17 +172,9 @@ extension AppModel {
         ))
     }
 
-    /// The snapshot the draft prefills from: the newest this Mac made, else
-    /// the newest of all — the folders most likely to exist here, with the
-    /// other-Mac warning carried beside them when they are not this Mac's.
-    /// `snapshots` are the group's, newest first.
-    static func prefillSnapshot(among snapshots: [Snapshot], localHost: String) -> Snapshot? {
-        snapshots.first { $0.hostname == localHost } ?? snapshots.first
-    }
-
-    /// The missing-folders warning, said by the adopt sheet's footer and
-    /// beside the plan editor's folders.
-    static let missingSourcesWarning = "Not all of these folders still exist on this Mac."
+    /// The missing-folder warning, said by the adopt sheet's footer and
+    /// beside the plan editor's path.
+    static let missingSourcesWarning = "This folder isn't on this Mac."
 
     /// Whether every source folder (or file) is on this Mac now, tilde
     /// expanded — the fact behind both the schedule's default and the

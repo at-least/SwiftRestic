@@ -15,7 +15,7 @@ struct StaleAlertTests {
         var plan = BackupPlan()
         plan.name = "Documents"
         plan.repositoryID = UUID()
-        plan.sources = ["/Users/someone/Documents"]
+        plan.path = "/Users/someone/Documents"
         plan.schedule.frequency = frequency
         plan.lastSuccessAt = lastSuccessDaysAgo.map { now.addingTimeInterval(-$0 * day) }
         return plan
@@ -73,7 +73,7 @@ struct StaleAlertTests {
         timed.pausedUntil = now.addingTimeInterval(3600)
         let manual = plan(.manual, lastSuccessDaysAgo: 20)
         var incomplete = plan(lastSuccessDaysAgo: 20)
-        incomplete.sources = []
+        incomplete.path = ""
         let running = plan(lastSuccessDaysAgo: 20)
         #expect(due([off, timed, manual, incomplete, running], running: [running.id]).isEmpty)
         #expect(due([plan(lastSuccessDaysAgo: 20)], days: 0).isEmpty)
@@ -90,7 +90,7 @@ struct StaleAlertTests {
     @Test("a plan backing up around an away drive is named from its last whole backup, for the drive, and re-armed by the next whole one")
     func partialBackups() throws {
         var partial = plan(lastSuccessDaysAgo: 0.5)
-        partial.sources = ["/Users/someone/Documents", "/Volumes/Archive SSD/Photos", "/Volumes/Archive SSD/Music"]
+        partial.path = "/Volumes/Archive SSD/Photos"
         let whole = now.addingTimeInterval(-9 * day)
         partial.lastCompleteBackupAt = whole
         let alert = try #require(due([partial], awayDrives: { _ in ["Archive SSD"] }).first)

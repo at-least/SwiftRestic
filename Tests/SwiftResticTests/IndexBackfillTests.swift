@@ -54,7 +54,7 @@ struct IndexBackfillTests {
         var plan = BackupPlan()
         plan.name = "\(label) plan"
         plan.repositoryID = repository.id
-        plan.sources = [source.path]
+        plan.path = source.path
 
         let context = RepositoryContext(repository: repository, password: Self.password)
         let service = ResticService(runner: ResticRunner(), binary: binary.url)

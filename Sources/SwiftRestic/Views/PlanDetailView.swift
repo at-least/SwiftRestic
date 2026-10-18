@@ -418,8 +418,8 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The plan's defining facts — the folders it backs up and the patterns
-    /// it leaves out, as the editor's Files tab pairs them — then its hooks,
+    /// The plan's defining facts — the folder it backs up and the patterns
+    /// it leaves out — then its hooks,
     /// with Edit in its corner. When is the Schedule card's, what it keeps
     /// the Backups card's; where is the sidebar's: the plan sits under its
     /// repository.
@@ -428,24 +428,23 @@ struct PlanDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Backing up")
                     .font(.subheadline.weight(.medium))
-                ForEach(plan.sources, id: \.self) { source in
+                if plan.path.isEmpty {
+                    Text("No folder chosen yet.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
                     Label {
-                        Text((source as NSString).abbreviatingWithTildeInPath)
+                        Text((plan.path as NSString).abbreviatingWithTildeInPath)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     } icon: {
-                        // Every source wears it, a file too: decoration,
-                        // whose SF label ("Move") would only mislead.
+                        // A file wears it too: decoration, whose SF label
+                        // ("Move") would only mislead.
                         Image(systemName: "folder.fill")
                             .foregroundStyle(Theme.tint)
                             .accessibilityHidden(true)
                     }
                     .font(.callout)
-                }
-                if plan.sources.isEmpty {
-                    Text("No folders chosen yet.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
                 }
                 // As the user typed them, tilde and all; none, no section —
                 // as Hooks below.
@@ -486,7 +485,7 @@ struct PlanDetailView: View {
             Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
                 .labelStyle(.titleAndIcon)
                 .controlSize(.small)
-                .help("Change this plan's folders, schedule and retention")
+                .help("Change this plan's schedule, retention and what it leaves out")
         }
     }
 }

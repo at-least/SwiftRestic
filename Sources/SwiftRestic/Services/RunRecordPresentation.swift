@@ -17,8 +17,10 @@ enum RunFix: Equatable {
     case editRepositoryPath(UUID)
     /// restic exit 11: a lock this app does not hold is in the way.
     case removeStaleLocks(UUID)
-    /// None of the plan's folders is on this Mac (`RunRecord.missingSources`).
-    case editPlan(UUID)
+    /// The plan's folder is not on this Mac (`RunRecord.missingSources`):
+    /// a plan's path is fixed, so where the folder is now takes a new plan
+    /// in the same repository.
+    case newPlan(UUID)
     /// The repository's network share refused to reconnect
     /// (`RunRecord.refusedShares`): its editor holds the share's password.
     case editRepositoryShare(UUID)
@@ -38,7 +40,8 @@ enum RunFix: Equatable {
         switch self {
         case .editRepository, .editRepositoryPath, .editRepositoryShare: "Edit Repository…"
         case .removeStaleLocks: "Remove Stale Locks…"
-        case .editPlan, .editPlanShare, .editPlanRetention: "Edit Plan…"
+        case .newPlan: "New Backup Plan…"
+        case .editPlanShare, .editPlanRetention: "Edit Plan…"
         case .pruneNow: "Prune Now…"
         }
     }
@@ -49,7 +52,7 @@ enum RunFix: Equatable {
         case .editRepository: "The password doesn't open this repository — check it in the repository settings"
         case .editRepositoryPath: ResticError.noRepositoryAtPath
         case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
-        case .editPlan: "Point the plan at where its folders are now"
+        case .newPlan: "Back the folder up where it is now, with a new plan"
         case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
         case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan's Files tab"
         case .pruneNow: "What the failed backup uploaded stays in the repository until a prune — prune it to free the space"
@@ -125,9 +128,7 @@ enum RunRecordPresentation {
             return planExists ? .editPlanRetention(planID) : nil
         }
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
-        if run.missingSources != nil, let planID = run.planID {
-            return planExists ? .editPlan(planID) : nil
-        }
+        if run.missingSources != nil { return .newPlan(repositoryID) }
         // A network share that refused: whichever editor holds its password
         // — the repository's for its own folder's share, else the plan's.
         if let refusedShares = run.refusedShares {

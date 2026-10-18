@@ -17,6 +17,8 @@ final class AppRouter {
     /// no sheet is already up — refused with a beep otherwise.
     enum Intent: Equatable {
         case newPlan
+        /// A new plan in this repository: a failure's fix.
+        case newPlanIn(UUID)
         case newRepository
         case showFind
         case showConcepts

@@ -406,13 +406,12 @@ extension RunRecord {
             + "What it uploaded before it stopped stays in the repository until a prune frees it."
     }
 
-    /// Why a backup failed when none of its folders is on this Mac and no
-    /// drive it could wait for is away: each named, and what to do.
-    static func folderGoneMessage(sources: [String]) -> String {
-        let names = sources.map { "“\(($0 as NSString).lastPathComponent)”" }
-        return names.count == 1
-            ? "\(names[0]) is not on this Mac — it was moved, renamed or deleted. Edit the plan to back up where it is now."
-            : "\(Format.list(names)) are not on this Mac — they were moved, renamed or deleted. Edit the plan to back up where they are now."
+    /// Why a backup failed when the plan's folder is not on this Mac and no
+    /// drive it could wait for is away: named, and what to do — a plan's
+    /// path is fixed, so where the folder is now takes a new plan.
+    static func folderGoneMessage(path: String) -> String {
+        "“\((path as NSString).lastPathComponent)” is not on this Mac — it was moved, renamed or deleted."
+            + " Put it back, or back it up where it is now with a new plan."
     }
 
     /// This failure as the continuation of `previous`, the plan's newest

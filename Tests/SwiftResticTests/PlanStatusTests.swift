@@ -16,7 +16,7 @@ struct PlanStatusTests {
         var plan = BackupPlan()
         plan.name = "Documents"
         plan.repositoryID = repositoryID
-        plan.sources = ["/Users/someone/Documents"]
+        plan.path = "/Users/someone/Documents"
         plan.schedule.frequency = .daily
         plan.lastRunAt = now.addingTimeInterval(-3600)
         return plan
@@ -60,7 +60,7 @@ struct PlanStatusTests {
         var paused = stored
         paused.pausedUntil = now.addingTimeInterval(3600)
         var incomplete = draft
-        incomplete.sources = []
+        incomplete.path = ""
         #expect(PlanStatus.editorNextBackup(draft: manual, stored: stored, existingRepositoryIDs: [repositoryID], now: now) == nil)
         #expect(PlanStatus.editorNextBackup(draft: off, stored: stored, existingRepositoryIDs: [repositoryID], now: now) == nil)
         #expect(PlanStatus.editorNextBackup(draft: draft, stored: paused, existingRepositoryIDs: [repositoryID], now: now) == nil)

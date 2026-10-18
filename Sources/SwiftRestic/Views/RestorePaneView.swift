@@ -1109,7 +1109,7 @@ private struct IncompleteSnapshotStrip: View {
     /// restic's own line, which the tooltip keeps, where the run stored no
     /// path.
     private func words(for line: String, in run: RunRecord) -> String {
-        let sources = run.planID.flatMap { model.plan(id: $0) }?.sources ?? []
+        let sources = run.planID.flatMap { model.plan(id: $0) }.map { [$0.path] } ?? []
         guard let words = RunRecordPresentation.unreadableItemWords(line: line, path: run.unreadableItemPaths?[line], sources: sources)
         else { return line }
         return "\(words.name) — \(words.reason) · \(words.location)"

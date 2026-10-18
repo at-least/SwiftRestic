@@ -10,7 +10,7 @@ struct MenuBarStatusTests {
         var plan = BackupPlan()
         plan.name = name
         plan.repositoryID = UUID()
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         return plan
     }
 
@@ -351,7 +351,7 @@ struct MenuBarStatusTests {
             var plan = BackupPlan()
             plan.name = name
             plan.repositoryID = home.id
-            plan.sources = ["/tmp"]
+            plan.path = "/tmp"
             plan.schedule.frequency = .weekly
             return plan
         }
@@ -389,7 +389,7 @@ struct MenuBarStatusTests {
         var plan = BackupPlan()
         plan.name = "Documents"
         plan.repositoryID = repository.id
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         let reason = "Home NAS is running a prune — backups wait until it finishes."
         let locked = MenuBarStatus.planRows(
             plans: [plan], activity: [:], isResticAvailable: true,
@@ -408,7 +408,7 @@ struct MenuBarStatusTests {
         var plan = BackupPlan()
         plan.name = "Documents"
         plan.repositoryID = UUID()
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         let next = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(MenuBarStatus.resticMissingLine(isResticAvailable: false) == "restic is missing — backups are on hold.")
         #expect(MenuBarStatus.resticMissingLine(isResticAvailable: true) == nil)
@@ -747,9 +747,9 @@ struct MenuBarStatusTests {
     func planRowsStopWhileRunning() {
         let nightly = plan(name: "Nightly")
         var incomplete = plan(name: "Half")
-        incomplete.sources = []
+        incomplete.path = ""
         var unnamed = plan(name: "")
-        unnamed.sources = ["/tmp"]
+        unnamed.path = "/tmp"
         let photos = plan(name: "Photos")
 
         let idle = MenuBarStatus.planRows(plans: [nightly, incomplete, unnamed, photos], activity: [:], isResticAvailable: true)

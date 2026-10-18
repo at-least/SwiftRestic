@@ -88,7 +88,7 @@ struct OtherGroupView: View {
                 }
                 .controlSize(.small)
                 .help("Show this plan's page, where it backs up now")
-            } else if case let .plan(planID) = groupID {
+            } else if summary.isAdoptable, case let .plan(planID) = groupID {
                 // The flow's main entry; the group's context menu carries the
                 // same verb.
                 Button("Adopt as a Backup Plan…") { onAdopt(planID) }

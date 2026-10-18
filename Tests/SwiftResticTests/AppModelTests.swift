@@ -57,7 +57,7 @@ struct AppModelTests {
         var plan = BackupPlan()
         plan.name = "Test Plan"
         plan.repositoryID = repository.id
-        plan.sources = [sourceDirectory.path]
+        plan.path = sourceDirectory.path
         plan.excludePatterns = []
         plan.schedule.frequency = frequency
         plan.schedule.intervalHours = 1
@@ -515,7 +515,7 @@ struct AppModelTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
         let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
-        model.configuration.plans[index].sources = ["/Volumes/SwiftRestic Test Drive/Documents"]
+        model.configuration.plans[index].path = "/Volumes/SwiftRestic Test Drive/Documents"
 
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
@@ -534,14 +534,14 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a backup whose every folder is gone from this Mac fails with the plan's editor as its fix, and its repeats are one record")
+    @Test("a backup whose folder is gone from this Mac fails with a new plan in its repository as the fix, and its repeats are one record")
     func everySourceGoneFromThisMacFails() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
         let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
         let gone = harness.root.appendingPathComponent("gone").path
-        model.configuration.plans[index].sources = [gone]
+        model.configuration.plans[index].path = gone
 
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
@@ -550,8 +550,8 @@ struct AppModelTests {
         #expect(record.outcome == .failed)
         #expect(record.missingSources == [gone])
         #expect(record.failureMessage
-            == "“gone” is not on this Mac — it was moved, renamed or deleted. Edit the plan to back up where it is now.")
-        #expect(model.fix(for: record) == .editPlan(harness.plan.id))
+            == "“gone” is not on this Mac — it was moved, renamed or deleted. Put it back, or back it up where it is now with a new plan.")
+        #expect(model.fix(for: record) == .newPlan(try #require(harness.plan.repositoryID)))
         #expect(model.currentProblem(for: harness.plan.id) != nil)
         let plan = try #require(model.plan(id: harness.plan.id))
         #expect(plan.lastRunAt != nil, "the slot is stamped, so the plan does not re-fire every tick")
@@ -573,7 +573,7 @@ struct AppModelTests {
             }
         )
         let onDriveHere = "/Volumes/\(startup)\(harness.root.path)/moved"
-        model.configuration.plans[index].sources = [onDriveHere]
+        model.configuration.plans[index].path = onDriveHere
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         #expect(model.configuration.runs.first?.outcome == .failed)
@@ -688,48 +688,13 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a backup that skipped only folders on a drive that is away is skipped, its snapshot kept; a folder simply gone stays a warning")
-    func someSourcesAwayIsSkipped() async throws {
-        let harness = try await makeHarness()
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let model = harness.model
-        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
-        let source = try #require(harness.plan.sources.first)
-        model.configuration.plans[index].sources = [source, "/Volumes/SwiftRestic Absent Drive/Photos"]
-
-        model.runBackup(planID: harness.plan.id)
-        await model.waitForRun(planID: harness.plan.id)
-
-        let record = try #require(model.configuration.runs.first)
-        #expect(record.outcome == .skipped)
-        #expect(record.snapshotID != nil, "the folders that are here were backed up")
-        #expect(record.filesNew == 2)
-        #expect(record.detailText == "“SwiftRestic Absent Drive” is not connected; the other folders were backed up.")
-        #expect(record.itemErrorCount == 0)
-        #expect(record.itemErrors.isEmpty)
-        #expect(record.exitCode == 3)
-        let plan = try #require(model.plan(id: harness.plan.id))
-        #expect(plan.lastSuccessAt != nil)
-        #expect(model.currentProblem(for: harness.plan.id) == nil)
-
-        // A folder gone from the startup disk is not a drive away.
-        model.configuration.plans[index].sources = [source, harness.root.appendingPathComponent("gone").path]
-        model.runBackup(planID: harness.plan.id)
-        await model.waitForRun(planID: harness.plan.id)
-        let warned = try #require(model.configuration.runs.first)
-        #expect(warned.outcome == .completedWithErrors)
-        #expect(warned.itemErrorCount == 1)
-
-        await model.shutdown()
-    }
-
     @Test("a drive away at every slot leaves one record that counts the runs, and the replaced run's log goes with it")
     func standingSkipIsOneRecord() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
         let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
-        model.configuration.plans[index].sources = ["/Volumes/SwiftRestic Test Drive/Documents"]
+        model.configuration.plans[index].path = "/Volumes/SwiftRestic Test Drive/Documents"
 
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
@@ -1263,7 +1228,7 @@ struct UpsertStampTests {
         var plan = BackupPlan()
         plan.name = "Nightly"
         plan.repositoryID = UUID()
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
 
         model.upsert(plan: plan)
 
@@ -1288,7 +1253,7 @@ struct UpsertStampTests {
         var plan = BackupPlan()
         plan.name = "Archive"
         plan.repositoryID = UUID()
-        plan.sources = ["/tmp", "/Volumes/Archive SSD/Photos"]
+        plan.path = "/Volumes/Archive SSD/Photos"
         model.upsert(plan: plan)
 
         // The drive away: the rest backed up, the whole-backup stamp untouched.
@@ -1312,7 +1277,7 @@ struct UpsertStampTests {
         var plan = BackupPlan()
         plan.name = "Nightly"
         plan.repositoryID = UUID()
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         model.upsert(plan: plan)
 
         // Paused while the editor held its copy, as pausePlanSchedule does.
@@ -1378,7 +1343,7 @@ struct PausingTests {
         var plan = BackupPlan()
         plan.name = name
         plan.repositoryID = UUID()
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         return plan
     }
 
@@ -1452,7 +1417,7 @@ struct StartAtLoginSurfaceTests {
         var plan = BackupPlan()
         plan.name = "Documents"
         plan.repositoryID = repository.id
-        plan.sources = ["/tmp"]
+        plan.path = "/tmp"
         plan.schedule.frequency = .daily
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
@@ -1937,7 +1902,7 @@ struct OrphanPlanPurgeLaunchTests {
             var plan = BackupPlan()
             plan.name = name
             plan.repositoryID = repositoryID
-            plan.sources = [root.path]
+            plan.path = root.path
             plan.schedule.frequency = .manual
             plan.isEnabled = repositoryID == repository.id
             return plan

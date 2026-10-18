@@ -65,7 +65,7 @@ struct PlanEditorSheet: View {
 
     init(plan: BackupPlan, mode: Mode? = nil, initialTab: Tab = .files, onAdopted: ((UUID) -> Void)? = nil) {
         var plan = plan
-        let mode = mode ?? (plan.name.isEmpty && plan.sources.isEmpty ? .new : .editing)
+        let mode = mode ?? (plan.name.isEmpty && plan.path.isEmpty ? .new : .editing)
         self.mode = mode
         self.onAdopted = onAdopted
         isNew = mode != .editing
@@ -199,6 +199,11 @@ struct PlanEditorSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Button(mode == .adopt ? "Adopt" : (isNew ? "Create Plan" : "Save")) {
                     guard mode == .adopt else {
+                        // As restic will read it: trimmed, a typed tilde
+                        // expanded (restic sees no shell).
+                        if isNew {
+                            draft.path = PathListEntry.value(for: draft.path, expandsTildeInPath: true, escapesGlobs: false) ?? ""
+                        }
                         model.upsert(plan: draft)
                         saveSharePasswords()
                         dismiss()
@@ -211,7 +216,7 @@ struct PlanEditorSheet: View {
                 // In adopt mode the group must still be there: with the
                 // history gone there is nothing to adopt, and the footer
                 // above says so beside the greyed button.
-                .disabled(!draft.isConfigurationComplete || (mode == .adopt && briefing == nil))
+                .disabled(missingRequirement != nil || (mode == .adopt && briefing == nil))
             }
             .padding(12)
         }
@@ -318,23 +323,19 @@ struct PlanEditorSheet: View {
         }
     }
 
-    /// The network shares the folders are on, each once: as mounted now,
-    /// else as saved — a share away while the sheet is open keeps its rows,
-    /// so its password can still be replaced.
+    /// The network share the path is on: as mounted now, else as saved — a
+    /// share away while the sheet is open keeps its rows, so its password
+    /// can still be replaced.
     private var folderShares: [(share: MountedShare, isSaved: Bool)] {
-        var shares: [(share: MountedShare, isSaved: Bool)] = []
-        for source in draft.sources {
-            guard let volume = VolumePresence.volumeName(of: ResticService.expandTilde(source)),
-                  !shares.contains(where: { $0.share.volumeName == volume })
-            else { continue }
-            let saved = model.networkShare(forVolume: volume)
-            if let mounted = mountedShares.first(where: { $0.volumeName == volume }) {
-                shares.append((mounted, saved != nil))
-            } else if let saved {
-                shares.append((MountedShare(volumeName: saved.volumeName, url: saved.url), true))
-            }
+        guard let volume = VolumePresence.volumeName(of: ResticService.expandTilde(draft.path)) else { return [] }
+        let saved = model.networkShare(forVolume: volume)
+        if let mounted = mountedShares.first(where: { $0.volumeName == volume }) {
+            return [(mounted, saved != nil)]
         }
-        return shares
+        if let saved {
+            return [(MountedShare(volumeName: saved.volumeName, url: saved.url), true)]
+        }
+        return []
     }
 
     /// The typed share passwords, saved once the sheet has closed — the
@@ -360,7 +361,7 @@ struct PlanEditorSheet: View {
     }
 
     private var missingRequirement: String? {
-        EditorRequirements.plan(draft)
+        EditorRequirements.plan(draft, among: model.configuration.plans)
     }
 
     /// The first backup of a new scheduled plan starts within a minute of
@@ -376,11 +377,11 @@ struct PlanEditorSheet: View {
     /// The plan's identity, above the tabs and so on screen from every one
     /// of them — Arq's place for it: the sheet often opens over a
     /// repository's page or Activity, where nothing else names the plan
-    /// being edited. Only a new plan chooses its repository. A saved plan
-    /// sits under its repository in the sidebar, and its history is there:
-    /// a picker here would move the plan and leave every backup it made
-    /// behind, so its repository reads as text — and an adopt draft's
-    /// history lives in the one repository it is adopted in.
+    /// being edited. Only a new plan chooses its path and repository. A
+    /// saved plan is its path in its repository — restic keeps one history
+    /// per path, and the plan sits under its repository in the sidebar,
+    /// where that history is — so both read as text; an adopt draft's are
+    /// the history's own.
     private func identityHeader(_ briefing: AdoptBriefing?) -> some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
@@ -389,6 +390,25 @@ struct PlanEditorSheet: View {
                 TextField("Name", text: $draft.name, prompt: Text("Documents to NAS"))
                     .labelsHidden()
                     .focused($isNameFocused)
+            }
+            GridRow {
+                Text("Back up")
+                if mode == .new {
+                    HStack {
+                        TextField("Back up", text: $draft.path, prompt: Text("/Users/you/Documents"))
+                            .labelsHidden()
+                        Button("Choose…") {
+                            if let url = FilePicker.chooseFolderOrFile(message: "Choose the folder or file this plan backs up") {
+                                draft.path = url.path
+                            }
+                        }
+                    }
+                } else {
+                    Text((draft.path as NSString).abbreviatingWithTildeInPath)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(draft.path)
+                }
             }
             GridRow {
                 Text("Repository")
@@ -418,14 +438,7 @@ struct PlanEditorSheet: View {
 
     private var sourcesTab: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PathListEditor(
-                title: "Back up these folders and files",
-                systemImage: "folder.fill",
-                paths: $draft.sources,
-                placeholder: "/Users/you/Documents",
-                expandsTildeInPath: true
-            )
-            // Folders on a network share: its password, so a backup can
+            // A folder on a network share: its password, so a backup can
             // reconnect it. Not while adopting — the sheet is about history.
             if mode != .adopt {
                 ForEach(folderShares, id: \.share.volumeName) { entry in
@@ -441,10 +454,9 @@ struct PlanEditorSheet: View {
                     }
                 }
             }
-            // A folder that is gone fills the history with "does not exist,
-            // skipping" lines; said here first. Adopt's footer already says
-            // it, in the same words.
-            if mode != .adopt, !draft.sources.isEmpty, !AppModel.allSourcesExist(draft.sources) {
+            // A folder that is gone fails every backup; said here first.
+            // Adopt's footer already says it, in the same words.
+            if mode != .adopt, !draft.path.isEmpty, !AppModel.allSourcesExist([draft.path]) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(Theme.warning)
@@ -453,11 +465,11 @@ struct PlanEditorSheet: View {
                 }
                 .font(.callout)
             }
-            // Said here, where the source is chosen, rather than after a
+            // Said here, where the path is chosen, rather than after a
             // backup comes back with warnings. The check is a few string
-            // comparisons per source (ProtectedLocations).
+            // comparisons (ProtectedLocations).
             if model.fullDiskAccess != .granted,
-               let source = ProtectedLocations.firstProtectedSource(draft.sources, home: NSHomeDirectory())
+               let source = ProtectedLocations.firstProtectedSource([draft.path], home: NSHomeDirectory())
             {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -494,20 +506,12 @@ struct PlanEditorSheet: View {
             }
         }
         .padding(.top, 6)
-        // The folders' network shares, read off the main actor: a stalled
+        // The path's network share, read off the main actor: a stalled
         // share can hold the read for seconds.
-        .task(id: draft.sources) {
-            let sources = draft.sources.map(ResticService.expandTilde)
+        .task(id: draft.path) {
+            let path = ResticService.expandTilde(draft.path)
             let shares = await Task.detached {
-                var found: [MountedShare] = []
-                for source in sources {
-                    guard let volume = VolumePresence.volumeName(of: source),
-                          !found.contains(where: { $0.volumeName == volume }),
-                          let share = VolumePresence.mountedShare(holding: source)
-                    else { continue }
-                    found.append(share)
-                }
-                return found
+                VolumePresence.mountedShare(holding: path).map { [$0] } ?? []
             }.value
             guard !Task.isCancelled else { return }
             mountedShares = shares
@@ -552,7 +556,7 @@ struct PlanEditorSheet: View {
                 // Why the adopt draft opened on Manual: the folders it
                 // prefilled from were not all here to back up.
                 if adoptDefaultedToManual {
-                    Text("Recommended — the folders may not exist on this Mac.")
+                    Text("Recommended — the folder may not exist on this Mac.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -34,7 +34,7 @@ struct ConfigStoreTests {
         var plan = BackupPlan()
         plan.name = "Documents"
         plan.repositoryID = repository.id
-        plan.sources = ["/Users/someone/Documents"]
+        plan.path = "/Users/someone/Documents"
         plan.lastRunAt = Date(timeIntervalSince1970: 1_756_000_000)
 
         var configuration = AppConfiguration()
@@ -105,6 +105,89 @@ struct ConfigStoreTests {
         #expect(settings["downloadLimitKiBps"] == nil)
         expected["Cloud"] = [0, 2048]
         #expect(limits(try await store.load().configuration) == expected)
+    }
+
+    @Test("a plan an earlier build saved with several folders becomes one plan per folder; the first keeps its id and stamps")
+    func multiFolderPlansSplit() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        // Before 2026-10-18 a plan held a list of folders.
+        let json = """
+        {
+          "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "name": "Home Disk",
+                            "kind": "local", "localPath": "/tmp/repo"}],
+          "plans": [
+            {"id": "340CA842-C653-4E2D-B61F-D7653D70A521", "name": "Projects",
+             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "sources": ["/Users/me/Code", "/Users/me/Notes", "/Volumes/Archive SSD/Photos", "/Users/me/Code"],
+             "excludePatterns": ["*.log"], "tags": ["work"], "isEnabled": false,
+             "schedule": {"frequency": "daily", "intervalHours": 1, "hour": 3, "minute": 30, "weekday": 2},
+             "retention": {"isEnabled": true, "keepLast": 3, "keepHourly": 0, "keepDaily": 0,
+                           "keepWeekly": 0, "keepMonthly": 0, "keepYearly": 0, "runPrune": false},
+             "lastRunAt": "2026-10-17T03:30:00Z", "lastSuccessAt": "2026-10-17T03:31:00Z",
+             "lastCompleteBackupAt": "2026-10-10T03:31:00Z", "staleAlertedFor": "2026-10-10T03:31:00Z"},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000002", "name": "Music",
+             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "sources": ["/Users/me/Music"]},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000003", "name": "Movies",
+             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "path": "/Users/me/Movies"},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000004", "name": "Unfinished",
+             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504"}
+          ],
+          "runs": [],
+          "settings": {}
+        }
+        """
+        let file = directory.appendingPathComponent("config.json")
+        try Data(json.utf8).write(to: file)
+        let store = ConfigStore(directory: directory)
+        let loaded = try await store.load()
+        #expect(loaded.decodeNotes.isEmpty)
+        let plans = loaded.configuration.plans
+
+        // One plan per folder, each once, in the list's order, right where
+        // the list stood.
+        #expect(plans.map(\.path) == [
+            "/Users/me/Code", "/Users/me/Notes", "/Volumes/Archive SSD/Photos",
+            "/Users/me/Music", "/Users/me/Movies", "",
+        ])
+        let original = try #require(plans.first)
+        let date = ISO8601DateFormatter()
+        #expect(original.id == UUID(uuidString: "340CA842-C653-4E2D-B61F-D7653D70A521"))
+        #expect(original.lastSuccessAt == date.date(from: "2026-10-17T03:31:00Z"))
+        #expect(original.lastCompleteBackupAt == date.date(from: "2026-10-10T03:31:00Z"))
+        #expect(original.staleAlertedFor == date.date(from: "2026-10-10T03:31:00Z"))
+
+        // The other folders: new plans with the settings copied. Their slot
+        // is the original's, so they wait for it; no backup carries their id
+        // yet, so nothing says they have one.
+        let copies = Array(plans[1 ... 2])
+        #expect(Set(copies.map(\.id)).count == 2)
+        #expect(!copies.contains { $0.id == original.id })
+        for copy in copies {
+            #expect(copy.name == "Projects")
+            #expect(copy.repositoryID == original.repositoryID)
+            #expect(copy.excludePatterns == ["*.log"])
+            #expect(copy.tags == ["work"])
+            #expect(copy.isEnabled == false)
+            #expect(copy.schedule == original.schedule)
+            #expect(copy.retention == original.retention)
+            #expect(copy.lastRunAt == original.lastRunAt)
+            #expect(copy.lastSuccessAt == nil)
+            #expect(copy.lastCompleteBackupAt == nil)
+            #expect(copy.staleAlertedFor == nil)
+        }
+        #expect(plans[3].id == UUID(uuidString: "5B0E7C2D-0000-4000-8000-000000000002"))
+
+        // Saved by this build: one path per plan, no list, and the split
+        // holds — the copies keep the ids they were given.
+        try await store.save(loaded.configuration)
+        let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+        let savedPlans = try #require(saved?["plans"] as? [[String: Any]])
+        #expect(savedPlans.allSatisfy { $0["sources"] == nil })
+        #expect(savedPlans.compactMap { $0["path"] as? String } == plans.map(\.path))
+        #expect(try await store.load().configuration.plans.map(\.id) == plans.map(\.id))
     }
 
     @Test("a hand-written config decodes: every stored key must be accepted")

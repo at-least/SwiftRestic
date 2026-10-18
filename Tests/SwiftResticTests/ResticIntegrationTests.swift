@@ -67,7 +67,7 @@ struct ResticIntegrationTests {
         var plan = BackupPlan()
         plan.name = "Integration plan"
         plan.repositoryID = repository.id
-        plan.sources = [sourceDirectory.path]
+        plan.path = sourceDirectory.path
         plan.excludePatterns = []
 
         return Fixture(
@@ -476,7 +476,7 @@ struct ResticIntegrationTests {
         // the newest backup's folder, not the plan name the repository never
         // knew.
         #expect(draft.name == "source")
-        #expect(draft.sources == [fixture.sourceDirectory.path])
+        #expect(draft.path == fixture.sourceDirectory.path)
         // The folder exists on this Mac, so the schedule dares to be Daily.
         #expect(draft.schedule.frequency == .daily)
 
@@ -707,49 +707,50 @@ struct ResticIntegrationTests {
         #expect(outcome.itemErrors.first?.hasPrefix(locked.path + ":") == true)
     }
 
-    @Test("a missing source folder is named, though restic sends no error event for it")
-    func missingSourceIsNamed() async throws {
+    @Test("a plan whose folder is missing writes no snapshot: restic fails with every source missing")
+    func missingPathWritesNothing() async throws {
         var fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
 
-        // An unmounted volume or a renamed folder: restic skips the source
-        // with a plain-text warning, still writes a snapshot of the rest, and
-        // exits 3 — the case that drops a whole top-level folder.
-        let missing = fixture.root.appendingPathComponent("does-not-exist").path
-        fixture.plan.sources = [fixture.sourceDirectory.path, missing]
+        // An unmounted volume or a renamed folder. A plan is one path, so
+        // nothing is left to back up: restic exits 1 and writes nothing —
+        // never the exit-3 snapshot of "the rest" a list of folders got.
+        fixture.plan.path = fixture.root.appendingPathComponent("does-not-exist").path
 
-        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
-
-        #expect(outcome.exitCode == ResticError.backupPartialSuccessCode)
-        #expect(outcome.summary?.snapshotID != nil, "a skipped source must still leave a snapshot of the rest")
-        #expect(outcome.itemErrors == ["\(missing) does not exist, skipping"])
+        await #expect {
+            try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        } throws: { error in
+            guard case let ResticError.commandFailed(exitCode, message) = error else { return false }
+            return exitCode == 1 && message.hasPrefix(RunRecord.everySourceMissingMessage)
+        }
+        #expect(try await fixture.service.snapshots(fixture.context).isEmpty)
     }
 
-    @Test("a missing source folder exits 3 with no error event, and only the transcript keeps restic's words")
-    func missingSourceIsTranscribed() async throws {
+    @Test("a missing folder's run keeps restic's words in the transcript, its skip line and its exit")
+    func missingPathIsTranscribed() async throws {
         var fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
 
-        let missing = fixture.root.appendingPathComponent("gone").path
-        fixture.plan.sources = [fixture.sourceDirectory.path, missing]
+        fixture.plan.path = fixture.root.appendingPathComponent("gone").path
         let transcript = RunTranscript()
         let service = fixture.service
         let context = fixture.context
         let plan = fixture.plan
-        let outcome = try await RunTranscript.$current.withValue(transcript) {
-            try await service.backup(context, plan: plan)
+        await #expect(throws: ResticError.self) {
+            try await RunTranscript.$current.withValue(transcript) {
+                try await service.backup(context, plan: plan)
+            }
         }
 
-        #expect(outcome.exitCode == 3)
         let entries = transcript.contents.entries
         #expect(entries.first?.kind == .command)
         #expect(entries.first?.text.hasPrefix("restic backup --json") == true, "first entry was \(entries.first?.text ?? "none")")
         #expect(entries.contains { entry in
             if case .output = entry.kind { entry.text.contains("gone does not exist, skipping") } else { false }
         }, "entries were \(entries.map(\.text))")
-        #expect(entries.contains { $0.kind == .exit(3) })
+        #expect(entries.contains { $0.kind == .exit(1) })
     }
 
     @Test("a repeat restore reports skipped files, not restored ones")
@@ -1041,7 +1042,7 @@ struct ResticMaintenanceTests {
         var plan = BackupPlan()
         plan.name = "Prune plan"
         plan.repositoryID = repository.id
-        plan.sources = [source.path]
+        plan.path = source.path
         plan.excludePatterns = []
 
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
@@ -1107,7 +1108,7 @@ struct ResticCheckDamageTests {
         var plan = BackupPlan()
         plan.name = "Check damage plan"
         plan.repositoryID = repository.id
-        plan.sources = [sourceDirectory.path]
+        plan.path = sourceDirectory.path
         plan.excludePatterns = []
 
         let context = RepositoryContext(repository: repository, password: "check-damage-password")
@@ -1188,7 +1189,7 @@ struct ResticDiffTests {
         var plan = BackupPlan()
         plan.name = "Diff plan"
         plan.repositoryID = repository.id
-        plan.sources = [source.path]
+        plan.path = source.path
         plan.excludePatterns = []
 
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
@@ -1260,7 +1261,7 @@ struct ResticFindTests {
         var plan = BackupPlan()
         plan.name = "Find plan"
         plan.repositoryID = repository.id
-        plan.sources = [source.path]
+        plan.path = source.path
         plan.excludePatterns = []
 
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
@@ -1323,7 +1324,7 @@ struct ResticFindTests {
         var plan = BackupPlan()
         plan.name = "Exact"
         plan.repositoryID = repository.id
-        plan.sources = [source.path]
+        plan.path = source.path
         plan.excludePatterns = []
 
         let service = ResticService(runner: ResticRunner(), binary: binary.url)

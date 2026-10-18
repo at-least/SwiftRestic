@@ -525,7 +525,7 @@ struct StubResticTests {
         var plan = BackupPlan()
         plan.name = "Stub plan"
         plan.repositoryID = repository.id
-        plan.sources = [root.path]
+        plan.path = root.path
         plan.excludePatterns = []
 
         return Fixture(

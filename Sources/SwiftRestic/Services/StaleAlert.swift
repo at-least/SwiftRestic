@@ -89,7 +89,7 @@ enum StaleAlert {
         isMounted: (String) -> Bool? = VolumePresence.isMounted(volumeOf:)
     ) -> [String] {
         var names: [String] = []
-        for source in plan.sources {
+        for source in [plan.path] {
             let path = (source as NSString).expandingTildeInPath
             guard isMounted(path) == false, let name = VolumePresence.volumeName(of: path), !names.contains(name)
             else { continue }

@@ -378,8 +378,8 @@ struct SidebarTreeTests {
         let g0 = try snapshot("g0", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(deleted)])
         let x1 = try snapshot("x1", time: "2026-09-27T02:00:00Z", paths: ["/Data/Sites"], host: "old-mac")
         let shelves = BackupShelves(listing: [m1, g1, g0, x1], plans: [], allPlans: [movedAway])
-        #expect(shelves.adoptableGroups.map(\.id) == [.plan(deleted)])
-        #expect(shelves.adoptableGroups.map { $0.snapshots.map(\.id) } == [["g1", "g0"]])
+        #expect(shelves.adoptableGroups(localHost: "this-mac").map(\.id) == [.plan(deleted)])
+        #expect(shelves.adoptableGroups(localHost: "this-mac").map { $0.snapshots.map(\.id) } == [["g1", "g0"]])
         // The card's accessory total is the node's own: every other backup,
         // not just the adoptable ones.
         #expect(shelves.otherBackupsCount == 4)
@@ -389,7 +389,7 @@ struct SidebarTreeTests {
         let documents = plan("Documents", in: nas)
         let d1 = try snapshot("d1", time: "2026-09-30T02:00:00Z", tags: [ResticService.planTag(documents.id)])
         let tidy = BackupShelves(listing: [d1], plans: [documents], allPlans: [documents])
-        #expect(tidy.adoptableGroups.isEmpty)
+        #expect(tidy.adoptableGroups(localHost: "this-mac").isEmpty)
         #expect(tidy.otherBackupsCount == 0)
     }
 
