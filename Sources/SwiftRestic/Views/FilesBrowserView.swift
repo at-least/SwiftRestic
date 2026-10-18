@@ -413,12 +413,13 @@ struct FilesBrowserView: View {
 }
 
 extension View {
-    /// A page's Overview | Files, in the window toolbar: Apple's guidance
-    /// for switching a main window's view, and where Activity's All runs |
-    /// Problems already sits.
+    /// A page's Overview | Files, in the middle of the window toolbar:
+    /// Apple's guidance for switching a main window's view (the HIG's
+    /// center area holds the common controls), clear of the trailing
+    /// corner, where a plan page's Edit sits.
     func pageTabPicker(_ selection: Binding<PageTab>) -> some View {
         toolbar {
-            ToolbarItem {
+            ToolbarItem(placement: .principal) {
                 Picker("View", selection: selection) {
                     Text("Overview").tag(PageTab.overview)
                     Text("Files").tag(PageTab.files)

@@ -31,6 +31,17 @@ struct PlanDetailView: View {
         .navigationTitle(plan.map { model.label(of: $0) } ?? "Plan")
         .navigationSubtitle(plan.map { ($0.path as NSString).abbreviatingWithTildeInPath } ?? "")
         .pageTabPicker(router.tabBinding(for: .plan(planID)))
+        .toolbar {
+            // The trailing corner's one item, a word: the HIG writes edit
+            // out, a symbol saying it poorly — as the repository page's.
+            // Deleting is rare and final, so it is not here: Plan ▸ Delete
+            // Plan… and the sidebar row's menu, through the one shared
+            // confirmation.
+            ToolbarItem {
+                Button("Edit", action: onEdit)
+                    .help("Change this plan's schedule, retention, what it leaves out and its hooks")
+            }
+        }
         // Opening the page marks the plan's problem seen — honestly, since
         // the problem row under the Backups card shows the failure for as
         // long as it stands. Keyed on the plan, not on appearing: moving
@@ -253,7 +264,7 @@ struct PlanDetailView: View {
             }
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             scheduleCard(plan)
-            configurationCard(plan)
+            excludingCard(plan)
         }
         .detailPane()
     }
@@ -421,58 +432,37 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The plan's defining facts — the patterns it leaves out, the folder
-    /// itself being the page's subtitle — then its hooks, with Edit in its
-    /// corner. When is the Schedule card's, what it keeps the Backups
-    /// card's; where is the sidebar's: the plan sits under its repository.
-    private func configurationCard(_ plan: BackupPlan) -> some View {
-        Card("Configuration") {
+    /// What the plan leaves out, as the user typed it, tilde and all — the
+    /// folder itself is the page's subtitle. When is the Schedule card's,
+    /// what it keeps the Backups card's, where the sidebar's (the plan sits
+    /// under its repository); the rest of how it runs, its hooks among it,
+    /// is the editor's, which the toolbar's Edit opens.
+    private func excludingCard(_ plan: BackupPlan) -> some View {
+        Card("Excluding") {
             VStack(alignment: .leading, spacing: 10) {
-                if plan.excludePatterns.isEmpty && plan.hooks.isEmpty {
-                    Text("Nothing is left out, and no hooks run.")
+                if plan.excludePatterns.isEmpty {
+                    Text("Nothing is left out.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                // As the user typed them, tilde and all; none, no section —
-                // as Hooks below.
-                if !plan.excludePatterns.isEmpty {
-                    Text("Excluding")
-                        .font(.subheadline.weight(.medium))
-                    ForEach(plan.excludePatterns, id: \.self) { pattern in
-                        Label {
-                            Text(pattern)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .help(pattern)
-                        } icon: {
-                            // The editor's glyph for the list, holding the
-                            // pattern where the folders' names start —
-                            // secondary, not the folders' tint: these are
-                            // what stays out of the backup.
-                            Image(systemName: "eye.slash")
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                        }
-                        .font(.callout)
+                ForEach(plan.excludePatterns, id: \.self) { pattern in
+                    Label {
+                        Text(pattern)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(pattern)
+                    } icon: {
+                        // The editor's glyph for the list, holding the
+                        // pattern where the folders' names start —
+                        // secondary, not the folders' tint: these are
+                        // what stays out of the backup.
+                        Image(systemName: "eye.slash")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
-                }
-
-                if !plan.hooks.isEmpty {
-                    Divider()
-
-                    DetailGrid {
-                        DetailRow("Hooks", "\(plan.hooks.filter(\.isRunnable).count) enabled")
-                    }
+                    .font(.callout)
                 }
             }
-        } accessory: {
-            // Deleting is rare and final, so it is not here: Plan ▸ Delete
-            // Plan… and the sidebar row's menu, through the one shared
-            // confirmation.
-            Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
-                .labelStyle(.titleAndIcon)
-                .controlSize(.small)
-                .help("Change this plan's schedule, retention and what it leaves out")
         }
     }
 }

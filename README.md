@@ -50,7 +50,8 @@ the generator after editing it; the PNGs are checked in.
   open. A repository wears a warning, its tooltip naming the plan, while a
   plan is not protected — backups unreadable, none yet, or the last one
   failed.
-- **Overview | Files** — a plan's page has both in the window toolbar.
+- **Overview | Files** — a plan's page has both in the middle of the window
+  toolbar, *Edit* at its right.
   Overview is its cards. Files is a tree on the left (drag its edge to widen
   it) of the folders and files of every backup the plan made, from the
   snapshot index — filling in while the index still reads, the newest backup
@@ -162,9 +163,9 @@ the generator after editing it; the PNGs are checked in.
   — a repeating cause (one unreadable file every run) is one row with its
   count ("7 times · 19 hours ago") opening the newest, and past five rows a
   last "… and N more in Activity" row opens Activity's Problems; then
-  location, size and maintenance, *Edit* in the Details card's corner as in
-  a plan's Configuration card's (the toolbar keeps only *Refresh*, a
-  symbol). The *Snapshots* row splits off backups no
+  location, size and maintenance, with *Refresh* and *Edit* apart at the
+  toolbar's right, *Edit* last as on a plan's page. The *Snapshots* row
+  splits off backups no
   plan here made (“11 · 6 from no plan here”, or “all”) and says how far
   back the history reaches (“509 · 3 from no plan here · since Jun 1, 2025”,
   the oldest backup's moment in the tooltip), as a plan page's does for its
@@ -258,12 +259,13 @@ the generator after editing it; the PNGs are checked in.
   stored is dropped at the next save; a run record keeps what it was called
   then. Each plan stamps its snapshots with a private tag so retention can
   only ever touch its own. A plan's page
-  is three cards, each with its verb in its corner, all also in the Plan
-  menu and the row's menu: *Backups* (last backup, count, retention) with
-  *Back Up Now* — *Stop* while it runs; *Schedule* (and when it runs next)
-  with *Pause Schedule*, its arrow offering the lengths, or *Resume Schedule*
-  (none for a manual plan); *Configuration* (exclude patterns, hooks) with
-  *Edit*. While the plan's newest failed or completed-with-errors
+  is three cards, the first two each with its verb in its corner and *Edit*
+  at the toolbar's right, all also in the Plan menu and the row's menu:
+  *Backups* (last backup, count, retention) with *Back Up Now* — *Stop*
+  while it runs; *Schedule* (and when it runs next) with *Pause Schedule*,
+  its arrow offering the lengths, or *Resume Schedule* (none for a manual
+  plan); *Excluding*, the patterns it leaves out (the rest of how it runs,
+  its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,
   how many backups in a row ended that way for the same cause ("3 times in
