@@ -9,7 +9,7 @@ extension AppModel {
         guard !tasks.isOccupied(.plan(planID)) else { return }
         guard let plan = plan(id: planID) else { return }
         if let reason = backupLockReason(for: plan) {
-            post(Banner(title: "“\(label(of: plan))” waits", message: reason, isError: false))
+            post(Banner(title: "“\(label(of: plan))” waits", message: reason, isError: false, symbolName: "clock"))
             return
         }
         guard plan.isConfigurationComplete, let repositoryID = plan.repositoryID,
@@ -146,8 +146,9 @@ extension AppModel: BackupRunEngine.Sink {
         })
     }
 
-    /// Stores and announces a finished run: its log, history, the in-app
-    /// banner, the user notification, and the external channels.
+    /// Stores and announces a finished run: its log, history, the user
+    /// notification, and the external channels — and, for a Back Up Now
+    /// that was skipped, the in-app banner.
     func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
         var record = record
         // Probed as the run ends and recorded: the drawer's wording reads
@@ -165,53 +166,30 @@ extension AppModel: BackupRunEngine.Sink {
         HookRunner(runner: runner)
     }
 
-    /// The in-app counterpart to `notify`: a finished backup lands in the
-    /// banner queue, so "did it work?" is answered in the pane the user is
-    /// looking at. The queue is global, so the title names the plan with
-    /// its repository.
+    /// A Back Up Now that was skipped, answered in the window: it ends in
+    /// milliseconds, the strip's flash saying nothing, and no surface but
+    /// Activity records a skip. How every other run went is the sidebar's
+    /// caption, the plan page's problem card, Activity's badge and the menu
+    /// bar's — where a banner over every page said it again, the whole
+    /// queue's worth after Back Up All (the HIG review of 2026-10-18).
+    /// A skip nobody asked for — a drive away at every slot of an hourly
+    /// plan — stays in Activity, and the quiet-plan alert speaks if the
+    /// drive stays away. The queue is global, so the title names the plan
+    /// with its repository.
     private func announceInApp(record: RunRecord) {
+        guard record.outcome == .skipped, let planID = record.planID,
+              activity[planID]?.askedByUser == true
+        else { return }
         let name = RunRecordPresentation.displayName(
             for: record,
             plans: configuration.plans,
             repositories: configuration.repositories
         )
-        switch record.outcome {
-        case .cancelled:
-            // The user asked for this stop, or confirmed the quit that
-            // caused it — a banner would add nothing.
-            return
-        case .skipped:
-            // A drive away at every slot of an hourly plan would post one
-            // an hour, so a run nobody asked for stays in Activity, and the
-            // quiet-plan alert speaks if the drive stays away. A Back Up Now
-            // is answered: it ends in milliseconds, the strip's flash saying
-            // nothing. Not an error, so it goes by itself.
-            guard let planID = record.planID, activity[planID]?.askedByUser == true else { return }
-            post(Banner(
-                title: "“\(name)” skipped",
-                message: record.detailText ?? "",
-                isError: false,
-                symbolName: RunRecord.Outcome.skipped.symbolName
-            ))
-        case .succeeded:
-            post(Banner(
-                title: "“\(name)” backed up",
-                message: "Backed up \(Format.bytes(record.dataAdded)) of new data in \(Format.duration(record.duration)).",
-                isError: false
-            ))
-        case .completedWithErrors:
-            // restic's partial success: a snapshot exists, so not a failure
-            // — but the unreadable items are what the banner queue exists to
-            // keep visible.
-            var message = RunRecordPresentation.warningBannerMessage(for: record)
-            if let hint = ItemErrorDiagnosis.headline(for: record) { message += " " + hint }
-            post(Banner(title: "“\(name)” finished with warnings", message: message, isError: true))
-        case .failed:
-            post(Banner(
-                title: "Backup of “\(name)” failed",
-                message: record.failureMessage ?? "",
-                isError: true
-            ))
-        }
+        post(Banner(
+            title: "“\(name)” skipped",
+            message: record.detailText ?? "",
+            isError: false,
+            symbolName: RunRecord.Outcome.skipped.symbolName
+        ))
     }
 }

@@ -61,10 +61,6 @@ struct OtherGroupView: View {
 
     private func content(_ summary: OtherGroupPageSummary) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            ForEach(model.banners) { banner in
-                BannerView(banner: banner)
-            }
-
             explanationCard(summary)
             backupsCard(summary)
         }

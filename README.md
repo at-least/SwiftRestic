@@ -635,8 +635,8 @@ the generator after editing it; the PNGs are checked in.
   added, the files restic could not read, and a plain-text log (Show Log…,
   Copy Details); the drawer opens its plan or repository, and restores
   record which backup, which item and where it went. A failure the drawer
-  offers a fix for says the fix in its own words, so the banner and
-  notification do too — exit 12 "The password doesn't open this repository
+  offers a fix for says the fix in its own words, so the plan page's problem
+  card and the notification do too — exit 12 "The password doesn't open this repository
   — check it in the repository settings.", exit 10 "No repository is at its
   location — put it back, or add it where it is now as a new repository."
   (*Add Repository…*), exit 11 "The repository is locked — if no other Mac is
@@ -666,6 +666,19 @@ the generator after editing it; the PNGs are checked in.
   completed-with-errors backup until a later success (its caption and dot
   read it however old), and any other run's problem for the week the Recent
   problems card, the Activity badge and the menu bar count.
+- **Banners** — one queue above every page, the Files tab and the console
+  included, for what has no other place to be said: a *Back Up Now*, *Check…*
+  or *Prune Now…* that was skipped, an ask that waits for a busy repository,
+  a restore's result with *Reveal in Finder*, an alert that could not be
+  sent, and the app's own trouble (the configuration, the Keychain, the login
+  item). How a run went is never one — the sidebar's caption, the plan page's
+  problem card, Activity's badge and the menu bar say it — nor is a
+  repository that cannot be read, which its sidebar row and its pages say for
+  as long as it lasts. (Until 2026-10-18 every finished backup posted one, and
+  Back Up All filled the queue on every page.) A banner wears the status
+  palette's mark: a failure's red octagon, a warning's orange triangle, a
+  success's green check, news in grey; errors and warnings stay until
+  dismissed.
 - **Menus** — *Plan* and *Repository* act on the sidebar's selection: a
   plan, a repository, or the repository a selected plan, backup record or
   Other-backups group belongs to; items with nothing to act on are grey.
@@ -998,8 +1011,8 @@ restic's warnings, and never sent to a webhook or chat channel.
 
 `forget` runs inside the backup that triggered it, so the plan's after-backup
 hooks cover it. *Apply Retention Now…* runs no hooks and sends no alerts: the
-banner and Activity announce it, and a Healthchecks ping would reset the
-dead-man's switch for a run that backed nothing up.
+plan page and Activity say how it went, and a Healthchecks ping would reset
+the dead-man's switch for a run that backed nothing up.
 
 ## Alerts
 
@@ -1013,8 +1026,9 @@ quiet about cancellations, since whoever cancelled already knows. Quitting the
 app waits for an in-flight start ping rather than dropping it. A notification
 that cannot be delivered is shown to you but never written into the run
 history, and that holds for the local system notification too: denied
-permission or a failed delivery names itself in a banner, once per failing
-stretch.
+permission or a failed delivery names itself in a warning banner, once per
+failing stretch — denied permission with *Open Notification Settings*, which
+opens SwiftRestic's entry in System Settings › Notifications.
 
 ## Behaviour worth knowing
 

@@ -122,14 +122,6 @@ struct RestorePaneView: View {
 
     private func browserPane(record: Snapshot?) -> some View {
         VStack(spacing: 0) {
-            // A restore started here ends here: the result lands at the top
-            // of the pane, under the window's restore strip whose place it
-            // takes. Its own view, so a banner never re-renders the tree.
-            // Claims height before the tree: at the stack's equal default
-            // share, queued banners are cut to a line each, while the
-            // scrolling tree keeps a floor of a few rows.
-            RestorePaneBanners()
-                .layoutPriority(1)
             toolbar(record: record)
             Divider()
             // Its own view, reading the run history itself: a new run
@@ -895,27 +887,6 @@ struct RestorePaneView: View {
                 to: directories[0],
                 overwrite: overwrite
             )
-        }
-    }
-}
-
-/// The shared banner queue at the top of the Restore pane. Never
-/// height-pinned (BannerView's rule): the pane does not scroll as a whole.
-/// Newer banners claim height first, so when the pane runs short the oldest
-/// is the one cut, never the result of the restore just finished.
-private struct RestorePaneBanners: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        if !model.banners.isEmpty {
-            VStack(spacing: 8) {
-                let banners = model.banners
-                ForEach(Array(banners.enumerated()), id: \.element.id) { index, banner in
-                    BannerView(banner: banner)
-                        .layoutPriority(Double(banners.count - index))
-                }
-            }
-            .padding([.horizontal, .top], 12)
         }
     }
 }

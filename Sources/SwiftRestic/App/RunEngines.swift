@@ -712,7 +712,8 @@ enum RetentionRunEngine {
         func service() throws -> any ResticClient
         func context(for repository: Repository) async throws -> RepositoryContext
         func noteAuthFailure(_ error: Error, repositoryID: UUID)
-        /// Stores the run and announces it in the window only.
+        /// Stores the run, and announces it nowhere: the plan page and
+        /// Activity say how it went.
         func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
         /// The maintenance engine's closing refresh, scheduled outside this
         /// (possibly cancelled) task.

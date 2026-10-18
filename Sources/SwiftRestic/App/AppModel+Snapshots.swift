@@ -117,7 +117,7 @@ extension AppModel {
                     post(Banner(
                         title: "Could not read “\(label(of: repository))”'s size",
                         message: error.localizedDescription,
-                        isError: false
+                        level: .warning
                     ))
                 }
             }
@@ -156,27 +156,21 @@ extension AppModel {
             // being gone. Earlier rows stay, as for any failed read. Two
             // sentences, because the sidebar shows only the first on one line.
             guard configuration.repository(id: repositoryID) != nil else { return }
+            // No banner: the sidebar's row and every page of the repository
+            // say it, for as long as it lasts.
             let advice = repository.kind == .local
                 ? "Is its disk connected? If it moved, update its path in the repository settings."
                 : "Check its location in the repository settings."
             snapshotListingOutcomes[repositoryID] = .failed("Repository missing. \(advice)")
-            post(Banner(
-                title: "Could not read “\(label(of: repository))”",
-                message: "The repository is missing at \(repository.resticRepositoryString).",
-                isError: true
-            ))
         } catch {
             // Keep whatever an earlier successful listing produced — stale
             // rows beside an error beat a blank card that reads as "nothing
-            // backed up".
+            // backed up". No banner: the sidebar's row and every page of the
+            // repository say it, for as long as it lasts — a banner over
+            // every page said it again (the HIG review of 2026-10-18).
             guard configuration.repository(id: repositoryID) != nil else { return }
             noteAuthFailure(error, repositoryID: repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(error.localizedDescription)
-            post(Banner(
-                title: "Could not read “\(label(of: repository))”",
-                message: error.localizedDescription,
-                isError: true
-            ))
         }
     }
 

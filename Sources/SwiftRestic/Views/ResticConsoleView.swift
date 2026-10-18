@@ -13,17 +13,6 @@ struct ResticConsoleView: View {
             historySidebar
             Divider()
             VStack(spacing: 0) {
-                // The shared banner queue, like every other pane: a
-                // repository failure while the console is open must not be
-                // the one message with nowhere to land.
-                if !model.banners.isEmpty {
-                    VStack(spacing: 8) {
-                        ForEach(model.banners) { banner in
-                            BannerView(banner: banner)
-                        }
-                    }
-                    .padding([.horizontal, .top], 12)
-                }
                 controls
                 Divider()
                 outputPane

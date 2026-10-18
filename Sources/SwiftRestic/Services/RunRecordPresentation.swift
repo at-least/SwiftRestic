@@ -346,33 +346,6 @@ enum RunRecordPresentation {
         }
     }
 
-    /// The in-app banner's message for a backup that finished with
-    /// warnings: the first unreadable item by name and how many more
-    /// restic counted, never how many lines were stored — restic's line
-    /// and count on a record that stored no path. Without one, what the
-    /// plan row explains the warning with (the line stored after the
-    /// items — a skipped retention step, a decoding gap — else a hook's
-    /// complaint), led by an unnamed exit 3 as the facts lead with it, so
-    /// a retention line never passes for the whole story. The fix, when
-    /// the app knows one, is the caller's to add.
-    static func warningBannerMessage(for run: RunRecord) -> String {
-        if let item = run.unreadableItems.first {
-            // By name where the run stored the item's path; older records
-            // keep restic's line.
-            guard let path = run.unreadableItemPaths?[item] else {
-                return "\(item) — \(Format.plural(run.itemErrorCount, "unreadable item")) in total."
-            }
-            let name = "“\((path as NSString).lastPathComponent)”"
-            let more = run.itemErrorCount - 1
-            return more > 0 ? "\(name) and \(Format.plural(more, "more item")) could not be read." : "\(name) could not be read."
-        }
-        let explanation = run.itemErrors.first ?? run.hookMessages.first ?? run.failureMessage
-        guard PlanStatus.facts(for: run).first == PlanStatus.unnamedUnreadFact else {
-            return explanation ?? RunRecord.unexplainedWarningMessage
-        }
-        return ([PlanStatus.unnamedUnreadFact + "."] + [explanation].compactMap { $0 }).joined(separator: " ")
-    }
-
     /// Nil for a restore that says nothing countable — a record without
     /// counts reads "Succeeded".
     private static func restoreDetail(_ run: RunRecord) -> String? {

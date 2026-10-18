@@ -131,25 +131,46 @@ struct BannerView: View {
     let banner: Banner
     var isDismissible = true
 
+    /// The status palette's glyph and hue for the banner's level, so a
+    /// colour means one thing app-wide: a failure's red octagon and a
+    /// warning's orange triangle are Activity's and the sidebar's for a run
+    /// that failed or completed with warnings.
     private var hue: Color {
-        banner.isError ? Theme.danger : banner.symbolName == nil ? Theme.success : .secondary
+        switch banner.level {
+        case .error: StatusPalette.status(.failed)
+        case .warning: StatusPalette.status(.completedWithErrors)
+        case .success: Theme.success
+        case .notice: .secondary
+        }
     }
     private var symbol: String {
-        banner.symbolName ?? (banner.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+        switch banner.level {
+        case .error: RunRecord.Outcome.failed.symbolName!
+        case .warning: RunRecord.Outcome.completedWithErrors.symbolName!
+        case .success: "checkmark.circle.fill"
+        case .notice: banner.symbolName ?? "info.circle"
+        }
+    }
+    /// Named for what it means — not every error's title says it failed
+    /// ("Keychain") — and silent for success and news, whose titles say it.
+    private var symbolLabel: String? {
+        switch banner.level {
+        case .error: "Error"
+        case .warning: "Warning"
+        case .success, .notice: nil
+        }
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             // The success check is decoration beside a title that already
             // says what happened, and its SF label read "Selected" to
-            // VoiceOver. The error triangle stays, named for what it means
-            // rather than SF's "Warning": not every error title says it
-            // failed ("Keychain").
+            // VoiceOver.
             Image(systemName: symbol)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(hue)
-                .accessibilityLabel(banner.isError ? "Error" : "")
-                .accessibilityHidden(!banner.isError)
+                .accessibilityLabel(symbolLabel ?? "")
+                .accessibilityHidden(symbolLabel == nil)
             // Title and message read as one utterance; the Reveal action and
             // the dismiss button stay their own elements beside them.
             VStack(alignment: .leading, spacing: 4) {
@@ -175,6 +196,12 @@ struct BannerView: View {
                         NSWorkspace.shared.activateFileViewerSelecting(banner.revealPaths.map { URL(fileURLWithPath: $0) })
                     }
                     .controlSize(.small)
+                }
+                // The fix as a button, where the words would only say
+                // where it is.
+                if let link = banner.link {
+                    Button(link.title) { NSWorkspace.shared.open(link.url) }
+                        .controlSize(.small)
                 }
             }
             Spacer()

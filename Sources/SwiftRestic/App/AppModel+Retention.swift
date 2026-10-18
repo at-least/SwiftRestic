@@ -43,7 +43,8 @@ extension AppModel {
             post(Banner(
                 title: "“\(label(of: repository))” is busy",
                 message: "A backup or another maintenance job is already using this repository.",
-                isError: false
+                isError: false,
+                symbolName: "clock"
             ))
             return
         }
@@ -63,36 +64,14 @@ extension AppModel {
 // MARK: - The retention engine's view of the model
 
 extension AppModel: RetentionRunEngine.Sink {
-    /// The record and the window's banner, and nothing else: no local
-    /// notification and no channel alert (see `RetentionRunEngine`).
+    /// The record, and nothing else: no banner, no local notification and
+    /// no channel alert (see `RetentionRunEngine`). How it went is the plan
+    /// page's — its Snapshots count, or its problem card and the sidebar's
+    /// caption for a failure — and Activity's, where a banner over every
+    /// page said it again (the HIG review of 2026-10-18).
     func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
         var record = record
         await seal(&record, transcript: transcript)
         append(record: record)
-        // Retention runs against the plan's repository, and the queue is
-        // global — the title names both, the one run-naming rule.
-        let name = RunRecordPresentation.displayName(
-            for: record,
-            plans: configuration.plans,
-            repositories: configuration.repositories
-        )
-        switch record.outcome {
-        case .succeeded, .completedWithErrors:
-            post(Banner(
-                title: "Applied retention to “\(name)”",
-                message: record.detailText ?? "",
-                isError: false
-            ))
-        case .failed:
-            post(Banner(
-                title: "Could not apply retention to “\(name)”",
-                message: record.failureMessage ?? "",
-                isError: true
-            ))
-        case .cancelled, .skipped:
-            // The user's own Stop, or the quit they confirmed: nothing to
-            // add. (A retention run is never skipped.)
-            break
-        }
     }
 }

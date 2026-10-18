@@ -601,32 +601,38 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("a repository missing at launch surfaces a banner naming it")
-    func missingAtLaunchSurfacesBanner() async throws {
+    @Test("a repository missing at launch says so in its listing's outcome, not in a banner")
+    func missingAtLaunchIsTheOutcome() async throws {
         let harness = try await makeHarness(mode: "missing")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         // Exit code 10 with nothing listed this session: the launch after
         // the backup disk was unplugged. Saving a new repository creates it
         // before it is kept, so the app never holds an uninitialised one.
-        let banner = try #require(harness.model.banners.first, "a missing repository must surface a banner")
-        #expect(banner.isError)
-        #expect(banner.title.contains("Stub Repo"))
-        #expect(banner.message.contains("missing"))
+        // The outcome is what the sidebar's row and the repository's pages
+        // say, for as long as it lasts; no banner repeats it over every page.
+        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+            Issue.record("expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
+            return
+        }
+        #expect(message.hasPrefix("Repository missing."), "message was \(message)")
+        #expect(!harness.model.banners.contains { $0.title.contains("Could not read “Stub Repo”") })
         #expect(harness.model.repositoriesMissingPassword.isEmpty)
 
         await harness.model.shutdown()
     }
 
-    @Test("an unexpected refresh failure surfaces a banner naming the repository")
-    func refreshFailureSurfacesBanner() async throws {
+    @Test("an unexpected refresh failure is the listing's outcome, not a banner")
+    func refreshFailureIsTheOutcome() async throws {
         let harness = try await makeHarness(mode: "plainfail")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        let banner = try #require(harness.model.banners.first, "a broken repository must surface a banner")
-        #expect(banner.isError)
-        #expect(banner.title.contains("Could not read"))
-        #expect(banner.title.contains("Stub Repo"))
+        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+            Issue.record("expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
+            return
+        }
+        #expect(!message.isEmpty)
+        #expect(!harness.model.banners.contains { $0.title.contains("Could not read “Stub Repo”") })
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
 
         await harness.model.shutdown()
@@ -1018,18 +1024,18 @@ struct AppModelStubTests {
         )
     }
 
-    @Test("a finished backup announces its outcome in the banner queue")
-    func finishedBackupAnnouncesItself() async throws {
+    @Test("a finished backup posts no banner: the plan's own surfaces say how it went")
+    func finishedBackupPostsNoBanner() async throws {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         harness.model.runBackup(planID: harness.plan.id)
         await harness.model.waitForRun(planID: harness.plan.id)
 
-        let banner = try #require(harness.model.banners.first)
-        #expect(!banner.isError)
-        #expect(banner.title.contains("Stub Plan"))
-        #expect(banner.message.contains("Backed up"))
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.outcome == .succeeded)
+        #expect(harness.model.plan(id: harness.plan.id)?.lastSuccessAt != nil)
+        #expect(!harness.model.banners.contains { $0.title.contains("Stub Plan") }, "banners were \(harness.model.banners.map(\.title))")
         // A settled run is not a reason to interject on quit.
         #expect(harness.model.quitInterruptions.isEmpty)
 
@@ -1046,11 +1052,11 @@ struct AppModelStubTests {
 
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .completedWithErrors)
-        let banner = try #require(harness.model.banners.first)
-        #expect(banner.isError)
-        #expect(banner.title.contains("finished with warnings"))
-        // The item by its name, from the path the run stored.
-        #expect(banner.message.hasPrefix("“secret-target” could not be read."), "message was \(banner.message)")
+        // The plan page's problem card and the sidebar's caption carry it —
+        // the plan's standing problem — and no banner says it again.
+        #expect(harness.model.currentProblem(for: harness.plan.id)?.id == record.id)
+        #expect(Array(record.unreadableItems) == ["/etc/secret-target: permission denied"])
+        #expect(!harness.model.banners.contains { $0.title.contains("Stub Plan") }, "banners were \(harness.model.banners.map(\.title))")
 
         await harness.model.shutdown()
     }
@@ -1076,34 +1082,7 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("the warning banner counts restic's unreadable items, never the stored lines")
-    func warningBannerCountsItemErrorCount() async throws {
-        let harness = try await makeHarness(mode: "default")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-
-        // One unreadable item, then the retention line stored after it.
-        var record = RunRecord(kind: .backup, planID: harness.plan.id, planName: "Stub Plan", repositoryID: harness.repository.id)
-        record.outcome = .completedWithErrors
-        record.itemErrors = ["/a: open /a: permission denied", RunRecord.retentionSkippedPrefix + "locked"]
-        record.itemErrorCount = 1
-        await harness.model.deliver(record: record, plan: harness.plan, transcript: RunTranscript.Contents())
-        let counted = try #require(harness.model.banners.first { $0.title.contains("finished with warnings") })
-        #expect(counted.message.hasPrefix("/a: open /a: permission denied — 1 unreadable item in total."), "message was \(counted.message)")
-
-        // A retention skip alone is its own explanation, never an item.
-        harness.model.banners.removeAll()
-        var retentionOnly = RunRecord(kind: .backup, planID: harness.plan.id, planName: "Stub Plan", repositoryID: harness.repository.id)
-        retentionOnly.outcome = .completedWithErrors
-        retentionOnly.itemErrors = [RunRecord.retentionSkippedPrefix + "locked"]
-        retentionOnly.itemErrorCount = 0
-        await harness.model.deliver(record: retentionOnly, plan: harness.plan, transcript: RunTranscript.Contents())
-        let retention = try #require(harness.model.banners.first { $0.title.contains("finished with warnings") })
-        #expect(retention.message == RunRecord.retentionSkippedPrefix + "locked", "message was \(retention.message)")
-
-        await harness.model.shutdown()
-    }
-
-    @Test("a run macOS blocked is stamped with the access state and says so in the banner and webhook")
+    @Test("a run macOS blocked is stamped with the access state and names the fix in its diagnosis and webhook")
     func tccBlockedRunNamesTheFix() async throws {
         let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
         defer { server.stop() }
@@ -1139,8 +1118,10 @@ struct AppModelStubTests {
         #expect(record.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 1, deniedByFilePermissions: 1))
         #expect(record.fullDiskAccessAtRun == .notGranted)
 
-        let banner = try #require(harness.model.banners.first { $0.title.contains("finished with warnings") })
-        #expect(banner.message.contains("SwiftRestic needs Full Disk Access"), "message was \(banner.message)")
+        // The fix is named where the run is read — the problem card's and
+        // the drawer's diagnosis — and in the webhook below.
+        let headline = try #require(ItemErrorDiagnosis.headline(for: record))
+        #expect(headline.contains("SwiftRestic needs Full Disk Access"), "headline was \(headline)")
 
         var bodies: [String] = []
         let bodyDeadline = Date.now.addingTimeInterval(5)
@@ -1157,8 +1138,8 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("a failed backup names the failure in a banner")
-    func failedBackupNamesTheFailure() async throws {
+    @Test("a failed backup is the plan's standing problem, named there and in no banner")
+    func failedBackupIsThePlansProblem() async throws {
         let harness = try await makeHarness(mode: "plainfail")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
@@ -1167,10 +1148,10 @@ struct AppModelStubTests {
 
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .failed)
-        let banner = try #require(harness.model.banners.first)
-        #expect(banner.isError)
-        #expect(banner.title.contains("failed"))
-        #expect(banner.message.contains(record.failureMessage ?? ""))
+        let problem = try #require(harness.model.currentProblem(for: harness.plan.id))
+        #expect(problem.id == record.id)
+        #expect(PlanStatus.summary(of: problem).message == record.failureMessage)
+        #expect(!harness.model.banners.contains { $0.title.contains("Stub Plan") }, "banners were \(harness.model.banners.map(\.title))")
 
         await harness.model.shutdown()
     }
@@ -1761,7 +1742,8 @@ struct AppModelStubTests {
         // Not a backup: the plan's run stamps stay where the backups left them.
         #expect(harness.model.plan(id: planID)?.lastRunAt == nil)
         #expect(harness.model.plan(id: planID)?.lastSuccessAt == nil)
-        #expect(await bannerTitled("Applied retention to “Stub Plan (Stub Repo)”", in: harness.model) != nil)
+        // How it went is the plan page's and Activity's: no banner.
+        #expect(!harness.model.banners.contains { $0.title.contains("retention") })
 
         // Attended and not a backup: nothing leaves the Mac — a Healthchecks
         // ping would reset the dead-man's switch for a run that backed
@@ -2001,11 +1983,6 @@ struct AppModelStubTests {
         }
         #expect(message.contains("doesn't open this repository"))
         #expect(message.contains("check it in the repository settings"))
-        // The failure is not a quiet state like a missing password: the user
-        // saved credentials that do not work, so the banner says so.
-        let banner = try #require(harness.model.banners.first, "a wrong password must surface a banner")
-        #expect(banner.isError)
-        #expect(banner.message.contains("doesn't open this repository"))
 
         await harness.model.shutdown()
     }

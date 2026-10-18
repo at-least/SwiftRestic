@@ -115,8 +115,8 @@ enum PlanStatus {
         let message: String? = if run.outcome == .failed {
             run.failureMessage ?? explanation
         } else {
-            // The banner's words for a bare exit 3 — only while the card
-            // lists nothing: listed items are the explanation.
+            // The words for a bare exit 3 — only while the card lists
+            // nothing: listed items are the explanation.
             explanation ?? run.failureMessage
                 ?? (run.outcome == .completedWithErrors && listedItems.isEmpty ? RunRecord.unexplainedWarningMessage : nil)
         }

@@ -146,7 +146,7 @@ extension AppModel {
                 title: "Could not send \(Format.plural(failures.count, "notification"))",
                 message: (subject.isEmpty ? failures : ["About \(subject)"] + failures)
                     .joined(separator: "\n"),
-                isError: true
+                level: .warning
             ))
         }
     }

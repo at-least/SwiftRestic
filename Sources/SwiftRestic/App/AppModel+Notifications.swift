@@ -146,20 +146,27 @@ extension AppModel {
             } catch {
                 guard !notificationsProblemNoted else { return }
                 notificationsProblemNoted = true
-                let message: String
+                // A warning, not an error: the run itself is unharmed. The
+                // permission's fix is a place, so the banner opens it rather
+                // than describing where it is (the HIG's Writing).
                 if let problem = error as? NotificationProblem, problem == .permissionDenied {
-                    message = "macOS notification permission is off — turn SwiftRestic on in System Settings › Notifications to see its alerts again."
+                    post(Banner(
+                        title: "Could not send a notification",
+                        message: "macOS notification permission is off for SwiftRestic, so its alerts don't appear.",
+                        level: .warning,
+                        link: Banner.Link(title: "Open Notification Settings", url: Self.notificationSettingsURL)
+                    ))
                 } else {
-                    message = error.localizedDescription
+                    post(Banner(title: "Could not send a notification", message: error.localizedDescription, level: .warning))
                 }
-                post(Banner(
-                    title: "Could not send a notification",
-                    message: message,
-                    isError: true
-                ))
             }
         }
     }
+
+    /// System Settings › Notifications, on this app's own entry.
+    static let notificationSettingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(Bundle.main.bundleIdentifier!)"
+    )!
 
     /// The local notification's title: the run's display name — the plan
     /// with its repository, the one rule every run surface names by — or

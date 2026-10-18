@@ -68,10 +68,6 @@ struct RepositoryDetailView: View {
     @ViewBuilder
     private func content(_ repository: Repository) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            ForEach(model.banners) { banner in
-                BannerView(banner: banner)
-            }
-
             ProtectionCard(repositoryID: repositoryID, onAddPlan: onAddPlan)
             OtherBackupsCard(repositoryID: repositoryID, onAdoptGroup: onAdoptGroup)
             RecentProblemsCard(repositoryID: repositoryID)

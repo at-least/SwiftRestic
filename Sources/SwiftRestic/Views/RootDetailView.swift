@@ -66,6 +66,7 @@ struct RootDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
             }
+            BannerQueue()
             if model.isBootstrapping {
                 // Configuration still being read: a loading state, not the
                 // empty states — an empty sidebar and Welcome here would read
@@ -165,6 +166,30 @@ struct RootDetailView: View {
             router.selection = .restoreSnapshot(repository.id, latest.id)
         }
         #endif
+    }
+}
+
+/// The banner queue, once, above every pane — a plan's Files tab and the
+/// console included, where each page had carried its own copy and some
+/// none: a restore started from a Files tab finished out of sight. Its own
+/// view, so a banner never re-renders the pane. Never height-pinned
+/// (BannerView's rule); newer banners claim height first, so when the
+/// column runs short the oldest is the one cut, never the news just in.
+private struct BannerQueue: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if !model.banners.isEmpty {
+            VStack(spacing: 8) {
+                let banners = model.banners
+                ForEach(Array(banners.enumerated()), id: \.element.id) { index, banner in
+                    BannerView(banner: banner)
+                        .layoutPriority(Double(banners.count - index))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+        }
     }
 }
 

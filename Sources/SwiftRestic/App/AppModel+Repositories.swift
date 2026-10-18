@@ -46,7 +46,7 @@ extension AppModel {
             post(Banner(
                 title: "Ignored environment variables",
                 message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; an entry for it in “\(label(of: repository))”'s extra environment (configuration file) has no effect.",
-                isError: false
+                level: .warning
             ))
         }
     }

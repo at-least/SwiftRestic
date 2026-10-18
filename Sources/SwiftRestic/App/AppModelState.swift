@@ -53,20 +53,75 @@ struct MaintenanceActivity: Sendable, Equatable {
     var lastOutput: String?
 }
 
-/// A transient message shown at the top of the detail pane.
+/// A transient message shown above the detail pane.
 struct Banner: Identifiable, Equatable {
+    /// What the banner is, and so its glyph and colour — the status
+    /// palette's own (`StatusPalette`), so a colour means one thing app-wide:
+    /// a failure's red octagon, a warning's orange triangle (a run that
+    /// completed with warnings wears it in Activity and the sidebar), a
+    /// success's green check, news in the secondary colour.
+    enum Level: Equatable {
+        case success
+        /// News, neither good nor bad — a skipped run, an ask that waits.
+        case notice
+        /// Something did not work that leaves the backups unharmed.
+        case warning
+        case error
+    }
+
+    /// A button that opens a place outside the app — the notification
+    /// permission's pane in System Settings.
+    struct Link: Equatable {
+        var title: String
+        var url: URL
+    }
+
     var id = UUID()
     var title: String
     var message: String
-    var isError: Bool
+    var level: Level
     /// When set, the banner offers a Reveal-in-Finder button, which selects
     /// them all — a restore that ends with "here is the path" reads finished
     /// only half-way.
     var revealPaths: [String] = []
-    /// A banner that is news, neither a success nor a failure, wears this
-    /// glyph in the secondary colour — a skipped run's own — instead of the
-    /// success check.
+    /// A notice's glyph, in the secondary colour — a skipped run's own —
+    /// instead of the generic one.
     var symbolName: String?
+    var link: Link?
+
+    init(
+        title: String,
+        message: String,
+        level: Level,
+        revealPaths: [String] = [],
+        symbolName: String? = nil,
+        link: Link? = nil
+    ) {
+        self.title = title
+        self.message = message
+        self.level = level
+        self.revealPaths = revealPaths
+        self.symbolName = symbolName
+        self.link = link
+    }
+
+    /// The two-way form most posts use: an error, or a success — a notice
+    /// when it names its own glyph.
+    init(title: String, message: String, isError: Bool, revealPaths: [String] = [], symbolName: String? = nil) {
+        self.init(
+            title: title,
+            message: message,
+            level: isError ? .error : symbolName == nil ? .success : .notice,
+            revealPaths: revealPaths,
+            symbolName: symbolName
+        )
+    }
+
+    var isError: Bool { level == .error }
+
+    /// Errors and warnings stay until dismissed: something did not work,
+    /// and it must not expire unread.
+    var staysUntilDismissed: Bool { level == .error || level == .warning }
 }
 
 /// Which pane the detail column is showing — the sidebar's selection, or the

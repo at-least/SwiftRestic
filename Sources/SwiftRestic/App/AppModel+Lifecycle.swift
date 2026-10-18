@@ -354,7 +354,8 @@ extension AppModel {
                 post(Banner(
                     title: "Approval needed",
                     message: await Task.detached { LoginItem.statusDescription }.value,
-                    isError: false
+                    isError: false,
+                    symbolName: "info.circle"
                 ))
             }
         } catch {

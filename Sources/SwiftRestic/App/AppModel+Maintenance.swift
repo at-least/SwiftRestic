@@ -66,7 +66,8 @@ extension AppModel {
             post(Banner(
                 title: "“\(label(of: repository))” is busy",
                 message: "A backup or another maintenance job is already using this repository.",
-                isError: false
+                isError: false,
+                symbolName: "clock"
             ))
             return
         }
@@ -178,20 +179,16 @@ extension AppModel: MaintenanceRunEngine.Sink {
         upkeepAwaitingDrive.insert(repositoryID)
     }
 
-    /// Stores a finished maintenance run with its log, announces a failure
-    /// — a check that found errors is a failure where hooks are concerned —
-    /// and a skip the user asked for, and notifies the external channels.
+    /// Stores a finished maintenance run with its log, announces a skip
+    /// the user asked for, and notifies the external channels. A failure —
+    /// a check that found errors is one where hooks are concerned — posts
+    /// no banner: the repository page's Last check or Last prune, its
+    /// Recent problems and Activity's badge say it.
     func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
         var record = record
         await seal(&record, transcript: transcript)
         append(record: record)
         switch record.outcome {
-        case .failed:
-            post(Banner(
-                title: "\(record.kind.displayName) failed on “\(label(of: repository))”",
-                message: record.failureMessage ?? "",
-                isError: true
-            ))
         case .skipped:
             // The drive away: Check… or Prune Now… is answered, as Back Up
             // Now is; a scheduled one waits in silence, Next check saying
@@ -203,7 +200,7 @@ extension AppModel: MaintenanceRunEngine.Sink {
                 isError: false,
                 symbolName: RunRecord.Outcome.skipped.symbolName
             ))
-        case .succeeded, .completedWithErrors, .cancelled:
+        case .succeeded, .completedWithErrors, .failed, .cancelled:
             break
         }
         await broadcast(record: record, plan: nil)
