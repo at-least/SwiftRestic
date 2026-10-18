@@ -509,6 +509,7 @@ private struct PlanSidebarRow: View {
         let caption = PlanStatus.sidebarCaption(
             for: plan,
             activity: model.activity[plan.id],
+            isQueued: model.isQueued(plan.id),
             problem: model.currentProblem(for: plan.id),
             latestSnapshot: latestSnapshot,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),

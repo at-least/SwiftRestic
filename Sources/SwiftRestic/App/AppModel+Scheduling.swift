@@ -157,6 +157,7 @@ extension AppModel {
     func runSkippedPlansAfterMount(now: Date = .now) {
         guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         var newest: [UUID: RunRecord.Outcome] = [:]
+        var planIDs: [UUID] = []
         // Newest first.
         for run in configuration.runs where run.kind == .backup {
             if let planID = run.planID, newest[planID] == nil { newest[planID] = run.outcome }
@@ -172,8 +173,10 @@ extension AppModel {
             },
             now: now
         ) {
-            runBackup(planID: planID, askedByUser: false)
+            planIDs.append(planID)
         }
+        // Two plans on one drive come back together: one at a time.
+        runBackups(planIDs: planIDs, askedByUser: false)
     }
 
     /// Follows the network for the metered-network hold: macOS's own
@@ -230,9 +233,12 @@ extension AppModel {
     /// backup, and a stopped one starts over — unless the user chose Pause
     /// and Stop, which stops them and leaves their slots due for when the
     /// pause ends. Maintenance, restores and console work are never stopped.
+    /// Pause and Stop drops the plans waiting for their turn too
+    /// (`runBackups`).
     func pauseBackups(for length: PauseLength, stoppingRunningBackups: Bool = false, now: Date = .now) {
         configuration.settings.schedulePause = SchedulePause(until: length.end(from: now))
         guard stoppingRunningBackups else { return }
+        backupQueue.removeAll()
         // A run the user already stopped keeps that Stop's meaning.
         for (planID, run) in activity where run.phase != .cancelling {
             pauseStoppedPlanIDs.insert(planID)

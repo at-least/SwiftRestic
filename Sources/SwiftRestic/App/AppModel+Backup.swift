@@ -23,6 +23,8 @@ extension AppModel {
             return
         }
 
+        // Back Up Now on a plan waiting its turn starts it now, out of line.
+        removeFromBackupQueue(planID)
         installPlanActivity(planID: planID)
         activity[planID]?.askedByUser = askedByUser
         tasks.install(Task { [weak self] in
@@ -50,6 +52,69 @@ extension AppModel {
         activity[planID] = nil
         planProgress[planID] = nil
         reconcileSleepAssertion()
+        startQueuedBackups()
+    }
+
+    /// Back Up All Plans Now: every complete plan, less those whose
+    /// repository restic holds exclusively — it would refuse their lock at
+    /// once.
+    func backUpAllPlans() {
+        runBackups(planIDs: configuration.plans
+            .filter { $0.isConfigurationComplete && backupLockReason(for: $0) == nil }
+            .map(\.id))
+    }
+
+    /// Starts several plans' backups — Back Up All's, a mount's catch-up —
+    /// one at a time per repository, the scheduler's rule
+    /// (`Scheduler.duePlans`): started together, the first to finish ran
+    /// its retention while the other's backup still held the repository,
+    /// and lost the lock (restic's exit 11, "Retention skipped"). A plan
+    /// whose repository another plan's run holds waits in that
+    /// repository's queue — its sidebar row says so — and starts when the
+    /// runs ahead of it are done (`startQueuedBackups`). A plan already
+    /// running or waiting is left as it is.
+    func runBackups(planIDs: [UUID], askedByUser: Bool = true) {
+        for planID in planIDs where activity[planID] == nil && !isQueued(planID) {
+            if let repositoryID = plan(id: planID)?.repositoryID, planRunHolds(repositoryID) {
+                backupQueue[repositoryID, default: []].append(QueuedBackup(planID: planID, askedByUser: askedByUser))
+            } else {
+                runBackup(planID: planID, askedByUser: askedByUser)
+            }
+        }
+    }
+
+    func isQueued(_ planID: UUID) -> Bool {
+        backupQueue.values.contains { $0.contains { $0.planID == planID } }
+    }
+
+    /// Whether a plan's run — a backup, or Apply Retention Now…'s forget —
+    /// is in flight on the repository.
+    private func planRunHolds(_ repositoryID: UUID) -> Bool {
+        activity.keys.contains { plan(id: $0)?.repositoryID == repositoryID }
+    }
+
+    private func removeFromBackupQueue(_ planID: UUID) {
+        for (repositoryID, queue) in backupQueue where queue.contains(where: { $0.planID == planID }) {
+            let rest = queue.filter { $0.planID != planID }
+            backupQueue[repositoryID] = rest.isEmpty ? nil : rest
+        }
+    }
+
+    /// Starts the next plan in each queue whose repository no plan's run
+    /// holds now — called as every run unwinds. A plan that does not start
+    /// (removed meanwhile, the app quitting, its repository locked) gives
+    /// its turn to the next. A catch-up nobody asked for waits out the
+    /// app-wide hold as the scheduler's runs do, and is dropped meanwhile:
+    /// a later mount or its next slot brings it back.
+    private func startQueuedBackups() {
+        for repositoryID in Array(backupQueue.keys) where !planRunHolds(repositoryID) {
+            while let next = backupQueue[repositoryID]?.first {
+                removeFromBackupQueue(next.planID)
+                guard next.askedByUser || scheduleHold == nil else { continue }
+                runBackup(planID: next.planID, askedByUser: next.askedByUser)
+                if planRunHolds(repositoryID) { break }
+            }
+        }
     }
 
     /// Installs a fresh run strip — activity for the phase, a zeroed

@@ -301,6 +301,22 @@ struct PlanStatusTests {
         #expect(withProblem.pauseNote == "Paused")
     }
 
+    @Test("a plan waiting for its turn says so over its standing problem, and a run in flight over both")
+    func queuedCaption() {
+        let plan = completeDailyPlan()
+        let waiting = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, isQueued: true, problem: run(.failed),
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(waiting.text == "Waiting for another backup")
+        #expect(waiting.outcome == nil)
+        let running = PlanStatus.sidebarCaption(
+            for: plan, activity: PlanActivity(phase: .backingUp), isQueued: true, problem: run(.failed),
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(running.text == "Backing up")
+    }
+
     @Test("a completed-with-errors caption has a short spelling for a narrow column; other outcomes none")
     func captionShortForm() {
         let plan = completeDailyPlan()

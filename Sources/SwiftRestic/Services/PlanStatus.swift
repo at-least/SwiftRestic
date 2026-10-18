@@ -322,7 +322,8 @@ enum PlanStatus {
         return "\(pause) — \(plan.schedule.summary)"
     }
 
-    /// A plan's sidebar caption. In rank: a run in flight's phase; a
+    /// A plan's sidebar caption. In rank: a run in flight's phase; a turn
+    /// waited for behind another plan's run (`AppModel.runBackups`); a
     /// standing problem, named for as long as it stands, seen or not; the
     /// pause; the last backup; the schedule. A problem and a pause are both
     /// news, so a paused plan with a standing problem gets both — the
@@ -339,6 +340,7 @@ enum PlanStatus {
     static func sidebarCaption(
         for plan: BackupPlan,
         activity: PlanActivity?,
+        isQueued: Bool = false,
         problem: RunRecord?,
         latestSnapshot: Snapshot? = nil,
         existingRepositoryIDs: Set<UUID>,
@@ -348,6 +350,9 @@ enum PlanStatus {
     ) -> PlanCaption {
         if let activity {
             return PlanCaption(text: activity.phase.displayName)
+        }
+        if isQueued {
+            return PlanCaption(text: "Waiting for another backup")
         }
         let pause = pauseCaption(for: plan, now: now, calendar: calendar)
         if let problem {

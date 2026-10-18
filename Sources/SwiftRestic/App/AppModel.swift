@@ -77,6 +77,9 @@ final class AppModel {
     var planProgress: [UUID: OperationProgress] = [:]
     /// Repository upkeep currently in flight, keyed by repository.
     var maintenance: [UUID: MaintenanceActivity] = [:]
+    /// Plans waiting for their turn, keyed by the repository another
+    /// plan's run holds, first in line first (`runBackups`).
+    var backupQueue: [UUID: [QueuedBackup]] = [:]
     var snapshots: [UUID: [Snapshot]] = [:] {
         didSet {
             // Array `!=` short-circuits on shared storage, so only the

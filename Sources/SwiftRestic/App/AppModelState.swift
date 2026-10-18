@@ -40,6 +40,14 @@ struct PlanActivity: Sendable, Equatable {
     var askedByUser = false
 }
 
+/// A plan waiting for its turn on a repository another plan's run holds
+/// (`AppModel.runBackups`).
+struct QueuedBackup: Sendable, Equatable {
+    var planID: UUID
+    /// Handed to the run when it starts, as `PlanActivity.askedByUser`.
+    var askedByUser: Bool
+}
+
 /// Live state of one repository's check or prune.
 struct MaintenanceActivity: Sendable, Equatable {
     var task: MaintenanceTask

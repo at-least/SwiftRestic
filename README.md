@@ -327,7 +327,8 @@ the generator after editing it; the PNGs are checked in.
   scheduled *Skipped* posts nothing, but a *Back Up Now*, which ends in
   milliseconds, gets a passing banner: "“Documents” skipped — “Travel SSD” is
   not connected." When a volume mounts, each scheduled plan whose newest
-  backup was skipped and whose folder is back runs at once (a disk
+  backup was skipped and whose folder is back runs at once — one at a time
+  per repository, as *Locking* below says (a disk
   image attached with `-nobrowse` counted); if the drive stays away the
   quiet-plan alert speaks.
   - *Repeats merge.* A skip that continues the plan's last one — same
@@ -1022,6 +1023,12 @@ restic's locks shape most of the scheduling. `backup` takes a shared lock;
   on the next tick, so nothing is silently lost. Plans due on one repository
   in the same minute start one at a time, the most overdue first: started
   together, one's retention lost the lock to the other's.
+- *Back Up All Plans Now* and a mount's catch-up keep that rule: a plan
+  whose repository another plan's run holds waits its turn — its sidebar
+  row reads *Waiting for another backup* — and starts when that run ends;
+  *Back Up Now* on it starts it at once, and *Pause and Stop* drops the
+  ones waiting. Until 2026-10-19 they started every plan together, and on a
+  repository with two plans the first to finish skipped its retention.
 - `prune` is ordered ahead of `check` when both fall due, so the app does not
   race itself. A launch reads the repositories before arming the scheduler.
 - If retention still loses a lock race, the snapshot already exists: the run is

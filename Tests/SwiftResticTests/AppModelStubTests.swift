@@ -99,6 +99,175 @@ struct AppModelStubTests {
         return model.banners.first(where: { $0.title.contains(fragment) })
     }
 
+    // MARK: - One plan per repository at a time
+
+    /// A second plan in the harness's repository, backing up a folder named
+    /// Held: under the `holdbackup` stub its backup holds the repository
+    /// until the test writes the release file.
+    private func addHeldPlan(to harness: Harness, first: Bool = false) throws -> BackupPlan {
+        let folder = harness.root.appendingPathComponent("Held")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var held = BackupPlan()
+        held.repositoryID = harness.repository.id
+        held.path = folder.path
+        held.schedule.frequency = .manual
+        if first {
+            harness.model.configuration.plans.insert(held, at: 0)
+        } else {
+            harness.model.configuration.plans.append(held)
+        }
+        return held
+    }
+
+    private func release(_ harness: Harness) throws {
+        try Data().write(to: harness.root.appendingPathComponent("release"))
+    }
+
+    /// The stub's invocations in order, each its arguments after a space,
+    /// so " forget " finds the subcommand wherever it stands — first, with
+    /// no rate limit before it.
+    private func invocations(_ harness: Harness) throws -> [String] {
+        try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { $0.hasPrefix("start args=[") }
+            .map { " " + $0.dropFirst("start args=[".count) }
+    }
+
+    /// Polls the stub's trace until a backup of `path` has started.
+    private func backupStarts(of path: String, in harness: Harness, within seconds: TimeInterval = 10) async throws -> Bool {
+        let deadline = Date.now.addingTimeInterval(seconds)
+        while Date.now < deadline {
+            if try invocations(harness).contains(where: { $0.contains(" backup ") && $0.contains(path) }) { return true }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        return false
+    }
+
+    @Test("Back Up All runs one plan per repository at a time: the second waits its turn, and the first's retention no longer loses the lock to its backup")
+    func backUpAllTakesTurnsPerRepository() async throws {
+        let harness = try await makeHarness(mode: "holdbackup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let quick = harness.plan
+        let held = try addHeldPlan(to: harness)
+        #expect(quick.retention.isSafeToRun && held.retention.isSafeToRun, "both plans apply retention after their backup")
+
+        model.backUpAllPlans()
+        // The first runs; the second waits, and its sidebar row says so.
+        #expect(model.isRunning(planID: quick.id))
+        #expect(model.isQueued(held.id))
+        #expect(!model.isRunning(planID: held.id))
+        let caption = PlanStatus.sidebarCaption(
+            for: held, activity: model.activity[held.id], isQueued: model.isQueued(held.id),
+            problem: nil, existingRepositoryIDs: [harness.repository.id]
+        )
+        #expect(caption.text == "Waiting for another backup")
+
+        // The first's run is over, its retention included, and the second's
+        // has begun.
+        await model.waitForRun(planID: quick.id)
+        #expect(model.isRunning(planID: held.id))
+        #expect(!model.isQueued(held.id))
+        try release(harness)
+        await model.waitForRun(planID: held.id)
+
+        let records = model.configuration.runs.filter { $0.kind == .backup }
+        #expect(records.count == 2)
+        for record in records {
+            #expect(record.outcome == .succeeded, "\(model.label(of: model.plan(id: record.planID) ?? quick)): \(record.outcome) \(record.itemErrors)")
+        }
+        // In the stub's own words: the second plan's backup started after
+        // the first plan's forget.
+        let lines = try invocations(harness)
+        let quickForget = try #require(lines.firstIndex { $0.contains(" forget ") && $0.contains(ResticService.planTag(quick.id)) })
+        let heldBackup = try #require(lines.firstIndex { $0.contains(" backup ") && $0.contains(held.path) })
+        #expect(quickForget < heldBackup, "\(lines)")
+
+        await model.shutdown()
+    }
+
+    @Test("Pause and Stop drops the plans waiting for their turn: they never start")
+    func pauseAndStopDropsTheQueue() async throws {
+        let harness = try await makeHarness(mode: "holdbackup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let held = try addHeldPlan(to: harness, first: true)
+        let waiting = harness.plan
+
+        model.backUpAllPlans()
+        #expect(model.isRunning(planID: held.id))
+        #expect(model.isQueued(waiting.id))
+        #expect(try await backupStarts(of: held.path, in: harness), "the held backup never started")
+
+        model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
+        await model.waitForRun(planID: held.id)
+        #expect(!model.isQueued(waiting.id))
+        #expect(!model.isRunning(planID: waiting.id))
+        #expect(model.configuration.runs.allSatisfy { $0.planID != waiting.id })
+        // The same match finds the backup that did run.
+        let backups = try invocations(harness).filter { $0.contains(" backup ") }
+        #expect(backups.contains { $0.contains(held.path) })
+        #expect(!backups.contains { $0.contains(waiting.path) })
+
+        await model.shutdown()
+    }
+
+    @Test("quitting while a plan waits for its turn starts nothing past shutdown")
+    func quitWithAQueuedBackupStartsNothing() async throws {
+        let harness = try await makeHarness(mode: "holdbackup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let held = try addHeldPlan(to: harness, first: true)
+        let waiting = harness.plan
+
+        model.backUpAllPlans()
+        #expect(model.isRunning(planID: held.id))
+        #expect(model.isQueued(waiting.id))
+        #expect(try await backupStarts(of: held.path, in: harness), "the held backup never started")
+
+        // The held run is cancelled; its unwind gives the waiting plan its
+        // turn, which the quit refuses.
+        await model.shutdown()
+        #expect(!model.isQueued(waiting.id))
+        #expect(model.configuration.runs.allSatisfy { $0.planID != waiting.id })
+        // The same match finds the backup that did run.
+        let backups = try invocations(harness).filter { $0.contains(" backup ") }
+        #expect(backups.contains { $0.contains(held.path) })
+        #expect(!backups.contains { $0.contains(waiting.path) })
+    }
+
+    @Test("a mount's catch-up of two plans on one repository runs them one at a time")
+    func mountCatchUpTakesTurns() async throws {
+        let harness = try await makeHarness(mode: "holdbackup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        _ = try addHeldPlan(to: harness, first: true)
+        // Both scheduled and just stamped, so the tick leaves them alone;
+        // both last skipped, which a mount catches up.
+        var skipped: [RunRecord] = []
+        for index in model.configuration.plans.indices {
+            model.configuration.plans[index].schedule.frequency = .daily
+            model.configuration.plans[index].lastRunAt = .now
+            let plan = model.configuration.plans[index]
+            var record = RunRecord(kind: .backup, planID: plan.id, planName: model.label(of: plan), repositoryID: harness.repository.id)
+            record.outcome = .skipped
+            skipped.append(record)
+        }
+        model.configuration.runs = skipped
+        let (first, second) = (model.configuration.plans[0], model.configuration.plans[1])
+
+        model.runSkippedPlansAfterMount()
+        #expect(model.isRunning(planID: first.id))
+        #expect(model.isQueued(second.id))
+        try release(harness)
+        await model.waitForRun(planID: first.id)
+        #expect(model.isRunning(planID: second.id))
+        await model.waitForRun(planID: second.id)
+        #expect(model.configuration.runs.filter { $0.kind == .backup && $0.outcome == .succeeded }.count == 2)
+
+        await model.shutdown()
+    }
+
     // MARK: - Restore
 
     @Test("a quiet scheduled plan is named once per stretch, and the mark is saved on the plan")

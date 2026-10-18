@@ -484,6 +484,45 @@ struct StubRestic: Sendable {
                 echo "[]"
                 exit 0
                 ;;
+            holdbackup)
+                # A repository two plans back up to. Each backup in flight
+                # leaves a mark, as restic's shared lock does, and a forget
+                # while one stands fails as restic's does (exit 11). A backup
+                # of a folder named Held answers only once <trace dir>/release
+                # exists (a minute at most); the others answer at once.
+                trace "holdbackup-arm"
+                dir="$(dirname "$SWIFTRESTIC_TRACE")"
+                case " $* " in
+                    *" backup "*)
+                        touch "$dir/backup-running.$$"
+                        case " $* " in
+                            *"/Held "*)
+                                waited=0
+                                while [ ! -f "$dir/release" ] && [ "$waited" -lt 1200 ]; do
+                                    sleep 0.05
+                                    waited=$((waited + 1))
+                                done
+                                ;;
+                        esac
+                        rm -f "$dir/backup-running.$$"
+                        trace "backup-done"
+                        echo '{"message_type":"summary","files_new":1,"total_files_processed":1,"total_bytes_processed":10,"snapshot_id":"feedface00000000"}'
+                        exit 0
+                        ;;
+                    *" forget "*)
+                        if ls "$dir"/backup-running.* >/dev/null 2>&1; then
+                            trace "forget-locked"
+                            echo '{"message_type":"exit_error","code":11,"message":"unable to create lock in backend: repository is already locked by a backup"}' >&2
+                            exit 11
+                        fi
+                        trace "forget-ran"
+                        echo "[]"
+                        exit 0
+                        ;;
+                esac
+                echo "[]"
+                exit 0
+                ;;
             *)
                 # Everything the fault tests do not care about gets an empty answer.
                 trace "default-arm"
