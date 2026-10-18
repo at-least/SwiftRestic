@@ -244,7 +244,8 @@ struct SidebarView: View {
     /// counts, read from the same derivation. With no page over every
     /// repository, this is where an unreadable repository shows at a
     /// glance: the badge and the menu bar count failed runs, and a wrong
-    /// password fails none.
+    /// password fails none. A failed run's red octagon while a plan's last
+    /// backup failed, as that plan's row wears it, else the triangle.
     /// The words stay with the rows; the mark only points at them.
     @ViewBuilder
     private func attentionMark(_ repository: Repository) -> some View {
@@ -253,9 +254,10 @@ struct SidebarView: View {
         )
         if !rows.isEmpty {
             let words = rows.map { "\($0.planName): \($0.stateText)" }.joined(separator: "\n")
-            Image(systemName: "exclamationmark.triangle.fill")
+            let outcome = OverviewMetrics.attentionOutcome(rows)
+            Image(systemName: outcome.symbolName!)
                 .imageScale(.small)
-                .foregroundStyle(Theme.warning)
+                .foregroundStyle(StatusPalette.status(outcome))
                 .help(words)
                 .accessibilityLabel(words)
         }

@@ -52,7 +52,9 @@ the generator after editing it; the PNGs are checked in.
   3 of 3 plans protected · Last backup 3 hours ago”*), so the window need not
   open. A repository wears a warning, its tooltip naming the plan, while a
   plan is not protected — backups unreadable, none yet, or the last one
-  failed.
+  failed: the red octagon the failed plan's own row wears when one did,
+  else the orange triangle (until 2026-10-19 the triangle beside a failure
+  too).
 - **Overview | Backups | Files** — a plan's page has the three in the middle
   of the window toolbar, *Edit* at its right.
   Overview is its cards. Backups lists the backups the plan made there,
@@ -159,7 +161,8 @@ the generator after editing it; the PNGs are checked in.
   plans protected · Last backup 1 hour ago”; with no plans, the count of
   backups from no plan here) carries the hold's words while backups are held
   app-wide, and a *Resume* button while the hold is your own *Pause
-  Backups*. Under it each unprotected plan is named with its warning, and
+  Backups*. Under it each unprotected plan is named with its warning — a
+  failed backup's red octagon, the triangle for the rest — and
   each protected plan that will not run by itself — paused, or "Not
   scheduled" for an incomplete setup — with a pause glyph in the sidebar's
   words ("Photos: Paused — Sunday at 3:00 AM"), so "2 of 2 plans protected"

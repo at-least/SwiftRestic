@@ -430,6 +430,15 @@ struct SidebarTreeTests {
         #expect(OverviewMetrics.needingAttention([protected, unreadable, pending, exposed, running]).map(\.planName)
             == ["Unreadable", "Exposed"])
         #expect(OverviewMetrics.needingAttention([protected, pending, running]).isEmpty)
+
+        // The mark's glyph: the warning triangle for these, a failed run's
+        // octagon once one of the rows is a plan whose last backup failed.
+        #expect(OverviewMetrics.attentionOutcome([unreadable, exposed]) == .completedWithErrors)
+        let failed = ProtectionRow(
+            plan: plan("Failed", in: repository), among: [], stateText: "Failed — 3 hours ago",
+            isKnown: true, isProtected: false, didFail: false, problemOutcome: .failed
+        )
+        #expect(OverviewMetrics.attentionOutcome([unreadable, exposed, failed]) == .failed)
     }
 
     @Test("Show Versions lands on the page holding a backup's history: its plan's, a plan-UUID group's, or a lineage's")

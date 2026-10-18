@@ -18,6 +18,12 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     /// Nil in every state that spells no moment; the Protection line reads
     /// the newest of these across a repository's plans.
     let lastBackupAt: Date?
+    /// The standing problem's outcome when the line is that problem's
+    /// ("Failed — 3 hours ago"); nil when the listing or a run in flight
+    /// says it. A failed one wears the failed run's red octagon on the
+    /// repository's surfaces, as on the plan's own row
+    /// (`OverviewMetrics.attentionOutcome`).
+    let problemOutcome: RunRecord.Outcome?
     var id: UUID { planID }
 
     /// Scanning order is severity, not sidebar order: unreadable first,
@@ -42,7 +48,8 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
         isProtected: Bool,
         didFail: Bool,
         lastBackupAt: Date? = nil,
-        isRunning: Bool = false
+        isRunning: Bool = false,
+        problemOutcome: RunRecord.Outcome? = nil
     ) {
         planID = plan.id
         planName = plan.label(among: plans)
@@ -53,6 +60,7 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
         self.didFail = didFail
         self.lastBackupAt = lastBackupAt
         self.isRunning = isRunning
+        self.problemOutcome = problemOutcome
     }
 }
 
@@ -67,9 +75,15 @@ struct ProtectionSummary: Equatable, Sendable {
     /// The hold is the user's own Pause Backups, so the line ends with a
     /// Resume; the battery's ends by plugging in, and has no button.
     var showsResume: Bool
-    /// One line per plan that is not protected, in the sidebar warning's
-    /// words ("Code: Failed — 3 hours ago"), so the count names its subject.
-    /// Empty when every plan is protected.
+    /// One line per plan whose last backup failed, in the sidebar warning's
+    /// words ("Code: Failed — 3 hours ago"), beside the failed run's red
+    /// octagon that the plan's own row wears. Empty when none failed.
+    var failureLines: [String] = []
+    /// One line per other plan that is not protected — no backup yet, no
+    /// repository — in the sidebar warning's words ("Photos: No backups
+    /// yet"), beside the warning triangle. With the failure lines, the
+    /// count names its subject; both are empty when every plan is
+    /// protected.
     var attentionLines: [String] = []
     /// One line per protected plan whose newest backup left an away
     /// drive's folders out, in the record's own words ("Journal: “Archive
@@ -222,6 +236,16 @@ enum OverviewMetrics {
         rows.filter { $0.severityRank <= 1 }
     }
 
+    /// The outcome whose glyph and hue a repository's warning wears for
+    /// these rows: a failed run's red octagon while one of them is a plan
+    /// whose last backup failed — the glyph that plan's own row wears
+    /// beneath — else the warning's orange triangle, as for a run that
+    /// completed with warnings (the banners' rule: one colour, one
+    /// meaning). An unreadable listing stays orange, as its page says it.
+    static func attentionOutcome(_ rows: [ProtectionRow]) -> RunRecord.Outcome {
+        rows.contains { $0.problemOutcome == .failed } ? .failed : .completedWithErrors
+    }
+
     /// The protection rows, one per plan. The lookups arrive as closures so
     /// the derivation stays pure while the view keeps its observation on the
     /// model behind them. `relative` spells a past moment; the view passes
@@ -274,7 +298,8 @@ enum OverviewMetrics {
                         // is older than the trouble; a run that completed
                         // with errors (restic exit 3) wrote one.
                         isProtected: listed.isProtected && problem.outcome != .failed,
-                        didFail: false, lastBackupAt: listed.lastBackupAt
+                        didFail: false, lastBackupAt: listed.lastBackupAt,
+                        problemOutcome: problem.outcome
                     )
                 }
                 return listed
@@ -401,11 +426,17 @@ enum OverviewMetrics {
         var showsResume = false
         if case .paused = hold { showsResume = true }
         // The sidebar warning's own join of the same rows (attentionMark), so
-        // the card and the triangle beside it cannot disagree.
+        // the card and the mark beside it cannot disagree — a failed run's
+        // lines apart, under its glyph.
+        var failures: [String] = []
         var attention: [String] = []
         for row in rows where row.isKnown && !row.isProtected && !row.isRunning {
             let line = "\(row.planName): \(row.stateText)"
-            if !attention.contains(line) { attention.append(line) }
+            if row.problemOutcome == .failed {
+                if !failures.contains(line) { failures.append(line) }
+            } else if !attention.contains(line) {
+                attention.append(line)
+            }
         }
         // The protected plans that will not run by themselves
         // (`PlanStatus.willNotRunCaption`); an unprotected one's line above
@@ -422,6 +453,7 @@ enum OverviewMetrics {
         return ProtectionSummary(
             text: segments.joined(separator: " · "),
             showsResume: showsResume,
+            failureLines: failures,
             attentionLines: attention,
             skippedLines: skipped,
             heldLines: held

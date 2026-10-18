@@ -307,6 +307,19 @@ struct OverviewMetricsTests {
         #expect(rows.map(\.stateText) == [sidebar.text])
         #expect(rows.first?.isKnown == true)
         #expect(rows.first?.isProtected == false)
+        // The repository's surfaces wear the glyph the plan's row does, a
+        // failed run's red octagon: the sidebar mark, and the Protection
+        // card's line under it.
+        #expect(rows.first?.problemOutcome == .failed)
+        let attention = OverviewMetrics.needingAttention(rows)
+        #expect(attention.map(\.planName) == ["Docs"])
+        #expect(OverviewMetrics.attentionOutcome(attention) == .failed)
+        let summary = OverviewMetrics.protectionSummary(
+            rows: rows, listingLoaded: true, otherBackupsCount: 0,
+            willNotRun: { _ in nil }, hold: nil, now: .now, relative: { _ in "4 minutes ago" }
+        )
+        #expect(summary?.failureLines == ["Docs: \(sidebar.text)"])
+        #expect(summary?.attentionLines == [])
     }
 
     @Test("a run that completed with warnings still wrote a backup, so the plan stays protected")
@@ -332,6 +345,10 @@ struct OverviewMetricsTests {
         )
         #expect(rows.first?.stateText.hasPrefix("\(RunRecord.Outcome.completedWithErrors.displayName) — ") == true)
         #expect(rows.first?.isProtected == true)
+        // Protected, so it never reaches the repository's mark: the
+        // warning stays on the plan's own row.
+        #expect(rows.first?.problemOutcome == .completedWithErrors)
+        #expect(OverviewMetrics.needingAttention(rows).isEmpty)
         // The problem override keeps the listing's moment for the line.
         #expect(rows.first?.lastBackupAt == written.time)
     }
@@ -354,6 +371,10 @@ struct OverviewMetricsTests {
         )
         #expect(rows.map(\.stateText) == ["Can't read backups — Repository /nas is not reachable"])
         #expect(rows.first?.didFail == true)
+        // The line is the listing's, so the mark is too: the warning
+        // triangle the page's caveat wears, not the hidden failure's octagon.
+        #expect(rows.first?.problemOutcome == nil)
+        #expect(OverviewMetrics.attentionOutcome(OverviewMetrics.needingAttention(rows)) == .completedWithErrors)
     }
 
     private func protectionRow(
@@ -511,15 +532,21 @@ struct OverviewMetricsTests {
         )
         let code = ProtectionRow(
             plan: plan("Code", repository: repository), among: [], stateText: "Failed — 3 hours ago",
+            isKnown: true, isProtected: false, didFail: false, problemOutcome: .failed
+        )
+        let music = ProtectionRow(
+            plan: plan("Music", repository: repository), among: [], stateText: "No backups yet",
             isKnown: true, isProtected: false, didFail: false
         )
         let summary = OverviewMetrics.protectionSummary(
-            rows: [code, documents], listingLoaded: true, otherBackupsCount: 0,
+            rows: [code, music, documents], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        // The count line stays as it was; the lines under it name the subject.
-        #expect(summary?.text == "1 of 2 plans protected · Last backup 1 hour ago")
-        #expect(summary?.attentionLines == ["Code: Failed — 3 hours ago"])
+        // The count line stays as it was; the lines under it name the
+        // subject, a failed run's under the failure's glyph.
+        #expect(summary?.text == "1 of 3 plans protected · Last backup 1 hour ago")
+        #expect(summary?.failureLines == ["Code: Failed — 3 hours ago"])
+        #expect(summary?.attentionLines == ["Music: No backups yet"])
         // All protected: nothing to name.
         #expect(OverviewMetrics.protectionSummary(
             rows: [documents], listingLoaded: true, otherBackupsCount: 0,

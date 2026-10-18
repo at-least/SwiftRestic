@@ -42,11 +42,13 @@ struct ProtectionCard: View {
                                 .help("Resume scheduled backups, checks and prunes")
                         }
                     }
-                    // The sidebar triangle's glyph for what needs attention;
+                    // The sidebar mark's glyphs for what needs attention — a
+                    // failed run's red octagon, else the warning triangle;
                     // Activity's skip glyph for a backup around an away drive,
                     // with the record's words; a pause is a choice, so its
                     // glyph, not the warning's. The words stay secondary
                     // throughout, as the caveat's do.
+                    captionLines(summary.failureLines, symbol: RunRecord.Outcome.failed.symbolName!, tint: StatusPalette.status(.failed))
                     captionLines(summary.attentionLines, symbol: "exclamationmark.triangle.fill", tint: Theme.warning)
                     captionLines(summary.skippedLines, symbol: RunRecord.Outcome.skipped.symbolName ?? "minus.circle", tint: .secondary)
                     captionLines(summary.heldLines, symbol: "pause.circle", tint: .secondary)
