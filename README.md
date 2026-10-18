@@ -86,8 +86,9 @@ the generator after editing it; the PNGs are checked in.
     not removed: restic left it out, and the disk may still have it. Items
     select several at a time and restore together, drag to Finder, or open
     in the tree with a double-click, keeping the chosen time where they
-    existed then; with nothing selected, *Restore Folder…* restores the
-    whole folder.
+    existed then; with nothing selected, *Restore Folder…* — the toolbar's
+    restore here — restores the whole folder. *Show in Backups* sits at the
+    pane's top, beside *As backed up*.
   - *A file* lists its versions, from the index: a version starts where
     restic's diff said the file changed, or where no diff compared two
     backups or the file was absent between them. A row gives its
@@ -105,10 +106,11 @@ the generator after editing it; the PNGs are checked in.
     says what the copy here is: *the same as the newest version*, the same
     as an older one, none of them (with its own date and size), or *Not on
     this Mac* — one `lstat`, compared by size and modification time to
-    restic's millisecond, read again when a restore ends. *Restore…* or
-    Return restores the chosen version, confirming "the version modified Sep
+    restic's millisecond, read again when a restore ends. *Restore…* (the
+    toolbar's) or Return restores the chosen version, confirming "the version modified Sep
     17, 2026 at 9:00 PM, from the backup of Sep 17, 2026 at 11:00 PM"; a row
-    drags to Finder. *Preview* shows it in Quick Look: `restic dump` copies
+    drags to Finder. *Preview*, at the pane's top beside *Show in Backups*,
+    shows it in Quick Look: `restic dump` copies
     it, read-only, into a temporary folder of its own, deleted when the
     preview closes, another version is chosen or the pane goes (a quit
     leaves it to the next launch's sweep); it waits for the size and stops
@@ -433,12 +435,17 @@ the generator after editing it; the PNGs are checked in.
   real hotspot not. While a backup, check or prune runs, SwiftRestic holds
   off idle sleep (`pmset -g assertions` lists "SwiftRestic is running a
   backup"); the display may still sleep, and a closed lid sleeps the Mac.
-- **Browsing and restore** — every *Browse* (a backup run in Activity),
+- **Browsing and restore** — a page's restore is its toolbar's *Restore…*,
+  at the trailing side beside *Edit* and the search field, and *File ▸
+  Restore…*; until 2026-10-18 it sat in the pane's bottom bar, which the HIG
+  warns a moved window can hide. The bottom bar keeps words only — what a
+  drag does, how many matches only other backups hold. Every *Browse* (a backup run in Activity),
   *Show Backups* (a group's menu) and *Show in Backups* (the Files tab) opens
   the one browser at that backup, on its page's Backups tab beside the list:
   its folders as a tree with a Change column and search. Restore by dragging to Finder,
-  by *Restore…* (or Return) on a selection, or by *Restore Entire Backup…*,
-  which recreates the full original paths inside the chosen folder;
+  or by the toolbar's *Restore…* (or Return) on a selection — *Restore
+  Backup…* with nothing selected, which recreates the full original paths
+  inside the chosen folder;
   per-node restores land in the chosen folder with no path rebuilt above
   them. ⌘- or ⇧-click selects several, restored with one `restic restore`
   per folder they come from (each run reloads the repository's index), an
@@ -504,7 +511,7 @@ the generator after editing it; the PNGs are checked in.
   answered; a latest-snapshot-only search says "this one". Before the
   listing lands, rows name their backup by short ID in the Snapshot column,
   times filled in when it lands without moving the rows. ⌘- or ⇧-click
-  selects several, and *Restore Selected…* (Return) restores them in one
+  selects several, and the toolbar's *Restore…* (Return) restores them in one
   destination sheet, each from its own row's backup ("from 2 backups, each
   item from the one it was found in"), an item inside a selected folder of
   the same backup left to the folder. A folder comes back as its own backup

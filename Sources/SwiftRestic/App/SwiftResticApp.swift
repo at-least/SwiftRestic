@@ -237,6 +237,7 @@ struct SwiftResticApp: App {
                     NSWorkspace.shared.open(AppLinks.changelog)
                 }
             }
+            RestoreCommands()
             planMenu
             repositoryMenu
         }

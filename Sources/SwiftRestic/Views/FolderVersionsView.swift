@@ -49,7 +49,11 @@ struct FolderVersionsView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                picker
+                HStack(spacing: 8) {
+                    picker
+                    Spacer(minLength: 8)
+                    showInBackups
+                }
                 changeSummary
             }
             .padding(.horizontal, 20)
@@ -57,9 +61,12 @@ struct FolderVersionsView: View {
             Divider()
             listing
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
-            footer
+            // The restore in flight, if any; the pane's actions are the
+            // toolbar's and the row above.
+            RestoreProgressStrip()
+                .padding(.horizontal, 12)
         }
+        .restoreCommand(restore)
         // The listing belongs to one backup: a flip reads the folder again.
         .task(id: chosen?.id) { await fetch() }
         // So do its changes, which a re-read of the holders can also move.
@@ -217,31 +224,36 @@ struct FolderVersionsView: View {
         }
     }
 
-    private var footer: some View {
-        VStack(spacing: 10) {
-            RestoreProgressStrip()
-            HStack {
-                Button("Show in Backups") {
-                    guard let chosen,
-                          let page = model.page(ofBackup: chosen.id, in: node.repositoryID)
-                    else { return }
-                    router.showBackup(chosen.id, on: page, repositoryID: node.repositoryID, focusPath: node.path)
-                }
-                .disabled(chosen == nil)
-                .help("Open this backup at this folder on the Backups tab — see what changed, search it, or restore the whole backup")
-                Spacer()
-                // By the rows selected in this listing, not the ids kept
-                // across a flip: while a backup's listing is read, or after
-                // its read failed, none are, and the button is the folder's.
-                Button(selectedNodes.isEmpty ? "Restore Folder…" : "Restore…") { restoreSelection() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(chosen == nil || model.isRestoring)
-                    .help(selectedNodes.isEmpty
-                        ? "Restore this whole folder as of the chosen backup"
-                        : "Restore the selected items as of the chosen backup (Return)")
-            }
+    /// Show in Backups, beside the backup it opens — a way to another
+    /// view of the same moment, not an action on the folder.
+    private var showInBackups: some View {
+        Button("Show in Backups") {
+            guard let chosen,
+                  let page = model.page(ofBackup: chosen.id, in: node.repositoryID)
+            else { return }
+            router.showBackup(chosen.id, on: page, repositoryID: node.repositoryID, focusPath: node.path)
         }
-        .padding(12)
+        .controlSize(.small)
+        .disabled(chosen == nil)
+        .help("Open this backup at this folder on the Backups tab — see what changed, search it, or restore the whole backup")
+    }
+
+    /// The pane's Restore…, the toolbar's (`restoreCommand`). By the rows
+    /// selected in this listing, not the ids kept across a flip: while a
+    /// backup's listing is read, or after its read failed, none are, and
+    /// the restore is the folder's. Return is the list's own, which opens
+    /// a folder before it restores.
+    private var restore: RestoreCommand {
+        let nodes = selectedNodes
+        return RestoreCommand(
+            title: nodes.isEmpty ? "Restore Folder…" : "Restore…",
+            help: nodes.isEmpty
+                ? "Restore this whole folder as of the chosen backup"
+                : "Restore the selected items as of the chosen backup (Return)",
+            isEnabled: chosen != nil && !model.isRestoring,
+            isDefault: false,
+            run: restoreSelection
+        )
     }
 
     private var selectedNodes: [SnapshotNode] {

@@ -139,9 +139,9 @@ struct RestorePaneView: View {
             // this the pane floats mid-window.
             browser
                 .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity)
-            Divider()
-            footer(record: record)
+            footer
         }
+        .restoreCommand(restore(record: record))
         // Fits the narrowest detail column the window allows beside the
         // Backups tab's list: its 940-pt minimum less the sidebar at its
         // 340-pt maximum, the split's 8 pt and the list at its 150-pt
@@ -410,44 +410,58 @@ struct RestorePaneView: View {
         }
     }
 
-    /// The pane's three ways out of a record, in one row: the primary
-    /// Restore… for the selection, the whole backup on the left, and the
-    /// drag named in between. The hint shows over a list whose rows drag
-    /// — the tree, or a search's hits; while a search lists hits and other
-    /// backups hold more, the middle says so and offers the way there —
-    /// never both. The keep/replace decision lives in the destination sheet, not
-    /// as a permanent caption under every browse.
-    private func footer(record: Snapshot?) -> some View {
-        HStack(spacing: 12) {
-            // Titles stay whole; the note beside them is what gives way.
-            Button("Restore Entire Backup…") { restoreWholeRecord() }
-                .disabled(model.isRestoring || record == nil)
-                .help("Restore everything in this backup — each folder is recreated under its full original path inside the folder you choose")
-                .fixedSize()
-            Spacer(minLength: 12)
-            // An empty result says it in the empty state, button included.
-            if let result = searchResult, !result.inThisBackup.isEmpty, let note = result.note {
+    /// The pane's Restore…, the toolbar's (`restoreCommand`): the selected
+    /// items, or with nothing selected the whole backup — Return restores a
+    /// selection only. The keep/replace decision lives in the destination
+    /// sheet, not as a permanent caption under every browse.
+    private func restore(record: Snapshot?) -> RestoreCommand {
+        let nodes = selectedNodes
+        return RestoreCommand(
+            // "Restore Backup…", not the longer "Restore Entire Backup…" of
+            // the bottom bar it came from: in the toolbar at the window's
+            // narrowest, that went into the overflow menu.
+            title: nodes.isEmpty ? "Restore Backup…" : "Restore…",
+            help: nodes.isEmpty
+                ? "Restore everything in this backup — each folder is recreated under its full original path inside the folder you choose"
+                : "Restore the selected items from this backup (Return)",
+            isEnabled: !model.isRestoring && record != nil,
+            isDefault: !nodes.isEmpty,
+            run: { nodes.isEmpty ? restoreWholeRecord() : restoreSelection() }
+        )
+    }
+
+    /// The pane's foot: words only — what a drag does over a list whose
+    /// rows drag, the tree or a search's hits; or, while a search lists hits
+    /// and other backups hold more, that and the way there. Nothing when
+    /// neither applies: a bottom bar is no place for the pane's actions.
+    @ViewBuilder
+    private var footer: some View {
+        // An empty result says it in the empty state, button included.
+        if let result = searchResult, !result.inThisBackup.isEmpty, let note = result.note {
+            Divider()
+            HStack(spacing: 12) {
                 Text(note)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .help(note)
+                Spacer(minLength: 12)
                 searchAllButton
                     .controlSize(.small)
                     .fixedSize()
-            } else if dragListIsShowing {
-                Text("Drag an item to Finder to restore it there.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
-            Button("Restore…") { restoreSelection() }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(selectedNodes.isEmpty || model.isRestoring || record == nil)
-                .help("Restore the selected items from this backup (Return)")
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        } else if dragListIsShowing {
+            Divider()
+            Text("Drag an item to Finder to restore it there.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
         }
-        .padding(12)
     }
 
     /// The browser shows a list whose rows drag: the search's hits in this
@@ -618,7 +632,7 @@ struct RestorePaneView: View {
             // Spent either way, as the native outline spends it.
             return .handled
         }
-        // Return on a file, or on several rows, is the footer's Restore…:
+        // Return on a file, or on several rows, is the toolbar's Restore…:
         // left unhandled, the list hands Return to its double-click action
         // and the default button never sees it. The same gate as the
         // button.

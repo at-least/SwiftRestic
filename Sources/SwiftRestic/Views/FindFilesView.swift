@@ -32,7 +32,7 @@ struct FindFilesView: View {
     /// Whether the repository's index has finished its backfill. nil = not
     /// known yet for the selected repository.
     @State private var indexComplete: Bool?
-    /// Several at a time, as in a backup's tree: Restore Selected…
+    /// Several at a time, as in a backup's tree: Restore…
     /// (Return) restores them together, each from its row's backup.
     @State private var selection = Set<String>()
     @State private var isSearching = false
@@ -49,7 +49,7 @@ struct FindFilesView: View {
     @FocusState private var searchIsFocused: Bool
     /// Taken by a click in the results (`focusOnClick`): left in the
     /// field, Return would search again — clearing the selection — instead
-    /// of reaching Restore Selected….
+    /// of reaching Restore….
     @FocusState private var resultsAreFocused: Bool
     /// The restore waiting in the destination sheet — over the window, the
     /// one sheet up.
@@ -99,6 +99,7 @@ struct FindFilesView: View {
             footer(rows)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .restoreCommand(restore)
         .navigationTitle("Find Files")
         .navigationSubtitle(repositoryID.flatMap { model.repository(id: $0) }.map { model.label(of: $0) } ?? "")
         // The prompt has to be verbatim: a literal string is a
@@ -382,14 +383,6 @@ struct FindFilesView: View {
                         .help(failure)
                 }
                 Spacer()
-                let selected = rows.filter { selection.contains($0.id) }
-                Button("Restore Selected…") { restoreSelection(selected) }
-                    .buttonStyle(.borderedProminent)
-                    // Same grammar as the Restore pane: Return offers the
-                    // restore, always through the destination sheet, where
-                    // the keep/replace choice lives.
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(selected.isEmpty || model.isRestoring)
             }
         }
         .padding(12)
@@ -574,6 +567,21 @@ struct FindFilesView: View {
         hasSearched = false
         errorMessage = nil
         selection = []
+    }
+
+    /// The page's Restore…, the toolbar's (`restoreCommand`): the selected
+    /// rows. Same grammar as a backup's tree: Return offers the restore,
+    /// always through the destination sheet, where the keep/replace choice
+    /// lives.
+    private var restore: RestoreCommand {
+        let selected = rows.filter { selection.contains($0.id) }
+        return RestoreCommand(
+            title: "Restore…",
+            help: "Restore the selected items, each from the backup it was found in (Return)",
+            isEnabled: !selected.isEmpty && !model.isRestoring,
+            isDefault: true,
+            run: { restoreSelection(selected) }
+        )
     }
 
     /// Restores the picked rows through the destination sheet, where the
