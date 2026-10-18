@@ -162,7 +162,9 @@ the generator after editing it; the PNGs are checked in.
   — a repeating cause (one unreadable file every run) is one row with its
   count ("7 times · 19 hours ago") opening the newest, and past five rows a
   last "… and N more in Activity" row opens Activity's Problems; then
-  location, size and maintenance. The *Snapshots* row splits off backups no
+  location, size and maintenance, *Edit* in the Details card's corner as in
+  a plan's Configuration card's (the toolbar keeps only *Refresh*, a
+  symbol). The *Snapshots* row splits off backups no
   plan here made (“11 · 6 from no plan here”, or “all”) and says how far
   back the history reaches (“509 · 3 from no plan here · since Jun 1, 2025”,
   the oldest backup's moment in the tooltip), as a plan page's does for its

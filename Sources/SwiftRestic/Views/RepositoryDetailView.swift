@@ -35,24 +35,24 @@ struct RepositoryDetailView: View {
         }
         .navigationTitle(repository.map { model.label(of: $0) } ?? "Repository")
         .toolbar {
-            // The page's verbs: read it again, change it. A new plan in
-            // this repository starts from the sidebar's + or ⌘N, both into
-            // the repository on screen, or from its sidebar row's menu —
-            // and from the Protection card while it has none. Getting files
-            // back starts from the sidebar, where the backups sit under the
-            // plans that made them. Check, Prune, the lock and index repairs
-            // and Remove from SwiftRestic… are the Repository menu's (all of
-            // them, acting on this page's repository) and the sidebar row's
-            // (all but the two repairs), each through the one shared
-            // confirmation.
-            ToolbarItemGroup {
+            // Reading the page again is the toolbar's, a symbol alone; Edit
+            // sits in the Details card's corner, as the plan page's Edit sits
+            // in its Configuration card's — the HIG keeps a text-labelled
+            // action apart from a symbol one, which together read as one
+            // control. A new plan in this repository starts from the
+            // sidebar's + or ⌘N, both into the repository on screen, or from
+            // its sidebar row's menu — and from the Protection card while it
+            // has none. Getting files back starts from the sidebar, where the
+            // backups sit under the plans that made them. Check, Prune, the
+            // lock and index repairs and Remove from SwiftRestic… are the
+            // Repository menu's (all of them, acting on this page's
+            // repository) and the sidebar row's (all but the two repairs),
+            // each through the one shared confirmation.
+            ToolbarItem {
                 Button("Refresh", systemImage: "arrow.clockwise") {
                     Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                 }
                 .help("Re-read snapshots and statistics")
-                Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
-                    .labelStyle(.titleAndIcon)
-                    .help("Change this repository's location, credentials and maintenance")
             }
         }
     }
@@ -87,6 +87,13 @@ struct RepositoryDetailView: View {
                     }
                     volumeStrip(repository)
                 }
+            } accessory: {
+                // The repository menu's Edit Repository… too; removing is
+                // rare and final, so it is there and in the row's menu only.
+                Button("Edit", systemImage: "slider.horizontal.3", action: onEdit)
+                    .labelStyle(.titleAndIcon)
+                    .controlSize(.small)
+                    .help("Change this repository's location, credentials and maintenance")
             }
 
             maintenanceCard(repository)
