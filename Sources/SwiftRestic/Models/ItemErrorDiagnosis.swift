@@ -163,12 +163,12 @@ enum ItemErrorDiagnosis {
     }
 }
 
-/// Where a plan's sources reach data macOS keeps behind Full Disk Access,
+/// Where a plan's path reaches data macOS keeps behind Full Disk Access,
 /// for the plan editor's warning before a backup finds out the hard way.
 ///
 /// The list is not Apple's and not exhaustive: the Photos library, Group
 /// Containers and other apps' containers are left out because their
-/// categories can put a permission prompt on screen. A source only under
+/// categories can put a permission prompt on screen. A path only under
 /// those gets no warning here; the run's own hint still names the fix
 /// afterwards.
 enum ProtectedLocations {

@@ -49,12 +49,12 @@ enum SidebarTree {
 /// unique.
 ///
 /// Equatable so the root view can watch the shelves themselves: `reshelve`
-/// rewrites them on any plan add, remove, rename or move, which is the one
-/// signal that sees a plan leave for another repository — no count changes,
-/// the listing does not change. Equality is the synthesized value one, so
-/// a reshelve that changes nothing compares equal, and one that moves a
-/// backup between shelves — or renames a plan — does not; revalidating on
-/// a rename is a no-op.
+/// rewrites them on any change to the plans, which is the one signal that
+/// sees backups change shelves when a plan is adopted or removed — no count
+/// changes, the listing does not change. Equality is the synthesized value
+/// one, so a reshelve that changes nothing compares equal, and one that
+/// moves a backup between shelves — or relabels a plan — does not;
+/// revalidating on a relabel is a no-op.
 struct BackupShelves: Equatable {
     /// The repository's plans, in configuration order.
     let plans: [BackupPlan]
@@ -161,7 +161,7 @@ struct BackupShelves: Equatable {
 
     /// How a backup is named where one backup is named — the restore pane's
     /// header, a whole-backup restore — so it matches the place the sidebar
-    /// shows it: its plan's name, with the folders when the plan's backups
+    /// shows it: its plan's label, with the folders when the plan's backups
     /// here span more than one set of them and the Mac when more than one
     /// Mac made them; under Other backups, its group's label.
     func label(of record: Snapshot, repositories: [Repository], localHost: String) -> SnapshotLineage.Label? {

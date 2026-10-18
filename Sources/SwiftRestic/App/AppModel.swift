@@ -24,8 +24,9 @@ final class AppModel {
             if oldValue.runs != configuration.runs {
                 backupRunsBySnapshot = RunRecord.backupRunsBySnapshot(configuration.runs)
             }
-            // A plan added, removed, renamed or moved to another repository
-            // moves backups between shelves, or renames one.
+            // A plan added, adopted or removed moves backups between shelves,
+            // or relabels one: two plans whose folders share a name are
+            // labelled by path.
             if oldValue.plans != configuration.plans {
                 for id in snapshots.keys { reshelve(id) }
             }

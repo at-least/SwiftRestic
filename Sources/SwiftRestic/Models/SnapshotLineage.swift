@@ -112,13 +112,14 @@ extension SnapshotLineage {
     }
 
     /// Names for `lineages`, all of one plan's own backups and shown
-    /// together: the plan's name when one existing plan wrote every
+    /// together: the plan's label when one existing plan wrote every
     /// snapshot in the lineage, otherwise the folders' names, with who
     /// wrote them in the tooltip. A lineage another plan's tag also
     /// marks — only an outside `restic tag` can do that — must not wear
-    /// one plan's name, which would claim the other's backups. A plan
-    /// whose folders changed leaves two lineages with one plan name, so a
-    /// shared title brings the folders into the qualifier.
+    /// one plan's label, which would claim the other's backups. A plan
+    /// whose folders changed — a list an earlier build let it hold — leaves
+    /// two lineages with one label, so a shared title brings the folders
+    /// into the qualifier.
     static func labels(for lineages: [SnapshotLineage], plans: [BackupPlan]) -> [Key: Label] {
         let titles = Dictionary(uniqueKeysWithValues: lineages.map { ($0.key, title(of: $0, plans: plans)) })
         var titleCounts: [String: Int] = [:]
@@ -246,7 +247,7 @@ enum OtherBackupsGroup: Identifiable, Sendable, Equatable {
 
 extension OtherBackupsGroup {
     /// Names for `groups`, all of one repository's Other backups and shown
-    /// together: the plan's name when the group is a configured plan's (that
+    /// together: the plan's label when the group is a configured plan's (that
     /// plan backs up to another repository now), the newest backup's folders
     /// otherwise — the newest member decides when a group spans several sets
     /// of them. The caption counts the backups and says which kind of group

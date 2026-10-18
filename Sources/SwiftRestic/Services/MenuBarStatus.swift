@@ -270,7 +270,7 @@ enum MenuBarStatus {
 
     /// A plan's lines in its repository's submenu: news only — a standing
     /// problem, then a pause — in the sidebar caption's words, joined to the
-    /// plan's name as the sidebar warning and the Protection card join them
+    /// plan's label as the sidebar warning and the Protection card join them
     /// ("Code: Failed — 3 hours ago"). A quiet plan says nothing (success is
     /// quiet); a running plan's line already leads the menu. The menu's top
     /// problem line repeats the newest problem as a sentence on purpose: a

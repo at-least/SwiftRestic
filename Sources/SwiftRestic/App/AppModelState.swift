@@ -127,8 +127,8 @@ struct FileNode: Hashable, Sendable {
     }
 
     /// The level a chain's tree hangs from: the folders its backups hold at
-    /// their top, a plan's sources. Not a path, so never a row or a
-    /// selection.
+    /// their top, a plan's path (several where an earlier build's plan held
+    /// a list). Not a path, so never a row or a selection.
     static func roots(repositoryID: UUID, chainKey: String) -> FileNode {
         FileNode(repositoryID: repositoryID, chainKey: chainKey, path: "", isDirectory: true)
     }
