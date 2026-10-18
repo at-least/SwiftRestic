@@ -376,12 +376,37 @@ struct PlanEditorSheet: View {
     /// The plan's identity, above the tabs and so on screen from every one
     /// of them — Arq's place for it: the sheet often opens over a
     /// repository's page or Activity, where nothing else names the plan
-    /// being edited. Only a new plan chooses its path and repository. A
+    /// being edited. Only a new plan chooses its path and repository, in
+    /// rows; an adopt draft's are the history's own, in the same rows. A
     /// saved plan is its path in its repository — restic keeps one history
     /// per path, and the plan sits under its repository in the sidebar,
-    /// where that history is — so both read as text; an adopt draft's are
-    /// the history's own.
+    /// where that history is — so it reads as its page does, with no rows:
+    /// its label over its path, the repository beside the label as every
+    /// surface away from the tree names a plan, since one folder can have a
+    /// plan in two repositories.
+    @ViewBuilder
     private func identityHeader(_ briefing: AdoptBriefing?) -> some View {
+        if mode == .editing {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(RunRecordPresentation.planWithRepository(
+                    draft, plans: model.configuration.plans, repositories: model.configuration.repositories
+                ))
+                .font(.headline)
+                Text((draft.path as NSString).abbreviatingWithTildeInPath)
+                    .foregroundStyle(.secondary)
+                    .truncationMode(.middle)
+                    .help(draft.path)
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+        } else {
+            identityRows(briefing)
+        }
+    }
+
+    private func identityRows(_ briefing: AdoptBriefing?) -> some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
                 Text("Back up")
@@ -416,9 +441,7 @@ struct PlanEditorSheet: View {
                     }
                     .labelsHidden()
                     .fixedSize()
-                case .editing:
-                    Text(model.repository(id: draft.repositoryID).map { model.label(of: $0) } ?? "")
-                case .adopt:
+                case .adopt, .editing:
                     // The briefing's own words. While the group is gone —
                     // its page revalidating away — the bare name still says
                     // where this draft points.

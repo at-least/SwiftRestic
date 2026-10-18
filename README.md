@@ -232,9 +232,10 @@ the generator after editing it; the PNGs are checked in.
 - **Backup plans** — one folder or file, exclude patterns, a schedule and a
   retention policy, pointed at one repository. A plan is its path in its
   repository: the editor asks for both only when the plan is new (*Back up*,
-  typed or chosen, and *Repository*), shows them as text afterwards, and
-  will not save a second plan for a path its repository already has — the
-  same folder to another repository is another plan. restic keeps one
+  typed or chosen, and *Repository*), and names a saved plan as its page
+  does, *“Documents (Home NAS)”* over its path. It will not save a second
+  plan for a path its repository already has — the same folder to another
+  repository is another plan. restic keeps one
   history per set of paths: a backup takes as its parent the newest one of
   the same host whose paths cover its own, and retention groups by host and
   exact path set (`--group-by host,paths`, restic 0.19.1), so a list of
