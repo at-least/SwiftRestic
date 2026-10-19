@@ -120,14 +120,56 @@ enum FolderAbsence: Error, Equatable, Sendable {
         }
     }
 
-    /// The sentence under it.
-    var detail: String {
+    /// The sentence under it: why. macOS's block reads by SwiftRestic's
+    /// Full Disk Access now, as an unreadable item's diagnosis does
+    /// (`ItemErrorDiagnosis`): with the grant on, macOS protects the folder
+    /// itself.
+    func detail(fullDiskAccess: FullDiskAccessStatus) -> String {
         switch self {
         case .volumeAway: "The folder is on it."
         case .missing: "It was moved, renamed or deleted."
-        case .blockedByMacOS: "macOS blocked it: SwiftRestic needs Full Disk Access."
+        case .blockedByMacOS:
+            fullDiskAccess == .granted
+                ? "macOS blocked it even with Full Disk Access on — it is likely protected by macOS itself."
+                : "macOS blocked it: SwiftRestic needs Full Disk Access."
         case .deniedByFilePermissions: "It can't be read with your account's file permissions."
         case let .unreadable(_, reason): reason
+        }
+    }
+
+    /// What the user can do about a refusal: the steps, and the one fix to
+    /// press beside them. Nil where there is nothing to do from here — a
+    /// drive to connect, a folder put back, macOS's own protection.
+    struct Remedy: Equatable, Sendable {
+        enum Fix: Equatable, Sendable {
+            /// System Settings › Privacy & Security › Full Disk Access
+            /// (`FullDiskAccessButton`).
+            case openFullDiskAccessSettings
+            /// The folder selected in Finder, where Get Info is.
+            case revealInFinder
+        }
+
+        let steps: String
+        let fix: Fix
+    }
+
+    /// The fix for a refusal. macOS applies a Full Disk Access grant to an
+    /// app already open once it restarts — System Settings offers "Quit &
+    /// Reopen" — so the steps end there; the file permissions are the
+    /// folder's own, which only Finder's Get Info (or its owner) changes.
+    func remedy(fullDiskAccess: FullDiskAccessStatus) -> Remedy? {
+        switch self {
+        case .blockedByMacOS where fullDiskAccess != .granted:
+            Remedy(
+                steps: "Turn SwiftRestic on in System Settings › Privacy & Security › Full Disk Access, then quit and reopen SwiftRestic.",
+                fix: .openFullDiskAccessSettings
+            )
+        case .deniedByFilePermissions:
+            Remedy(
+                steps: "Full Disk Access doesn't change that: select it in Finder, choose File › Get Info, and give your account Read access under Sharing & Permissions.",
+                fix: .revealInFinder
+            )
+        case .volumeAway, .missing, .blockedByMacOS, .unreadable: nil
         }
     }
 }

@@ -84,9 +84,15 @@ the generator after editing it; the PNGs are checked in.
   The pane of an item on this Mac no backup holds says *Not backed up* and
   why, and a folder's pane, once the folder is gone from this Mac, says when
   it was last backed up. When the plan's folder can't be read, the tab says
-  only why, with *Show Backups*: *“TinyDisk” is not connected*, *“Documents”
-  is not on this Mac* (moved, renamed or deleted), or *SwiftRestic can't
-  read “Documents”* (macOS blocked it, or the file permissions). A folder
+  why, with *Show Backups*: *“TinyDisk” is not connected*, *“Documents” is
+  not on this Mac* (moved, renamed or deleted), or *SwiftRestic can't read
+  “Documents”* — and for a refusal, what to do about it: macOS's block,
+  while SwiftRestic lacks Full Disk Access, says to turn it on and quit and
+  reopen SwiftRestic, with *Open Full Disk Access Settings* (with the grant
+  on, that macOS protects the folder itself); the file permissions, that
+  Full Disk Access doesn't change them and how Finder's Get Info does, with
+  *Reveal in Finder*. A subfolder that refuses SwiftRestic says so in the
+  tree, its fix in place of *Try Again*. A folder
   lists at most 200 items in the tree, then a row that opens it in the pane,
   which lists it as a backup held it. Each page keeps its tab, open backup,
   open folders and selection while the app runs, and opens on Overview

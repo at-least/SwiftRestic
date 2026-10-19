@@ -92,6 +92,13 @@ struct FilesBrowserView: View {
         return nil
     }
 
+    /// The plan's folder, as its path names it — what Reveal in Finder
+    /// selects when the folder refuses SwiftRestic.
+    private var planPath: String? {
+        guard case let .plan(id) = page, let plan = model.plan(id: id) else { return nil }
+        return ResticService.expandTilde(plan.path)
+    }
+
     /// Every level the tree has on screen: the roots and the open folders
     /// under them, a deleted one's too while Show Deleted Items lists it.
     private var neededLevels: [FileNode] {
@@ -160,16 +167,27 @@ struct FilesBrowserView: View {
         }
     }
 
-    /// The tab when the plan's folder can't be read: why, and the way to
-    /// what the backups hold of it — no tree of an older backup in its
-    /// place (the user's call, 2026-10-19).
+    /// The tab when the plan's folder can't be read: why, what to do about
+    /// a refusal and the fix to press, and the way to what the backups hold
+    /// of it — no tree of an older backup in its place (the user's calls,
+    /// 2026-10-19: the reason only, then the reason with its fix).
     private func unavailable(_ absence: FolderAbsence) -> some View {
-        ContentUnavailableView {
+        let remedy = absence.remedy(fullDiskAccess: model.fullDiskAccess)
+        return ContentUnavailableView {
             Label(absence.title, systemImage: Self.symbol(of: absence))
         } description: {
-            Text(verbatim: "\(absence.detail) Its backups are on the Backups tab.")
+            Text(verbatim: [
+                absence.detail(fullDiskAccess: model.fullDiskAccess),
+                remedy?.steps,
+                "Its backups are on the Backups tab.",
+            ].compactMap { $0 }.joined(separator: " "))
         } actions: {
-            Button("Show Backups") { router.setTab(.backups, of: page) }
+            HStack {
+                if let remedy, let planPath {
+                    FolderFixButton(fix: remedy.fix, path: planPath)
+                }
+                Button("Show Backups") { router.setTab(.backups, of: page) }
+            }
         }
     }
 
@@ -731,17 +749,26 @@ struct FilesTreeRow: View {
 }
 
 /// What an open folder of a Files tree says while it lists nothing: still
-/// reading, why it could not, or that it holds nothing.
+/// reading, why it could not — with the fix to press when SwiftRestic is
+/// refused, else Try Again — or that it holds nothing.
 struct FilesStatusRow: View {
+    @Environment(AppModel.self) private var model
     @Environment(FilesTree.self) private var filesTree
     let node: FileNode
 
     var body: some View {
         switch filesTree.state(of: node) {
         case let .failed(message):
-            problem(Format.firstSentence(message), help: message)
+            problem(Format.firstSentence(message), help: message, reason: nil, fix: nil)
         case let .unavailable(absence, _):
-            problem(absence.title, help: absence.detail)
+            let reason = absence.detail(fullDiskAccess: model.fullDiskAccess)
+            let remedy = absence.remedy(fullDiskAccess: model.fullDiskAccess)
+            problem(
+                absence.title,
+                help: [reason, remedy?.steps].compactMap { $0 }.joined(separator: " "),
+                reason: remedy == nil ? nil : reason,
+                fix: remedy?.fix
+            )
         case .loaded:
             Text("Empty folder")
                 .font(.caption)
@@ -756,7 +783,11 @@ struct FilesStatusRow: View {
         }
     }
 
-    private func problem(_ words: String, help: String) -> some View {
+    /// The headline, the reason under it when a fix follows — the steps in
+    /// the tooltip, the column being narrow — and the fix, or Try Again.
+    /// A fix needs no Try Again: the tree is read again when SwiftRestic
+    /// comes back to the front from System Settings or Finder.
+    private func problem(_ words: String, help: String, reason: String?, fix: FolderAbsence.Remedy.Fix?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -769,8 +800,40 @@ struct FilesStatusRow: View {
                     .help(help)
             }
             .font(.caption)
-            Button("Try Again") { filesTree.reread(node) }
-                .controlSize(.small)
+            if let reason {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .help(help)
+            }
+            if let fix {
+                FolderFixButton(fix: fix, path: node.path)
+                    .controlSize(.small)
+            } else {
+                Button("Try Again") { filesTree.reread(node) }
+                    .controlSize(.small)
+            }
+        }
+    }
+}
+
+/// The fix a folder that refuses SwiftRestic offers
+/// (`FolderAbsence.Remedy`): System Settings' Full Disk Access list, or the
+/// folder selected in Finder, where File › Get Info shows its permissions.
+struct FolderFixButton: View {
+    let fix: FolderAbsence.Remedy.Fix
+    let path: String
+
+    var body: some View {
+        switch fix {
+        case .openFullDiskAccessSettings:
+            FullDiskAccessButton()
+        case .revealInFinder:
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            }
+            .help("Select it in Finder, where File › Get Info shows its permissions")
         }
     }
 }
