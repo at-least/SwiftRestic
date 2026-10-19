@@ -78,7 +78,7 @@ struct RepositoryDetailView: View {
                     DetailGrid {
                         DetailRow("Type", repository.kind.displayName)
                         DetailRow("Location") {
-                            Text(repository.resticRepositoryString)
+                            Text(repository.displayLocation)
                                 .textSelection(.enabled)
                                 .lineLimit(2)
                                 .truncationMode(.middle)
