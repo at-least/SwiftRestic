@@ -12,8 +12,11 @@ enum EditorRequirements {
     /// Back up, Repository — then the one a configuration checks: a
     /// repository holds one plan per path (`plans`, every configured plan,
     /// the draft's own saved entry among them), its history being restic's
-    /// for that path.
-    static func plan(_ draft: BackupPlan, among plans: [BackupPlan]) -> String? {
+    /// for that path. That one binds a plan being added — new, or adopted
+    /// — alone: a saved plan's path is fixed, so in an edit it could only
+    /// catch twins a configuration from before 2026-10-18 holds, and keep
+    /// their Save grey with nothing in the sheet to change.
+    static func plan(_ draft: BackupPlan, isNew: Bool, among plans: [BackupPlan]) -> String? {
         if draft.path.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Choose a folder to back up."
         }
@@ -21,7 +24,7 @@ enum EditorRequirements {
             return "Choose a repository to save it."
         }
         let path = comparable(draft.path)
-        if plans.contains(where: { $0.id != draft.id && $0.repositoryID == draft.repositoryID && comparable($0.path) == path }) {
+        if isNew, plans.contains(where: { $0.id != draft.id && $0.repositoryID == draft.repositoryID && comparable($0.path) == path }) {
             return "This repository already has a plan for this folder."
         }
         return nil
@@ -132,9 +135,12 @@ enum EditorRequirements {
         }
         // Without a name of their own, two entries for one place would be
         // two identical rows — and two schedulers' checks and prunes on one
-        // repository.
+        // repository. A new one's rule alone: a saved repository's location
+        // is fixed, so in an edit it could only catch twins a configuration
+        // from before 2026-10-18 holds, and keep their Save grey — a
+        // password this Mac lacks never entered.
         let location = comparableLocation(draft)
-        if let other = repositories.first(where: { $0.id != draft.id && comparableLocation($0) == location }) {
+        if isNew, let other = repositories.first(where: { $0.id != draft.id && comparableLocation($0) == location }) {
             return "“\(other.label(among: repositories))” is already at this location."
         }
         if isNew {

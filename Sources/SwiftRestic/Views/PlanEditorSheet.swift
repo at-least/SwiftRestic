@@ -368,7 +368,7 @@ struct PlanEditorSheet: View {
     }
 
     private var missingRequirement: String? {
-        EditorRequirements.plan(draft, among: model.configuration.plans)
+        EditorRequirements.plan(draft, isNew: isNew, among: model.configuration.plans)
     }
 
     /// The first backup of a new scheduled plan starts within a minute of

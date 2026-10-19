@@ -10,20 +10,20 @@ struct EditorRequirementTests {
     @Test("the plan editor names the first unmet requirement in the order the sheet shows its fields")
     func planRequirementOrdering() {
         var plan = BackupPlan()
-        #expect(EditorRequirements.plan(plan, among: []) == "Choose a folder to back up.")
+        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a folder to back up.")
 
         plan.path = "/Users/demo/Documents"
-        #expect(EditorRequirements.plan(plan, among: []) == "Choose a repository to save it.")
+        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a repository to save it.")
 
         plan.repositoryID = UUID()
-        #expect(EditorRequirements.plan(plan, among: []) == nil, "a complete plan has nothing to name")
+        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == nil, "a complete plan has nothing to name")
 
         // Whitespace is as absent as nothing.
         plan.path = "  "
-        #expect(EditorRequirements.plan(plan, among: []) == "Choose a folder to back up.")
+        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a folder to back up.")
     }
 
-    @Test("a path another plan already backs up to the repository cannot be saved again; another repository, or the plan itself, can")
+    @Test("a path another plan already backs up to the repository cannot be added again; another repository, an edit, or twins an older configuration holds can be saved")
     func planPathIsOncePerRepository() {
         let home = UUID()
         var saved = BackupPlan()
@@ -36,23 +36,30 @@ struct EditorRequirementTests {
         // Spelled the same, with a trailing slash, or padded: one path.
         for spelling in ["/Users/demo/Documents", "/Users/demo/Documents/", " /Users/demo/Documents"] {
             draft.path = spelling
-            #expect(EditorRequirements.plan(draft, among: [saved]) == taken, "spelled \(spelling)")
+            #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == taken, "spelled \(spelling)")
         }
         // A tilde is the home folder.
         var inHome = saved
         inHome.path = NSHomeDirectory() + "/Documents"
         draft.path = "~/Documents"
-        #expect(EditorRequirements.plan(draft, among: [inHome]) == taken)
+        #expect(EditorRequirements.plan(draft, isNew: true, among: [inHome]) == taken)
 
         // A folder inside it is another path.
         draft.path = "/Users/demo/Documents/Taxes"
-        #expect(EditorRequirements.plan(draft, among: [saved]) == nil)
+        #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == nil)
         // The same folder to another repository is another plan.
         draft.path = "/Users/demo/Documents"
         draft.repositoryID = UUID()
-        #expect(EditorRequirements.plan(draft, among: [saved]) == nil)
+        #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == nil)
         // A saved plan's own entry is not another plan.
-        #expect(EditorRequirements.plan(saved, among: [saved]) == nil)
+        #expect(EditorRequirements.plan(saved, isNew: false, among: [saved]) == nil)
+        // Twins: builds before 2026-10-18 let two plans back up one folder
+        // to one repository, and a plan's path is fixed once saved, so
+        // editing either — its schedule, its excludes — must save.
+        var twin = saved
+        twin.id = UUID()
+        #expect(EditorRequirements.plan(saved, isNew: false, among: [saved, twin]) == nil)
+        #expect(EditorRequirements.plan(twin, isNew: false, among: [saved, twin]) == nil)
     }
 
     @Test("a new plan's repository is chosen for it only when there is one to choose")
@@ -124,7 +131,7 @@ struct EditorRequirementTests {
             == "Enter the rclone remote to save it.")
     }
 
-    @Test("a location already added cannot be added again — the two would be one repository under two rows")
+    @Test("a location already added cannot be added again — the two would be one repository under two rows; twins an older configuration holds still save their edits")
     func repositoryLocationIsOnce() {
         var saved = Repository()
         saved.kind = .local
@@ -164,6 +171,18 @@ struct EditorRequirementTests {
         ) == nil)
         #expect(EditorRequirements.repository(
             saved, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true, among: [saved]
+        ) == nil)
+        // Twins: builds before 2026-10-18 named repositories, and one place
+        // could be added twice under two names. A saved repository's
+        // location is fixed, so its edits — a password this Mac lacks, a
+        // bandwidth limit — must save.
+        var twin = saved
+        twin.id = UUID()
+        #expect(EditorRequirements.repository(
+            saved, password: "", confirmPassword: "", isNew: false, hasStoredPassword: true, among: [saved, twin]
+        ) == nil)
+        #expect(EditorRequirements.repository(
+            twin, password: "pw", confirmPassword: "", isNew: false, hasStoredPassword: false, among: [saved, twin]
         ) == nil)
     }
 
