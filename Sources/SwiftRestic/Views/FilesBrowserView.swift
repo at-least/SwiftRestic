@@ -48,6 +48,10 @@ struct FilesBrowserView: View {
     /// row standing for it — is listed. A deep item a route selected (Show
     /// Versions, a capture's item) otherwise sat out of sight below.
     @State private var unrevealed: FileNode?
+    /// The disk's turn the tab was shown in (`FilesTree.diskMayHaveChanged`):
+    /// a request to show an item waits for the levels on its way to be read
+    /// in it, so a folder last read away, or there, answers as it is now.
+    @State private var shownTurn: UInt64?
 
     private var selected: FileNode? {
         router.filesSelection[roots]
@@ -55,8 +59,8 @@ struct FilesBrowserView: View {
 
     /// The selection the tree and the search's hits share. A hit picked
     /// opens the folders above it, so the tree lists it when the search
-    /// ends — Show Deleted Items too, when it is no longer on this Mac
-    /// (`revealIfGone`).
+    /// ends — Show Deleted Items too, when the tree lists it only as
+    /// deleted (`reveal`).
     private var selection: Binding<FileNode?> {
         Binding(get: { router.filesSelection[roots] }, set: { item in
             router.filesSelection[roots] = item
@@ -107,6 +111,15 @@ struct FilesBrowserView: View {
         filesTree.needed(under: roots, open: router.openFolders, showsDeleted: router.filesShowsDeletedItems)
     }
 
+    /// What the router's request to show an item comes to now
+    /// (`FilesTree.reveal`): nil with none, a wait until the tab's turn is
+    /// known and the levels on the item's way are read in it.
+    private var reveal: FilesTree.Reveal? {
+        guard let item = router.filesRevealRequest else { return nil }
+        guard let shownTurn else { return .wait }
+        return FilesTree.reveal(item, under: roots, open: router.openFolders, states: filesTree.states, turn: shownTurn)
+    }
+
     var body: some View {
         Group {
             if let absence {
@@ -154,11 +167,22 @@ struct FilesBrowserView: View {
             router.filesSelection[roots] = root
             router.openFolders.insert(root)
         }
-        .task(id: router.filesRevealRequest) { await revealIfGone() }
+        // A request to show an item — Show Versions', a hit picked, one
+        // opened from the pane — is spent once the tree can answer it: one
+        // it lists only as deleted turns Show Deleted Items on, so it has a
+        // row (the user's call, 2026-10-19), the View menu's tick saying so.
+        .onChange(of: reveal, initial: true) { _, answer in
+            guard let answer, answer != .wait else { return }
+            router.filesRevealRequest = nil
+            if answer == .showDeleted { router.filesShowsDeletedItems = true }
+        }
         // The tree does not watch the folder: it is read again when the tab
         // shows, when SwiftRestic comes to the front — another app may have
         // changed the folder meanwhile — and when a volume comes or goes.
-        .onAppear { filesTree.diskMayHaveChanged() }
+        .onAppear {
+            filesTree.diskMayHaveChanged()
+            shownTurn = filesTree.diskGeneration
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             filesTree.diskMayHaveChanged()
         }
@@ -321,7 +345,9 @@ struct FilesBrowserView: View {
     /// Answers the query, and again every `recheckInterval` while the index
     /// is still reading the repository — the tree's own rule — so hits from
     /// backups it reads meanwhile fill in. One read of the index, no restic,
-    /// then one `lstat` per hit: a hit no longer on this Mac is dimmed.
+    /// then one listing per hit's folder (`DiskFolder.present`): a hit no
+    /// longer on this Mac, by its bytes as the tree's rows tell it, is
+    /// dimmed.
     private func search() async {
         let roots = roots
         let query = query
@@ -338,9 +364,7 @@ struct FilesBrowserView: View {
                     pattern: query, inChain: roots.chainKey, repositoryID: roots.repositoryID
                 )
                 let paths = found.hits.map(\.path)
-                let present = await Task.detached(priority: .userInitiated) { () -> Set<PathKey> in
-                    Set(paths.filter { DiskFolder.exists($0) }.map { PathKey($0) })
-                }.value
+                let present = await Task.detached(priority: .userInitiated) { DiskFolder.present(paths) }.value
                 outcome = .hits(FilesSearchAnswer.entries(found.hits, under: roots, present: present))
                 isTruncated = found.isTruncated
             } catch {
@@ -445,26 +469,12 @@ struct FilesBrowserView: View {
     /// Opens an item of the selected folder's listing in the tree, at the
     /// backup the listing was read from: the folder opens so the item's row
     /// is there to select, and walking down keeps the era — Show Deleted
-    /// Items too, when this Mac no longer has it (`revealIfGone`).
+    /// Items too, when the tree lists it only as deleted (`reveal`).
     private func open(_ item: FileNode, versionID: String) {
         if let selected { router.openFolders.insert(selected) }
         router.filesVersionHint = versionID
         router.filesSelection[roots] = item
         router.filesRevealRequest = item
-    }
-
-    /// Spends the router's reveal request: an item this Mac no longer has
-    /// has no row while Show Deleted Items is off, so asking for it turns
-    /// that on — the View menu's tick says so, and unticks it. Not while the
-    /// plan's folder itself can't be read: its tab says why instead.
-    private func revealIfGone() async {
-        guard let item = router.filesRevealRequest else { return }
-        router.filesRevealRequest = nil
-        guard !router.filesShowsDeletedItems else { return }
-        let path = item.path
-        let present = await Task.detached(priority: .userInitiated) { DiskFolder.exists(path) }.value
-        guard !present, absence == nil else { return }
-        router.filesShowsDeletedItems = true
     }
 
     /// Spoken when it folds: the fold is a button, whose changed value

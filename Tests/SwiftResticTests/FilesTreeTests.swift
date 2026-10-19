@@ -211,6 +211,76 @@ struct FilesTreeTests {
         #expect(!AppRouter().filesShowsDeletedItems)
     }
 
+    @Test("a request to show an item turns Show Deleted Items on when the tree lists it, or a folder above it, only as deleted — by its bytes, once each level on its way was read in the tab's turn")
+    func revealDecides() {
+        let roots = FileNode.roots(repositoryID: repositoryID, chainKey: chain)
+        let data = node("/Data")
+        let deleted = FilesTree.Standing.deleted(lastBackedUp: IndexVersion(id: "s1", time: .now))
+        func read(_ entries: [FilesTree.Entry], complete: Bool = true, turn: UInt64 = 2) -> FilesTree.State {
+            .loaded(FilesTree.Level(entries: entries, isComplete: complete, diskGeneration: turn))
+        }
+        // The disk's names, then what only the backups hold: among them a
+        // name in another case and one in another normalization than the
+        // disk's, which lstat takes for the disk's on APFS as Macs ship it.
+        let nfd = "/Data/cafe\u{301}.txt"
+        let nfc = "/Data/caf\u{E9}.txt"
+        var states: [FileNode: FilesTree.State] = [
+            roots: read([entry(data)]),
+            data: read([
+                entry(node("/Data/Archive")),
+                entry(node("/Data/Notes.md", folder: false), .notBackedUp),
+                entry(node(nfd, folder: false)),
+                entry(node("/Data/Drafts"), deleted),
+                entry(node("/Data/notes.md", folder: false), deleted),
+                entry(node(nfc, folder: false), deleted),
+            ]),
+        ]
+        func reveal(_ path: String, folder: Bool = false, turn: UInt64 = 2) -> FilesTree.Reveal {
+            FilesTree.reveal(node(path, folder: folder), under: roots, open: [data], states: states, turn: turn)
+        }
+        // On this Mac: its row is there already.
+        #expect(reveal("/Data", folder: true) == .nothing)
+        #expect(reveal("/Data/Notes.md") == .nothing)
+        #expect(reveal(nfd) == .nothing)
+        // Listed only as deleted, by its bytes.
+        #expect(reveal("/Data/notes.md") == .showDeleted)
+        #expect(reveal(nfc) == .showDeleted)
+        // Under a deleted folder, whose level is not read while the toggle
+        // is off.
+        #expect(reveal("/Data/Drafts/draft1.txt") == .showDeleted)
+        // Under a folder of this Mac left closed: folded away either way.
+        #expect(reveal("/Data/Archive/old.txt") == .nothing)
+        // In no level, nothing to list.
+        #expect(reveal("/Data/elsewhere.txt") == .nothing)
+        // Another chain's item is not this tab's.
+        #expect(FilesTree.reveal(
+            FileNode(repositoryID: repositoryID, chainKey: "swiftrestic-plan-bbbb", path: "/Data/notes.md", isDirectory: false),
+            under: roots, open: [data], states: states, turn: 2
+        ) == .nothing)
+
+        // A level read before the tab's turn waits for the read in it: a
+        // folder last read there, or away, answers as it is now.
+        #expect(reveal("/Data/notes.md", turn: 3) == .wait)
+        // An index still reading may yet find a backup that holds it.
+        states[data] = read([entry(node("/Data/Archive"))], complete: false)
+        #expect(reveal("/Data/elsewhere.txt") == .wait)
+        states[data] = nil
+        #expect(reveal("/Data/notes.md") == .wait)
+        states[data] = .loading
+        #expect(reveal("/Data/notes.md") == .wait)
+        // A level that failed or can't be read answers nothing: the tab, or
+        // the folder's row, says why.
+        states[data] = .failed("The index could not be read.")
+        #expect(reveal("/Data/notes.md") == .nothing)
+        states[data] = .unavailable(.blockedByMacOS(name: "Data"), diskGeneration: 2)
+        #expect(reveal("/Data/notes.md") == .nothing)
+        states[roots] = read([entry(data)], turn: 3)
+        #expect(reveal("/Data/notes.md", turn: 3) == .wait)
+        states[roots] = .unavailable(.volumeAway(volume: "TinyDisk"), diskGeneration: 2)
+        #expect(reveal("/Data/notes.md") == .nothing)
+        #expect(reveal("/Data/notes.md", turn: 3) == .wait)
+    }
+
     @Test("a disk that may have changed reads every level again, keeping it on screen meanwhile; a folder that could not be listed waits for that")
     func diskTurnRereads() async {
         let model = AppModel(

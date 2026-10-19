@@ -208,6 +208,48 @@ final class FilesTree {
         return more
     }
 
+    /// What a request to show `item` comes to (`AppRouter.filesRevealRequest`),
+    /// by the levels on its way down from `roots`: the item, or a folder
+    /// above it, listed only as deleted turns Show Deleted Items on, so the
+    /// tree lists it; an item this Mac holds, or one whose way can't be
+    /// read, failed or is folded, asks nothing. The entries decide, by their
+    /// bytes — `lstat` would find "Report.txt" for "report.txt" — and only
+    /// once each level on the way was read in `turn` or later, the disk's
+    /// turn the tab was shown in: a folder last read away, or there,
+    /// answers as it is now.
+    enum Reveal: Equatable {
+        case wait
+        case showDeleted
+        case nothing
+    }
+
+    nonisolated static func reveal(
+        _ item: FileNode, under roots: FileNode, open: Set<FileNode>, states: [FileNode: State], turn: UInt64
+    ) -> Reveal {
+        guard item.repositoryID == roots.repositoryID, item.chainKey == roots.chainKey else { return .nothing }
+        var folder = roots
+        while true {
+            let level: Level
+            switch states[folder] {
+            case nil, .loading?: return .wait
+            case .failed?: return .nothing
+            case let .unavailable(_, generation)?: return generation >= turn ? .nothing : .wait
+            case let .loaded(read)?:
+                guard read.diskGeneration >= turn else { return .wait }
+                level = read
+            }
+            // The entry on the item's way: the item, or the folder above it.
+            guard let next = level.entries.first(where: { ResticPath.holds($0.node.path, item.path) }) else {
+                // An index still reading may not have reached a backup
+                // that holds it.
+                return level.isComplete ? .nothing : .wait
+            }
+            if case .deleted = next.standing { return .showDeleted }
+            guard next.node.pathKey != item.pathKey, next.node.isDirectory, open.contains(next.node) else { return .nothing }
+            folder = next.node
+        }
+    }
+
     /// The levels the rows under `parent` need: `parent` and every open
     /// folder shown under it.
     func needed(under parent: FileNode, open: Set<FileNode>, showsDeleted: Bool) -> [FileNode] {

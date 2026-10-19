@@ -65,6 +65,46 @@ enum DiskFolder {
         if lstat(path, &info) == 0 { return true }
         return errno != ENOENT && errno != ENOTDIR
     }
+
+    /// Which of `paths` this Mac holds now, as a plan's tree tells it: by
+    /// the bytes of each name in its folder's listing (`FilesTree.entries`),
+    /// one listing per folder. `lstat` would find "Report.txt" for
+    /// "report.txt", and an NFC name for its NFD spelling — one name to the
+    /// file system, two to restic. A missing folder's items are gone; one
+    /// SwiftRestic may not list keeps `exists`' rule, so an item in it is
+    /// not taken for gone.
+    static func present(_ paths: [String]) -> Set<PathKey> {
+        enum Folder {
+            case listed(Set<PathKey>)
+            case gone
+            case refused
+        }
+        var folders: [PathKey: Folder] = [:]
+        var present = Set<PathKey>()
+        for path in paths {
+            let parent = ResticPath.parent(of: path)
+            let folder: Folder
+            if let known = folders[PathKey(parent)] {
+                folder = known
+            } else {
+                do {
+                    let prefix = parent == "/" ? "" : parent
+                    folder = try .listed(Set(list(parent).map { PathKey(prefix + "/" + $0.name) }))
+                } catch FolderAbsence.missing(name: _), FolderAbsence.volumeAway(volume: _) {
+                    folder = .gone
+                } catch {
+                    folder = .refused
+                }
+                folders[PathKey(parent)] = folder
+            }
+            switch folder {
+            case let .listed(names) where names.contains(PathKey(path)): present.insert(PathKey(path))
+            case .refused where exists(path): present.insert(PathKey(path))
+            case .listed, .gone, .refused: break
+            }
+        }
+        return present
+    }
 }
 
 /// Why a folder of this Mac cannot be listed, in the Files tab's words —
@@ -158,10 +198,11 @@ enum FolderAbsence: Error, Equatable, Sendable {
     /// What to do about it. A drive away is to connect; a folder gone, to
     /// put back or back up with a new plan, a failed backup's words
     /// (`RunRecord.folderGoneAdvice`) — no button for either (the user's
-    /// call, 2026-10-19). macOS applies a Full Disk Access grant to an app
-    /// already open once it restarts — System Settings offers "Quit &
-    /// Reopen" — so those steps end there; the file permissions are the
-    /// folder's own, which only Finder's Get Info (or its owner) changes.
+    /// call, 2026-10-19). UNVERIFIED (third-party guides; not tried on
+    /// macOS 27): macOS applies a Full Disk Access grant to an app already
+    /// open once it restarts — System Settings offers "Quit & Reopen" — so
+    /// those steps end there. The file permissions are the folder's own,
+    /// which only Finder's Get Info (or its owner) changes.
     func remedy(fullDiskAccess: FullDiskAccessStatus) -> Remedy? {
         switch self {
         case let .volumeAway(volume):

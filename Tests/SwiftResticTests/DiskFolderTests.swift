@@ -83,6 +83,33 @@ struct DiskFolderTests {
         #expect(DiskFolder.exists(root + "/dangling"))
     }
 
+    @Test("presence is a listing's bytes, as the tree's rows: a name in another case or normalization than the disk's is gone, as is all of a folder gone or a file; a refused folder's items are not taken for gone")
+    func presence() throws {
+        let root = try scratch()
+        defer {
+            chmod(root + "/locked", 0o755)
+            try? FileManager.default.removeItem(atPath: root)
+        }
+        #expect(FileManager.default.createFile(atPath: root + "/report.txt", contents: Data()))
+        // An NFD name, written by its bytes; lstat finds it by its NFC
+        // spelling too, and "Report.txt" for "report.txt", on APFS as Macs
+        // ship it.
+        let nfd = root + "/cafe\u{301}.txt"
+        let nfc = root + "/caf\u{E9}.txt"
+        let descriptor = open(nfd, O_CREAT | O_WRONLY, 0o644)
+        #expect(descriptor >= 0)
+        close(descriptor)
+        try FileManager.default.createDirectory(atPath: root + "/locked", withIntermediateDirectories: true)
+        #expect(FileManager.default.createFile(atPath: root + "/locked/inside", contents: Data()))
+        #expect(chmod(root + "/locked", 0) == 0)
+
+        let present = DiskFolder.present([
+            root + "/report.txt", root + "/Report.txt", nfd, nfc, root + "/gone.txt",
+            root + "/nope/x.txt", root + "/report.txt/below", root + "/locked/inside",
+        ])
+        #expect(present == [PathKey(root + "/report.txt"), PathKey(nfd), PathKey(root + "/locked/inside")])
+    }
+
     @Test("each absence has its headline and its reason; a refusal has its fix, by Full Disk Access now")
     func absenceWords() {
         let away = FolderAbsence.volumeAway(volume: "TinyDisk")

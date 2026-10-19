@@ -167,10 +167,10 @@ final class AppRouter {
     private(set) var filesPaneOpenings = 0
 
     /// An item the Files tab was asked to show — Show Versions', a search
-    /// hit picked, one opened from the pane — waiting for the tab to look
-    /// whether this Mac still has it: one it no longer has turns Show
-    /// Deleted Items on, so the tree lists it (the user's call, 2026-10-19).
-    /// Transient; the tab spends it.
+    /// hit picked, one opened from the pane — waiting for the tab's tree to
+    /// read the levels on its way: one it lists only as deleted turns Show
+    /// Deleted Items on, so it has a row (the user's call, 2026-10-19).
+    /// Transient; the tab spends it (`FilesTree.reveal`).
     var filesRevealRequest: FileNode?
 
     func tab(of page: SidebarItem) -> PageTab {
