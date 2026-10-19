@@ -158,10 +158,7 @@ extension AppModel {
             guard configuration.repository(id: repositoryID) != nil else { return }
             // No banner: the sidebar's row and every page of the repository
             // say it, for as long as it lasts.
-            let advice = repository.kind == .local
-                ? "Is its disk connected? If it moved, update its path in the repository settings."
-                : "Check its location in the repository settings."
-            snapshotListingOutcomes[repositoryID] = .failed("Repository missing. \(advice)")
+            snapshotListingOutcomes[repositoryID] = .failed(Self.missingRepositoryReason(kind: repository.kind))
         } catch {
             // Keep whatever an earlier successful listing produced — stale
             // rows beside an error beat a blank card that reads as "nothing
@@ -179,6 +176,17 @@ extension AppModel {
     func snapshotListingOutcome(for repositoryID: UUID?) -> SnapshotListingOutcome {
         guard let repositoryID else { return .idle }
         return snapshotListingOutcomes[repositoryID] ?? .idle
+    }
+
+    /// The listing's words for restic's exit 10 — no repository where this
+    /// one is saved: two sentences, the sidebar showing the first alone.
+    /// What to do is exit 10's own (`ResticError.noRepositoryAtLocation`):
+    /// a saved repository's location is fixed (ad173dc), so its settings
+    /// can't repoint it, and where it is now is a new repository.
+    nonisolated static func missingRepositoryReason(kind: Repository.Kind) -> String {
+        kind == .local
+            ? "Repository missing. Is its disk connected? If it moved, put it back, or add it where it is now as a new repository."
+            : "Repository missing. If it moved, put it back, or add it where it is now as a new repository."
     }
 
     /// When the repository's listing last succeeded, for freshness stamps.

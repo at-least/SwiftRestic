@@ -785,6 +785,12 @@ struct AppModelStubTests {
             return
         }
         #expect(message.hasPrefix("Repository missing."), "message was \(message)")
+        // What to do, in exit 10's own terms (ResticError.noRepositoryAtLocation):
+        // a saved repository's location is fixed, so its settings can't
+        // repoint it — where it is now is a new repository.
+        #expect(message == "Repository missing. Is its disk connected? If it moved, put it back, or add it where it is now as a new repository.")
+        #expect(AppModel.missingRepositoryReason(kind: .sftp)
+            == "Repository missing. If it moved, put it back, or add it where it is now as a new repository.")
         #expect(!harness.model.banners.contains { $0.title.contains("Could not read “Stub Repo”") })
         #expect(harness.model.repositoriesMissingPassword.isEmpty)
 
