@@ -80,13 +80,17 @@ the generator after editing it; the PNGs are checked in.
   folder's own items, dimmed with the day it was last backed up (*until Oct
   2*), a deleted folder opening onto what the backups held in it; the
   search finds it either way, and a folder's *As backed up* lists it as the
-  backups held it.
+  backups held it. Asking for such an item — *Show Versions*, a search hit
+  picked, one opened from the pane — turns *Show Deleted Items* on, so the
+  tree lists it.
   The pane of an item on this Mac no backup holds says *Not backed up* and
   why, and a folder's pane, once the folder is gone from this Mac, says when
   it was last backed up. When the plan's folder can't be read, the tab says
-  why, with *Show Backups*: *“TinyDisk” is not connected*, *“Documents” is
-  not on this Mac* (moved, renamed or deleted), or *SwiftRestic can't read
-  “Documents”* — and for a refusal, what to do about it: macOS's block,
+  why and what to do, with *Show Backups*: *“TinyDisk” is not connected*
+  (connect it to see the folder), *“Documents” is not on this Mac* (moved,
+  renamed or deleted: put it back, or back it up where it is now with a new
+  plan — a failed backup's words), or *SwiftRestic can't read “Documents”*
+  — and for a refusal, a fix to press besides: macOS's block,
   while SwiftRestic lacks Full Disk Access, says to turn it on and quit and
   reopen SwiftRestic, with *Open Full Disk Access Settings* (with the grant
   on, that macOS protects the folder itself); the file permissions, that

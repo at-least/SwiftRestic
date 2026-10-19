@@ -411,9 +411,13 @@ extension RunRecord {
     /// drive it could wait for is away: named, and what to do — a plan's
     /// path is fixed, so where the folder is now takes a new plan.
     static func folderGoneMessage(path: String) -> String {
-        "“\((path as NSString).lastPathComponent)” is not on this Mac — it was moved, renamed or deleted."
-            + " Put it back, or back it up where it is now with a new plan."
+        "“\((path as NSString).lastPathComponent)” is not on this Mac — it was moved, renamed or deleted. "
+            + folderGoneAdvice
     }
+
+    /// What to do about a plan's folder gone from this Mac — a failed
+    /// backup's words and the Files tab's (`FolderAbsence.remedy`).
+    static let folderGoneAdvice = "Put it back, or back it up where it is now with a new plan."
 
     /// This failure as the continuation of `previous`, the plan's newest
     /// backup before it, failed for the same cause only the user clears —

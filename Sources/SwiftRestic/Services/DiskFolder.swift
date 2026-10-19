@@ -137,9 +137,9 @@ enum FolderAbsence: Error, Equatable, Sendable {
         }
     }
 
-    /// What the user can do about a refusal: the steps, and the one fix to
-    /// press beside them. Nil where there is nothing to do from here — a
-    /// drive to connect, a folder put back, macOS's own protection.
+    /// What the user can do about it: the steps, and the one fix to press
+    /// beside them where the app has one. Nil where there is nothing to do
+    /// — macOS's own protection, the system's own error.
     struct Remedy: Equatable, Sendable {
         enum Fix: Equatable, Sendable {
             /// System Settings › Privacy & Security › Full Disk Access
@@ -150,15 +150,24 @@ enum FolderAbsence: Error, Equatable, Sendable {
         }
 
         let steps: String
-        let fix: Fix
+        /// Nil for steps the user takes away from the app: a drive to
+        /// connect, a folder to put back.
+        let fix: Fix?
     }
 
-    /// The fix for a refusal. macOS applies a Full Disk Access grant to an
-    /// app already open once it restarts — System Settings offers "Quit &
-    /// Reopen" — so the steps end there; the file permissions are the
+    /// What to do about it. A drive away is to connect; a folder gone, to
+    /// put back or back up with a new plan, a failed backup's words
+    /// (`RunRecord.folderGoneAdvice`) — no button for either (the user's
+    /// call, 2026-10-19). macOS applies a Full Disk Access grant to an app
+    /// already open once it restarts — System Settings offers "Quit &
+    /// Reopen" — so those steps end there; the file permissions are the
     /// folder's own, which only Finder's Get Info (or its owner) changes.
     func remedy(fullDiskAccess: FullDiskAccessStatus) -> Remedy? {
         switch self {
+        case let .volumeAway(volume):
+            Remedy(steps: "Connect “\(volume)” to see the folder here.", fix: nil)
+        case .missing:
+            Remedy(steps: RunRecord.folderGoneAdvice, fix: nil)
         case .blockedByMacOS where fullDiskAccess != .granted:
             Remedy(
                 steps: "Turn SwiftRestic on in System Settings › Privacy & Security › Full Disk Access, then quit and reopen SwiftRestic.",
@@ -169,7 +178,7 @@ enum FolderAbsence: Error, Equatable, Sendable {
                 steps: "Full Disk Access doesn't change that: select it in Finder, choose File › Get Info, and give your account Read access under Sharing & Permissions.",
                 fix: .revealInFinder
             )
-        case .volumeAway, .missing, .blockedByMacOS, .unreadable: nil
+        case .blockedByMacOS, .unreadable: nil
         }
     }
 }

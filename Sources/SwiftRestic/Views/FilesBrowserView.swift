@@ -55,12 +55,14 @@ struct FilesBrowserView: View {
 
     /// The selection the tree and the search's hits share. A hit picked
     /// opens the folders above it, so the tree lists it when the search
-    /// ends.
+    /// ends — Show Deleted Items too, when it is no longer on this Mac
+    /// (`revealIfGone`).
     private var selection: Binding<FileNode?> {
         Binding(get: { router.filesSelection[roots] }, set: { item in
             router.filesSelection[roots] = item
             if let item, !query.isEmpty {
                 router.openFolders(above: item, from: rootEntries.map(\.path))
+                router.filesRevealRequest = item
             }
         })
     }
@@ -152,6 +154,7 @@ struct FilesBrowserView: View {
             router.filesSelection[roots] = root
             router.openFolders.insert(root)
         }
+        .task(id: router.filesRevealRequest) { await revealIfGone() }
         // The tree does not watch the folder: it is read again when the tab
         // shows, when SwiftRestic comes to the front — another app may have
         // changed the folder meanwhile — and when a volume comes or goes.
@@ -183,8 +186,8 @@ struct FilesBrowserView: View {
             ].compactMap { $0 }.joined(separator: " "))
         } actions: {
             HStack {
-                if let remedy, let planPath {
-                    FolderFixButton(fix: remedy.fix, path: planPath)
+                if let fix = remedy?.fix, let planPath {
+                    FolderFixButton(fix: fix, path: planPath)
                 }
                 Button("Show Backups") { router.setTab(.backups, of: page) }
             }
@@ -441,11 +444,27 @@ struct FilesBrowserView: View {
 
     /// Opens an item of the selected folder's listing in the tree, at the
     /// backup the listing was read from: the folder opens so the item's row
-    /// is there to select, and walking down keeps the era.
+    /// is there to select, and walking down keeps the era — Show Deleted
+    /// Items too, when this Mac no longer has it (`revealIfGone`).
     private func open(_ item: FileNode, versionID: String) {
         if let selected { router.openFolders.insert(selected) }
         router.filesVersionHint = versionID
         router.filesSelection[roots] = item
+        router.filesRevealRequest = item
+    }
+
+    /// Spends the router's reveal request: an item this Mac no longer has
+    /// has no row while Show Deleted Items is off, so asking for it turns
+    /// that on — the View menu's tick says so, and unticks it. Not while the
+    /// plan's folder itself can't be read: its tab says why instead.
+    private func revealIfGone() async {
+        guard let item = router.filesRevealRequest else { return }
+        router.filesRevealRequest = nil
+        guard !router.filesShowsDeletedItems else { return }
+        let path = item.path
+        let present = await Task.detached(priority: .userInitiated) { DiskFolder.exists(path) }.value
+        guard !present, absence == nil else { return }
+        router.filesShowsDeletedItems = true
     }
 
     /// Spoken when it folds: the fold is a button, whose changed value
@@ -783,7 +802,7 @@ struct FilesStatusRow: View {
         }
     }
 
-    /// The headline, the reason under it when a fix follows — the steps in
+    /// The headline, the reason under it when steps follow — the steps in
     /// the tooltip, the column being narrow — and the fix, or Try Again.
     /// A fix needs no Try Again: the tree is read again when SwiftRestic
     /// comes back to the front from System Settings or Finder.

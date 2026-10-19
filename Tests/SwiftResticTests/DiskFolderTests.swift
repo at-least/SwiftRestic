@@ -93,13 +93,18 @@ struct DiskFolderTests {
         #expect(gone.detail(fullDiskAccess: .notGranted) == "It was moved, renamed or deleted.")
         let unreadable = FolderAbsence.unreadable(name: "Documents", reason: "Input/output error")
         #expect(unreadable.detail(fullDiskAccess: .granted) == "Input/output error")
-        // Nothing to press for these: a drive to connect, a folder to put
-        // back, the system's own error.
-        for absence in [away, gone, unreadable] {
-            for access: FullDiskAccessStatus in [.granted, .notGranted, .unknown] {
-                #expect(absence.remedy(fullDiskAccess: access) == nil, "\(absence) \(access)")
-            }
+        // A drive to connect and a folder to put back: steps, no button —
+        // the folder's in a failed backup's words; the system's own error
+        // has none.
+        for access: FullDiskAccessStatus in [.granted, .notGranted, .unknown] {
+            #expect(away.remedy(fullDiskAccess: access)
+                == FolderAbsence.Remedy(steps: "Connect “TinyDisk” to see the folder here.", fix: nil))
+            #expect(gone.remedy(fullDiskAccess: access)
+                == FolderAbsence.Remedy(steps: "Put it back, or back it up where it is now with a new plan.", fix: nil))
+            #expect(unreadable.remedy(fullDiskAccess: access) == nil, "\(access)")
         }
+        #expect(RunRecord.folderGoneMessage(path: "/Users/x/Documents")
+            == "“Documents” is not on this Mac — it was moved, renamed or deleted. Put it back, or back it up where it is now with a new plan.")
 
         // macOS's block: the grant, while SwiftRestic lacks it — or the
         // probe found nothing to say it has it.

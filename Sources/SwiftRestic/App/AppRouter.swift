@@ -166,6 +166,13 @@ final class AppRouter {
     /// would otherwise keep its backup and leave the hint for the next.
     private(set) var filesPaneOpenings = 0
 
+    /// An item the Files tab was asked to show — Show Versions', a search
+    /// hit picked, one opened from the pane — waiting for the tab to look
+    /// whether this Mac still has it: one it no longer has turns Show
+    /// Deleted Items on, so the tree lists it (the user's call, 2026-10-19).
+    /// Transient; the tab spends it.
+    var filesRevealRequest: FileNode?
+
     func tab(of page: SidebarItem) -> PageTab {
         pageTabs[page] ?? .overview
     }
@@ -189,6 +196,7 @@ final class AppRouter {
         setTab(.files, of: page)
         openFolders(above: item, from: record.paths)
         filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = item
+        filesRevealRequest = item
         filesVersionHint = record.id
         filesPaneOpenings += 1
         selection = page
