@@ -225,12 +225,12 @@ the generator after editing it; the PNGs are checked in.
   drive-full words use), any other folder by its own name, SFTP and a REST
   server by host, S3, B2 and Google Cloud Storage by bucket, Azure by
   container, rclone by remote — and two that would read alike each by its
-  location, as its page shows it ("/Volumes/T7/restic-macbook"). The label
-  follows the location when an edit moves it. A location already added
-  cannot be added again ("“T7” is already at this location."): two entries
-  for one place would be two identical rows, and two sets of checks and
-  prunes on one repository. A name an earlier build stored is dropped at
-  the next save; a check's or prune's record keeps what it was called then.
+  location, as its page shows it ("/Volumes/T7/restic-macbook"). A location
+  already added cannot be added again ("“T7” is already at this location."):
+  two entries for one place would be two identical rows, and two sets of
+  checks and prunes on one repository. A name an earlier build stored is
+  dropped at the next save; a check's or prune's record keeps what it was
+  called then.
   The editor asks *Where is it?* — on this Mac, on another machine, in the
   cloud, through a gateway — and groups the kinds that way. Creating one runs
   `restic init`; a repository that cannot be reached is not saved. *Test
