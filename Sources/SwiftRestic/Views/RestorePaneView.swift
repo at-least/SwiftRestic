@@ -667,13 +667,16 @@ struct RestorePaneView: View {
 
     // MARK: - Loading
 
-    /// The selected record changed: rebuild the tree, walk the preserved
-    /// folder's spine back open, and load the change annotations. Search
-    /// belongs to the record it was searched in — both the hits and the
-    /// query go, so a record switch never shows another backup's search.
+    /// The selected record changed, or the pane was just shown: rebuild the
+    /// tree, walk the preserved folder's spine back open, and load the
+    /// change annotations. Search belongs to the record it was searched in
+    /// — a record switch takes both the hits and the query, so it never
+    /// shows another backup's search. A pane just shown keeps the query it
+    /// comes with — typed on a group's Overview, which turns the page to
+    /// Backups, or left when the tab was last shown — and runs it.
     private func loadLevel() async {
         searchResult = nil
-        searchText = ""
+        if loadedSnapshotID != nil { searchText = "" }
         guard let record else {
             tree = FileTree(roots: [])
             comparison = nil
@@ -693,6 +696,11 @@ struct RestorePaneView: View {
         isLoadingTree = true
         loadError = nil
         folderMissing = false
+        // The query the pane came with, against this record: after the
+        // resets above, which an index failure's answer must outlive, and
+        // once `loadedSnapshotID` names the record its answer must match.
+        // The field's own changes reach `searchChanged` as they are typed.
+        if !searchText.isEmpty { searchChanged(searchText) }
 
         // Changes against the previous backup — one restic diff, streamed.
         if let predecessor {

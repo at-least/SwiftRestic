@@ -109,8 +109,9 @@ final class AppRouter {
 
     /// What each page's Backups tab is searching the open backup for, by
     /// the page, as typed in the toolbar's search field. Transient; a
-    /// record switch clears it, the search belonging to the backup it ran
-    /// in.
+    /// record switch clears it, and so does a route to a backup
+    /// (`showBackup`), the search belonging to the backup it ran in — the
+    /// tab shown again keeps it, as a group's Overview hands it over.
     var backupsSearchText: [SidebarItem: String] = [:]
 
     /// The page whose toolbar search field takes the keyboard focus next —
@@ -261,11 +262,14 @@ final class AppRouter {
     /// record (`AppModel.page(ofBackup:in:)`), on that tab with the record
     /// open, where the Change column, search, drag and whole-backup restore
     /// all live, whichever button was pressed. A plain route clears an older
-    /// focus request rather than inheriting it.
+    /// focus request rather than inheriting it, and the page's search: a
+    /// query left on its Backups tab, searched in another backup, would
+    /// stand over the record and the folder the route opens.
     func showBackup(_ snapshotID: String, on page: SidebarItem, repositoryID: UUID, focusPath: String? = nil) {
         restoreFocus = focusPath.map {
             RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
         }
+        backupsSearchText[page] = nil
         backupSelection[page] = snapshotID
         pageTabs[page] = .backups
         selection = page

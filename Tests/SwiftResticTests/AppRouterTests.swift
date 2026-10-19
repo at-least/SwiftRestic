@@ -88,6 +88,16 @@ struct AppRouterTests {
         router.showBackup("s2", on: page, repositoryID: repository)
         #expect(router.backupSelection[page] == "s2")
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
+
+        // A route opens its backup afresh: a query left on the page's
+        // Backups tab, searched in another backup, would stand over the
+        // record and the folder the route asked for. Another page's stays.
+        let other = SidebarItem.plan(UUID())
+        router.backupsSearchText[page] = "taxes"
+        router.backupsSearchText[other] = "photos"
+        router.showBackup("s3", on: page, repositoryID: repository, focusPath: "/D/Taxes")
+        #expect(router.backupsSearchText[page] == nil)
+        #expect(router.backupsSearchText[other] == "photos")
     }
 
     @Test("a Files version hint is spent by the next pane that takes it, once")

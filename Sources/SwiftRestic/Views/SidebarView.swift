@@ -423,8 +423,8 @@ struct SidebarView: View {
     }
 
     /// A plan-UUID group's menu: an adoptable group's verb first, a moved
-    /// plan's history opens that plan, and every group gets its two ways in
-    /// — its page's Backups and Files.
+    /// plan's history opens that plan, and every group gets its way in —
+    /// its page's Backups (a group's page has no Files tab).
     @ViewBuilder
     private func planGroupMenu(
         planID: UUID,

@@ -116,10 +116,14 @@ struct BackupsBrowserView: View {
                 ),
                 onSearchAllBackups: onSearchAllBackups
             )
-                // Folder state belongs to one repository: another
-                // repository's page must not carry paths or history over —
-                // the pane's own @State resets with the identity.
-                .id(repositoryID)
+                // Folder state and the record the search belongs to are one
+                // page's: another page — another plan's of the same
+                // repository too, which the root shows in the same view —
+                // must not carry paths, history or a search over, nor find
+                // its own query wiped as if it were a record switch
+                // (`RestorePaneView.loadLevel`). The pane's own @State resets
+                // with the identity.
+                .id(page)
         } else {
             ContentUnavailableView(
                 "No backup open",
