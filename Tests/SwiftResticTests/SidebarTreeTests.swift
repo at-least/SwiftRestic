@@ -441,7 +441,7 @@ struct SidebarTreeTests {
         #expect(OverviewMetrics.attentionOutcome([unreadable, exposed, failed]) == .failed)
     }
 
-    @Test("Show Versions lands on the page holding a backup's history: its plan's, a plan-UUID group's, or a lineage's")
+    @Test("a backup's page is its plan's, a plan-UUID group's or a lineage's; Show Versions lands on its plan's alone")
     func showVersionsPage() throws {
         let repositoryID = UUID()
         var plan = BackupPlan()
@@ -455,6 +455,10 @@ struct SidebarTreeTests {
         #expect(shelves.page(of: own, repositoryID: repositoryID) == .plan(plan.id))
         #expect(shelves.page(of: orphan, repositoryID: repositoryID) == .orphanPlan(repositoryID: repositoryID, planID: gone))
         #expect(shelves.page(of: untagged, repositoryID: repositoryID) == .lineage(repositoryID: repositoryID, key: untagged.lineageKey))
+        // A group's page has no Files tab to show versions on.
+        #expect(shelves.versionsPage(of: own) == .plan(plan.id))
+        #expect(shelves.versionsPage(of: orphan) == nil)
+        #expect(shelves.versionsPage(of: untagged) == nil)
     }
 
     @MainActor
@@ -498,18 +502,6 @@ struct SidebarTreeTests {
         let sibling = AppRouter()
         sibling.showVersions(path: "/Data2/x.txt", isDirectory: false, in: record, repositoryID: repositoryID, page: .plan(planID))
         #expect(sibling.openFolders.isEmpty)
-
-        // A relative backup's tree holds its folder under a tail of the
-        // absolute path it names: the folders open from there.
-        let relative = try snapshot("r1", time: "2026-10-02T10:00:00Z", paths: ["/Users/x/work/src/Music"])
-        let lineage = SidebarItem.lineage(repositoryID: repositoryID, key: relative.lineageKey)
-        let console = AppRouter()
-        console.showVersions(path: "/src/Music/Album/song.txt", isDirectory: false, in: relative, repositoryID: repositoryID, page: lineage)
-        let chain = SnapshotIndex.chainKey(for: relative)
-        #expect(console.openFolders == [
-            FileNode(repositoryID: repositoryID, chainKey: chain, path: "/src/Music", isDirectory: true),
-            FileNode(repositoryID: repositoryID, chainKey: chain, path: "/src/Music/Album", isDirectory: true),
-        ])
     }
 
     @Test("a Files tab selects its first root on a first visit, and follows the root when a re-read moves it, never a pick of the user's")

@@ -156,26 +156,13 @@ extension AppModel {
     }
 
     /// The Files tab ⇧⌘F searches on this selection, by the roots its tree
-    /// hangs from: a plan's with a repository set, or a group's under Other
-    /// backups — the pages whose Files tab lists a tree. Nil on every other
-    /// pane, where it opens Find Files over the whole repository.
+    /// hangs from: a plan's with a repository set, the one page whose Files
+    /// tab lists a tree. Nil on every other pane — a group's under Other
+    /// backups too, which has no Files tab — where it opens Find Files over
+    /// the whole repository.
     func filesSearchRoots(for selection: SidebarItem?) -> FileNode? {
-        func group(_ repositoryID: UUID, _ id: OtherBackupsGroup.ID) -> FileNode? {
-            shelves(for: repositoryID)
-                .otherGroupPage(id, repositories: configuration.repositories, localHost: localHostname)
-                .map { FileNode.roots(repositoryID: repositoryID, chainKey: $0.chainKey) }
-        }
-        switch selection {
-        case let .plan(id):
-            guard let repositoryID = plan(id: id)?.repositoryID else { return nil }
-            return FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(id))
-        case let .orphanPlan(repositoryID, planID):
-            return group(repositoryID, .plan(planID))
-        case let .lineage(repositoryID, key):
-            return group(repositoryID, .lineage(key))
-        case .repository, .console, .findFiles, .activity, nil:
-            return nil
-        }
+        guard case let .plan(id) = selection, let repositoryID = plan(id: id)?.repositoryID else { return nil }
+        return FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(id))
     }
 
     // MARK: - Confirmations

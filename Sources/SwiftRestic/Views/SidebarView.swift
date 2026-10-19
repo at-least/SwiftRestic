@@ -446,15 +446,13 @@ struct SidebarView: View {
         showMenuItems(.orphanPlan(repositoryID: repository.id, planID: planID), snapshots: snapshots, repository: repository)
     }
 
-    /// Show Backups — the page's Backups tab, its newest backup open — and
-    /// Show Files, the two ways into a group from its row.
+    /// Show Backups — the page's Backups tab, its newest backup open: the
+    /// way into a group's backups from its row. A group's page has no Files
+    /// tab (2026-10-19), so no Show Files.
     @ViewBuilder
     private func showMenuItems(_ page: SidebarItem, snapshots: [Snapshot], repository: Repository) -> some View {
         Button("Show Backups") {
             router.showBackup(snapshots[0].id, on: page, repositoryID: repository.id)
-        }
-        Button("Show Files") {
-            router.showFiles(of: page)
         }
     }
 }

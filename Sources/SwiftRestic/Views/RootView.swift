@@ -375,14 +375,15 @@ struct RootView: View {
     }
 
     /// `SWIFTRESTIC_CAPTURE_TAB=files` or `backups`: the page the run
-    /// selected, on that tab. A selection with no tabs ignores it.
+    /// selected, on that tab. A selection without that tab — any tab on a
+    /// page with none, Files on a group's — ignores it.
     private func applyCaptureTab() {
         let tab: PageTab? = switch ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_TAB"] {
         case "files": .files
         case "backups": .backups
         default: nil
         }
-        guard let tab, let page = router.selection else { return }
+        guard let tab, let page = router.selection, page.pageTabs.contains(tab) else { return }
         router.setTab(tab, of: page)
     }
 
@@ -462,10 +463,10 @@ struct RootView: View {
         case .newRepository:
             editingRepository = Repository()
         case .showFind:
-            // A plan's or a group's page searches its own history on its
-            // Files tab, the toolbar's field focused; every other pane, the
-            // whole repository in Find Files — on the repository the
-            // selection names, else the first.
+            // A plan's page searches its own files on its Files tab, the
+            // toolbar's field focused; every other pane — a group's page
+            // too, which has no Files tab — the whole repository in Find
+            // Files, on the repository the selection names, else the first.
             if let page = router.selection, model.filesSearchRoots(for: page) != nil {
                 router.searchFiles(on: page)
             } else {

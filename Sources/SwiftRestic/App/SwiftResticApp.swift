@@ -343,20 +343,22 @@ struct SwiftResticApp: App {
     /// switches, each a command too (the HIG's Toolbars: "Make every
     /// toolbar item available as a command in the menu bar") — a page's
     /// Overview | Backups | Files with ⌘1–⌘3, Finder's keys for its views,
-    /// and Activity's problems filter. Greyed where the page has none.
+    /// and Activity's problems filter. Greyed where the page has none:
+    /// Files on a group's page, every one of them on a page with no tabs.
     private var viewMenu: some Commands {
         CommandGroup(after: .sidebar) {
-            let page = router.selection.flatMap { $0.hasPageTabs ? $0 : nil }
+            let page = router.selection
             Divider()
             ForEach(Array(PageTab.allCases.enumerated()), id: \.element) { index, tab in
+                let offered = page?.pageTabs.contains(tab) == true
                 Toggle(tab.menuTitle, isOn: Binding(
-                    get: { page.map { router.tab(of: $0) == tab } ?? false },
+                    get: { offered && page.map { router.tab(of: $0) == tab } == true },
                     set: { isOn in
-                        if isOn, let page { router.setTab(tab, of: page) }
+                        if isOn, offered, let page { router.setTab(tab, of: page) }
                     }
                 ))
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-                .disabled(page == nil)
+                .disabled(!offered)
             }
             Divider()
             Toggle("Show Problems Only", isOn: Binding(

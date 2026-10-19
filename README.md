@@ -120,7 +120,7 @@ the generator after editing it; the PNGs are checked in.
     page's Backups tab, scrolling the list sixteen months long to its row,
     as the tree scrolls to a revealed item.
   - *The search field*, the toolbar's at the window's trailing edge, lists
-    in the tree's place the items of this plan's (or group's) backups whose
+    in the tree's place the items of this plan's backups whose
     names have words starting like the query — from the index, instant,
     dropped items dimmed as in the tree — each under its folder. A hit selects as a tree row does; Return
     or Esc ends the search on the tree with the hit's folders opened and
@@ -128,18 +128,18 @@ the generator after editing it; the PNGs are checked in.
     backups may be missing, and one with no match offers *Search All
     Backups…*, Find Files over the whole repository.
 - **A group under Other backups is a page** — its row selects like a plan's,
-  with the same Overview | Backups | Files. Overview says what
+  with Overview | Backups and no Files tab: a plan's lists its folder as
+  this Mac holds it, and a group's backups name none of this Mac's to list
+  (until 2026-10-19 a group's page had one too). Overview says what
   the history is: a plan not set up here (deleted, or running on another
   Mac), a plan that now backs up elsewhere (*Open the “Music” Plan*), or
   backups no plan made, which can't be adopted. Its Backups card brackets
   the history (newest, oldest), names the Macs and folder sets, carries the
   exclude patterns and user tags, and shows the plan tag when there is one —
   selectable, the one honest identifier. Its row's menu has *Show Backups*,
-  the Backups tab on the newest backup, and *Show Files*. An untagged lineage's
-  files come from the index's chain of its host and folders. A folder
-  backed up by a relative path (`restic backup Documents` from the console,
-  in the home folder) shows where restic put it, `/Documents`, though the
-  backup names `/Users/…/Documents`.
+  the Backups tab on the newest backup. The toolbar's search field searches
+  the open backup on either tab (typed on Overview, the page turns to
+  Backups), and ⇧⌘F opens Find Files, as it does off a plan's page.
 - **Adopting** — a group whose ID no plan anywhere carries can be adopted:
   *Adopt as a Backup Plan…* (the page's explanation card, the group's
   context menu, or the repository page's *Other backups* card, listing each
@@ -481,13 +481,16 @@ the generator after editing it; the PNGs are checked in.
     the header names what the previous backup held and this one does not
     ("Removed: old.txt, sub" — a removed folder once, not its contents), the
     full paths in its tooltip; each name there and in a Files folder's
-    "Removed:" line links to the previous backup's copy on the Files tab.
+    "Removed:" line links to the previous backup's copy on the Files tab —
+    a plan's backups only: a group's names are words, its page having no
+    Files tab.
     What this backup's own run could not read is on a "Not read:" line of
     its own, with the reason in each name's tooltip.
   - *Into the Files view.* *Show Versions*, in an item's right-click menu
     here and on Find Files' results, opens it on the Files tab of the plan
-    or group the backup belongs to, at that backup; on Find Files' index
-    results the version count ("of 12 ›") is a button to the same place.
+    the backup belongs to, at that backup; on Find Files' index results the
+    version count ("of 12 ›") is a button to the same place. A group's
+    backups under Other backups offer neither: its page has no Files tab.
     The search — the toolbar's field on the Backups tab — covers the open
     backup, says how many matches only other backups hold, and *Search All
     Backups…* carries it on in Find Files; a
@@ -509,15 +512,16 @@ the generator after editing it; the PNGs are checked in.
   the first (Activity, the console, nothing); a repository page's own search
   field (*Search all backups*) carries its query there on Return, and a
   *Search All Backups…* (a backup's tree's, or a Files tab's with no match)
-  carries its query and repository and runs it. On a plan's or group's page
+  carries its query and repository and runs it. On a plan's page
   ⇧⌘F instead turns the page to Files and focuses the toolbar's search
   field, whose scope follows the page's tab: on Overview and Files the
   page's files across every backup (typed on Overview, the page turns to
   Files), on Backups the open backup.
   Each path is one row at the newest backup holding it, with how many
-  backups of that backup's plan or group do ("of 4 ›", Show Versions) — the
-  count its Files tab lists, so a copy a Home plan holds beside a Documents
-  plan's is that plan's to list — whether the index or `restic find`
+  backups of that backup's plan or group do ("of 4 ›", Show Versions; a
+  plain "of 4" for a group's) — the count a plan's Files tab lists, so a
+  copy a Home plan holds beside a Documents plan's is that plan's to list —
+  whether the index or `restic find`
   answered; a latest-snapshot-only search says "this one". Before the
   listing lands, rows name their backup by short ID in the Backup column,
   times filled in when it lands without moving the rows. ⌘- or ⇧-click
@@ -535,7 +539,8 @@ the generator after editing it; the PNGs are checked in.
   totals, under a header naming the repository: "what did last night's
   backup actually pick up?" without restoring anything. A row's right-click
   menu has *Show Versions* (also a double-click), closing the sheet onto its
-  Files tab, and *Restore “…”…* — both from whichever of the two backups
+  plan's Files tab (not for a group's backups), and *Restore “…”…* — both
+  from whichever of the two backups
   holds the item (the newer for added or changed, the older for removed);
   an item the newer backup's own run could not read is marked *!*, not
   read rather than removed, and the footer counts them;
@@ -743,7 +748,8 @@ the generator after editing it; the PNGs are checked in.
   as the HIG asks of every toolbar item: *Show/Hide Sidebar* (⌃⌘S) — with
   the sidebar hidden, the toolbar's button had been the one way back — a
   page's *Overview*, *Backups* and *Files* (⌘1–⌘3, Finder's keys for its
-  views; grey off a plan's or group's page), and *Show Problems Only* for
+  views; *Files* grey on a group's page, all three off a plan's or group's
+  page), and *Show Problems Only* for
   Activity. *File ▸ Restore…* is the toolbar's Restore… of the page in view
   (*Restore Backup…*, *Restore Folder…* by what it would restore), and
   *Help ▸ SwiftRestic Help* (⌘?) opens the concepts in a window of their
@@ -941,8 +947,9 @@ plan cannot fire mid-capture.
   time per pane. The sweep is the whole-window regression check: a defect
   like macOS 26's floating title-bar material shows on every pane, including
   the ones nobody was looking at.
-- `SWIFTRESTIC_CAPTURE_TAB=files` (or `backups`) puts the plan or group page
-  a run selects on its Files (or Backups) tab.
+- `SWIFTRESTIC_CAPTURE_TAB=files` (or `backups`) puts the plan page a run
+  selects on its Files (or Backups) tab; a group's page takes `backups`
+  only.
 - `SWIFTRESTIC_CAPTURE_SHEET` opens a sheet: `diff`, Activity's compare sheet
   (with pane `activity`); `retention`, the plan editor on its Retention tab;
   `adopt`/`adoptRetention`, the first adoptable group's adopt sheet (with

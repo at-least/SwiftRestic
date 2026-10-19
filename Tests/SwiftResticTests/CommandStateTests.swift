@@ -333,7 +333,7 @@ struct CommandStateTests {
         #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: nil) == first.id)
     }
 
-    @Test("⇧⌘F searches the Files tab of a plan's or a group's page, and Find Files everywhere else")
+    @Test("⇧⌘F searches the Files tab of a plan's page, and Find Files everywhere else — a group's page too")
     func filesSearchRootsFollowThePage() throws {
         let model = makeModel()
         let repository = makeRepository()
@@ -349,15 +349,12 @@ struct CommandStateTests {
 
         #expect(model.filesSearchRoots(for: .plan(plan.id))
             == FileNode.roots(repositoryID: repository.id, chainKey: ResticService.planTag(plan.id)))
-        // A group's tree hangs from its own chain — the page's summary's.
-        #expect(model.filesSearchRoots(for: .orphanPlan(repositoryID: repository.id, planID: deleted))
-            == FileNode.roots(repositoryID: repository.id, chainKey: SnapshotIndex.chainKey(for: tagged)))
-        #expect(model.filesSearchRoots(for: .lineage(repositoryID: repository.id, key: untagged.lineageKey))
-            == FileNode.roots(repositoryID: repository.id, chainKey: SnapshotIndex.chainKey(for: untagged)))
-        // No tree to search: a plan with nowhere to back up, a group whose
-        // chain the listing does not hold, and every page with no Files tab.
+        // No tree to search: a plan with nowhere to back up, and every page
+        // with no Files tab — a group's under Other backups, either kind,
+        // whose backups the listing holds, among them.
         for selection: SidebarItem? in [
-            .plan(homeless.id), .orphanPlan(repositoryID: repository.id, planID: UUID()),
+            .plan(homeless.id), .orphanPlan(repositoryID: repository.id, planID: deleted),
+            .lineage(repositoryID: repository.id, key: untagged.lineageKey),
             .repository(repository.id), .activity, .console, nil,
         ] {
             #expect(model.filesSearchRoots(for: selection) == nil, "selection \(String(describing: selection))")

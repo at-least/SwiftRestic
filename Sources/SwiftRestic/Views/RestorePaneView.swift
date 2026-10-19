@@ -393,18 +393,18 @@ struct RestorePaneView: View {
     }
 
     /// Show Versions: the item through every backup of its history, on the
-    /// Files tab of the page that holds it — its plan's, or its group's
-    /// under Other backups — opening at this backup.
+    /// Files tab of its plan's page, opening at this backup. Not offered for
+    /// a group's backup under Other backups, whose page has no Files tab.
     @ViewBuilder
     private func showVersionsItem(path: String, isDirectory: Bool) -> some View {
-        if let record {
+        if let record, let page = model.shelves(for: repositoryID).versionsPage(of: record) {
             Button("Show Versions") {
                 router.showVersions(
                     path: path,
                     isDirectory: isDirectory,
                     in: record,
                     repositoryID: repositoryID,
-                    page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
+                    page: page
                 )
             }
         }
@@ -961,17 +961,26 @@ private struct RestoreRecordHeader: View {
             // Its own tooltip: a `.help` on the stack would cover this
             // line's too.
             // Each name opens the item's versions at the backup compared
-            // with, which has it.
+            // with, which has it — on its plan's Files tab; a group's
+            // backups have none, and their names are words only.
             ForEach([heading.removed, heading.notRead].compactMap { $0 }, id: \.names.label) { removals in
-                RemovedNamesLine(names: removals.names, help: removals.detail, before: removals.baseline.time) { item in
-                    router.showVersions(
-                        path: item.path,
-                        isDirectory: item.isDirectory,
-                        in: removals.baseline,
-                        repositoryID: repositoryID,
-                        page: model.shelves(for: repositoryID).page(of: removals.baseline, repositoryID: repositoryID)
-                    )
-                }
+                let page = model.shelves(for: repositoryID).versionsPage(of: removals.baseline)
+                RemovedNamesLine(
+                    names: removals.names,
+                    help: removals.detail,
+                    before: removals.baseline.time,
+                    open: page.map { page in
+                        { item in
+                            router.showVersions(
+                                path: item.path,
+                                isDirectory: item.isDirectory,
+                                in: removals.baseline,
+                                repositoryID: repositoryID,
+                                page: page
+                            )
+                        }
+                    }
+                )
             }
         }
     }
@@ -1026,16 +1035,18 @@ private struct IncompleteSnapshotStrip: View {
                     // Only the pane's minimum width keeps this one safe.
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     if let baseline, let path = run.unreadableItemPaths?[line],
-                       let isDirectory = heldBefore[PathKey(path)] {
+                       let isDirectory = heldBefore[PathKey(path)],
+                       let page = model.shelves(for: repositoryID).versionsPage(of: baseline) {
                         // A row that goes somewhere: the item's versions,
-                        // opening at the backup before, which has it.
+                        // opening at the backup before, which has it — on
+                        // its plan's Files tab; a group's backups have none.
                         Button {
                             router.showVersions(
                                 path: path,
                                 isDirectory: isDirectory,
                                 in: baseline,
                                 repositoryID: repositoryID,
-                                page: model.shelves(for: repositoryID).page(of: baseline, repositoryID: repositoryID)
+                                page: page
                             )
                         } label: {
                             HStack(spacing: 4) {

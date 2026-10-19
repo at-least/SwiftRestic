@@ -164,14 +164,20 @@ enum SidebarItem: Hashable {
 }
 
 extension SidebarItem {
-    /// Whether the page has the toolbar's Overview | Backups | Files: a
-    /// plan's, and a group's under Other backups.
-    var hasPageTabs: Bool {
+    /// The views the page's toolbar switches between: a plan's Overview |
+    /// Backups | Files, a group's under Other backups Overview | Backups —
+    /// its backups name no folder of this Mac for a Files tab to list
+    /// (2026-10-19) — and none for every other page.
+    var pageTabs: [PageTab] {
         switch self {
-        case .plan, .orphanPlan, .lineage: true
-        case .repository, .console, .findFiles, .activity: false
+        case .plan: PageTab.allCases
+        case .orphanPlan, .lineage: [.overview, .backups]
+        case .repository, .console, .findFiles, .activity: []
         }
     }
+
+    /// Whether the page has the toolbar's tabs at all.
+    var hasPageTabs: Bool { !pageTabs.isEmpty }
 
     /// The page of a group under `repositoryID`'s Other backups, either kind.
     static func otherGroup(repositoryID: UUID, id: OtherBackupsGroup.ID) -> SidebarItem {

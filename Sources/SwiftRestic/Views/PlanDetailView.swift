@@ -31,7 +31,7 @@ struct PlanDetailView: View {
         // the backup open there.
         .navigationTitle(plan.map { model.label(of: $0) } ?? "Plan")
         .navigationSubtitle(plan.map(subtitle) ?? "")
-        .pageTabPicker(router.tabBinding(for: .plan(planID)))
+        .pageTabPicker(router.tabBinding(for: .plan(planID)), tabs: SidebarItem.plan(planID).pageTabs)
         .pageSearch(
             page: .plan(planID),
             roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },

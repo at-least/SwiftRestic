@@ -120,23 +120,26 @@ struct AppRouterTests {
         #expect(router.tab(of: plan) == .overview)
     }
 
-    @Test("a group's Show Files lands on its page's Files tab, either kind of group")
-    func showFilesOpensThePageOnFiles() throws {
+    @Test("a plan's page offers Overview, Backups and Files; a group's, either kind, Overview and Backups; every other page none")
+    func pagesOfferTheirTabs() {
         let router = AppRouter()
         let repositoryID = UUID()
+        let plan = SidebarItem.plan(UUID())
+        #expect(plan.pageTabs == [.overview, .backups, .files])
         let group = SidebarItem.otherGroup(repositoryID: repositoryID, id: .plan(UUID()))
-        router.showFiles(of: group)
-        #expect(router.selection == group)
-        #expect(router.tab(of: group) == .files)
-
         let key = SnapshotLineage.Key(hostname: "mac", paths: ["/Data/Music"])
         let lineage = SidebarItem.otherGroup(repositoryID: repositoryID, id: .lineage(key))
         #expect(lineage == .lineage(repositoryID: repositoryID, key: key))
-        #expect(router.tab(of: lineage) == .overview)
-        router.showFiles(of: lineage)
-        #expect(router.selection == lineage)
-        #expect(router.tab(of: lineage) == .files)
-        #expect(router.tab(of: group) == .files)
+        for page in [group, lineage] {
+            #expect(page.pageTabs == [.overview, .backups])
+            #expect(page.hasPageTabs)
+            router.tabBinding(for: page).wrappedValue = .backups
+            #expect(router.tab(of: page) == .backups)
+        }
+        for page: SidebarItem in [.repository(repositoryID), .activity, .console, .findFiles] {
+            #expect(page.pageTabs.isEmpty)
+            #expect(!page.hasPageTabs)
+        }
     }
 
     @Test("⇧⌘F on a page turns it to its Files tab and asks that page's toolbar field, and no other, for the focus")

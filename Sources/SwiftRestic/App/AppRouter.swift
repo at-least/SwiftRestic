@@ -112,9 +112,9 @@ final class AppRouter {
     /// has the focus.
     var searchFocus: SidebarItem?
 
-    /// ⇧⌘F on a page with a Files tab: the tab, its search field focused.
+    /// ⇧⌘F on a plan's page: its Files tab, the search field focused.
     func searchFiles(on page: SidebarItem) {
-        pageTabs[page] = .files
+        setTab(.files, of: page)
         searchFocus = page
     }
 
@@ -164,31 +164,29 @@ final class AppRouter {
         pageTabs[page] ?? .overview
     }
 
+    /// Only a tab the page offers (`SidebarItem.pageTabs`): a group's page
+    /// set to Files would show its overview under a Files segment no one
+    /// can see, so a route that asks for one is a bug to hear about.
     func setTab(_ tab: PageTab, of page: SidebarItem) {
+        precondition(page.pageTabs.contains(tab), "\(page) has no \(tab.menuTitle) tab")
         pageTabs[page] = tab
     }
 
-    /// A page on its Files tab: a group's Show Files.
-    func showFiles(of page: SidebarItem) {
-        selection = page
-        pageTabs[page] = .files
-    }
-
     /// An item by version, from a backup that holds it — the Restore pane's
-    /// and Find Files' Show Versions: `page`, the one whose Files tab holds
-    /// `record`'s history (`BackupShelves.page(of:)`), on Files, the item
-    /// selected with every folder above it open down from the backed-up
-    /// folder that holds it — the tail of a backed-up path a relative
-    /// backup's tree holds it under (`FilesTree.tails`) — and its pane
-    /// opening at `record`.
+    /// and Find Files' Show Versions: `page`, the plan's page whose Files tab
+    /// holds `record`'s history (`BackupShelves.versionsPage(of:)`), on
+    /// Files, the item selected with every folder above it open down from
+    /// the backed-up folder that holds it — the tail of a backed-up path a
+    /// relative backup's tree holds it under (`FilesTree.tails`) — and its
+    /// pane opening at `record`.
     func showVersions(path: String, isDirectory: Bool, in record: Snapshot, repositoryID: UUID, page: SidebarItem) {
         let chain = SnapshotIndex.chainKey(for: record)
         let item = FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
+        setTab(.files, of: page)
         openFolders(above: item, from: record.paths.flatMap(FilesTree.tails(of:)))
         filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = item
         filesVersionHint = record.id
         filesPaneOpenings += 1
-        pageTabs[page] = .files
         selection = page
     }
 
@@ -274,12 +272,12 @@ final class AppRouter {
     }
 }
 
-/// A page's three views — the toolbar's Overview | Backups | Files on a
-/// plan's page and on a group's under Other backups: its overview; its
-/// backups, each one's files beside the list; and its folders and files
-/// across every backup, each by version. The backups were the sidebar's,
-/// folded under their plan, until the HIG review of 2026-10-18: a sidebar
-/// shows no more than two levels.
+/// A page's views — the toolbar's Overview | Backups | Files on a plan's
+/// page, Overview | Backups on a group's under Other backups
+/// (`SidebarItem.pageTabs`): its overview; its backups, each one's files
+/// beside the list; and its folders and files, each by version. The backups
+/// were the sidebar's, folded under their plan, until the HIG review of
+/// 2026-10-18: a sidebar shows no more than two levels.
 enum PageTab: Hashable, CaseIterable {
     case overview
     case backups

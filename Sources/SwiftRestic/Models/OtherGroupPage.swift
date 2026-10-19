@@ -45,10 +45,6 @@ struct OtherGroupPageSummary: Equatable {
     /// A plan-UUID group's one honest identifier, selectable on the page;
     /// nil for an untagged lineage, which has none.
     var planTag: String?
-    /// The index's chain the group's files are read from
-    /// (`SnapshotIndex.chainKey`): the plan tag, or the lineage's host and
-    /// folders.
-    var chainKey: String
 
     /// `snapshots` are the group's, newest first as `OtherBackupsGroup`
     /// sorts them, and never empty — a group exists only around backups.
@@ -70,7 +66,6 @@ struct OtherGroupPageSummary: Equatable {
         oldestAt = snapshots[snapshots.count - 1].time
         newestSnapshotID = snapshots[0].id
         planTag = planID.map(ResticService.planTag)
-        chainKey = SnapshotIndex.chainKey(for: snapshots[0])
 
         if planID == nil {
             // The labels' "outside SwiftRestic", as a sentence: no plan

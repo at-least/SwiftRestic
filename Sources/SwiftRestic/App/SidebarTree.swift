@@ -177,12 +177,18 @@ struct BackupShelves: Equatable {
         return label
     }
 
-    /// The page whose Backups tab lists `record` and whose Files tab holds
-    /// its history: the plan of this repository that made it, or its group
-    /// under Other backups.
+    /// The page whose Backups tab lists `record`: the plan of this
+    /// repository that made it, or its group under Other backups.
     func page(of record: Snapshot, repositoryID: UUID) -> SidebarItem {
         if let planID = Self.owner(of: record, among: plans) { return .plan(planID) }
         return .otherGroup(repositoryID: repositoryID, id: record.otherGroupID)
+    }
+
+    /// The page whose Files tab holds `record`'s items by version — Show
+    /// Versions' destination: the plan of this repository that made it.
+    /// Nil under Other backups, whose pages have no Files tab.
+    func versionsPage(of record: Snapshot) -> SidebarItem? {
+        Self.owner(of: record, among: plans).map { .plan($0) }
     }
 
     /// The one configured plan a group under Other backups belongs to: it

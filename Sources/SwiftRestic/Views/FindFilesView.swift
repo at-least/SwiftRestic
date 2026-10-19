@@ -390,13 +390,15 @@ struct FindFilesView: View {
 
     // MARK: - Data
 
-    /// Show Versions for a row — onto the Files tab that holds the match's
-    /// history, at this match's backup — or nil when the row's backup is no
-    /// longer listed. The row is passed directly: a click
+    /// Show Versions for a row — onto the Files tab of the plan that holds
+    /// the match's history, at this match's backup — or nil when the row's
+    /// backup is no longer listed, or no plan made it (a group under Other
+    /// backups has no Files tab). The row is passed directly: a click
     /// on an unselected row must not depend on selection state.
     private func showVersions(of row: Row) -> (() -> Void)? {
         guard let repositoryID,
-              let record = model.snapshots(for: repositoryID).first(where: { $0.id == row.snapshotID })
+              let record = model.snapshots(for: repositoryID).first(where: { $0.id == row.snapshotID }),
+              let page = model.shelves(for: repositoryID).versionsPage(of: record)
         else { return nil }
         return {
             router.showVersions(
@@ -404,7 +406,7 @@ struct FindFilesView: View {
                 isDirectory: row.match.isDirectory,
                 in: record,
                 repositoryID: repositoryID,
-                page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
+                page: page
             )
         }
     }
@@ -457,8 +459,9 @@ struct FindFilesView: View {
                     // ID or re-sorts the rows under the user.
                     let snapshots = model.snapshots(for: searchedRepository)
                     let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
-                    // Each backup's page, whose Files tab a row's "of N"
-                    // must agree with: its count is that chain's.
+                    // Each backup's page — its plan's or its group's — whose
+                    // backups a row's "of N" counts: the count a plan's
+                    // Files tab lists.
                     let shelves = model.shelves(for: searchedRepository)
                     let pages = Dictionary(uniqueKeysWithValues: snapshots.map {
                         ($0.id, shelves.page(of: $0, repositoryID: searchedRepository))

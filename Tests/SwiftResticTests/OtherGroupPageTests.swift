@@ -144,7 +144,7 @@ struct OtherGroupPageTests {
         #expect(orphaned.orphanPlanGroup(UUID()) == nil)
     }
 
-    @Test("an untagged lineage's page says it can't be adopted, has no plan tag, and reads its files from its own chain")
+    @Test("an untagged lineage's page says it can't be adopted and has no plan tag")
     func lineagePage() throws {
         let l2 = try snapshot("l2", time: "2026-10-02T02:00:00Z", paths: ["/Data/Music"], host: "studio", tags: ["manual"])
         let l1 = try snapshot("l1", time: "2026-09-30T02:00:00Z", paths: ["/Data/Music"], host: "studio")
@@ -157,8 +157,6 @@ struct OtherGroupPageTests {
         #expect(page.explanation == "These 2 backups carry no plan ID — they were made outside SwiftRestic — so they can't be adopted as a plan.")
         #expect(page.formerPlan == nil)
         #expect(page.planTag == nil)
-        #expect(page.chainKey == SnapshotIndex.chainKey(for: l2))
-        #expect(page.chainKey == SnapshotIndex.chainKey(for: l1))
         #expect(page.newestSnapshotID == "l2")
         #expect(page.madeFrom == "studio")
         #expect(page.folders == ["/Data/Music"])
@@ -173,14 +171,13 @@ struct OtherGroupPageTests {
         #expect(empty.otherGroupPage(.lineage(key), repositories: [], localHost: "mac") == nil)
     }
 
-    @Test("a plan-UUID group's page reads its files from the plan tag's chain")
-    func planGroupChain() throws {
+    @Test("a plan-UUID group's page carries its plan tag")
+    func planGroupTag() throws {
         let deleted = UUID()
         let tag = ResticService.planTag(deleted)
         let g1 = try snapshot("g1", time: "2026-10-01T02:00:00Z", tags: [tag])
         let shelves = BackupShelves(listing: [g1], plans: [], allPlans: [])
         let page = try #require(shelves.otherGroupPage(.plan(deleted), repositories: [], localHost: "mac"))
-        #expect(page.chainKey == tag)
         #expect(page.planTag == tag)
     }
 }

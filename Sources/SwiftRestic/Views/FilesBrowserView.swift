@@ -395,47 +395,65 @@ struct FilesBrowserView: View {
 }
 
 extension View {
-    /// A page's Overview | Backups | Files, in the middle of the window
-    /// toolbar: Apple's guidance for switching a main window's view (the
-    /// HIG's center area holds the common controls), clear of the trailing
+    /// A page's Overview | Backups | Files — a group's Overview | Backups
+    /// (`SidebarItem.pageTabs`) — in the middle of the window toolbar:
+    /// Apple's guidance for switching a main window's view (the HIG's
+    /// center area holds the common controls), clear of the trailing
     /// corner, where Restore… and the search field sit.
-    func pageTabPicker(_ selection: Binding<PageTab>) -> some View {
+    func pageTabPicker(_ selection: Binding<PageTab>, tabs: [PageTab]) -> some View {
         toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: selection) {
                     // The View menu's words too (⌘1–⌘3).
-                    ForEach(PageTab.allCases, id: \.self) { tab in
+                    ForEach(tabs, id: \.self) { tab in
                         Text(tab.menuTitle).tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 240)
-                .help("The overview; the backups, each one's files beside the list; or the folders and files across every backup, each by version")
+                // Each segment as wide as the three's were.
+                .frame(width: 80 * CGFloat(tabs.count))
+                .help(tabs.contains(.files)
+                    ? "The overview; the backups, each one's files beside the list; or the folders and files across every backup, each by version"
+                    : "The overview; or the backups, each one's files beside the list")
             }
         }
     }
 }
 
 extension View {
-    /// A plan's or a group's page's search, in the window toolbar's trailing
-    /// field — the HIG's place for it ("Put a search field at the trailing
-    /// side of the toolbar for many common uses"), where each tab had carried
-    /// a field of its own above its list. Its scope follows the tab: on
-    /// Backups, the open backup; on Files and Overview, the page's files
-    /// across every backup — typed on Overview, the page turns to Files,
-    /// where the hits list. ⇧⌘F focuses it (`AppRouter.searchFocus`).
+    /// A plan's page's search, in the window toolbar's trailing field — the
+    /// HIG's place for it ("Put a search field at the trailing side of the
+    /// toolbar for many common uses"), where each tab had carried a field of
+    /// its own above its list. Its scope follows the tab: on Backups, the
+    /// open backup; on Files and Overview, the page's files across every
+    /// backup — typed on Overview, the page turns to Files, where the hits
+    /// list. ⇧⌘F focuses it (`AppRouter.searchFocus`).
     func pageSearch(page: SidebarItem, roots: FileNode?, filesPrompt: String) -> some View {
-        modifier(PageSearch(page: page, roots: roots, filesPrompt: filesPrompt))
+        modifier(PageSearch(page: page, files: PageSearch.Files(roots: roots, prompt: filesPrompt)))
+    }
+
+    /// A group's page's search under Other backups, the same field: the
+    /// open backup on either tab, the page having no Files tab — typed on
+    /// Overview, the page turns to Backups, where its newest backup opens
+    /// unless another was picked.
+    func backupsPageSearch(page: SidebarItem) -> some View {
+        modifier(PageSearch(page: page, files: nil))
     }
 }
 
 private struct PageSearch: ViewModifier {
+    /// A plan's Files tab, what its field searches there.
+    struct Files {
+        /// The chain the tab lists; nil for a plan with no repository,
+        /// which has nothing to search.
+        let roots: FileNode?
+        let prompt: String
+    }
+
     @Environment(AppRouter.self) private var router
     let page: SidebarItem
-    /// The chain the Files tab lists; nil for a plan with no repository,
-    /// which has nothing to search.
-    let roots: FileNode?
-    let filesPrompt: String
+    /// Nil on a page with no Files tab: a group's.
+    let files: Files?
     @FocusState private var isFocused: Bool
 
     func body(content: Content) -> some View {
@@ -451,22 +469,25 @@ private struct PageSearch: ViewModifier {
             }
     }
 
-    private var onBackups: Bool { router.tab(of: page) == .backups }
+    private var onBackups: Bool { files == nil || router.tab(of: page) == .backups }
 
-    private var prompt: String { onBackups ? "Search this backup" : filesPrompt }
+    private var prompt: String { onBackups ? "Search this backup" : files?.prompt ?? "" }
 
     private var text: Binding<String> {
         Binding(
             get: {
                 if onBackups { return router.backupsSearchText[page] ?? "" }
-                return roots.flatMap { router.filesSearchText[$0] } ?? ""
+                return files?.roots.flatMap { router.filesSearchText[$0] } ?? ""
             },
             set: { newValue in
                 if onBackups {
                     router.backupsSearchText[page] = newValue
+                    if !newValue.isEmpty, router.tab(of: page) == .overview {
+                        router.setTab(.backups, of: page)
+                    }
                     return
                 }
-                guard let roots else { return }
+                guard let roots = files?.roots else { return }
                 router.filesSearchText[roots] = newValue
                 if !newValue.isEmpty, router.tab(of: page) == .overview {
                     router.setTab(.files, of: page)

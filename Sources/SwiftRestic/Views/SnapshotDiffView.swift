@@ -377,7 +377,10 @@ struct SnapshotDiffView: View {
                     guard ids.count == 1, let change = rows.first(where: { $0.id == ids.first }) else { return }
                     showVersions(of: change)?()
                 }
-                .help("Double-click shows an item's versions; Return or right-click restores the selection, each item from the backup that has it")
+                // A group's backups have no Files tab to show versions on.
+                .help(model.shelves(for: target.repositoryID).versionsPage(of: newer) == nil
+                    ? "Return or right-click restores the selection, each item from the backup that has it"
+                    : "Double-click shows an item's versions; Return or right-click restores the selection, each item from the backup that has it")
             }
         } else {
             // The filter pass for these inputs is still in flight — a blank
@@ -427,10 +430,14 @@ struct SnapshotDiffView: View {
         return change.holder(newer: newer, older: older)
     }
 
-    /// Show Versions for a row — out of the sheet, onto the Files tab that
-    /// holds the item's history, at the backup that has it.
+    /// Show Versions for a row — out of the sheet, onto the Files tab of
+    /// the plan that holds the item's history, at the backup that has it.
+    /// Nil when no plan made that backup: a group under Other backups has
+    /// no Files tab.
     private func showVersions(of change: ResticDiffChange) -> (() -> Void)? {
-        guard let record = holder(of: change) else { return nil }
+        guard let record = holder(of: change),
+              let page = model.shelves(for: target.repositoryID).versionsPage(of: record)
+        else { return nil }
         let repositoryID = target.repositoryID
         return {
             router.showVersions(
@@ -438,7 +445,7 @@ struct SnapshotDiffView: View {
                 isDirectory: change.isDirectory,
                 in: record,
                 repositoryID: repositoryID,
-                page: model.shelves(for: repositoryID).page(of: record, repositoryID: repositoryID)
+                page: page
             )
             dismiss()
         }

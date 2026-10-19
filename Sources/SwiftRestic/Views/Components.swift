@@ -300,23 +300,34 @@ struct RemovedNamesLine: View {
     let help: String
     /// When the backup before was made, for the names' tooltips.
     let before: Date
-    let open: (RemovedItem) -> Void
+    /// Opens a name's versions; nil where there is no Files tab to open
+    /// them on (a group's backups under Other backups), and the names are
+    /// words only.
+    let open: ((RemovedItem) -> Void)?
 
     var body: some View {
         HStack(spacing: 0) {
             Text(names.label)
                 .help(help)
             ForEach(Array(names.items.enumerated()), id: \.element) { index, item in
-                Button { open(item) } label: {
+                let standing = item.reason.map {
+                    "Not read by this backup — \($0); it may still be on this Mac. The backup of \(Format.timestamp(before)) has it."
+                } ?? "Not in this backup — the backup of \(Format.timestamp(before)) has it."
+                if let open {
+                    Button { open(item) } label: {
+                        Text(verbatim: item.name)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(.tint)
+                    }
+                    .buttonStyle(HoverableButtonStyle())
+                    .help(standing + " Show its versions.")
+                } else {
                     Text(verbatim: item.name)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .foregroundStyle(.tint)
+                        .help(standing)
                 }
-                .buttonStyle(HoverableButtonStyle())
-                .help(item.reason.map {
-                    "Not read by this backup — \($0); it may still be on this Mac. The backup of \(Format.timestamp(before)) has it. Show its versions."
-                } ?? "Not in this backup — the backup of \(Format.timestamp(before)) has it. Show its versions.")
                 if index < names.items.count - 1 || names.more > 0 {
                     Text(verbatim: ", ")
                 }

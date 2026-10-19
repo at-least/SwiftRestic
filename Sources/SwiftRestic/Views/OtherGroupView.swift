@@ -2,10 +2,11 @@ import SwiftUI
 
 /// The page of one group under a repository's Other backups — a plan's
 /// history in this repository that none of its plans owns, or the backups
-/// of one Mac's folders that no plan made. Overview | Backups | Files in the
-/// toolbar, as a plan's page has: the overview says what the history is and
-/// the facts that identify it; Backups lists them, each one's files beside
-/// the list; Files is its folders and files across every backup.
+/// of one Mac's folders that no plan made. Overview | Backups in the
+/// toolbar: the overview says what the history is and the facts that
+/// identify it; Backups lists them, each one's files beside the list. No
+/// Files tab, as a plan's page has: that lists a folder as this Mac holds it
+/// now, and these backups name none of this Mac's to list (2026-10-19).
 ///
 /// Every fact comes from `OtherGroupPageSummary`, the one derivation the
 /// sidebar's labels already feed. No verbs in the toolbar: there is nothing
@@ -19,7 +20,7 @@ struct OtherGroupView: View {
     /// Opens the adopt sheet for a plan-UUID group — the root owns the
     /// presenting state, as it does for every sheet a pane raises.
     let onAdopt: (_ planID: UUID) -> Void
-    /// The Files tab's "Search All Backups…": Find Files, prefilled.
+    /// The Backups tab's "Search All Backups…": Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     private var summary: OtherGroupPageSummary? {
@@ -37,20 +38,17 @@ struct OtherGroupView: View {
     var body: some View {
         Group {
             if let summary {
-                switch router.tab(of: page) {
-                case .overview: content(summary)
-                case .backups:
+                // Overview or Backups: `AppRouter.setTab` takes no other
+                // tab for this page.
+                if router.tab(of: page) == .backups {
                     BackupsBrowserView(
                         page: page,
                         repositoryID: repositoryID,
                         backups: groupBackups,
                         onSearchAllBackups: onSearchAllBackups
                     )
-                case .files:
-                    FilesBrowserView(
-                        roots: FileNode.roots(repositoryID: repositoryID, chainKey: summary.chainKey),
-                        onSearchAllBackups: onSearchAllBackups
-                    )
+                } else {
+                    content(summary)
                 }
             } else {
                 // Only while the shelves lag a change that revalidation is
@@ -62,12 +60,8 @@ struct OtherGroupView: View {
         .navigationTitle(summary?.title ?? "Backups")
         // On the Backups tab, the moment of the backup open there.
         .navigationSubtitle(subtitle)
-        .pageTabPicker(router.tabBinding(for: page))
-        .pageSearch(
-            page: page,
-            roots: summary.map { FileNode.roots(repositoryID: repositoryID, chainKey: $0.chainKey) },
-            filesPrompt: "Search these backups' files"
-        )
+        .pageTabPicker(router.tabBinding(for: page), tabs: page.pageTabs)
+        .backupsPageSearch(page: page)
     }
 
     /// The group's backups, newest first.
