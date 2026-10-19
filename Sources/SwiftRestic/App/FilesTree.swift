@@ -150,18 +150,24 @@ final class FilesTree {
 
     /// The rows under `parent`, recursing into the open folders whose levels
     /// are loaded.
-    func rows(under parent: FileNode, open: Set<FileNode>) -> [Row] {
-        Self.rows(under: parent, open: open, states: states)
+    func rows(under parent: FileNode, open: Set<FileNode>, showsDeleted: Bool) -> [Row] {
+        Self.rows(under: parent, open: open, showsDeleted: showsDeleted, states: states)
     }
 
-    /// `rows(under:open:)` over given levels — the pure rule the instance
-    /// reads its own levels through. What only the backups hold is left
-    /// out.
-    static func rows(under parent: FileNode, open: Set<FileNode>, states: [FileNode: State], depth: Int = 0) -> [Row] {
+    /// `rows(under:open:showsDeleted:)` over given levels — the pure rule
+    /// the instance reads its own levels through. What only the backups
+    /// hold is left out unless Show Deleted Items asks for it.
+    static func rows(
+        under parent: FileNode,
+        open: Set<FileNode>,
+        showsDeleted: Bool = false,
+        states: [FileNode: State],
+        depth: Int = 0
+    ) -> [Row] {
         guard case let .loaded(level)? = states[parent] else {
             return [.status(parent, depth: depth)]
         }
-        let listed = level.entries.filter { entry in
+        let listed = showsDeleted ? level.entries : level.entries.filter { entry in
             if case .deleted = entry.standing { return false }
             return true
         }
@@ -173,7 +179,7 @@ final class FilesTree {
         for entry in shown {
             rows.append(.entry(entry, depth: depth))
             if entry.node.isDirectory, open.contains(entry.node) {
-                rows += Self.rows(under: entry.node, open: open, states: states, depth: depth + 1)
+                rows += Self.rows(under: entry.node, open: open, showsDeleted: showsDeleted, states: states, depth: depth + 1)
             }
         }
         if shown.count < listed.count {
@@ -204,9 +210,9 @@ final class FilesTree {
 
     /// The levels the rows under `parent` need: `parent` and every open
     /// folder shown under it.
-    func needed(under parent: FileNode, open: Set<FileNode>) -> [FileNode] {
+    func needed(under parent: FileNode, open: Set<FileNode>, showsDeleted: Bool) -> [FileNode] {
         var nodes = [parent]
-        for case let .entry(entry, _) in rows(under: parent, open: open)
+        for case let .entry(entry, _) in rows(under: parent, open: open, showsDeleted: showsDeleted)
         where entry.node.isDirectory && open.contains(entry.node) {
             nodes.append(entry.node)
         }
@@ -336,10 +342,17 @@ final class FilesTree {
     }
 
     /// One folder's items as this Mac holds them, beside what the plan's
-    /// backups ever held there (`entries(disk:indexed:in:isComplete:)`).
+    /// backups ever held there (`entries(disk:indexed:in:isComplete:)`). A
+    /// folder gone from this Mac — a deleted one opened with Show Deleted
+    /// Items — holds only what the backups held in it.
     private static func folder(_ node: FileNode, model: AppModel) async throws -> Level {
         let path = node.path
-        let disk = try await Task.detached(priority: .userInitiated) { try DiskFolder.list(path) }.value
+        let disk: [DiskFolder.Item]
+        do {
+            disk = try await Task.detached(priority: .userInitiated) { try DiskFolder.list(path) }.value
+        } catch FolderAbsence.missing(name: _) {
+            disk = []
+        }
         // Asked before the index's answer, as the root's is.
         let complete = await model.indexIsComplete(repositoryID: node.repositoryID)
         let indexed = try await model.indexedChildren(

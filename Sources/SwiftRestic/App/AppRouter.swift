@@ -61,6 +61,12 @@ final class AppRouter {
     /// run (the plan page's Last backup) turns it off.
     var activityShowsProblemsOnly = false
 
+    /// Transient, never persisted: whether a plan's Files tree lists, after
+    /// each folder's own items, what only its backups hold — items deleted
+    /// from this Mac since. View ▸ Show Deleted Items, off at every launch
+    /// (the user's call, 2026-10-19).
+    var filesShowsDeletedItems = false
+
     /// A folder a backup's tree should open and select when it next loads
     /// this exact record — the Files view's Show in Backups, which leaves
     /// the folder or file the user was reading and must not lose their place.

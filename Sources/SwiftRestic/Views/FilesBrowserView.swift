@@ -93,9 +93,9 @@ struct FilesBrowserView: View {
     }
 
     /// Every level the tree has on screen: the roots and the open folders
-    /// under them.
+    /// under them, a deleted one's too while Show Deleted Items lists it.
     private var neededLevels: [FileNode] {
-        filesTree.needed(under: roots, open: router.openFolders)
+        filesTree.needed(under: roots, open: router.openFolders, showsDeleted: router.filesShowsDeletedItems)
     }
 
     var body: some View {
@@ -198,7 +198,7 @@ struct FilesBrowserView: View {
     }
 
     private var tree: some View {
-        let rows = filesTree.rows(under: roots, open: router.openFolders)
+        let rows = filesTree.rows(under: roots, open: router.openFolders, showsDeleted: router.filesShowsDeletedItems)
         let unread = newestUnread
         return ScrollViewReader { proxy in
             List(selection: selection) {

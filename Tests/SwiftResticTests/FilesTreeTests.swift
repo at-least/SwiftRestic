@@ -188,7 +188,7 @@ struct FilesTreeTests {
         #expect(root.map(\.standing) == [.notBackedUp, .deleted(lastBackedUp: nfc.newest)])
     }
 
-    @Test("what only the backups hold is not a row, nor counted past the cap")
+    @Test("what only the backups hold is a row only with Show Deleted Items, after the folder's own and under the same cap")
     func deletedAreNoRows() {
         let docs = node("/Docs")
         let here = (0 ..< FilesTree.rowCap + 2).map { entry(node(String(format: "/Docs/f%04d", $0), folder: false)) }
@@ -200,6 +200,15 @@ struct FilesTreeTests {
         // A folder whose items are all gone is empty on this Mac.
         let empty: [FileNode: FilesTree.State] = [docs: .loaded(FilesTree.Level(entries: [gone], isComplete: true))]
         #expect(text(FilesTree.rows(under: docs, open: [], states: empty)) == ["0 status /Docs"])
+
+        // Show Deleted Items lists them after the folder's own, the cap
+        // counting them too.
+        let shown = text(FilesTree.rows(under: docs, open: [], showsDeleted: true, states: states))
+        #expect(shown.count == FilesTree.rowCap + 1)
+        #expect(shown.last == "0 more 3 of /Docs")
+        #expect(text(FilesTree.rows(under: docs, open: [], showsDeleted: true, states: empty)) == ["0 /Docs/zz-old"])
+        // Off at every launch.
+        #expect(!AppRouter().filesShowsDeletedItems)
     }
 
     @Test("a disk that may have changed reads every level again, keeping it on screen meanwhile; a folder that could not be listed waits for that")

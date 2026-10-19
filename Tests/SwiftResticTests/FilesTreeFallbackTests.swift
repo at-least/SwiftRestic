@@ -7,7 +7,7 @@ import Testing
 @Suite("restic Files tree", .serialized, .enabled(if: ResticAvailability.isInstalled))
 struct ResticFilesTreeTests {
     @MainActor
-    @Test("a plan's tree is its folder as the disk holds it: unmarked while the index reads, then a newer file not backed up, a deleted one the backups' alone, an excluded hidden one not at all; a folder gone says so")
+    @Test("a plan's tree is its folder as the disk holds it: unmarked while the index reads, then a newer file not backed up, a deleted one and a deleted folder's items the backups' alone, an excluded hidden one not at all; a folder gone says so")
     func treeListsTheDisk() async throws {
         let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory
@@ -18,7 +18,8 @@ struct ResticFilesTreeTests {
 
         let data = root.appendingPathComponent("Data")
         try FileManager.default.createDirectory(at: data.appendingPathComponent("Sub"), withIntermediateDirectories: true)
-        for name in ["a.txt", "gone.txt", ".keep", ".DS_Store"] {
+        try FileManager.default.createDirectory(at: data.appendingPathComponent("Old"), withIntermediateDirectories: true)
+        for name in ["a.txt", "gone.txt", ".keep", ".DS_Store", "Old/x.txt"] {
             try name.write(to: data.appendingPathComponent(name), atomically: true, encoding: .utf8)
         }
 
@@ -47,11 +48,13 @@ struct ResticFilesTreeTests {
         await model.tasks.drain()
         #expect(await model.indexIsComplete(repositoryID: repository.id))
 
-        // A backup, then the folder moves on: gone.txt deleted, new.txt
-        // written. The listing holds the backup; the index has not taken it
-        // — the moment between a refresh's listing and its reconcile.
+        // A backup, then the folder moves on: gone.txt and Old deleted,
+        // new.txt written. The listing holds the backup; the index has not
+        // taken it — the moment between a refresh's listing and its
+        // reconcile.
         _ = try await service.backup(context, plan: plan)
         try FileManager.default.removeItem(at: data.appendingPathComponent("gone.txt"))
+        try FileManager.default.removeItem(at: data.appendingPathComponent("Old"))
         try "new".write(to: data.appendingPathComponent("new.txt"), atomically: true, encoding: .utf8)
         let listing = try await service.snapshots(context, planID: nil, timeout: 60)
         let generation = model.nextListingGeneration()
@@ -89,9 +92,13 @@ struct ResticFilesTreeTests {
         let read = try await FilesTree.level(of: folder, model: model)
         #expect(read.isComplete)
         #expect(summary(read) == [
-            "Sub/ disk", ".keep disk", "a.txt disk", "new.txt not backed up", "gone.txt deleted",
+            "Sub/ disk", ".keep disk", "a.txt disk", "new.txt not backed up", "Old/ deleted", "gone.txt deleted",
         ])
         #expect(summary(try await FilesTree.level(of: roots, model: model)) == ["Data/ disk"])
+        // A deleted folder, opened with Show Deleted Items: what the backups
+        // held in it.
+        let old = try #require(read.entries.first { $0.node.name == "Old" }?.node)
+        #expect(summary(try await FilesTree.level(of: old, model: model)) == ["x.txt deleted"])
 
         // The folder moved away: the root says so, not an empty tree.
         try FileManager.default.moveItem(at: data, to: root.appendingPathComponent("Moved"))

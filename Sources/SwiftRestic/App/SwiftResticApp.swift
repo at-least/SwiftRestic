@@ -343,8 +343,9 @@ struct SwiftResticApp: App {
     /// switches, each a command too (the HIG's Toolbars: "Make every
     /// toolbar item available as a command in the menu bar") — a page's
     /// Overview | Backups | Files with ⌘1–⌘3, Finder's keys for its views,
-    /// and Activity's problems filter. Greyed where the page has none:
-    /// Files on a group's page, every one of them on a page with no tabs.
+    /// a Files tab's Show Deleted Items and Activity's problems filter.
+    /// Greyed where the page has none: Files on a group's page, every tab on
+    /// a page with no tabs.
     private var viewMenu: some Commands {
         CommandGroup(after: .sidebar) {
             let page = router.selection
@@ -361,6 +362,12 @@ struct SwiftResticApp: App {
                 .disabled(!offered)
             }
             Divider()
+            // A plan's Files tab only, where the tree it changes is.
+            Toggle("Show Deleted Items", isOn: Binding(
+                get: { router.filesShowsDeletedItems },
+                set: { router.filesShowsDeletedItems = $0 }
+            ))
+            .disabled(!(page.map { $0.pageTabs.contains(.files) && router.tab(of: $0) == .files } ?? false))
             Toggle("Show Problems Only", isOn: Binding(
                 get: { router.activityShowsProblemsOnly },
                 set: { router.activityShowsProblemsOnly = $0 }
