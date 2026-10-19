@@ -466,11 +466,14 @@ struct RootView: View {
             // A plan's page searches its own files on its Files tab, the
             // toolbar's field focused; every other pane — a group's page
             // too, which has no Files tab — the whole repository in Find
-            // Files, on the repository the selection names, else the first.
+            // Files, on the repository the selection names — on Find Files
+            // itself, the one it shows — else the first.
             if let page = router.selection, model.filesSearchRoots(for: page) != nil {
                 router.searchFiles(on: page)
             } else {
-                router.openFind(repositoryID: model.findFilesRepositoryID(prefillRepositoryID: nil, selection: router.selection))
+                router.openFind(repositoryID: model.findFilesRepositoryID(
+                    prefillRepositoryID: nil, selection: router.selection, shown: router.findRepositoryID
+                ))
             }
         case .showConsole:
             router.selection = .console

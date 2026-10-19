@@ -149,10 +149,12 @@ extension AppModel {
 
     /// The repository Find Files opens on: a "Search All Backups…" hand-off's
     /// wins; otherwise the window's selection by the Repository menu's own
-    /// rule — and the first repository only when that names none to look at
-    /// (Activity, the console, nothing).
-    func findFilesRepositoryID(prefillRepositoryID: UUID?, selection: SidebarItem?) -> UUID? {
-        prefillRepositoryID ?? commandRepositoryID(for: selection) ?? configuration.repositories.first?.id
+    /// rule — on Find Files itself, the repository it shows (`shown`), so
+    /// ⇧⌘F there keeps it and its results — and the first repository only
+    /// when that names none to look at (Activity, the console, nothing).
+    func findFilesRepositoryID(prefillRepositoryID: UUID?, selection: SidebarItem?, shown: UUID?) -> UUID? {
+        let onFindFiles = selection == .findFiles ? repository(id: shown)?.id : nil
+        return prefillRepositoryID ?? commandRepositoryID(for: selection) ?? onFindFiles ?? configuration.repositories.first?.id
     }
 
     /// The Files tab ⇧⌘F searches on this selection, by the roots its tree

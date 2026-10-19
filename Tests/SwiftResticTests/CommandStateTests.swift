@@ -320,7 +320,7 @@ struct CommandStateTests {
         #expect(!model.repositoryCommands(for: nil).canRefreshAll)
     }
 
-    @Test("Find Files opens on the selection's repository, and a handed-over search wins")
+    @Test("Find Files opens on the selection's repository — on Find Files itself the one it shows — and a handed-over search wins")
     func findFilesOpensWhereTheSelectionPoints() {
         let model = makeModel()
         let first = makeRepository("First")
@@ -330,31 +330,39 @@ struct CommandStateTests {
         model.configuration.plans = [plan]
 
         // Every selection kind the Repository menu acts through.
-        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(second.id)) == second.id)
-        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .plan(plan.id)) == second.id)
-        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .orphanPlan(repositoryID: second.id, planID: UUID())) == second.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(second.id), shown: nil) == second.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .plan(plan.id), shown: nil) == second.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .orphanPlan(repositoryID: second.id, planID: UUID()), shown: nil) == second.id)
 
-        // Nothing to look at — Activity, the console, nothing selected, or a
-        // selection whose target is gone — and the picker starts on the
-        // first repository.
+        // ⇧⌘F on Find Files itself: the repository it shows, its results
+        // with it — not the first, which threw them away.
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .findFiles, shown: second.id) == second.id)
+
+        // Nothing to look at — Activity, the console, nothing selected, a
+        // selection whose target is gone, or Find Files showing none — and
+        // the picker starts on the first repository.
         let gone = makeRepository("Gone")
         let orphan = makePlan("Orphan", on: gone)
         model.configuration.plans = [plan, orphan]
-        for selection: SidebarItem? in [.activity, .console, nil, .plan(orphan.id), .repository(gone.id)] {
-            #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: selection) == first.id,
+        for selection: SidebarItem? in [.activity, .console, nil, .plan(orphan.id), .repository(gone.id), .findFiles] {
+            #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: selection, shown: nil) == first.id,
                     "selection \(String(describing: selection))")
         }
+        // The repository Find Files showed, since removed.
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .findFiles, shown: gone.id) == first.id)
+        // What Find Files shows speaks for Find Files alone.
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .activity, shown: second.id) == first.id)
 
         // The Restore pane's "Search All Backups…" hand-off wins over
         // whatever the window has selected.
-        #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: .repository(second.id)) == first.id)
-        #expect(model.findFilesRepositoryID(prefillRepositoryID: second.id, selection: nil) == second.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: .repository(second.id), shown: nil) == first.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: second.id, selection: nil, shown: nil) == second.id)
 
         // No repositories: the picker starts empty, unless a hand-off names
         // one — the prefill still wins.
         model.configuration.repositories = []
-        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(first.id)) == nil)
-        #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: nil) == first.id)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(first.id), shown: nil) == nil)
+        #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: nil, shown: nil) == first.id)
     }
 
     @Test("⇧⌘F searches the Files tab of a plan's page, and Find Files everywhere else — a group's page too")
