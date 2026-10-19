@@ -20,6 +20,19 @@ rules from the flaky-run hunt of 2026-09-14:
   refuses to start `test` while another xcodebuild exists and fails any run
   whose log shows the restart banner — which a plain crash or timeout also
   raises, so read the xcresult before blaming a collision.
+- A runner can drop its connection with no collision in sight. On
+  2026-10-19 a run ended after 616 of 1027 tests. The script's stream
+  showed `** TEST FAILED **` and no failed test. The runner had logged
+  "Exiting due to IDE disconnection" (exit 74), and xcodebuild's restart of
+  it was refused ("Connection peer refused channel request"). The xcresult's
+  one failure read "xctest (25068) encountered an error: Failed to
+  establish communication with the test runner. (Underlying Error: Channel
+  disconnected)". The unified log showed no other xcodebuild and nothing
+  from testmanagerd before the runner left, and there was no crash report.
+  The change under test was in Views, outside the test target, and the
+  re-run passed. The cause was not found. Read `xcrun xcresulttool get
+  test-results summary --path <xcresult>` and `log show --predicate
+  'processID == <runner pid>'` first.
 - A mutation check's `xcodebuild test` rebuilds the Debug app in
   DerivedData — the binary the user's own instance is relaunched from and
   every scratch instance runs. Run `./build.sh` the moment the source is
@@ -206,7 +219,40 @@ Launching and quitting:
 - **A plan's Files tab lists its folder from the app itself** (since ba5cd70): a scratch plan's folder belongs outside Desktop, Documents, Downloads and iCloud Drive, where the first listing may put macOS's privacy prompt on the user's screen; a scratchpad folder lists without one. A disk image's detach and attach reach a scratch instance's Files tab with no activation — NSWorkspace's mount notifications read it again ("“TinyDisk” is not connected", then the tree, 2026-10-19). A tab off screen hears none of that: a detach, or its folder moved, while another page shows is first seen when the tab shows again — the stale state a Show Versions from Find Files arrives on, which is how the races the reveal fix closed were provoked (its commit message has the steps).
 - **A launch with a saved network share mounts it** (8b02f75): a scratch configuration whose repository is on a share in `settings.networkShares`, with `SWIFTRESTIC_SHARE_PASSWORD` set, mounts that share within seconds of launch — each mount adds the server to macOS's Recent Servers, to remove after, and a mount runs the catch-up of plans whose newest backup was skipped. With the server gone the listing reads "Reading backups…" until NetFS gives up: 9 s with the Samba container stopped, 131 s with it removed (2026-10-16), and the scheduler starts only after that first listing.
 - **restic gets the app's environment** minus the repository and password variables (`ResticRunner.protectedEnvironmentKeys`): `RESTIC_CACHE_DIR` at an empty folder, under a configuration with no repository, shows Settings › restic on an empty cache.
-- **To see a surface before the listing lands**, point `resticPathOverride` at a wrapper that sleeps on `snapshots` and execs restic otherwise. A cold index (no `index` folder) makes Find Files take the restic engine.
+- **A restic call held open, on demand**: point `resticPathOverride` at a wrapper that logs its argv, sleeps while a marker file names its subcommand, and otherwise execs restic. Holding `snapshots` shows a surface before the listing lands. The sleep must end on TERM: a run's cancel sends TERM to the wrapper (`Process.terminate`), and a bare `sleep` under bash outlives the wrapper's death. Which call each surface makes:
+  - A single file's restore is `restic dump`, not `restore`; a folder's, or several items', is `restore`.
+  - A plan's retention step is `forget`.
+  - A Find Files index hit is listed by `ls` of its folder before it restores. That `ls` misses the browse cache, which holds only folders restic has listed: here, none until the Files tab first shows.
+  - A cold index (no `index` folder) makes Find Files take the restic engine, whose rows carry restic's nodes and restore at once.
+  On 2026-10-19:
+  - `forget` held 25 s let Back Up All Plans Now be pressed during a plan's retention step (6d7b4c7).
+  - `dump` held 40 s let the progress strip's Cancel be pressed (942dd90).
+  - `dump` held 20 s let the file pane's line be read during a restore (b4f7367).
+  - `ls` held 30 s raised the refused restore below.
+- **Back Up All Plans Now is disabled while every plan's repository is held**: it needs a plan whose row can back up. A check of the queue therefore needs an idle plan on a second repository, whose own run also shows the press landed. On 2026-10-19:
+  - On 8bb001d, Beta, sharing Alpha's repository, stayed "Paused — …" through Alpha's held forget and never ran.
+  - On 6d7b4c7's build, Beta read "Waiting for another backup" and backed up after the forget.
+- **A restore never needs the real Desktop.** Launch with `-RestoreDestinationKind otherFolder -RestoreOtherFolderPath <scratch folder>`, creating the folder first, because the sheet drops a missing one. The sheet then opens on Other folder there, and from the argument domain Restore remembers nothing.
+  - Read the sheet's "Will restore to …" line with `getval`, because a dump clips values at 120 characters. Compare it with the scratch path before pressing Restore, and resolve Restore by name from a fresh dump.
+  - Keep raises no Replace alert.
+  - Original location puts a scratch plan's file back in its scratch folder.
+  - On 2026-10-19, eight Restore presses ran so, none touching the Desktop.
+- **The refused restore can be raised live.** The sheet's Restore is disabled only while a restore runs, so the one gap is a listing. A Find Files index hit's restore lists its folder first, and Restore… elsewhere stays enabled meanwhile. On 2026-10-19:
+  - The hit's Restore was pressed with `ls` held 30 s, then the Files tab's Restore… of the same file, with `dump` held 60 s.
+  - When the listing returned, 31 s after the first press, "A restore is already running" showed, on 8bb001d and on 942dd90's build alike.
+  - The refused restore writes no record and no file.
+- **A file restored alone lands with the restore's time as its modified date**: `restic dump` writes the bytes and nothing else. On 2026-10-19 a version modified at 23:11 was put back at 23:17, and the file pane then read "On this Mac: modified Oct 19, 2026 at 11:17 PM, 42 bytes — no version here matches it". A restore of a folder or of several items goes through `restic restore`.
+- **A disk read that stalls, on demand.** A paused Samba server is the real thing, but unreliable:
+  - The setup: servercontainers/samba in OrbStack, mounted with `mount_smbfs` (no Recent Servers entry), stalled with `docker pause`.
+  - The kernel answers an item's lstat from its attribute cache for about 5 s after its last fetch. Which of the app's reads blocked at a disk turn varied from run to run: the read under test was held in 1 of 4 runs on 2026-10-19.
+  - Statting the item from outside to prove the stall is one more variable.
+  - `docker info` starts OrbStack, which takes the front.
+
+  The deterministic stand-in is an lstat interposer (`__DATA,__interpose`) that sleeps for one path suffix while a marker file exists, guarded by `getprogname()` so restic is untouched:
+  - Pass `DYLD_INSERT_LIBRARIES` as an argument of `env` in the launch line: SIP strips DYLD_* exported through /bin/bash or /usr/bin/env.
+  - The Debug app takes it because it is not hardened (codesign flags 0x0). It reaches Foundation's `attributesOfItem`: a probe took 4.01 s with the marker and 0.00 s without, and failed without the library.
+  - Read the stall with `sample <pid>`, per thread. Time the accessibility call itself, not a wait that includes the sample. b4f7367's message has the numbers.
+- **A webhook on this Mac**: a channel at `http://127.0.0.1:8765/…` reached a Python listener there. A skipped run reaches only Healthchecks channels. A before-backup hook that fails while set to cancel the run makes a failed run without asking restic, so its webhook carries the payload offline. On 2026-10-19 that showed `SWIFTRESTIC_REPO_NAME` and the payload's "repository" with a REST login on 8bb001d and without it from c952b17 on; the repository page's Location row kept the login until 6f29e29.
 - **The quiet-plan alert can be raised live** — the scheduler's first tick runs at launch. The plan switched on, every other plan and both repositories' check and prune off; its `lastSuccessAt` further back than the alert's window (7 days for a daily plan at the default threshold), its path under an absent `/Volumes/…`; `lastRunAt` past the latest slot, so nothing starts; no `staleAlertedFor`. On 2026-10-10 `staleAlertedFor` in config.json held the stamp it counted from four seconds after launch — then a plan's last whole backup (`lastCompleteBackupAt`), a stamp gone since plans became one path (2026-10-18). The Debug bundle's notification permission is off, so the window showed "Could not send a notification"; with it on, the notification would reach the user's screen. Its words stay unit-tested. Quit with `NSRunningApplication.terminate` by PID: the menu's Quit asks about the enabled plan's schedule.
 - **An open sheet keeps an instance from quitting**: `NSRunningApplication.terminate` ended one within two seconds once its repository editor was closed, and not while open (cause not traced). Cancel on an unchanged draft closes it without asking.
 - **A capture run that stops on a precondition** (`findMoved` on a one-repository configuration) leaves macOS's "reopen windows?" prompt, which hangs every later run until answered. Launch with `-ApplePersistenceIgnoreState YES`.
@@ -224,6 +270,10 @@ The accessibility tree:
 - **Focusing a secure field raises password AutoFill's window** (`SafariPlatformSupportAutoCompleteWindow`, layer 101), which becomes AX window 0 and pushes the main window to index 1, so a path resolved before it (`0/6/0/…`) points at nothing (2026-10-15). Resolve the window index from a fresh dump before each press.
 - **A secure field reads back empty** whatever it holds, so the readout is the probe: a wrong password made Test Connection answer "The password doesn't open this repository — …", the field left blank "Connected to the existing repository." (2026-10-10).
 - **A Table's cells follow their row's data**: a lookup held by the parent and read in a cell closure did not re-render the cells when it changed; rewriting the rows did.
+- **A banner's glyph is not in the tree** for a success or a notice: it is accessibility-hidden. To check it, photograph the window within the banner's 8 s and count the glyph's pixels in a box left of the title. On 2026-10-19, in dark mode:
+  - A success check had 587 green pixels and 0 grey ones.
+  - A notice's slash.circle and clock had 0 green and 326 grey each, in boxes that differ in 383 of 4,200 pixels.
+  - The classifier was first self-tested on drawn squares.
 
 The index, the menu bar and a locked screen:
 
@@ -235,7 +285,7 @@ The index, the menu bar and a locked screen:
 ### Not verified
 
 - **Input the accessibility API cannot give** — posting real events would land in whatever app is in front: double-click or Return opening an item at the pane's backup time; Return and Esc in the Files tab's search hits; Return in a toolbar search field (`AXConfirm` does not fire SwiftUI's `onSubmit(of: .search)` — a repository page's hand-over to Find Files; `setval` does reach the field's binding, so a search as typed is seen live); right-click menus (Show Versions on a backup's tree and Find Files, Show Backups on a group); dragging the tree's or the Backups list's edge, or items to Finder. The router, `preferredVersion` and `BackupShelves.page(of:)` behind them are unit-tested.
-- **Restore… and Restore Folder… through the destination sheet** — into a scratch folder, never the real Desktop.
+- **Restore Folder… through the destination sheet**, and Restore… of a folder or of several items: into a scratch folder, never the real Desktop. A file's Restore… was run on 2026-10-19, from the Files tab and from Find Files, into a scratch folder and back to the scratch plan's folder (see "A restore never needs the real Desktop").
 - **Try Again on a failed level** (only the load key's change is unit-tested).
 - **A remote repository** (`restic find` and the index read over a network): none was available.
 - **A Files pane keeps the backup it was left at** in its final form (the pick written only when the user picks): not clicked, the accessibility API had stopped answering. Show Versions on the item already selected reopening its pane is tested only by the router's count (`filesPaneOpenings`).
