@@ -240,9 +240,16 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     }
 
     /// The location as the repository page shows it: restic's repository
-    /// string, a local path tilde-abbreviated.
+    /// string, a local path tilde-abbreviated — a REST server's without the
+    /// login a URL saved before the login had fields of its own still
+    /// carries (fa972e9), which restic is still handed: this is also a
+    /// twin's label, which every notification, hook and webhook says.
     var displayLocation: String {
-        kind == .local ? (resolvedLocalPath as NSString).abbreviatingWithTildeInPath : resticRepositoryString
+        switch kind {
+        case .local: (resolvedLocalPath as NSString).abbreviatingWithTildeInPath
+        case .rest: Self.splittingRESTCredentials(resticRepositoryString)?.url ?? resticRepositoryString
+        case .sftp, .s3, .b2, .azure, .gcs, .rclone: resticRepositoryString
+        }
     }
 
     private var shortLabel: String {

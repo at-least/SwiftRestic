@@ -695,5 +695,20 @@ struct RepositoryLabelTests {
         // Another drive's folder of the same name is no twin.
         let other = local("/Volumes/Samsung/restic")
         #expect(t7.label(among: [t7, other]) == "T7")
+        // A REST server's twins read as their URLs — without the login a URL
+        // saved before the login had fields of its own still carries
+        // (fa972e9): the label is every surface's, notifications, hooks and
+        // webhooks among them.
+        var me = Repository()
+        me.kind = .rest
+        me.restURL = "rest:https://alice:s3cret@backup.example.com:8000/me/"
+        var work = me
+        work.id = UUID()
+        work.restURL = "https://backup.example.com:8000/work/"
+        #expect(me.label(among: [me, work]) == "rest:https://backup.example.com:8000/me/")
+        #expect(work.label(among: [me, work]) == "rest:https://backup.example.com:8000/work/")
+        #expect(me.displayLocation == "rest:https://backup.example.com:8000/me/")
+        // restic still gets the URL as saved, login and all.
+        #expect(me.resticRepositoryString == "rest:https://alice:s3cret@backup.example.com:8000/me/")
     }
 }
