@@ -56,9 +56,18 @@ struct FileVersionsView: View {
         // A restore can put a version back where it came from: the disk is
         // read again once it ends, as when the pane opens — and whenever
         // the tree reads the disk again (`FilesTree.diskMayHaveChanged`).
-        .task(id: diskPath) { disk = diskPath.map(DiskFile.at) }
-        .onChange(of: model.isRestoring) { disk = diskPath.map(DiskFile.at) }
-        .onChange(of: filesTree.diskGeneration) { disk = diskPath.map(DiskFile.at) }
+        // Off the main actor, as the tree's and the pane's own reads are: a
+        // stalled share holds the read for as long as it stalls, and every
+        // activation and mount is a disk turn.
+        .task(id: DiskReadKey(path: diskPath, isRestoring: model.isRestoring, diskGeneration: filesTree.diskGeneration)) {
+            guard let path = diskPath else {
+                disk = nil
+                return
+            }
+            let read = await Task.detached(priority: .userInitiated) { DiskFile.at(path) }.value
+            guard !Task.isCancelled else { return }
+            disk = read
+        }
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)
@@ -68,6 +77,15 @@ struct FileVersionsView: View {
         // show the version the list says — and when the pane goes.
         .previewSession(previewer)
         .onChange(of: chosenID) { previewer.end() }
+    }
+
+    /// What the disk read is keyed by: the path, whether a restore is
+    /// running — its start and its end each read again — and the disk's
+    /// turn.
+    private struct DiskReadKey: Equatable {
+        let path: String?
+        let isRestoring: Bool
+        let diskGeneration: UInt64
     }
 
     private func versionRow(_ version: ContentVersion) -> some View {
