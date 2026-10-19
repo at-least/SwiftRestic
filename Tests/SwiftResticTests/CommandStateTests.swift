@@ -72,6 +72,30 @@ struct CommandStateTests {
             == "Home NAS is applying retention for “Photos” — backups wait until it finishes.")
     }
 
+    @Test("Back Up All queues a plan behind another plan's run on its repository, its retention step too, and leaves out one whose repository a check or prune holds")
+    func backUpAllQueuesBehindAPlansRun() {
+        let model = makeModel()
+        let home = makeRepository("Home NAS")
+        let offsite = makeRepository("Offsite")
+        let documents = makePlan("Documents", on: home)
+        let photos = makePlan("Photos", on: home)
+        let music = makePlan("Music", on: offsite)
+        model.configuration.repositories = [home, offsite]
+        model.configuration.plans = [documents, photos, music]
+        // Photos' run is past its backup, in the forget — with a prune, for
+        // minutes. Its unwind starts the next plan in Home NAS's queue.
+        model.activity[photos.id] = PlanActivity(phase: .applyingRetention)
+        // Offsite's check holds it exclusively, and no plan's run ends there
+        // to start a plan that waited for it.
+        model.maintenance[offsite.id] = MaintenanceActivity(task: .check)
+
+        model.backUpAllPlans()
+        #expect(model.isQueued(documents.id), "Documents waits for Photos' run, as it does while Photos backs up")
+        #expect(!model.isRunning(planID: documents.id))
+        #expect(!model.isQueued(music.id))
+        #expect(!model.isRunning(planID: music.id))
+    }
+
     @Test("excluding an unreadable item adds its exact path to the plan once, glob characters escaped")
     func excludeItemAddsItsPath() {
         let model = makeModel()

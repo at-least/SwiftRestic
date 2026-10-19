@@ -56,11 +56,16 @@ extension AppModel {
     }
 
     /// Back Up All Plans Now: every complete plan, less those whose
-    /// repository restic holds exclusively — it would refuse their lock at
-    /// once.
+    /// repository a check or prune holds — restic would refuse their lock
+    /// at once, and no plan's run ends there to start them after it. A plan
+    /// whose repository another plan's run holds, its retention step too,
+    /// waits its turn (`runBackups`).
     func backUpAllPlans() {
         runBackups(planIDs: configuration.plans
-            .filter { $0.isConfigurationComplete && backupLockReason(for: $0) == nil }
+            .filter { plan in
+                guard plan.isConfigurationComplete, let repositoryID = plan.repositoryID else { return false }
+                return maintenance[repositoryID] == nil
+            }
             .map(\.id))
     }
 
