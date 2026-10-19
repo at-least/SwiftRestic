@@ -15,12 +15,16 @@ struct FilesTreeTests {
         FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: folder)
     }
 
-    private func entry(_ node: FileNode) -> FilesTree.Entry {
-        FilesTree.Entry(node: node, newest: IndexVersion(id: "s1", time: .now), isInNewest: true)
+    private func entry(_ node: FileNode, _ standing: FilesTree.Standing = .onDisk) -> FilesTree.Entry {
+        FilesTree.Entry(node: node, standing: standing)
     }
 
     private func level(_ nodes: [FileNode]) -> FilesTree.State {
-        .loaded(FilesTree.Level(entries: nodes.map(entry), isFallback: false, isComplete: true))
+        .loaded(FilesTree.Level(entries: nodes.map { entry($0) }, isComplete: true))
+    }
+
+    private func child(_ path: String, folder: Bool = false, newest: String = "s2") -> IndexChild {
+        IndexChild(path: path, isDirectory: folder, newest: IndexVersion(id: newest, time: .now), isInNewest: newest == "s2")
     }
 
     /// Each row as text: an entry's path at its depth, "more N", or "status".
@@ -133,13 +137,107 @@ struct FilesTreeTests {
         #expect(ResticPath.ancestors(of: "a") == [])
     }
 
-    @Test("a path's tails run from the whole path to its last name, split on the separator's byte")
-    func tails() {
-        #expect(FilesTree.tails(of: "/a/b/c") == ["/a/b/c", "/b/c", "/c"])
-        #expect(FilesTree.tails(of: "/a") == ["/a"])
-        #expect(FilesTree.tails(of: "/") == [])
-        // A name starting with a combining mark keeps its own tail.
-        #expect(FilesTree.tails(of: "/d/\u{0301}x") == ["/d/\u{0301}x", "/\u{0301}x"])
+    // MARK: - The disk beside the backups
+
+    @Test("a folder's rows are the disk's items, each not backed up only once the index has read every backup and found none of it, then what only the backups hold")
+    func diskBesideTheBackups() {
+        let folder = node("/Docs")
+        let disk: [DiskFolder.Item] = [
+            .init(name: "b.txt", isDirectory: false, isHidden: false),
+            .init(name: "new.txt", isDirectory: false, isHidden: false),
+            .init(name: "Work", isDirectory: true, isHidden: false),
+            // Hidden: listed only when a backup holds it.
+            .init(name: ".DS_Store", isDirectory: false, isHidden: true),
+            .init(name: ".zshrc", isDirectory: false, isHidden: true),
+            // A file now where a backup held a folder: the disk's kind.
+            .init(name: "k", isDirectory: false, isHidden: false),
+        ]
+        let indexed = [
+            child("/Docs/b.txt"), child("/Docs/Work", folder: true), child("/Docs/.zshrc"),
+            child("/Docs/k", folder: true),
+            // Gone from the disk: the backups alone hold them.
+            child("/Docs/old.txt", newest: "s1"), child("/Docs/Old", folder: true, newest: "s1"),
+        ]
+        func summary(_ entries: [FilesTree.Entry]) -> [String] {
+            entries.map { entry in
+                let mark = switch entry.standing {
+                case .onDisk: "disk"
+                case .notBackedUp: "not backed up"
+                case let .deleted(lastBackedUp): "deleted \(lastBackedUp.id)"
+                }
+                return "\(entry.node.name)\(entry.node.isDirectory ? "/" : "") \(mark)"
+            }
+        }
+        #expect(summary(FilesTree.entries(disk: disk, indexed: indexed, in: folder, isComplete: true)) == [
+            "Work/ disk", ".zshrc disk", "b.txt disk", "k disk", "new.txt not backed up",
+            "Old/ deleted s1", "old.txt deleted s1",
+        ])
+        // While the index still reads, an older backup may hold new.txt.
+        #expect(summary(FilesTree.entries(disk: disk, indexed: indexed, in: folder, isComplete: false)) == [
+            "Work/ disk", ".zshrc disk", "b.txt disk", "k disk", "new.txt disk",
+            "Old/ deleted s1", "old.txt deleted s1",
+        ])
+        // Paths join under the folder, the root's without a doubled slash,
+        // byte for byte: an NFD name is not its NFC twin.
+        let nfc = child("/caf\u{E9}")
+        let root = FilesTree.entries(
+            disk: [.init(name: "cafe\u{301}", isDirectory: false, isHidden: false)],
+            indexed: [nfc], in: node("/"), isComplete: true
+        )
+        #expect(root.map(\.node) == [node("/cafe\u{301}", folder: false), node("/caf\u{E9}", folder: false)])
+        #expect(root.map(\.standing) == [.notBackedUp, .deleted(lastBackedUp: nfc.newest)])
+    }
+
+    @Test("what only the backups hold is not a row, nor counted past the cap")
+    func deletedAreNoRows() {
+        let docs = node("/Docs")
+        let here = (0 ..< FilesTree.rowCap + 2).map { entry(node(String(format: "/Docs/f%04d", $0), folder: false)) }
+        let gone = entry(node("/Docs/zz-old", folder: false), .deleted(lastBackedUp: IndexVersion(id: "s1", time: .now)))
+        let states: [FileNode: FilesTree.State] = [docs: .loaded(FilesTree.Level(entries: here + [gone], isComplete: true))]
+        let rows = text(FilesTree.rows(under: docs, open: [], states: states))
+        #expect(rows.count == FilesTree.rowCap + 1)
+        #expect(rows.last == "0 more 2 of /Docs")
+        // A folder whose items are all gone is empty on this Mac.
+        let empty: [FileNode: FilesTree.State] = [docs: .loaded(FilesTree.Level(entries: [gone], isComplete: true))]
+        #expect(text(FilesTree.rows(under: docs, open: [], states: empty)) == ["0 status /Docs"])
+    }
+
+    @Test("a disk that may have changed reads every level again, keeping it on screen meanwhile; a folder that could not be listed waits for that")
+    func diskTurnRereads() async {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticFilesTree-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory([:])
+        )
+        let folder = node("/Data")
+        let away = node("/Volumes/Gone/Data")
+        let reads = ReadCount()
+        let tree = FilesTree(read: { node, _ in
+            reads.value += 1
+            if node == away { throw FolderAbsence.volumeAway(volume: "Gone") }
+            return FilesTree.Level(entries: [], isComplete: true)
+        }, warm: { _, _ in })
+
+        await tree.keep([folder, away], model: model)
+        #expect(reads.value == 2)
+        #expect(tree.state(of: away) == .unavailable(.volumeAway(volume: "Gone"), diskGeneration: 0))
+        // Current: nothing is read again, the unlisted folder included.
+        await tree.keep([folder, away], model: model)
+        #expect(reads.value == 2)
+
+        let before = tree.loadKey([folder], model: model)
+        tree.diskMayHaveChanged()
+        #expect(tree.loadKey([folder], model: model) != before)
+        await tree.keep([folder, away], model: model)
+        #expect(reads.value == 4)
+        guard case let .loaded(level)? = tree.state(of: folder) else {
+            Issue.record("the folder was left \(String(describing: tree.state(of: folder)))")
+            return
+        }
+        #expect(level.diskGeneration == 1)
+        #expect(tree.state(of: away) == .unavailable(.volumeAway(volume: "Gone"), diskGeneration: 1))
     }
 
     @Test("Try Again changes what the load task is keyed by, so a task that had returned — every level then current — runs again")
@@ -181,7 +279,7 @@ struct FilesTreeTests {
         #expect(tree.loadKey([folder], model: model) == taken)
     }
 
-    @Test("a folder level read whole reads ahead the files it lists; the roots, a fallback or an incomplete level do not")
+    @Test("a folder level read whole reads ahead the files it lists that a backup holds; the roots or an incomplete level do not")
     func levelsReadAheadTheirFiles() async {
         let model = AppModel(
             store: ConfigStore(
@@ -193,7 +291,9 @@ struct FilesTreeTests {
         let folder = node("/Data")
         // A subfolder first, then more files than the tree lists.
         let files = (0 ..< FilesTree.rowCap + 5).map { node(String(format: "/Data/f%03d.txt", $0), folder: false) }
-        let whole = FilesTree.Level(entries: ([node("/Data/Sub")] + files).map(entry), isFallback: false, isComplete: true)
+        // A file no backup holds has no versions to read.
+        let unsaved = entry(node("/Data/zz-new.txt", folder: false), .notBackedUp)
+        let whole = FilesTree.Level(entries: ([node("/Data/Sub")] + files).map { entry($0) } + [unsaved], isComplete: true)
         let warmed = WarmLog()
         func tree(_ level: FilesTree.Level) -> FilesTree {
             FilesTree(read: { _, _ in level }, warm: { files, _ in warmed.calls.append(files) })
@@ -204,9 +304,6 @@ struct FilesTreeTests {
 
         warmed.calls = []
         await tree(whole).keep([FileNode.roots(repositoryID: repositoryID, chainKey: chain)], model: model)
-        var fallback = whole
-        fallback.isFallback = true
-        await tree(fallback).keep([folder], model: model)
         var incomplete = whole
         incomplete.isComplete = false
         let reading = tree(incomplete)
@@ -233,7 +330,7 @@ struct FilesTreeTests {
             secrets: .inMemory([:])
         )
         let folder = FileNode(repositoryID: UUID(), chainKey: "swiftrestic-plan-x", path: "/Data", isDirectory: true)
-        let read = FilesTree.Level(entries: [], isFallback: false, isComplete: true)
+        let read = FilesTree.Level(entries: [], isComplete: true)
         let reads = ReadCount()
         // The first read is still in flight when its task is cancelled — a
         // folder being read through restic when a listing restarts the load.
@@ -262,7 +359,7 @@ struct FilesTreeTests {
 
     // MARK: - Search
 
-    @Test("a search's hits list by name as Finder sorts names, one name's by path, each the tree row it selects")
+    @Test("a search's hits list by name as Finder sorts names, one name's by path, each the tree row it selects, dimmed when no longer on this Mac")
     func searchHitsOrder() {
         let roots = FileNode.roots(repositoryID: repositoryID, chainKey: chain)
         let day = IndexVersion(id: "s1", time: .now)
@@ -272,28 +369,44 @@ struct FilesTreeTests {
             IndexChild(path: "/Docs/b/note2", isDirectory: false, newest: day, isInNewest: true),
             IndexChild(path: "/Docs/Notes", isDirectory: true, newest: day, isInNewest: true),
         ]
-        let entries = FilesSearchAnswer.entries(hits, under: roots)
+        let present: Set<PathKey> = ["/Docs/b/note10", "/Docs/b/note2", "/Docs/Notes"]
+        let entries = FilesSearchAnswer.entries(hits, under: roots, present: present)
         // note2 before note10, numbers as numbers; no folders-first.
         #expect(entries.map(\.node.path) == ["/Docs/a/note2", "/Docs/b/note2", "/Docs/b/note10", "/Docs/Notes"])
         // A hit is the very node the tree lists, so picking it selects that
-        // row's item, and the dimming comes with it.
-        #expect(entries[0] == FilesTree.Entry(node: node("/Docs/a/note2", folder: false), newest: day, isInNewest: false))
+        // row's item; the one the disk no longer has is deleted.
+        #expect(entries[0] == FilesTree.Entry(node: node("/Docs/a/note2", folder: false), standing: .deleted(lastBackedUp: day)))
+        #expect(entries[1].standing == .onDisk)
         #expect(entries[3].node == node("/Docs/Notes"))
     }
 
-    @Test("an item the newest backup lacks says when it was last backed up, and why when that backup could not read it")
+    @Test("each standing has its words: a row's tag and tooltip, VoiceOver's, and the pane's")
     func standingWords() {
         let when = Date(timeIntervalSince1970: 1_790_904_600)
         let stamp = Format.timestamp(when)
-        let gone = FilesTree.Entry(node: node("/Docs/old.txt", folder: false), newest: IndexVersion(id: "s1", time: when), isInNewest: false)
-        #expect(gone.help(notRead: nil) == "Not in the newest backup — last backed up \(stamp)")
-        #expect(gone.help(notRead: "permission denied")
+        let here = entry(node("/Docs/a.txt", folder: false))
+        #expect(here.tag == nil)
+        #expect(here.help(notRead: nil) == "/Docs/a.txt")
+        #expect(here.spokenStanding(notRead: nil) == nil)
+
+        let unsaved = entry(node("/Docs/new.txt", folder: false), .notBackedUp)
+        #expect(unsaved.tag == "Not backed up")
+        #expect(unsaved.help(notRead: nil) == "Not backed up. No backup of this plan holds it.")
+        #expect(unsaved.help(notRead: "permission denied") == "Not backed up. The newest backup could not read it (permission denied).")
+        #expect(unsaved.spokenStanding(notRead: nil) == "not backed up")
+        #expect(unsaved.spokenStanding(notRead: "permission denied") == "not backed up, the newest backup could not read it, permission denied")
+        #expect(FilesTree.Entry.notBackedUpReason(notRead: nil) == "No backup of this plan holds it.")
+
+        let gone = entry(node("/Docs/old.txt", folder: false), .deleted(lastBackedUp: IndexVersion(id: "s1", time: when)))
+        #expect(gone.tag == Format.until(when))
+        #expect(gone.help(notRead: nil) == "Not on this Mac — last backed up \(stamp)")
+        #expect(gone.spokenStanding(notRead: nil) == "not on this Mac, last backed up \(stamp)")
+
+        // On this Mac, but missing from the newest backup an older one is
+        // not: the pane's line.
+        #expect(FilesTree.Entry.standing(notRead: nil, lastBackedUp: when) == "Not in the newest backup — last backed up \(stamp)")
+        #expect(FilesTree.Entry.standing(notRead: "permission denied", lastBackedUp: when)
             == "Not read by the newest backup (permission denied) — last backed up \(stamp)")
-        #expect(FilesTree.Entry.spokenStanding(notRead: "permission denied", lastBackedUp: when)
-            == "not read by the newest backup, permission denied, last backed up \(stamp)")
-        #expect(FilesTree.Entry.spokenStanding(notRead: nil, lastBackedUp: when) == "not in the newest backup, last backed up \(stamp)")
-        let here = FilesTree.Entry(node: node("/Docs/new.txt", folder: false), newest: IndexVersion(id: "s2", time: when), isInNewest: true)
-        #expect(here.help(notRead: nil) == "/Docs/new.txt")
     }
 
     @Test("a search's footer says the ceiling first, then the index still reading, else nothing")

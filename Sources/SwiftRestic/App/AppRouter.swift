@@ -176,14 +176,12 @@ final class AppRouter {
     /// and Find Files' Show Versions: `page`, the plan's page whose Files tab
     /// holds `record`'s history (`BackupShelves.versionsPage(of:)`), on
     /// Files, the item selected with every folder above it open down from
-    /// the backed-up folder that holds it — the tail of a backed-up path a
-    /// relative backup's tree holds it under (`FilesTree.tails`) — and its
-    /// pane opening at `record`.
+    /// the backed-up folder that holds it, and its pane opening at `record`.
     func showVersions(path: String, isDirectory: Bool, in record: Snapshot, repositoryID: UUID, page: SidebarItem) {
         let chain = SnapshotIndex.chainKey(for: record)
         let item = FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
         setTab(.files, of: page)
-        openFolders(above: item, from: record.paths.flatMap(FilesTree.tails(of:)))
+        openFolders(above: item, from: record.paths)
         filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = item
         filesVersionHint = record.id
         filesPaneOpenings += 1

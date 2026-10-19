@@ -11,6 +11,7 @@ import SwiftUI
 struct FileVersionsView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    @Environment(FilesTree.self) private var filesTree
     let node: FileNode
     /// Newest first.
     let versions: [ContentVersion]
@@ -53,9 +54,11 @@ struct FileVersionsView: View {
         // newer listing or a re-read of the index.
         .task(id: versions.map(\.id)) { await readDetails() }
         // A restore can put a version back where it came from: the disk is
-        // read again once it ends, as when the pane opens.
+        // read again once it ends, as when the pane opens — and whenever
+        // the tree reads the disk again (`FilesTree.diskMayHaveChanged`).
         .task(id: diskPath) { disk = diskPath.map(DiskFile.at) }
         .onChange(of: model.isRestoring) { disk = diskPath.map(DiskFile.at) }
+        .onChange(of: filesTree.diskGeneration) { disk = diskPath.map(DiskFile.at) }
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
                 .environment(model)

@@ -1,16 +1,19 @@
+import AppKit
 import SwiftUI
 
-/// A page's Files view: one chain's folders and files across every backup —
-/// a plan's, or a group's under Other backups — the tree on the leading
-/// side, and the folder or file selected
-/// in it on the trailing side, by version (`FilesPaneView`). The tree starts
-/// at the page's edge rather than under a repository and a plan, and its
-/// divider drags: a deep folder keeps its names.
+/// A plan's Files view: its folder as this Mac holds it now, the tree on the
+/// leading side — each item beside what the plan's backups hold of it
+/// (`FilesTree`) — and the folder or file selected in it on the trailing
+/// side, by version (`FilesPaneView`): the way to a current file's past
+/// versions. The tree starts at the page's edge rather than under a
+/// repository and a plan, and its divider drags: a deep folder keeps its
+/// names. When the plan's folder can't be read — its drive away, moved,
+/// SwiftRestic kept out — the tab says why and points to the Backups tab.
 ///
 /// While the page's search field — the toolbar's — holds a query, the
-/// column lists the chain's items named like it instead of the tree — from
-/// the index, items the newest backup no longer holds included — and a hit
-/// selects as a tree row does, so its versions open beside it.
+/// column lists the plan's items named like it instead of the tree — from
+/// the index, items no longer on this Mac included — and a hit selects as a
+/// tree row does, so its versions open beside it.
 ///
 /// What is open, selected and searched for is the router's, per chain, so
 /// leaving the page — for a backup's record, Activity, another plan — and
@@ -19,8 +22,11 @@ struct FilesBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Environment(FilesTree.self) private var filesTree
-    /// The chain's roots (`FileNode.roots`).
+    /// The plan's roots (`FileNode.roots`).
     let roots: FileNode
+    /// The plan's page, whose Backups tab the tab points to when the
+    /// folder can't be read.
+    let page: SidebarItem
     /// A search with no match offers Find Files over the whole repository,
     /// prefilled — other plans' backups included. The root presents it.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
@@ -65,17 +71,25 @@ struct FilesBrowserView: View {
     }
 
     /// What the chain's newest backup's own run could not read: an item
-    /// that backup lacks for that reason says so (`FilesTree.Entry.standing`).
+    /// that backup lacks for that reason says so.
     private var newestUnread: UnreadItems {
         model.snapshots(for: roots.repositoryID)
             .first { SnapshotIndex.chainKey(for: $0) == roots.chainKey }
             .map { model.unreadItems(inBackup: $0.id) } ?? UnreadItems()
     }
 
-    /// The roots level's folders, once read.
+    /// The roots level's one folder — the plan's — once read.
     private var rootEntries: [FileNode] {
         guard case let .loaded(level)? = filesTree.state(of: roots) else { return [] }
         return level.entries.map(\.node)
+    }
+
+    /// Why the plan's folder can't be listed, when it can't: the root's own
+    /// read — its drive away, nothing at its path — or its listing, refused.
+    private var absence: FolderAbsence? {
+        if case let .unavailable(absence, _)? = filesTree.state(of: roots) { return absence }
+        if let root = rootEntries.first, case let .unavailable(absence, _)? = filesTree.state(of: root) { return absence }
+        return nil
     }
 
     /// Every level the tree has on screen: the roots and the open folders
@@ -85,42 +99,85 @@ struct FilesBrowserView: View {
     }
 
     var body: some View {
-        // An HStack, not HSplitView: the split would not narrow the pane
-        // below the width it first laid out at, so a wider tree pushes the
-        // window's content past its edges — the sidebar and the pane's
-        // buttons clip.
-        HStack(spacing: 0) {
-            navigator
-                .frame(width: min(max(treeWidth, treeWidthBounds.lowerBound), treeWidthBounds.upperBound))
-            TreeEdge(width: $treeWidth, bounds: treeWidthBounds)
-            pane
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Group {
+            if let absence {
+                unavailable(absence)
+            } else {
+                // An HStack, not HSplitView: the split would not narrow the
+                // pane below the width it first laid out at, so a wider tree
+                // pushes the window's content past its edges — the sidebar
+                // and the pane's buttons clip.
+                HStack(spacing: 0) {
+                    navigator
+                        .frame(width: min(max(treeWidth, treeWidthBounds.lowerBound), treeWidthBounds.upperBound))
+                    TreeEdge(width: $treeWidth, bounds: treeWidthBounds)
+                    pane
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         // The levels on screen, read and kept current; keyed by what is
-        // open and the listings they were read under, so opening a folder,
-        // a refresh or the index taking it restarts it. Kept while a search
-        // lists hits: the tree it ends on is read already.
+        // open, the listings they were read under and the disk's turn, so
+        // opening a folder, a refresh, the index taking it or the disk
+        // maybe changing restarts it. Kept while a search lists hits — the
+        // tree it ends on is read already — and while the folder can't be
+        // read, so it is read again when that may have changed.
         .task(id: filesTree.loadKey(neededLevels, model: model)) {
             await filesTree.keep(neededLevels, model: model)
         }
-        // The search, asked again under each listing and each one the index
-        // takes, as the levels are.
+        // The search, asked again under each listing, each one the index
+        // takes and each turn of the disk, as the levels are.
         .task(id: FilesSearchKey(
             roots: roots,
             query: query,
             listedAt: model.snapshotsLoadedAt(for: roots.repositoryID),
-            indexTaken: model.indexTakenGeneration[roots.repositoryID]
+            indexTaken: model.indexTakenGeneration[roots.repositoryID],
+            diskGeneration: filesTree.diskGeneration
         )) {
             await search()
         }
-        // A first visit opens and selects the first root, so the pane has
+        // A first visit opens and selects the plan's folder, so the pane has
         // something to show from the first look — and follows it when a
         // re-read moves it (`FilesTree.rootToSelect`).
         .onChange(of: rootEntries, initial: true) { old, new in
             guard let root = FilesTree.rootToSelect(selected: selected, old: old, new: new) else { return }
             router.filesSelection[roots] = root
             router.openFolders.insert(root)
+        }
+        // The tree does not watch the folder: it is read again when the tab
+        // shows, when SwiftRestic comes to the front — another app may have
+        // changed the folder meanwhile — and when a volume comes or goes.
+        .onAppear { filesTree.diskMayHaveChanged() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            filesTree.diskMayHaveChanged()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)) { _ in
+            filesTree.diskMayHaveChanged()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)) { _ in
+            filesTree.diskMayHaveChanged()
+        }
+    }
+
+    /// The tab when the plan's folder can't be read: why, and the way to
+    /// what the backups hold of it — no tree of an older backup in its
+    /// place (the user's call, 2026-10-19).
+    private func unavailable(_ absence: FolderAbsence) -> some View {
+        ContentUnavailableView {
+            Label(absence.title, systemImage: Self.symbol(of: absence))
+        } description: {
+            Text(verbatim: "\(absence.detail) Its backups are on the Backups tab.")
+        } actions: {
+            Button("Show Backups") { router.setTab(.backups, of: page) }
+        }
+    }
+
+    private static func symbol(of absence: FolderAbsence) -> String {
+        switch absence {
+        case .volumeAway: "externaldrive.badge.xmark"
+        case .missing: "questionmark.folder"
+        case .blockedByMacOS, .deniedByFilePermissions, .unreadable: "lock"
         }
     }
 
@@ -201,11 +258,10 @@ struct FilesBrowserView: View {
                         .help("Search every backup in this repository with Find Files, other plans' included")
                 }
             case let .hits(entries):
-                let unread = newestUnread
                 VStack(spacing: 0) {
                     List(selection: selection) {
                         ForEach(entries) { entry in
-                            FilesSearchRow(entry: entry, notRead: entry.isInNewest ? nil : unread.reason(for: entry.node.path))
+                            FilesSearchRow(entry: entry)
                                 .tag(entry.node)
                         }
                     }
@@ -243,7 +299,8 @@ struct FilesBrowserView: View {
 
     /// Answers the query, and again every `recheckInterval` while the index
     /// is still reading the repository — the tree's own rule — so hits from
-    /// backups it reads meanwhile fill in. One read of the index, no restic.
+    /// backups it reads meanwhile fill in. One read of the index, no restic,
+    /// then one `lstat` per hit: a hit no longer on this Mac is dimmed.
     private func search() async {
         let roots = roots
         let query = query
@@ -259,7 +316,11 @@ struct FilesBrowserView: View {
                 let found = try await model.searchIndex(
                     pattern: query, inChain: roots.chainKey, repositoryID: roots.repositoryID
                 )
-                outcome = .hits(FilesSearchAnswer.entries(found.hits, under: roots))
+                let paths = found.hits.map(\.path)
+                let present = await Task.detached(priority: .userInitiated) { () -> Set<PathKey> in
+                    Set(paths.filter { DiskFolder.exists($0) }.map { PathKey($0) })
+                }.value
+                outcome = .hits(FilesSearchAnswer.entries(found.hits, under: roots, present: present))
                 isTruncated = found.isTruncated
             } catch {
                 outcome = .failed((error as? ResticError)?.errorDescription ?? error.localizedDescription)
@@ -283,7 +344,7 @@ struct FilesBrowserView: View {
         case let .entry(entry, depth):
             FilesTreeRow(
                 entry: entry,
-                notRead: entry.isInNewest ? nil : unread.reason(for: entry.node.path),
+                notRead: entry.standing == .notBackedUp ? unread.reason(for: entry.node.path) : nil,
                 title: depth == 0 ? (entry.node.path as NSString).abbreviatingWithTildeInPath : entry.node.name,
                 isExpanded: router.openFolders.contains(entry.node),
                 onToggle: { toggle(entry.node) }
@@ -313,29 +374,21 @@ struct FilesBrowserView: View {
         }
     }
 
-    /// What the tree says while its roots list nothing: the listing's own
-    /// row while the repository's listing is unread or holds no backup of
-    /// the chain — "No backups yet" only then — and "Reading…" while the
-    /// roots of a chain the listing does hold are read, a first backup's
-    /// re-read included (the empty level stays on screen meanwhile); a
-    /// failed roots read says so, with a Try Again that reads it again.
+    /// What the tree says while its root is not listed: "Reading…" while
+    /// the plan's folder is looked at, a failed read with a Try Again that
+    /// reads it again. A folder that can't be read is the whole tab's
+    /// (`unavailable`).
     @ViewBuilder
     private var rootsStatus: some View {
-        let listed = model.snapshotListingOutcome(for: roots.repositoryID) == .loaded
-        let holdsChain = model.snapshots(for: roots.repositoryID).contains {
-            SnapshotIndex.chainKey(for: $0) == roots.chainKey
-        }
         if case .failed? = filesTree.state(of: roots) {
             FilesStatusRow(node: roots)
-        } else if listed, holdsChain {
+        } else {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
                 Text("Reading…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        } else {
-            BackupsStatusRow(repositoryID: roots.repositoryID)
         }
     }
 
@@ -413,7 +466,7 @@ extension View {
                 // Each segment as wide as the three's were.
                 .frame(width: 80 * CGFloat(tabs.count))
                 .help(tabs.contains(.files)
-                    ? "The overview; the backups, each one's files beside the list; or the folders and files across every backup, each by version"
+                    ? "The overview; the backups, each one's files beside the list; or the plan's folder as this Mac holds it, each item by version"
                     : "The overview; or the backups, each one's files beside the list")
             }
         }
@@ -503,25 +556,24 @@ private struct FilesPaneIdentity: Hashable {
     let opening: Int
 }
 
-/// What a Files tab's search is keyed by: the chain, the query, and the
-/// listing it is read under and the one the index has taken — so a refresh
-/// asks again, as the tree's levels are read again.
+/// What a Files tab's search is keyed by: the chain, the query, the
+/// listing it is read under and the one the index has taken, and the disk's
+/// turn — so a refresh asks again, as the tree's levels are read again, and
+/// a hit deleted meanwhile dims.
 private struct FilesSearchKey: Equatable {
     let roots: FileNode
     let query: String
     let listedAt: Date?
     let indexTaken: UInt64?
+    let diskGeneration: UInt64
 }
 
 /// One hit of a Files tab's search: the kind's icon and the name, over the
-/// folder that holds it. An item the chain's newest backup no longer holds
-/// is dimmed, with the day it was last backed up — the tree row's facts,
-/// in the tree row's words.
+/// folder that holds it. An item no longer on this Mac is dimmed, with the
+/// day it was last backed up — the tree row's facts, in the tree row's
+/// words.
 struct FilesSearchRow: View {
     let entry: FilesTree.Entry
-    /// Why the chain's newest backup lacks it, when that backup's own run
-    /// could not read it (`UnreadItems.reason`).
-    let notRead: String?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -538,14 +590,14 @@ struct FilesSearchRow: View {
                     .truncationMode(.head)
             }
             Spacer(minLength: 4)
-            if !entry.isInNewest {
-                Text(Format.until(entry.newest.time))
+            if let tag = entry.tag {
+                Text(tag)
                     .font(.caption)
-                    .accessibilityLabel(FilesTree.Entry.spokenStanding(notRead: notRead, lastBackedUp: entry.newest.time))
+                    .accessibilityLabel(entry.spokenStanding(notRead: nil) ?? tag)
             }
         }
-        .foregroundStyle(entry.isInNewest ? .primary : .secondary)
-        .help(entry.help(notRead: notRead))
+        .foregroundStyle(entry.standing == .onDisk ? .primary : .secondary)
+        .help(entry.help(notRead: nil))
         .accessibilityElement(children: .combine)
     }
 }
@@ -592,8 +644,9 @@ struct FoldChevron: View {
 
 /// One folder or file in a Files tree: a fold column (a chevron for a
 /// folder, empty for a file, so names line up), the kind's icon and its
-/// name. An item the chain's newest backup no longer holds is dimmed, and
-/// says when it was last backed up.
+/// name. An item no backup of the plan holds is dimmed and says it is not
+/// backed up; one only the backups hold, when shown, says when it was last
+/// backed up.
 struct FilesTreeRow: View {
     /// The fold column's width, a chevron's.
     static let foldWidth: CGFloat = 14
@@ -625,19 +678,16 @@ struct FilesTreeRow: View {
                     .frame(width: Self.foldWidth)
                     .accessibilityHidden(true)
             }
-            if entry.isInNewest {
-                nameLabel
-                Spacer(minLength: 0)
-            } else {
-                // The name is what identifies the row, so the day yields
+            if let tag = entry.tag {
+                // The name is what identifies the row, so the tag yields
                 // first: beside the whole name when both fit, else left to
-                // the tooltip, the label and the pane's line, the name
-                // keeping the room — and truncating only past it.
+                // the tooltip, the label and the pane, the name keeping the
+                // room — and truncating only past it.
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 4) {
                         nameLabel.fixedSize(horizontal: true, vertical: false)
                         Spacer(minLength: 8)
-                        dayTag
+                        tagLabel(tag)
                     }
                     HStack(spacing: 4) {
                         nameLabel.fixedSize(horizontal: true, vertical: false)
@@ -648,6 +698,9 @@ struct FilesTreeRow: View {
                         Spacer(minLength: 0)
                     }
                 }
+            } else {
+                nameLabel
+                Spacer(minLength: 0)
             }
         }
     }
@@ -660,17 +713,15 @@ struct FilesTreeRow: View {
         } icon: {
             Image(systemName: entry.node.isDirectory ? "folder" : "doc")
         }
-        .foregroundStyle(entry.isInNewest ? .primary : .secondary)
+        .foregroundStyle(entry.standing == .onDisk ? .primary : .secondary)
         .help(entry.help(notRead: notRead))
-        .accessibilityLabel(entry.isInNewest
-            ? title
-            : "\(title), \(FilesTree.Entry.spokenStanding(notRead: notRead, lastBackedUp: entry.newest.time))")
+        .accessibilityLabel([title, entry.spokenStanding(notRead: notRead)].compactMap { $0 }.joined(separator: ", "))
     }
 
-    /// The day it was last backed up, on the row: what made it dim,
-    /// without a hover. VoiceOver has it in the label.
-    private var dayTag: some View {
-        Text(Format.until(entry.newest.time))
+    /// What made it dim, on the row, without a hover. VoiceOver has it in
+    /// the label.
+    private func tagLabel(_ tag: String) -> some View {
+        Text(tag)
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
@@ -680,7 +731,7 @@ struct FilesTreeRow: View {
 }
 
 /// What an open folder of a Files tree says while it lists nothing: still
-/// reading, why it could not, or that it held nothing in any backup.
+/// reading, why it could not, or that it holds nothing.
 struct FilesStatusRow: View {
     @Environment(FilesTree.self) private var filesTree
     let node: FileNode
@@ -688,36 +739,38 @@ struct FilesStatusRow: View {
     var body: some View {
         switch filesTree.state(of: node) {
         case let .failed(message):
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .imageScale(.small)
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityHidden(true)
-                    Text(Format.firstSentence(message))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .help(message)
-                }
-                .font(.caption)
-                Button("Try Again") { filesTree.reread(node) }
-                    .controlSize(.small)
-            }
-        case let .loaded(level) where !level.isFallback:
+            problem(Format.firstSentence(message), help: message)
+        case let .unavailable(absence, _):
+            problem(absence.title, help: absence.detail)
+        case .loaded:
             Text("Empty folder")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        case nil, .loading, .loaded:
-            // Still reading, or a fallback level: the index holds nothing
-            // under it yet and the newest backup's listing had nothing at
-            // this path either (a relative backup before the index has read
-            // it, say). The next read may fill it, so it is not called empty.
+        case nil, .loading:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
                 Text("Reading…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func problem(_ words: String, help: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .imageScale(.small)
+                    .foregroundStyle(Theme.warning)
+                    .accessibilityHidden(true)
+                Text(words)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .help(help)
+            }
+            .font(.caption)
+            Button("Try Again") { filesTree.reread(node) }
+                .controlSize(.small)
         }
     }
 }

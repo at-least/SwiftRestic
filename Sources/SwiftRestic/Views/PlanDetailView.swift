@@ -300,13 +300,14 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The Files tab: the plan's own history in the repository it backs up
-    /// to, folders and files across every backup.
+    /// The Files tab: the plan's folder as this Mac holds it, each item by
+    /// version from the plan's backups in the repository it backs up to.
     @ViewBuilder
     private func files(_ plan: BackupPlan) -> some View {
         if let repositoryID = plan.repositoryID {
             FilesBrowserView(
                 roots: FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id)),
+                page: .plan(plan.id),
                 onSearchAllBackups: onSearchAllBackups
             )
         } else {

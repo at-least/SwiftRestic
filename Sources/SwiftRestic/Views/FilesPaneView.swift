@@ -2,13 +2,15 @@ import SwiftUI
 
 /// The pane for a folder or file picked in a Files tab's tree: what it is
 /// and where it lives — and when it was last backed up, once the newest
-/// backup has dropped it — then the item by version — a folder as any
-/// backup holding it held it
+/// backup has dropped it or this Mac no longer holds it — then the item by
+/// version — a folder as any backup holding it held it
 /// (`FolderVersionsView`), a file as each content it had
-/// (`FileVersionsView`).
+/// (`FileVersionsView`) — or, for an item on this Mac no backup holds, that
+/// it is not backed up.
 struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    @Environment(FilesTree.self) private var filesTree
     let node: FileNode
     /// Opens an item of a folder's listing in the tree, at the backup the
     /// listing was read from.
@@ -25,6 +27,8 @@ struct FilesPaneView: View {
     @State private var didOpen = false
     @State private var loadError: String?
     @State private var indexComplete = true
+    /// Whether this Mac holds the item now, by one `lstat`; nil until read.
+    @State private var isOnDisk: Bool?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,7 +37,8 @@ struct FilesPaneView: View {
                     node: node,
                     newestHolder: versions.first,
                     chainNewest: chainNewest,
-                    notRead: chainNewest.flatMap { model.unreadItems(inBackup: $0.id).reason(for: node.path) }
+                    notRead: notRead,
+                    isOnDisk: isOnDisk
                 )
                 if !indexComplete {
                     Label(FilesSearchAnswer.indexStillReading, systemImage: "clock.arrow.circlepath")
@@ -48,15 +53,19 @@ struct FilesPaneView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Read under each listing, and again every `recheckInterval` while
-        // the index is still reading the repository — the tree's own
-        // rule, so the pane fills in as the tree does.
+        // Read under each listing and each turn of the disk, and again
+        // every `recheckInterval` while the index is still reading the
+        // repository — the tree's own rule, so the pane fills in as the
+        // tree does.
         .task(id: FilesPaneLoadKey(
             node: node,
             listedAt: model.snapshotsLoadedAt(for: node.repositoryID),
-            indexTaken: model.indexTakenGeneration[node.repositoryID]
+            indexTaken: model.indexTakenGeneration[node.repositoryID],
+            diskGeneration: filesTree.diskGeneration
         )) {
             while !Task.isCancelled {
+                let path = node.path
+                isOnDisk = await Task.detached(priority: .userInitiated) { DiskFolder.exists(path) }.value
                 await load()
                 guard !indexComplete else { return }
                 do {
@@ -73,6 +82,18 @@ struct FilesPaneView: View {
         model.snapshots(for: node.repositoryID).first { SnapshotIndex.chainKey(for: $0) == node.chainKey }
     }
 
+    /// Why the chain's newest backup lacks the item, when that backup's own
+    /// run could not read it (`UnreadItems.reason`).
+    private var notRead: String? {
+        chainNewest.flatMap { model.unreadItems(inBackup: $0.id).reason(for: node.path) }
+    }
+
+    /// An item on this Mac no backup of the plan holds, by the index once it
+    /// has read every backup — the tree's `notBackedUp`.
+    private var isNotBackedUp: Bool {
+        isOnDisk == true && indexComplete && (node.isDirectory ? versions.isEmpty : contentVersions.isEmpty)
+    }
+
     @ViewBuilder
     private var content: some View {
         if let loadError {
@@ -86,6 +107,12 @@ struct FilesPaneView: View {
             // reached the item yet keeps the empty state up rather than
             // swapping it for this every recheck.
             ProgressView("Reading…")
+        } else if isNotBackedUp {
+            ContentUnavailableView(
+                "Not backed up",
+                systemImage: "clock.arrow.circlepath",
+                description: Text(verbatim: FilesTree.Entry.notBackedUpReason(notRead: notRead))
+            )
         } else if node.isDirectory {
             FolderVersionsView(node: node, versions: versions, chosenID: choice, onOpen: onOpen)
         } else {
@@ -149,19 +176,22 @@ struct FilesPaneView: View {
 }
 
 /// What the pane's load is keyed by: the item, the listing it is read
-/// under, and the listing the index has taken — so a refresh reads it again,
-/// and so does the index taking that refresh's listing a moment later.
+/// under, the listing the index has taken and the disk's turn — so a
+/// refresh reads it again, and so does the index taking that refresh's
+/// listing a moment later, and the disk maybe changing.
 private struct FilesPaneLoadKey: Equatable {
     let node: FileNode
     let listedAt: Date?
     let indexTaken: UInt64?
+    let diskGeneration: UInt64
 }
 
 /// The pane's identity block: the kind's icon, the name, the whole path —
-/// selectable, the one exact identifier — and, for an item the chain's
-/// newest backup no longer holds, when it was last backed up: the one fact
-/// of its standing the rows below do not already say. How many backups and
-/// versions hold it are the rows themselves.
+/// selectable, the one exact identifier — and, for a folder no longer on
+/// this Mac or an item the chain's newest backup no longer holds, when it
+/// was last backed up: the one fact of its standing the rows below do not
+/// already say. How many backups and versions hold it are the rows
+/// themselves; a file's own line says whether this Mac has it.
 struct FilesPaneHeader: View {
     let node: FileNode
     /// The newest backup holding it.
@@ -170,6 +200,8 @@ struct FilesPaneHeader: View {
     /// Why the chain's newest backup lacks it, when that backup's own run
     /// could not read it (`UnreadItems.reason`).
     let notRead: String?
+    /// Whether this Mac holds it now; nil until read.
+    let isOnDisk: Bool?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -199,10 +231,15 @@ struct FilesPaneHeader: View {
         }
     }
 
-    /// For an item the chain's newest backup lacks, when it was last backed
-    /// up and, when that backup could not read it, why — the tree row's
-    /// tooltip, in the same words.
+    /// For a folder this Mac no longer holds, when it was last backed up —
+    /// a deleted row's tooltip, in the same words; a file's line over its
+    /// versions says "Not on this Mac" already. For an item the chain's
+    /// newest backup lacks, when it was last backed up and, when that
+    /// backup could not read it, why.
     private var standing: String? {
+        if node.isDirectory, isOnDisk == false, let newestHolder {
+            return FilesTree.Entry.deleted(lastBackedUp: newestHolder.time)
+        }
         guard let newestHolder, let chainNewest, newestHolder.id != chainNewest.id else { return nil }
         return FilesTree.Entry.standing(notRead: notRead, lastBackedUp: newestHolder.time)
     }

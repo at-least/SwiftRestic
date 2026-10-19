@@ -1,35 +1,43 @@
 import Foundation
 import Testing
 
-/// The Files tree's way past an index still reading: a folder it holds
-/// nothing under is listed from the chain's newest backup with `restic ls`
-/// (`FilesTree.folder`), and from the index again once it has read it.
-@Suite("restic Files tree fallback", .serialized, .enabled(if: ResticAvailability.isInstalled))
-struct ResticFilesFallbackTests {
+/// The Files tree over real restic: a plan's folder listed from the disk
+/// beside what its backups hold (`FilesTree.level`), and an open folder's
+/// files read ahead.
+@Suite("restic Files tree", .serialized, .enabled(if: ResticAvailability.isInstalled))
+struct ResticFilesTreeTests {
     @MainActor
-    @Test("a folder the index has not read yet is listed from the chain's newest backup through restic, then from the index once it has")
-    func folderFallsBackToNewestBackup() async throws {
+    @Test("a plan's tree is its folder as the disk holds it: unmarked while the index reads, then a newer file not backed up, a deleted one the backups' alone, an excluded hidden one not at all; a folder gone says so")
+    func treeListsTheDisk() async throws {
         let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticFallback-\(UUID().uuidString)")
+            .appendingPathComponent("SwiftResticDiskTree-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         let root = base.resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let data = root.appendingPathComponent("Data")
         try FileManager.default.createDirectory(at: data.appendingPathComponent("Sub"), withIntermediateDirectories: true)
-        try "a".write(to: data.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        for name in ["a.txt", "gone.txt", ".keep", ".DS_Store"] {
+            try name.write(to: data.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
 
         var repository = Repository()
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
-        let password = "fallback-test"
+        let password = "disk-tree-test"
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
         let context = RepositoryContext(repository: repository, password: password)
         _ = try await service.initializeRepository(context)
+        var plan = BackupPlan()
+        plan.repositoryID = repository.id
+        plan.path = data.path
+        plan.excludePatterns = [".DS_Store"]
+        plan.schedule.frequency = .manual
 
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
+        configuration.plans = [plan]
         configuration.settings.resticPathOverride = binary.url.path
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
         try await store.save(configuration)
@@ -39,43 +47,55 @@ struct ResticFilesFallbackTests {
         await model.tasks.drain()
         #expect(await model.indexIsComplete(repositoryID: repository.id))
 
-        // A first backup lands in the listing; the index has not taken it —
-        // the moment between a refresh's listing and its reconcile.
-        var plan = BackupPlan()
-        plan.repositoryID = repository.id
-        plan.path = data.path
-        plan.excludePatterns = []
+        // A backup, then the folder moves on: gone.txt deleted, new.txt
+        // written. The listing holds the backup; the index has not taken it
+        // — the moment between a refresh's listing and its reconcile.
         _ = try await service.backup(context, plan: plan)
+        try FileManager.default.removeItem(at: data.appendingPathComponent("gone.txt"))
+        try "new".write(to: data.appendingPathComponent("new.txt"), atomically: true, encoding: .utf8)
         let listing = try await service.snapshots(context, planID: nil, timeout: 60)
         let generation = model.nextListingGeneration()
         model.snapshots[repository.id] = listing
         model.snapshotsGeneration[repository.id] = generation
         #expect(!(await model.indexIsComplete(repositoryID: repository.id)))
 
-        let snapshot = try #require(listing.first)
-        let roots = FileNode.roots(repositoryID: repository.id, chainKey: SnapshotIndex.chainKey(for: snapshot))
+        func summary(_ level: FilesTree.Level) -> [String] {
+            level.entries.map { entry in
+                let mark = switch entry.standing {
+                case .onDisk: "disk"
+                case .notBackedUp: "not backed up"
+                case .deleted: "deleted"
+                }
+                return "\(entry.node.name)\(entry.node.isDirectory ? "/" : "") \(mark)"
+            }
+        }
+        let roots = FileNode.roots(repositoryID: repository.id, chainKey: ResticService.planTag(plan.id))
         let top = try await FilesTree.level(of: roots, model: model)
         #expect(top.entries.map(\.node.path) == [data.path])
+        #expect(summary(top) == ["Data/ disk"])
         let folder = try #require(top.entries.first?.node)
-        let listed = try await FilesTree.level(of: folder, model: model)
-        #expect(listed.isFallback)
-        #expect(!listed.isComplete)
-        #expect(listed.entries.map(\.node.name) == ["Sub", "a.txt"])
-        #expect(listed.entries.map(\.node.isDirectory) == [true, false])
-        #expect(listed.entries.allSatisfy { $0.isInNewest && $0.newest.id == snapshot.id })
+        // While the index reads: the disk's items, none marked, hidden ones
+        // left out until a backup is known to hold them.
+        let reading = try await FilesTree.level(of: folder, model: model)
+        #expect(!reading.isComplete)
+        #expect(summary(reading) == ["Sub/ disk", "a.txt disk", "new.txt disk"])
 
-        // Once the index has taken the listing and read the backup, the
-        // same folder comes from it.
         model.indexReconcile(repositoryID: repository.id, listing: listing, generation: generation)
         let deadline = Date.now.addingTimeInterval(60)
         while !(await model.indexIsComplete(repositoryID: repository.id)), Date.now < deadline {
             try await Task.sleep(for: .milliseconds(100))
         }
         #expect(await model.indexIsComplete(repositoryID: repository.id), "the index never read the backup")
-        let indexed = try await FilesTree.level(of: folder, model: model)
-        #expect(!indexed.isFallback)
-        #expect(indexed.isComplete)
-        #expect(indexed.entries.map(\.node.name) == ["Sub", "a.txt"])
+        let read = try await FilesTree.level(of: folder, model: model)
+        #expect(read.isComplete)
+        #expect(summary(read) == [
+            "Sub/ disk", ".keep disk", "a.txt disk", "new.txt not backed up", "gone.txt deleted",
+        ])
+        #expect(summary(try await FilesTree.level(of: roots, model: model)) == ["Data/ disk"])
+
+        // The folder moved away: the root says so, not an empty tree.
+        try FileManager.default.moveItem(at: data, to: root.appendingPathComponent("Moved"))
+        await #expect(throws: FolderAbsence.missing(name: "Data")) { try await FilesTree.level(of: roots, model: model) }
 
         await model.shutdown()
     }

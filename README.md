@@ -62,17 +62,31 @@ the generator after editing it; the PNGs are checked in.
   the open one's files (its tree, as *Browsing and restore* below says); the
   list's edge drags, and the window's subtitle is the open backup's moment.
   Files is a tree on the left (drag its edge to widen
-  it) of the folders and files of every backup the plan made, from the
-  snapshot index — filling in while the index still reads, the newest backup
-  alone for a plan it holds nothing of yet — and the picked item on the
-  right; a first visit opens at the plan's first folder. Items the newest
-  backup no longer holds are dimmed with the day they were last backed up
-  (*until Oct 2*) where the whole name fits beside it; the tooltip and the
-  pane's header say it in full, and why when the newest backup's own run
-  could not read it (*Not read by the newest backup (permission denied)*).
-  A folder lists at most 200 items in the tree, then a row that opens it in
-  the pane. Each page keeps its tab, open backup, open folders and selection
-  while the app runs, and opens on Overview after a launch.
+  it) of the plan's folder as this Mac holds it now, and the picked item on
+  the right — what the tab is for: a current file's past versions (until
+  2026-10-19 the tree listed every item any backup had held). A first visit
+  opens at the plan's folder. The tree is read from the disk and the
+  snapshot index, and read again when the tab shows, when SwiftRestic comes
+  to the front, when a volume mounts or unmounts, after a backup, and on Try
+  Again; it does not watch the folder. An item no backup of the plan holds —
+  newer than the last backup, or left out — is dimmed with *Not backed up*
+  where the whole name fits beside it, the tooltip saying why when the newest
+  backup's own run could not read it (*The newest backup could not read it
+  (permission denied).*); while the index still reads, nothing is marked. A
+  hidden item — a dot name, or the hidden flag — is listed only when a
+  backup holds it, so the excluded `.DS_Store` is no row in every folder.
+  What only the backups hold, deleted since, is not in the tree: the search
+  finds it, and a folder's *As backed up* lists it as the backups held it.
+  The pane of an item on this Mac no backup holds says *Not backed up* and
+  why, and a folder's pane, once the folder is gone from this Mac, says when
+  it was last backed up. When the plan's folder can't be read, the tab says
+  only why, with *Show Backups*: *“TinyDisk” is not connected*, *“Documents”
+  is not on this Mac* (moved, renamed or deleted), or *SwiftRestic can't
+  read “Documents”* (macOS blocked it, or the file permissions). A folder
+  lists at most 200 items in the tree, then a row that opens it in the pane,
+  which lists it as a backup held it. Each page keeps its tab, open backup,
+  open folders and selection while the app runs, and opens on Overview
+  after a launch.
   - *A folder* lists as a backup held it, each file with its size. *As
     backed up* picks which backup, newest first, grouped by month once they
     span more than one — as the Compare sheet's picker and the Backups tab
@@ -122,7 +136,9 @@ the generator after editing it; the PNGs are checked in.
   - *The search field*, the toolbar's at the window's trailing edge, lists
     in the tree's place the items of this plan's backups whose
     names have words starting like the query — from the index, instant,
-    dropped items dimmed as in the tree — each under its folder. A hit selects as a tree row does; Return
+    an item no longer on this Mac dimmed with the day it was last backed up
+    (*until Oct 2*), by one `lstat` per hit — each under its folder. A hit
+    selects as a tree row does; Return
     or Esc ends the search on the tree with the hit's folders opened and
     its row in view. While the index still reads, the search says older
     backups may be missing, and one with no match offers *Search All
