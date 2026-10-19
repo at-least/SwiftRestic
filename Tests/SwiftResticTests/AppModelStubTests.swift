@@ -2061,6 +2061,37 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a restore asked for while another runs is refused as news, in a busy repository's glyph — not as a success")
+    func secondRestoreIsRefusedAsNews() async throws {
+        let harness = try await makeHarness(mode: "hang-restore")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt")
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            node: node,
+            to: harness.root.appendingPathComponent("first"),
+            overwrite: .replaceExisting
+        )
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            node: node,
+            to: harness.root.appendingPathComponent("second"),
+            overwrite: .replaceExisting
+        )
+        let refused = await bannerTitled("A restore is already running", in: harness.model)
+        #expect(refused?.level == .notice, "banners were: \(harness.model.banners.map(\.title))")
+        #expect(refused?.symbolName == "clock")
+
+        harness.model.cancelRestore()
+        await waitUntilRestoreFinishes(in: harness.model)
+        await harness.model.shutdown()
+    }
+
     @Test("deleting a repository cancels the restore reading from it")
     func deletingRepositoryCancelsRunningRestore() async throws {
         let harness = try await makeHarness(mode: "hang-restore")
@@ -2097,6 +2128,10 @@ struct AppModelStubTests {
             cancelledBanner?.isError == false,
             "banners were: \(harness.model.banners.map(\.title))"
         )
+        // News in the cancelled run's own glyph, as Activity shows its
+        // record — never the success check: nothing was restored.
+        #expect(cancelledBanner?.level == .notice)
+        #expect(cancelledBanner?.symbolName == RunRecord.Outcome.cancelled.symbolName)
 
         await harness.model.shutdown()
     }

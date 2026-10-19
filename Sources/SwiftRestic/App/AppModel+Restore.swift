@@ -325,11 +325,14 @@ extension AppModel {
     ) {
         guard !tasks.isOccupied(.restore) else {
             // Every other refused start says why; a restore request that
-            // silently does nothing reads as a broken drop.
+            // silently does nothing reads as a broken drop. News, in a busy
+            // repository's clock: the click did nothing yet, which the
+            // success check would say it did.
             post(Banner(
                 title: "A restore is already running",
                 message: "One restore at a time — the current one is still in progress.",
-                isError: false
+                isError: false,
+                symbolName: "clock"
             ))
             return
         }
@@ -429,14 +432,17 @@ extension AppModel {
                 // restore otherwise leaves — including when it is the
                 // repository's removal that cancelled it. During shutdown
                 // the banner would die with the process, and the quit
-                // confirmation has already said it.
+                // confirmation has already said it. News, in the cancelled
+                // run's own glyph as Activity shows its record — not the
+                // success check: the restore did not finish.
                 if !isShuttingDown {
                     let title = repositoryName.map { "Restore from “\($0)” cancelled" } ?? "Restore cancelled"
                     post(Banner(
                         title: title,
                         message: ["The restore was cancelled before it finished.", partial]
                             .compactMap { $0 }.joined(separator: " "),
-                        isError: false
+                        isError: false,
+                        symbolName: RunRecord.Outcome.cancelled.symbolName
                     ))
                 }
             } else {
