@@ -245,7 +245,7 @@ Launching and quitting:
   - Until then `restic dump` wrote the bytes alone. On 2026-10-19 a version modified at 23:11 was put back at 23:17, and the file pane then read "On this Mac: modified Oct 19, 2026 at 11:17 PM, 42 bytes — no version here matches it".
   - On 2026-10-20 a 0600 file modified at 2026-10-01 09:00:00.123456789 UTC came back so to the nanosecond, both into the seeded Other folder and to its original location. The pane then read "On this Mac: the same as the newest version".
   - The hidden folder keeps a failed or cancelled restore off the user's file, because restic restores onto an existing file in place. On 2026-10-20 a TERM during a 1 GB file's `restore --overwrite always` left the 10-byte file there, same inode, at 57,611,115 bytes.
-  - A folder's restore, or several items', still goes straight to its landing.
+  - A folder's restore, or several items', still goes straight to its landing, so a Replace cancelled or failed partway can leave a file there that is neither the user's nor the backed-up one. It stays so (the user's call, 2026-10-20).
 - **A disk read that stalls, on demand.** A paused Samba server is the real thing, but unreliable:
   - The setup: servercontainers/samba in OrbStack, mounted with `mount_smbfs` (no Recent Servers entry), stalled with `docker pause`.
   - The kernel answers an item's lstat from its attribute cache for about 5 s after its last fetch. Which of the app's reads blocked at a disk turn varied from run to run: the read under test was held in 1 of 4 runs on 2026-10-19.

@@ -15,13 +15,6 @@ struct ResticInvocation: Sendable {
     /// `nil` accepts any code, for callers that read the exit status themselves
     /// rather than treating it as an error — a shell hook, for instance.
     var allowedExitCodes: Set<Int32>? = [0]
-    /// Where raw stdout should go instead of being parsed (used by `restic dump`).
-    var stdoutFile: URL?
-    /// Whether the finished dump may replace something already at
-    /// `stdoutFile`. When false, the commit refuses an occupied name
-    /// atomically — including one that appeared while the dump ran — and
-    /// reports it in `ResticRunResult.keptExistingStdoutFile`.
-    var stdoutFileReplacesExisting: Bool = true
     /// Kill the child after this many seconds. A hook that never returns must not
     /// hang the backup that triggered it.
     var timeout: TimeInterval?
@@ -60,9 +53,6 @@ struct ResticRunResult: Sendable {
     /// A schema change under us must be countable, not silent — the run
     /// record reports this number instead of dropping the lines.
     var malformedCount: Int = 0
-    /// A no-replace dump found its target taken at commit time and left it
-    /// alone; the staged output was discarded.
-    var keptExistingStdoutFile: Bool = false
 
     /// The fatal error restic reported, if it wrote one as JSON.
     var exitError: ResticExitError? {
@@ -210,53 +200,8 @@ actor ResticRunner {
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
-        var stdoutFileHandle: FileHandle?
-        var dumpStagingURL: URL?
-        var dumpCommitted = false
-        if let stdoutFile = invocation.stdoutFile {
-            // The dump writes to a hidden sibling and replaces the target by
-            // rename only after the run exits cleanly: a failed, hung or
-            // cancelled run must leave whatever the user already had at the
-            // destination exactly as it was — not a truncated or half-written
-            // replacement that reads as a restored file.
-            let staging = stdoutFile.deletingLastPathComponent()
-                .appendingPathComponent(".\(stdoutFile.lastPathComponent).\(UUID().uuidString).partial")
-            guard FileManager.default.createFile(atPath: staging.path, contents: nil) else {
-                throw ResticError.dumpMoveFailed(
-                    path: stdoutFile.path,
-                    reason: "the directory is not writable"
-                )
-            }
-            let fh: FileHandle
-            do {
-                fh = try FileHandle(forWritingTo: staging)
-            } catch {
-                // The staging file exists but was never opened, and the
-                // defers below are not installed yet: clean it up here.
-                try? FileManager.default.removeItem(at: staging)
-                throw error
-            }
-            stdoutFileHandle = fh
-            dumpStagingURL = staging
-            process.standardOutput = fh
-        } else {
-            process.standardOutput = stdoutPipe
-        }
+        process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        // Closed at function exit, whatever the exit: the launch-failure and
-        // cancellation paths both throw, and a close that runs only on the
-        // success path leaks the descriptor into the actor's lifetime on
-        // every other one. Installed here, before anything can throw.
-        defer { try? stdoutFileHandle?.close() }
-        // An uncommitted staging file is garbage on every path that did not
-        // end in a clean rename — the throws below, a cancellation, a
-        // timeout. (It runs before the close above unwinds; removing an
-        // open file is fine on POSIX — the descriptor keeps the inode.)
-        defer {
-            if let staging = dumpStagingURL, !dumpCommitted {
-                try? FileManager.default.removeItem(at: staging)
-            }
-        }
         // No terminal is attached, so a backend that tries to prompt (an SFTP
         // host-key confirmation, say) must fail fast rather than hang on a stdin
         // that will never answer.
@@ -311,7 +256,6 @@ actor ResticRunner {
         }
         defer { idleWatchdog?.cancel() }
 
-        let parseStdout = invocation.stdoutFile == nil
         // Any chunk on either pipe proves the child is alive and counts
         // against the stall cap — complete lines are not required.
         let activity: @Sendable () -> Void = { [weak box] in
@@ -320,20 +264,16 @@ actor ResticRunner {
         }
         let stdoutReader = StreamReader(
             handle: stdoutPipe.fileHandleForReading,
-            active: parseStdout,
             textLimit: invocation.retainFullOutput ? .max : StreamReader.defaultTextLimit,
             retainMessages: invocation.retainMessages,
             onActivity: activity
         )
         let stderrReader = StreamReader(
             handle: stderrPipe.fileHandleForReading,
-            active: true,
             textLimit: StreamReader.defaultTextLimit,
             retainMessages: true,
             onActivity: activity
         )
-        // A dump's stdout goes to its file with the reader inactive, so the
-        // restored bytes never reach the transcript.
         let stdoutLine = Self.transcriptFeed(transcript, stream: .stdout)
         let stderrLine = Self.transcriptFeed(transcript, stream: .stderr)
 
@@ -393,7 +333,7 @@ actor ResticRunner {
         }
 
         let captured = takeCaptured(handle: handle)
-        var result = ResticRunResult(
+        let result = ResticRunResult(
             exitCode: exitCode,
             messages: captured.messages,
             stdout: captured.stdout,
@@ -423,31 +363,10 @@ actor ResticRunner {
             )
         }
 
-        // The run exited cleanly: now, and only now, does the staged dump
-        // land at the destination — atomically, so the target is never a
-        // half-written file regardless of when the process dies. Whether it
-        // may replace what is already there is the caller's choice: without
-        // it, RENAME_EXCL refuses an occupied name in the same atomic step,
-        // so a file that appeared during a minutes-long dump (a user's copy,
-        // an iCloud re-download) is kept too, not only one a pre-check saw.
-        if let staging = dumpStagingURL, let target = invocation.stdoutFile {
-            switch try Self.commitStagedDump(
-                staging,
-                to: target,
-                replacingExisting: invocation.stdoutFileReplacesExisting
-            ) {
-            case .committed:
-                dumpCommitted = true
-            case .keptExisting:
-                // The staging file goes with the defer above, uncommitted.
-                result.keptExistingStdoutFile = true
-            }
-        }
-
         return result
     }
 
-    /// How a finished dump's staged output was placed.
+    /// How a single file's staged restore was placed.
     enum DumpCommit: Equatable {
         case committed
         /// No-replace only: the target was taken, and the staged output
@@ -455,12 +374,11 @@ actor ResticRunner {
         case keptExisting
     }
 
-    /// Moves a staged file — a finished dump's, or the one a single file's
-    /// restore wrote beside its landing — onto its target: `rename(2)`
-    /// when it may replace what is there, `renamex_np(RENAME_EXCL)`
-    /// otherwise. `renameExclusive` answers 0 or the errno; it is a
-    /// parameter so the volumes that refuse the flag can be tested without
-    /// mounting one.
+    /// Moves the file a single file's restore wrote beside its landing onto
+    /// its target: `rename(2)` when it may replace what is there,
+    /// `renamex_np(RENAME_EXCL)` otherwise. `renameExclusive` answers 0 or
+    /// the errno; it is a parameter so the volumes that refuse the flag can
+    /// be tested without mounting one.
     static func commitStagedDump(
         _ staging: URL,
         to target: URL,
@@ -741,7 +659,6 @@ private final class StreamReader: @unchecked Sendable {
     static let defaultTextLimit = 64 * 1024
 
     let handle: FileHandleBox
-    let active: Bool
     let textLimit: Int
     let retainMessages: Bool
     /// Fires for every chunk read, before any line splitting — liveness is
@@ -761,13 +678,11 @@ private final class StreamReader: @unchecked Sendable {
 
     init(
         handle: FileHandle,
-        active: Bool,
         textLimit: Int,
         retainMessages: Bool,
         onActivity: (@Sendable () -> Void)?
     ) {
         self.handle = FileHandleBox(handle)
-        self.active = active
         self.textLimit = textLimit
         self.retainMessages = retainMessages
         self.onActivity = onActivity
@@ -775,8 +690,7 @@ private final class StreamReader: @unchecked Sendable {
     }
 
     /// Stops the reader at its next `poll`, returning whatever it has. Safe
-    /// from any thread, any number of times; an inactive or finished reader
-    /// ignores it.
+    /// from any thread, any number of times; a finished reader ignores it.
     func abandon() {
         lock.lock()
         if finished || abandonSignalled {
@@ -805,7 +719,6 @@ private final class StreamReader: @unchecked Sendable {
         onRawLine: (@Sendable (String) -> Void)? = nil,
         onLine: (@Sendable (String, ResticMessage?) -> Void)? = nil
     ) async -> Outcome {
-        guard active else { return Outcome() }
         let box = handle
         return await withCheckedContinuation { (cont: CheckedContinuation<Outcome, Never>) in
             DispatchQueue.global(qos: .utility).async { [self] in
