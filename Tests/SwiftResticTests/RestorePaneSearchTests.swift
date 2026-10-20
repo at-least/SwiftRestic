@@ -111,7 +111,7 @@ struct RestorePaneSearchTests {
 
     /// The search's kind is the path's kind in the newest backup holding it;
     /// the pane restores from the open backup, whose kind may differ — and
-    /// the restore picks `dump` or `restore` by the kind it is handed.
+    /// the restore takes a file's way or a folder's by the kind it is handed.
     @Test("a hit the open backup holds carries its kind in that backup, not the search's")
     func inRecordHitCarriesRecordKind() {
         let result = RestorePaneSearch(

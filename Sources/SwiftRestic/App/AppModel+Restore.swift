@@ -612,11 +612,11 @@ extension AppModel {
     /// sweep and with `removePreviewCopy`, which deletes nothing else.
     nonisolated static let previewPrefix = "SwiftRestic-Preview-"
 
-    /// One version of a file, copied out for Quick Look: dumped into a
+    /// One version of a file, copied out for Quick Look: restored into a
     /// fresh temporary folder of its own under its own name, so it opens as
     /// what it is, and read-only. Like the drag restore, not a restore run
     /// — no progress strip, no history, no banner; the preview is the
-    /// feedback. A dump that fails takes its folder with it. The caller removes the copy
+    /// feedback. A restore that fails takes its folder with it. The caller removes the copy
     /// when the preview closes (`removePreviewCopy`); a session that ends
     /// first leaves it to the launch sweep.
     func previewCopy(repositoryID: UUID, snapshotID: String, node: SnapshotNode) async throws -> URL {
@@ -641,7 +641,7 @@ extension AppModel {
                 ofItemAtPath: ResticService.restoredItemURL(for: node, in: folder).path
             )
         } catch {
-            // The dump's own error is the one to report; a folder this
+            // The restore's own error is the one to report; a folder this
             // removal misses is the launch sweep's.
             try? FileManager.default.removeItem(at: folder)
             throw error

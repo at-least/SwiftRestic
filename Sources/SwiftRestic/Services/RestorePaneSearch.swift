@@ -10,8 +10,7 @@ struct RestorePaneSearch: Equatable, Sendable {
     /// order, each carrying its kind in the open backup — not the search's
     /// own kind, the path's kind in the newest backup holding it; a path
     /// that is a file there may be a folder here. The pane restores from
-    /// the open backup, picking `restic dump` for a file and `restic
-    /// restore` for a folder by the row's kind.
+    /// the open backup, as a file or as a folder by the row's kind.
     let inThisBackup: [SearchHit]
     /// Matching paths the index holds only in other backups of the
     /// repository: the hits the open backup lacks. The search returns only

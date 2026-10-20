@@ -342,9 +342,9 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
-    @Test("restoring a file writes the dump, records the run and surfaces a banner")
+    @Test("restoring a file lands what restic restored, records the run and surfaces a banner")
     func restoringFileSucceeds() async throws {
-        let harness = try await makeHarness(mode: "default")
+        let harness = try await makeHarness(mode: "restorefile")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         let node = try ResticMessageDecoder.jsonDecoder.decode(
@@ -364,20 +364,22 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.kind == .restore)
         #expect(record.outcome == .succeeded)
-        #expect(record.bytesProcessed == 12)
+        // restic's count of what it restored, not the listing's 12.
+        #expect(record.bytesProcessed == 8)
         #expect(harness.model.banners.first?.title == "Restored a.txt")
         #expect(
-            try String(contentsOf: destination.appendingPathComponent("a.txt"), encoding: .utf8)
-                .contains("[]"),
-            "the dump target did not receive the stub's stdout"
+            try String(contentsOf: destination.appendingPathComponent("a.txt"), encoding: .utf8) == "restored",
+            "the landing did not receive the file the stub restored"
         )
+        let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+        #expect(names == ["a.txt"], "left beside it: \(names)")
 
         await harness.model.shutdown()
     }
 
-    @Test("a restored file with no known size records the bytes actually written")
+    @Test("a restored file with no known size records the bytes restic restored")
     func restoredFileWithoutSizeRecordsWrittenBytes() async throws {
-        let harness = try await makeHarness(mode: "default")
+        let harness = try await makeHarness(mode: "restorefile")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         // The shape the Restore pane's search hits build: the index knows a
@@ -398,8 +400,8 @@ struct AppModelStubTests {
 
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .succeeded)
-        // The default arm's dump writes "[]\n": three bytes landed.
-        #expect(record.bytesProcessed == 3)
+        // The stub's restore wrote "restored": eight bytes, by restic's count.
+        #expect(record.bytesProcessed == 8)
 
         await harness.model.shutdown()
     }
@@ -542,7 +544,7 @@ struct AppModelStubTests {
 
     @Test("cancelling a restore stops the child and records a user cancellation")
     func cancellingRestoreIsRecorded() async throws {
-        // hang-restore hangs only the restore/dump command, so launch-time
+        // hang-restore hangs only the restore command, so launch-time
         // snapshot refreshes still answer.
         let harness = try await makeHarness(mode: "hang-restore")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -593,7 +595,7 @@ struct AppModelStubTests {
 
     @Test("a late restore-progress hop after the run unwound is dropped")
     func lateRestoreProgressHopIsDropped() async throws {
-        // hang-restore hangs only the restore/dump command, so launch-time
+        // hang-restore hangs only the restore command, so launch-time
         // snapshot refreshes still answer.
         let harness = try await makeHarness(mode: "hang-restore")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -2705,7 +2707,7 @@ struct AppModelStubTests {
 
     @Test("a restore record says which backup, which item and where it went")
     func restoreRecordNamesItsBackupAndLanding() async throws {
-        let harness = try await makeHarness(mode: "default")
+        let harness = try await makeHarness(mode: "restorefile")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         let node = try ResticMessageDecoder.jsonDecoder.decode(
@@ -2723,11 +2725,16 @@ struct AppModelStubTests {
         #expect(record.destinationPath == destination.appendingPathComponent("a.txt").path)
         #expect(record.filesRestored == 1)
         #expect(record.filesSkipped == 0)
-        #expect(record.bytesProcessed == 12)
+        #expect(record.bytesProcessed == 8)
         #expect(record.exitCode == 0)
         #expect(record.hasLog)
         let log = try logText(for: record, in: harness)
-        #expect(log.contains("$    restic dump latest /src/a.txt"), "log was \(log)")
+        // restic restores the file into a hidden folder beside its landing.
+        #expect(
+            log.contains("$    restic restore --json latest:/src --target \(destination.path)/.a.txt."),
+            "log was \(log)"
+        )
+        #expect(log.contains(".partial --include /a.txt"), "log was \(log)")
         #expect(log.contains("exit 0"))
         #expect(log.contains("Restored to \(destination.appendingPathComponent("a.txt").path)"))
         // A restore is never the run that wrote a snapshot.

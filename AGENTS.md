@@ -21,7 +21,7 @@ rules from the flaky-run hunt of 2026-09-14:
   whose log shows the restart banner — which a plain crash or timeout also
   raises, so read the xcresult before blaming a collision.
 - A runner can drop its connection with no collision in sight. On
-  2026-10-19 a run ended after 616 of 1027 tests. The script's stream
+  2026-10-19 a run ended after 610 of 1027 tests. The script's stream
   showed `** TEST FAILED **` and no failed test. The runner had logged
   "Exiting due to IDE disconnection" (exit 74), and xcodebuild's restart of
   it was refused ("Connection peer refused channel request"). The xcresult's
@@ -220,7 +220,7 @@ Launching and quitting:
 - **A launch with a saved network share mounts it** (8b02f75): a scratch configuration whose repository is on a share in `settings.networkShares`, with `SWIFTRESTIC_SHARE_PASSWORD` set, mounts that share within seconds of launch — each mount adds the server to macOS's Recent Servers, to remove after, and a mount runs the catch-up of plans whose newest backup was skipped. With the server gone the listing reads "Reading backups…" until NetFS gives up: 9 s with the Samba container stopped, 131 s with it removed (2026-10-16), and the scheduler starts only after that first listing.
 - **restic gets the app's environment** minus the repository and password variables (`ResticRunner.protectedEnvironmentKeys`): `RESTIC_CACHE_DIR` at an empty folder, under a configuration with no repository, shows Settings › restic on an empty cache.
 - **A restic call held open, on demand**: point `resticPathOverride` at a wrapper that logs its argv, sleeps while a marker file names its subcommand, and otherwise execs restic. Holding `snapshots` shows a surface before the listing lands. The sleep must end on TERM: a run's cancel sends TERM to the wrapper (`Process.terminate`), and a bare `sleep` under bash outlives the wrapper's death. Which call each surface makes:
-  - A single file's restore is `restic dump`, not `restore`; a folder's, or several items', is `restore`.
+  - Every restore is `restore`. A single file's is `restore <id>:<its folder> --include /<name>` into a hidden folder beside its landing from 2026-10-20 on; before, it was `restic dump`, the call the 2026-10-19 holds below held.
   - A plan's retention step is `forget`.
   - A Find Files index hit is listed by `ls` of its folder before it restores. That `ls` misses the browse cache, which holds only folders restic has listed: here, none until the Files tab first shows.
   - A cold index (no `index` folder) makes Find Files take the restic engine, whose rows carry restic's nodes and restore at once.
@@ -236,12 +236,16 @@ Launching and quitting:
   - Read the sheet's "Will restore to …" line with `getval`, because a dump clips values at 120 characters. Compare it with the scratch path before pressing Restore, and resolve Restore by name from a fresh dump.
   - Keep raises no Replace alert.
   - Original location puts a scratch plan's file back in its scratch folder.
-  - On 2026-10-19, eight Restore presses ran so, none touching the Desktop.
+  - On 2026-10-19, eight Restore presses ran so, and two on 2026-10-20, none touching the Desktop.
 - **The refused restore can be raised live.** The sheet's Restore is disabled only while a restore runs, so the one gap is a listing. A Find Files index hit's restore lists its folder first, and Restore… elsewhere stays enabled meanwhile. On 2026-10-19:
   - The hit's Restore was pressed with `ls` held 30 s, then the Files tab's Restore… of the same file, with `dump` held 60 s.
   - When the listing returned, 31 s after the first press, "A restore is already running" showed, on 8bb001d and on 942dd90's build alike.
   - The refused restore writes no record and no file.
-- **A file restored alone lands with the restore's time as its modified date**: `restic dump` writes the bytes and nothing else. On 2026-10-19 a version modified at 23:11 was put back at 23:17, and the file pane then read "On this Mac: modified Oct 19, 2026 at 11:17 PM, 42 bytes — no version here matches it". A restore of a folder or of several items goes through `restic restore`.
+- **A file restored alone keeps its modified date, permissions and extended attributes** from 2026-10-20 on. restic restores it into a hidden folder beside its landing (`.<name>.<UUID>.partial`), and it is renamed into place once restic is done.
+  - Until then `restic dump` wrote the bytes alone. On 2026-10-19 a version modified at 23:11 was put back at 23:17, and the file pane then read "On this Mac: modified Oct 19, 2026 at 11:17 PM, 42 bytes — no version here matches it".
+  - On 2026-10-20 a 0600 file modified at 2026-10-01 09:00:00.123456789 UTC came back so to the nanosecond, both into the seeded Other folder and to its original location. The pane then read "On this Mac: the same as the newest version".
+  - The hidden folder keeps a failed or cancelled restore off the user's file, because restic restores onto an existing file in place. On 2026-10-20 a TERM during a 1 GB file's `restore --overwrite always` left the 10-byte file there, same inode, at 57,611,115 bytes.
+  - A folder's restore, or several items', still goes straight to its landing.
 - **A disk read that stalls, on demand.** A paused Samba server is the real thing, but unreliable:
   - The setup: servercontainers/samba in OrbStack, mounted with `mount_smbfs` (no Recent Servers entry), stalled with `docker pause`.
   - The kernel answers an item's lstat from its attribute cache for about 5 s after its last fetch. Which of the app's reads blocked at a disk turn varied from run to run: the read under test was held in 1 of 4 runs on 2026-10-19.

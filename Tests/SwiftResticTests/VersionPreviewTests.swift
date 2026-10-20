@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// When a file version's Preview is offered: a preview dumps the whole file
+/// When a file version's Preview is offered: a preview restores the whole file
 /// into a temporary folder, so it waits for the version's size and refuses
 /// a file too big to copy just to look at.
 @MainActor

@@ -14,8 +14,8 @@ struct RestoreSource: RestoreBatchItem, Sendable, Equatable {
     /// restic-engine hit's. Nil to have restic list it before restoring
     /// (`AppModel.listedNode`): a diff names a path and a kind, never a
     /// node, and an index row's kind is the index's, a cache's — a folder it
-    /// called a file would go to `dump`, which writes its tar into one file
-    /// with no error.
+    /// called a file would take a file's restore, which never restores into
+    /// a folder already at its landing.
     let node: SnapshotNode?
 }
 

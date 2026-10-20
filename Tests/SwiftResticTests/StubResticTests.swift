@@ -120,7 +120,7 @@ struct StubRestic: Sendable {
                 fi
                 if [ "$SWIFTRESTIC_STUB" = "hang-restore" ]; then
                     case " $* " in
-                        *" restore "* | *" dump "*) ;;
+                        *" restore "*) ;;
                         *) hang_this=0 ;;
                     esac
                 fi
@@ -467,17 +467,46 @@ struct StubRestic: Sendable {
                 echo "[]"
                 exit 0
                 ;;
-            dumpappears)
-                # A single-file restore whose landing is taken while the dump
-                # runs — a user's copy, an iCloud re-download: `dump` writes
-                # "mine" at <trace dir>/restored/<the file's name>, where the
-                # test restores to, and only then prints the backed-up bytes.
-                trace "dumpappears-arm"
+            restorefile | restoreappears | restorefails | restorehangs)
+                # A single file's restore as restic runs it: `restore
+                # <id>:<folder> --target <dir> --include /<name>` writes
+                # <dir>/<name> ("restored", 8 bytes) and its summary.
+                # restoreappears first writes "mine" at <trace dir>/restored/
+                # <name>, where the test restores to — a user's copy, an
+                # iCloud re-download landing while restic runs. restorefails
+                # and restorehangs write part of the file, then fail as
+                # restic does, or hang until the cancel's TERM.
+                trace "$SWIFTRESTIC_STUB-arm"
                 case " $* " in
-                    *" dump "*)
-                        for last in "$@"; do :; done
-                        printf mine > "$(dirname "$SWIFTRESTIC_TRACE")/restored/$(basename "$last")"
-                        printf new
+                    *" restore "*)
+                        target=""
+                        name=""
+                        previous=""
+                        for arg in "$@"; do
+                            [ "$previous" = "--target" ] && target="$arg"
+                            [ "$previous" = "--include" ] && name="${arg#/}"
+                            previous="$arg"
+                        done
+                        case "$SWIFTRESTIC_STUB" in
+                            restoreappears)
+                                printf mine > "$(dirname "$SWIFTRESTIC_TRACE")/restored/$name"
+                                ;;
+                            restorefails)
+                                printf part > "$target/$name"
+                                echo "Fatal: stub restore failed" >&2
+                                exit 1
+                                ;;
+                            restorehangs)
+                                printf part > "$target/$name"
+                                trap 'kill -TERM "$sleepChild" 2>/dev/null' TERM
+                                sleep \(sleepMarker) &
+                                sleepChild=$!
+                                wait "$sleepChild"
+                                exit 0
+                                ;;
+                        esac
+                        printf restored > "$target/$name"
+                        echo '{"message_type":"summary","total_files":1,"files_restored":1,"total_bytes":8,"bytes_restored":8}'
                         exit 0
                         ;;
                 esac
@@ -879,16 +908,16 @@ struct StubResticTests {
         #expect(transcript.contents.firstExitCode == nil)
     }
 
-    @Test("Keep keeps a file that appeared while its dump ran, and says so in the log")
-    func keepSurvivesAFileAppearingMidDump() async throws {
-        let fixture = try makeFixture(mode: "dumpappears")
+    @Test("Keep keeps a file that appeared while its restore ran, and says so in the log")
+    func keepSurvivesAFileAppearingMidRestore() async throws {
+        let fixture = try makeFixture(mode: "restoreappears")
         defer { cleanUp(fixture.root) }
         let destination = fixture.root.appendingPathComponent("restored")
         let landing = destination.appendingPathComponent("a.txt")
         let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt", size: 3)
 
         // The landing is free when the restore starts, so the pre-check lets
-        // the dump run; only the commit can see the file the stub plants.
+        // restic run; only the commit can see the file the stub plants.
         let transcript = RunTranscript()
         let summary = try await RunTranscript.$current.withValue(transcript) {
             try await fixture.service.restore(
@@ -900,13 +929,68 @@ struct StubResticTests {
             )
         }
 
-        #expect(try String(contentsOf: landing, encoding: .utf8) == "mine", "Keep replaced a file that appeared mid-dump")
+        #expect(try String(contentsOf: landing, encoding: .utf8) == "mine", "Keep replaced a file that appeared mid-restore")
         #expect(summary?.filesSkipped == 1)
         #expect(summary?.filesRestored == 0)
         let notes = transcript.contents.entries.filter { $0.kind == .note }.map(\.text)
-        #expect(notes.contains { $0.contains("appeared at \(landing.path) during the dump") }, "notes were \(notes)")
+        #expect(notes.contains { $0.contains("appeared at \(landing.path) during the restore") }, "notes were \(notes)")
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: destination.path).filter { $0.hasSuffix(".partial") }
         #expect(leftovers.isEmpty, "left behind: \(leftovers)")
+    }
+
+    /// A destination holding "mine" at a.txt, and the node restored there.
+    private func occupiedLanding(_ fixture: Fixture) throws -> (destination: URL, landing: URL, node: SnapshotNode) {
+        let destination = fixture.root.appendingPathComponent("restored")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let landing = destination.appendingPathComponent("a.txt")
+        try Data("mine".utf8).write(to: landing)
+        return (destination, landing, SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt", size: 3))
+    }
+
+    @Test("a file's failed restore leaves the file at its landing as it was, and nothing beside it")
+    func failedFileRestoreLeavesTheLanding() async throws {
+        let fixture = try makeFixture(mode: "restorefails")
+        defer { cleanUp(fixture.root) }
+        let (destination, landing, node) = try occupiedLanding(fixture)
+
+        // restic writes into the file it restores, so the half it wrote
+        // before failing must be somewhere other than the landing.
+        await #expect(throws: ResticError.self) {
+            try await fixture.service.restore(
+                fixture.context, snapshotID: "latest", node: node,
+                destinationDirectory: destination, overwrite: .replaceExisting
+            )
+        }
+
+        #expect(try String(contentsOf: landing, encoding: .utf8) == "mine", "a failed restore changed the file")
+        let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+        #expect(names == ["a.txt"], "left behind: \(names)")
+    }
+
+    @Test("a file's cancelled restore leaves the file at its landing as it was, and nothing beside it")
+    func cancelledFileRestoreLeavesTheLanding() async throws {
+        let fixture = try makeFixture(mode: "restorehangs")
+        defer { cleanUp(fixture.root) }
+        let (destination, landing, node) = try occupiedLanding(fixture)
+
+        let task = Task {
+            try await fixture.service.restore(
+                fixture.context, snapshotID: "latest", node: node,
+                destinationDirectory: destination, overwrite: .replaceExisting
+            )
+        }
+        // The hang comes after the stub's part of the file, so the cancel
+        // lands on a restore that has written.
+        #expect(
+            await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 10),
+            "the stub never established its hang"
+        )
+        task.cancel()
+        await #expect(throws: ResticError.self) { try await task.value }
+
+        #expect(try String(contentsOf: landing, encoding: .utf8) == "mine", "a cancelled restore changed the file")
+        let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+        #expect(names == ["a.txt"], "left behind: \(names)")
     }
 
     @Test("below restic 0.17 no --overwrite is passed, and Keep refuses what it cannot keep")

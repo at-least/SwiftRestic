@@ -100,7 +100,7 @@ struct ResticService: ResticClient {
     /// `restore`, the index walks): total silence for this long means the
     /// child is hung — a black-holed network path — while a legitimate run of
     /// any length keeps reporting. Not applied to legitimately silent
-    /// commands (`prune`, `forget`, `dump`, console `runRaw`).
+    /// commands (`prune`, `forget`, console `runRaw`).
     static let streamingIdleTimeout: TimeInterval = 15 * 60
     let runner: ResticRunner
     let binary: URL
@@ -763,8 +763,12 @@ struct ResticService: ResticClient {
     /// original absolute path above it.
     ///
     /// Directories go through `restic restore <id>:<path>`, which makes the
-    /// given subtree the root of the output. Single files go through
-    /// `restic dump`, which writes exactly one file and nothing else.
+    /// given subtree the root of the output. A single file goes through
+    /// `restoreItems` — `restic restore <id>:<parent> --include /<name>` —
+    /// into a hidden folder beside its landing, so it comes back with the
+    /// dates, permissions and extended attributes restic recorded, which
+    /// `restic dump` (this branch's command before) never wrote: the bytes
+    /// were all it gave, the restore's own time the file's modified date.
     ///
     /// `overwrite` always reaches restic explicitly, even for Replace, whose
     /// `always` is restic's default (0.17+): the command line in the run's
@@ -775,9 +779,13 @@ struct ResticService: ResticClient {
     /// name, and gives a folder that already exists the backed-up
     /// permissions and dates. The landing itself is safe —
     /// `createDirectory` below fails on a file there before restic runs.
-    /// `restic dump` has no overwrite option, so the file branch keeps
-    /// in-app: an existing landing skips the dump entirely, and the
-    /// runner's commit refuses a name that appeared while it ran.
+    /// The file branch keeps and replaces in-app, as it did when it dumped:
+    /// restic rewrites an existing file in place, so a failed or cancelled
+    /// restore straight onto the landing would leave a file that is neither
+    /// the user's nor the backed-up one. An existing landing skips restic
+    /// entirely under Keep; the file lands by rename only once restic is
+    /// done, and under Keep that rename refuses a name that appeared while
+    /// restic ran.
     @discardableResult
     func restore(
         _ context: RepositoryContext,
@@ -811,32 +819,37 @@ struct ResticService: ResticClient {
         // lstat, not fileExists: a dangling symlink holds the name too. The
         // check spares the download; the commit below closes the window.
         if overwrite == .keepExisting, RestoreDestinationRules.itemExists(at: target) {
-            RunTranscript.current?.note("Kept the file already at \(target.path); restic dump did not run.")
+            RunTranscript.current?.note("Kept the file already at \(target.path); restic did not run.")
             return Self.keptFileSummary(node: node)
         }
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["dump", snapshotID, node.path],
-                environment: context.environment,
-                stdoutFile: target,
-                stdoutFileReplacesExisting: overwrite == .replaceExisting
-            )
+        // Beside the landing, so the commit is a rename on one volume. What
+        // the commit did not take — a failed, cancelled or kept restore's
+        // file — goes with the folder.
+        let staging = destinationDirectory.appendingPathComponent(
+            ".\(target.lastPathComponent).\(UUID().uuidString).partial",
+            isDirectory: true
         )
-        if result.keptExistingStdoutFile {
-            RunTranscript.current?.note("Kept the file that appeared at \(target.path) during the dump; the dump was discarded.")
+        defer { try? FileManager.default.removeItem(at: staging) }
+        let summary = try await restoreItems(
+            context,
+            snapshotID: snapshotID,
+            parent: RestoreBatch.parentPath(of: node.path),
+            nodes: [node],
+            destinationDirectory: staging,
+            overwrite: overwrite,
+            onProgress: onProgress
+        )
+        switch try ResticRunner.commitStagedDump(
+            Self.restoredItemURL(for: node, in: staging),
+            to: target,
+            replacingExisting: overwrite == .replaceExisting
+        ) {
+        case .committed:
+            return summary
+        case .keptExisting:
+            RunTranscript.current?.note("Kept the file that appeared at \(target.path) during the restore; the restored copy was discarded.")
             return Self.keptFileSummary(node: node)
         }
-        // A node the index synthesized (a search hit) carries no size; the
-        // committed file says what landed.
-        let written = node.size ?? (
-            try? FileManager.default.attributesOfItem(atPath: target.path)[.size] as? NSNumber
-        )?.int64Value
-        var summary = ResticSummary()
-        summary.totalFiles = 1
-        summary.filesRestored = 1
-        summary.bytesRestored = written
-        return summary
     }
 
     /// Restores several items that share one folder of the backup into

@@ -844,6 +844,50 @@ struct ResticIntegrationTests {
         #expect(!names.contains { $0.hasSuffix(".partial") }, "left behind: \(names)")
     }
 
+    @Test("a file restored alone keeps its modification time, permissions and extended attributes")
+    func fileRestoredAloneKeepsItsMetadata() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        // What restic recorded beside the bytes: owner-only permissions, an
+        // extended attribute, and a modification time to the nanosecond.
+        let source = fixture.sourceDirectory.appendingPathComponent("key.txt")
+        try "secret".write(to: source, atomically: false, encoding: .utf8)
+        #expect(chmod(source.path, 0o600) == 0)
+        let attribute = Array("kept".utf8)
+        #expect(setxattr(source.path, "com.example.swiftrestic", attribute, attribute.count, 0, XATTR_NOFOLLOW) == 0)
+        let stamp = [timespec](repeating: timespec(tv_sec: 1_767_357_296, tv_nsec: 123_456_789), count: 2)
+        #expect(utimensat(AT_FDCWD, source.path, stamp, AT_SYMLINK_NOFOLLOW) == 0)
+        let (snapshotID, children) = try await backedUpChildren(fixture)
+        let node = try #require(children.first { $0.name == "key.txt" })
+
+        // Into an empty folder, and over another file of that name.
+        let fresh = fixture.root.appendingPathComponent("restore-metadata")
+        let occupied = fixture.root.appendingPathComponent("restore-metadata-over")
+        try FileManager.default.createDirectory(at: occupied, withIntermediateDirectories: true)
+        try "mine".write(to: occupied.appendingPathComponent("key.txt"), atomically: false, encoding: .utf8)
+        for (destination, policy) in [(fresh, RestoreOverwritePolicy.keepExisting), (occupied, .replaceExisting)] {
+            _ = try await fixture.service.restore(
+                fixture.context, snapshotID: snapshotID, node: node,
+                destinationDirectory: destination, overwrite: policy
+            )
+            let restored = destination.appendingPathComponent("key.txt")
+            let place = destination.lastPathComponent
+            #expect(try String(contentsOf: restored, encoding: .utf8) == "secret")
+            var status = stat()
+            #expect(lstat(restored.path, &status) == 0)
+            #expect(status.st_mode & 0o7777 == 0o600, "permissions \(String(status.st_mode & 0o7777, radix: 8)) in \(place)")
+            #expect(
+                status.st_mtimespec.tv_sec == 1_767_357_296 && status.st_mtimespec.tv_nsec == 123_456_789,
+                "modified at \(status.st_mtimespec.tv_sec).\(status.st_mtimespec.tv_nsec) in \(place)"
+            )
+            var value = [UInt8](repeating: 0, count: 16)
+            let length = getxattr(restored.path, "com.example.swiftrestic", &value, value.count, 0, XATTR_NOFOLLOW)
+            #expect(length == 4 && value.prefix(4).elementsEqual(attribute), "extended attribute: \(length) bytes in \(place)")
+            let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+            #expect(names == ["key.txt"], "left in \(place): \(names)")
+        }
+    }
+
     @Test("several items of one folder restore in one call, each where it would land alone, matched by its exact name")
     func restoreItemsLandsEachByName() async throws {
         let fixture = try makeFixture()

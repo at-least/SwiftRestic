@@ -422,7 +422,7 @@ struct AppModelTests {
         }
     }
 
-    @Test("a preview dumps one version into its own temporary folder, and nothing is left once it closes or fails")
+    @Test("a preview restores one version into its own temporary folder, and nothing is left once it closes or fails")
     func previewCopy() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -460,7 +460,7 @@ struct AppModelTests {
         try AppModel.removePreviewCopy(url)
         #expect(!FileManager.default.fileExists(atPath: folder.path))
 
-        // A dump that fails takes its folder with it.
+        // A restore that fails takes its folder with it.
         let missing = SnapshotNode(name: "gone.txt", type: .file, path: "/no/such/gone.txt")
         await #expect(throws: (any Error).self) {
             try await model.previewCopy(repositoryID: harness.repository.id, snapshotID: snapshot.id, node: missing)

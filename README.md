@@ -140,7 +140,7 @@ the generator after editing it; the PNGs are checked in.
     toolbar's) or Return restores the chosen version, confirming "the version modified Sep
     17, 2026 at 9:00 PM, from the backup of Sep 17, 2026 at 11:00 PM"; a row
     drags to Finder. *Preview*, at the pane's top beside *Show in Backups*,
-    shows it in Quick Look: `restic dump` copies
+    shows it in Quick Look: `restic restore` copies
     it, read-only, into a temporary folder of its own, deleted when the
     preview closes, another version is chosen or the pane goes (a quit
     leaves it to the next launch's sweep); it waits for the size and stops
@@ -487,7 +487,11 @@ the generator after editing it; the PNGs are checked in.
   Backup…* with nothing selected, which recreates the full original paths
   inside the chosen folder;
   per-node restores land in the chosen folder with no path rebuilt above
-  them. ⌘- or ⇧-click selects several, restored with one `restic restore`
+  them. A file alone is restored into a hidden folder beside its landing,
+  with the dates, permissions and extended attributes restic recorded, and
+  moved there once restic is done: restic rewrites a file in place, and this
+  way a failed or cancelled restore leaves what was there as it was. ⌘- or
+  ⇧-click selects several, restored with one `restic restore`
   per folder they come from (each run reloads the repository's index), an
   item inside a selected folder left to the folder (the sheet says so), and
   two items of one name allowed back to their original locations but never
@@ -846,8 +850,8 @@ A few seams worth knowing by name:
   without a restart.
 - **Streaming commands wear an idle stall cap** (15 min with no output at all
   ends the run as hung) — measured on `systemUptime`, so a closed lid is not
-  "silence". Legitimately quiet commands (`prune`, `forget`, `dump`, the
-  console) wear none. When a child dies, its pipes are abandoned two seconds
+  "silence". Legitimately quiet commands (`prune`, `forget`, the console)
+  wear none. When a child dies, its pipes are abandoned two seconds
   later whatever still holds them: a hook that backgrounds a long-lived
   command cannot hang the run, its timeout, or the quit that drains it.
 - **Menu commands and the tray ask the router** (`router.request(...)`) for

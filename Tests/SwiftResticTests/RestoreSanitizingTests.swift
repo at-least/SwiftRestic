@@ -3,8 +3,8 @@ import Testing
 
 /// The restore-name sanitizer: snapshot node names are repository data, and a
 /// hostile writer to a shared repository can fill them with anything. Wherever
-/// the app turns a name into a local path (`dump`'s output file, the drag's
-/// staged file), the traversal spellings must never survive.
+/// the app turns a name into a local path (a restored file's landing, the
+/// drag's staged file), the traversal spellings must never survive.
 @Suite("restore name sanitizing")
 struct RestoreSanitizingTests {
     @Test("ordinary names pass through untouched")

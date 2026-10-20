@@ -52,7 +52,7 @@ final class PreviewSession {
                 copy = url
                 self.url = url
             } catch {
-                // A cancelled dump is the pane's own doing, not a failure.
+                // A cancelled copy is the pane's own doing, not a failure.
                 if !Task.isCancelled { failure = error.localizedDescription }
             }
             if !Task.isCancelled { task = nil }

@@ -30,9 +30,9 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// than papered over: a backup app's numbers must be right or absent,
     /// never silently zero.
     case malformedOutput(detail: String)
-    /// A `restic dump` ran to completion but its output could not be moved
-    /// into place at the destination. The staged copy is gone; whatever the
-    /// destination held before is untouched.
+    /// A single file's restore ran to completion but the file restic wrote
+    /// beside the landing could not be moved into place. The staged copy is
+    /// gone; whatever the destination held before is untouched.
     case dumpMoveFailed(path: String, reason: String)
     /// A Keep restore onto something that is already there, with a restic
     /// older than 0.17: it has no `--overwrite` and would replace it.

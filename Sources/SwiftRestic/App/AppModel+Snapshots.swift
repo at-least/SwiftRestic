@@ -245,9 +245,11 @@ extension AppModel {
     /// matched by bytes: a sibling whose name only canonically equals this
     /// one is another file. For a restore asked by path (a Find Files hit
     /// from the index, a Compare row): the index and a diff name a path and
-    /// a kind but no node, and a kind they got wrong would send a folder to
-    /// `dump`, which writes its tar into one file with no error. A path the
-    /// backup no longer lists fails loudly.
+    /// a kind but no node, and a kind they got wrong would restore a folder
+    /// as a file is restored: a folder of its name already at the landing
+    /// is kept whole under Keep and, holding anything, refused under
+    /// Replace — never restored into. A path the backup no longer lists
+    /// fails loudly.
     func listedNode(repositoryID: UUID, snapshotID: String, path: String) async throws -> SnapshotNode {
         let siblings = try await children(repositoryID: repositoryID, snapshotID: snapshotID, path: ResticPath.parent(of: path))
         guard let node = siblings.first(where: { PathKey($0.path) == PathKey(path) }) else {

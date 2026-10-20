@@ -455,7 +455,8 @@ actor ResticRunner {
         case keptExisting
     }
 
-    /// Moves a finished dump's staging file onto its target: `rename(2)`
+    /// Moves a staged file — a finished dump's, or the one a single file's
+    /// restore wrote beside its landing — onto its target: `rename(2)`
     /// when it may replace what is there, `renamex_np(RENAME_EXCL)`
     /// otherwise. `renameExclusive` answers 0 or the errno; it is a
     /// parameter so the volumes that refuse the flag can be tested without

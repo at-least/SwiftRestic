@@ -481,9 +481,11 @@ struct RateLimitTests {
     }
 }
 
-/// The `stdoutFile` path — single-file restores through `restic dump`. The
-/// destination is user data: a failed or cancelled dump must leave whatever
-/// was there before exactly as it was, and no partial sibling behind.
+/// The `stdoutFile` path — single-file restores through `restic dump`, until
+/// they became `restic restore` beside the landing; nothing runs it now, and
+/// the commit at the end is theirs still. The destination is user data: a
+/// failed or cancelled dump must leave whatever was there before exactly as
+/// it was, and no partial sibling behind.
 @Suite("stdout file dump")
 struct StdoutFileDumpTests {
     private func makeDirectory() throws -> URL {
