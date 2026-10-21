@@ -499,7 +499,7 @@ extension View {
     /// (`SidebarItem.pageTabs`) — in the middle of the window toolbar:
     /// Apple's guidance for switching a main window's view (the HIG's
     /// center area holds the common controls), clear of the trailing
-    /// corner, where Restore… and the search field sit.
+    /// corner, where the search field sits.
     func pageTabPicker(_ selection: Binding<PageTab>, tabs: [PageTab]) -> some View {
         toolbar {
             ToolbarItem(placement: .principal) {

@@ -37,9 +37,9 @@ struct PlanDetailView: View {
             roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
             filesPrompt: "Search this plan's files"
         )
-        // The toolbar holds the tabs, the search field and, on Backups and
-        // Files, Restore…; the editor is Plan ▸ Edit Plan… and the sidebar
-        // row's Edit…, deleting Plan ▸ Delete Plan… and the row's menu —
+        // The toolbar holds the tabs and the search field; the editor is
+        // Plan ▸ Edit Plan… and the sidebar row's Edit…, deleting Plan ▸
+        // Delete Plan… and the row's menu —
         // the HIG's macOS toolbars: "it doesn't make sense to provide a
         // toolbar item for every menu item". Until 2026-10-19 Edit sat at
         // the toolbar's trailing corner.

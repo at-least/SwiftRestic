@@ -116,9 +116,9 @@ the generator after editing it; the PNGs are checked in.
     not removed: restic left it out, and the disk may still have it. Items
     select several at a time and restore together, drag to Finder, or open
     in the tree with a double-click, keeping the chosen time where they
-    existed then; with nothing selected, *Restore Folder…* — the toolbar's
-    restore here — restores the whole folder. *Show in Backups* sits at the
-    pane's top, beside *As backed up*.
+    existed then; with nothing selected, *Restore Folder…* restores the
+    whole folder. *Show in Backups* sits in the pane's bottom bar, at its
+    left.
   - *A file* lists its versions, from the index: a version starts where
     restic's diff said the file changed, or where no diff compared two
     backups or the file was absent between them. A row gives its
@@ -136,11 +136,11 @@ the generator after editing it; the PNGs are checked in.
     says what the copy here is: *the same as the newest version*, the same
     as an older one, none of them (with its own date and size), or *Not on
     this Mac* — one `lstat`, compared by size and modification time to
-    restic's millisecond, read again when a restore ends. *Restore…* (the
-    toolbar's) or Return restores the chosen version, confirming "the version modified Sep
+    restic's millisecond, read again when a restore ends. *Restore…* — the
+    bottom bar's prominent button, beside *Preview* and *Show in Backups* —
+    or Return restores the chosen version, confirming "the version modified Sep
     17, 2026 at 9:00 PM, from the backup of Sep 17, 2026 at 11:00 PM"; a row
-    drags to Finder. *Preview*, at the pane's top beside *Show in Backups*,
-    shows it in Quick Look: `restic restore` copies
+    drags to Finder. *Preview* shows it in Quick Look: `restic restore` copies
     it, read-only, into a temporary folder of its own, deleted when the
     preview closes, another version is chosen or the pane goes (a quit
     leaves it to the next launch's sweep); it waits for the size and stops
@@ -475,15 +475,19 @@ the generator after editing it; the PNGs are checked in.
   real hotspot not. While a backup, check or prune runs, SwiftRestic holds
   off idle sleep (`pmset -g assertions` lists "SwiftRestic is running a
   backup"); the display may still sleep, and a closed lid sleeps the Mac.
-- **Browsing and restore** — a page's restore is its toolbar's *Restore…*,
-  at the trailing side beside the search field, and *File ▸
-  Restore…*; until 2026-10-18 it sat in the pane's bottom bar, which the HIG
-  warns a moved window can hide. The bottom bar keeps words only — what a
-  drag does, how many matches only other backups hold. Every *Browse* (a backup run in Activity),
+- **Browsing and restore** — a page's restore is its pane's bottom bar's
+  *Restore…*, prominent at the bar's trailing corner, and *File ▸ Restore…*
+  runs the same restore from the menu bar; on a backup's tree the bar leads
+  with *Restore Entire Backup…* for the whole backup. The restore sat in
+  the window toolbar from 2026-10-19 to 2026-10-21 — the HIG's "Only
+  specify one primary action, and put it on the trailing side of the
+  toolbar" — until the user asked for the bottom bar back, which the HIG
+  warns a moved window can hide. The bar keeps words beside the buttons —
+  what a drag does, how many matches only other backups hold. Every *Browse* (a backup run in Activity),
   *Show Backups* (a group's menu) and *Show in Backups* (the Files tab) opens
   the one browser at that backup, on its page's Backups tab beside the list:
   its folders as a tree with a Change column and search. Restore by dragging to Finder,
-  or by the toolbar's *Restore…* (or Return) on a selection — *Restore
+  or by the bar's *Restore…* (or Return) on a selection — *Restore Entire
   Backup…* with nothing selected, which recreates the full original paths
   inside the chosen folder;
   per-node restores land in the chosen folder with no path rebuilt above
@@ -559,7 +563,7 @@ the generator after editing it; the PNGs are checked in.
   answered; a latest-snapshot-only search says "this one". Before the
   listing lands, rows name their backup by short ID in the Backup column,
   times filled in when it lands without moving the rows. ⌘- or ⇧-click
-  selects several, and the toolbar's *Restore…* (Return) restores them in one
+  selects several, and *Restore Selected…* (Return) restores them in one
   destination sheet, each from its own row's backup ("from 2 backups, each
   item from the one it was found in"), an item inside a selected folder of
   the same backup left to the folder. A folder comes back as its own backup
@@ -785,8 +789,8 @@ the generator after editing it; the PNGs are checked in.
   views; *Files* grey on a group's page, all three off a plan's or group's
   page), *Show Deleted Items* for a plan's Files tab, and *Show Problems
   Only* for
-  Activity. *File ▸ Restore…* is the toolbar's Restore… of the page in view
-  (*Restore Backup…*, *Restore Folder…* by what it would restore), and
+  Activity. *File ▸ Restore…* is the pane's Restore… of the page in view
+  (*Restore Entire Backup…*, *Restore Folder…* by what it would restore), and
   *Help ▸ SwiftRestic Help* (⌘?) opens the concepts in a window of their
   own, where macOS's item had said "Help isn't available for SwiftRestic." While a sheet is up, a command that
   opens a sheet or the console, or acts on the selected plan or repository,

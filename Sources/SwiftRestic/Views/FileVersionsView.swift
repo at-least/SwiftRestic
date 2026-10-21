@@ -43,10 +43,19 @@ struct FileVersionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
+            if let diskLine {
+                Label(diskLine, systemImage: "laptopcomputer")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .help(diskPath ?? "")
+                Divider()
+            }
             list
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
             footer
         }
         .restoreCommand(restore)
@@ -142,84 +151,63 @@ struct FileVersionsView: View {
         }
     }
 
-    /// The row over the versions: what the copy on this Mac is, then the
-    /// chosen version's two looks — Preview, and Show in Backups at its
-    /// backup — at the top, where a window's edge cannot hide them; its
-    /// Restore… is the toolbar's.
-    private var header: some View {
-        HStack(spacing: 8) {
-            if let diskLine {
-                Label(diskLine, systemImage: "laptopcomputer")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .help(diskPath ?? "")
-            }
-            Spacer(minLength: 8)
-            if previewer.isCopying {
-                ProgressView()
-                    .controlSize(.small)
-                    .help("Copying the chosen version out of the repository for the preview")
-            }
-            let blocked = chosen.flatMap { previewBlock(for: $0) }
-            Button("Preview") { preview() }
-                .disabled(chosen == nil || blocked != nil || previewer.isCopying)
-                .help(blocked ?? "Look at the chosen version with Quick Look before restoring it — from a temporary copy, deleted when the preview closes")
-            Button("Show in Backups") {
-                guard let backup = chosen?.snapshots.first,
-                      let page = model.page(ofBackup: backup.id, in: node.repositoryID)
-                else { return }
-                router.showBackup(
-                    backup.id,
-                    on: page,
-                    repositoryID: node.repositoryID,
-                    focusPath: ResticPath.parent(of: node.path)
-                )
-            }
-            .disabled(chosen == nil)
-            .help("Open the chosen version's newest backup at this file's folder on the Backups tab")
-        }
-        .controlSize(.small)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
-    }
-
-    /// The pane's foot: what went wrong reading or previewing, beside the
-    /// restore in flight — words only, and nothing when all is well.
-    @ViewBuilder
+    /// The pane's foot: errors of the reads at the left, and at the right
+    /// the chosen version's ways out — Preview, Show in Backups,
+    /// Restore… — above them the strip that reports a restore in flight.
     private var footer: some View {
-        if detailsError != nil || previewer.failure != nil || model.isRestoring {
-            Divider()
-            VStack(spacing: 8) {
-                RestoreProgressStrip()
-                HStack {
-                    if let detailsError {
-                        Label("Sizes and dates could not be read", systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .help(detailsError)
-                    }
-                    if let failure = previewer.failure {
-                        Label("Preview failed", systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .help(failure)
-                    }
-                    Spacer()
+        VStack(spacing: 10) {
+            RestoreProgressStrip()
+            HStack {
+                if let detailsError {
+                    Label("Sizes and dates could not be read", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help(detailsError)
                 }
+                if let failure = previewer.failure {
+                    Label("Preview failed", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help(failure)
+                }
+                Spacer()
+                if previewer.isCopying {
+                    ProgressView()
+                        .controlSize(.small)
+                        .help("Copying the chosen version out of the repository for the preview")
+                }
+                Button("Show in Backups") {
+                    guard let backup = chosen?.snapshots.first,
+                          let page = model.page(ofBackup: backup.id, in: node.repositoryID)
+                    else { return }
+                    router.showBackup(
+                        backup.id,
+                        on: page,
+                        repositoryID: node.repositoryID,
+                        focusPath: ResticPath.parent(of: node.path)
+                    )
+                }
+                .disabled(chosen == nil)
+                .help("Open the chosen version's newest backup at this file's folder on the Backups tab")
+                let blocked = chosen.flatMap { previewBlock(for: $0) }
+                Button("Preview") { preview() }
+                    .disabled(chosen == nil || blocked != nil || previewer.isCopying)
+                    .help(blocked ?? "Look at the chosen version with Quick Look before restoring it — from a temporary copy, deleted when the preview closes")
+                Button("Restore…") { restoreChosen() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(chosen == nil || model.isRestoring)
+                    .help("Restore the chosen version of this file (Return)")
             }
-            .padding(12)
         }
+        .padding(12)
     }
 
-    /// The pane's Restore…, the toolbar's (`restoreCommand`): the chosen
-    /// version. Return is the list's own.
+    /// What the pane restores, for File ▸ Restore…: the chosen version —
+    /// the bottom bar's button's restore. Return is the list's own.
     private var restore: RestoreCommand {
         RestoreCommand(
             title: "Restore…",
-            help: "Restore the chosen version of this file (Return)",
             isEnabled: chosen != nil && !model.isRestoring,
-            isDefault: false,
             run: restoreChosen
         )
     }
