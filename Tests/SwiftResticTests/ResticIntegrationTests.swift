@@ -1017,9 +1017,8 @@ struct ResticIntegrationTests {
         try "ref: refs/heads/main\n".write(to: git.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
         // A default that must still apply, so this test cannot pass merely
         // because no exclude reached restic.
-        let modules = fixture.sourceDirectory.appendingPathComponent("project/node_modules/left-pad")
-        try FileManager.default.createDirectory(at: modules, withIntermediateDirectories: true)
-        try "module".write(to: modules.appendingPathComponent("index.js"), atomically: true, encoding: .utf8)
+        let finderFile = fixture.sourceDirectory.appendingPathComponent("project/.DS_Store")
+        try "finder".write(to: finderFile, atomically: true, encoding: .utf8)
         // The defaults as a plan of this folder gets them. The whole list
         // would leave nothing to back up: the scratch tree lies under
         // /private/var/folders, itself one of the startup disk's defaults.
@@ -1038,7 +1037,7 @@ struct ResticIntegrationTests {
         let restored = { (url: URL) in destination.appendingPathComponent(url.path) }
         #expect(FileManager.default.fileExists(atPath: restored(object).path))
         #expect(FileManager.default.fileExists(atPath: restored(git.appendingPathComponent("HEAD")).path))
-        #expect(!FileManager.default.fileExists(atPath: restored(modules).path))
+        #expect(!FileManager.default.fileExists(atPath: restored(finderFile).path))
     }
 
     @Test("the folder-fitted defaults' glob shapes skip what the system rebuilds, re-rooted over a scratch tree")
@@ -1131,6 +1130,10 @@ struct ResticIntegrationTests {
         let home = fixture.sourceDirectory.appendingPathComponent("home")
         fixture.service.home = home.path
         fixture.plan.excludeDeveloperFiles = true
+        // The switch alone: no row of the plan's own may be what skips a
+        // folder here — node_modules among them, the switch's since
+        // 2026-10-21.
+        fixture.plan.excludePatterns = []
 
         // The developers' own layouts: a virtualenv by its name, a Cargo
         // target by its marker, the package stores and toolchains beside
@@ -1153,6 +1156,7 @@ struct ResticIntegrationTests {
         let rustBinary = try planted("rs/target/debug/app", "built binary")
         let userTarget = try planted("notes/target/mine.txt", "a user's folder that is only named target")
         let pycache = try planted("proj/__pycache__/m.pyc", "bytecode")
+        let nodeModule = try planted("web/node_modules/left-pad/index.js", "an installed package")
         let terraformState = try planted("proj/.terraform/x", "providers and modules cache")
         let terraformLock = try planted("proj/.terraform.lock.hcl", "the resolve's lock file")
         let gradleCache = try planted("home/.gradle/caches/x", "build cache")
@@ -1180,7 +1184,7 @@ struct ResticIntegrationTests {
         }
         let paths = Set(listed.content.keys)
 
-        for skipped in [venvConfig, venvModule, namedVenvModule, rustBinary, pycache, terraformState, gradleCache,
+        for skipped in [venvConfig, venvModule, namedVenvModule, rustBinary, pycache, nodeModule, terraformState, gradleCache,
                         cargoRegistry, m2Repository, limaDisk, avdImage, deviceSupport, simulator] {
             #expect(!paths.contains(skipped.path), "the rules must skip \(skipped.path); snapshot held \(paths.count) paths")
         }

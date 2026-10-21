@@ -297,7 +297,7 @@ struct TolerantDecodingTests {
     @Test("a plan's default excludes are the ones that can match under its path")
     func defaultExcludesFollowThePath() {
         let home = NSHomeDirectory()
-        let anywhere = [".DS_Store", "**/node_modules"]
+        let anywhere = [".DS_Store"]
         // Every home-anchored default, in the list's order.
         let homeDefaults = anywhere + [
             "~/Library/Caches",
@@ -406,7 +406,7 @@ struct TolerantDecodingTests {
         let python = [
             "**/.venv", "**/venv", "**/__pycache__", "**/.mypy_cache", "**/.pytest_cache", "**/.ruff_cache", "**/.tox", "**/.nox",
         ]
-        let jsFolders = ["**/.next", "**/.nuxt", "**/.svelte-kit", "**/.parcel-cache", "**/.turbo"]
+        let jsFolders = ["**/node_modules", "**/.next", "**/.nuxt", "**/.svelte-kit", "**/.parcel-cache", "**/.turbo"]
         let jsHome = ["~/.npm", "~/Library/pnpm/store", "~/.bun/install/cache", "~/.yarn/berry/cache"]
         let appleFolders = ["**/DerivedData", "**/.build", "**/Pods", "**/Carthage/Build"]
         let appleHome = ["~/.cocoapods/repos/trunk", "~/.cocoapods/repos/master", "~/Library/Developer/Xcode/*DeviceSupport"]
@@ -491,7 +491,7 @@ struct TolerantDecodingTests {
     func excludeSectionsGroupByCategory() {
         let sections = ExcludeRule.sections(
             stored: ["*.iso", ".DS_Store", "**/node_modules", "~/Movies/Render", "**/.venv"],
-            developer: [ExcludeRule.developer[2], ExcludeRule.developer[0], ExcludeRule.developer[8]]
+            developer: [ExcludeRule.developer[2], ExcludeRule.developer[0], ExcludeRule.developer[9]]
                 + ExcludeRule.developerMarkers
         )
         #expect(sections.map(\.category) == [.yours, .finder, .javascript, .python, .toolchains])
@@ -542,12 +542,13 @@ struct TolerantDecodingTests {
         let store = ConfigStore(directory: directory)
         let loaded = try await store.load()
         #expect(loaded.decodeNotes.isEmpty)
-        let anywhere = [".DS_Store", "**/node_modules"]
+        let anywhere = [".DS_Store"]
 
         #expect(loaded.configuration.plans.map(\.excludePatterns) == [
             // The defaults ~/dotfiles cannot hold go; the patterns given
-            // stay, even one anchored elsewhere, in their order.
-            anywhere + ["~/elsewhere/cache", "*.log"],
+            // stay, even one anchored elsewhere, in their order — and
+            // **/node_modules, a default until 2026-10-21, is one of them.
+            anywhere + ["**/node_modules", "~/elsewhere/cache", "*.log"],
             // The home folder holds the home-anchored ones; the drive and
             // startup-disk ones, which it cannot hold, go.
             BackupPlan.defaultExcludes(for: "~"),

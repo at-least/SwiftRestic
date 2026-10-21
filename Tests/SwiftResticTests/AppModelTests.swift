@@ -740,7 +740,7 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("the developer switch passes restic its marker and fitted excludes when on, none of them when off")
+    @Test("the developer switch passes restic its marker and fitted excludes when on, each once, none of them when off")
     func excludeDeveloperFilesFlag() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -748,6 +748,9 @@ struct AppModelTests {
         let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
 
         model.configuration.plans[index].excludeDeveloperFiles = true
+        // A plan saved while **/node_modules was a default holds it as its
+        // own row; the switch passes it too, and restic is given it once.
+        model.configuration.plans[index].excludePatterns = ["**/node_modules"]
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let with = try #require(model.configuration.runs.first)
@@ -756,6 +759,7 @@ struct AppModelTests {
         #expect(on.contains("--exclude-if-present .rustc_info.json"))
         #expect(on.contains("--exclude **/.venv"))
         #expect(on.contains("--exclude **/__pycache__"))
+        #expect(on.components(separatedBy: "--exclude **/node_modules ").count == 2)
         // No marker for a virtualenv: an in-place one's sits beside the
         // user's code.
         #expect(on.contains("pyvenv.cfg") == false)

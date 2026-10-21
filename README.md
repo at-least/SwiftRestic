@@ -330,8 +330,10 @@ the generator after editing it; the PNGs are checked in.
   *Reveal in Finder* and *Exclude from “Documents”…* menu, then "… and N
   more in Activity"; *Show in Activity* opens the run. The editor
   preselects the repository only when there is just one, starts a new
-  plan's excludes with the defaults its folder can hold — `.DS_Store` and
-  `**/node_modules` anywhere; for a folder they lie in, the home folder's
+  plan's excludes with the defaults its folder can hold — `.DS_Store`
+  anywhere (`**/node_modules`, a default until 2026-10-21, is the developer
+  switch's below; plans saved with it keep it as their own row); for a
+  folder they lie in, the home folder's
   regenerable state (`~/Library/Caches`, `~/.Trash`,
   `~/Library/Application Support/Steam`, `~/Library/Logs`, Spotlight's
   per-user index, saved window state, per-app HTTP stores, sandboxed
@@ -371,7 +373,8 @@ the generator after editing it; the PNGs are checked in.
   .`) holds the user's code beside pyvenv.cfg, and restic would leave that
   out with it (0.19.1, probed); a virtualenv named otherwise is backed up,
   and a folder named so that is not one is left out. The rules are what the
-  tools download and build again: virtualenvs, the
+  tools download and build again: virtualenvs, a project's
+  `node_modules`, the
   languages' bytecode, type-check and test caches, the package managers' and
   toolchains' stores under the home folder, the frameworks' build folders
   (`.next`, DerivedData, Pods), the version managers' installed toolchains,

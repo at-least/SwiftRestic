@@ -73,11 +73,12 @@ struct ExcludeRule: Hashable, Sendable {
     /// own. Nothing here may be the only copy of anything — a restored Git
     /// working copy without its object store is "not a git repository". A
     /// plan gets the ones that can match under its path
-    /// (`BackupPlan.defaultExcludes(for:)`). The first six are the list
-    /// builds before 2026-10-21 offered, unchanged and first.
+    /// (`BackupPlan.defaultExcludes(for:)`). The first five are the list
+    /// builds before 2026-10-21 offered, unchanged and first, but for
+    /// `**/node_modules`, which went to the developer switch's JavaScript
+    /// rules: plans saved with it keep it as their own row.
     static let defaults: [ExcludeRule] = [
         ExcludeRule(".DS_Store", .finder, "Finder’s window settings", "Finder writes them again"),
-        ExcludeRule("**/node_modules", .javascript, "npm packages", "npm install fetches them again"),
         ExcludeRule("~/Library/Caches", .appState, "Apps’ caches", "apps fill them again"),
         ExcludeRule("~/Library/Containers/*/Data/Library/Caches", .appState, "Sandboxed apps’ caches", "apps fill them again"),
         ExcludeRule("~/.Trash", .finder, "The Trash", "already thrown away"),
@@ -155,9 +156,10 @@ struct ExcludeRule: Hashable, Sendable {
         ExcludeRule("**/.ruff_cache", .python, "Ruff’s cache", "Ruff rebuilds it"),
         ExcludeRule("**/.tox", .python, "tox environments", "tox creates them again"),
         ExcludeRule("**/.nox", .python, "nox environments", "nox creates them again"),
-        // JavaScript: the frameworks' build state; node_modules is already
-        // a default. The package managers' global caches are the home
-        // folder's.
+        // JavaScript: the packages a project installs, the frameworks'
+        // build state, and the package managers' global caches, which are
+        // the home folder's.
+        ExcludeRule("**/node_modules", .javascript, "npm packages", "npm install fetches them again"),
         ExcludeRule("**/.next", .javascript, "Next.js build output", "next build makes it again"),
         ExcludeRule("**/.nuxt", .javascript, "Nuxt build output", "nuxt build makes it again"),
         ExcludeRule("**/.svelte-kit", .javascript, "SvelteKit build output", "vite build makes it again"),

@@ -579,16 +579,18 @@ struct ResticService: ResticClient {
     ) async throws -> BackupOutcome {
         var args = context.globalArguments + ["backup", "--json"]
         args.append(Self.expandTilde(plan.path, home: home))
-        for pattern in plan.excludePatterns where !pattern.trimmingCharacters(in: .whitespaces).isEmpty {
-            args += ["--exclude", Self.expandTilde(pattern, home: home)]
+        // The plan's own patterns, then the developer switch's rules,
+        // fitted to the path like the defaults are — each once: a plan
+        // saved before **/node_modules became the switch's holds it as its
+        // own row too.
+        let stored = plan.excludePatterns.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let developer = plan.excludeDeveloperFiles ? BackupPlan.developerExcludes(for: plan.path, home: home) : []
+        for pattern in BackupPlan.withoutDuplicates((stored + developer).map { Self.expandTilde($0, home: home) }) {
+            args += ["--exclude", pattern]
         }
-        // The developer switch's rules, fitted to the path like the
-        // defaults are, and the Cargo marker: restic leaves out the
-        // contents of any folder holding it and keeps the marker itself.
+        // The Cargo marker: restic leaves out the contents of any folder
+        // holding it and keeps the marker itself.
         if plan.excludeDeveloperFiles {
-            for pattern in BackupPlan.developerExcludes(for: plan.path, home: home) {
-                args += ["--exclude", Self.expandTilde(pattern, home: home)]
-            }
             for marker in BackupPlan.developerMarkers {
                 args += ["--exclude-if-present", marker]
             }
