@@ -314,8 +314,12 @@ the generator after editing it; the PNGs are checked in.
   *Backups* (last backup, count, retention) with *Back Up Now* — *Stop*
   while it runs; *Schedule* (and when it runs next) with *Pause Schedule*,
   its arrow offering the lengths, or *Resume Schedule* (none for a manual
-  plan); *Excluding*, the patterns it leaves out (the rest of how it runs,
-  its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors
+  plan); *Excluding*, everything it leaves out, grouped by kind — Finder &
+  Trash, apps' caches & state, search indexes, a drive's or the startup
+  disk's own, each developer language and tool, and last *Added by you* —
+  every rule the app offers labelled with what it is and who puts it back
+  ("Virtualenvs · pip installs them again"), the patterns as typed (the rest
+  of how it runs, its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,
   how many backups in a row ended that way for the same cause ("3 times in
@@ -381,7 +385,9 @@ the generator after editing it; the PNGs are checked in.
   are never rows in the plan's own list — the editor shows them in a collapsed
   "N rules for this folder" disclosure, whether the switch is on or off, so
   they are read before it is turned on, and the plan page's *Excluding* card
-  one line with the count, the rules themselves in the line's help.
+  lists each under its kind beside the plan's own patterns. The editor's
+  exclude list is grouped and labelled the same way; a pattern the user
+  typed carries no label and sits under *Added by you*.
 - **Skipped backups** — when a plan's folder is missing, restic writes
   nothing (exit 1, "Fatal: all source directories/files do not exist",
   restic 0.19.1). When it is on a drive that is away — a volume under

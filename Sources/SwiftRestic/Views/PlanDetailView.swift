@@ -463,58 +463,49 @@ struct PlanDetailView: View {
         }
     }
 
-    /// What the plan leaves out, as the user typed it, tilde and all — the
-    /// folder itself is the page's subtitle. When is the Schedule card's,
-    /// what it keeps the Backups card's, where the sidebar's (the plan sits
-    /// under its repository); the rest of how it runs, its hooks among it,
-    /// is the editor's, which Plan ▸ Edit Plan… and the row's Edit… open.
+    /// What the plan leaves out, grouped by what kind of thing each rule
+    /// skips, each the app offered labelled with what it is and who puts
+    /// it back: the plan's own patterns as typed, tilde and all, and while
+    /// the developer switch is on the rules it passes restic for this
+    /// folder. The folder itself is the page's subtitle. When is the
+    /// Schedule card's, what it keeps the Backups card's, where the
+    /// sidebar's (the plan sits under its repository); the rest of how it
+    /// runs, its hooks among it, is the editor's, which Plan ▸ Edit Plan…
+    /// and the row's Edit… open.
     private func excludingCard(_ plan: BackupPlan) -> some View {
-        Card("Excluding") {
-            VStack(alignment: .leading, spacing: 10) {
-                if plan.excludePatterns.isEmpty && !plan.excludeDeveloperFiles {
+        let sections = ExcludeRule.sections(
+            stored: plan.excludePatterns,
+            developer: plan.excludeDeveloperFiles ? BackupPlan.developerRules(for: plan.path) : []
+        )
+        return Card("Excluding") {
+            VStack(alignment: .leading, spacing: 12) {
+                if sections.isEmpty {
                     Text("Nothing is left out.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                ForEach(plan.excludePatterns, id: \.self) { pattern in
-                    Label {
-                        Text(pattern)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(pattern)
-                    } icon: {
-                        // The editor's glyph for the list, holding the
-                        // pattern where the folders' names start —
-                        // secondary, not the folders' tint: these are
-                        // what stays out of the backup.
-                        Image(systemName: "eye.slash")
+                ForEach(sections) { section in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(section.category.title)
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
+                            .accessibilityAddTraits(.isHeader)
+                        ForEach(section.rows) { row in
+                            Label {
+                                ExcludeRowText(row: row)
+                            } icon: {
+                                // The editor's glyph for the list, holding
+                                // the pattern where the folders' names
+                                // start — secondary, not the folders' tint:
+                                // these are what stays out of the backup.
+                                Image(systemName: "eye.slash")
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
+                            }
+                        }
                     }
-                    .font(.callout)
-                }
-                if plan.excludeDeveloperFiles {
-                    developerRulesLine(plan)
                 }
             }
         }
-    }
-
-    /// The developer switch's one line: how many rules this plan's folder
-    /// gets, the rules themselves in the line's help — the set a run
-    /// passes restic, fitted where the stored patterns above are as typed.
-    private func developerRulesLine(_ plan: BackupPlan) -> some View {
-        let lines = BackupPlan.developerRuleLines(for: plan.path)
-        return Label {
-            Text("\(lines.count) rules for what developer tools rebuild")
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(lines.joined(separator: "\n"))
-        } icon: {
-            Image(systemName: "eye.slash")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-        }
-        .font(.callout)
     }
 }

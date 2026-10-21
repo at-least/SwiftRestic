@@ -516,7 +516,8 @@ struct PlanEditorSheet: View {
                 placeholder: "e.g. **/node_modules",  // a String variable, so not parsed as Markdown
                 browseMessage: "Choose folders and files to leave out of backups",
                 browsePrompt: "Exclude",
-                escapesPickedGlobs: true
+                escapesPickedGlobs: true,
+                groupsExcludeRules: true
             )
             Toggle("Skip folders marked as caches (CACHEDIR.TAG)", isOn: $draft.excludeCaches)
             VStack(alignment: .leading, spacing: 2) {
@@ -531,14 +532,29 @@ struct PlanEditorSheet: View {
                 // switch on — never rows in the list above, always the
                 // folder's own — shown while it is off too, so what it
                 // would leave out is read before it is turned on.
-                let lines = BackupPlan.developerRuleLines(for: draft.path)
-                DisclosureGroup("\(lines.count) rules for this folder") {
-                    ForEach(lines, id: \.self) { line in
-                        Text(line)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(line)
+                let rules = BackupPlan.developerRules(for: draft.path)
+                DisclosureGroup("\(rules.count) rules for this folder") {
+                    // Capped: open, two dozen labelled rows would grow the
+                    // sheet past its frame, pushing its tabs and its buttons
+                    // out of sight. 140 leaves the sheet's 620 points room
+                    // for the exclude list's own rows and the buttons.
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(ExcludeRule.sections(stored: [], developer: rules)) { section in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(section.category.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityAddTraits(.isHeader)
+                                    ForEach(section.rows) { row in
+                                        ExcludeRowText(row: row)
+                                    }
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .frame(maxHeight: 140)
                 }
                 .font(.callout)
             }

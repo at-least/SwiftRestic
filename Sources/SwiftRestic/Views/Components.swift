@@ -800,6 +800,10 @@ struct PathListEditor: View {
     /// entered as its own path, matching itself alone (`PathListEntry`).
     var escapesPickedGlobs = false
 
+    /// Excludes: the rows grouped by what each rule skips, each the app
+    /// offered labelled (`ExcludeRule.sections`); off, one plain list.
+    var groupsExcludeRules = false
+
     @State private var selection: Set<String> = []
     @State private var draft = ""
     @State private var isDropTargeted = false
@@ -810,12 +814,23 @@ struct PathListEditor: View {
                 .font(.headline)
 
             List(selection: $selection) {
-                ForEach(paths, id: \.self) { path in
-                    Text(path)
-                        .font(.callout)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .tag(path)
+                if groupsExcludeRules {
+                    ForEach(ExcludeRule.sections(stored: paths)) { section in
+                        Section(section.category.title) {
+                            ForEach(section.rows) { row in
+                                ExcludeRowText(row: row)
+                                    .tag(row.line)
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(paths, id: \.self) { path in
+                        Text(path)
+                            .font(.callout)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .tag(path)
+                    }
                 }
             }
             // The plan editor's give: the lists grow toward 220 when the
@@ -879,6 +894,35 @@ struct PathListEditor: View {
     private func browse() {
         guard let chosen = FilePicker.chooseFoldersAndFiles(message: browseMessage, prompt: browsePrompt) else { return }
         addPaths(chosen.map(\.path), picked: true)
+    }
+}
+
+// MARK: - Exclude rows
+
+/// An exclude rule's row — the Excluding card's, the editor's list's and
+/// the developer switch's disclosure's: the line as restic is given it,
+/// and below it, for a rule the app offered, what it leaves out and who
+/// puts it back. Stacked, so a long pattern and its label each keep the
+/// row's width.
+struct ExcludeRowText: View {
+    let row: ExcludeRule.Row
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(row.line)
+                .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if let rule = row.rule {
+                Text(rule.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .help(row.rule.map { "\(row.line)\n\($0.label)" } ?? row.line)
+        .accessibilityElement(children: .combine)
     }
 }
 

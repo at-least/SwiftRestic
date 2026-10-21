@@ -473,6 +473,41 @@ struct TolerantDecodingTests {
         #expect(BackupPlan.developerExcludes(for: "/Users/probe/proj", home: "/Users/probe") == relative)
     }
 
+    @Test("every rule the app offers is labelled, once, and sits in an app category")
+    func everyOfferedRuleIsLabelled() {
+        let rules = ExcludeRule.defaults + ExcludeRule.developer + ExcludeRule.developerMarkers
+        #expect(rules.map(\.pattern) == BackupPlan.defaultExcludes + BackupPlan.developerExcludes + BackupPlan.developerMarkers)
+        #expect(Set(rules.map(\.pattern)).count == rules.count)
+        for rule in rules {
+            #expect(!rule.what.isEmpty && !rule.why.isEmpty, "\(rule.pattern)")
+            #expect(rule.category != .yours, "\(rule.pattern)")
+        }
+        #expect(ExcludeRule.developerMarkers.map(\.line) == ["Folders holding .rustc_info.json"])
+        #expect(BackupPlan.developerRules(for: "~/Documents").map(\.pattern)
+            == BackupPlan.developerExcludes(for: "~/Documents") + [".rustc_info.json"])
+    }
+
+    @Test("the Excluding sections follow the categories' order, the user's own last, each row in the order it came")
+    func excludeSectionsGroupByCategory() {
+        let sections = ExcludeRule.sections(
+            stored: ["*.iso", ".DS_Store", "**/node_modules", "~/Movies/Render", "**/.venv"],
+            developer: [ExcludeRule.developer[2], ExcludeRule.developer[0], ExcludeRule.developer[8]]
+                + ExcludeRule.developerMarkers
+        )
+        #expect(sections.map(\.category) == [.finder, .javascript, .python, .toolchains, .yours])
+        #expect(sections.map { $0.rows.map(\.line) } == [
+            [".DS_Store"],
+            ["**/node_modules", "**/.next"],
+            // A stored row the switch also passes is shown once.
+            ["**/.venv", "**/__pycache__"],
+            ["Folders holding .rustc_info.json"],
+            ["*.iso", "~/Movies/Render"],
+        ])
+        #expect(sections[0].rows[0].rule?.label == "Finder’s window settings · Finder writes them again")
+        #expect(sections[4].rows.allSatisfy { $0.rule == nil })
+        #expect(ExcludeRule.sections(stored: []).isEmpty)
+    }
+
     @Test("at load a plan drops the defaults that cannot match under its path, and keeps every pattern it was given")
     func inapplicableDefaultsDropAtLoad() async throws {
         let directory = temporaryDirectory()
