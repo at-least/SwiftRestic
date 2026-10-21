@@ -351,7 +351,35 @@ the generator after editing it; the PNGs are checked in.
   change under it), and only with restic 0.19 or later, which brought the
   flag to macOS (restic's changelog) — the editor says when this restic is
   older. What restic does with an online-only file without the flag was not
-  tried: it would mean reading a real iCloud Drive file.
+  tried: it would mean reading a real iCloud Drive file. *Skip what developer
+  tools rebuild* passes restic `--exclude` for the rules its folder fits and
+  `--exclude-if-present .rustc_info.json` — a Cargo `target` is skipped by
+  the marker file a build writes into it, never by its generic name, so a
+  folder of the user's that is only named target stays and the marker itself
+  is kept. The marker sits only in the build folder (cargo's own source;
+  none in `~/.cargo`), so it can take the user's files with it only where
+  `CARGO_TARGET_DIR` or `build.target-dir` points the build into a folder
+  that holds them — a folder restic then empties to the marker alone, exit
+  0 (0.19.1, probed). A virtualenv goes by its usual names (`.venv`,
+  `venv`), not by its marker: a project made one in place (`python -m venv
+  .`) holds the user's code beside pyvenv.cfg, and restic would leave that
+  out with it (0.19.1, probed); a virtualenv named otherwise is backed up,
+  and a folder named so that is not one is left out. The rules are what the
+  tools download and build again: virtualenvs, the
+  languages' bytecode, type-check and test caches, the package managers' and
+  toolchains' stores under the home folder, the frameworks' build folders
+  (`.next`, DerivedData, Pods), the version managers' installed toolchains,
+  Xcode's per-device symbol dumps — and, the switch's trade, the simulators'
+  devices and the containers' machine disks (CoreSimulator, Docker, OrbStack,
+  Lima, Colima, Podman, Vagrant): whatever was installed inside one is not
+  backed up, and the editor's caption says so before the switch is turned on.
+  Off for new plans and for plans saved before the option; on, the rules
+  follow the folder the way the defaults do (a plan of `~/Documents` gets the
+  folder patterns alone, one of the home folder gets the home rules too) and
+  are never rows in the plan's own list — the editor shows them in a collapsed
+  "N rules for this folder" disclosure, whether the switch is on or off, so
+  they are read before it is turned on, and the plan page's *Excluding* card
+  one line with the count, the rules themselves in the line's help.
 - **Skipped backups** — when a plan's folder is missing, restic writes
   nothing (exit 1, "Fatal: all source directories/files do not exist",
   restic 0.19.1). When it is on a drive that is away — a volume under

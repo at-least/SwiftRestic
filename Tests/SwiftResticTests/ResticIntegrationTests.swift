@@ -1118,6 +1118,78 @@ struct ResticIntegrationTests {
         #expect(paths.contains(document.path), "the user folder on the volume must stay")
     }
 
+    @Test("the developer switch's rules and marker skip what the tools rebuild, over a stand-in home")
+    func developerExcludesSkipRebuildables() async throws {
+        var fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // The stand-in home: a folder inside the source, so the anchored
+        // rules re-root over it — the service's `home` is what the plan's
+        // tilde paths and the anchored patterns expand against, and the
+        // fitting matches them against the plan's path the same way.
+        let home = fixture.sourceDirectory.appendingPathComponent("home")
+        fixture.service.home = home.path
+        fixture.plan.excludeDeveloperFiles = true
+
+        // The developers' own layouts: a virtualenv by its name, a Cargo
+        // target by its marker, the package stores and toolchains beside
+        // the user's own files the rules must leave alone — a project made
+        // a virtualenv in place (`python -m venv .`) among them, whose
+        // pyvenv.cfg sits beside the user's code.
+        @discardableResult
+        func planted(_ relative: String, _ contents: String) throws -> URL {
+            let url = fixture.sourceDirectory.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        }
+        let venvConfig = try planted("proj/.venv/pyvenv.cfg", "virtualenv configuration")
+        let venvModule = try planted("proj/.venv/lib/x.py", "installed module")
+        let namedVenvModule = try planted("tool/venv/lib/y.py", "installed module")
+        try planted("inplace/pyvenv.cfg", "virtualenv configuration")
+        let inPlaceCode = try planted("inplace/main.py", "the user's code beside an in-place virtualenv")
+        let cargoMarker = try planted("rs/target/.rustc_info.json", "rustc info cache")
+        let rustBinary = try planted("rs/target/debug/app", "built binary")
+        let userTarget = try planted("notes/target/mine.txt", "a user's folder that is only named target")
+        let pycache = try planted("proj/__pycache__/m.pyc", "bytecode")
+        let terraformState = try planted("proj/.terraform/x", "providers and modules cache")
+        let terraformLock = try planted("proj/.terraform.lock.hcl", "the resolve's lock file")
+        let gradleCache = try planted("home/.gradle/caches/x", "build cache")
+        let gradleProperties = try planted("home/.gradle/gradle.properties", "the user's gradle properties")
+        let cargoRegistry = try planted("home/.cargo/registry/x", "downloaded crate")
+        let cargoBin = try planted("home/.cargo/bin/tool", "a cargo-installed executable")
+        let m2Repository = try planted("home/.m2/repository/x", "downloaded artifact")
+        let m2Settings = try planted("home/.m2/settings.xml", "the user's maven settings")
+        let limaDisk = try planted("home/.lima/vm/diffdisk", "the machine's disk image")
+        let limaConfig = try planted("home/.lima/vm/lima.yaml", "the machine's configuration")
+        let avdImage = try planted("home/.android/avd/x.avd/userdata.img", "the emulator's disk image")
+        let adbKey = try planted("home/.android/adbkey", "the adb identity")
+        let deviceSupport = try planted("home/Library/Developer/Xcode/iOS DeviceSupport/x", "device symbols")
+        let archive = try planted("home/Library/Developer/Xcode/Archives/a.xcarchive/Info.plist", "a shipped build's archive")
+        let simulator = try planted("home/Library/Developer/CoreSimulator/Devices/d/data", "what was installed in a simulator")
+
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        let snapshotID = try #require(outcome.summary?.snapshotID)
+
+        // `restic ls` of the whole snapshot is the truth the excludes are
+        // checked against — every path the snapshot holds, nothing else.
+        let listed = NodeCollector()
+        try await fixture.service.walkSnapshot(fixture.context, snapshotID: snapshotID) { node in
+            listed.append(node)
+        }
+        let paths = Set(listed.content.keys)
+
+        for skipped in [venvConfig, venvModule, namedVenvModule, rustBinary, pycache, terraformState, gradleCache,
+                        cargoRegistry, m2Repository, limaDisk, avdImage, deviceSupport, simulator] {
+            #expect(!paths.contains(skipped.path), "the rules must skip \(skipped.path); snapshot held \(paths.count) paths")
+        }
+        for kept in [cargoMarker, userTarget, inPlaceCode, terraformLock, gradleProperties,
+                     cargoBin, m2Settings, limaConfig, adbKey, archive] {
+            #expect(paths.contains(kept.path), "the marker and the user's own files must stay: \(kept.path)")
+        }
+    }
+
     @Test("check reports a healthy repository")
     func check() async throws {
         let fixture = try makeFixture()

@@ -519,6 +519,32 @@ struct PlanEditorSheet: View {
                 escapesPickedGlobs: true
             )
             Toggle("Skip folders marked as caches (CACHEDIR.TAG)", isOn: $draft.excludeCaches)
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Skip what developer tools rebuild", isOn: $draft.excludeDeveloperFiles)
+                // No row anywhere can name what a simulator or a container
+                // disk held, so the trade is said here, once.
+                Text(developerFilesCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // The set a run of this draft would pass restic with the
+                // switch on — never rows in the list above, always the
+                // folder's own — shown while it is off too, so what it
+                // would leave out is read before it is turned on.
+                let rules = BackupPlan.developerExcludes(for: draft.path)
+                DisclosureGroup("\(rules.count + BackupPlan.developerMarkers.count) rules for this folder") {
+                    ForEach(rules, id: \.self) { rule in
+                        Text(rule)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(rule)
+                    }
+                    ForEach(BackupPlan.developerMarkers, id: \.self) { marker in
+                        Text("Folders holding \(marker)")
+                    }
+                }
+                .font(.callout)
+            }
             Toggle("Stay on one filesystem", isOn: $draft.oneFileSystem)
             VStack(alignment: .leading, spacing: 2) {
                 Toggle("Skip online-only cloud files (iCloud Drive, OneDrive)", isOn: $draft.excludeCloudFiles)
@@ -541,6 +567,13 @@ struct PlanEditorSheet: View {
             guard !Task.isCancelled else { return }
             mountedShares = shares
         }
+    }
+
+    /// What the developer switch covers, and its one trade: the rules'
+    /// names are the tools' own, what they download again — the contents
+    /// of the simulators and the machines are the part nobody rebuilds.
+    private var developerFilesCaption: String {
+        "Dependency caches, build output and toolchains the tools download again, simulator devices and container or virtual-machine disks — whatever is kept inside a simulator, Docker or OrbStack is not backed up."
     }
 
     /// What the cloud-files switch does with this restic: 0.19 brought

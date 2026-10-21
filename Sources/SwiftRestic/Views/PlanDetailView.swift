@@ -471,7 +471,7 @@ struct PlanDetailView: View {
     private func excludingCard(_ plan: BackupPlan) -> some View {
         Card("Excluding") {
             VStack(alignment: .leading, spacing: 10) {
-                if plan.excludePatterns.isEmpty {
+                if plan.excludePatterns.isEmpty && !plan.excludeDeveloperFiles {
                     Text("Nothing is left out.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -493,7 +493,29 @@ struct PlanDetailView: View {
                     }
                     .font(.callout)
                 }
+                if plan.excludeDeveloperFiles {
+                    developerRulesLine(plan)
+                }
             }
         }
+    }
+
+    /// The developer switch's one line: how many rules this plan's folder
+    /// gets, the rules themselves in the line's help — the set a run
+    /// passes restic, fitted where the stored patterns above are as typed.
+    private func developerRulesLine(_ plan: BackupPlan) -> some View {
+        let rules = BackupPlan.developerExcludes(for: plan.path)
+        let lines = rules + BackupPlan.developerMarkers.map { "Folders holding \($0)" }
+        return Label {
+            Text("\(lines.count) rules for what developer tools rebuild")
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(lines.joined(separator: "\n"))
+        } icon: {
+            Image(systemName: "eye.slash")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
+        .font(.callout)
     }
 }

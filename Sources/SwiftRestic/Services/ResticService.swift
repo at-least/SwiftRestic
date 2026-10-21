@@ -116,6 +116,11 @@ struct ResticService: ResticClient {
     /// Whether this restic takes `--exclude-cloud-files` on macOS (0.19+).
     /// Below that a plan's setting passes nothing, and the editor says so.
     var excludesCloudFiles = true
+    /// The home folder the run expands `~` against — the plan's path and
+    /// its exclude patterns, and the developer rules' fitting with them.
+    /// The real one, except where the tests re-root the anchored rules
+    /// over a scratch tree.
+    var home = NSHomeDirectory()
 
     /// Tag stamped on every snapshot a plan creates, so retention and snapshot
     /// listings can be scoped to that plan without touching anyone else's data.
@@ -573,9 +578,20 @@ struct ResticService: ResticClient {
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> BackupOutcome {
         var args = context.globalArguments + ["backup", "--json"]
-        args.append(Self.expandTilde(plan.path))
+        args.append(Self.expandTilde(plan.path, home: home))
         for pattern in plan.excludePatterns where !pattern.trimmingCharacters(in: .whitespaces).isEmpty {
-            args += ["--exclude", Self.expandTilde(pattern)]
+            args += ["--exclude", Self.expandTilde(pattern, home: home)]
+        }
+        // The developer switch's rules, fitted to the path like the
+        // defaults are, and the Cargo marker: restic leaves out the
+        // contents of any folder holding it and keeps the marker itself.
+        if plan.excludeDeveloperFiles {
+            for pattern in BackupPlan.developerExcludes(for: plan.path, home: home) {
+                args += ["--exclude", Self.expandTilde(pattern, home: home)]
+            }
+            for marker in BackupPlan.developerMarkers {
+                args += ["--exclude-if-present", marker]
+            }
         }
         if plan.excludeCaches { args.append("--exclude-caches") }
         if plan.oneFileSystem { args.append("--one-file-system") }
@@ -1046,9 +1062,18 @@ struct ResticService: ResticClient {
     }
 
     /// restic does not expand `~`; the shell normally would. NSString, not
-    /// pure Swift: `~user` semantics have no pure-Swift spelling.
-    static func expandTilde(_ path: String) -> String {
+    /// pure Swift: `~user` semantics have no pure-Swift spelling, and its
+    /// tidying — a trailing or doubled slash dropped — is what every
+    /// caller compares. `home` stands in for the real one where the tests
+    /// re-root anchored patterns over a scratch tree (`ResticService.home`):
+    /// a `~` or `~/…` then starts there instead, tidied the same; a typed
+    /// `~user/…` stays NSString's.
+    static func expandTilde(_ path: String, home: String = NSHomeDirectory()) -> String {
         guard path.hasPrefix("~") else { return path }
-        return (path as NSString).expandingTildeInPath
+        let expanded = (path as NSString).expandingTildeInPath
+        let realHome = NSHomeDirectory()
+        guard home != realHome, path == "~" || path.hasPrefix("~/") else { return expanded }
+        precondition(expanded.hasPrefix(realHome), "NSString expanded \(path) to \(expanded), outside \(realHome)")
+        return home + expanded.dropFirst(realHome.count)
     }
 }

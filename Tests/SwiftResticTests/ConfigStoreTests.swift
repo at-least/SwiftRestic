@@ -387,6 +387,92 @@ struct TolerantDecodingTests {
         #expect(BackupPlan().excludePatterns == anywhere)
     }
 
+    @Test("the developer switch is off for new plans and for ones saved without the key, and round-trips when on")
+    func developerFilesWaitUntilAsked() throws {
+        #expect(!BackupPlan().excludeDeveloperFiles)
+        #expect(!(try decode(BackupPlan.self, #"{"name":"Docs"}"#).excludeDeveloperFiles))
+        var on = BackupPlan()
+        on.excludeDeveloperFiles = true
+        // No dates in a fresh plan, so no strategy to match the encoder's.
+        let roundTrip = try JSONDecoder().decode(BackupPlan.self, from: JSONEncoder().encode(on))
+        #expect(roundTrip.excludeDeveloperFiles)
+    }
+
+    @Test("the developer rules fit the folder by the defaults' rule")
+    func developerExcludesFollowThePath() {
+        // The whole list, pinned group by group in the list's own order: a
+        // pattern typoed or dropped here fails this test instead of only a
+        // real backup.
+        let python = [
+            "**/.venv", "**/venv", "**/__pycache__", "**/.mypy_cache", "**/.pytest_cache", "**/.ruff_cache", "**/.tox", "**/.nox",
+        ]
+        let jsFolders = ["**/.next", "**/.nuxt", "**/.svelte-kit", "**/.parcel-cache", "**/.turbo"]
+        let jsHome = ["~/.npm", "~/Library/pnpm/store", "~/.bun/install/cache", "~/.yarn/berry/cache"]
+        let appleFolders = ["**/DerivedData", "**/.build", "**/Pods", "**/Carthage/Build"]
+        let appleHome = ["~/.cocoapods/repos/trunk", "~/.cocoapods/repos/master", "~/Library/Developer/Xcode/*DeviceSupport"]
+        let toolchainHome = [
+            "~/.cargo/registry", "~/.cargo/git", "~/.rustup/toolchains", "~/go/pkg/mod", "~/.m2/repository",
+            "~/.gradle/caches", "~/.gradle/wrapper", "~/.gradle/jdks", "~/.gradle/daemon",
+        ]
+        let dartFolders = ["**/.dart_tool"]
+        let dartHome = ["~/.pub-cache", "~/Library/Android/sdk"]
+        let buildFolders = ["**/.zig-cache", "**/.terraform", "**/.direnv", "**/.stack-work", "**/_build"]
+        let buildHome = ["~/.cache/pre-commit"]
+        let versionManagers = [
+            "~/.nvm/versions", "~/.pyenv/versions", "~/.rbenv/versions", "~/.asdf/installs",
+            "~/.local/share/mise/installs", "~/.sdkman/candidates",
+        ]
+        let simulators = [
+            "~/Library/Developer/CoreSimulator/Devices", "~/Library/Developer/CoreSimulator/Caches",
+            "~/Library/Developer/Xcode/UserData/Previews", "~/.android/avd",
+        ]
+        let containerDisks = [
+            "~/Library/Containers/com.docker.docker/Data/vms",
+            "~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data",
+            "~/.lima/*/disk", "~/.lima/*/diffdisk", "~/.lima/*/basedisk",
+            "~/.colima/_lima/*/disk", "~/.colima/_lima/*/diffdisk", "~/.colima/_lima/*/basedisk",
+            "~/.local/share/containers/podman/machine", "~/.vagrant.d/boxes",
+        ]
+        // What matches anywhere, in the list's order.
+        let relative = python + jsFolders + appleFolders + dartFolders + buildFolders
+        // Every rule, in the list's order: each tool group's folder
+        // patterns with the home folder's beside them.
+        let all = python + jsFolders + jsHome + appleFolders + appleHome + toolchainHome
+            + dartFolders + dartHome + buildFolders + buildHome + versionManagers + simulators + containerDisks
+        #expect(BackupPlan.developerExcludes == all)
+        #expect(BackupPlan.developerMarkers == [".rustc_info.json"])
+        // The home folder holds every anchored rule.
+        #expect(BackupPlan.developerExcludes(for: "~") == all)
+        // Xcode's and the simulators' own subtree: the folder patterns and
+        // the anchored rules that lie inside it, in the list's order — the
+        // DeviceSupport one with the Apple group's, the simulators' three
+        // with theirs. The Android sdk, the package stores and the
+        // container disks are other subtrees of the home folder, not this
+        // one's.
+        #expect(BackupPlan.developerExcludes(for: "~/Library/Developer")
+            == python + jsFolders + appleFolders + [
+                "~/Library/Developer/Xcode/*DeviceSupport",
+            ] + dartFolders + buildFolders + [
+                "~/Library/Developer/CoreSimulator/Devices", "~/Library/Developer/CoreSimulator/Caches",
+                "~/Library/Developer/Xcode/UserData/Previews",
+            ])
+        // A folder none of the anchored rules lies in; a volume another
+        // disk's rules can never name.
+        #expect(BackupPlan.developerExcludes(for: "~/Documents") == relative)
+        #expect(BackupPlan.developerExcludes(for: "/Volumes/T7") == relative)
+        // No path yet: what matches anywhere — a new plan's start.
+        #expect(BackupPlan.developerExcludes(for: "") == relative)
+        // A rule naming the path itself would leave nothing to back up:
+        // the Devices folder does not exclude itself, and its sibling
+        // Caches, of the same depth, is not inside it either.
+        #expect(BackupPlan.developerExcludes(for: "~/Library/Developer/CoreSimulator/Devices") == relative)
+        // A stand-in home (the real-restic test re-roots the rules over a
+        // scratch tree this way): the anchored ones expand against it, not
+        // the real home.
+        #expect(BackupPlan.developerExcludes(for: "/Users/probe", home: "/Users/probe") == all)
+        #expect(BackupPlan.developerExcludes(for: "/Users/probe/proj", home: "/Users/probe") == relative)
+    }
+
     @Test("at load a plan drops the defaults that cannot match under its path, and keeps every pattern it was given")
     func inapplicableDefaultsDropAtLoad() async throws {
         let directory = temporaryDirectory()

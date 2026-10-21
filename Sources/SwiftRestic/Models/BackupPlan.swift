@@ -321,6 +321,13 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// restic's `--exclude-cloud-files`. On for new plans; a plan saved
     /// before the option reads it off, so its backups do not change under it.
     var excludeCloudFiles: Bool = true
+    /// Leave out what developer tools rebuild, with restic's `--exclude`
+    /// for the fitting rules (`developerExcludes(for:)`) and
+    /// `--exclude-if-present` for the Cargo marker. Off for new plans and
+    /// for plans saved without the key, so a plan's backups do not change
+    /// under a switch it never asked for; the rules are read off the
+    /// folder at each run and are never rows in the plan's own list.
+    var excludeDeveloperFiles: Bool = false
 
     init() {}
 
@@ -346,6 +353,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
         excludeCloudFiles = c.value(.excludeCloudFiles, default: false)
+        excludeDeveloperFiles = c.value(.excludeDeveloperFiles, default: false)
     }
 
     /// Noise the Finder, package managers and caches regenerate on their own.
@@ -409,7 +417,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// itself or a folder above it would leave nothing to back up, so it is
     /// not among them; with no path yet, neither is any anchored one.
     static func defaultExcludes(for path: String) -> [String] {
-        defaultExcludes.filter { defaultApplies($0, under: path) }
+        defaultExcludes.filter { patternApplies($0, under: path, home: NSHomeDirectory()) }
     }
 
     /// `patterns` without the defaults that cannot match under `path`; a
@@ -417,19 +425,146 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// applies it (`AppConfiguration`): a plan's path is fixed, so such a
     /// default never will match, and dropping it changes no backup.
     static func withoutInapplicableDefaults(_ patterns: [String], path: String) -> [String] {
-        patterns.filter { !defaultExcludes.contains($0) || defaultApplies($0, under: path) }
+        patterns.filter {
+            !defaultExcludes.contains($0) || patternApplies($0, under: path, home: NSHomeDirectory())
+        }
     }
 
-    /// For the default list's shapes: an anchored pattern's components match
-    /// the path's one for one, `*` within a component, as restic matches
-    /// them — none of the defaults spans components with `**`.
-    private static func defaultApplies(_ pattern: String, under path: String) -> Bool {
+    /// For the defaults' and the developer rules' shapes: an anchored
+    /// pattern's components match the path's one for one, `*` within a
+    /// component, as restic matches them — none of them spans components
+    /// with `**`.
+    private static func patternApplies(_ pattern: String, under path: String, home: String) -> Bool {
         guard pattern.hasPrefix("/") || pattern.hasPrefix("~") else { return true }
         guard !path.isEmpty else { return false }
-        let patternParts = ResticService.expandTilde(pattern).split(separator: "/")
-        let pathParts = ResticService.expandTilde(path).split(separator: "/")
+        let patternParts = ResticService.expandTilde(pattern, home: home).split(separator: "/")
+        let pathParts = ResticService.expandTilde(path, home: home).split(separator: "/")
         return patternParts.count > pathParts.count
             && zip(patternParts, pathParts).allSatisfy { fnmatch(String($0), String($1), 0) == 0 }
+    }
+
+    /// What developer tools rebuild, passed to restic when a plan's
+    /// developer switch (`excludeDeveloperFiles`) is on: the ones that fit
+    /// its path (`developerExcludes(for:)`), with the Cargo marker
+    /// (`developerMarkers`) beside them. The defaults' bar holds — nothing
+    /// here may be the only copy of anything — and where a tool folder
+    /// also holds the user's own words, the disposable subfolder is named,
+    /// never the folder: `~/.gradle`'s gradle.properties,
+    /// `~/.lima`'s lima.yaml, `~/.android`'s keys, `~/.cocoapods`' private
+    /// spec repos and `~/.cache`'s working folders stay by staying out of
+    /// the list. Kept out on purpose: `**/target`, a generic name the
+    /// Cargo marker answers for exactly; virtualenvs by their marker,
+    /// pyvenv.cfg, because a project made one in place (`python -m venv .`)
+    /// keeps the user's code beside it, which restic would leave out with
+    /// the virtualenv — they go by their usual names instead, and one
+    /// named otherwise is backed up; `**/vendor`, `**/build`, `**/bin` and
+    /// `**/dist`, which hold vendored or built source that is not always
+    /// regenerable; `~/Library/Developer/Xcode/Archives`, the only copy of
+    /// a shipped build's dSYMs; `~/.cargo/bin`, its cargo-installed
+    /// executables.
+    static let developerExcludes = [
+        // Python: virtualenvs by the names the venv docs and the tools
+        // give them, bytecode, and the test and type tools' own caches.
+        "**/.venv",
+        "**/venv",
+        "**/__pycache__",
+        "**/.mypy_cache",
+        "**/.pytest_cache",
+        "**/.ruff_cache",
+        "**/.tox",
+        "**/.nox",
+        // JavaScript: the frameworks' build state; node_modules is already
+        // a default. The package managers' global caches are the home
+        // folder's.
+        "**/.next",
+        "**/.nuxt",
+        "**/.svelte-kit",
+        "**/.parcel-cache",
+        "**/.turbo",
+        "~/.npm",
+        "~/Library/pnpm/store",
+        "~/.bun/install/cache",
+        "~/.yarn/berry/cache",
+        // Apple: Xcode's per-project build folders, SwiftPM's, the
+        // dependency managers' checkouts, and the per-device symbol dumps
+        // Xcode re-extracts from a connected device.
+        "**/DerivedData",
+        "**/.build",
+        "**/Pods",
+        "**/Carthage/Build",
+        "~/.cocoapods/repos/trunk",
+        "~/.cocoapods/repos/master",
+        "~/Library/Developer/Xcode/*DeviceSupport",
+        // The toolchains' downloaded modules and the JVM's: redownloaded
+        // from the registries on demand, while the binaries and the
+        // settings beside them are not caches.
+        "~/.cargo/registry",
+        "~/.cargo/git",
+        "~/.rustup/toolchains",
+        "~/go/pkg/mod",
+        "~/.m2/repository",
+        "~/.gradle/caches",
+        "~/.gradle/wrapper",
+        "~/.gradle/jdks",
+        "~/.gradle/daemon",
+        "**/.dart_tool",
+        "~/.pub-cache",
+        "~/Library/Android/sdk",
+        // Other build tools' caches, and Terraform's working folder — the
+        // lockfile beside it stays, so the next init redoes this resolve.
+        "**/.zig-cache",
+        "**/.terraform",
+        "**/.direnv",
+        "**/.stack-work",
+        "**/_build",
+        "~/.cache/pre-commit",
+        // Version managers' installed toolchains, redownloaded on demand;
+        // the shims and version files beside them stay.
+        "~/.nvm/versions",
+        "~/.pyenv/versions",
+        "~/.rbenv/versions",
+        "~/.asdf/installs",
+        "~/.local/share/mise/installs",
+        "~/.sdkman/candidates",
+        // Simulators and SwiftUI previews: the devices are recreated on
+        // demand, but whatever was installed inside them is not backed up
+        // — the switch's trade, said where it is turned on.
+        "~/Library/Developer/CoreSimulator/Devices",
+        "~/Library/Developer/CoreSimulator/Caches",
+        "~/Library/Developer/Xcode/UserData/Previews",
+        "~/.android/avd",
+        // Container and virtual-machine disk images — what lives inside
+        // the machine is not backed up (OrbStack's own FAQ recommends the
+        // exclusion), while the machine's configuration beside the disks
+        // stays. Only the disk files are named, never ~/.lima or
+        // ~/.colima wholesale.
+        "~/Library/Containers/com.docker.docker/Data/vms",
+        "~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data",
+        "~/.lima/*/disk",
+        "~/.lima/*/diffdisk",
+        "~/.lima/*/basedisk",
+        "~/.colima/_lima/*/disk",
+        "~/.colima/_lima/*/diffdisk",
+        "~/.colima/_lima/*/basedisk",
+        "~/.local/share/containers/podman/machine",
+        "~/.vagrant.d/boxes",
+    ]
+
+    /// A folder holding one of these files has its contents left out
+    /// (restic's `--exclude-if-present`), the marker file itself kept —
+    /// how the Cargo target is skipped, whose generic name is not safe to
+    /// exclude by pattern: a user's folder that is only named target stays,
+    /// a folder with the marker, which a build writes into the target
+    /// folder (not into ~/.cargo), does not. Applies to every path.
+    static let developerMarkers = [".rustc_info.json"]
+
+    /// The developer rules a plan of `path` gets: those that match
+    /// anywhere, and each anchored one only when it lies inside the path —
+    /// the same rule as the defaults' (`patternApplies`). `home` stands in
+    /// for the real home folder where the rules are re-rooted over a test
+    /// tree.
+    static func developerExcludes(for path: String, home: String = NSHomeDirectory()) -> [String] {
+        developerExcludes.filter { patternApplies($0, under: path, home: home) }
     }
 
     /// First-occurrence-wins deduplication, order preserved.

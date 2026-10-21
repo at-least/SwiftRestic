@@ -1143,6 +1143,24 @@ struct RepositoryTests {
         #expect(ResticService.expandTilde("/absolute/path") == "/absolute/path")
         #expect(ResticService.expandTilde("**/node_modules") == "**/node_modules")
     }
+
+    @Test("a stand-in home changes where a tilde path starts, never how NSString tidies it")
+    func tildeExpansionAgainstAStandInHome() {
+        // With the real home every shape is NSString's, slashes tidied: a
+        // plan's typed "~/" or "~/Documents/" names the folder restic and
+        // the rest of the app compare against.
+        let shapes = ["~", "~/", "~/Documents", "~/Documents/", "~//Documents", "~/a//b", "~root", "~/Library/Mail/V*/MailData/Envelope Index*"]
+        for shape in shapes {
+            #expect(ResticService.expandTilde(shape) == (shape as NSString).expandingTildeInPath, "\(shape)")
+        }
+        // A stand-in home takes the real one's place in the same result.
+        #expect(ResticService.expandTilde("~", home: "/Users/probe") == "/Users/probe")
+        #expect(ResticService.expandTilde("~/", home: "/Users/probe") == "/Users/probe")
+        #expect(ResticService.expandTilde("~/Documents/", home: "/Users/probe") == "/Users/probe/Documents")
+        #expect(ResticService.expandTilde("~//a//b", home: "/Users/probe") == "/Users/probe/a/b")
+        // Another user's home is NSString's to find.
+        #expect(ResticService.expandTilde("~root/x", home: "/Users/probe") == ("~root/x" as NSString).expandingTildeInPath)
+    }
 }
 
 @Suite("Additional backends")

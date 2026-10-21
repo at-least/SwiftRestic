@@ -740,6 +740,42 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("the developer switch passes restic its marker and fitted excludes when on, none of them when off")
+    func excludeDeveloperFilesFlag() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+
+        model.configuration.plans[index].excludeDeveloperFiles = true
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let with = try #require(model.configuration.runs.first)
+        #expect(with.outcome == .succeeded)
+        let on = try #require(model.runLogs.read(with.id))
+        #expect(on.contains("--exclude-if-present .rustc_info.json"))
+        #expect(on.contains("--exclude **/.venv"))
+        #expect(on.contains("--exclude **/__pycache__"))
+        // No marker for a virtualenv: an in-place one's sits beside the
+        // user's code.
+        #expect(on.contains("pyvenv.cfg") == false)
+
+        model.configuration.plans[index].excludeDeveloperFiles = false
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let without = try #require(model.configuration.runs.first)
+        #expect(without.id != with.id)
+        let off = try #require(model.runLogs.read(without.id))
+        // The argument, never the bare pattern: a run's log holds restic's
+        // every word, and the run's retention step echoes the snapshots'
+        // recorded excludes — the switch-on run's, minutes old, among
+        // them.
+        #expect(off.contains("--exclude-if-present") == false)
+        #expect(off.contains("--exclude **/__pycache__") == false)
+
+        await model.shutdown()
+    }
+
     @Test("the launch sweep removes old drag and preview staging and nothing else")
     func dragStagingSweep() throws {
         let temp = FileManager.default.temporaryDirectory
