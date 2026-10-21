@@ -453,7 +453,7 @@ extension RunRecord {
 
     /// "“Archive SSD” is not connected", naming each drive once, or nil
     /// when a source is not on a volume under /Volumes.
-    private static func notConnected(_ sources: [String]) -> String? {
+    static func notConnected(_ sources: [String]) -> String? {
         var volumes: [String] = []
         for source in sources {
             guard let volume = VolumePresence.volumeName(of: (source as NSString).expandingTildeInPath) else { return nil }

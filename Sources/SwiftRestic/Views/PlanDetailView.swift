@@ -358,9 +358,11 @@ struct PlanDetailView: View {
         return Card("Schedule") {
             DetailGrid {
                 DetailRow("Schedule", schedule)
-                // "Paused — Daily at 2:00 AM" already says there is no next
-                // backup; a second row saying "Paused" only repeats it.
-                if !schedule.hasPrefix(next.value) {
+                // With the schedule switched off the row above reads
+                // "Paused — Daily at 2:00 AM" and Next backup could only
+                // repeat "Paused" (`nextBackupTile`); a timed pause keeps
+                // the row, which says when backups resume.
+                if plan.isEnabled {
                     DetailRow("Next backup") {
                         Text(next.value)
                             .help(next.help ?? "")

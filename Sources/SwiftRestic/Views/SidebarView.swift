@@ -228,9 +228,12 @@ struct SidebarView: View {
                 Text("Reading backups…")
             } else if case let .failed(message) = model.snapshotListingOutcome(for: repository.id) {
                 // Under the repository's own name, its drive's absence needs
-                // no name again.
+                // no name again: the sentence the listing wrote for it
+                // (`RunRecord.notConnected`, the volume's name), matched as
+                // that same derivation builds it — not the row's label,
+                // which names a twin by its path.
                 let line = Format.firstSentence(message)
-                let away = "“\(model.label(of: repository))” is not connected"
+                let away = repository.kind == .local ? RunRecord.notConnected([repository.resolvedLocalPath]) : nil
                 Text(line.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == away ? "Not connected" : line)
                     .lineLimit(1)
                     .truncationMode(.middle)

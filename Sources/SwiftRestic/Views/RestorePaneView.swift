@@ -890,16 +890,19 @@ struct RestorePaneView: View {
         )
     }
 
-    /// The whole record, named by its page's title and dated; the sheet
-    /// says the layout restic will produce: `restore <id> --target`
-    /// recreates every absolute path under the target.
+    /// The whole record, named the way the header and its page name it —
+    /// its qualifier included, which tells two same-titled groups apart —
+    /// and dated; the sheet says the layout restic will produce: `restore
+    /// <id> --target` recreates every absolute path under the target.
     private func restoreWholeRecord() {
         guard let record else { return }
         let repositoryID = repositoryID
         destinationRequest = RestoreDestinationRequest(
             subject: .wholeSnapshot(paths: record.paths),
-            backupName: model.recordLabel(of: record, repositoryID: repositoryID)?.title
-                ?? SnapshotLineage.displayName(of: record, label: nil),
+            backupName: SnapshotLineage.displayName(
+                of: record,
+                label: model.recordLabel(of: record, repositoryID: repositoryID)
+            ),
             backupTime: record.time,
             snapshotShortID: record.shortID
         ) { directories, overwrite in

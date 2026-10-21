@@ -192,24 +192,20 @@ struct RecentProblemsCard: View {
     let repositoryID: UUID
 
     var body: some View {
-        // A clean week is the absence of trouble: no card at all, rather
-        // than one saying so.
-        if !OverviewMetrics.problems(
+        // The same window the sidebar's badge counts, read once.
+        let problems = OverviewMetrics.problems(
             in: model.configuration.runs,
             since: OverviewMetrics.problemWindowStart(from: now),
             repositoryID: repositoryID
-        ).isEmpty {
+        )
+        // A clean week is the absence of trouble: no card at all, rather
+        // than one saying so.
+        if !problems.isEmpty {
             Card("Recent problems") {
                 VStack(alignment: .leading, spacing: 7) {
-                    // The same window the sidebar's badge counts.
-                    let since = OverviewMetrics.problemWindowStart(from: now)
                     // A cause that stands repeats every run: one row each, with
                     // its count, so it cannot push the rest off the card.
-                    let groups = OverviewMetrics.problemGroups(OverviewMetrics.problems(
-                        in: model.configuration.runs,
-                        since: since,
-                        repositoryID: repositoryID
-                    ))
+                    let groups = OverviewMetrics.problemGroups(problems)
                     let shown = groups.prefix(5)
                     // What the badge counts and the rows do not show.
                     let hidden = groups.dropFirst(5).reduce(0) { $0 + $1.count }

@@ -567,7 +567,7 @@ struct NotificationChannelsTab: View {
             // Only while a click in the list's empty space has cleared the
             // selection.
             ContentUnavailableView(
-                "No Alert Selected",
+                "No Webhook Selected",
                 systemImage: "bell",
                 description: Text("Select a webhook in the list to change it.")
             )
