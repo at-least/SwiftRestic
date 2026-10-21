@@ -45,6 +45,14 @@ extension AppModel {
         draft.repositoryID = repositoryID
         draft.path = path
         draft.excludePatterns = prefill.excludes
+        // A run with the developer switch on records its rules among the
+        // excludes, tilde expanded (the marker is not recorded): the whole
+        // set fitted to the path means the switch, not rows the user typed.
+        let developerRules = Set(BackupPlan.developerExcludes(for: path).map { ResticService.expandTilde($0) })
+        if developerRules.isSubset(of: prefill.excludes) {
+            draft.excludePatterns.removeAll { developerRules.contains($0) }
+            draft.excludeDeveloperFiles = true
+        }
         // Plan tags are the group's plumbing; what the user tagged is everything else.
         draft.tags = prefill.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
         // Daily — a new plan's default — only when every prefilled folder is

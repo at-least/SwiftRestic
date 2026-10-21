@@ -139,6 +139,32 @@ struct AdoptTests {
         #expect(draft.lastRunAt == nil && draft.lastSuccessAt == nil)
     }
 
+    @Test("a history made with the developer switch on adopts with the switch on, its rules not copied as rows")
+    func developerRulesAdoptAsTheSwitch() throws {
+        let planID = UUID()
+        let tag = ResticService.planTag(planID)
+        let model = makeModel()
+        let repository = makeRepository()
+        // restic records each rule as the run passed it, tilde expanded, and
+        // not the marker; the plan's own rows come first.
+        for path in ["/Data/Docs", NSHomeDirectory()] {
+            let recorded = ["*.iso"] + BackupPlan.developerExcludes(for: path).map { ResticService.expandTilde($0) }
+            let made = try snapshot("on", time: "2026-10-01T10:00:00Z", paths: [path], tags: [tag], excludes: recorded)
+            loadModel(model, repository: repository, listing: [made])
+            let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+            #expect(draft.excludeDeveloperFiles, "path \(path)")
+            #expect(draft.excludePatterns == ["*.iso"], "path \(path)")
+        }
+
+        // Part of the set is the user's own rows, copied as they were.
+        let partial = ["*.iso", "**/.venv", "**/__pycache__"]
+        let made = try snapshot("off", time: "2026-10-01T10:00:00Z", tags: [tag], excludes: partial)
+        loadModel(model, repository: repository, listing: [made])
+        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        #expect(!draft.excludeDeveloperFiles)
+        #expect(draft.excludePatterns == partial)
+    }
+
     @Test("the schedule follows the folder: Daily when it is here, Manual otherwise")
     func scheduleFollowsTheFolders() throws {
         let here = existingFolder()

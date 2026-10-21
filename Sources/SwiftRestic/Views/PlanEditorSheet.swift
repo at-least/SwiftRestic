@@ -531,16 +531,13 @@ struct PlanEditorSheet: View {
                 // switch on — never rows in the list above, always the
                 // folder's own — shown while it is off too, so what it
                 // would leave out is read before it is turned on.
-                let rules = BackupPlan.developerExcludes(for: draft.path)
-                DisclosureGroup("\(rules.count + BackupPlan.developerMarkers.count) rules for this folder") {
-                    ForEach(rules, id: \.self) { rule in
-                        Text(rule)
+                let lines = BackupPlan.developerRuleLines(for: draft.path)
+                DisclosureGroup("\(lines.count) rules for this folder") {
+                    ForEach(lines, id: \.self) { line in
+                        Text(line)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .help(rule)
-                    }
-                    ForEach(BackupPlan.developerMarkers, id: \.self) { marker in
-                        Text("Folders holding \(marker)")
+                            .help(line)
                     }
                 }
                 .font(.callout)

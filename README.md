@@ -176,7 +176,9 @@ the generator after editing it; the PNGs are checked in.
   adoptable group while there is one) opens the plan editor with, from the
   newest backup this Mac made — or the newest of all when another Mac made
   them all — its folder, exclude patterns and user tags;
-  the folder and the repository are the backups' own, the schedule is Daily
+  a backup whose recorded patterns hold every developer rule fitted to its
+  folder adopts with *Skip what developer tools rebuild* on and those rules
+  not copied as rows (restic records them, not the marker); the folder and the repository are the backups' own, the schedule is Daily
   only when the folder exists here, and retention is off. A group whose
   backup holds several folders — a plan of an earlier build — cannot be
   adopted, since a plan backs up one; its page says so. Adopting

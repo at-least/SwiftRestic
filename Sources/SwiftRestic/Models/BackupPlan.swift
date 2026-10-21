@@ -567,6 +567,14 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         developerExcludes.filter { patternApplies($0, under: path, home: home) }
     }
 
+    /// What the developer switch leaves out of a plan of `path`, one line
+    /// each, as the editor's disclosure and the plan page's line list it:
+    /// the fitted rules, then a line per marker. Its count is the number
+    /// both surfaces say.
+    static func developerRuleLines(for path: String) -> [String] {
+        developerExcludes(for: path) + developerMarkers.map { "Folders holding \($0)" }
+    }
+
     /// First-occurrence-wins deduplication, order preserved.
     static func withoutDuplicates(_ values: [String]) -> [String] {
         var seen = Set<String>()

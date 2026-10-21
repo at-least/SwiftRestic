@@ -504,8 +504,7 @@ struct PlanDetailView: View {
     /// gets, the rules themselves in the line's help — the set a run
     /// passes restic, fitted where the stored patterns above are as typed.
     private func developerRulesLine(_ plan: BackupPlan) -> some View {
-        let rules = BackupPlan.developerExcludes(for: plan.path)
-        let lines = rules + BackupPlan.developerMarkers.map { "Folders holding \($0)" }
+        let lines = BackupPlan.developerRuleLines(for: plan.path)
         return Label {
             Text("\(lines.count) rules for what developer tools rebuild")
                 .lineLimit(1)

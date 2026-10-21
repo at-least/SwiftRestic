@@ -391,6 +391,7 @@ struct FindFilesView: View {
                     // the keep/replace choice lives.
                     .keyboardShortcut(.defaultAction)
                     .disabled(selected.isEmpty || model.isRestoring)
+                    .help("Restore the selected items, each from the backup it was found in (Return)")
             }
         }
         .padding(12)
