@@ -617,20 +617,25 @@ struct OverviewMetricsTests {
         #expect(held?.showsResume == true)
     }
 
-    @Test("the Snapshots value splits the count no plan of the repository made")
+    @Test("the Snapshots value splits off the backups the sidebar shelves under Other backups, by that name")
     func snapshotsValueSplit() {
-        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6) == "11 · 6 from other plans")
-        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 0) == "11")
-        // A plan-less repository's: none of its backups is a plan's.
-        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11) == "11")
+        // Other backups hold another Mac's, a deleted plan's and the
+        // console's alike: the line names the shelf, not a cause.
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, repositoryHasPlans: true) == "11 · 6 in Other backups")
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 0, repositoryHasPlans: true) == "11")
+        // Plans, but none of the backups theirs: said, not left out.
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11, repositoryHasPlans: true) == "11 · all in Other backups")
+        // A plan-less repository's shelf is "Backups": nothing to split.
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11, repositoryHasPlans: false) == "11")
         // How far back the history reaches, after the split; a single
         // backup reaches no further than itself.
         let oldest = Date(timeIntervalSince1970: 1_748_782_800)
-        #expect(OverviewMetrics.snapshotsLine(total: 495, otherBackups: 0, since: oldest) == "495 · since \(Format.day(oldest))")
-        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, since: oldest)
-            == "11 · 6 from other plans · since \(Format.day(oldest))")
-        #expect(OverviewMetrics.snapshotsLine(total: 1, otherBackups: 0, since: oldest) == "1")
-        #expect(OverviewMetrics.snapshotsLine(total: 0, otherBackups: 0, since: nil) == "0")
+        #expect(OverviewMetrics.snapshotsLine(total: 495, otherBackups: 0, repositoryHasPlans: true, since: oldest)
+            == "495 · since \(Format.day(oldest))")
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, repositoryHasPlans: true, since: oldest)
+            == "11 · 6 in Other backups · since \(Format.day(oldest))")
+        #expect(OverviewMetrics.snapshotsLine(total: 1, otherBackups: 0, repositoryHasPlans: true, since: oldest) == "1")
+        #expect(OverviewMetrics.snapshotsLine(total: 0, otherBackups: 0, repositoryHasPlans: true, since: nil) == "0")
     }
 
     @Test("the Snapshots tile names the oldest backup behind its face, read from the end of the newest-first listing")
@@ -641,11 +646,11 @@ struct OverviewMetricsTests {
             snapshot("bbbb", at: Date(timeIntervalSince1970: 1_750_000_000)),
             snapshot("cccc", at: oldest),
         ]
-        let tile = OverviewMetrics.snapshotsTile(total: 3, otherBackups: 0, snapshots: listing, subject: "of this plan")
+        let tile = OverviewMetrics.snapshotsTile(total: 3, otherBackups: 0, repositoryHasPlans: true, snapshots: listing, subject: "of this plan")
         #expect(tile.value == "3 · since \(Format.day(oldest))")
         #expect(tile.help == "The oldest backup of this plan is from \(Format.timestamp(oldest)).")
         // Nothing listed: no moment to name.
-        let empty = OverviewMetrics.snapshotsTile(total: 0, otherBackups: 0, snapshots: [], subject: "here")
+        let empty = OverviewMetrics.snapshotsTile(total: 0, otherBackups: 0, repositoryHasPlans: true, snapshots: [], subject: "here")
         #expect(empty.value == "0")
         #expect(empty.help == nil)
     }

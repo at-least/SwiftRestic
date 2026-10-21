@@ -465,22 +465,25 @@ enum OverviewMetrics {
     /// backup's moment behind it. `snapshots` are newest first, as every
     /// listing is (the pages read their newest from `first`), so the oldest
     /// is the last.
-    static func snapshotsTile(total: Int, otherBackups: Int, snapshots: [Snapshot], subject: String) -> TileFace {
+    static func snapshotsTile(total: Int, otherBackups: Int, repositoryHasPlans: Bool, snapshots: [Snapshot], subject: String) -> TileFace {
         let oldest = snapshots.last?.time
         return TileFace(
-            value: snapshotsLine(total: total, otherBackups: otherBackups, since: oldest),
+            value: snapshotsLine(total: total, otherBackups: otherBackups, repositoryHasPlans: repositoryHasPlans, since: oldest),
             help: oldest.map { "The oldest backup \(subject) is from \(Format.timestamp($0))." }
         )
     }
 
-    /// The repository page's Snapshots value: the whole count, split when
-    /// some backups, not all, belong to no plan of it — the same count the
-    /// sidebar's Other backups node carries. When none is a plan's there is
-    /// nothing to split.
-    static func snapshotsLine(total: Int, otherBackups: Int, since: Date? = nil) -> String {
+    /// The repository page's Snapshots value: the whole count, split by the
+    /// shelf the sidebar puts the rest on — "Other backups", whatever made
+    /// them (another Mac, a deleted plan, the console, restic elsewhere), so
+    /// the line names the place, not a cause. A repository with no plans
+    /// shelves everything under "Backups": there is nothing to split.
+    static func snapshotsLine(total: Int, otherBackups: Int, repositoryHasPlans: Bool, since: Date? = nil) -> String {
         var line = Format.count(total)
-        if otherBackups > 0, otherBackups < total {
-            line += " · \(Format.count(otherBackups)) from other plans"
+        if repositoryHasPlans, otherBackups > 0 {
+            line += otherBackups == total
+                ? " · all in Other backups"
+                : " · \(Format.count(otherBackups)) in Other backups"
         }
         // How far back the history reaches — the oldest backup's day, which
         // nothing else on the page says and which both the Backups tab's

@@ -126,9 +126,11 @@ struct RepositoryDetailView: View {
         switch model.snapshotListingOutcome(for: repositoryID) {
         case .loaded:
             let snapshots = model.snapshots(for: repositoryID)
+            let shelves = model.shelves(for: repositoryID)
             let tile = OverviewMetrics.snapshotsTile(
                 total: model.repositoryStats[repositoryID]?.snapshotsCount ?? snapshots.count,
-                otherBackups: model.shelves(for: repositoryID).otherBackupsCount,
+                otherBackups: shelves.otherBackupsCount,
+                repositoryHasPlans: !shelves.plans.isEmpty,
                 snapshots: snapshots,
                 subject: "here"
             )

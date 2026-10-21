@@ -87,7 +87,7 @@ extension AppModel {
             let quoted = removedPlanNames.map { "“\($0)”" }
             consequences += removedPlanNames.count == 1
                 ? "Its plan \(quoted[0]) is removed too. "
-                : "Its plans \(ListFormatter.localizedString(byJoining: quoted)) are removed too. "
+                : "Its plans \(Format.list(quoted)) are removed too. "
         }
         consequences += "The backups in it are kept."
         if isRestoring {

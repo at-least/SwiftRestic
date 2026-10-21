@@ -175,10 +175,12 @@ the generator after editing it; the PNGs are checked in.
   context menu, or the repository page's *Other backups* card, listing each
   adoptable group while there is one) opens the plan editor with, from the
   newest backup this Mac made — or the newest of all when another Mac made
-  them all — its folder, exclude patterns and user tags;
-  a backup whose recorded patterns hold every developer rule fitted to its
-  folder adopts with *Skip developer files* on and those rules
-  not copied as rows (restic records them, not the marker); the folder and the repository are the backups' own, the schedule is Daily
+  them all — its folder, exclude patterns and user tags, each pattern the
+  app offers in its own `~` spelling (restic records them tilde expanded);
+  a backup whose recorded patterns hold most of the developer rules fitted
+  to its folder — not all, since a later build may add one — adopts with
+  *Skip developer files* on and those rules not copied as rows (restic
+  records them, not the marker); the folder and the repository are the backups' own, the schedule is Daily
   only when the folder exists here, and retention is off. A group whose
   backup holds several folders — a plan of an earlier build — cannot be
   adopted, since a plan backs up one; its page says so. Adopting
@@ -214,9 +216,10 @@ the generator after editing it; the PNGs are checked in.
   item for every menu item" (until 2026-10-19 *Refresh* and *Edit* sat at
   the toolbar's right). The *Backups* row
   splits off backups no
-  plan here made (“11 · 6 from other plans”; none split off when no plan
-  made any) and says how far
-  back the history reaches (“509 · 3 from other plans · since Jun 1, 2025”,
+  plan here made, by the sidebar shelf that holds them (“11 · 6 in Other
+  backups”, “11 · all in Other backups”; none split off in a repository
+  with no plans, whose shelf is “Backups”) and says how far
+  back the history reaches (“509 · 3 in Other backups · since Jun 1, 2025”,
   the oldest backup's moment in the tooltip), as a plan page's does for its
   own, so whether last March can be reached is answered before browsing. A
   repository whose first listing finds no plans but adoptable history opens
@@ -384,8 +387,8 @@ the generator after editing it; the PNGs are checked in.
   Lima, Colima, Podman, Vagrant): whatever was installed inside one is not
   backed up, and the editor's caption says so beside the switch.
   On for new plans (since 2026-10-21) and off for plans saved before the
-  option; adopting a backup turns it on only when that backup recorded every
-  rule it passes. On, the rules
+  option; adopting a backup turns it on when that backup recorded most of
+  the rules it passes. On, the rules
   follow the folder the way the defaults do (a plan of `~/Documents` gets the
   folder patterns alone, one of the home folder gets the home rules too) and
   are never stored in the plan's own list — while the switch is on, the

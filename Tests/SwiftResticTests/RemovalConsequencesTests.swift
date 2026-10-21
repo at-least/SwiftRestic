@@ -28,6 +28,17 @@ struct RemovalConsequencesTests {
                 isConsoleRunning: false
             ) == "Its plan “Documents” is removed too. The backups in it are kept."
         )
+        // Three, joined as every list in the app is (`Format.list`), not
+        // by the Mac's locale.
+        #expect(
+            AppModel.removalConsequences(
+                removedPlanNames: ["Documents", "Photos", "Music"],
+                isRestoring: false,
+                runningBackupNames: [],
+                isMaintaining: false,
+                isConsoleRunning: false
+            ) == "Its plans “Documents”, “Photos” and “Music” are removed too. The backups in it are kept."
+        )
         // No plan uses it: nothing is removed with it, so nothing says so.
         #expect(
             AppModel.removalConsequences(

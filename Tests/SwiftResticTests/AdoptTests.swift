@@ -156,6 +156,16 @@ struct AdoptTests {
             #expect(draft.excludePatterns == ["*.iso"], "path \(path)")
         }
 
+        // A rule added by a later build is missing from an older history:
+        // the switch still reads as on, and the rules it recorded are not
+        // copied as rows.
+        let older = ["*.iso"] + BackupPlan.developerExcludes(for: "/Data/Docs").dropFirst()
+        let made1 = try snapshot("older", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: older)
+        loadModel(model, repository: repository, listing: [made1])
+        let olderDraft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        #expect(olderDraft.excludeDeveloperFiles)
+        #expect(olderDraft.excludePatterns == ["*.iso"])
+
         // Part of the set is the user's own rows, copied as they were.
         let partial = ["*.iso", "**/.venv", "**/__pycache__"]
         let made = try snapshot("off", time: "2026-10-01T10:00:00Z", tags: [tag], excludes: partial)
@@ -163,6 +173,24 @@ struct AdoptTests {
         let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(!draft.excludeDeveloperFiles)
         #expect(draft.excludePatterns == partial)
+    }
+
+    @Test("a default restic recorded with its tilde expanded adopts in the app's spelling, labelled; other rows stay as recorded")
+    func expandedDefaultsAdoptInTheirOwnSpelling() throws {
+        let planID = UUID()
+        let tag = ResticService.planTag(planID)
+        let model = makeModel()
+        let repository = makeRepository()
+        let caches = ResticService.expandTilde("~/Library/Caches")
+        let made = try snapshot(
+            "home", time: "2026-10-01T10:00:00Z", paths: [NSHomeDirectory()], tags: [tag],
+            excludes: [".DS_Store", caches, "/Users/someone/elsewhere"]
+        )
+        loadModel(model, repository: repository, listing: [made])
+        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        #expect(draft.excludePatterns == [".DS_Store", "~/Library/Caches", "/Users/someone/elsewhere"])
+        #expect(ExcludeRule.sections(stored: draft.excludePatterns).first { $0.category == .appState }?
+            .rows.map(\.line) == ["~/Library/Caches"])
     }
 
     @Test("the schedule follows the folder: Daily when it is here, Manual otherwise")

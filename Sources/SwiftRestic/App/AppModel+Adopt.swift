@@ -42,14 +42,24 @@ extension AppModel {
         draft.id = planID
         draft.repositoryID = repositoryID
         draft.path = path
-        draft.excludePatterns = prefill.excludes
+        // restic records each exclude as it was passed, tilde expanded: a
+        // rule the app offers goes back to the app's own spelling, so it
+        // reads as that rule — labelled, grouped, a default still a default.
+        let spelled = Dictionary(
+            (BackupPlan.defaultExcludes + BackupPlan.developerExcludes).filter { $0.hasPrefix("~") }
+                .map { (ResticService.expandTilde($0), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        draft.excludePatterns = BackupPlan.withoutDuplicates(prefill.excludes.map { spelled[$0] ?? $0 })
         // A run with the developer switch on records its rules among the
-        // excludes, tilde expanded (the marker is not recorded): the whole
-        // set fitted to the path means the switch, not rows the user typed.
-        // Anything less means it was off — set either way, since a new
-        // plan starts with it on.
-        let developerRules = Set(BackupPlan.developerExcludes(for: path).map { ResticService.expandTilde($0) })
-        draft.excludeDeveloperFiles = developerRules.isSubset(of: prefill.excludes)
+        // excludes (the marker is not recorded). Most of the set fitted to
+        // the path means the switch — not all of it, since a later build
+        // may add a rule an older history never passed; a few such rows
+        // are ones the user typed. Set either way, since a new plan starts
+        // with it on.
+        let developerRules = Set(BackupPlan.developerExcludes(for: path))
+        let recorded = developerRules.intersection(draft.excludePatterns)
+        draft.excludeDeveloperFiles = recorded.count * 2 > developerRules.count
         if draft.excludeDeveloperFiles {
             draft.excludePatterns.removeAll { developerRules.contains($0) }
         }

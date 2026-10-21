@@ -432,7 +432,7 @@ struct PlanDetailView: View {
                     // The count and how far back the plan's history reaches
                     // — the repository page's own line, for this plan alone.
                     let tile = OverviewMetrics.snapshotsTile(
-                        total: snapshots.count, otherBackups: 0, snapshots: snapshots, subject: "of this plan"
+                        total: snapshots.count, otherBackups: 0, repositoryHasPlans: true, snapshots: snapshots, subject: "of this plan"
                     )
                     // When the count was read, in the tooltip with the rest.
                     let updated = model.snapshotsLoadedAt(for: repositoryID)
