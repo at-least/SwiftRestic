@@ -48,10 +48,12 @@ extension AppModel {
         // A run with the developer switch on records its rules among the
         // excludes, tilde expanded (the marker is not recorded): the whole
         // set fitted to the path means the switch, not rows the user typed.
+        // Anything less means it was off — set either way, since a new
+        // plan starts with it on.
         let developerRules = Set(BackupPlan.developerExcludes(for: path).map { ResticService.expandTilde($0) })
-        if developerRules.isSubset(of: prefill.excludes) {
+        draft.excludeDeveloperFiles = developerRules.isSubset(of: prefill.excludes)
+        if draft.excludeDeveloperFiles {
             draft.excludePatterns.removeAll { developerRules.contains($0) }
-            draft.excludeDeveloperFiles = true
         }
         // Plan tags are the group's plumbing; what the user tagged is everything else.
         draft.tags = prefill.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }

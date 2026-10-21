@@ -381,8 +381,10 @@ the generator after editing it; the PNGs are checked in.
   Xcode's per-device symbol dumps — and, the switch's trade, the simulators'
   devices and the containers' machine disks (CoreSimulator, Docker, OrbStack,
   Lima, Colima, Podman, Vagrant): whatever was installed inside one is not
-  backed up, and the editor's caption says so before the switch is turned on.
-  Off for new plans and for plans saved before the option; on, the rules
+  backed up, and the editor's caption says so beside the switch.
+  On for new plans (since 2026-10-21) and off for plans saved before the
+  option; adopting a backup turns it on only when that backup recorded every
+  rule it passes. On, the rules
   follow the folder the way the defaults do (a plan of `~/Documents` gets the
   folder patterns alone, one of the home folder gets the home rules too) and
   are never rows in the plan's own list — the editor shows them in a collapsed

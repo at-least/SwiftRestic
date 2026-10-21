@@ -323,11 +323,12 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var excludeCloudFiles: Bool = true
     /// Leave out what developer tools rebuild, with restic's `--exclude`
     /// for the fitting rules (`developerExcludes(for:)`) and
-    /// `--exclude-if-present` for the Cargo marker. Off for new plans and
-    /// for plans saved without the key, so a plan's backups do not change
-    /// under a switch it never asked for; the rules are read off the
-    /// folder at each run and are never rows in the plan's own list.
-    var excludeDeveloperFiles: Bool = false
+    /// `--exclude-if-present` for the Cargo marker. On for new plans (the
+    /// user's call, 2026-10-21); a plan saved without the key reads it off,
+    /// so its backups do not change under a switch it never asked for. The
+    /// rules are read off the folder at each run and are never rows in the
+    /// plan's own list.
+    var excludeDeveloperFiles: Bool = true
 
     init() {}
 

@@ -387,15 +387,17 @@ struct TolerantDecodingTests {
         #expect(BackupPlan().excludePatterns == anywhere)
     }
 
-    @Test("the developer switch is off for new plans and for ones saved without the key, and round-trips when on")
-    func developerFilesWaitUntilAsked() throws {
-        #expect(!BackupPlan().excludeDeveloperFiles)
+    @Test("the developer switch is on for new plans, off for ones saved without the key, and round-trips either way")
+    func developerFilesOnForNewPlans() throws {
+        #expect(BackupPlan().excludeDeveloperFiles)
         #expect(!(try decode(BackupPlan.self, #"{"name":"Docs"}"#).excludeDeveloperFiles))
-        var on = BackupPlan()
-        on.excludeDeveloperFiles = true
         // No dates in a fresh plan, so no strategy to match the encoder's.
-        let roundTrip = try JSONDecoder().decode(BackupPlan.self, from: JSONEncoder().encode(on))
-        #expect(roundTrip.excludeDeveloperFiles)
+        for value in [true, false] {
+            var plan = BackupPlan()
+            plan.excludeDeveloperFiles = value
+            let roundTrip = try JSONDecoder().decode(BackupPlan.self, from: JSONEncoder().encode(plan))
+            #expect(roundTrip.excludeDeveloperFiles == value)
+        }
     }
 
     @Test("the developer rules fit the folder by the defaults' rule")
