@@ -1020,7 +1020,10 @@ struct ResticIntegrationTests {
         let modules = fixture.sourceDirectory.appendingPathComponent("project/node_modules/left-pad")
         try FileManager.default.createDirectory(at: modules, withIntermediateDirectories: true)
         try "module".write(to: modules.appendingPathComponent("index.js"), atomically: true, encoding: .utf8)
-        fixture.plan.excludePatterns = BackupPlan.defaultExcludes
+        // The defaults as a plan of this folder gets them. The whole list
+        // would leave nothing to back up: the scratch tree lies under
+        // /private/var/folders, itself one of the startup disk's defaults.
+        fixture.plan.excludePatterns = BackupPlan.defaultExcludes(for: fixture.sourceDirectory.path)
 
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
         let snapshotID = try #require(outcome.summary?.snapshotID)
@@ -1036,6 +1039,83 @@ struct ResticIntegrationTests {
         #expect(FileManager.default.fileExists(atPath: restored(object).path))
         #expect(FileManager.default.fileExists(atPath: restored(git.appendingPathComponent("HEAD")).path))
         #expect(!FileManager.default.fileExists(atPath: restored(modules).path))
+    }
+
+    @Test("the folder-fitted defaults' glob shapes skip what the system rebuilds, re-rooted over a scratch tree")
+    func reRootedDefaultsSkipRegeneratedState() async throws {
+        var fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // The new defaults' shapes with the "~" or "/" anchor replaced by
+        // the scratch root: the real anchors name the user's home folder
+        // and disk, and the fitting itself is the unit pins' fact. What
+        // needs real restic is whether the globs match as drawn — `V*` and
+        // `Envelope Index*` inside one component, spaces staying one
+        // component, and `*` never crossing a separator.
+        let root = fixture.sourceDirectory.path
+        fixture.plan.excludePatterns = [
+            root + "/Library/Mail/V*/MailData/Envelope Index*",
+            root + "/Pictures/*.photoslibrary/database/search",
+            root + "/Pictures/*.photoslibrary/resources/caches",
+            root + "/Library/Group Containers/*/Library/Caches",
+            root + "/Volumes/*/.Spotlight-V100",
+            root + "/Volumes/*/.fseventsd",
+        ]
+
+        // The trees the shapes answer to, in Mail's, Photos' and an
+        // external drive's own layout: the index (a SQLite trio) against
+        // the messages it indexes, the search database and analysis caches
+        // against the library database and the originals, an app group's
+        // caches against its preferences, and a volume root's bookkeeping
+        // against a user folder on the volume.
+        @discardableResult
+        func planted(_ relative: String, _ contents: String) throws -> URL {
+            let url = fixture.sourceDirectory.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        }
+        try planted("Library/Mail/V10/MailData/Envelope Index", "index")
+        try planted("Library/Mail/V10/MailData/Envelope Index-shm", "shm")
+        try planted("Library/Mail/V10/MailData/Envelope Index-wal", "wal")
+        let message = try planted("Library/Mail/V10/5C98A1B2-C3D4-4E5F-8A9B-0123456789AB/Data/Messages/172.emlx", "message")
+        try planted("Pictures/My Photos.photoslibrary/database/search/leo.sqlite", "search index")
+        try planted("Pictures/My Photos.photoslibrary/resources/caches/compute/thumbnails", "cache")
+        let database = try planted("Pictures/My Photos.photoslibrary/database/Photos.sqlite", "library database")
+        let original = try planted("Pictures/My Photos.photoslibrary/originals/2026/IMG_0001.heic", "photo")
+        try planted("Library/Group Containers/group.abc123/Library/Caches/cache.bin", "cache")
+        let preferences = try planted("Library/Group Containers/group.abc123/Library/Preferences/prefs.plist", "prefs")
+        try planted("Volumes/T7/.fseventsd/fsevents", "events")
+        try planted("Volumes/T7/.Spotlight-V100/Store-V2/index", "index")
+        let document = try planted("Volumes/T7/user/doc.txt", "doc")
+
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        let snapshotID = try #require(outcome.summary?.snapshotID)
+
+        // `restic ls` of the whole snapshot is the truth the excludes are
+        // checked against — every path the snapshot holds, nothing else.
+        let listed = NodeCollector()
+        try await fixture.service.walkSnapshot(fixture.context, snapshotID: snapshotID) { node in
+            listed.append(node)
+        }
+        let paths = Set(listed.content.keys)
+
+        #expect(!paths.contains { $0.hasSuffix("/Envelope Index") || $0.hasSuffix("/Envelope Index-shm") || $0.hasSuffix("/Envelope Index-wal") },
+            "the Mail index trio must be skipped; snapshot held: \(paths.filter { $0.contains("MailData") })")
+        #expect(paths.contains(message.path), "the message beside MailData must stay")
+        #expect(!paths.contains { $0.contains("/database/search") },
+            "the search index must be skipped; snapshot held: \(paths.filter { $0.contains(".photoslibrary") })")
+        #expect(!paths.contains { $0.contains("/resources/caches") }, "the analysis caches must be skipped")
+        #expect(paths.contains(database.path), "the library database must stay")
+        #expect(paths.contains(original.path), "the originals must stay")
+        #expect(!paths.contains { $0.contains("/group.abc123/Library/Caches") },
+            "the app group's caches must be skipped; snapshot held: \(paths.filter { $0.contains("group.abc123") })")
+        #expect(paths.contains(preferences.path), "the app group's preferences must stay")
+        #expect(!paths.contains { $0.hasSuffix("/.fseventsd/fsevents") },
+            "the volume's FS-events journal must be skipped; snapshot held: \(paths.filter { $0.contains("/Volumes/") })")
+        #expect(!paths.contains { $0.hasSuffix("/.Spotlight-V100/Store-V2/index") }, "the volume's Spotlight index must be skipped")
+        #expect(paths.contains(document.path), "the user folder on the volume must stay")
     }
 
     @Test("check reports a healthy repository")

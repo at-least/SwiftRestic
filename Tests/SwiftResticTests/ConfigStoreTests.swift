@@ -298,24 +298,90 @@ struct TolerantDecodingTests {
     func defaultExcludesFollowThePath() {
         let home = NSHomeDirectory()
         let anywhere = [".DS_Store", "**/node_modules"]
+        // Every home-anchored default, in the list's order.
+        let homeDefaults = anywhere + [
+            "~/Library/Caches",
+            "~/Library/Containers/*/Data/Library/Caches",
+            "~/.Trash",
+            "~/Library/Application Support/Steam",
+            "~/Library/Logs",
+            "~/Library/Metadata/CoreSpotlight",
+            "~/Library/Saved Application State",
+            "~/Library/HTTPStorages",
+            "~/Library/Group Containers/*/Library/Caches",
+            "~/Library/Mail/V*/MailData/Envelope Index*",
+            "~/Pictures/*.photoslibrary/database/search",
+            "~/Pictures/*.photoslibrary/resources/caches",
+        ]
         // A folder none of the home-folder defaults is inside.
         #expect(BackupPlan.defaultExcludes(for: "~/dotfiles") == anywhere)
         #expect(BackupPlan.defaultExcludes(for: home + "/dotfiles") == anywhere)
-        // The home folder, and every folder above it, holds them all.
-        #expect(BackupPlan.defaultExcludes(for: "~") == BackupPlan.defaultExcludes)
-        #expect(BackupPlan.defaultExcludes(for: "~/") == BackupPlan.defaultExcludes)
-        #expect(BackupPlan.defaultExcludes(for: (home as NSString).deletingLastPathComponent) == BackupPlan.defaultExcludes)
-        #expect(BackupPlan.defaultExcludes(for: "/") == BackupPlan.defaultExcludes)
-        // Inside the home folder, the ones inside the path.
+        // The home folder holds all of those; a folder above it — /Users
+        // itself — them and nothing of the drives or the startup disk,
+        // /System included.
+        #expect(BackupPlan.defaultExcludes(for: "~") == homeDefaults)
+        #expect(BackupPlan.defaultExcludes(for: "~/") == homeDefaults)
+        #expect(BackupPlan.defaultExcludes(for: (home as NSString).deletingLastPathComponent) == homeDefaults)
+        // Inside the home folder, the ones anchored inside the path: the
+        // Library subtree carries the Library ones and Mail's index,
+        // Pictures the Photos library's regenerables.
         #expect(BackupPlan.defaultExcludes(for: "~/Library") == anywhere + [
-            "~/Library/Caches", "~/Library/Containers/*/Data/Library/Caches", "~/Library/Application Support/Steam",
+            "~/Library/Caches",
+            "~/Library/Containers/*/Data/Library/Caches",
+            "~/Library/Application Support/Steam",
+            "~/Library/Logs",
+            "~/Library/Metadata/CoreSpotlight",
+            "~/Library/Saved Application State",
+            "~/Library/HTTPStorages",
+            "~/Library/Group Containers/*/Library/Caches",
+            "~/Library/Mail/V*/MailData/Envelope Index*",
         ])
         #expect(BackupPlan.defaultExcludes(for: home + "/Library/Containers/com.example.app")
             == anywhere + ["~/Library/Containers/*/Data/Library/Caches"])
+        #expect(BackupPlan.defaultExcludes(for: "~/Library/Mail") == anywhere + ["~/Library/Mail/V*/MailData/Envelope Index*"])
+        #expect(BackupPlan.defaultExcludes(for: "~/Pictures")
+            == anywhere + ["~/Pictures/*.photoslibrary/database/search", "~/Pictures/*.photoslibrary/resources/caches"])
         // A default naming the path itself, or a folder above it, would
         // leave nothing to back up.
         #expect(BackupPlan.defaultExcludes(for: "~/Library/Caches") == anywhere)
         #expect(BackupPlan.defaultExcludes(for: "~/Library/Caches/com.example") == anywhere)
+        #expect(BackupPlan.defaultExcludes(for: "~/Documents") == anywhere)
+        // A volume's root bookkeeping goes to a plan of the volume — of
+        // /Volumes itself as much as of one volume — not to one of a
+        // folder on it.
+        let volumeGroup = [
+            "/Volumes/*/.Spotlight-V100",
+            "/Volumes/*/.fseventsd",
+            "/Volumes/*/.Trashes",
+            "/Volumes/*/.DocumentRevisions-V100",
+            "/Volumes/*/.TemporaryItems",
+        ]
+        #expect(BackupPlan.defaultExcludes(for: "/Volumes/T7") == anywhere + volumeGroup)
+        #expect(BackupPlan.defaultExcludes(for: "/Volumes") == anywhere + volumeGroup)
+        #expect(BackupPlan.defaultExcludes(for: "/Volumes/T7/Photos") == anywhere)
+        // The startup disk's own, spelled out: a plan of / holds all of
+        // them and /System alone, while /private, /private/var and
+        // /Library hold the ones lying below them — and the whole list is
+        // pinned to these three groups, so a pattern typoed here fails
+        // this test instead of only a real backup of /.
+        let startupGroup = [
+            "/System",
+            "/private/var/vm",
+            "/private/var/folders",
+            "/private/tmp",
+            "/Library/Caches",
+            "/Library/Logs",
+        ]
+        #expect(BackupPlan.defaultExcludes
+            == anywhere + Array(homeDefaults.dropFirst(anywhere.count)) + volumeGroup + startupGroup)
+        #expect(BackupPlan.defaultExcludes(for: "/") == BackupPlan.defaultExcludes)
+        #expect(BackupPlan.defaultExcludes(for: "/private")
+            == anywhere + ["/private/var/vm", "/private/var/folders", "/private/tmp"])
+        #expect(BackupPlan.defaultExcludes(for: "/private/var")
+            == anywhere + ["/private/var/vm", "/private/var/folders"])
+        #expect(BackupPlan.defaultExcludes(for: "/Library")
+            == anywhere + ["/Library/Caches", "/Library/Logs"])
+        #expect(BackupPlan.defaultExcludes(for: "/System") == anywhere)
         // No path yet: what matches anywhere — a new plan's start.
         #expect(BackupPlan.defaultExcludes(for: "") == anywhere)
         #expect(BackupPlan().excludePatterns == anywhere)
@@ -361,10 +427,11 @@ struct TolerantDecodingTests {
             // The defaults ~/dotfiles cannot hold go; the patterns given
             // stay, even one anchored elsewhere, in their order.
             anywhere + ["~/elsewhere/cache", "*.log"],
-            // The home folder holds them all.
-            BackupPlan.defaultExcludes,
+            // The home folder holds the home-anchored ones; the drive and
+            // startup-disk ones, which it cannot hold, go.
+            BackupPlan.defaultExcludes(for: "~"),
             // A split plan's folders each keep the ones that apply to them.
-            BackupPlan.defaultExcludes,
+            BackupPlan.defaultExcludes(for: "~"),
             anywhere,
             // Saved without the key: the defaults, fitted to the path.
             anywhere,

@@ -325,8 +325,18 @@ the generator after editing it; the PNGs are checked in.
   more in Activity"; *Show in Activity* opens the run. The editor
   preselects the repository only when there is just one, starts a new
   plan's excludes with the defaults its folder can hold — `.DS_Store` and
-  `**/node_modules` anywhere, `~/Library/Caches` and the home folder's
-  other three only for a folder they lie in — and keeps them following the
+  `**/node_modules` anywhere; for a folder they lie in, the home folder's
+  regenerable state (`~/Library/Caches`, `~/.Trash`,
+  `~/Library/Application Support/Steam`, `~/Library/Logs`, Spotlight's
+  per-user index, saved window state, per-app HTTP stores, sandboxed
+  apps' caches, app-group caches, Mail's Envelope Index, Photos' search
+  index and caches); a volume's root bookkeeping (`.Spotlight-V100`,
+  `.fseventsd`, `.Trashes`, `.DocumentRevisions-V100`, `.TemporaryItems`)
+  for a plan of the volume itself, of `/Volumes` or of `/`; the startup
+  disk's own (`/System`, the swap and sleep images, `/private/var/folders`,
+  `/private/tmp`, `/Library/Caches`, `/Library/Logs`) for a plan of `/`,
+  `/private`, `/private/var` or `/Library`, each getting the ones lying
+  under it — and keeps them following the
   folder until the list is edited (a plan saved with defaults its folder
   cannot hold sheds them at load; patterns typed in stay), says when a folder
   is not on this Mac, takes excludes chosen in a panel or dropped from Finder

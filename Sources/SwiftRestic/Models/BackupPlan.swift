@@ -359,6 +359,47 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         "~/Library/Containers/*/Data/Library/Caches",
         "~/.Trash",
         "~/Library/Application Support/Steam",
+        // Per-user state macOS and the apps rebuild by themselves: logs,
+        // Spotlight's index, saved window state, the per-app cookie and
+        // session stores (losing one means signing in again in that app,
+        // nothing else), app-group caches, Mail's Envelope Index — a
+        // SQLite trio Mail rebuilds from the messages it indexes, which
+        // the pattern leaves alone — and Photos' search index and
+        // analysis caches, rebuilt from the library's database and
+        // originals.
+        "~/Library/Logs",
+        "~/Library/Metadata/CoreSpotlight",
+        "~/Library/Saved Application State",
+        "~/Library/HTTPStorages",
+        "~/Library/Group Containers/*/Library/Caches",
+        "~/Library/Mail/V*/MailData/Envelope Index*",
+        "~/Pictures/*.photoslibrary/database/search",
+        "~/Pictures/*.photoslibrary/resources/caches",
+        // A volume's own root bookkeeping — Spotlight's and the
+        // file-system events' journals, the trash, Versions' store and
+        // editors' temp files — which the volume rebuilds and none of
+        // which is the user's files. A plan of /Volumes, of one volume,
+        // or of / gets them.
+        "/Volumes/*/.Spotlight-V100",
+        "/Volumes/*/.fseventsd",
+        "/Volumes/*/.Trashes",
+        "/Volumes/*/.DocumentRevisions-V100",
+        "/Volumes/*/.TemporaryItems",
+        // The startup disk's own, which the system rebuilds: the sealed
+        // System volume (a walk of / would otherwise read the Data volume
+        // under /System/Volumes a second time through the firmlinks, the
+        // volume holds swap, Preboot and Recovery beside it, and Time
+        // Machine never backs it up either), the swap and sleep images,
+        // the per-user temp and cache folders, and the system-wide temp,
+        // caches and logs. A plan of / gets them all, and is the only one
+        // that gets /System; a plan of /private, /private/var or /Library
+        // gets the ones below it.
+        "/System",
+        "/private/var/vm",
+        "/private/var/folders",
+        "/private/tmp",
+        "/Library/Caches",
+        "/Library/Logs",
     ]
 
     /// The defaults a plan of `path` gets: those that match anywhere, and
