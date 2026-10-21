@@ -214,13 +214,22 @@ struct FilesPaneHeader: View {
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text((node.path as NSString).abbreviatingWithTildeInPath)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .textSelection(.enabled)
-                    .help(node.path)
+                // Where it is, Finder's "Where": the folder holding it, cut
+                // in the middle so both ends stay readable — a click shows
+                // the item in Finder while this Mac holds it.
+                let folder = (ResticPath.parent(of: node.path) as NSString).abbreviatingWithTildeInPath
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: node.path)])
+                } label: {
+                    Text(folder)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .buttonStyle(.plain)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .disabled(isOnDisk != true)
+                .help(isOnDisk == true ? "\(node.path)\nClick to show it in Finder." : node.path)
                 if let standing {
                     Text(standing)
                         .font(.callout)

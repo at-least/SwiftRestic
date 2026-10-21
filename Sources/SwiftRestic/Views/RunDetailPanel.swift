@@ -151,8 +151,27 @@ struct RunDetailPanel: View {
         }
     }
 
+    /// Where the run belongs, each name a link to its page — the run's
+    /// two homes, said once, rather than a fact row and a button apart.
+    /// A plan gone has no row; a repository gone says so.
+    @ViewBuilder
     private var repositoryRow: some View {
-        DetailRow("Repository", repositoryName ?? "No longer set up in SwiftRestic")
+        if let planID = run.planID, let plan = model.plan(id: planID) {
+            DetailRow("Plan") {
+                Button(model.label(of: plan)) { router.selection = .plan(planID) }
+                    .buttonStyle(.link)
+                    .help("Open this plan")
+            }
+        }
+        if let repositoryID = run.repositoryID, let repositoryName {
+            DetailRow("Repository") {
+                Button(repositoryName) { router.selection = .repository(repositoryID) }
+                    .buttonStyle(.link)
+                    .help("Open this repository")
+            }
+        } else {
+            DetailRow("Repository", "No longer set up in SwiftRestic")
+        }
     }
 
     @ViewBuilder
@@ -227,15 +246,6 @@ struct RunDetailPanel: View {
 
     private var buttons: some View {
         HStack(spacing: 10) {
-            if let planID = run.planID, model.plan(id: planID) != nil {
-                Button("Open Plan") { router.selection = .plan(planID) }
-            }
-            // The run's other home, beside Open Plan. Only where the
-            // repository still resolves — a removed one has no page to open,
-            // and the Repository row above already says it is gone.
-            if let repositoryID = run.repositoryID, repositoryName != nil {
-                Button("Open Repository") { router.selection = .repository(repositoryID) }
-            }
             if let fix = model.fix(for: run) {
                 RunFixButton(fix: fix)
             }

@@ -600,7 +600,7 @@ struct OverviewMetricsTests {
         let withHistory = OverviewMetrics.protectionSummary(
             rows: [], listingLoaded: true, otherBackupsCount: 6, willNotRun: { _ in nil }, hold: nil, now: now
         )
-        #expect(withHistory?.text == "No plans yet · 6 backups from no plan here")
+        #expect(withHistory?.text == "No plans yet · 6 backups")
         #expect(withHistory?.showsResume == false)
 
         let empty = OverviewMetrics.protectionSummary(
@@ -619,16 +619,16 @@ struct OverviewMetricsTests {
 
     @Test("the Snapshots value splits the count no plan of the repository made")
     func snapshotsValueSplit() {
-        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6) == "11 · 6 from no plan here")
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6) == "11 · 6 from other plans")
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 0) == "11")
         // A plan-less repository's: none of its backups is a plan's.
-        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11) == "11 · all from no plan here")
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11) == "11")
         // How far back the history reaches, after the split; a single
         // backup reaches no further than itself.
         let oldest = Date(timeIntervalSince1970: 1_748_782_800)
         #expect(OverviewMetrics.snapshotsLine(total: 495, otherBackups: 0, since: oldest) == "495 · since \(Format.day(oldest))")
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, since: oldest)
-            == "11 · 6 from no plan here · since \(Format.day(oldest))")
+            == "11 · 6 from other plans · since \(Format.day(oldest))")
         #expect(OverviewMetrics.snapshotsLine(total: 1, otherBackups: 0, since: oldest) == "1")
         #expect(OverviewMetrics.snapshotsLine(total: 0, otherBackups: 0, since: nil) == "0")
     }

@@ -403,7 +403,7 @@ enum OverviewMetrics {
         if rows.isEmpty {
             segments = ["No plans yet"]
             if otherBackupsCount > 0 {
-                segments.append("\(Format.plural(otherBackupsCount, "backup")) from no plan here")
+                segments.append(Format.plural(otherBackupsCount, "backup"))
             }
         } else {
             // The Protection line's own rule: a plan still being read is
@@ -474,15 +474,13 @@ enum OverviewMetrics {
     }
 
     /// The repository page's Snapshots value: the whole count, split when
-    /// some backups belong to no plan of it — the same count the sidebar's
-    /// Other backups node and the Protection line carry. When none is a
-    /// plan's, "all" says so instead of repeating the count.
+    /// some backups, not all, belong to no plan of it — the same count the
+    /// sidebar's Other backups node carries. When none is a plan's there is
+    /// nothing to split.
     static func snapshotsLine(total: Int, otherBackups: Int, since: Date? = nil) -> String {
         var line = Format.count(total)
-        if otherBackups == total, total > 0 {
-            line += " · all from no plan here"
-        } else if otherBackups > 0 {
-            line += " · \(Format.count(otherBackups)) from no plan here"
+        if otherBackups > 0, otherBackups < total {
+            line += " · \(Format.count(otherBackups)) from other plans"
         }
         // How far back the history reaches — the oldest backup's day, which
         // nothing else on the page says and which both the Backups tab's

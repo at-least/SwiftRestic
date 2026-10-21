@@ -91,7 +91,7 @@ struct AdoptTests {
         let page = try #require(shelves.otherGroupPage(.plan(planID), repositories: [repository], localHost: model.localHostname))
         #expect(!page.isAdoptable)
         #expect(page.explanation
-            == "This backup carries the ID of a plan that isn't set up in SwiftRestic — it was deleted here, or it's still running on another Mac."
+            == "From a plan that isn't set up here — deleted, or still running on another Mac."
                 + " It holds several folders and a plan backs up one, so it can't be adopted.")
 
         // A newer backup of one folder is the history a plan continues.
@@ -247,7 +247,7 @@ struct AdoptTests {
         #expect(briefing.madeLine
             == "Made \(Format.historySpan(oldest: newest.time, newest: newest.time)) from other-mac."
                 + " Nothing in “Home Disk” changes.")
-        #expect(briefing.repositoryLine == "Home Disk — the backups live here")
+        #expect(briefing.repositoryLine == "Home Disk")
         #expect(briefing.warnings == [
             "The newest backup was made on “other-mac” on \(Format.timestamp(newest.time)).",
             "The folder comes from another Mac and may not exist here.",
@@ -456,40 +456,27 @@ struct AdoptTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             == "The plan and its schedule are removed. Backups already written to the repository are not deleted.")
 
-        // Two backups under it: the landing is named, with the way back. Docs
-        // is the repository's only plan, so the shelf the snapshots move to
-        // reads "Backups" once it is gone.
+        // Two backups under it: the repository they stay in is named, with
+        // the way back.
         let listing = try [
             snapshot("d1", time: "2026-10-02T02:00:00Z", tags: [ResticService.planTag(plan.id)]),
             snapshot("d2", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(plan.id)]),
         ]
         model.snapshots[repository.id] = listing
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Its 2 backups stay in “Home Disk”,"
-                + " under Backups, and can be adopted back.")
-
-        // Another plan survives the deletion: the shelf keeps its "Other"
-        // title, and the dialog says that one.
-        var sibling = BackupPlan()
-        sibling.repositoryID = repository.id
-        model.configuration.plans = [plan, sibling]
-        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Its 2 backups stay in “Home Disk”,"
-                + " under Other backups, and can be adopted back.")
-        model.configuration.plans = [plan]
+            == "The plan and its schedule are removed. Its 2 backups stay in “Home Disk” and can be adopted again.")
 
         // The running variant keeps its own first sentence.
         model.activity[plan.id] = PlanActivity()
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The running backup will be stopped and recorded as cancelled. Its 2 backups stay in “Home Disk”,"
-                + " under Backups, and can be adopted back.")
+            == "The running backup will be stopped and recorded as cancelled."
+                + " Its 2 backups stay in “Home Disk” and can be adopted again.")
 
         // One backup agrees in number.
         model.activity[plan.id] = nil
         model.snapshots[repository.id] = [listing[0]]
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Its 1 backup stays in “Home Disk”,"
-                + " under Backups, and can be adopted back.")
+            == "The plan and its schedule are removed. Its 1 backup stays in “Home Disk” and can be adopted again.")
     }
 }
 

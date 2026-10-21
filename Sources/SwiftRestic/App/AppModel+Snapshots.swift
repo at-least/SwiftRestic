@@ -202,17 +202,12 @@ extension AppModel {
             ?? BackupShelves(listing: [], plans: plans(in: repositoryID), allPlans: configuration.plans)
     }
 
-    /// A plan's backups that would stay behind if it left `repositoryID`, and
-    /// the shelf's title as it will read once it has — the sidebar's own
-    /// derivation, so a dialog never names a section by a title it will not
-    /// have. Nil when the plan holds no backups there.
-    func backupsLeftBehind(planID: UUID, in repositoryID: UUID) -> (count: Int, shelfTitle: String)? {
+    /// How many of a plan's backups would stay behind if it left
+    /// `repositoryID`; nil when it holds none there.
+    func backupsLeftBehind(planID: UUID, in repositoryID: UUID) -> Int? {
         guard let count = shelves(for: repositoryID).byPlan[planID]?.count, count > 0
         else { return nil }
-        return (
-            count,
-            SidebarTree.otherBackupsTitle(repositoryHasPlans: plans(in: repositoryID).count > 1)
-        )
+        return count
     }
 
     /// How the sidebar names the place `record` sits — its plan, or its group

@@ -9,7 +9,7 @@ struct AdoptBriefing: Equatable {
     var historyLine: String
     /// "Made Sep 28 – Oct 2, 2026 from this Mac. Nothing in “Home Disk” changes."
     var madeLine: String
-    /// The locked repository row: "Home Disk — the backups live here".
+    /// The locked repository row: "Home Disk".
     var repositoryLine: String
     /// The warnings that hold of the group, in the order the sheet shows them.
     var warnings: [String]
@@ -21,9 +21,7 @@ struct AdoptBriefing: Equatable {
 
     /// Always, as the sheet's footer: what adopting does not do, and the one
     /// situation it must not be used in.
-    static let footer =
-        "Adopting reuses these backups' history — nothing is written to the repository. "
-        + "If another Mac still runs this plan, don't adopt it here: both Macs would share one history and one retention policy."
+    static let footer = "Don't adopt a plan another Mac still runs — the two Macs would share one history."
 }
 
 extension AppModel {
@@ -81,7 +79,7 @@ extension AppModel {
         let snapshots = group.snapshots
         let newest = snapshots[0]
 
-        // The page's "Made from" row reads the same list, so the two cannot
+        // The page's "Made on" row reads the same list, so the two cannot
         // count the Macs differently.
         let hosts = Snapshot.distinctHosts(of: snapshots)
         let madeFrom = hosts.count == 1 ? hosts[0] : "\(hosts.count) Macs"
@@ -132,7 +130,7 @@ extension AppModel {
         return AdoptBriefing(
             historyLine: historyLine,
             madeLine: madeLine,
-            repositoryLine: "\(label(of: repository)) — the backups live here",
+            repositoryLine: label(of: repository),
             warnings: warnings,
             // Broader than the recent warning: a fresh backup this Mac made
             // gets the confirmation too.

@@ -33,7 +33,7 @@ struct OtherGroupPageSummary: Equatable {
     /// One line per folder set the history spans, the newest set first —
     /// each in the one folder-list format (`SnapshotLineage.Key.folderList`)
     /// the labels qualify with. Two Macs that spell the same list share the
-    /// line: "Made from" already names them both.
+    /// line: "Made on" already names them both.
     var folders: [String]
     /// Every exclude pattern any of the backups ran with, first-seen order
     /// (newest backup first). Empty when none did — restic omits the key —
@@ -71,8 +71,8 @@ struct OtherGroupPageSummary: Equatable {
             // The labels' "outside SwiftRestic", as a sentence: no plan
             // made them, so there is no plan to adopt them into.
             explanation = snapshots.count == 1
-                ? "This backup carries no plan ID — it was made outside SwiftRestic — so it can't be adopted as a plan."
-                : "These \(Format.plural(snapshots.count, "backup")) carry no plan ID — they were made outside SwiftRestic — so they can't be adopted as a plan."
+                ? "Made outside SwiftRestic, so it can't become a plan."
+                : "Made outside SwiftRestic, so they can't become a plan."
         } else if let formerPlan {
             let name = formerPlan.label(among: allPlans)
             // Where it went: the destination the sidebar's caption names,
@@ -89,9 +89,7 @@ struct OtherGroupPageSummary: Equatable {
             // Neither cause is knowable from the repository (another Mac's
             // living plan and a deleted plan leave the same tag behind), so
             // the sentence offers both without choosing.
-            let carries = snapshots.count == 1 ? "This backup carries" : "These \(Format.plural(snapshots.count, "backup")) carry"
-            explanation = "\(carries) the ID of a plan that isn't set up in SwiftRestic"
-                + " — it was deleted here, or it's still running on another Mac."
+            explanation = "From a plan that isn't set up here — deleted, or still running on another Mac."
             // A history of several folders, from builds that let a plan
             // hold a list: a plan is one path now, so there is no plan to
             // adopt it into.

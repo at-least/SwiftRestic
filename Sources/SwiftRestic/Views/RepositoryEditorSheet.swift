@@ -268,10 +268,10 @@ struct RepositoryEditorSheet: View {
     /// The SSH note's first-contact step, with this repository's server
     /// once its name is typed.
     private var firstContact: String {
-        guard !draft.sftpHost.isEmpty else { return "connect to it once in Terminal with ssh and accept its key." }
+        guard !draft.sftpHost.isEmpty else { return "connect once in Terminal with ssh and accept it." }
         let user = draft.sftpUser.isEmpty ? "" : "\(draft.sftpUser)@"
         let port = draft.sftpCustomPort.map { "-p \($0) " } ?? ""
-        return "connect once in Terminal (ssh \(port)\(user)\(draft.sftpHost)) and accept its key."
+        return "connect once in Terminal (ssh \(port)\(user)\(draft.sftpHost)) and accept it."
     }
 
     private var settingsForm: some View {
@@ -285,7 +285,7 @@ struct RepositoryEditorSheet: View {
                 if isNew {
                     kindPicker
                 } else {
-                    LabeledContent("Where is it?") { Text(draft.kind.displayName) }
+                    LabeledContent("Type") { Text(draft.kind.displayName) }
                 }
                 Text(draft.kind.summary)
                     .font(.caption)
@@ -296,9 +296,11 @@ struct RepositoryEditorSheet: View {
             Section("Location") { locationFields }
 
             Section("Encryption") {
-                SecureField("Repository password", text: $password)
+                // A grouped form draws its fields without a border, so an
+                // empty one needs its prompt to be seen at all.
+                SecureField("Repository password", text: $password, prompt: Text(passwordPrompt))
                 if isNew {
-                    SecureField("Confirm password", text: $confirmPassword)
+                    SecureField("Confirm password", text: $confirmPassword, prompt: Text("Re-enter password"))
                 }
                 Text(encryptionHint)
                 .font(.caption)
@@ -316,8 +318,8 @@ struct RepositoryEditorSheet: View {
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         Text(
-                            "SwiftRestic launches restic without a terminal, so it cannot answer an SSH passphrase prompt and does not inherit your ssh-agent. Use a key without a passphrase, or add the host to ~/.ssh/config with IdentityFile. "
-                                + "Nor can it accept a server's key on first contact: \(firstContact) SSH then refuses the server if its key ever changes."
+                            "restic runs without a terminal, so it can't ask for a key's passphrase or use ssh-agent: use a key without one, set in ~/.ssh/config. "
+                                + "It can't accept a new server's key either — \(firstContact)"
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -336,20 +338,9 @@ struct RepositoryEditorSheet: View {
                 // Typeable, not steppers. Values are clamped on commit; the
                 // assignment itself refreshes the field even when the clamp
                 // lands on the value it already held.
-                TextField(
-                    "Upload limit (KiB/s, 0 for unlimited)",
-                    value: clampedLimit($draft.uploadLimitKiBps),
-                    format: .number.grouping(.never)
-                )
-                TextField(
-                    "Download limit (KiB/s, 0 for unlimited)",
-                    value: clampedLimit($draft.downloadLimitKiBps),
-                    format: .number.grouping(.never)
-                )
-                Text(
-                    "Every restic command on this repository keeps to them, on a disk attached to this Mac too: "
-                        + "backups upload, while restores, a check that reads data and opening a backup for the first time download."
-                )
+                limitField("Upload limit (KiB/s)", $draft.uploadLimitKiBps)
+                limitField("Download limit (KiB/s)", $draft.downloadLimitKiBps)
+                Text("Backups upload; restores and checks that read data download — on a drive attached to this Mac too.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -469,7 +460,7 @@ struct RepositoryEditorSheet: View {
     // MARK: - Fields
 
     private var kindPicker: some View {
-        Picker("Where is it?", selection: $draft.kind) {
+        Picker("Type", selection: $draft.kind) {
             Section("On this Mac") {
                 Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
             }
@@ -512,16 +503,6 @@ struct RepositoryEditorSheet: View {
             }
         }
         accessFields
-        if isNew {
-            LabeledContent("restic will use") {
-                Text(draft.resticRepositoryString.isEmpty ? "—" : draft.resticRepositoryString)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
-            }
-        }
     }
 
     /// The fields that reach the repository without being where it is.
@@ -657,13 +638,19 @@ struct RepositoryEditorSheet: View {
     /// asks for the password before Save.
     private var encryptionHint: String {
         if isNew {
-            return "restic encrypts everything with this password. There is no recovery if you lose it — store it in your password manager."
+            return "Everything is encrypted with it, and it can't be recovered — keep it in your password manager."
         }
         if hasStoredPassword == false {
             return ResticError.passwordMissing(repositoryName: draftLabel).localizedDescription
                 + " Enter it here to read it and back up to it."
         }
-        return "Leave blank to keep the password already saved in your Keychain."
+        return "Leave blank to keep the one saved in your Keychain."
+    }
+
+    /// The password field's prompt: what an empty field means.
+    private var passwordPrompt: String {
+        if isNew { return "Required" }
+        return hasStoredPassword == false ? "Required" : "Saved in Keychain"
     }
 
     private func loadExistingSecrets() async {
@@ -779,10 +766,19 @@ struct RepositoryEditorSheet: View {
 
     /// Keeps the typed value inside restic's accepted range: out-of-range
     /// input is corrected on commit, never mid-keystroke.
-    private func clampedLimit(_ binding: Binding<Int>) -> Binding<Int> {
-        Binding(
-            get: { binding.wrappedValue },
-            set: { binding.wrappedValue = min(1_000_000, max(0, $0)) }
+    /// A bandwidth limit in KiB/s, restic's unit: empty is no limit (0),
+    /// shown as the prompt. Typeable, not a stepper; clamped on commit, the
+    /// assignment refreshing the field even when the clamp lands on the
+    /// value it already held.
+    private func limitField(_ title: String, _ binding: Binding<Int>) -> some View {
+        TextField(
+            title,
+            value: Binding<Int?>(
+                get: { binding.wrappedValue == 0 ? nil : binding.wrappedValue },
+                set: { binding.wrappedValue = min(1_000_000, max(0, $0 ?? 0)) }
+            ),
+            format: .number.grouping(.never),
+            prompt: Text("Unlimited")
         )
     }
 
@@ -790,7 +786,7 @@ struct RepositoryEditorSheet: View {
     static func depthCaption(_ maintenance: MaintenancePolicy) -> String {
         switch maintenance.checkDepth {
         case .structure:
-            "Checks the repository's structure only — a damaged pack of backed-up data passes it."
+            "Checks the structure only — damaged data can pass."
         case .rotating:
             "Each check reads the next twelfth of the backed-up data, so all of it is read every "
                 + "\(MaintenancePolicy.rotatingSlices) checks — every \(maintenance.checkIntervalDays * MaintenancePolicy.rotatingSlices) days at this interval."

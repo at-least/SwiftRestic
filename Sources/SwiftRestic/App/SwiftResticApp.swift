@@ -251,6 +251,7 @@ struct SwiftResticApp: App {
             SettingsView()
                 .environment(model)
         }
+        .windowResizability(.contentSize)
 
         // Help ▸ SwiftRestic Help: the restic vocabulary the app assumes.
         Window("SwiftRestic Help", id: Self.helpWindowID) {

@@ -191,7 +191,7 @@ the generator after editing it; the PNGs are checked in.
   offers its plan instead.
 - **A repository's page is its overview.** A *Protection* line (“2 of 2
   plans protected · Last backup 1 hour ago”; with no plans, the count of
-  backups from no plan here) carries the hold's words while backups are held
+  its backups) carries the hold's words while backups are held
   app-wide, and a *Resume* button while the hold is your own *Pause
   Backups*. Under it each unprotected plan is named with its warning — a
   failed backup's red octagon, the triangle for the rest — and
@@ -214,8 +214,9 @@ the generator after editing it; the PNGs are checked in.
   item for every menu item" (until 2026-10-19 *Refresh* and *Edit* sat at
   the toolbar's right). The *Backups* row
   splits off backups no
-  plan here made (“11 · 6 from no plan here”, or “all”) and says how far
-  back the history reaches (“509 · 3 from no plan here · since Jun 1, 2025”,
+  plan here made (“11 · 6 from other plans”; none split off when no plan
+  made any) and says how far
+  back the history reaches (“509 · 3 from other plans · since Jun 1, 2025”,
   the oldest backup's moment in the tooltip), as a plan page's does for its
   own, so whether last March can be reached is answered before browsing. A
   repository whose first listing finds no plans but adoptable history opens
@@ -233,7 +234,7 @@ the generator after editing it; the PNGs are checked in.
   checks and prunes on one repository. A name an earlier build stored is
   dropped at the next save; a check's or prune's record keeps what it was
   called then.
-  The editor asks *Where is it?* — on this Mac, on another machine, in the
+  The editor's *Type* menu groups the kinds by where they are — on this Mac, on another machine, in the
   cloud, through a gateway — and groups the kinds that way. Creating one runs
   `restic init`; a repository that cannot be reached is not saved. *Test
   Connection* on a path with no repository says what Save will do: create
@@ -353,8 +354,8 @@ the generator after editing it; the PNGs are checked in.
   schedule's *At* is macOS's own time field, in the Mac's 12- or 24-hour
   clock, as every schedule then reads ("Daily at 2:00 AM", "Daily at 02:00"
   under a 24-hour clock) — the form of the *Next backup* value beside it,
-  where it had been a fixed 24-hour "02:00". *Skip online-only cloud
-  files (iCloud Drive, OneDrive)* passes restic's `--exclude-cloud-files`: on
+  where it had been a fixed 24-hour "02:00". *Skip online-only files*
+  (iCloud Drive, OneDrive) passes restic's `--exclude-cloud-files`: on
   for new plans, off for plans saved before the option (their backups do not
   change under it), and only with restic 0.19 or later, which brought the
   flag to macOS (restic's changelog) — the editor says when this restic is
@@ -729,7 +730,7 @@ the generator after editing it; the PNGs are checked in.
   says "No Hooks" and what + adds, and while there are some, one is always
   open in the form under the list (the first on arrival, a neighbour after a
   removal, which asks first).
-- **Alerts** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
+- **Webhooks** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
   Locally, a notification when a backup fails or completes with warnings
   (*Notify when a backup fails or completes with warnings*, the channels' own
   event words), once per stretch: a run with its plan's last problem again —
@@ -819,7 +820,7 @@ the generator after editing it; the PNGs are checked in.
   tab, *Find Files in Backups…*, the Backup column, "Removed 2 backups" —
   which restic calls a snapshot; restic's word stays where restic itself
   speaks: the console and the commands it runs, and the hook variable
-  `SWIFTRESTIC_SNAPSHOT_ID`. Help's Concepts says so under *Backup*. A run
+  `SWIFTRESTIC_SNAPSHOT_ID`. Help's Terms say so under *Backup*. A run
   that did its work but met trouble — a backup with unreadable files
   (restic's exit 3), a failing after-hook, retention skipped, a check that
   found errors — *completed with warnings* wherever it is named, beside the
@@ -842,8 +843,11 @@ the generator after editing it; the PNGs are checked in.
   Only* for
   Activity. *File ▸ Restore…* is the pane's Restore… of the page in view
   (*Restore Entire Backup…*, *Restore Folder…* by what it would restore), and
-  *Help ▸ SwiftRestic Help* (⌘?) opens the concepts in a window of their
-  own, where macOS's item had said "Help isn't available for SwiftRestic." While a sheet is up, a command that
+  *Help ▸ SwiftRestic Help* (⌘?) opens a window of its own — how to back
+  up a folder, get a file back, read a failed run, keep the history tidy
+  and adopt backups from elsewhere, then six terms (task-first since
+  2026-10-21, a glossary of restic's words before) — where macOS's item had
+  said "Help isn't available for SwiftRestic." While a sheet is up, a command that
   opens a sheet or the console, or acts on the selected plan or repository,
   beeps and does nothing; *Back Up All Plans Now*, *Pause Backups*, *Resume
   Backups*, *Pause and Stop Running Backups* and *Refresh All Backups*

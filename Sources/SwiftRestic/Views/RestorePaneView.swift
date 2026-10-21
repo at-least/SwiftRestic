@@ -890,18 +890,16 @@ struct RestorePaneView: View {
         )
     }
 
-    /// The whole record, named the way the header and its page name it
-    /// and dated; the sheet says the layout restic will produce: `restore
-    /// <id> --target` recreates every absolute path under the target.
+    /// The whole record, named by its page's title and dated; the sheet
+    /// says the layout restic will produce: `restore <id> --target`
+    /// recreates every absolute path under the target.
     private func restoreWholeRecord() {
         guard let record else { return }
         let repositoryID = repositoryID
         destinationRequest = RestoreDestinationRequest(
             subject: .wholeSnapshot(paths: record.paths),
-            backupName: SnapshotLineage.displayName(
-                of: record,
-                label: model.recordLabel(of: record, repositoryID: repositoryID)
-            ),
+            backupName: model.recordLabel(of: record, repositoryID: repositoryID)?.title
+                ?? SnapshotLineage.displayName(of: record, label: nil),
             backupTime: record.time,
             snapshotShortID: record.shortID
         ) { directories, overwrite in
@@ -934,37 +932,26 @@ private struct RestoreRecordHeader: View {
             comparison: comparison,
             unread: model.unreadItems(inBackup: record.id)
         )
+        // The backup's name and moment are the window's title and subtitle;
+        // this line says only what its Change column compares with.
         VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 4) {
-                // The name gives way in the middle; the day never does.
-                Text(heading.name)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(verbatim: "—")
-                    .accessibilityHidden(true)
-                Text(heading.time)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            .font(.subheadline.weight(.semibold))
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isHeader)
-            .help(heading.detail)
-            HStack(spacing: 4) {
-                // Orange only on the glyph, beside words that already say
-                // it: the caption stays secondary for contrast.
-                if heading.isProblem {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityHidden(true)
+            if !heading.caption.isEmpty {
+                HStack(spacing: 4) {
+                    // Orange only on the glyph, beside words that already say
+                    // it: the caption stays secondary for contrast.
+                    if heading.isProblem {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.warning)
+                            .accessibilityHidden(true)
+                    }
+                    Text(heading.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                Text(heading.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                .font(.caption)
+                .help(heading.detail)
             }
-            .font(.caption)
-            .help(heading.detail)
             // Its own tooltip: a `.help` on the stack would cover this
             // line's too.
             // Each name opens the item's versions at the backup compared

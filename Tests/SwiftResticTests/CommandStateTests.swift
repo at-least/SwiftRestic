@@ -503,7 +503,7 @@ struct CommandStateTests {
 
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Delete “Docs”?")
         #expect(model.confirmationCopy(for: .prune(repository.id))?.title == "Prune “NAS” now?")
-        #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Check the integrity of “NAS”?")
+        #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Check “NAS”?")
         #expect(model.confirmationCopy(for: .removeRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
         #expect(model.confirmationCopy(for: .unlock(repository.id))?.title == "Remove stale locks on “NAS”?")
@@ -519,10 +519,10 @@ struct CommandStateTests {
         model.activity[plan.id] = nil
 
         // The check dialog says which size of slow the user is holding.
-        #expect(model.confirmationCopy(for: .check(repository.id))?.message.contains("currently holds") == false)
+        #expect(model.confirmationCopy(for: .check(repository.id))?.message.contains("It holds") == false)
         model.repositoryStats[repository.id] = RepositoryStats(totalSize: 2_000_000)
         #expect(model.confirmationCopy(for: .check(repository.id))?.message
-            .contains("This repository currently holds \(Format.bytes(2_000_000)).") == true)
+            .contains("It holds \(Format.bytes(2_000_000)).") == true)
 
         // A plan is called by its folder; one with no path yet has nothing
         // to be called.

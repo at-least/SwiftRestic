@@ -162,7 +162,7 @@ enum Scheduler {
     /// The Maintenance card's Prune row while prune is off: stated, not
     /// hidden — retention runs after every backup, and only a prune frees
     /// what it removed.
-    static let pruneOffText = "Off — the data retention removes stays in the repository until a prune"
+    static let pruneOffText = "Off — space from removed backups isn't freed"
 
     static func lastMaintenanceText(
         _ task: MaintenanceTask,

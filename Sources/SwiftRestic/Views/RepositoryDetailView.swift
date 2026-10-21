@@ -83,8 +83,13 @@ struct RepositoryDetailView: View {
                                 .lineLimit(2)
                                 .truncationMode(.middle)
                         }
-                        DetailRow("Size", Format.bytes(model.repositoryStats[repositoryID]?.totalSize))
-                        DetailRow("Backups") { snapshotsValue }
+                        // Facts read from the repository, only once it has
+                        // been read: a row of dashes says nothing the
+                        // Protection card doesn't.
+                        if case .loaded = model.snapshotListingOutcome(for: repositoryID) {
+                            DetailRow("Size", Format.bytes(model.repositoryStats[repositoryID]?.totalSize))
+                            DetailRow("Backups") { snapshotsValue }
+                        }
                     }
                     volumeStrip(repository)
                 }
@@ -150,9 +155,7 @@ struct RepositoryDetailView: View {
                 Divider()
                 ProgressView(value: capacity.usedFraction)
                     .tint(Theme.tint)
-                Text(
-                    "The disk holding this repository: \(Format.bytes(capacity.usedBytes)) used of \(Format.bytes(capacity.totalBytes)), \(Format.bytes(capacity.freeBytes)) free."
-                )
+                Text("\(Format.bytes(capacity.freeBytes)) free of \(Format.bytes(capacity.totalBytes)) on this disk")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

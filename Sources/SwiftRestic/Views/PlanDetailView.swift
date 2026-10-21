@@ -354,12 +354,17 @@ struct PlanDetailView: View {
             isBackingUp: model.activity[plan.id]?.isBackup == true,
             now: now
         )
+        let schedule = PlanStatus.scheduleRow(for: plan)
         return Card("Schedule") {
             DetailGrid {
-                DetailRow("Schedule", PlanStatus.scheduleRow(for: plan))
-                DetailRow("Next backup") {
-                    Text(next.value)
-                        .help(next.help ?? "")
+                DetailRow("Schedule", schedule)
+                // "Paused — Daily at 2:00 AM" already says there is no next
+                // backup; a second row saying "Paused" only repeats it.
+                if !schedule.hasPrefix(next.value) {
+                    DetailRow("Next backup") {
+                        Text(next.value)
+                            .help(next.help ?? "")
+                    }
                 }
             }
         } accessory: {
@@ -429,9 +434,12 @@ struct PlanDetailView: View {
                     let tile = OverviewMetrics.snapshotsTile(
                         total: snapshots.count, otherBackups: 0, snapshots: snapshots, subject: "of this plan"
                     )
+                    // When the count was read, in the tooltip with the rest.
+                    let updated = model.snapshotsLoadedAt(for: repositoryID)
+                        .map { "Updated \($0.formatted(date: .omitted, time: .shortened))." }
                     Text(tile.value)
                         .monospacedDigit()
-                        .help(tile.help ?? "")
+                        .help([tile.help, updated].compactMap { $0 }.joined(separator: "\n"))
                 case .loaded:
                     Text(
                         model.snapshots(for: repositoryID).isEmpty
@@ -450,12 +458,10 @@ struct PlanDetailView: View {
                 case .idle:
                     Text("—")
                 }
-                // Every count traces to the moment it was read, or a spinner
-                // while a read is in flight.
-                SnapshotFreshnessLabel(
-                    loadedAt: model.snapshotsLoadedAt(for: repositoryID),
-                    isLoading: model.loadingSnapshots.contains(repositoryID)
-                )
+                // A spinner while a read is in flight.
+                if model.loadingSnapshots.contains(repositoryID) {
+                    ProgressView().controlSize(.small)
+                }
             }
         } else {
             Text("No repository set")

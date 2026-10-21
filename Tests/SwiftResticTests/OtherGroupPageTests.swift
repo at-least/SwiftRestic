@@ -43,8 +43,7 @@ struct OtherGroupPageTests {
         let page = try #require(shelves.otherGroupPage(.plan(deleted), repositories: [], localHost: "mac"))
 
         #expect(page.title == "Projects")
-        #expect(page.explanation == "These 2 backups carry the ID of a plan that isn't set up in SwiftRestic"
-            + " — it was deleted here, or it's still running on another Mac.")
+        #expect(page.explanation == "From a plan that isn't set up here — deleted, or still running on another Mac.")
         #expect(page.formerPlan == nil)
         #expect(page.newestSnapshotID == "g2")
         #expect(page.newestAt == g2.time)
@@ -64,8 +63,7 @@ struct OtherGroupPageTests {
         let only = try snapshot("g1", time: "2026-10-01T02:00:00Z", tags: [ResticService.planTag(deleted)])
         let shelves = BackupShelves(listing: [only], plans: [], allPlans: [])
         #expect(shelves.otherGroupPage(.plan(deleted), repositories: [], localHost: "mac")?.explanation
-            == "This backup carries the ID of a plan that isn't set up in SwiftRestic"
-                + " — it was deleted here, or it's still running on another Mac.")
+            == "From a plan that isn't set up here — deleted, or still running on another Mac.")
     }
 
     @Test("a moved plan's page names the plan and where it went, and carries the plan to open")
@@ -154,7 +152,7 @@ struct OtherGroupPageTests {
         let page = try #require(shelves.otherGroupPage(.lineage(key), repositories: [], localHost: "mac"))
 
         #expect(page.title == "Music")
-        #expect(page.explanation == "These 2 backups carry no plan ID — they were made outside SwiftRestic — so they can't be adopted as a plan.")
+        #expect(page.explanation == "Made outside SwiftRestic, so they can't become a plan.")
         #expect(page.formerPlan == nil)
         #expect(page.planTag == nil)
         #expect(page.newestSnapshotID == "l2")
@@ -164,7 +162,7 @@ struct OtherGroupPageTests {
 
         let single = BackupShelves(listing: [l1], plans: [], allPlans: [])
         #expect(single.otherGroupPage(.lineage(key), repositories: [], localHost: "mac")?.explanation
-            == "This backup carries no plan ID — it was made outside SwiftRestic — so it can't be adopted as a plan.")
+            == "Made outside SwiftRestic, so it can't become a plan.")
         // Gone once no backup of it is left.
         let empty = BackupShelves(listing: [], plans: [], allPlans: [])
         #expect(empty.lineageGroup(key) == nil)

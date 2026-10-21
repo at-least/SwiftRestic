@@ -2153,7 +2153,7 @@ struct AppModelStubTests {
 
         // Idle: the removal dialog's base sentence only, no restore clause.
         let idle = harness.model.removalConsequences(for: harness.repository.id)
-        #expect(idle.contains("The backup data itself is not deleted."))
+        #expect(idle.contains("The backups in it are kept."))
         #expect(!idle.contains("restore"))
 
         let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt")
@@ -2170,7 +2170,7 @@ struct AppModelStubTests {
         )
 
         let consequences = harness.model.removalConsequences(for: harness.repository.id)
-        #expect(consequences.contains("The backup data itself is not deleted."))
+        #expect(consequences.contains("The backups in it are kept."))
         #expect(consequences.contains("A restore from this repository is running"))
         #expect(consequences.contains("cancelled"))
 

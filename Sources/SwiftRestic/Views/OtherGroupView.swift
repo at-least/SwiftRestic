@@ -123,7 +123,7 @@ struct OtherGroupView: View {
             DetailGrid {
                 DetailRow("Newest", Format.timestamp(summary.newestAt))
                 DetailRow("Oldest", Format.timestamp(summary.oldestAt))
-                DetailRow("Made from") {
+                DetailRow("Made on") {
                     Text(summary.madeFrom)
                 }
                 DetailRow("Folders") {

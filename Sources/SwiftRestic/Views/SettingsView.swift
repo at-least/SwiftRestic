@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    private static let width: CGFloat = 560
     @State private var isConfirmingCacheCleanup = false
     @Environment(AppModel.self) private var model
     /// Arms the "you can strand the app" confirmation: menu bar item off and
@@ -10,16 +11,24 @@ struct SettingsView: View {
     @State private var removingShare: NetworkShare?
 
     var body: some View {
+        // Each pane at its own height, the window following it (the
+        // Settings scene's `.contentSize`): the HIG's "a settings window
+        // accommodates the size of the current pane", no pane scrolling.
         TabView {
             generalTab(model: model)
+                .frame(width: Self.width, height: 670)
                 .tabItem { Label("General", systemImage: "gearshape") }
+            notificationsTab(model: model)
+                .frame(width: Self.width, height: 290)
+                .tabItem { Label("Notifications", systemImage: "bell") }
             NotificationChannelsTab()
                 .environment(model)
-                .tabItem { Label("Alerts", systemImage: "bell") }
+                .frame(width: Self.width, height: 460)
+                .tabItem { Label("Webhooks", systemImage: "point.3.connected.trianglepath.dotted") }
             resticTab(model: model)
+                .frame(width: Self.width, height: 380)
                 .tabItem { Label("restic", systemImage: "terminal") }
         }
-        .frame(minWidth: 560, idealWidth: 560, minHeight: 460, idealHeight: 500)
         .confirmationDialog(
             "Turn off the menu bar item?",
             isPresented: $isConfirmingMenuBarOff,
@@ -71,14 +80,14 @@ struct SettingsView: View {
                 if model.fullDiskAccess == .granted {
                     // Only what the grant controls: a file the account can't
                     // read stays unreadable, and the run's hint says so.
-                    Text("restic runs as part of SwiftRestic, so macOS's privacy protection doesn't keep your plans' data from it. Files your account can't read are still skipped.")
+                    Text("restic can read every file in your plans that your account can.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     // Unknown is treated as missing, as the run hints do:
                     // nothing observable says the grant is there.
-                    Text("Without it, macOS keeps Mail, Messages, Safari and other apps' data away from SwiftRestic and the restic it runs. Backups that include them complete with warnings.")
+                    Text("Without it, Mail, Messages, Safari and other apps' data can't be read, and backups that include them end with warnings.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -105,39 +114,8 @@ struct SettingsView: View {
                     )
                 )
                 ExpandableCaption(
-                    summary: "Closing the window never quits SwiftRestic — scheduled backups keep firing until you quit or log out.",
-                    detail: "The menu bar item is how you get back to it. Its icon pulses while work is in progress (held still if you've turned on Reduce Motion), dims while backups are paused or waiting for power on battery, wears a warning mark while a run from the last seven days failed or completed with warnings — a backup's until its plan's next backup succeeds — and asks with a question mark until a repository is set up."
-                )
-            }
-
-            Section("Notifications") {
-                Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
-                // What it gates (`AppModel.notify(about:)`), in the alert
-                // channels' own event words.
-                Toggle("Notify when a backup fails or completes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
-                // `RunRecord.problemStretch`: the rule said where it is set.
-                Text("Once for each cause: a backup that fails the same way again stays quiet until one succeeds or the cause changes.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                // A plan that never runs writes no failure to notify about:
-                // an unplugged drive at every slot, a Mac asleep through them.
-                Picker("Notify when a scheduled plan has not backed up for", selection: $model.configuration.settings.staleAlertDays) {
-                    ForEach(StaleAlert.choices, id: \.self) { days in
-                        Text(days == 0 ? "Never" : Format.plural(days, "day")).tag(days)
-                    }
-                }
-                Text("Once per quiet stretch, until the plan's next successful backup. Checked every minute while SwiftRestic runs — a Mac asleep the whole time hears at its first check after waking. Paused and manual plans are never named, nor a plan that is running or starting.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                // The relationship between the two toggle layers, stated
-                // where both are visible: these gate this Mac's notification
-                // centre; the Alerts tab's channels carry their own
-                // per-event switches, and neither gates the other.
-                ExpandableCaption(
-                    summary: "These switches control this Mac's notifications.",
-                    detail: "Webhook and chat channels on the Alerts tab have their own per-event switches and don't follow them."
+                    summary: "Shows what's running, and opens SwiftRestic after its window is closed.",
+                    detail: "The icon pulses while work is in progress (held still with Reduce Motion), dims while backups are paused or waiting for power, wears a warning mark while a run from the last seven days failed or completed with warnings, and shows a question mark until a repository is set up."
                 )
             }
 
@@ -198,7 +176,7 @@ struct SettingsView: View {
                                 .help(share.url)
                         }
                     }
-                    Text("SwiftRestic reconnects these shares with their saved passwords before a backup that needs them.")
+                    Text("Reconnected with their saved passwords before a backup needs them.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -210,10 +188,49 @@ struct SettingsView: View {
                     LabeledContent("Keep runs", value: "\(model.configuration.settings.maxRunHistory)")
                 }
                 // The trim's exemption (`OverviewMetrics.standingProblemIDs`).
-                Text("A problem that still stands is kept past this number: a plan's until a backup fixes it, any other for a week.")
+                Text("Unresolved problems are kept longer.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// This Mac's own notifications; webhooks are the next pane's.
+    private func notificationsTab(model: AppModel) -> some View {
+        @Bindable var model = model
+        return Form {
+            // The pane's title names it; no section heading repeats it.
+            Section {
+                Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
+                // What it gates (`AppModel.notify(about:)`), in the alert
+                // channels' own event words.
+                Toggle("Notify when a backup fails or completes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
+                // `RunRecord.problemStretch`: the rule said where it is set.
+                Text("A failure that repeats with the same cause notifies once.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // A plan that never runs writes no failure to notify about:
+                // an unplugged drive at every slot, a Mac asleep through them.
+                Picker("Notify when a scheduled plan has not backed up for", selection: $model.configuration.settings.staleAlertDays) {
+                    ForEach(StaleAlert.choices, id: \.self) { days in
+                        Text(days == 0 ? "Never" : Format.plural(days, "day")).tag(days)
+                    }
+                }
+                Text("Once, until the plan backs up again. Paused and manual plans are left out.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // The relationship between the two toggle layers, stated
+                // where both are visible: these gate this Mac's notification
+                // centre; the Webhooks tab's channels carry their own
+                // per-event switches, and neither gates the other.
+                ExpandableCaption(
+                    summary: "These switches control this Mac's notifications.",
+                    detail: "Webhooks have their own per-event switches and don't follow them."
+                )
             }
         }
         .formStyle(.grouped)
@@ -235,8 +252,9 @@ struct SettingsView: View {
                         }
                     }
                 }
+                // The field's prompt is the path in use when none is typed,
+                // so the path is not repeated in a row of its own.
                 if model.isResticAvailable {
-                    LabeledContent("Using", value: model.resticPath)
                     LabeledContent("Version", value: model.resticVersion.isEmpty ? "—" : model.resticVersion)
                 } else if let problem = model.binaryProblem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
@@ -266,14 +284,15 @@ struct SettingsView: View {
                 Text("\(Format.bytes(report.totalBytes)) in \(Format.plural(report.count, "folder"))")
                     .textSelection(.enabled)
             }
-            Text(
-                "At \((report.directory as NSString).abbreviatingWithTildeInPath): one folder per repository restic has opened on this Mac, kept after a repository is removed here. "
-                    + AppModel.unusedLine(report)
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+            Text("One folder per repository restic has opened on this Mac. " + AppModel.unusedLine(report))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
+                // Where it is, as a button rather than a path to read.
+                Button("Show in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: report.directory)])
+                }
                 Button("Remove Caches Unused for \(ResticCacheReport.oldAfterDays) Days…") { isConfirmingCacheCleanup = true }
                     .disabled(report.oldCount == 0 || model.isWorkingOnResticCache)
                 if model.isWorkingOnResticCache { ProgressView().controlSize(.small) }
@@ -292,7 +311,7 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(
-                    "A repository still set up here loses its cache too when it went unused that long — a drive away for a month, for instance. restic rebuilds it the next time it opens that repository, over the network for a remote one. Nothing inside any repository is touched."
+                    "A repository still set up here loses its cache too if unused that long; restic rebuilds it next time. Nothing in any repository is touched."
                 )
             }
         case let .failed(message):
@@ -364,10 +383,10 @@ struct NotificationChannelsTab: View {
         VStack(spacing: 0) {
             EditableListFrame(
                 isEmpty: channels.isEmpty,
-                emptyTitle: "No Alerts",
+                emptyTitle: "No Webhooks",
                 emptyHint: "Click + to add a webhook, a Slack or Discord channel, or a Healthchecks.io ping URL.",
-                addTitle: "Add Alert",
-                removeTitle: "Remove Alert",
+                addTitle: "Add Webhook",
+                removeTitle: "Remove Webhook",
                 canRemove: selection != nil,
                 onAdd: {
                     var channel = NotificationChannel()
@@ -550,7 +569,7 @@ struct NotificationChannelsTab: View {
             ContentUnavailableView(
                 "No Alert Selected",
                 systemImage: "bell",
-                description: Text("Select an alert in the list to change it.")
+                description: Text("Select a webhook in the list to change it.")
             )
         }
     }

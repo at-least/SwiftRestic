@@ -100,8 +100,8 @@ struct FindFilesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .restoreCommand(restore)
+        // The repository is the page's own picker, not a subtitle as well.
         .navigationTitle("Find Files")
-        .navigationSubtitle(repositoryID.flatMap { model.repository(id: $0) }.map { model.label(of: $0) } ?? "")
         // The prompt has to be verbatim: a literal string is a
         // LocalizedStringKey, which SwiftUI parses as Markdown — the
         // asterisks in a glob would be eaten as emphasis markers.
@@ -214,13 +214,15 @@ struct FindFilesView: View {
                     .accessibilityHidden(!isSearching)
             }
 
+            // The one line says what to do; how matching works is the
+            // ⓘ's to tell.
             ExpandableCaption(
                 summary: indexComplete == true
-                    ? FilesSearchAnswer.matchRule
-                    : "Matching is case-insensitive and supports shell globs. Press Return to search.",
+                    ? "Searches every backup as you type."
+                    : "Press Return to search.",
                 detail: indexComplete == true
-                    ? "This repository's index has finished reading, so the search runs locally against every backup at once, as you type — instant, however deep the history."
-                    : "Searching every backup walks each one, so it takes longer the more history a repository holds. “Latest backup only” searches the repository's single newest backup — that backup may span other plans' folders, so it is not the newest per plan."
+                    ? FilesSearchAnswer.matchRule + " The search runs on this Mac against every backup at once, however deep the history."
+                    : "Matching ignores case and takes shell patterns such as *.key. Searching every backup reads each one, so it takes longer the more history the repository holds. “Latest backup only” searches the repository's newest backup — which may not be the newest of every plan."
             )
         }
         .padding(12)

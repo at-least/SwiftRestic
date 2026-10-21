@@ -390,7 +390,9 @@ struct FilesBrowserView: View {
             FilesTreeRow(
                 entry: entry,
                 notRead: entry.standing == .notBackedUp ? unread.reason(for: entry.node.path) : nil,
-                title: depth == 0 ? (entry.node.path as NSString).abbreviatingWithTildeInPath : entry.node.name,
+                // The plan's folder by its name, as the sidebar names the
+                // plan; its path is the window's subtitle.
+                title: entry.node.name.isEmpty ? entry.node.path : entry.node.name,
                 isExpanded: router.openFolders.contains(entry.node),
                 onToggle: { toggle(entry.node) }
             )
@@ -634,7 +636,7 @@ struct FilesSearchRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .truncationMode(.head)
+                    .truncationMode(.middle)
             }
             Spacer(minLength: 4)
             if let tag = entry.tag {

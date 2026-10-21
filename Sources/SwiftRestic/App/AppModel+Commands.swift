@@ -177,17 +177,16 @@ extension AppModel {
         case let .deletePlan(id):
             guard let plan = plan(id: id) else { return nil }
             let name = label(of: plan)
-            // Where the snapshots land, said when there are some: the count
-            // and the shelf the sidebar will move them to, so the dialog and
-            // what happens next cannot disagree. Deleting is the main source
-            // of adoptable groups — re-adoption restores this same UUID.
+            // Where the snapshots land, said when there are some. Deleting is
+            // the main source of adoptable groups — re-adoption restores this
+            // same UUID.
             let landing: String
             if let repositoryID = plan.repositoryID,
                let repository = repository(id: repositoryID),
                let left = backupsLeftBehind(planID: id, in: repositoryID)
             {
-                landing = "Its \(Format.plural(left.count, "backup")) \(left.count == 1 ? "stays" : "stay")"
-                    + " in “\(label(of: repository))”, under \(left.shelfTitle), and can be adopted back."
+                landing = "Its \(Format.plural(left, "backup")) \(left == 1 ? "stays" : "stay")"
+                    + " in “\(label(of: repository))” and can be adopted again."
             } else {
                 landing = "Backups already written to the repository are not deleted."
             }
@@ -207,30 +206,30 @@ extension AppModel {
             )
         case let .check(id):
             guard let repository = repository(id: id) else { return nil }
-            // The cost scales with the repository's size, so the dialog
-            // names the size the user holds.
-            var message = "Structure checks are fast; reading data finds more problems at the cost of time. The repository is locked while the check runs, so backups to it are held back until it finishes."
+            // Reading data costs time in proportion to the size, so the
+            // sheet names the size the user holds.
+            var message = "Backups to it wait until the check finishes."
             if let size = repositoryStats[id]?.totalSize {
-                message += " This repository currently holds \(Format.bytes(size))."
+                message += " It holds \(Format.bytes(size))."
             }
-            return ConfirmationCopy(title: "Check the integrity of “\(label(of: repository))”?", message: message)
+            return ConfirmationCopy(title: "Check “\(label(of: repository))”?", message: message)
         case let .prune(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Prune “\(label(of: repository))” now?",
-                message: "Pruning permanently removes the data of removed backups and locks the repository exclusively — backups to it are held back until it finishes."
+                message: "The data of removed backups is deleted for good. Backups to it wait until the prune finishes."
             )
         case let .unlock(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Remove stale locks on “\(label(of: repository))”?",
-                message: "This removes locks left behind by interrupted restic processes. If restic is running somewhere else right now, removing its lock can corrupt the repository."
+                message: "Only do this when no restic is using it — removing a lock in use can damage the repository."
             )
         case let .rebuildIndex(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Rebuild the search index for “\(label(of: repository))”?",
-                message: "The local search index, with its cached folder listings and comparisons, is deleted and read back from the repository, backup by backup. The repository itself is not touched. Until the rebuild finishes, folder version lists are incomplete, the Restore pane's search may miss matches, and Find Files searches through restic, which is slower."
+                message: "The index is read again from the repository. Searches are slower until it finishes."
             )
         }
     }

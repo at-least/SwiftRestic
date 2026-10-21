@@ -125,10 +125,8 @@ struct PlanEditorSheet: View {
 
             HStack {
                 // A greyed Save that spans four tabs of validation owes the
-                // user the reason at the button, not a hunt across tabs. The
-                // first-run consequence rides in the same slot: it changes
-                // what Create does, and the Schedule tab that explains the
-                // escape hatch may never be opened.
+                // user the reason at the button, not a hunt across tabs.
+                // What saving starts is the Schedule tab's to say.
                 VStack(alignment: .leading, spacing: 4) {
                     // Adopt's warnings and standing sentence, beside the
                     // button they qualify — every tab's footer, so the words
@@ -163,36 +161,7 @@ struct PlanEditorSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if startsFirstBackupOnCreate {
-                        Text(mode == .adopt
-                            ? "Adopting this plan starts its first backup within a minute."
-                            : "Creating this plan starts its first backup within a minute."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                    // Only when this save turns a schedule on — the moment
-                    // the user commits to it. `initial` is nil until
-                    // onAppear, and an existing plan must not flash the
-                    // offer on that first pass, so the draft stands in.
-                    // No key equivalent: Return stays Create, Esc Cancel.
-                    if let offer = LoginItemAdvice.editorOffer(
-                        draft: draft,
-                        initial: initial ?? draft,
-                        isNew: isNew,
-                        startsAtLogin: model.startsAtLogin,
-                        needsApproval: model.loginItemNeedsApproval,
-                        isInstallable: model.loginItemInstallable
-                    ) {
-                        LoginItemOfferLine(offer: offer) { requestedLoginItem = true }
-                    } else if requestedLoginItem, model.startsAtLogin {
-                        Text(LoginItemAdvice.enabledConfirmation)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
-                // Wider than the buttons' own spacing: the login line's small
-                // button belongs to its caption, not to Cancel and Create.
                 Spacer(minLength: 20)
                 Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
@@ -462,12 +431,12 @@ struct PlanEditorSheet: View {
     }
 
     private var sourcesTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        Form {
             // A folder on a network share: its password, so a backup can
             // reconnect it. Not while adopting — the sheet is about history.
             if mode != .adopt {
                 ForEach(folderShares, id: \.share.volumeName) { entry in
-                    VStack(alignment: .leading, spacing: 6) {
+                    Section {
                         NetworkSharePasswordRows(
                             url: entry.share.url,
                             isSaved: entry.isSaved,
@@ -482,13 +451,15 @@ struct PlanEditorSheet: View {
             // A folder that is gone fails every backup; said here first.
             // Adopt's footer already says it, in the same words.
             if mode != .adopt, !draft.path.isEmpty, !AppModel.allSourcesExist([draft.path]) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityHidden(true)
-                    Text(AppModel.missingSourcesWarning)
+                Section {
+                    Label {
+                        Text(AppModel.missingSourcesWarning)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.warning)
+                    }
+                    .font(.callout)
                 }
-                .font(.callout)
             }
             // Said here, where the path is chosen, rather than after a
             // backup comes back with warnings. The check is a few string
@@ -496,55 +467,56 @@ struct PlanEditorSheet: View {
             if model.fullDiskAccess != .granted,
                let source = ProtectedLocations.firstProtectedSource([draft.path], home: NSHomeDirectory())
             {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Section {
+                    Label {
+                        Text("Without Full Disk Access, parts of “\((source as NSString).abbreviatingWithTildeInPath)” can't be read, and its backups end with warnings.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
                         // Orange on the glyph only; the sentence says it all.
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(Theme.warning)
-                            .accessibilityHidden(true)
-                        Text("Without Full Disk Access, macOS keeps parts of “\((source as NSString).abbreviatingWithTildeInPath)” from SwiftRestic, and backups of it complete with warnings.")
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .font(.callout)
                     FullDiskAccessButton()
                 }
             }
-            PathListEditor(
-                title: "Exclude patterns",
-                systemImage: "eye.slash",
-                paths: $draft.excludePatterns,
-                placeholder: "e.g. **/node_modules",  // a String variable, so not parsed as Markdown
-                browseMessage: "Choose folders and files to leave out of backups",
-                browsePrompt: "Exclude",
-                escapesPickedGlobs: true,
-                groupsExcludeRules: true,
-                // The set a run of this draft passes restic, fitted to the
-                // folder as it is typed, among the rows while the switch
-                // below is on.
-                switchRules: draft.excludeDeveloperFiles ? BackupPlan.developerRules(for: draft.path) : []
-            )
-            Toggle("Skip folders marked as caches (CACHEDIR.TAG)", isOn: $draft.excludeCaches)
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Skip developer files", isOn: $draft.excludeDeveloperFiles)
+            Section {
+                PathListEditor(
+                    title: "Exclude patterns",
+                    systemImage: "eye.slash",
+                    paths: $draft.excludePatterns,
+                    placeholder: "e.g. **/node_modules",  // a String variable, so not parsed as Markdown
+                    browseMessage: "Choose folders and files to leave out of backups",
+                    browsePrompt: "Exclude",
+                    escapesPickedGlobs: true,
+                    groupsExcludeRules: true,
+                    // The set a run of this draft passes restic, fitted to
+                    // the folder as it is typed, among the rows while the
+                    // switch below is on.
+                    switchRules: draft.excludeDeveloperFiles ? BackupPlan.developerRules(for: draft.path) : []
+                )
+            }
+            Section {
+                Toggle("Skip folders marked as caches", isOn: $draft.excludeCaches)
+                    .help("Folders holding a CACHEDIR.TAG file.")
                 // No row anywhere can name what a simulator or a container
                 // disk held, so the trade is said here, once.
-                Text(developerFilesCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Toggle("Stay on one filesystem", isOn: $draft.oneFileSystem)
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Skip online-only cloud files (iCloud Drive, OneDrive)", isOn: $draft.excludeCloudFiles)
+                Toggle(isOn: $draft.excludeDeveloperFiles) {
+                    Text("Skip developer files")
+                    Text(developerFilesCaption)
+                }
+                Toggle("Stay on one file system", isOn: $draft.oneFileSystem)
+                    .help("Folders on another disk mounted inside this one are skipped.")
                 // No row anywhere can show a file that was left out, so the
                 // trade is said here, once.
-                Text(cloudFilesCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(isOn: $draft.excludeCloudFiles) {
+                    Text("Skip online-only files")
+                    Text(cloudFilesCaption)
+                }
             }
+            .editorSwitches()
         }
-        .padding(.top, 6)
+        .formStyle(.grouped)
         // The path's network share, read off the main actor: a stalled
         // share can hold the read for seconds.
         .task(id: draft.path) {
@@ -561,16 +533,16 @@ struct PlanEditorSheet: View {
     /// names are the tools' own, what they download again — the contents
     /// of the simulators and the machines are the part nobody rebuilds.
     private var developerFilesCaption: String {
-        "Dependency caches, build output and toolchains the tools download again, simulator devices and container or virtual-machine disks — whatever is kept inside a simulator, Docker or OrbStack is not backed up."
+        "Leaves out what developer tools download or build again, simulators and Docker or OrbStack disks included — whatever is inside those isn't backed up."
     }
 
     /// What the cloud-files switch does with this restic: 0.19 brought
     /// `--exclude-cloud-files` to macOS.
     private var cloudFilesCaption: String {
         if let version = ResticVersion(parsing: model.resticVersion), !version.excludesCloudFilesOnMac {
-            return "Needs restic 0.19 or later — this restic backs them up like any other file."
+            return "Needs restic 0.19 or later."
         }
-        return "Files kept only online, not downloaded to this Mac, are left out (restic's --exclude-cloud-files). Off, restic reads them like any other file."
+        return "Files kept only in iCloud Drive or OneDrive aren't downloaded or backed up."
     }
 
     private var scheduleTab: some View {
@@ -579,6 +551,7 @@ struct PlanEditorSheet: View {
             // pickers below stay editable: a paused plan's times can still
             // be changed, and saving keeps the pause.
             Toggle("Run on schedule", isOn: $draft.isEnabled)
+                .editorSwitches()
             // A timed Pause Schedule leaves the switch on; without this line
             // the editor would read as if the plan were running on schedule.
             if draft.isEnabled, let end = draft.activePauseEnd(at: .now) {
@@ -624,16 +597,6 @@ struct PlanEditorSheet: View {
                 timeOfDayPicker
             }
 
-            if draft.schedule.frequency != .manual {
-                // The footer states the consequence on every tab; this line
-                // only carries the escape hatch, so the two never repeat
-                // each other on the tab where both are visible.
-                Text("Pick Manually if the plan should only run when you press Back Up Now.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
             // When this schedule fires, as the plan page will say once it
             // is saved — the moment a wrong guess would otherwise first
             // show as a surprise run.
@@ -652,14 +615,43 @@ struct PlanEditorSheet: View {
             }
 
             // No summary row: it would only restate the pickers above. The
-            // daemon's honesty line stays — scheduled runs need the app.
+            // daemon's honesty line stays — scheduled runs need the app —
+            // with what saving this schedule starts, and the offer to open
+            // the app at login, where the schedule is chosen.
             Section {
-                Text(
-                    "Scheduled runs need SwiftRestic to be running. It checks every minute and catches up on a run it missed while the Mac was asleep. While a backup runs, the Mac does not go to sleep on its own."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                if startsFirstBackupOnCreate {
+                    Text(mode == .adopt
+                        ? "Its first backup starts within a minute of adopting it."
+                        : "Its first backup starts within a minute of creating it."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                // Only when this save turns a schedule on — the moment
+                // the user commits to it. `initial` is nil until
+                // onAppear, and an existing plan must not flash the
+                // offer on that first pass, so the draft stands in. The
+                // offer says the app must be open itself, so the plain
+                // line only stands without it.
+                if let offer = LoginItemAdvice.editorOffer(
+                    draft: draft,
+                    initial: initial ?? draft,
+                    isNew: isNew,
+                    startsAtLogin: model.startsAtLogin,
+                    needsApproval: model.loginItemNeedsApproval,
+                    isInstallable: model.loginItemInstallable
+                ) {
+                    LoginItemOfferLine(offer: offer) { requestedLoginItem = true }
+                } else if requestedLoginItem, model.startsAtLogin {
+                    Text(LoginItemAdvice.enabledConfirmation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Runs while SwiftRestic is open, and catches up after the Mac sleeps.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .formStyle(.grouped)
@@ -687,6 +679,7 @@ struct PlanEditorSheet: View {
     private var retentionTab: some View {
         Form {
             Toggle("Apply retention after each backup", isOn: $draft.retention.isEnabled)
+                .editorSwitches()
 
             // The adopt draft starts here off, and the consequence of turning
             // it on is not the editor's usual one: the plan's tag is shared
@@ -708,11 +701,16 @@ struct PlanEditorSheet: View {
                         Text(choice.displayName).tag(choice)
                     }
                 }
+                // Retention's own follow-up, so it sits under it and goes
+                // with it.
+                Toggle(isOn: $draft.retention.runPrune) {
+                    Text("Also prune")
+                    Text("Frees the space removed backups held. Much slower.")
+                }
+                .editorSwitches()
             }
 
             Section {
-                Toggle("Also prune (reclaims space, much slower)", isOn: $draft.retention.runPrune)
-                    .disabled(!draft.retention.isEnabled)
                 LabeledContent("Summary", value: draft.retention.summary)
                 if draft.retention.isEnabled, let projection {
                     // Retention is where users decide what gets deleted; the
@@ -739,7 +737,7 @@ struct PlanEditorSheet: View {
                 {
                     let count = model.snapshots(for: repositoryID, planID: draft.id).count
                     if count > 0 {
-                        LabeledContent("Backups now", value: Format.count(count))
+                        LabeledContent("Current backups", value: Format.count(count))
                     }
                 }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
@@ -901,5 +899,14 @@ private struct AdoptRetentionPreview: View {
             result = nil
         }
         isLoading = false
+    }
+}
+
+extension View {
+    /// The plan editor's on/off settings: mini switches in a grouped form,
+    /// the HIG's "consider using a mini switch to control the setting in a
+    /// single row", the same on every tab.
+    func editorSwitches() -> some View {
+        toggleStyle(.switch).controlSize(.mini)
     }
 }

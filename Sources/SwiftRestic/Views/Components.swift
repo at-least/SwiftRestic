@@ -607,24 +607,6 @@ struct SnapshotListingCaveat: View {
     }
 }
 
-/// A snapshot count traces to the moment it was read: an "Updated 7:27 AM"
-/// caption, or a spinner while a refresh is in flight.
-struct SnapshotFreshnessLabel: View {
-    let loadedAt: Date?
-    let isLoading: Bool
-
-    var body: some View {
-        if isLoading {
-            ProgressView().controlSize(.small)
-        } else if let loadedAt {
-            Text("Updated \(loadedAt.formatted(date: .omitted, time: .shortened))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-    }
-}
-
 // MARK: - Snapshot completeness
 
 /// A snapshot's completeness, where snapshots are named (the sidebar's
@@ -864,7 +846,10 @@ struct PathListEditor: View {
             } isTargeted: { isDropTargeted = $0 }
 
             HStack(spacing: 6) {
-                TextField(placeholder, text: $draft)
+                // The placeholder is a prompt, not a label: inside a form a
+                // title would stand beside the field as a row's label.
+                TextField(text: $draft, prompt: Text(placeholder)) { Text(title) }
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(addDraft)
                 Button("Add", action: addDraft)
@@ -946,7 +931,7 @@ struct ExcludeRowText: View {
 // MARK: - Editable list
 
 /// A list people add rows to and take rows from, the Mac's way — the
-/// Hooks tab's and the Alerts tab's: framed, with + and − attached beneath
+/// Hooks tab's and the Webhooks tab's: framed, with + and − attached beneath
 /// it, symbols and not words (the HIG's square buttons, "adding or removing
 /// rows in a table"). Empty, the frame says so and what + does, rather than
 /// standing as a blank box.

@@ -227,7 +227,11 @@ struct SidebarView: View {
             } else if model.loadingSnapshots.contains(repository.id) {
                 Text("Reading backups…")
             } else if case let .failed(message) = model.snapshotListingOutcome(for: repository.id) {
-                Text(Format.firstSentence(message))
+                // Under the repository's own name, its drive's absence needs
+                // no name again.
+                let line = Format.firstSentence(message)
+                let away = "“\(model.label(of: repository))” is not connected"
+                Text(line.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == away ? "Not connected" : line)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(message)
@@ -341,10 +345,10 @@ struct SidebarView: View {
     /// stand over its rows.
     private func otherBackupsCaption(_ repository: Repository, shelves: BackupShelves) -> some View {
         let title = SidebarTree.otherBackupsTitle(repositoryHasPlans: !shelves.plans.isEmpty)
-        // The one count every surface reads — the page's Protection line,
-        // its Other backups card and its Snapshots split included.
+        // The count stays for VoiceOver; on screen each group's row says
+        // its own.
         let count = Format.plural(shelves.otherBackupsCount, "backup")
-        return Text("\(title) · \(count)")
+        return Text(title)
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)

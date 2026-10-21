@@ -203,7 +203,7 @@ struct RestoreDestinationSheet: View {
     private var headline: String {
         if let itemName { return "Restore “\(itemName)”" }
         if let items { return "Restore \(Format.plural(items.count, "item"))" }
-        return request.backupName.map { "Restore the whole “\($0)” backup" } ?? "Restore the whole backup"
+        return request.backupName.map { "Restore all of “\($0)”" } ?? "Restore the whole backup"
     }
 
     private var backupLine: String {
@@ -219,7 +219,7 @@ struct RestoreDestinationSheet: View {
     private var subjectName: String {
         if let itemName { return "“\(itemName)”" }
         if let items { return "the \(Format.plural(items.count, "item"))" }
-        return request.backupName.map { "the whole “\($0)” backup" } ?? "the whole backup"
+        return request.backupName.map { "all of “\($0)”" } ?? "the whole backup"
     }
 
     /// Selected items that would land on each other in one folder — the
@@ -270,12 +270,13 @@ struct RestoreDestinationSheet: View {
                 } else if let items {
                     pathCaption("Will restore the \(Format.plural(items.count, "item")) into \(Self.abbreviated(folder))", fullPath: folder.path)
                 } else {
-                    // The path truncates and the sentence wraps: one line at
-                    // this width cuts both to fragments.
-                    VStack(alignment: .leading, spacing: 2) {
-                        pathCaption("Will restore into \(Self.abbreviated(folder))", fullPath: folder.path)
-                        caption("Each backed-up folder is recreated under its full original path inside it.")
-                    }
+                    // restic recreates each backed-up folder's whole path
+                    // inside the target: said in the tooltip, not a second
+                    // line.
+                    pathCaption(
+                        "Will restore into \(Self.abbreviated(folder))",
+                        fullPath: "\(folder.path)\nEach folder is recreated under its full original path inside it."
+                    )
                 }
             } else {
                 caption("No folder chosen")

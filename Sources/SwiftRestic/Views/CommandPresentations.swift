@@ -6,7 +6,14 @@ struct RetentionTarget: Identifiable, Equatable {
     var id: UUID { planID }
 }
 
-/// Every destructive confirmation, once, and Apply Retention Now…'s sheet —
+/// Identifies Check…'s sheet by the repository it checks.
+private struct CheckTarget: Identifiable {
+    let repositoryID: UUID
+    var id: UUID { repositoryID }
+}
+
+/// Every destructive confirmation, once, Check…'s sheet and Apply Retention
+/// Now…'s sheet —
 /// wherever they are asked from: the Plan and Repository menus, the panes'
 /// toolbars, the sidebar's menus. One dialog with the model's words
 /// (`AppModel.confirmationCopy(for:)`), so no two surfaces can word one
@@ -22,19 +29,31 @@ struct CommandPresentations: ViewModifier {
         // Read on every render: the delete message says whether a run will be
         // stopped, and a run can start or end while the dialog is up.
         let copy = pendingConfirmation.flatMap { model.confirmationCopy(for: $0) }
+        // Check asks how much data to read as well, which an alert's three
+        // buttons cannot hold with a Cancel beside them: it is a sheet.
+        let checkTarget: CheckTarget? = if case let .check(id) = pendingConfirmation { CheckTarget(repositoryID: id) } else { nil }
+        let dialog = checkTarget == nil ? pendingConfirmation : nil
         return content
             .confirmationDialog(
                 copy?.title ?? "",
                 isPresented: Binding(
-                    get: { pendingConfirmation != nil },
+                    get: { dialog != nil },
                     set: { if !$0 { pendingConfirmation = nil } }
                 ),
                 titleVisibility: .visible,
-                presenting: pendingConfirmation
+                presenting: dialog
             ) { confirmation in
                 actions(for: confirmation)
             } message: { _ in
                 Text(copy?.message ?? "")
+            }
+            .sheet(item: Binding(
+                get: { checkTarget },
+                set: { if $0 == nil { pendingConfirmation = nil } }
+            )) { target in
+                CheckSheet(copy: copy) { readDataPercent in
+                    check(target.repositoryID, readDataPercent: readDataPercent)
+                }
             }
             .sheet(item: $retentionTarget) { target in
                 ApplyRetentionSheet(planID: target.planID)
@@ -49,14 +68,9 @@ struct CommandPresentations: ViewModifier {
             Button("Delete Plan", role: .destructive) { model.deletePlan(id: id) }
         case let .removeRepository(id):
             Button("Remove", role: .destructive) { model.deleteRepository(id: id) }
-        case let .check(id):
-            Button("Check Structure") { check(id, readDataPercent: 0) }
-            Button("Check + Read 5% of Data") { check(id, readDataPercent: 5) }
-            Button("Check + Read All Data") { check(id, readDataPercent: 100) }
-            // Three plain choices and no cancel of their own: SwiftUI then
-            // adds its dismiss button titled "OK", which under "Check the
-            // integrity of …?" reads as a yes.
-            Button("Cancel", role: .cancel) {}
+        case .check:
+            // A sheet of its own (CheckSheet); never shown as a dialog.
+            EmptyView()
         case let .prune(id):
             Button("Prune", role: .destructive) {
                 model.runMaintenance(repositoryID: id, task: .prune)
@@ -83,5 +97,44 @@ struct CommandPresentations: ViewModifier {
         if router.selection != .repository(id) {
             router.selection = .repository(id)
         }
+    }
+}
+
+/// Check…: the confirmation's title and sentence, and how much of the
+/// backed-up data to read back — none checks the structure alone.
+private struct CheckSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let copy: ConfirmationCopy?
+    let run: (Int) -> Void
+    @State private var readDataPercent = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(copy?.title ?? "")
+                .font(.headline)
+            Picker("Read data:", selection: $readDataPercent) {
+                Text("None").tag(0)
+                Text("5% of it").tag(5)
+                Text("All of it").tag(100)
+            }
+            .fixedSize()
+            .help("Reading data back finds damage the structure check misses, and takes longer.")
+            Text(copy?.message ?? "")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Check") {
+                    run(readDataPercent)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
     }
 }

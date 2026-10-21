@@ -199,7 +199,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
             about = nil
             why = "Backup \(record.id)."
         case .firstBackup:
-            about = "No earlier backup of these folders, so no changes are marked"
+            about = "First backup of this folder — nothing to compare with"
             why = "Backup \(record.id). The Change column compares a backup with the previous one "
                 + "of the same folders from the same Mac, and this is the first."
         case let .comparing(baseline):
@@ -218,7 +218,9 @@ struct RestoreRecordHeading: Equatable, Sendable {
             about = "Could not compare with \(Format.timestamp(baseline.time)): \(Format.firstSentence(reason))"
             why = Self.comparedWith(record, baseline) + " restic diff failed: \(reason)"
         }
-        caption = [record.shortID, about].compactMap { $0 }.joined(separator: " · ")
+        // The backup's ID stays in the tooltip (`why`); the line is only
+        // what the Change column is measured against.
+        caption = about ?? ""
         detail = [label?.detail, why].compactMap { $0 }.joined(separator: "\n")
         if case .failed = comparison { isProblem = true } else { isProblem = false }
 

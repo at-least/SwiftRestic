@@ -221,7 +221,7 @@ extension Snapshot {
     }
 
     /// The Macs a history was made from, first-seen order, once each — one
-    /// derivation, so the group page's "Made from" row and the adopt
+    /// derivation, so the group page's "Made on" row and the adopt
     /// sheet's header cannot count the Macs differently.
     static func distinctHosts(of snapshots: [Snapshot]) -> [String] {
         var hosts: [String] = []

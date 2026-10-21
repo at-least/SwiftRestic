@@ -59,8 +59,10 @@ struct ProtectionCard: View {
                 // The repository's first plan: the way to it is the whole
                 // point of a plan-less page, in the empty card's prominent
                 // form. Once a plan exists the next one starts from the
-                // sidebar's +, ⌘N or the repository row's menu.
-                if plans.isEmpty {
+                // sidebar's +, ⌘N or the repository row's menu. Not while the
+                // repository can't be read: a plan for a drive that isn't
+                // here is not the next step, reaching it is.
+                if plans.isEmpty, case .loaded = model.snapshotListingOutcome(for: repositoryID) {
                     Button("New Backup Plan…", action: onAddPlan)
                         .buttonStyle(.borderedProminent)
                 }
@@ -190,78 +192,81 @@ struct RecentProblemsCard: View {
     let repositoryID: UUID
 
     var body: some View {
-        Card("Recent problems") {
-            VStack(alignment: .leading, spacing: 7) {
-                // The same window the sidebar's badge counts.
-                let since = OverviewMetrics.problemWindowStart(from: now)
-                // A cause that stands repeats every run: one row each, with
-                // its count, so it cannot push the rest off the card.
-                let groups = OverviewMetrics.problemGroups(OverviewMetrics.problems(
-                    in: model.configuration.runs,
-                    since: since,
-                    repositoryID: repositoryID
-                ))
-                let shown = groups.prefix(5)
-                // What the badge counts and the rows do not show.
-                let hidden = groups.dropFirst(5).reduce(0) { $0 + $1.count }
+        // A clean week is the absence of trouble: no card at all, rather
+        // than one saying so.
+        if !OverviewMetrics.problems(
+            in: model.configuration.runs,
+            since: OverviewMetrics.problemWindowStart(from: now),
+            repositoryID: repositoryID
+        ).isEmpty {
+            Card("Recent problems") {
+                VStack(alignment: .leading, spacing: 7) {
+                    // The same window the sidebar's badge counts.
+                    let since = OverviewMetrics.problemWindowStart(from: now)
+                    // A cause that stands repeats every run: one row each, with
+                    // its count, so it cannot push the rest off the card.
+                    let groups = OverviewMetrics.problemGroups(OverviewMetrics.problems(
+                        in: model.configuration.runs,
+                        since: since,
+                        repositoryID: repositoryID
+                    ))
+                    let shown = groups.prefix(5)
+                    // What the badge counts and the rows do not show.
+                    let hidden = groups.dropFirst(5).reduce(0) { $0 + $1.count }
 
-                if groups.isEmpty {
-                    // Quiet by rule: a clean week is the absence of trouble,
-                    // not an achievement — words, no celebratory checkmark.
-                    Text("Nothing has failed in the last seven days.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(shown)) { group in
-                        let run = group.newest
-                        let title = RunRecordPresentation.problemRowTitle(for: run, plans: model.configuration.plans)
-                        let when = PlanStatus.problemWhen(count: group.count, ago: Format.ago(run.finishedAt, now: now))
-                        let caption = RunRecordPresentation.problemRowCaption(for: run)
-                        Button { showInActivity(run) } label: {
-                            HStack(spacing: 6) {
-                                // This card lists only problems, so the
-                                // outcome is said in words right under the
-                                // name — a glyph would only repeat it — with
-                                // why, as Activity's Detail column says it.
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(title)
-                                        .lineLimit(1)
-                                    Text(caption)
+                    Group {
+                        ForEach(Array(shown)) { group in
+                            let run = group.newest
+                            let title = RunRecordPresentation.problemRowTitle(for: run, plans: model.configuration.plans)
+                            let when = PlanStatus.problemWhen(count: group.count, ago: Format.ago(run.finishedAt, now: now))
+                            let caption = RunRecordPresentation.problemRowCaption(for: run)
+                            Button { showInActivity(run) } label: {
+                                HStack(spacing: 6) {
+                                    // This card lists only problems, so the
+                                    // outcome is said in words right under the
+                                    // name — a glyph would only repeat it — with
+                                    // why, as Activity's Detail column says it.
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(title)
+                                            .lineLimit(1)
+                                        Text(caption)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                            .help(caption)
+                                    }
+                                    Spacer()
+                                    // The newest of them is the one the row
+                                    // opens.
+                                    Text(when)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .help(caption)
+                                    DashboardRowChevron()
                                 }
-                                Spacer()
-                                // The newest of them is the one the row
-                                // opens.
-                                Text(when)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                DashboardRowChevron()
                             }
+                            .buttonStyle(HoverableButtonStyle())
+                            .accessibilityLabel("\(title): \(caption). \(when). Show in Activity")
                         }
-                        .buttonStyle(HoverableButtonStyle())
-                        .accessibilityLabel("\(title): \(caption). \(when). Show in Activity")
-                    }
-                    if hidden > 0 {
-                        Button {
-                            router.activityShowsProblemsOnly = true
-                            router.selection = .activity
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("… and \(hidden) more in Activity")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                DashboardRowChevron()
+                        if hidden > 0 {
+                            Button {
+                                router.activityShowsProblemsOnly = true
+                                router.selection = .activity
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text("… and \(hidden) more in Activity")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    DashboardRowChevron()
+                                }
                             }
+                            .buttonStyle(HoverableButtonStyle())
                         }
-                        .buttonStyle(HoverableButtonStyle())
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

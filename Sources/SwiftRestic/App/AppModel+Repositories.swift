@@ -82,10 +82,14 @@ extension AppModel {
         isMaintaining: Bool,
         isConsoleRunning: Bool
     ) -> String {
-        var consequences = "The backup data itself is not deleted."
+        var consequences = ""
         if !removedPlanNames.isEmpty {
-            consequences += " Its plans will be removed too (\(removedPlanNames.joined(separator: ", ")))."
+            let quoted = removedPlanNames.map { "“\($0)”" }
+            consequences += removedPlanNames.count == 1
+                ? "Its plan \(quoted[0]) is removed too. "
+                : "Its plans \(ListFormatter.localizedString(byJoining: quoted)) are removed too. "
         }
+        consequences += "The backups in it are kept."
         if isRestoring {
             consequences += " A restore from this repository is running and will be cancelled."
         }

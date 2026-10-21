@@ -17,7 +17,16 @@ struct RemovalConsequencesTests {
                 runningBackupNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
-            ) == "The backup data itself is not deleted. Its plans will be removed too (Documents, Photos)."
+            ) == "Its plans “Documents” and “Photos” are removed too. The backups in it are kept."
+        )
+        #expect(
+            AppModel.removalConsequences(
+                removedPlanNames: ["Documents"],
+                isRestoring: false,
+                runningBackupNames: [],
+                isMaintaining: false,
+                isConsoleRunning: false
+            ) == "Its plan “Documents” is removed too. The backups in it are kept."
         )
         // No plan uses it: nothing is removed with it, so nothing says so.
         #expect(
@@ -27,7 +36,7 @@ struct RemovalConsequencesTests {
                 runningBackupNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
-            ) == "The backup data itself is not deleted."
+            ) == "The backups in it are kept."
         )
     }
 

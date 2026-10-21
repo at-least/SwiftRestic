@@ -293,16 +293,16 @@ struct SnapshotLineageTests {
             RestoreRecordHeading(record: record, label: nil, comparison: comparison)
         }
 
-        #expect(heading(nil).caption == "abf72899")
-        #expect(heading(.firstBackup).caption == "abf72899 · No earlier backup of these folders, so no changes are marked")
-        #expect(heading(.comparing(baseline: baseline)).caption == "abf72899 · Comparing with \(since)…")
-        #expect(heading(.compared(baseline: baseline, changeCount: 1)).caption == "abf72899 · 1 change since \(since)")
-        #expect(heading(.compared(baseline: baseline, changeCount: 3)).caption == "abf72899 · 3 changes since \(since)")
+        #expect(heading(nil).caption == "")
+        #expect(heading(.firstBackup).caption == "First backup of this folder — nothing to compare with")
+        #expect(heading(.comparing(baseline: baseline)).caption == "Comparing with \(since)…")
+        #expect(heading(.compared(baseline: baseline, changeCount: 1)).caption == "1 change since \(since)")
+        #expect(heading(.compared(baseline: baseline, changeCount: 3)).caption == "3 changes since \(since)")
         // restic diff lists nothing when nothing changed: an honest zero.
-        #expect(heading(.compared(baseline: baseline, changeCount: 0)).caption == "abf72899 · No changes since \(since)")
+        #expect(heading(.compared(baseline: baseline, changeCount: 0)).caption == "No changes since \(since)")
         // restic's first sentence in the caption; the whole reason in the tooltip.
         let failed = heading(.failed(baseline: baseline, reason: "restic reported a fatal error — Fatal: injected. More."))
-        #expect(failed.caption == "abf72899 · Could not compare with \(since): restic reported a fatal error — Fatal: injected")
+        #expect(failed.caption == "Could not compare with \(since): restic reported a fatal error — Fatal: injected")
         #expect(failed.detail.hasSuffix(" restic diff failed: restic reported a fatal error — Fatal: injected. More."))
 
         // Only a failed comparison wears the warning glyph.
@@ -372,7 +372,7 @@ struct SnapshotLineageTests {
         #expect(ChangeComparison.removals(in: changes).map(\.path) == ["/src/old.txt", "/src/sub/"])
         let removedTwo = heading(changes)
         // The count line is unchanged; the removals get their own.
-        #expect(removedTwo.caption == "abf72899 · 6 changes since \(since)")
+        #expect(removedTwo.caption == "6 changes since \(since)")
         #expect(removedTwo.removed?.line == "Removed: old.txt, sub")
         #expect(removedTwo.removed?.detail == "Removed since \(since):\n/src/old.txt\n/src/sub and everything in it")
         // Each name is a route to the copy the backup before holds.
