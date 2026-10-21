@@ -507,6 +507,10 @@ struct TolerantDecodingTests {
         ])
         #expect(sections[1].rows[0].rule?.label == "Finder’s window settings · Finder writes them again")
         #expect(sections[0].rows.allSatisfy { $0.rule == nil })
+        // The plan's own rows are the editor's to remove; the switch's are
+        // not — the stored **/.venv stays the stored one.
+        #expect(sections.flatMap(\.rows).filter(\.isStored).map(\.line)
+            == ["*.iso", "~/Movies/Render", ".DS_Store", "**/node_modules", "**/.venv"])
         #expect(ExcludeRule.sections(stored: []).isEmpty)
     }
 

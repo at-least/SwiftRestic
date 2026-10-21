@@ -177,7 +177,7 @@ the generator after editing it; the PNGs are checked in.
   newest backup this Mac made — or the newest of all when another Mac made
   them all — its folder, exclude patterns and user tags;
   a backup whose recorded patterns hold every developer rule fitted to its
-  folder adopts with *Skip what developer tools rebuild* on and those rules
+  folder adopts with *Skip developer files* on and those rules
   not copied as rows (restic records them, not the marker); the folder and the repository are the backups' own, the schedule is Daily
   only when the folder exists here, and retention is off. A group whose
   backup holds several folders — a plan of an earlier build — cannot be
@@ -359,8 +359,8 @@ the generator after editing it; the PNGs are checked in.
   change under it), and only with restic 0.19 or later, which brought the
   flag to macOS (restic's changelog) — the editor says when this restic is
   older. What restic does with an online-only file without the flag was not
-  tried: it would mean reading a real iCloud Drive file. *Skip what developer
-  tools rebuild* passes restic `--exclude` for the rules its folder fits and
+  tried: it would mean reading a real iCloud Drive file. *Skip developer
+  files* (named *Skip what developer tools rebuild* until 2026-10-21) passes restic `--exclude` for the rules its folder fits and
   `--exclude-if-present .rustc_info.json` — a Cargo `target` is skipped by
   the marker file a build writes into it, never by its generic name, so a
   folder of the user's that is only named target stays and the marker itself
@@ -387,12 +387,12 @@ the generator after editing it; the PNGs are checked in.
   rule it passes. On, the rules
   follow the folder the way the defaults do (a plan of `~/Documents` gets the
   folder patterns alone, one of the home folder gets the home rules too) and
-  are never rows in the plan's own list — the editor shows them in a collapsed
-  "N rules for this folder" disclosure, whether the switch is on or off, so
-  they are read before it is turned on, and the plan page's *Excluding* card
-  lists each under its kind beside the plan's own patterns. The editor's
-  exclude list is grouped and labelled the same way; a pattern the user
-  typed carries no label and sits under *Added by you*.
+  are never stored in the plan's own list — while the switch is on, the
+  editor's exclude list and the plan page's *Excluding* card show each under
+  its kind beside the plan's own patterns, labelled; in the editor they
+  cannot be selected or removed (their help says to turn the switch off to
+  back one up), and they leave the list when it is turned off. A pattern the
+  user typed carries no label and sits under *Added by you*, first.
 - **Skipped backups** — when a plan's folder is missing, restic writes
   nothing (exit 1, "Fatal: all source directories/files do not exist",
   restic 0.19.1). When it is on a drive that is away — a volume under

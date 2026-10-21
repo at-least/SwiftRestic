@@ -803,6 +803,11 @@ struct PathListEditor: View {
     /// Excludes: the rows grouped by what each rule skips, each the app
     /// offered labelled (`ExcludeRule.sections`); off, one plain list.
     var groupsExcludeRules = false
+    /// Excludes: the developer switch's rules for the folder, shown among
+    /// the plan's own patterns under their groups while it is on. They are
+    /// not `paths` — the run fits them to the folder — so they cannot be
+    /// selected or removed.
+    var switchRules: [ExcludeRule] = []
 
     @State private var selection: Set<String> = []
     @State private var draft = ""
@@ -815,11 +820,14 @@ struct PathListEditor: View {
 
             List(selection: $selection) {
                 if groupsExcludeRules {
-                    ForEach(ExcludeRule.sections(stored: paths)) { section in
+                    ForEach(ExcludeRule.sections(stored: paths, developer: switchRules)) { section in
                         Section(section.category.title) {
                             ForEach(section.rows) { row in
+                                // Leaving the tag off is not enough: the
+                                // ForEach's String ids tag every row.
                                 ExcludeRowText(row: row)
                                     .tag(row.line)
+                                    .selectionDisabled(!row.isStored)
                             }
                         }
                     }
@@ -907,6 +915,15 @@ struct PathListEditor: View {
 struct ExcludeRowText: View {
     let row: ExcludeRule.Row
 
+    /// The line and label in full, and for a developer switch's rule how to
+    /// back that up after all — it has no row to remove.
+    private var help: String {
+        var lines = [row.line]
+        if let rule = row.rule { lines.append(rule.label) }
+        if !row.isStored { lines.append("Left out by Skip developer files — turn it off to back this up.") }
+        return lines.joined(separator: "\n")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(row.line)
@@ -921,7 +938,7 @@ struct ExcludeRowText: View {
                     .truncationMode(.tail)
             }
         }
-        .help(row.rule.map { "\(row.line)\n\($0.label)" } ?? row.line)
+        .help(help)
         .accessibilityElement(children: .combine)
     }
 }

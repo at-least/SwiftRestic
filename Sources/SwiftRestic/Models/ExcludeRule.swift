@@ -259,10 +259,13 @@ struct ExcludeRule: Hashable, Sendable {
     }
 
     /// A row: the line as shown, and the rule's label when the app offered
-    /// it — a pattern the user typed has none.
+    /// it — a pattern the user typed has none. `isStored`: one of the
+    /// plan's own patterns, which the editor can remove; a rule of the
+    /// developer switch is not, and goes only with the switch.
     struct Row: Identifiable, Equatable {
         let line: String
         let rule: ExcludeRule?
+        let isStored: Bool
         var id: String { line }
     }
 
@@ -273,7 +276,8 @@ struct ExcludeRule: Hashable, Sendable {
     /// other is the user's own. A line already shown is not shown again.
     static func sections(stored: [String], developer: [ExcludeRule] = []) -> [Section] {
         var seen = Set<String>()
-        let rows = (stored.map { Row(line: $0, rule: byPattern[$0]) } + developer.map { Row(line: $0.line, rule: $0) })
+        let rows = (stored.map { Row(line: $0, rule: byPattern[$0], isStored: true) }
+            + developer.map { Row(line: $0.line, rule: $0, isStored: false) })
             .filter { seen.insert($0.line).inserted }
         return ExcludeCategory.allCases.compactMap { category in
             let inCategory = rows.filter { ($0.rule?.category ?? .yours) == category }

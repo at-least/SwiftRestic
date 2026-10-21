@@ -517,46 +517,21 @@ struct PlanEditorSheet: View {
                 browseMessage: "Choose folders and files to leave out of backups",
                 browsePrompt: "Exclude",
                 escapesPickedGlobs: true,
-                groupsExcludeRules: true
+                groupsExcludeRules: true,
+                // The set a run of this draft passes restic, fitted to the
+                // folder as it is typed, among the rows while the switch
+                // below is on.
+                switchRules: draft.excludeDeveloperFiles ? BackupPlan.developerRules(for: draft.path) : []
             )
             Toggle("Skip folders marked as caches (CACHEDIR.TAG)", isOn: $draft.excludeCaches)
             VStack(alignment: .leading, spacing: 2) {
-                Toggle("Skip what developer tools rebuild", isOn: $draft.excludeDeveloperFiles)
+                Toggle("Skip developer files", isOn: $draft.excludeDeveloperFiles)
                 // No row anywhere can name what a simulator or a container
                 // disk held, so the trade is said here, once.
                 Text(developerFilesCaption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                // The set a run of this draft would pass restic with the
-                // switch on — never rows in the list above, always the
-                // folder's own — shown while it is off too, so what it
-                // would leave out is read before it is turned on.
-                let rules = BackupPlan.developerRules(for: draft.path)
-                DisclosureGroup("\(rules.count) rules for this folder") {
-                    // Capped: open, two dozen labelled rows would grow the
-                    // sheet past its frame, pushing its tabs and its buttons
-                    // out of sight. 140 leaves the sheet's 620 points room
-                    // for the exclude list's own rows and the buttons.
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(ExcludeRule.sections(stored: [], developer: rules)) { section in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(section.category.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                        .accessibilityAddTraits(.isHeader)
-                                    ForEach(section.rows) { row in
-                                        ExcludeRowText(row: row)
-                                    }
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 140)
-                }
-                .font(.callout)
             }
             Toggle("Stay on one filesystem", isOn: $draft.oneFileSystem)
             VStack(alignment: .leading, spacing: 2) {
