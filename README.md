@@ -314,9 +314,9 @@ the generator after editing it; the PNGs are checked in.
   *Backups* (last backup, count, retention) with *Back Up Now* — *Stop*
   while it runs; *Schedule* (and when it runs next) with *Pause Schedule*,
   its arrow offering the lengths, or *Resume Schedule* (none for a manual
-  plan); *Excluding*, everything it leaves out, grouped by kind — Finder &
-  Trash, apps' caches & state, search indexes, a drive's or the startup
-  disk's own, each developer language and tool, and last *Added by you* —
+  plan); *Excluding*, everything it leaves out, grouped by kind — first
+  *Added by you*, then Finder & Trash, apps' caches & state, search indexes,
+  a drive's or the startup disk's own, each developer language and tool —
   every rule the app offers labelled with what it is and who puts it back
   ("Virtualenvs · pip installs them again"), the patterns as typed (the rest
   of how it runs, its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors

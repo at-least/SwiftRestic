@@ -487,24 +487,24 @@ struct TolerantDecodingTests {
             == BackupPlan.developerExcludes(for: "~/Documents") + [".rustc_info.json"])
     }
 
-    @Test("the Excluding sections follow the categories' order, the user's own last, each row in the order it came")
+    @Test("the Excluding sections follow the categories' order, the user's own first, each row in the order it came")
     func excludeSectionsGroupByCategory() {
         let sections = ExcludeRule.sections(
             stored: ["*.iso", ".DS_Store", "**/node_modules", "~/Movies/Render", "**/.venv"],
             developer: [ExcludeRule.developer[2], ExcludeRule.developer[0], ExcludeRule.developer[8]]
                 + ExcludeRule.developerMarkers
         )
-        #expect(sections.map(\.category) == [.finder, .javascript, .python, .toolchains, .yours])
+        #expect(sections.map(\.category) == [.yours, .finder, .javascript, .python, .toolchains])
         #expect(sections.map { $0.rows.map(\.line) } == [
+            ["*.iso", "~/Movies/Render"],
             [".DS_Store"],
             ["**/node_modules", "**/.next"],
             // A stored row the switch also passes is shown once.
             ["**/.venv", "**/__pycache__"],
             ["Folders holding .rustc_info.json"],
-            ["*.iso", "~/Movies/Render"],
         ])
-        #expect(sections[0].rows[0].rule?.label == "Finder’s window settings · Finder writes them again")
-        #expect(sections[4].rows.allSatisfy { $0.rule == nil })
+        #expect(sections[1].rows[0].rule?.label == "Finder’s window settings · Finder writes them again")
+        #expect(sections[0].rows.allSatisfy { $0.rule == nil })
         #expect(ExcludeRule.sections(stored: []).isEmpty)
     }
 

@@ -2,8 +2,10 @@ import Foundation
 
 /// The kind of thing an exclude rule leaves out — the one layer the
 /// plan page's Excluding card and the editor's lists group rules by, in
-/// this order, the user's own last.
+/// this order, the user's own first: those are the ones only they can
+/// explain, and the ones they come to the list to change.
 enum ExcludeCategory: Int, CaseIterable, Comparable, Sendable {
+    case yours
     case finder
     case appState
     case indexes
@@ -17,10 +19,10 @@ enum ExcludeCategory: Int, CaseIterable, Comparable, Sendable {
     case versionManagers
     case simulators
     case machines
-    case yours
 
     var title: String {
         switch self {
+        case .yours: "Added by you"
         case .finder: "Finder & Trash"
         case .appState: "Apps’ caches & state"
         case .indexes: "Search indexes"
@@ -34,7 +36,6 @@ enum ExcludeCategory: Int, CaseIterable, Comparable, Sendable {
         case .versionManagers: "Version managers"
         case .simulators: "Simulators"
         case .machines: "Containers & virtual machines"
-        case .yours: "Added by you"
         }
     }
 
