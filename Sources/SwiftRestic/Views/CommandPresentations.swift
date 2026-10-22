@@ -65,21 +65,21 @@ struct CommandPresentations: ViewModifier {
     private func actions(for confirmation: CommandConfirmation) -> some View {
         switch confirmation {
         case let .deletePlan(id):
-            Button("Delete Plan", role: .destructive) { model.deletePlan(id: id) }
+            Button("Delete Plan") { model.deletePlan(id: id) }
         case let .removeRepository(id):
-            Button("Remove", role: .destructive) { model.deleteRepository(id: id) }
+            Button("Remove") { model.deleteRepository(id: id) }
         case .check:
             // A sheet of its own (CheckSheet); never shown as a dialog.
             EmptyView()
         case let .prune(id):
-            Button("Prune", role: .destructive) {
+            Button("Prune") {
                 model.runMaintenance(repositoryID: id, task: .prune)
                 showMaintenance(of: id)
             }
         case let .unlock(id):
-            Button("Remove Locks", role: .destructive) { model.unlockRepository(id: id) }
+            Button("Remove Locks") { model.unlockRepository(id: id) }
         case let .rebuildIndex(id):
-            Button("Rebuild Index", role: .destructive) { model.rebuildIndex(repositoryID: id) }
+            Button("Rebuild Index") { model.rebuildIndex(repositoryID: id) }
         }
     }
 

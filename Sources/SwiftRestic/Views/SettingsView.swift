@@ -34,19 +34,19 @@ struct SettingsView: View {
             isPresented: $isConfirmingMenuBarOff,
             titleVisibility: .visible
         ) {
-            Button("Turn Off", role: .destructive) {
+            Button("Turn Off") {
                 model.configuration.settings.showMenuBarExtra = false
             }
         } message: {
-            Text("Closing the main window afterwards leaves scheduled backups running with no visible way back into SwiftRestic — reopening means launching the app again. Keep the item on to always have a way in.")
+            Text("Backups keep running with the window closed, and SwiftRestic opens again only from the Applications folder.")
         }
         .confirmationDialog(
-            "Forget this network share's password?",
+            "Remove the saved password for \(removingShare?.url ?? "this share")?",
             isPresented: Binding(get: { removingShare != nil }, set: { if !$0 { removingShare = nil } }),
             titleVisibility: .visible,
             presenting: removingShare
         ) { share in
-            Button("Remove", role: .destructive) {
+            Button("Remove") {
                 Task {
                     do {
                         try await model.removeNetworkShare(share)
@@ -307,7 +307,7 @@ struct SettingsView: View {
                 isPresented: $isConfirmingCacheCleanup,
                 titleVisibility: .visible
             ) {
-                Button("Remove", role: .destructive) { Task { await model.cleanupResticCache() } }
+                Button("Remove") { Task { await model.cleanupResticCache() } }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(
@@ -442,7 +442,7 @@ struct NotificationChannelsTab: View {
             isPresented: $isConfirmingRemove,
             titleVisibility: .visible
         ) {
-            Button("Remove", role: .destructive) {
+            Button("Remove") {
                 let channels = model.configuration.settings.notificationChannels
                 guard let index = channels.firstIndex(where: { $0.id == selection }) else { return }
                 model.configuration.settings.notificationChannels.remove(at: index)

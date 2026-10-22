@@ -139,10 +139,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 alert.addButton(withTitle: "Quit Anyway")
                 alert.addButton(withTitle: "Cancel")
                 alert.buttons[0].hasDestructiveAction = true
-                // The safe answer owns Return: quitting must be a deliberate
-                // click, never the key a reflex hits while typing elsewhere.
-                // Escape keeps its built-in route to the "Cancel" button.
-                alert.buttons[1].keyEquivalent = "\r"
+                // No button owns Return: quitting must be a deliberate click,
+                // never the key a reflex hits while typing elsewhere, and the
+                // HIG keeps Cancel from being the default ("avoid making any
+                // button the default button"). Escape keeps its built-in
+                // route to the "Cancel" button.
+                alert.buttons[0].keyEquivalent = ""
             } else {
                 // Nothing is in progress and the user just asked to quit:
                 // the alert informs, so Quit keeps NSAlert's Return and

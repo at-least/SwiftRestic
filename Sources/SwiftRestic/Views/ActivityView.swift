@@ -190,7 +190,7 @@ struct ActivityView: View {
             isPresented: $isConfirmingClear,
             titleVisibility: .visible
         ) {
-            Button("Clear History", role: .destructive) {
+            Button("Clear History") {
                 model.clearRunHistory()
             }
         } message: {

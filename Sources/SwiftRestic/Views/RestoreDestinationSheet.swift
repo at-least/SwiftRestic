@@ -403,9 +403,9 @@ struct RestoreDestinationSheet: View {
         }
     }
 
-    /// NSAlert rather than a SwiftUI alert so the safe button provably owns
-    /// Return — the quit alert's pattern: "Replace" is marked destructive,
-    /// "Cancel" takes Return, and Escape keeps its built-in route to Cancel.
+    /// Asked only after the sheet's own Replace was chosen, so "Replace" is
+    /// the person's intent: the default button, not marked destructive — the
+    /// HIG's Empty Trash case. Escape keeps NSAlert's route to "Cancel".
     private func confirmReplace(_ existing: [URL], in destination: URL) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -436,8 +436,6 @@ struct RestoreDestinationSheet: View {
         }
         alert.addButton(withTitle: "Replace")
         alert.addButton(withTitle: "Cancel")
-        alert.buttons[0].hasDestructiveAction = true
-        alert.buttons[1].keyEquivalent = "\r"
         return alert.runModal() == .alertFirstButtonReturn
     }
 

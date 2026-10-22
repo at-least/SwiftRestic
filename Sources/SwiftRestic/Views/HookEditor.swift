@@ -39,7 +39,7 @@ struct HookEditor: View {
             isPresented: $isConfirmingRemove,
             titleVisibility: .visible
         ) {
-            Button("Remove", role: .destructive) {
+            Button("Remove") {
                 guard let index = hooks.firstIndex(where: { $0.id == selection }) else { return }
                 hooks.remove(at: index)
                 selection = hooks.indices.contains(index) ? hooks[index].id : hooks.last?.id

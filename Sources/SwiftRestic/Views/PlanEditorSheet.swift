@@ -221,7 +221,7 @@ struct PlanEditorSheet: View {
             titleVisibility: .visible
         ) {
             Button("Discard Changes", role: .destructive) { dismiss() }
-            Button("Keep Editing", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("The plan has unsaved changes.")
         }
