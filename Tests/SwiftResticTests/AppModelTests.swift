@@ -1493,7 +1493,7 @@ struct StartAtLoginSurfaceTests {
         #expect(upcoming.hasPrefix("Documents (NAS) is next due \(Format.relative(next))."))
         #expect(!upcoming.contains(" ago"))
         // Seconds away is due now too: the relative phrase for it is
-        // "Just now", and "is next due Just now" is no sentence.
+        // "just now", and "is next due just now" is no sentence.
         model.configuration.plans[0].schedule.frequency = .hourly
         model.configuration.plans[0].schedule.intervalHours = 1
         model.configuration.plans[0].lastRunAt = now.addingTimeInterval(-3600 + 30)

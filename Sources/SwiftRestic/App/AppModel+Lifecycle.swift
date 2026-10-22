@@ -65,7 +65,7 @@ extension AppModel {
             existingRepositoryIDs: Set(configuration.repositories.map(\.id)),
             heldUntil: hold?.resumesAt
         ) else { return nil }
-        // Within 45 s either way `Format.relative` says "Just now", which
+        // Within 45 s either way `Format.relative` says "just now", which
         // cannot follow "is next due"; a run that close is due now, and the
         // next tick starts it.
         let when = if next.date.timeIntervalSince(now) >= 45 {

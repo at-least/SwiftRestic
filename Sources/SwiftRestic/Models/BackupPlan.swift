@@ -204,17 +204,20 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     var summary: String {
         guard isEnabled else { return "Keep everything" }
         guard isSafeToRun else { return "No rules set" }
-        var parts: [String] = []
-        if keepLast > 0 { parts.append("\(keepLast) latest") }
-        if keepHourly > 0 { parts.append("\(keepHourly)h") }
-        if keepDaily > 0 { parts.append("\(keepDaily)d") }
-        if keepWeekly > 0 { parts.append("\(keepWeekly)w") }
-        if keepMonthly > 0 { parts.append("\(keepMonthly)m") }
-        if keepYearly > 0 { parts.append("\(keepYearly)y") }
-        return "Keep " + parts.joined(separator: ", ")
+        // Counts of backups, not spans: restic keeps the newest backup of
+        // each of the last N hours (days, …) that hold one, so a daily plan's
+        // 24 hourly backups reach back 24 days. "24h" read as either.
+        let rules = [
+            (keepLast, keepLast == 1 ? "the latest one" : "the latest \(keepLast)"), (keepHourly, "\(keepHourly) hourly"),
+            (keepDaily, "\(keepDaily) daily"), (keepWeekly, "\(keepWeekly) weekly"),
+            (keepMonthly, "\(keepMonthly) monthly"), (keepYearly, "\(keepYearly) yearly"),
+        ].filter { $0.0 > 0 }
+        if rules.count == 1, keepLast == 1 { return "Keep the latest backup" }
+        let noun = rules.count == 1 && rules[0].0 == 1 ? "backup" : "backups"
+        return "Keep " + Format.list(rules.map(\.1)) + " " + noun
     }
 
-    /// The plain-language answer to "how far back do you want to reach?" —
+    /// The plain-language answer to how long backups are kept —
     /// the editor's primary control — and the bucket set each answer writes.
     /// Matching and writing live on the model so the picker can never
     /// disagree with the policy it describes. Not Codable: a derived view of
@@ -232,11 +235,11 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
 
         var displayName: String {
             switch self {
-            case .standard: "The standard buckets"
-            case .month: "About a month"
-            case .quarter: "About 3 months"
-            case .year: "About a year"
-            case .custom: "Custom rules"
+            case .standard: "Recommended"
+            case .month: "For about a month"
+            case .quarter: "For about 3 months"
+            case .year: "For about a year"
+            case .custom: "Custom"
             }
         }
 

@@ -159,7 +159,7 @@ enum Scheduler {
     /// succeed — how it ended ("3 days ago · failed"), since the stamp the
     /// scheduler keeps is written for every attempt. The stamp's moment
     /// alone when the history holds no run as new as it.
-    /// The Maintenance card's Prune row while prune is off: stated, not
+    /// The Maintenance card's Cleanup row while cleanup is off: stated, not
     /// hidden — retention runs after every backup, and only a prune frees
     /// what it removed.
     static let pruneOffText = "Off — space from removed backups isn't freed"
@@ -185,7 +185,7 @@ enum Scheduler {
         guard let newest else { return Format.ago(stamp, now: now) }
         let ago = Format.ago(newest.startedAt, now: now)
         switch newest.outcome {
-        // A check names what it read — "· data slice 3 of 12", "· structure
+        // A check names what it read — "· part 3 of 12", "· structure
         // only" — so a clean check of the structure alone does not read as
         // the data verified.
         case .succeeded: return newest.checkRead.map { "\(ago) · \($0)" } ?? ago

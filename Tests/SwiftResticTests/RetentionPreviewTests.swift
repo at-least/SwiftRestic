@@ -104,9 +104,9 @@ struct RetentionPreviewTests {
         #expect(RetentionPreview.appliedSummary(removed: 0, pruned: false) == "No backups needed removing.")
         #expect(RetentionPreview.appliedSummary(removed: 0, pruned: true) == "No backups needed removing.")
         #expect(RetentionPreview.appliedSummary(removed: 2, pruned: false)
-            == "Removed 2 backups. Their data stays until the next prune.")
+            == "Removed 2 backups. Their data stays until the next cleanup.")
         #expect(RetentionPreview.appliedSummary(removed: 1, pruned: true)
-            == "Removed 1 backup and pruned their data.")
+            == "Removed 1 backup and freed their space.")
     }
 
     @Test("the preview's command differs from the real forget only by its dry-run flags")

@@ -80,7 +80,7 @@ struct SettingsView: View {
                 if model.fullDiskAccess == .granted {
                     // Only what the grant controls: a file the account can't
                     // read stays unreadable, and the run's hint says so.
-                    Text("restic can read every file in your plans that your account can.")
+                    Text("SwiftRestic can read every file in your plans.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -185,7 +185,7 @@ struct SettingsView: View {
 
             Section("History") {
                 Stepper(value: $model.configuration.settings.maxRunHistory, in: 20 ... 2000, step: 20) {
-                    LabeledContent("Keep runs", value: "\(model.configuration.settings.maxRunHistory)")
+                    LabeledContent("Items kept in Activity", value: "\(model.configuration.settings.maxRunHistory)")
                 }
                 // The trim's exemption (`OverviewMetrics.standingProblemIDs`).
                 Text("Unresolved problems are kept longer.")
@@ -262,7 +262,7 @@ struct SettingsView: View {
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Button("Re-detect") { Task { await model.resolveBinary() } }
+                Button("Find Again") { Task { await model.resolveBinary() } }
             }
 
             // restic keeps one cache folder per repository it has opened
@@ -383,14 +383,14 @@ struct NotificationChannelsTab: View {
         VStack(spacing: 0) {
             EditableListFrame(
                 isEmpty: channels.isEmpty,
-                emptyTitle: "No Webhooks",
+                emptyTitle: "No webhooks",
                 emptyHint: "Click + to add a webhook, a Slack or Discord channel, or a Healthchecks.io ping URL.",
                 addTitle: "Add Webhook",
                 removeTitle: "Remove Webhook",
                 canRemove: selection != nil,
                 onAdd: {
                     var channel = NotificationChannel()
-                    channel.name = "New alert"
+                    channel.name = "New Webhook"
                     model.configuration.settings.notificationChannels.append(channel)
                     selection = channel.id
                 },
@@ -402,7 +402,7 @@ struct NotificationChannelsTab: View {
                             Toggle("", isOn: $channel.isEnabled)
                                 .labelsHidden()
                                 .controlSize(.mini)
-                                .accessibilityLabel("Enable \(channel.displayName)")
+                                .accessibilityLabel(channel.displayName)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(channel.displayName)
                                 Text(channel.kind.displayName)
@@ -413,7 +413,7 @@ struct NotificationChannelsTab: View {
                             if !channel.isUsable, channel.isEnabled {
                                 Image(systemName: "exclamationmark.triangle")
                                     .foregroundStyle(Theme.warning)
-                                    .help("The URL is missing or not http(s)")
+                                    .help("Enter a URL that starts with http:// or https://.")
                             }
                         }
                         .tag(channel.id)
@@ -438,7 +438,7 @@ struct NotificationChannelsTab: View {
             if selection == nil { selection = channels.first?.id }
         }
         .confirmationDialog(
-            "Remove this alert channel?",
+            "Remove this webhook?",
             isPresented: $isConfirmingRemove,
             titleVisibility: .visible
         ) {
@@ -484,12 +484,12 @@ struct NotificationChannelsTab: View {
                 // The row's warning triangle has a reason; it is repeated here
                 // where the user edits, not only on hover.
                 if !channel.isUsable, channel.isEnabled {
-                    Label("This channel cannot fire: the URL is missing or not http(s).", systemImage: "exclamationmark.triangle")
+                    Label("This webhook can't send until its URL starts with http:// or https://.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Theme.warning)
                         .font(.callout)
                 }
 
-                Section("Send when a run") {
+                Section("Send when") {
                     Toggle(
                         "Succeeds",
                         isOn: $model.configuration.settings.notificationChannels[index].notifyOnSuccess
@@ -567,7 +567,7 @@ struct NotificationChannelsTab: View {
             // Only while a click in the list's empty space has cleared the
             // selection.
             ContentUnavailableView(
-                "No Webhook Selected",
+                "No webhook selected",
                 systemImage: "bell",
                 description: Text("Select a webhook in the list to change it.")
             )

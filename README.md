@@ -165,8 +165,8 @@ the generator after editing it; the PNGs are checked in.
   Mac), a plan that now backs up elsewhere (*Open the “Music” Plan*), or
   backups no plan made, which can't be adopted. Its Backups card brackets
   the history (newest, oldest), names the Macs and folder sets, carries the
-  exclude patterns and user tags, and shows the plan tag when there is one —
-  selectable, the one honest identifier. Its row's menu has *Show Backups*,
+  exclude patterns and user tags; the plan tag, when there is one, is its
+  right-click *Copy Plan Tag* rather than a row of its own. Its row's menu has *Show Backups*,
   the Backups tab on the newest backup. The toolbar's search field searches
   the open backup on either tab (typed on Overview, the page turns to
   Backups), and ⇧⌘F opens Find Files, as it does off a plan's page.
@@ -289,7 +289,7 @@ the generator after editing it; the PNGs are checked in.
   folder on a saved network share — and the rest go unlimited.
 - **Backup plans** — one folder or file, exclude patterns, a schedule and a
   retention policy, pointed at one repository. A plan is its path in its
-  repository: the editor asks for both only when the plan is new (*Back up*,
+  repository: the editor asks for both only when the plan is new (*Folder or file*,
   typed or chosen, and *Repository*), and names a saved plan as its page
   does, *“Documents (Home NAS)”* over its path. It will not save a second
   plan for a path its repository already has — the same folder to another
@@ -351,7 +351,7 @@ the generator after editing it; the PNGs are checked in.
   under it — and keeps them following the
   folder until the list is edited (a plan saved with defaults its folder
   cannot hold sheds them at load; patterns typed in stay), says when a folder
-  is not on this Mac, takes excludes chosen in a panel or dropped from Finder
+  is not on this Mac, takes excludes chosen in a panel (the + beneath the list, − removing) or dropped from Finder
   as their own paths (glob characters escaped), and shows *Next backup* for
   the schedule being chosen, as Save would store it. A daily or weekly
   schedule's *At* is macOS's own time field, in the Mac's 12- or 24-hour
@@ -427,7 +427,7 @@ the generator after editing it; the PNGs are checked in.
     replaces it and its log: one record reading "“Archive SSD” is not
     connected. Skipped 24 times since …", with a *Since* row in the drawer
     and a "Skipped since:" line in Copy Details. A week away is one row, not
-    168, and "Keep runs" stays for real runs.
+    168, and *Items kept in Activity* stays for real runs.
   - *Partial skips, from earlier builds.* Before 2026-10-18 a plan could
     hold several folders, and a run that left out only those on an away
     drive was Skipped with a snapshot of the rest — "“Archive SSD” is not
@@ -494,7 +494,7 @@ the generator after editing it; the PNGs are checked in.
     *Edit Plan…* beside it, whichever editor holds that share's password;
     repeats merge into one record as a folder gone's do. Until 2026-10-16 a
     refusal was Skipped too, silent until the quiet-plan alert. Two runs
-    needing one share mount it once. *Check…*, *Prune Now…* and *Apply
+    needing one share mount it once. *Check…*, *Clean Up Now…* and *Apply
     Retention Now…* — its preview too — reconnect the repository's share the
     same way, and so does reading the repository: its listing at launch,
     *Refresh* and *Try Again*, the Files tab, Find Files, a restore, the
@@ -516,7 +516,7 @@ the generator after editing it; the PNGs are checked in.
   slot), the menu bar's menu leads with "restic is missing — backups are on
   hold." and promises no next run, each grey *Back Up* row says "restic is
   missing.", and the quiet-plan alert still names plans left unprotected.
-  *Re-detect* in Settings, or a relaunch, lets the due plans run.
+  *Find Again* in Settings › restic, or a relaunch, lets the due plans run.
 - **Pause** — *Pause Backups* in the menu bar holds every scheduled backup,
   check and prune for an hour, until tomorrow or until resumed; *Pause and
   Stop Running Backups* also stops backups in flight, which start over when
@@ -652,7 +652,7 @@ the generator after editing it; the PNGs are checked in.
 - **Start at login** — the scheduler only runs while the app runs, so SwiftRestic
   can register itself as a login item and sit in the menu bar.
 - **Maintenance** — scheduled `check` and `prune` per repository, on a day
-  interval, plus manual runs, stale lock removal, repository stats, and a
+  interval, plus manual runs, unlocking (restic's stale lock removal), repository stats, and a
   plan's retention on demand (*Plan › Apply Retention Now…* previews with
   `restic forget --dry-run --no-lock`, then asks). The repository page's
   *Last check* and *Last prune* read the newest such run in Activity and say
@@ -661,7 +661,7 @@ the generator after editing it; the PNGs are checked in.
   recover some damage" — the words Activity's Detail column and the Recent
   problems row show, derived once from the record); the row leads to the run,
   whose drawer holds the log, Copy Details and, for a failed check or prune
-  or a check that found errors, *Check Again…* or *Prune Again…* — the
+  or a check that found errors, *Check Again…* or *Clean Up Again…* — the
   Repository menu's command, same confirmation, grey while the repository is
   busy. The scheduler's own stamp, written for every attempt so a failing
   check is not retried every minute, is read only when the history holds no
@@ -675,15 +675,17 @@ the generator after editing it; the PNGs are checked in.
   unstamped, so the task stays due: *Next check* reads "When “Archive SSD” is
   connected", *Last check* passes over the skip, the scheduler leaves the
   repository alone while the drive is still away, and the task runs within
-  a minute of its return. Only *Check…* or *Prune Now…* asked by hand gets a
+  a minute of its return. Only *Check…* or *Clean Up Now…* asked by hand gets a
   passing banner. A repository added from 2026-10-09 on prunes by default, every
   30 days starting 30 days after it is added, since retention runs after
   every backup and only a prune frees the space; one saved before keeps its
-  setting. With prune off the Maintenance card says "Prune — Off — the data
-  retention removes stays in the repository until a prune" rather than
-  hiding its rows.
+  setting. With cleanup off the Maintenance card says "Cleanup — Off — space
+  from removed backups isn't freed" rather than hiding its rows. A prune is
+  a *cleanup* wherever the app names it (*Clean Up Now…*, *Last cleanup*,
+  *Clean up periodically*, the retention tab's *Also clean up*), and
+  restic's `unlock` is *Unlock…* — restic's words stay in the console.
   A check verifies the repository's structure and reads back as much of
-  the backed-up data as its *Depth* says. Until 2026-10-17 every scheduled
+  the backed-up data as its *Data to read* says. Until 2026-10-17 every scheduled
   check read the structure alone, which passes a damaged pack: with one
   bit flipped in a pack's data, `restic check` said "no errors were found"
   while `--read-data-subset` found it (restic 0.19.1). A repository added
@@ -694,7 +696,7 @@ the generator after editing it; the PNGs are checked in.
   structure only on a REST server, in a cloud or behind rclone, where
   reading may be billed, until a depth is chosen in the editor; one saved
   before keeps its depth. *Last check* names what the newest check read
-  ("3 days ago · data slice 3 of 12", "· structure only"); a check asked
+  ("3 days ago · part 3 of 12", "· structure only"); a check asked
   for by hand reads what it was asked and leaves the rotation where it
   was. Arq's *Back up and validate* reads its objects back too, and
   re-uploads what is missing or damaged; here a check that finds damage
@@ -728,9 +730,9 @@ the generator after editing it; the PNGs are checked in.
 - **Hooks** — shell commands before a backup and after success, warnings or
   failure, and per repository before and after a check or prune. Context arrives
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
-  run off. An editor's Hooks tab, like Settings › Alerts for the channels below,
+  run off. An editor's Hooks tab, like Settings › Webhooks for the channels below,
   lists them in a frame with + and − attached beneath it; empty, the frame
-  says "No Hooks" and what + adds, and while there are some, one is always
+  says "No hooks" and what + adds, and while there are some, one is always
   open in the form under the list (the first on arrival, a neighbour after a
   removal, which asks first).
 - **Webhooks** — webhooks, Slack, Discord and Healthchecks.io, per run outcome.
@@ -778,13 +780,13 @@ the generator after editing it; the PNGs are checked in.
   — check it in the repository settings.", exit 10 "No repository is at its
   location — put it back, or add it where it is now as a new repository."
   (*Add Repository…*), exit 11 "The repository is locked — if no other Mac is
-  using it, remove the stale locks." (*Remove Stale Locks…*) — each followed
+  using it, unlock it." (*Unlock…*) — each followed
   by restic's first sentence. A backup that fills its local repository's
   disk says so instead of restic's line, which names a pack file by its
   hash and stays in the log: "“TinyDisk” is full — the backup needed more
   room than it has free. What it uploaded before it stopped stays in the
-  repository until a prune frees it." (this Mac's disk for a repository on
-  it), with *Prune Now…* — checked on 2026-10-16 with a 40 MB disk image: a
+  repository until a cleanup frees it." (this Mac's disk for a repository on
+  it), with *Clean Up Now…* — checked on 2026-10-16 with a 40 MB disk image: a
   57 MB backup failed with 35 MB of it left behind, which `restic prune`
   freed. A full disk anywhere else — restic's cache on this Mac — keeps
   restic's words. An rclone repository's failure leads with rclone's own
@@ -798,7 +800,7 @@ the generator after editing it; the PNGs are checked in.
   editor's "rclone is not installed. Install it with `brew install
   rclone`." — checked against SFTP through rclone 1.75.2 in Docker. Every surface naming a run names its
   repository too: the log sheet's header, notifications and failure alerts,
-  the menu bar, Settings. The history keeps the newest *Keep runs* records
+  the menu bar, Settings. The history keeps the newest *Items kept in Activity* records
   (Settings › General › History), trimming the oldest with their logs —
   except what a standing problem reads: each plan's newest failed or
   completed-with-errors backup until a later success (its caption and dot
@@ -806,7 +808,7 @@ the generator after editing it; the PNGs are checked in.
   problems card, the Activity badge and the menu bar count.
 - **Banners** — one queue above every page, the Files tab and the console
   included, for what has no other place to be said: a *Back Up Now*, *Check…*
-  or *Prune Now…* that was skipped, an ask that waits for a busy repository,
+  or *Clean Up Now…* that was skipped, an ask that waits for a busy repository,
   a restore's result with *Reveal in Finder*, an alert that could not be
   sent, and the app's own trouble (the configuration, the Keychain, the login
   item). How a run went is never one — the sidebar's caption, the plan page's

@@ -26,7 +26,7 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Keep the history tidy",
-            text: "Retention, on the plan editor's Retention tab, removes old backups after each one. The space they held is freed by a prune: Repository ▸ Prune Now…, or the repository's periodic prune. Repository ▸ Check… verifies that nothing is damaged."
+            text: "Retention, on the plan editor's Retention tab, removes old backups after each one. The space they held is freed by a cleanup: Repository ▸ Clean Up Now…, or the repository's periodic cleanup. Repository ▸ Check… verifies that nothing is damaged."
         ),
         Topic(
             title: "Backups from elsewhere",
@@ -39,7 +39,7 @@ struct ConceptsView: View {
         Topic(title: "Plan", text: "One folder, the repository it backs up to, and when."),
         Topic(title: "Backup", text: "The folder as it was at one moment. restic calls it a snapshot."),
         Topic(title: "Retention", text: "Which backups to keep — the latest ones, and one per hour, day, week, month or year."),
-        Topic(title: "Prune", text: "Frees the space of removed backups. Slow; backups to the repository wait for it."),
+        Topic(title: "Cleanup", text: "Frees the space of removed backups. Slow; backups to the repository wait for it."),
         Topic(title: "Check", text: "Verifies the repository. Reading data back finds more damage, and takes longer."),
     ]
 

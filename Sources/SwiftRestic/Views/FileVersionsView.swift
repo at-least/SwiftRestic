@@ -147,7 +147,7 @@ struct FileVersionsView: View {
                 restoreChosen()
                 return .handled
             }
-            .help("Return or double-click restores the chosen version; drag a version to Finder to restore it there")
+            .help("Drag a version to Finder to restore it there.")
         }
     }
 

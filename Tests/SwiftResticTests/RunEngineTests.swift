@@ -204,7 +204,7 @@ struct BackupRunEngineTests {
         #expect(!here.log.contains { $0.hasPrefix("reconnect") }, "log was \(here.log)")
     }
 
-    @Test("a backup that fills its repository's disk fails in plain words, marked for Prune Now…")
+    @Test("a backup that fills its repository's disk fails in plain words, marked for Clean Up Now…")
     func repositoryDiskFull() async throws {
         let sink = RecordingSink()
         var repository = Repository()
@@ -792,13 +792,13 @@ struct MaintenanceRunEngineTests {
 
         let (scheduled, scheduledClient) = await check(override: nil)
         #expect(scheduledClient.checkSubsets == [.slice(3, of: 12)])
-        #expect(scheduled.deliveredRecords.first?.checkRead == "data slice 3 of 12")
+        #expect(scheduled.deliveredRecords.first?.checkRead == "part 3 of 12")
         #expect(scheduled.log.contains("advance-slice"))
 
         // By hand: what was asked, the rotation left where it was.
         let (byHand, byHandClient) = await check(override: 5)
         #expect(byHandClient.checkSubsets == [.percent(5)])
-        #expect(byHand.deliveredRecords.first?.checkRead == "5% of data")
+        #expect(byHand.deliveredRecords.first?.checkRead == "5% of the data")
         #expect(!byHand.log.contains("advance-slice"))
         let (structure, structureClient) = await check(override: 0)
         #expect(structureClient.checkSubsets == [nil])
@@ -953,7 +953,7 @@ struct MaintenanceRunEngineTests {
         // One sentence for the verdict, so the Detail column carries it
         // whole; restic's advice is the second.
         #expect(sink.deliveredRecords[0].detailText
-            == "2 errors — `restic repair` can recover some damage. restic suggests running prune.")
+            == "2 errors — `restic repair` can recover some damage. A cleanup is suggested.")
         #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0])
             == "2 errors — `restic repair` can recover some damage")
     }
@@ -1097,7 +1097,7 @@ struct RetentionRunEngineTests {
         #expect(record.planID == plan.id)
         #expect(record.planName == "Retention Plan")
         #expect(record.outcome == .succeeded)
-        #expect(record.detailText == "Removed 2 backups. Their data stays until the next prune.")
+        #expect(record.detailText == "Removed 2 backups. Their data stays until the next cleanup.")
         #expect(record.exitCode == 0)
         // The sink has no markPlanRun, so no stamp is possible; no hooks run
         // and no backup is asked for.

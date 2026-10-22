@@ -303,7 +303,7 @@ struct RestorePaneView: View {
                 // does not follow a selection it did not make itself.
                 handleKeyPress(press) { proxy.scrollTo($0) }
             }
-            .help("→ or Return expands a folder; ← collapses it or selects the folder above; ⌘↑ or ⌫ goes up; double-click also expands; ⌘- or ⇧-click selects several items; drag an item to Finder to restore it there")
+            .help("Drag items to Finder to restore them there.")
             // Initial as well: the routed focus is set while the spinner stands
             // in for this list, so the list meets it on its first appearance.
             .onChange(of: revealPath, initial: true) { _, target in

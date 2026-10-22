@@ -213,7 +213,7 @@ struct WelcomeView: View {
 
             VStack(spacing: 8) {
                 HStack(spacing: 10) {
-                    Button("Add a Repository…", action: onAddRepository)
+                    Button("Add Repository…", action: onAddRepository)
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                     // With no repository yet it starts there and carries

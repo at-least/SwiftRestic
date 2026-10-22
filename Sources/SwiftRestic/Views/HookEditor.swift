@@ -53,9 +53,9 @@ struct HookEditor: View {
         VStack(alignment: .leading, spacing: 6) {
             EditableListFrame(
                 isEmpty: hooks.isEmpty,
-                emptyTitle: "No Hooks",
+                emptyTitle: "No hooks",
                 emptyHint: isForMaintenance
-                    ? "Click + to run a script before or after this repository's checks and prunes."
+                    ? "Click + to run a script before or after this repository's checks and cleanups."
                     : "Click + to run a script before or after this plan's backups.",
                 addTitle: "Add Hook",
                 removeTitle: "Remove Hook",
@@ -69,7 +69,7 @@ struct HookEditor: View {
                             Toggle("", isOn: $hook.isEnabled)
                                 .labelsHidden()
                                 .controlSize(.mini)
-                                .accessibilityLabel("Enable \(hook.displayName)")
+                                .accessibilityLabel(hook.displayName)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(hook.displayName)
                                 Text(hook.event.displayName)
@@ -80,7 +80,7 @@ struct HookEditor: View {
                             if hook.abortsRunOnFailure {
                                 Image(systemName: "exclamationmark.octagon")
                                     .foregroundStyle(Theme.warning)
-                                    .help(isForMaintenance ? "Cancels the check or prune if it fails" : "Cancels the backup if it fails")
+                                    .help(isForMaintenance ? "Cancels the check or cleanup if it fails" : "Cancels the backup if it fails")
                             }
                         }
                         .tag(hook.id)
@@ -176,7 +176,7 @@ struct HookEditor: View {
             // Only while a click in the list's empty space has cleared the
             // selection.
             ContentUnavailableView(
-                "No Hook Selected",
+                "No hook selected",
                 systemImage: "terminal",
                 description: Text("Select a hook in the list to change it.")
             )

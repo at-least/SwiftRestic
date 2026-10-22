@@ -127,7 +127,7 @@ extension AppModel {
             do {
                 let service = try self.service()
                 try await service.unlock(self.context(for: repository))
-                self.post(Banner(title: "Removed stale locks", message: label(of: repository), isError: false))
+                self.post(Banner(title: "Unlocked", message: label(of: repository), isError: false))
             } catch {
                 self.noteAuthFailure(error, repositoryID: repositoryID)
                 // The queue is global: name the repository whose locks
@@ -135,7 +135,7 @@ extension AppModel {
                 self.post(
                     Banner(
                         title: "Unlock failed",
-                        message: "Could not remove “\(label(of: repository))”'s stale locks: \(error.localizedDescription)",
+                        message: "Could not unlock “\(label(of: repository))”: \(error.localizedDescription)",
                         isError: true
                     )
                 )
@@ -190,7 +190,7 @@ extension AppModel: MaintenanceRunEngine.Sink {
         append(record: record)
         switch record.outcome {
         case .skipped:
-            // The drive away: Check… or Prune Now… is answered, as Back Up
+            // The drive away: Check… or Clean Up Now… is answered, as Back Up
             // Now is; a scheduled one waits in silence, Next check saying
             // for what.
             guard maintenance[repository.id]?.askedByUser == true else { break }

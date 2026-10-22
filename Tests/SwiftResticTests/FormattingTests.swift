@@ -87,9 +87,9 @@ struct FormattingTests {
 
     @Test("relative time treats the last few seconds as now, whichever side of it")
     func relativeNow() {
-        #expect(Format.relative(Date.now) == "Just now")
-        #expect(Format.relative(Date.now.addingTimeInterval(-30)) == "Just now")
-        #expect(Format.relative(Date.now.addingTimeInterval(30)) == "Just now")
+        #expect(Format.relative(Date.now) == "just now")
+        #expect(Format.relative(Date.now.addingTimeInterval(-30)) == "just now")
+        #expect(Format.relative(Date.now.addingTimeInterval(30)) == "just now")
     }
 
     @Test("relative time stays truthful for a future timestamp")
@@ -110,8 +110,8 @@ struct FormattingTests {
         #expect(Format.ago(tick.addingTimeInterval(-3_600), now: tick)
             == Format.relative(tick.addingTimeInterval(-3_600), now: tick))
         // The tick can be up to a minute old. A run that finished since it
-        // happened "Just now" — Format.relative would say "in 50 seconds".
-        #expect(Format.ago(tick.addingTimeInterval(50), now: tick) == "Just now")
+        // happened "just now" — Format.relative would say "in 50 seconds".
+        #expect(Format.ago(tick.addingTimeInterval(50), now: tick) == "just now")
         #expect(Format.relative(tick.addingTimeInterval(50), now: tick).hasPrefix("in "))
         #expect(Format.ago(nil, now: tick) == "Never")
     }
@@ -225,8 +225,8 @@ struct FormattingTests {
         }
         #expect(!Format.bytes(0).contains("Zero"))
         #expect(Format.bytes(1_500_000) != Format.bytes(3_000_000))
-        #expect(Format.relative(Date.now) == "Just now")
-        #expect(Format.relative(Date.now.addingTimeInterval(-3_600)) != "Just now")
+        #expect(Format.relative(Date.now) == "just now")
+        #expect(Format.relative(Date.now.addingTimeInterval(-3_600)) != "just now")
     }
 
     @Test("a timestamp renders a real date, not the sentinel")

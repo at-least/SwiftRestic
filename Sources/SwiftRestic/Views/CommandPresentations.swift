@@ -72,14 +72,14 @@ struct CommandPresentations: ViewModifier {
             // A sheet of its own (CheckSheet); never shown as a dialog.
             EmptyView()
         case let .prune(id):
-            Button("Prune") {
+            Button("Clean Up") {
                 model.runMaintenance(repositoryID: id, task: .prune)
                 showMaintenance(of: id)
             }
         case let .unlock(id):
-            Button("Remove Locks") { model.unlockRepository(id: id) }
+            Button("Unlock") { model.unlockRepository(id: id) }
         case let .rebuildIndex(id):
-            Button("Rebuild Index") { model.rebuildIndex(repositoryID: id) }
+            Button("Rebuild") { model.rebuildIndex(repositoryID: id) }
         }
     }
 
@@ -112,10 +112,10 @@ private struct CheckSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(copy?.title ?? "")
                 .font(.headline)
-            Picker("Read data:", selection: $readDataPercent) {
-                Text("None").tag(0)
-                Text("5% of it").tag(5)
-                Text("All of it").tag(100)
+            Picker("Data to read", selection: $readDataPercent) {
+                Text("Structure only").tag(0)
+                Text("5% of the data").tag(5)
+                Text("All of the data").tag(100)
             }
             .fixedSize()
             .help("Reading data back finds damage the structure check misses, and takes longer.")

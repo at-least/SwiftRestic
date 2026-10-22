@@ -42,7 +42,7 @@ struct ResticErrorTests {
         #expect(ResticError.commandFailed(
             exitCode: 11,
             message: "Fatal: repository is locked"
-        ).errorDescription == "The repository is locked — if no other Mac is using it, remove the stale locks. restic reported: Fatal: repository is locked")
+        ).errorDescription == "The repository is locked — if no other Mac is using it, unlock it. restic reported: Fatal: repository is locked")
 
         // Other known codes: explanation and restic's words, both there.
         let known = ResticError.commandFailed(

@@ -386,11 +386,11 @@ struct PlanEditorSheet: View {
     private func identityRows(_ briefing: AdoptBriefing?) -> some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
-                Text("Back up")
+                Text("Folder or file")
                     .gridColumnAlignment(.trailing)
                 if mode == .new {
                     HStack {
-                        TextField("Back up", text: $draft.path, prompt: Text("/Users/you/Documents"))
+                        TextField("Folder or file", text: $draft.path, prompt: Text("/Users/you/Documents"))
                             .labelsHidden()
                             .focused($isPathFocused)
                         Button("Choose…") {
@@ -696,7 +696,7 @@ struct PlanEditorSheet: View {
                 // The question people actually have, in the words they'd
                 // answer it with. The six buckets are the machinery that
                 // delivers the answer, so they live in the disclosure below.
-                Picker("How far back do you want to reach?", selection: retentionChoice) {
+                Picker("Keep backups", selection: retentionChoice) {
                     ForEach(RetentionPolicy.Reach.allCases) { choice in
                         Text(choice.displayName).tag(choice)
                     }
@@ -704,7 +704,7 @@ struct PlanEditorSheet: View {
                 // Retention's own follow-up, so it sits under it and goes
                 // with it.
                 Toggle(isOn: $draft.retention.runPrune) {
-                    Text("Also prune")
+                    Text("Also clean up")
                     Text("Frees the space removed backups held. Much slower.")
                 }
                 .editorSwitches()
@@ -717,7 +717,7 @@ struct PlanEditorSheet: View {
                     // bucket arithmetic is impossible to eyeball, so project
                     // the outcome instead of restating the rules.
                     Label(
-                        "≈ \(projection.keptSnapshots) backups would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule.",
+                        "≈ \(Format.plural(projection.keptSnapshots, "backup")) would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule.",
                         systemImage: "chart.bar.doc.horizontal"
                     )
                     .foregroundStyle(.secondary)
@@ -742,7 +742,7 @@ struct PlanEditorSheet: View {
                 }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
                     Label(
-                        "With every rule at zero, restic would delete all backups. Retention is skipped until at least one rule is set.",
+                        "With every rule at zero, every backup would be deleted, so retention is skipped until a rule is set.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(Theme.warning)
@@ -752,19 +752,13 @@ struct PlanEditorSheet: View {
             }
 
             if draft.retention.isEnabled {
-                DisclosureGroup("Advanced: keep rules by bucket") {
-                    keepStepper("Keep latest", value: $draft.retention.keepLast, max: 100)
-                    keepStepper("Keep hourly", value: $draft.retention.keepHourly, max: 168)
-                    keepStepper("Keep daily", value: $draft.retention.keepDaily, max: 365)
-                    keepStepper("Keep weekly", value: $draft.retention.keepWeekly, max: 260)
-                    keepStepper("Keep monthly", value: $draft.retention.keepMonthly, max: 120)
-                    keepStepper("Keep yearly", value: $draft.retention.keepYearly, max: 50)
-                    // Hand-edited rules are the Custom answer, said out loud so
-                    // the picker above never silently disagrees with the
-                    // buckets below.
-                    Text("Hand-editing the rules shows as Custom in the picker above.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                DisclosureGroup("Custom rules") {
+                    keepStepper("Latest", value: $draft.retention.keepLast, max: 100)
+                    keepStepper("Hourly", value: $draft.retention.keepHourly, max: 168)
+                    keepStepper("Daily", value: $draft.retention.keepDaily, max: 365)
+                    keepStepper("Weekly", value: $draft.retention.keepWeekly, max: 260)
+                    keepStepper("Monthly", value: $draft.retention.keepMonthly, max: 120)
+                    keepStepper("Yearly", value: $draft.retention.keepYearly, max: 50)
                 }
             }
         }
@@ -805,7 +799,7 @@ struct PlanEditorSheet: View {
 
     private func keepStepper(_ title: String, value: Binding<Int>, max: Int) -> some View {
         Stepper(value: value, in: 0 ... max) {
-            LabeledContent(title, value: value.wrappedValue == 0 ? "off" : "\(value.wrappedValue)")
+            LabeledContent(title, value: value.wrappedValue == 0 ? "Off" : "\(value.wrappedValue)")
         }
     }
 }
@@ -852,7 +846,7 @@ private struct AdoptRetentionPreview: View {
             if isLoading {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Asking restic what these rules would keep…")
+                    Text("Working out what these rules would keep…")
                         .foregroundStyle(.secondary)
                 }
             }

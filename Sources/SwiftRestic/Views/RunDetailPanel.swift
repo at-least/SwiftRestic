@@ -302,7 +302,7 @@ struct RunDetailPanel: View {
 }
 
 /// A failure's one known fix, through the Repository menu's own path: the
-/// editor sheet, or the confirmed Remove Stale Locks.
+/// editor sheet, or the confirmed Unlock.
 struct RunFixButton: View {
     @Environment(AppRouter.self) private var router
     let fix: RunFix
@@ -375,7 +375,7 @@ private struct RunSnapshotRow: View {
                 Text("\(short) — no longer in the repository")
                     .monospaced()
                     .textSelection(.enabled)
-                    .help("Removed after this run — by retention, a prune, or another restic client.")
+                    .help("Removed after this run — by retention, a cleanup, or another app.")
             case .unavailable?:
                 let help = "This repository's list of backups isn't loaded right now."
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)

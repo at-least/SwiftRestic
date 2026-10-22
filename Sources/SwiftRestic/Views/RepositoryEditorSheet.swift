@@ -349,18 +349,18 @@ struct RepositoryEditorSheet: View {
             Section("Maintenance") {
                 Toggle("Check integrity periodically", isOn: $draft.maintenance.checkEnabled)
                 Stepper(value: $draft.maintenance.checkIntervalDays, in: 1 ... 365) {
-                    LabeledContent("Every", value: "\(draft.maintenance.checkIntervalDays) day(s)")
+                    LabeledContent("Every", value: Format.plural(draft.maintenance.checkIntervalDays, "day"))
                 }
                 .disabled(!draft.maintenance.checkEnabled)
-                Picker("Depth", selection: Binding(
+                Picker("Data to read", selection: Binding(
                     get: { draft.maintenance.checkDepth },
                     set: { draft.maintenance.checkDepth = $0; depthChosen = true }
                 )) {
-                    Text("Structure only (fast)").tag(MaintenancePolicy.CheckDepth.structure)
+                    Text("Structure only").tag(MaintenancePolicy.CheckDepth.structure)
                     Text("A twelfth of the data each check").tag(MaintenancePolicy.CheckDepth.rotating)
-                    Text("Read 5% of data").tag(MaintenancePolicy.CheckDepth.percent(5))
-                    Text("Read 25% of data").tag(MaintenancePolicy.CheckDepth.percent(25))
-                    Text("Read all data (slow)").tag(MaintenancePolicy.CheckDepth.percent(100))
+                    Text("5% of the data").tag(MaintenancePolicy.CheckDepth.percent(5))
+                    Text("25% of the data").tag(MaintenancePolicy.CheckDepth.percent(25))
+                    Text("All of the data").tag(MaintenancePolicy.CheckDepth.percent(100))
                 }
                 .disabled(!draft.maintenance.checkEnabled)
                 .onChange(of: draft.kind) { _, kind in
@@ -373,13 +373,13 @@ struct RepositoryEditorSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Toggle("Prune periodically", isOn: $draft.maintenance.pruneEnabled)
+                Toggle("Clean up periodically", isOn: $draft.maintenance.pruneEnabled)
                 Stepper(value: $draft.maintenance.pruneIntervalDays, in: 1 ... 365) {
-                    LabeledContent("Every", value: "\(draft.maintenance.pruneIntervalDays) day(s)")
+                    LabeledContent("Every", value: Format.plural(draft.maintenance.pruneIntervalDays, "day"))
                 }
                 .disabled(!draft.maintenance.pruneEnabled)
                 ExpandableCaption(
-                    summary: "Pruning reclaims the space that retention freed.",
+                    summary: "A cleanup frees the space of backups retention removed.",
                     detail: "It rewrites pack files, takes an exclusive lock and can run for a long time, so backups to this repository wait for it."
                 )
             }

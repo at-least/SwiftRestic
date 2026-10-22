@@ -800,34 +800,61 @@ struct PathListEditor: View {
             Label(title, systemImage: systemImage)
                 .font(.headline)
 
-            List(selection: $selection) {
-                if groupsExcludeRules {
-                    ForEach(ExcludeRule.sections(stored: paths, developer: switchRules)) { section in
-                        Section(section.category.title) {
-                            ForEach(section.rows) { row in
-                                // Leaving the tag off is not enough: the
-                                // ForEach's String ids tag every row.
-                                ExcludeRowText(row: row)
-                                    .tag(row.line)
-                                    .selectionDisabled(!row.isStored)
+            VStack(spacing: 0) {
+                List(selection: $selection) {
+                    if groupsExcludeRules {
+                        ForEach(ExcludeRule.sections(stored: paths, developer: switchRules)) { section in
+                            Section(section.category.title) {
+                                ForEach(section.rows) { row in
+                                    // Leaving the tag off is not enough: the
+                                    // ForEach's String ids tag every row.
+                                    ExcludeRowText(row: row)
+                                        .tag(row.line)
+                                        .selectionDisabled(!row.isStored)
+                                }
                             }
                         }
-                    }
-                } else {
-                    ForEach(paths, id: \.self) { path in
-                        Text(path)
-                            .font(.callout)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .tag(path)
+                    } else {
+                        ForEach(paths, id: \.self) { path in
+                            Text(path)
+                                .font(.callout)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .tag(path)
+                        }
                     }
                 }
+                // The plan editor's give: the lists grow toward 220 when the
+                // sheet has room, and shrink first when it does not — the adopt
+                // sheet stacks a header strip and footer warnings on the same
+                // frame, and content that outgrows a sheet loses its top edge.
+                .frame(minHeight: 44, maxHeight: 220)
+                .dropDestination(for: URL.self) { urls, _ in
+                    // Only file URLs are paths: a dragged web link's `.path`
+                    // would silently become a pattern matching nothing.
+                    let filePaths = urls.filter(\.isFileURL).map(\.path)
+                    guard !filePaths.isEmpty else { return false }
+                    addPaths(filePaths, picked: true)
+                    return true
+                } isTargeted: { isDropTargeted = $0 }
+                Divider()
+                // + and − attached beneath, as the Hooks and Webhooks lists
+                // have them: + chooses items in a panel, as Time Machine's
+                // exclusions do; a pattern is typed in the field below.
+                HStack(spacing: 0) {
+                    ListBarButton(symbol: "plus", title: "Choose Items…") { browse() }
+                    Divider()
+                        .frame(height: 14)
+                    ListBarButton(symbol: "minus", title: "Remove") {
+                        paths.removeAll { selection.contains($0) }
+                        selection.removeAll()
+                    }
+                    .disabled(selection.isEmpty)
+                    Spacer()
+                }
+                .padding(.horizontal, 2)
+                .frame(height: 24)
             }
-            // The plan editor's give: the lists grow toward 220 when the
-            // sheet has room, and shrink first when it does not — the adopt
-            // sheet stacks a header strip and footer warnings on the same
-            // frame, and content that outgrows a sheet loses its top edge.
-            .frame(minHeight: 44, maxHeight: 220)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
@@ -836,14 +863,6 @@ struct PathListEditor: View {
                         lineWidth: isDropTargeted ? 2 : 1
                     )
             )
-            .dropDestination(for: URL.self) { urls, _ in
-                // Only file URLs are paths: a dragged web link's `.path`
-                // would silently become a pattern matching nothing.
-                let filePaths = urls.filter(\.isFileURL).map(\.path)
-                guard !filePaths.isEmpty else { return false }
-                addPaths(filePaths, picked: true)
-                return true
-            } isTargeted: { isDropTargeted = $0 }
 
             HStack(spacing: 6) {
                 // The placeholder is a prompt, not a label: inside a form a
@@ -854,13 +873,6 @@ struct PathListEditor: View {
                     .onSubmit(addDraft)
                 Button("Add", action: addDraft)
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("Choose…") { browse() }
-                Spacer()
-                Button("Remove") {
-                    paths.removeAll { selection.contains($0) }
-                    selection.removeAll()
-                }
-                .disabled(selection.isEmpty)
             }
         }
     }
@@ -969,10 +981,10 @@ struct EditableListFrame<Content: View>: View {
             }
             Divider()
             HStack(spacing: 0) {
-                squareButton("plus", title: addTitle, action: onAdd)
+                ListBarButton(symbol: "plus", title: addTitle, action: onAdd)
                 Divider()
                     .frame(height: 14)
-                squareButton("minus", title: removeTitle, action: onRemove)
+                ListBarButton(symbol: "minus", title: removeTitle, action: onRemove)
                     .disabled(!canRemove)
                 Spacer()
             }
@@ -987,7 +999,16 @@ struct EditableListFrame<Content: View>: View {
         )
     }
 
-    private func squareButton(_ symbol: String, title: String, action: @escaping () -> Void) -> some View {
+}
+
+/// A + or − of the bar attached beneath an editable list: a symbol, its
+/// name in the tooltip and for VoiceOver.
+struct ListBarButton: View {
+    let symbol: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .frame(width: 24, height: 20)

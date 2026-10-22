@@ -214,7 +214,7 @@ struct FolderVersionsView: View {
                 restoreSelection()
                 return .handled
             }
-            .help("Double-click or Return opens a folder in the tree; Return on files restores them; ⌘- or ⇧-click selects several items; drag an item to Finder to restore it there")
+            .help("Drag items to Finder to restore them there.")
         }
     }
 

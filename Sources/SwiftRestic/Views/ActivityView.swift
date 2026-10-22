@@ -36,13 +36,13 @@ struct ActivityView: View {
                 ContentUnavailableView(
                     "No activity yet",
                     systemImage: "list.bullet.rectangle",
-                    description: Text("Runs appear here once a plan has finished.")
+                    description: Text("Backups, checks and restores show here when they finish.")
                 )
             } else if runs.isEmpty {
                 ContentUnavailableView(
                     "No problems recorded",
                     systemImage: "checkmark.circle",
-                    description: Text("No run in the history failed or completed with warnings. Turn the filter off to see them all.")
+                    description: Text("Nothing in the history failed or completed with warnings.")
                 )
             } else {
                 Table(runs, selection: $selection, sortOrder: $sortOrder) {
@@ -178,7 +178,7 @@ struct ActivityView: View {
                 // Two states: what went wrong, or everything. Full
                 // per-outcome filtering would serve nobody who reaches for it.
                 Picker("Show", selection: $router.activityShowsProblemsOnly) {
-                    Text("All runs").tag(false)
+                    Text("All").tag(false)
                     Text("Problems").tag(true)
                 }
                 .pickerStyle(.segmented)

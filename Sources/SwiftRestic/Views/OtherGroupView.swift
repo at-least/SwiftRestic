@@ -114,10 +114,9 @@ struct OtherGroupView: View {
     }
 
     /// The history's identifying facts. Newest and Oldest bracket it; Made
-    /// from, Folders, Excludes and Tags say what it holds — rows omitted
-    /// when there is nothing to say — and Plan tag is the identifier
-    /// itself, the one line a copy can carry elsewhere, for a group that
-    /// has one.
+    /// on, Folders, Excludes and Tags say what it holds — rows omitted
+    /// when there is nothing to say. The plan tag, an identifier a person
+    /// rarely reads, is the card's Copy Plan Tag, not a row.
     private func backupsCard(_ summary: OtherGroupPageSummary) -> some View {
         Card("Backups") {
             DetailGrid {
@@ -126,7 +125,7 @@ struct OtherGroupView: View {
                 DetailRow("Made on") {
                     Text(summary.madeFrom)
                 }
-                DetailRow("Folders") {
+                DetailRow(summary.folders.count == 1 ? "Folder" : "Folders") {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(summary.folders, id: \.self) { set in
                             Text(set)
@@ -145,15 +144,13 @@ struct OtherGroupView: View {
                         Text(summary.userTags.joined(separator: ", "))
                     }
                 }
-                if let planTag = summary.planTag {
-                    DetailRow("Plan tag") {
-                        Text(planTag)
-                            .font(.callout.monospaced())
-                            .textSelection(.enabled)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(planTag)
-                    }
+            }
+        }
+        .contextMenu {
+            if let planTag = summary.planTag {
+                Button("Copy Plan Tag") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(planTag, forType: .string)
                 }
             }
         }

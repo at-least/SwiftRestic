@@ -84,7 +84,7 @@ struct RetentionPreview: Sendable, Equatable {
         guard removed > 0 else { return "No backups needed removing." }
         let snapshots = Format.plural(removed, "backup")
         return pruned
-            ? "Removed \(snapshots) and pruned their data."
-            : "Removed \(snapshots). Their data stays until the next prune."
+            ? "Removed \(snapshots) and freed their space."
+            : "Removed \(snapshots). Their data stays until the next cleanup."
     }
 }

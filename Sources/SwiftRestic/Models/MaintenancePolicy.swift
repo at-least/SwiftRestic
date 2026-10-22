@@ -137,9 +137,9 @@ enum CheckDataSubset: Equatable, Sendable {
     /// What the check read, in the repository page's words.
     var words: String {
         switch self {
-        case .percent(100): "all data"
-        case let .percent(percent): "\(percent)% of data"
-        case let .slice(n, total): "data slice \(n) of \(total)"
+        case .percent(100): "all of the data"
+        case let .percent(percent): "\(percent)% of the data"
+        case let .slice(n, total): "part \(n) of \(total)"
         }
     }
 }
@@ -153,7 +153,7 @@ enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .prune: "Prune"
+        case .prune: "Cleanup"
         case .check: "Check"
         }
     }

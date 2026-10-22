@@ -58,7 +58,7 @@ struct CommandStateTests {
         model.maintenance[repository.id] = MaintenanceActivity(task: .prune)
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
         #expect(!model.planCommands(for: nil).canBackUpAll)
-        #expect(model.backupLockReason(for: documents) == "Home NAS is running a prune — backups wait until it finishes.")
+        #expect(model.backupLockReason(for: documents) == "Home NAS is running a cleanup — backups wait until it finishes.")
         model.maintenance[repository.id] = MaintenanceActivity(task: .check)
         #expect(model.backupLockReason(for: documents) == "Home NAS is running a check — backups wait until it finishes.")
         model.maintenance = [:]
@@ -502,11 +502,11 @@ struct CommandStateTests {
         model.configuration.plans = [plan]
 
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Delete “Docs”?")
-        #expect(model.confirmationCopy(for: .prune(repository.id))?.title == "Prune “NAS” now?")
+        #expect(model.confirmationCopy(for: .prune(repository.id))?.title == "Clean up “NAS” now?")
         #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Check “NAS”?")
         #expect(model.confirmationCopy(for: .removeRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
-        #expect(model.confirmationCopy(for: .unlock(repository.id))?.title == "Remove stale locks on “NAS”?")
+        #expect(model.confirmationCopy(for: .unlock(repository.id))?.title == "Unlock “NAS”?")
         #expect(model.confirmationCopy(for: .rebuildIndex(repository.id))?.title
             == "Rebuild the search index for “NAS”?")
 

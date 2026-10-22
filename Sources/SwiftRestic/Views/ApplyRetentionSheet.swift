@@ -74,7 +74,7 @@ struct ApplyRetentionSheet: View {
             if isLoading {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Asking restic which backups these rules would remove…")
+                    Text("Working out which backups these rules would remove…")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -139,8 +139,8 @@ struct ApplyRetentionSheet: View {
             .fixedSize(horizontal: false, vertical: true)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
             Text(plan.retention.runPrune
-                ? "Prune runs right after and reclaims their space — slow on a large repository, and it locks the repository until it finishes."
-                : "Their data stays in the repository until the next prune (Repository › Prune Now…).")
+                ? "A cleanup runs right after and frees their space — slow on a large repository, and backups to it wait until it finishes."
+                : "Their data stays in the repository until the next cleanup.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

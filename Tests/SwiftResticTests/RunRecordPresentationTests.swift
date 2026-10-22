@@ -210,7 +210,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Completed with warnings · 2 unreadable items")
     }
 
-    @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path, or Remove Stale Locks… while nobody here holds the lock")
+    @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path, or Unlock… while nobody here holds the lock")
     func failureFixes() {
         let repository = UUID()
         var wrongPassword = backup {
@@ -259,7 +259,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == nil)
         #expect(RunFix.editRepository(repository).title == "Edit Repository…")
         #expect(RunFix.addRepository.title == "Add Repository…")
-        #expect(RunFix.removeStaleLocks(repository).title == "Remove Stale Locks…")
+        #expect(RunFix.removeStaleLocks(repository).title == "Unlock…")
         // Each says the cause it fixes.
         #expect(RunFix.editRepository(repository).help == "The password doesn't open this repository — check it in the repository settings")
         #expect(RunFix.addRepository.help == "No repository is at its location — put it back, or add it where it is now as a new repository")
@@ -318,9 +318,9 @@ struct RunRecordPresentationTests {
             == "The repository refuses to delete backups — turn this plan's retention off, or thin it where deletions are allowed")
     }
 
-    @Test("a backup that filled its repository's disk says so in plain words and offers Prune Now…; a write anywhere else keeps restic's")
+    @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now…; a write anywhere else keeps restic's")
     func repositoryFull() {
-        let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the repository until a prune frees it."
+        let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the repository until a cleanup frees it."
         var onDrive = Repository()
         onDrive.kind = .local
         onDrive.localPath = "/Volumes/TinyDisk/repo"
@@ -358,7 +358,7 @@ struct RunRecordPresentationTests {
         }
         #expect(RunRecordPresentation.fix(for: full, repositoryExists: true, repositoryBusy: false) == .pruneNow(repository))
         #expect(RunRecordPresentation.fix(for: full, repositoryExists: false, repositoryBusy: false) == nil)
-        #expect(RunFix.pruneNow(repository).title == "Prune Now…")
+        #expect(RunFix.pruneNow(repository).title == "Clean Up Now…")
     }
 
     @Test("a check or prune that did not end clean offers itself again; nothing else does")
@@ -374,7 +374,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .completedWithErrors), repositoryExists: true) == .check(repository))
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .failed), repositoryExists: true) == .prune(repository))
         #expect(MaintenanceRetry.check(repository).title == "Check Again…")
-        #expect(MaintenanceRetry.prune(repository).title == "Prune Again…")
+        #expect(MaintenanceRetry.prune(repository).title == "Clean Up Again…")
         // A clean or cancelled one, another kind, a repository gone: nothing.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .succeeded), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .cancelled), repositoryExists: true) == nil)
@@ -399,7 +399,7 @@ struct RunRecordPresentationTests {
             record.detailText = verdict
             return record
         }
-        let damaged = check(.completedWithErrors, "2 errors — `restic repair` can recover some damage. restic suggests running prune.")
+        let damaged = check(.completedWithErrors, "2 errors — `restic repair` can recover some damage. A cleanup is suggested.")
         #expect(RunRecordPresentation.detail(for: damaged) == "2 errors — `restic repair` can recover some damage")
         #expect(RunRecordPresentation.verdictClause(for: damaged) == "2 errors — `restic repair` can recover some damage")
         #expect(RunRecordPresentation.problemRowCaption(for: damaged)
@@ -558,9 +558,9 @@ struct RunRecordPresentationTests {
     @Test("a retention run's Detail says what it removed, or why it did not")
     func retentionRunDetail() {
         var applied = RunRecord(kind: .forget, planName: "Documents")
-        applied.detailText = "Removed 2 backups. Their data stays until the next prune."
+        applied.detailText = "Removed 2 backups. Their data stays until the next cleanup."
         #expect(RunRecordPresentation.detail(for: applied)
-            == "Removed 2 backups. Their data stays until the next prune.")
+            == "Removed 2 backups. Their data stays until the next cleanup.")
 
         var failed = RunRecord(kind: .forget, planName: "Documents")
         failed.outcome = .failed
@@ -636,7 +636,7 @@ struct RunRecordPresentationTests {
     func copyDetailsForARetentionRun() {
         var record = RunRecord(kind: .forget, planName: "Documents")
         record.outcome = .succeeded
-        record.detailText = "Removed 2 backups. Their data stays until the next prune."
+        record.detailText = "Removed 2 backups. Their data stays until the next cleanup."
         let text = RunRecordPresentation.detailsText(
             for: record,
             repositoryName: "Home NAS",
@@ -644,7 +644,7 @@ struct RunRecordPresentationTests {
         )
         let lines = text.components(separatedBy: "\n")
         #expect(lines.first == "Retention of “Documents” — Succeeded")
-        #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next prune."), "details were \(lines)")
+        #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next cleanup."), "details were \(lines)")
     }
 
     @Test("Copy Details for a restore names the backup, the item and where it landed")

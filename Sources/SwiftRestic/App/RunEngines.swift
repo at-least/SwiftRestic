@@ -368,7 +368,7 @@ enum BackupRunEngine {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
             // The repository's disk full: said plainly, with what the run left
             // behind — restic's line, naming a pack file by its hash, stays in
-            // the log — and Prune Now… as its fix (`repositoryFull`).
+            // the log — and Clean Up Now… as its fix (`repositoryFull`).
             if case let ResticError.commandFailed(_, message) = error,
                let full = RunRecord.repositoryFullMessage(resticMessage: message, repository: repository)
             {
@@ -608,7 +608,7 @@ enum MaintenanceRunEngine {
                     ? "No errors found."
                     : "\(Format.plural(errors, "error")) — `restic repair` can recover some damage."
                 if summary?.suggestPrune == true {
-                    record.detailText? += " restic suggests running prune."
+                    record.detailText? += " A cleanup is suggested."
                 }
             case .prune:
                 // Prune narrates its progress line by line; surfacing the

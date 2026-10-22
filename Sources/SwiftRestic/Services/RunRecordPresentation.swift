@@ -41,10 +41,10 @@ enum RunFix: Equatable {
         switch self {
         case .editRepository, .editRepositoryShare: "Edit Repository…"
         case .addRepository: "Add Repository…"
-        case .removeStaleLocks: "Remove Stale Locks…"
+        case .removeStaleLocks: "Unlock…"
         case .newPlan: "New Backup Plan…"
         case .editPlanShare, .editPlanRetention: "Edit Plan…"
-        case .pruneNow: "Prune Now…"
+        case .pruneNow: "Clean Up Now…"
         }
     }
 
@@ -57,7 +57,7 @@ enum RunFix: Equatable {
         case .newPlan: "Back the folder up where it is now, with a new plan"
         case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
         case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan's Files tab"
-        case .pruneNow: "What the failed backup uploaded stays in the repository until a prune — prune it to free the space"
+        case .pruneNow: "What the failed backup uploaded stays in the repository until a cleanup frees it"
         case .editPlanRetention: "The repository refuses to delete backups — turn this plan's retention off, or thin it where deletions are allowed"
         }
     }
@@ -80,7 +80,7 @@ enum MaintenanceRetry: Equatable {
     var title: String {
         switch self {
         case .check: "Check Again…"
-        case .prune: "Prune Again…"
+        case .prune: "Clean Up Again…"
         }
     }
 
@@ -93,8 +93,8 @@ enum MaintenanceRetry: Equatable {
 
 enum RunRecordPresentation {
     /// The fix for a failed run, or nil when its cause has none the app can
-    /// perform. Only while the repository is still set up; Remove Stale
-    /// Locks… only while no run here holds a lock on it, so "stale" means
+    /// perform. Only while the repository is still set up; Unlock…
+    /// only while no run here holds a lock on it, so "stale" means
     /// nobody here is using it.
     /// The re-run a failed check or prune offers, or one that found errors;
     /// nil for any other run, a clean one, or one whose repository is gone.
@@ -275,7 +275,7 @@ enum RunRecordPresentation {
             return restoreDetail(run) ?? run.outcome.displayName
         case .forget:
             // Apply Retention Now…'s count ("Removed 2 snapshots. Their data
-            // stays until the next prune."), one short line.
+            // stays until the next cleanup."), one short line.
             return run.detailText ?? run.outcome.displayName
         case .check:
             // The verdict the run recorded — "2 errors — `restic repair` can

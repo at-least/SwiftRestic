@@ -228,20 +228,20 @@ struct RepositoryDetailView: View {
                         hold: hold, awaitingServer: awaitingServer, now: now
                     ))
                     if repository.maintenance.pruneEnabled {
-                        DetailRow("Last prune") {
+                        DetailRow("Last cleanup") {
                             MaintenanceRunValue(
                                 text: Scheduler.lastMaintenanceText(.prune, of: repository, newest: prune, now: now),
                                 run: prune
                             )
                         }
-                        DetailRow("Next prune", Scheduler.nextMaintenanceText(
+                        DetailRow("Next cleanup", Scheduler.nextMaintenanceText(
                             .prune, of: repository, among: model.configuration.repositories,
                             hold: hold, awaitingServer: awaitingServer, now: now
                         ))
                     } else {
                         // Off is a fact the page states beside the disk bar,
                         // not two rows that vanish; Edit is its fix.
-                        DetailRow("Prune", Scheduler.pruneOffText)
+                        DetailRow("Cleanup", Scheduler.pruneOffText)
                     }
                 }
 

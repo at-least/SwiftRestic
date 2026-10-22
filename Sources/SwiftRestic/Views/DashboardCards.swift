@@ -39,7 +39,7 @@ struct ProtectionCard: View {
                             Button("Resume") { model.resumeBackups() }
                                 .buttonStyle(.borderless)
                                 .controlSize(.small)
-                                .help("Resume scheduled backups, checks and prunes")
+                                .help("Resume scheduled backups, checks and cleanups")
                         }
                     }
                     // The sidebar mark's glyphs for what needs attention — a
@@ -166,7 +166,7 @@ struct OtherBackupsCard: View {
             }
             .buttonStyle(HoverableButtonStyle())
             .accessibilityLabel("\(label.title): \(label.caption?.text ?? ""). Show group page")
-            Button("Adopt…") { onAdoptGroup(repositoryID, planID) }
+            Button("Adopt as a Backup Plan…") { onAdoptGroup(repositoryID, planID) }
                 .controlSize(.small)
                 // The group page's own words for the verb it opens.
                 .help("Rebuild a plan around these backups — their history becomes its own, and nothing is written to the repository")

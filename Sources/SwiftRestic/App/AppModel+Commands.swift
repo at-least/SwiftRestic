@@ -45,7 +45,7 @@ struct RepositoryCommandState: Equatable {
     /// selection's.
     var canFind = false
     var canRefreshAll = false
-    /// Check, Prune, Remove Stale Locks, Rebuild Search Index: restic work
+    /// Check, Clean Up, Unlock, Rebuild Search Index: restic work
     /// that must not collide with a backup or another job on it.
     var canMaintain = false
     var canEdit = false
@@ -216,14 +216,14 @@ extension AppModel {
         case let .prune(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
-                title: "Prune “\(label(of: repository))” now?",
-                message: "The data of removed backups is deleted for good. Backups to it wait until the prune finishes."
+                title: "Clean up “\(label(of: repository))” now?",
+                message: "The data of removed backups is deleted for good. Backups to it wait until the cleanup finishes."
             )
         case let .unlock(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
-                title: "Remove stale locks on “\(label(of: repository))”?",
-                message: "Only do this when no restic is using it — removing a lock in use can damage the repository."
+                title: "Unlock “\(label(of: repository))”?",
+                message: "Do this only when no other Mac or app is using it — unlocking a repository in use can damage it."
             )
         case let .rebuildIndex(id):
             guard let repository = repository(id: id) else { return nil }

@@ -725,11 +725,11 @@ struct MaintenanceSchedulingTests {
         #expect(saved.checkDepth == .percent(5))
         #expect(saved.checkDataSlices == 0)
         // What each reads, in the page's words and restic's argument.
-        #expect(CheckDataSubset.slice(3, of: 12).words == "data slice 3 of 12")
+        #expect(CheckDataSubset.slice(3, of: 12).words == "part 3 of 12")
         #expect(CheckDataSubset.slice(3, of: 12).argument == "3/12")
-        #expect(CheckDataSubset.percent(5).words == "5% of data")
+        #expect(CheckDataSubset.percent(5).words == "5% of the data")
         #expect(CheckDataSubset.percent(5).argument == "5%")
-        #expect(CheckDataSubset.percent(100).words == "all data")
+        #expect(CheckDataSubset.percent(100).words == "all of the data")
     }
 
     @Test("Last check names what the newest check read")
@@ -738,9 +738,9 @@ struct MaintenanceSchedulingTests {
         let now = date("2026-09-10 12:00:00")
         var check = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: date("2026-09-08 12:00:00"))
         check.outcome = .succeeded
-        check.checkRead = "data slice 3 of 12"
+        check.checkRead = "part 3 of 12"
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now)
-            == "\(Format.ago(date("2026-09-08 12:00:00"), now: now)) · data slice 3 of 12")
+            == "\(Format.ago(date("2026-09-08 12:00:00"), now: now)) · part 3 of 12")
         check.checkRead = "structure only"
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now)
             == "\(Format.ago(date("2026-09-08 12:00:00"), now: now)) · structure only")
@@ -803,7 +803,7 @@ struct MaintenanceSchedulingTests {
         // A check that found damage says what it found, in its record's
         // own words — the Detail column's — not a second spelling.
         var withVerdict = check(.completedWithErrors, at: "2026-09-09 12:00:00")
-        withVerdict.detailText = "2 errors — `restic repair` can recover some damage. restic suggests running prune."
+        withVerdict.detailText = "2 errors — `restic repair` can recover some damage. A cleanup is suggested."
         #expect(last([withVerdict]) == "\(ago) · 2 errors — `restic repair` can recover some damage")
         // A record from before the verdict was stored: the outcome itself.
         #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · completed with warnings")
@@ -991,7 +991,21 @@ struct RetentionPolicyTests {
         mixed.keepWeekly = 0
         mixed.keepMonthly = 12
         mixed.keepYearly = 0
-        #expect(mixed.summary == "Keep 3 latest, 24h, 12m")
+        #expect(mixed.summary == "Keep the latest 3, 24 hourly and 12 monthly backups")
+
+        // Counts of backups, never "24h": a daily plan's 24 hourly backups
+        // reach back 24 days, not 24 hours.
+        #expect(RetentionPolicy().summary == "Keep 24 hourly, 7 daily, 4 weekly, 12 monthly and 3 yearly backups")
+
+        var single = empty
+        single.keepYearly = 1
+        #expect(single.summary == "Keep 1 yearly backup")
+
+        var latest = empty
+        latest.keepLast = 1
+        #expect(latest.summary == "Keep the latest backup")
+        latest.keepDaily = 7
+        #expect(latest.summary == "Keep the latest one and 7 daily backups")
     }
 }
 

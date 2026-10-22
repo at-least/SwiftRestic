@@ -113,7 +113,7 @@ enum Format {
         // produces. Beyond that window the formatter gets the real date in
         // whichever direction it lies: clamping a future date down to now
         // renders a run an hour ahead as the nonsense "in 0 seconds".
-        if abs(date.timeIntervalSince(now)) < 45 { return "Just now" }
+        if abs(date.timeIntervalSince(now)) < 45 { return "just now" }
         relativeLock.lock()
         defer { relativeLock.unlock() }
         return relativeStamp.localizedString(for: date, relativeTo: now)
@@ -122,7 +122,7 @@ enum Format {
     /// When a past event happened, as of `now` — the window's minute clock
     /// (`EnvironmentValues.now`), so the same event reads the same on every
     /// surface and moves on with the minute. The tick can be up to a minute
-    /// old: an event since then happened "Just now", never "in 50 seconds".
+    /// old: an event since then happened "just now", never "in 50 seconds".
     static func ago(_ date: Date?, now: Date) -> String {
         guard let date else { return "Never" }
         return relative(date, now: max(now, date))

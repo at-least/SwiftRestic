@@ -73,12 +73,12 @@ enum ResticError: Error, LocalizedError, Equatable {
                 // keeps the detail. Exit 10's are the Add Repository…
                 // button's own words, so the banner and the notification say
                 // what the drawer's button does. Exit 11's leave out the
-                // Remove Stale Locks… tooltip's "no run here holds it",
+                // Unlock… tooltip's "no run here holds it",
                 // checked when the button is offered: the stored message
                 // outlives that moment.
                 let base = code == 10
                     ? Self.noRepositoryAtLocation + "."
-                    : "The repository is locked — if no other Mac is using it, remove the stale locks."
+                    : "The repository is locked — if no other Mac is using it, unlock it."
                 let restic = Format.firstSentence(message)
                 return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
             }

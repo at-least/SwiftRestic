@@ -428,11 +428,11 @@ struct SwiftResticApp: App {
                 if let id = r.repositoryID { ask(.confirm(.check(id))) }
             }
             .disabled(!r.canMaintain)
-            Button("Prune Now…") {
+            Button("Clean Up Now…") {
                 if let id = r.repositoryID { ask(.confirm(.prune(id))) }
             }
             .disabled(!r.canMaintain)
-            Button("Remove Stale Locks…") {
+            Button("Unlock…") {
                 if let id = r.repositoryID { ask(.confirm(.unlock(id))) }
             }
             .disabled(!r.canMaintain)

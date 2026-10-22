@@ -7,10 +7,12 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 
         /// The operation's word in titles and rows: "Backup", "Check", …
         /// A forget is "Retention", the word every other surface uses for it
-        /// (the plan page's row, Apply Retention Now…, "Retention skipped").
+        /// (the plan page's row, Apply Retention Now…, "Retention skipped");
+        /// a prune is "Cleanup", as Clean Up Now… names it.
         var displayName: String {
             switch self {
             case .forget: "Retention"
+            case .prune: "Cleanup"
             default: rawValue.capitalized
             }
         }
@@ -168,7 +170,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var retentionRefused: Int?
 
     /// What a check read besides the structure, in the repository page's
-    /// words — "data slice 3 of 12", "5% of data", "all data" — or
+    /// words — "part 3 of 12", "5% of the data", "all of the data" — or
     /// "structure only". Nil for any other run, and for a check recorded
     /// before 2026-10-17.
     var checkRead: String?
@@ -404,7 +406,7 @@ extension RunRecord {
         guard resticMessage.contains("write \(root)/") else { return nil }
         let disk = VolumePresence.volumeName(of: root).map { "“\($0)”" } ?? "This Mac's disk"
         return "\(disk) is full — the backup needed more room than it has free. "
-            + "What it uploaded before it stopped stays in the repository until a prune frees it."
+            + "What it uploaded before it stopped stays in the repository until a cleanup frees it."
     }
 
     /// Why a backup failed when the plan's folder is not on this Mac and no
