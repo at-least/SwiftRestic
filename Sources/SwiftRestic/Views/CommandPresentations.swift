@@ -77,7 +77,9 @@ struct CommandPresentations: ViewModifier {
                 showMaintenance(of: id)
             }
         case let .unlock(id):
-            Button("Unlock") { model.unlockRepository(id: id) }
+            // Destructive, unlike the others: the harm is one the person
+            // did not choose — a lock another Mac still holds.
+            Button("Unlock", role: .destructive) { model.unlockRepository(id: id) }
         case let .rebuildIndex(id):
             Button("Rebuild") { model.rebuildIndex(repositoryID: id) }
         }

@@ -90,6 +90,21 @@ struct NotificationTests {
         #expect(request.contentType == "application/json")
     }
 
+    @Test("the webhook's operation keeps restic's word while the screen says Cleanup")
+    @MainActor
+    func payloadOperationIsStable() throws {
+        var prune = RunRecord(kind: .prune, planName: "")
+        prune.outcome = .failed
+        #expect(prune.kind.displayName == "Cleanup")
+        let event = AppModel.notificationEvent(for: prune, repositoryName: "NAS")
+        #expect(event.operation == "Prune")
+        let request = try #require(NotificationPayload.request(for: channel(.webhook, url: "https://example.com/hook"), event: event))
+        let data = try #require(request.body)
+        let body = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(body["operation"] as? String == "Prune")
+        #expect(AppModel.notificationEvent(for: RunRecord(kind: .forget, planName: "Docs"), repositoryName: "NAS").operation == "Retention")
+    }
+
     @Test("a channel with no usable URL produces no request")
     func rejectsUnusableChannels() {
         #expect(NotificationPayload.request(

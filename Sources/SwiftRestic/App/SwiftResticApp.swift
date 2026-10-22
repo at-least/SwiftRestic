@@ -145,6 +145,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // button the default button"). Escape keeps its built-in
                 // route to the "Cancel" button.
                 alert.buttons[0].keyEquivalent = ""
+                // Full Keyboard Access presses the focused button with Space:
+                // focus starts on Cancel, not Quit Anyway.
+                alert.window.initialFirstResponder = alert.buttons[1]
             } else {
                 // Nothing is in progress and the user just asked to quit:
                 // the alert informs, so Quit keeps NSAlert's Return and

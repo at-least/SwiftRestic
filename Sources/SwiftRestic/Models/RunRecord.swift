@@ -8,11 +8,21 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         /// The operation's word in titles and rows: "Backup", "Check", …
         /// A forget is "Retention", the word every other surface uses for it
         /// (the plan page's row, Apply Retention Now…, "Retention skipped");
-        /// a prune is "Cleanup", as Clean Up Now… names it.
+        /// a prune is the maintenance task's own word.
         var displayName: String {
             switch self {
             case .forget: "Retention"
-            case .prune: "Cleanup"
+            case .prune: MaintenanceTask.prune.displayName
+            default: rawValue.capitalized
+            }
+        }
+
+        /// The webhook payload's `operation`, which receivers match on: the
+        /// words it carried before the app called a prune a cleanup, so a
+        /// rename on screen never changes what a filter reads.
+        var payloadOperation: String {
+            switch self {
+            case .forget: "Retention"
             default: rawValue.capitalized
             }
         }
@@ -175,6 +185,16 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// before 2026-10-17.
     var checkRead: String?
 
+    /// A check recorded before 2026-10-23 stored "data slice 3 of 12",
+    /// "5% of data" or "all data"; read in today's words, so Last check
+    /// never mixes the two.
+    static func currentCheckWords(_ stored: String) -> String {
+        if stored == "all data" { return "all of the data" }
+        if stored.hasSuffix("% of data") { return stored.dropLast("data".count) + "the data" }
+        if stored.hasPrefix("data slice ") { return "part " + stored.dropFirst("data slice ".count) }
+        return stored
+    }
+
     // A standing skip (`continuingSkip(of:)`), or a standing failure for the
     // same folders gone or shares refused (`continuingStandingFailure(of:)`):
     // one record for every run it lasted. Nil for a run that stands alone.
@@ -252,7 +272,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         refusedShares = c.optional(.refusedShares)
         repositoryFull = c.optional(.repositoryFull)
         retentionRefused = c.optional(.retentionRefused)
-        checkRead = c.optional(.checkRead)
+        checkRead = (c.optional(.checkRead) as String?).map(Self.currentCheckWords)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)

@@ -121,6 +121,15 @@ struct OtherGroupPageTests {
         let page = try #require(shelves.otherGroupPage(.plan(deleted), repositories: [], localHost: "mac"))
         #expect(page.madeFrom == "2 Macs — laptop, mac")
         #expect(page.folders == ["/Data/Documents"])
+        #expect(page.pathCount == 1)
+
+        // One line of several folders, from a build that let a plan hold a
+        // list: the row's label counts paths, not lines.
+        let several = try snapshot("s1", time: "2026-10-03T02:00:00Z", paths: ["/Data/Documents", "/Data/Pictures"], tags: [tag])
+        let listed = try #require(BackupShelves(listing: [several], plans: [], allPlans: [])
+            .otherGroupPage(.plan(deleted), repositories: [], localHost: "mac"))
+        #expect(listed.folders.count == 1)
+        #expect(listed.pathCount == 2)
     }
 
     @Test("the page is gone once the group is — adopted, moved to this repository, or refreshed away")

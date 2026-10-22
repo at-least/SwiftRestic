@@ -838,9 +838,8 @@ struct PathListEditor: View {
                     return true
                 } isTargeted: { isDropTargeted = $0 }
                 Divider()
-                // + and − attached beneath, as the Hooks and Webhooks lists
-                // have them: + chooses items in a panel, as Time Machine's
-                // exclusions do; a pattern is typed in the field below.
+                // + chooses items in a panel, as Time Machine's exclusions
+                // do; a pattern is typed in the field below.
                 HStack(spacing: 0) {
                     ListBarButton(symbol: "plus", title: "Choose Items…") { browse() }
                     Divider()

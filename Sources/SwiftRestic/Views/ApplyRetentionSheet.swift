@@ -101,14 +101,14 @@ struct ApplyRetentionSheet: View {
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 if let preview, !preview.removed.isEmpty {
-                    // What Apply Retention Now… was chosen for, after its
-                    // preview: the default, not marked destructive — the
-                    // HIG's Empty Trash case.
+                    // What Apply Retention Now… was chosen for, so not marked
+                    // destructive — the HIG's Empty Trash case — but no
+                    // Return either: removing backups cannot be undone, and
+                    // the HIG's way to make people read first is no default.
                     Button("Remove \(Format.plural(preview.removed.count, "Backup"))") {
                         model.applyRetention(planID: planID)
                         dismiss()
                     }
-                    .keyboardShortcut(.defaultAction)
                     .disabled(isLoading || !state.canApplyRetention)
                 }
             }

@@ -749,6 +749,23 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now) == Format.ago(date("2026-09-08 12:00:00"), now: now))
     }
 
+    @Test("a check recorded in the old words reads in today's")
+    func oldCheckWordsReadAnew() throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        for (old, new) in [
+            ("data slice 3 of 12", "part 3 of 12"), ("5% of data", "5% of the data"),
+            ("all data", "all of the data"), ("structure only", "structure only"),
+        ] {
+            var check = RunRecord(kind: .check, planName: "repo")
+            check.checkRead = old
+            let decoded = try decoder.decode(RunRecord.self, from: encoder.encode(check))
+            #expect(decoded.checkRead == new)
+        }
+    }
+
     @Test("a disabled task never comes due")
     func disabledTasksNeverDue() {
         let repository = repository {

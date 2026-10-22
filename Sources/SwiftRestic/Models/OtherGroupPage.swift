@@ -35,6 +35,10 @@ struct OtherGroupPageSummary: Equatable {
     /// the labels qualify with. Two Macs that spell the same list share the
     /// line: "Made on" already names them both.
     var folders: [String]
+    /// How many distinct paths the lines hold — one line can list several,
+    /// from builds that let a plan hold a list — for the row's "Folder" or
+    /// "Folders".
+    var pathCount: Int
     /// Every exclude pattern any of the backups ran with, first-seen order
     /// (newest backup first). Empty when none did — restic omits the key —
     /// and the page then shows no row.
@@ -115,6 +119,7 @@ struct OtherGroupPageSummary: Equatable {
             folderSets.append(list)
         }
         folders = folderSets
+        pathCount = Set(snapshots.flatMap(\.paths)).count
 
         excludes = BackupPlan.withoutDuplicates(snapshots.flatMap(\.excludes))
         userTags = BackupPlan.withoutDuplicates(

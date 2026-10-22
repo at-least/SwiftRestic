@@ -404,8 +404,9 @@ struct RestoreDestinationSheet: View {
     }
 
     /// Asked only after the sheet's own Replace was chosen, so "Replace" is
-    /// the person's intent: the default button, not marked destructive — the
-    /// HIG's Empty Trash case. Escape keeps NSAlert's route to "Cancel".
+    /// the person's intent and not marked destructive — the HIG's Empty
+    /// Trash case — yet no button is the default, the HIG's way to make
+    /// people read first. Escape keeps NSAlert's route to "Cancel".
     private func confirmReplace(_ existing: [URL], in destination: URL) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -436,6 +437,11 @@ struct RestoreDestinationSheet: View {
         }
         alert.addButton(withTitle: "Replace")
         alert.addButton(withTitle: "Cancel")
+        // No Return: a folder's or several items' restore writes straight
+        // into its landing, so one cut short leaves files that are neither
+        // the user's nor the backup's. Keyboard focus starts on Cancel.
+        alert.buttons[0].keyEquivalent = ""
+        alert.window.initialFirstResponder = alert.buttons[1]
         return alert.runModal() == .alertFirstButtonReturn
     }
 

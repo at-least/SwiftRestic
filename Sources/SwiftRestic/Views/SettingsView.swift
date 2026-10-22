@@ -38,10 +38,10 @@ struct SettingsView: View {
                 model.configuration.settings.showMenuBarExtra = false
             }
         } message: {
-            Text("Backups keep running with the window closed, and SwiftRestic opens again only from the Applications folder.")
+            Text("Backups keep running with the window closed, and SwiftRestic opens again only when you launch it.")
         }
         .confirmationDialog(
-            "Remove the saved password for \(removingShare?.url ?? "this share")?",
+            "Remove \(removingShare?.url ?? "this share") from SwiftRestic?",
             isPresented: Binding(get: { removingShare != nil }, set: { if !$0 { removingShare = nil } }),
             titleVisibility: .visible,
             presenting: removingShare
@@ -60,7 +60,7 @@ struct SettingsView: View {
                 }
             }
         } message: { share in
-            Text("A backup that needs \(share.url) is skipped while it is not mounted, until its password is entered again in the repository's or plan's editor.")
+            Text("Its saved password is deleted too. A backup that needs \(share.url) is skipped while it is not mounted, until its password is entered again in the repository's or plan's editor.")
         }
         .task {
             await model.refreshFullDiskAccess()
@@ -80,7 +80,7 @@ struct SettingsView: View {
                 if model.fullDiskAccess == .granted {
                     // Only what the grant controls: a file the account can't
                     // read stays unreadable, and the run's hint says so.
-                    Text("SwiftRestic can read every file in your plans.")
+                    Text("Full Disk Access is on for SwiftRestic.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

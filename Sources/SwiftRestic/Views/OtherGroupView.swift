@@ -125,7 +125,7 @@ struct OtherGroupView: View {
                 DetailRow("Made on") {
                     Text(summary.madeFrom)
                 }
-                DetailRow(summary.folders.count == 1 ? "Folder" : "Folders") {
+                DetailRow(summary.pathCount == 1 ? "Folder" : "Folders") {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(summary.folders, id: \.self) { set in
                             Text(set)

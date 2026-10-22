@@ -177,7 +177,7 @@ struct SidebarView: View {
         // wants; the shared confirmations ask first.
         Button("Check…") { router.request(.confirm(.check(repository.id))) }
             .disabled(!commands.canMaintain)
-        Button("Clean Up Now…", role: .destructive) { router.request(.confirm(.prune(repository.id))) }
+        Button("Clean Up Now…") { router.request(.confirm(.prune(repository.id))) }
             .disabled(!commands.canMaintain)
         Divider()
         Button("Remove from SwiftRestic…", role: .destructive) {
