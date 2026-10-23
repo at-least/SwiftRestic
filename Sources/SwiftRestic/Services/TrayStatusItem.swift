@@ -144,7 +144,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         if let hold {
             menu.addItem(disabledItem(hold.summary()))
         }
-        // The failure line leads, unless the `?` face summoned the menu and
+        // The failure line leads, unless nothing is set up yet and
         // an old failure from a since-removed repository would talk over the
         // setup question — the same yield MenuBarStatus defines. The subject
         // names the repository, so a failure from one repository cannot read

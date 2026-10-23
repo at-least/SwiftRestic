@@ -132,10 +132,10 @@ enum ScaleBounds {
 
     /// A full read into a populated chain commits one transaction per
     /// chunk, and each chunk that creates nodes pays what a delta's constant
-    /// pays for its names — the FTS segment flush and the merge share, 4 and
-    /// 16 rows above — plus the node table's tail page: a delta's accounting
-    /// plus, per such chunk, 20 rows and eight pages. Still change-sized:
-    /// every such chunk carries at least one added path.
+    /// pays for its names — the FTS segment flush and the merge share —
+    /// plus the node table's tail page: a delta's accounting plus, per such
+    /// chunk, 20 rows and eight pages.
+    /// Still change-sized: every such chunk carries at least one added path.
     static func fullRows(added: Int, removed: Int, chunksWithAdds: Int) -> Double {
         rows(added: added, removed: removed) + Double(20 * chunksWithAdds)
     }

@@ -41,7 +41,7 @@ struct PlanCommandState: Equatable {
 struct RepositoryCommandState: Equatable {
     /// The repository the menu acts on — see `commandRepositoryID(for:)`.
     var repositoryID: UUID?
-    /// Find Files and Refresh All Snapshots: every repository's, not the
+    /// Find Files and Refresh All Backups: every repository's, not the
     /// selection's.
     var canFind = false
     var canRefreshAll = false

@@ -52,7 +52,7 @@ struct PlanEditorSheet: View {
     }
     private let mode: Mode
     /// `Mode.adopt`'s completion: the presenting surface selects the new
-    /// plan and reveals its fold, which are its states to move.
+    /// plan and turns its page to Backups, which are its states to move.
     private let onAdopted: ((UUID) -> Void)?
     private let isNew: Bool
     /// The schedule default the adopt draft opened with, so the Schedule tab
@@ -343,9 +343,8 @@ struct PlanEditorSheet: View {
     /// The first backup of a new scheduled plan starts within a minute of
     /// the button that saves it — Create for a fresh plan, Adopt for a
     /// prefilled one whose folders are all here. The scheduler ticks once a
-    /// minute and a never-run plan counts as immediately due. Stated at the
-    /// button, on every tab, because the schedule picker that could avoid it
-    /// sits behind a tab the user may never open.
+    /// minute and a never-run plan counts as immediately due. Stated on the
+    /// Schedule tab, beside the picker that could avoid it.
     private var startsFirstBackupOnCreate: Bool {
         isNew && draft.isEnabled && draft.schedule.frequency != .manual
     }

@@ -110,7 +110,7 @@ struct DiffCandidateGroupingTests {
         #expect(buckets[0].label != buckets[1].label)
     }
 
-    @Test("a folder's backups group by month too, as the Files pane's picker and the sidebar's fold read them")
+    @Test("a folder's backups group by month too, as the Files pane's picker and the Backups tab read them")
     func versionMonths() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(identifier: "UTC"))

@@ -1,20 +1,22 @@
 import Foundation
 import GRDB
 
-/// Housekeeping: space reclamation, and nothing else.
+/// `housekeeping()`: space reclamation, and nothing else.
+/// (`releaseUnreadable()` beside it is not housekeeping: it writes `snap`
+/// and `next_seq`.)
 ///
-/// Every statement here that writes the index's own tables is a DELETE — of
-/// closed runs that claim no indexed snapshot, of content marks with no
-/// indexed snapshot left on one side, of a snapshot-less chain's runs, marks
-/// and row, of queue rows, and of nodes nothing holds, with their FTS rows
-/// through FTS5's delete-by-INSERT and their edits. The only other inserts
+/// Every statement housekeeping runs that writes the index's own tables is a
+/// DELETE — of closed runs that claim no indexed snapshot, of content marks
+/// with no indexed snapshot left on one side, of a snapshot-less chain's runs,
+/// marks and row, of queue rows, and of nodes nothing holds, with their FTS
+/// rows through FTS5's delete-by-INSERT and their edits. The only other inserts
 /// go to the TEMP scratch list `gc`, which names nodes to consider, never a
 /// claim. None writes `snap`, a window or `next_seq`, and a claim is a run
-/// joined to an indexed snap row, so housekeeping can remove claims but
-/// never add one. That is what makes it safe to skip (a crash between
-/// reconcile and housekeeping costs space, not answers) and keeps its bugs
-/// conservative: deleting too much loses a claim, deleting too little
-/// leaves garbage that `invariantViolations()` (b) reports.
+/// joined to an indexed snap row, so housekeeping can remove claims but never
+/// add one. That is what makes it safe to skip (a crash between reconcile and
+/// housekeeping costs space, not answers) and keeps its bugs conservative:
+/// deleting too much loses a claim, deleting too little leaves garbage that
+/// `invariantViolations()` (b) reports.
 extension SnapshotIndex {
     /// Where a queued seq sits between the chain's indexed seqs: the nearest
     /// indexed seq below and above it, either possibly absent.

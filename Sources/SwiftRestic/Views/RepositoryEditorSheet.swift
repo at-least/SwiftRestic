@@ -576,8 +576,8 @@ struct RepositoryEditorSheet: View {
         case .rest:
             TextField("URL", text: $draft.restURL, prompt: Text("https://host:8000/"))
                 // A URL pasted with its login sheds it into User and the
-                // Keychain, so the configuration file and the "restic will
-                // use" line below never hold the password.
+                // Keychain, so the configuration file never holds the
+                // password.
                 .onChange(of: draft.restURL) { _, url in
                     guard let split = Repository.splittingRESTCredentials(url) else { return }
                     draft.restURL = split.url

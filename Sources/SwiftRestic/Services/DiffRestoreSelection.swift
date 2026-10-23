@@ -2,9 +2,10 @@ import Foundation
 
 /// The Compare sheet's rows as restore sources (`RestoreSelection`): each
 /// from the backup of the two that holds it (`ResticDiffChange.holder`),
-/// restic listing its node first — a diff names a path and a kind, never a
-/// node. A row whose backup is no longer listed (`holder` nil) is left out,
-/// as its own Restore… is grey.
+/// with no node — a diff names a path and a kind, never a node, so the
+/// restore finds it in that backup (`RestoreSource.node`). A row whose
+/// backup is no longer listed (`holder` nil) is left out, as its own
+/// Restore… is grey.
 enum DiffRestoreSelection {
     static func sources(
         _ changes: [ResticDiffChange],

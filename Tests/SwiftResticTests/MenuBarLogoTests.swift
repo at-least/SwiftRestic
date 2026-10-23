@@ -143,10 +143,10 @@ struct MenuBarLogoTests {
         return rep
     }
 
-    /// Visual-audit harness: set `SWIFTRESTIC_TRAY_FACE_DIR` to a directory
-    /// and the four faces land there as 8x PNGs, composed on white. A no-op
-    /// (passing test) when the variable is unset, so ordinary runs never
-    /// write files.
+    /// Visual-audit harness: set `SWIFTRESTIC_TRAY_FACE_DIR` to a directory and
+    /// the four faces and the hero mark land there as 8x PNGs, composed on
+    /// white. A no-op (passing test) when the variable is unset, so ordinary
+    /// runs never write files.
     @Test("dump the tray faces as PNGs for visual audit")
     func dumpFaces() throws {
         guard let directory = ProcessInfo.processInfo.environment["SWIFTRESTIC_TRAY_FACE_DIR"] else { return }

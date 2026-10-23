@@ -4,7 +4,7 @@ import UserNotifications
 extension AppModel {
     // MARK: - Notifications
 
-    /// The outcome of a Settings alert-channel test, reported inline where the
+    /// The outcome of a Settings › Webhooks test, reported inline where the
     /// user clicked rather than as a global banner on another window.
     enum TestNotificationOutcome: Equatable, Sendable {
         case unusable

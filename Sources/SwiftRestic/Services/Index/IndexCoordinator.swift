@@ -402,7 +402,8 @@ actor IndexCoordinator {
     }
 
     /// Which of `paths` a snapshot holds, each with its kind there — the
-    /// Restore pane's incomplete strip asks it of the backup before.
+    /// Restore pane's incomplete strip asks it of the backup before, and a
+    /// restore by path of the backup it restores from.
     nonisolated func kinds(of paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
         try await read(repositoryID) { try await $0.contains(paths: paths, inSnapshot: snapshotID) }
     }
@@ -418,8 +419,7 @@ actor IndexCoordinator {
     /// it before closing the pool. A reset in progress is sat out; a dropped
     /// repository throws `repositoryRemoved`, however late the caller came.
     /// Internal, not private: the tests hold a read open across a reset, and
-    /// read through it what the app never asks — a path's versions across
-    /// every chain, and the path-keyed reads they hold the searches to.
+    /// read through it what the app never asks.
     nonisolated func read<T: Sendable>(
         _ repositoryID: UUID,
         _ body: @Sendable (SnapshotIndex) async throws -> T

@@ -163,7 +163,7 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("an item named by its path is restored from the node restic lists for it, and a path the backup lacks says so")
+    @Test("restic lists the node of an item named by its path, and a path the backup lacks says so")
     func listedNodeByPath() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -1653,9 +1653,10 @@ struct RunReporterTokenTests {
         )
     }
 
-    /// Lets a reporter's `Task { @MainActor in … }` land before asserting.
-    /// The passing run lands on the first poll; the 1 s bound is for a
-    /// loaded machine, so a slow hop cannot flake the test.
+    /// Gives a reporter's `Task { @MainActor in … }` the full second to land
+    /// before asserting. Not a poll: the hop under test must drop, and an
+    /// absence has nothing to poll for, so a wait that ended early could
+    /// pass before a wrong write landed.
     private func drainReporterHops() async {
         for _ in 0..<200 {
             try? await Task.sleep(for: .milliseconds(5))
@@ -2259,9 +2260,9 @@ struct IndexCompletenessTests {
     }
 }
 
-/// The "Keep runs" cap and what a standing problem still reads: the trim
-/// drops the oldest records by count, except the ones a standing surface
-/// would lose its problem with.
+/// The "Items kept in Activity" cap and what a standing problem still reads:
+/// the trim drops the oldest records by count, except the ones a standing
+/// surface would lose its problem with.
 @Suite("Run history trim")
 @MainActor
 struct RunHistoryTrimTests {

@@ -87,7 +87,7 @@ struct NotificationEvent: Sendable, Equatable {
         /// The user stopped the run. Chat channels stay quiet, but a monitor
         /// waiting for a check-in has still missed one.
         case cancelled
-        /// Nothing to back up: every folder was missing. Like a cancel,
+        /// A drive or server the run needs was away. Like a cancel,
         /// only a monitor waiting for a check-in needs to hear of it.
         case skipped
     }

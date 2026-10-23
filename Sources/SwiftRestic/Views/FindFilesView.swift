@@ -323,9 +323,8 @@ struct FindFilesView: View {
                         Button("Show Versions", action: open)
                     }
                     if !row.match.isDirectory, let repositoryID {
-                        // An index row carries no size: restic lists the
-                        // file first, as its restore does, and the size
-                        // gate reads that.
+                        // An index row carries no size, which the size
+                        // gate reads: restic lists the file first.
                         Button("Preview") {
                             previewer.start(model, repositoryID: repositoryID, snapshotID: row.snapshotID) { [model] in
                                 row.hit == nil

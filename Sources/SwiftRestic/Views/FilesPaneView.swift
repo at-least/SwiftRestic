@@ -186,8 +186,8 @@ private struct FilesPaneLoadKey: Equatable {
     let diskGeneration: UInt64
 }
 
-/// The pane's identity block: the kind's icon, the name, the whole path —
-/// selectable, the one exact identifier — and, for a folder no longer on
+/// The pane's identity block: the kind's icon, the name, the folder holding
+/// it (the whole path in its tooltip) and, for a folder no longer on
 /// this Mac or an item the chain's newest backup no longer holds, when it
 /// was last backed up: the one fact of its standing the rows below do not
 /// already say. How many backups and versions hold it are the rows

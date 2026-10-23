@@ -29,7 +29,7 @@ extension AppModel {
     }
 
     /// Runs the plan's forget now, as the post-backup retention step does —
-    /// its "Also prune" included — in the plan's own slot, so Stop, the
+    /// its "Also clean up" included — in the plan's own slot, so Stop, the
     /// sidebar's spinner, quitting and the busy repository behave as for a
     /// backup. Guarded like `runMaintenance`: a busy repository says so
     /// instead of queueing.
@@ -66,7 +66,7 @@ extension AppModel {
 extension AppModel: RetentionRunEngine.Sink {
     /// The record, and nothing else: no banner, no local notification and
     /// no channel alert (see `RetentionRunEngine`). How it went is the plan
-    /// page's — its Snapshots count, or its problem card and the sidebar's
+    /// page's — its Backups count, or its problem card and the sidebar's
     /// caption for a failure — and Activity's, where a banner over every
     /// page said it again (the HIG review of 2026-10-18).
     func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {

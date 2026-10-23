@@ -11,13 +11,12 @@ import Testing
 /// back-dated snapshots, snapshots set aside as unreadable, and housekeeping
 /// skipped at random. The truth comes from the world, never from SQL.
 ///
-/// After every write the stored-state checks must hold ((a)–(c) only right
-/// after housekeeping). Check (i) runs by path: the nodes a reopen strands
-/// by dropping an open stream's stage — the one allowed
-/// exception — are recorded at that reopen and excused alone, so a node
-/// stranded any other way still fails the run, before or after a crash. At
-/// the end of every round the planner must reach `.done`, and every read
-/// must equal the truth.
+/// After every write the stored-state checks must hold ((a)–(c) and (l) only
+/// right after housekeeping). Check (i) runs by path: the nodes a reopen
+/// strands by dropping an open stream's stage — the one allowed exception — are
+/// recorded at that reopen and excused alone, so a node stranded any other way
+/// still fails the run, before or after a crash. At the end of every round the
+/// planner must reach `.done`, and every read must equal the truth.
 ///
 /// The default scale is modest so `./build.sh test` stays quick: 3 seeds of
 /// 15 rounds per variant. For a heavier run, 40 seeds of 30

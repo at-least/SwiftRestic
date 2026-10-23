@@ -31,12 +31,13 @@ struct RcloneRemotesTests {
     @Test("blank lines, stray text, and whitespace are tolerated")
     func messyOutput() {
         let remotes = RcloneRemoteLister.parse(
-            "\nmydrive: drive\r\n  spaced:  b2  \nnot a remote\n:noname\ntrailing:"
+            "\nmydrive: drive\r\n  my drive:  b2  \nnot a remote\n:noname\ntrailing:"
         )
         #expect(remotes == [
             RcloneRemote(name: "mydrive", type: "drive"),
-            // A remote name may contain spaces; the first colon splits it.
-            RcloneRemote(name: "spaced", type: "b2"),
+            // A remote name may contain a space, though not at either end
+            // (rclone.org/docs, "Valid remote names"); the first colon splits it.
+            RcloneRemote(name: "my drive", type: "b2"),
             // Colonless lines and nameless colons drop out.
             RcloneRemote(name: "trailing", type: ""),
         ])

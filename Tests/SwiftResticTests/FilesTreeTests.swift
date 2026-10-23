@@ -412,7 +412,7 @@ struct FilesTreeTests {
         let read = FilesTree.Level(entries: [], isComplete: true)
         let reads = ReadCount()
         // The first read is still in flight when its task is cancelled — a
-        // folder being read through restic when a listing restarts the load.
+        // folder still being read when a listing restarts the load.
         let tree = FilesTree { _, _ in
             reads.value += 1
             if reads.value == 1 { try await Task.sleep(for: .seconds(600)) }

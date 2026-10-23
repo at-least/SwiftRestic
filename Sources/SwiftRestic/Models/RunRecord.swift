@@ -30,9 +30,10 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 
     enum Outcome: String, Codable, Sendable {
         case succeeded, completedWithErrors, failed, cancelled
-        /// A backup with nothing to back up: every folder was missing — a
-        /// drive not plugged in — so restic wrote nothing. Stamps the slot;
-        /// no problem surface counts it (`detailText` says why).
+        /// A run whose plan's folder or repository is on a drive that is
+        /// away, or whose network repository's server is out of reach:
+        /// nothing was written. A skipped backup stamps its slot; no
+        /// problem surface counts it (`detailText` says why).
         case skipped
 
         var displayName: String {
@@ -157,9 +158,9 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// `files_restored` key).
     var filesSkipped: Int = 0
 
-    /// The plan's folders when a backup failed because none of them is on
-    /// this Mac and no drive it could wait for is away
-    /// (`folderGoneMessage(sources:)`). Nil for any other run.
+    /// The plan's path when a backup failed because it is missing from this
+    /// Mac and on no drive that is away (`folderGoneMessage(path:)`). Nil
+    /// for any other run.
     var missingSources: [String]?
 
     /// The network shares a backup, check or prune needed that refused to
@@ -340,13 +341,6 @@ extension RunRecord {
         return itemErrorCount > 0 ? .incomplete : .unknown
     }
 
-    /// The stored lines naming what restic could not read, without the
-    /// decoding and retention lines stored after them. `min` because a run
-    /// with more unreadable items than the cap stored only the cap's worth,
-    /// and a bare `prefix(itemErrorCount)` would reach into the trailing
-    /// lines. A scan-time complaint about an item the archiver then read
-    /// fine (a permission changed mid-run) is still among them — rare, and
-    /// restic gives no way to tell.
     /// The unreadable items a surface lists and how many more Activity's
     /// drawer holds past them, counted from restic's total (`itemErrorCount`),
     /// never the stored lines, which are capped: the drawer lists every
@@ -357,6 +351,13 @@ extension RunRecord {
         return (listed, max(0, itemErrorCount - listed.count))
     }
 
+    /// The stored lines naming what restic could not read, without the
+    /// decoding and retention lines stored after them. `min` because a run
+    /// with more unreadable items than the cap stored only the cap's worth,
+    /// and a bare `prefix(itemErrorCount)` would reach into the trailing
+    /// lines. A scan-time complaint about an item the archiver then read
+    /// fine (a permission changed mid-run) is still among them — rare, and
+    /// restic gives no way to tell.
     var unreadableItems: ArraySlice<String> {
         itemErrors.prefix(min(itemErrorCount, Self.storedItemErrorLimit))
     }
@@ -382,11 +383,6 @@ extension RunRecord {
 }
 
 extension RunRecord {
-    /// Maps a thrown error onto the outcome fields: task cancellation — Swift's
-    /// or restic's own — reads as `.cancelled`, with the caller saying whether
-    /// it was the user's stop or the app quitting, and anything else as
-    /// `.failed` with the error's message. Callers keep their own side effects:
-    /// stamps, banners, bookkeeping.
     /// restic's fatal line when every source of a backup is missing
     /// (restic 0.19.1, exit 1, no snapshot written).
     static let everySourceMissingMessage = "Fatal: all source directories/files do not exist"
@@ -395,7 +391,7 @@ extension RunRecord {
     /// folders — or the repository — live on, every one away, and why each
     /// network share among them could not be reconnected
     /// (`ShareReconnect`). A folder missing from this Mac is no skip
-    /// (`folderGoneMessage(sources:)`).
+    /// (`folderGoneMessage(path:)`).
     static func skippedReason(sources: [String], reconnectFailures: [String: String] = [:]) -> String {
         guard let drives = notConnected(sources) else { preconditionFailure("a skip with a source not on a volume: \(sources)") }
         return drives + "." + reconnectClauses(reconnectFailures, sources: sources)
@@ -509,6 +505,11 @@ extension RunRecord {
         return merged
     }
 
+    /// Maps a thrown error onto the outcome fields: task cancellation — Swift's
+    /// or restic's own — reads as `.cancelled`, with the caller saying whether
+    /// it was the user's stop or the app quitting, and anything else as
+    /// `.failed` with the error's message. Callers keep their own side effects:
+    /// stamps, banners, bookkeeping.
     mutating func setOutcome(from error: Error, cancellationMessage: String) {
         let cancelled = ResticError.isCancellation(error)
         outcome = cancelled ? .cancelled : .failed

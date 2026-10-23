@@ -34,10 +34,10 @@ final class AppModel {
         }
     }
     /// The backup run that wrote each snapshot, derived once per history
-    /// write rather than by every row that shows a snapshot (the sidebar's
-    /// backups, Activity's run drawer). A snapshot whose run was trimmed from
-    /// the history, or never recorded here, is simply absent — unknown, never
-    /// complete.
+    /// write rather than by every row that shows a snapshot (a page's
+    /// Backups tab, the Restore pane, Activity's run drawer). A snapshot
+    /// whose run was trimmed from the history, or never recorded here, is
+    /// simply absent — unknown, never complete.
     private(set) var backupRunsBySnapshot: [String: RunRecord] = [:]
 
     /// The backup run that wrote a snapshot, while the history still holds

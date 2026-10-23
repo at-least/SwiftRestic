@@ -40,7 +40,7 @@ struct RepositoryDetailView: View {
         // menus' — the HIG's macOS toolbars: "it doesn't make sense to
         // provide a toolbar item for every menu item". Edit Repository… is
         // the Repository menu's and the sidebar row's (Edit… there); Check,
-        // Prune, the lock and index repairs and Remove from SwiftRestic…
+        // Clean Up, the lock and index repairs and Remove from SwiftRestic…
         // are the Repository menu's (all acting on this page's repository)
         // and the row's (all but the two repairs), each through the one
         // shared confirmation; Refresh is the row's, and the menu's Refresh
@@ -71,8 +71,8 @@ struct RepositoryDetailView: View {
 
             // Arq's storage-location page, plus the two numbers a backup
             // user asks of a destination: how big, and how full is its disk.
-            // The backups themselves are the sidebar's, under the plans
-            // that made them.
+            // The backups themselves are on each plan's or group's page,
+            // its Backups tab.
             Card("Details") {
                 VStack(alignment: .leading, spacing: 10) {
                     DetailGrid {
@@ -269,11 +269,11 @@ struct RepositoryDetailView: View {
 
 }
 
-/// The Last check / Last prune value: the words alone after a run that
+/// The Last check / Last cleanup value: the words alone after a run that
 /// succeeded, else the same words as a route to the run in Activity — its
-/// drawer holds Check Again…, the log and Copy Details, so the page gains no
-/// maintenance control, and the route outlives the Recent problems card's
-/// week.
+/// drawer holds Check Again… or Clean Up Again…, the log and Copy
+/// Details, so the page gains no maintenance control, and the route
+/// outlives the Recent problems card's week.
 private struct MaintenanceRunValue: View {
     @Environment(AppRouter.self) private var router
     let text: String

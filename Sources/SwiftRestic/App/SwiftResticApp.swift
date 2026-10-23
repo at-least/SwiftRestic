@@ -405,10 +405,10 @@ struct SwiftResticApp: App {
         }
     }
 
-    /// The repository selected in the sidebar — or the one a selected
-    /// Restore record or plan uses. The repository page keeps no maintenance
-    /// buttons of its own: Check, Prune and the repairs are here, and the
-    /// first two on the sidebar row's menu. Nothing destructive has a key.
+    /// Acts on `commandRepositoryID(for:)`. The repository page keeps no
+    /// maintenance buttons of its own: Check, Clean Up and the repairs are
+    /// here, and the first two on the sidebar row's menu. Nothing
+    /// destructive has a key.
     private var repositoryMenu: some Commands {
         CommandMenu("Repository") {
             let r = model.repositoryCommands(for: router.selection)

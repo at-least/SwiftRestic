@@ -165,6 +165,9 @@ extension AppModel {
         indexTakenGeneration[id] = nil
         pendingSnapshotRefreshes.remove(id)
         repositoriesMissingPassword.remove(id)
+        upkeepAwaitingDrive.remove(id)
+        upkeepAwaitingServer.remove(id)
+        backupQueue[id] = nil
         statsFailureNoted.remove(id)
         resolvedContexts[id] = nil
         fileHistoryAnswers = fileHistoryAnswers.filter { $0.key.repositoryID != id }

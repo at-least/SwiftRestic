@@ -85,15 +85,14 @@ struct ProtectionCard: View {
 
 // MARK: - Other backups
 
-/// The repository page's Other backups card — the adopt flow's landing
-/// place, for a repository added with history already in it: one row per
-/// adoptable plan-UUID group, with the group's own Adopt… beside it. An
+/// The repository page's Other backups card — the adopt flow's landing place,
+/// for a repository added with history already in it: one row per adoptable
+/// plan-UUID group, with the group's own Adopt as a Backup Plan… beside it. An
 /// exception to "the sidebar lists them": the rows carry a verb, the card
-/// exists only while something can be adopted, and the groups it leaves
-/// out — a moved plan's, an untagged lineage's — stay visible in the
-/// sidebar beside it, counted by the Details split rather than restated
-/// here. It hides while the listing has not succeeded, and adopting the
-/// last group empties it away.
+/// exists only while something can be adopted, and the groups it leaves out — a
+/// moved plan's, an untagged lineage's — stay visible in the sidebar beside it,
+/// counted by the Details split rather than restated here. It hides while the
+/// listing has not succeeded, and adopting the last group empties it away.
 struct OtherBackupsCard: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -142,9 +141,9 @@ struct OtherBackupsCard: View {
     }
 
     /// One adoptable group. The row opens the group's page — the in-page
-    /// row grammar, hover and trailing chevron — and Adopt… sits before the
-    /// chevron as its own control, Retry's grammar: never a button inside
-    /// a button.
+    /// row grammar, hover and trailing chevron — and Adopt as a Backup Plan…
+    /// sits before the chevron as its own control, Retry's grammar: never a
+    /// button inside a button.
     private func row(planID: UUID, label: SnapshotLineage.Label) -> some View {
         HStack(spacing: 8) {
             Button {

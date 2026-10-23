@@ -1059,6 +1059,24 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("deleting a repository clears its waiting upkeep and its backup queue")
+    func deletingRepositoryClearsWaitingState() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let id = harness.repository.id
+        harness.model.markDriveAway(repositoryID: id)
+        harness.model.markServerAway(repositoryID: id)
+        harness.model.backupQueue[id] = [QueuedBackup(planID: harness.plan.id, askedByUser: true)]
+
+        harness.model.deleteRepository(id: id)
+
+        #expect(!harness.model.upkeepAwaitingDrive.contains(id))
+        #expect(!harness.model.upkeepAwaitingServer.contains(id))
+        #expect(harness.model.backupQueue[id] == nil)
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Run history
 
     @Test("the run history is capped at twenty even when every run succeeds")
@@ -1099,6 +1117,13 @@ struct AppModelStubTests {
         #expect(model.holdsOffSleep)
         await model.waitForMaintenance(repositoryID: harness.repository.id)
         #expect(!model.holdsOffSleep, "a finished check let go of the assertion")
+
+        model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "plainfail"
+        model.runBackup(planID: harness.plan.id)
+        #expect(model.holdsOffSleep)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.configuration.runs.first?.outcome == .failed)
+        #expect(!model.holdsOffSleep, "a failed backup let go of the assertion")
 
         await model.shutdown()
     }

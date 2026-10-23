@@ -25,7 +25,7 @@ struct OtherGroupPageSummary: Equatable {
     var isAdoptable: Bool
     var newestAt: Date
     var oldestAt: Date
-    /// Where the page's Restore Files… lands — the group's newest record.
+    /// The group's newest backup.
     var newestSnapshotID: String
     /// The Mac the backups came from, or "N Macs — the list" when several
     /// did — the count first, so a long hostname cannot push it out.
@@ -46,8 +46,8 @@ struct OtherGroupPageSummary: Equatable {
     /// The user tags among the backups' tags — everything but plan tags,
     /// which are the group's own plumbing. Empty hides the row.
     var userTags: [String]
-    /// A plan-UUID group's one honest identifier, selectable on the page;
-    /// nil for an untagged lineage, which has none.
+    /// A plan-UUID group's one honest identifier; nil for an untagged
+    /// lineage, which has none.
     var planTag: String?
 
     /// `snapshots` are the group's, newest first as `OtherBackupsGroup`

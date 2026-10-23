@@ -262,8 +262,8 @@ private final class ChangeMap: @unchecked Sendable {
         storage[Self.key(change)] = change
     }
 
-    /// The key a change's row is stored under: bytewise-normalized path,
-    /// directories' trailing slash included (see `insert`).
+    /// The key a change's row is stored under: the bytewise-normalized
+    /// path, a directory's trailing slash dropped (see `insert`).
     static func key(_ change: ResticDiffChange) -> String { ResticPath.normalized(change.path) }
 
     var map: [String: ResticDiffChange] {

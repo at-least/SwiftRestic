@@ -2,9 +2,8 @@ import Foundation
 import Testing
 
 /// The sidebar's shape, as the pure rules the view lays out: repositories at
-/// the top, each with its plans — which fold open to their own backups — the
-/// way to its first plan while it has none, and Other backups for whatever
-/// no plan of the repository made.
+/// the top, each with its plans, the way to its first plan while it has
+/// none, and Other backups for whatever no plan of the repository made.
 @Suite("Sidebar tree")
 struct SidebarTreeTests {
     /// A plan is called by its path's last component, so `name` ends it.

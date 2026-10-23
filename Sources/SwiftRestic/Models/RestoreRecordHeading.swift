@@ -156,7 +156,8 @@ struct RestoreRecordHeading: Equatable, Sendable {
     /// The record's moment. Kept apart from `name` so the view can truncate a
     /// long qualifier and never the day.
     var time: String
-    /// The record's short ID and what its Change column compares against.
+    /// What the Change column compares against; the backup's ID is in
+    /// `detail`.
     var caption: String
     /// The tooltip: folders, host, who wrote them, and both full IDs — the
     /// open record called a backup, as every restore surface calls it.

@@ -100,8 +100,6 @@ struct RunDetailPanel: View {
             // Records that predate destination tracking have none; their
             // rows are left out rather than guessed.
             if let destination = run.destinationPath {
-                // "Snapshot" beside the Snapshot row, as Copy Details says it;
-                // "backup" is the Restore pane's word.
                 if let paths = run.sourcePaths {
                     // The names in the row, every full path in the tooltip.
                     DetailRow("Items") {
@@ -343,10 +341,11 @@ struct ConsoleRouteButton: View {
     }
 }
 
-/// The drawer's Snapshot row, in its own view so the listing lookup behind
+/// The drawer's Backup row, in its own view so the listing lookup behind
 /// it reruns only when the run or the repository's listing changes — not on
-/// every write the drawer's other rows observe. Browse opens the record
-/// in the sidebar; Compare with Previous… is the diff's one way in.
+/// every write the drawer's other rows observe. Browse opens the backup
+/// on its page's Backups tab; Compare with Previous… is the diff's one
+/// way in.
 private struct RunSnapshotRow: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router

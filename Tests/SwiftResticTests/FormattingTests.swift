@@ -2,9 +2,9 @@ import Foundation
 import Testing
 
 /// The literal branches of the shared formatters: the sentinel strings and the
-/// guards around them. Everything a system formatter localises ("1 hr", "5 MB")
-/// is asserted only structurally, so the suite does not depend on the test
-/// machine's locale.
+/// guards around them. The formatters take the machine's locale, and most pins
+/// here are exact English ("1m 30s", "Today 9:00 PM"), so the suite assumes an
+/// en locale.
 @Suite("Shared formatting")
 struct FormattingTests {
     @Test("missing values read as an em dash, never as an empty string")

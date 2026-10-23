@@ -79,7 +79,7 @@ struct RetentionPreview: Sendable, Equatable {
     }
 
     /// The run record's Detail after the real forget: what went, and
-    /// whether its data went with it (the plan's "Also prune").
+    /// whether its data went with it (the plan's "Also clean up").
     static func appliedSummary(removed: Int, pruned: Bool) -> String {
         guard removed > 0 else { return "No backups needed removing." }
         let snapshots = Format.plural(removed, "backup")

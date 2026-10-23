@@ -152,8 +152,9 @@ enum SnapshotIndexSchema {
     /// the point for both: a reopen ends any stream (`stage`), and `gc` is
     /// scratch.
     static let temporary = """
-    -- The one open full-listing stream: one snapshot's rows at a time (beginFull clears it
-    -- before its session stages anything). Keyed node-first so GC can ask "is it staged?".
+    -- The one open full-listing stream: one snapshot's rows at a time (beginFull clears
+    -- another snapshot's before its session stages anything). Keyed node-first so GC can
+    -- ask "is it staged?".
     CREATE TEMP TABLE IF NOT EXISTS stage (
         node_id  INTEGER NOT NULL,
         snap_id  INTEGER NOT NULL,

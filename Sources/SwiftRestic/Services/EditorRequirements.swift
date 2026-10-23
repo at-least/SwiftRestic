@@ -9,7 +9,7 @@ import Foundation
 enum EditorRequirements {
     /// The first requirement `BackupPlan.isConfigurationComplete` checks but
     /// does not name, in the order the plan sheet's header presents them —
-    /// Back up, Repository — then the one a configuration checks: a
+    /// Folder or file, Repository — then the one a configuration checks: a
     /// repository holds one plan per path (`plans`, every configured plan,
     /// the draft's own saved entry among them), its history being restic's
     /// for that path. That one binds a plan being added — new, or adopted

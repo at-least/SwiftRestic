@@ -55,7 +55,7 @@ struct RetentionProjectionTests {
     @Test("hourly and daily rules overlap; a snapshot survives once")
     func overlappingRules() throws {
         // Hourly 3 keeps the runs at 12:00, 11:00, 10:00. Daily 2 keeps the
-        // newest run of Sep 8 (12:00 — already kept) and of Sep 7 (12:00).
+        // newest run of Sep 8 (12:00 — already kept) and of Sep 7 (23:00).
         // Four distinct snapshots, not five.
         let outcome = try #require(RetentionProjection.project(
             policy: policy(hourly: 3, daily: 2),
@@ -91,8 +91,8 @@ struct RetentionProjectionTests {
         ))
         // 24 hourly + 7 daily + 4 weekly + 12 monthly + 3 yearly, minus
         // overlaps — bounded between the largest single rule and their sum.
-        #expect(outcome.keptSnapshots >= 12)
-        #expect(outcome.keptSnapshots <= 70)
+        #expect(outcome.keptSnapshots >= 24)
+        #expect(outcome.keptSnapshots <= 50)
         // The yearly rule reaches into the third year back: its newest
         // survivor is the New Year's Eve run of 2024, ~616 days before now.
         #expect(outcome.historyDays >= 600)

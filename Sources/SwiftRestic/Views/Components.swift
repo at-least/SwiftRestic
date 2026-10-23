@@ -609,8 +609,8 @@ struct SnapshotListingCaveat: View {
 
 // MARK: - Snapshot completeness
 
-/// A snapshot's completeness, where snapshots are named (the sidebar's
-/// backups, Activity's run drawer). Only trouble wears a glyph — the rule
+/// A snapshot's completeness, where snapshots are named (a page's
+/// Backups tab, Activity's run drawer). Only trouble wears a glyph — the rule
 /// Activity's outcome column follows — and it is the completed-with-errors
 /// triangle, because that is what the run behind it was. A known-complete
 /// snapshot keeps an invisible "Complete" for VoiceOver; one with no run
@@ -726,8 +726,8 @@ enum BrowserListGrammar {
     }
 }
 
-/// The row a Files-view folder lists for one node: icon, name, and the size
-/// and modification columns. (The restore pane's change-annotated row is
+/// The row a Files-view folder lists for one node: icon, name, its change
+/// mark and a file's size. (The restore pane's change-annotated row is
 /// its own shape.)
 struct SnapshotNodeRow: View {
     let node: SnapshotNode
@@ -775,7 +775,7 @@ struct PathListEditor: View {
     var systemImage = "folder.badge.gearshape"
     @Binding var paths: [String]
     var placeholder = "Add a pattern"
-    /// Choose…'s panel: what it asks for and its button.
+    /// Choose Items…'s panel: what it asks for and its button.
     var browseMessage = "Choose folders and files to leave out of backups"
     var browsePrompt = "Add"
     /// Excludes: an item chosen in the panel or dropped from Finder is
@@ -903,8 +903,8 @@ struct PathListEditor: View {
 
 // MARK: - Exclude rows
 
-/// An exclude rule's row — the Excluding card's, the editor's list's and
-/// the developer switch's disclosure's: the line as restic is given it,
+/// An exclude rule's row — the Excluding card's and the editor's list's,
+/// the developer switch's rules among them: the line as restic is given it,
 /// and below it, for a rule the app offered, what it leaves out and who
 /// puts it back. Stacked, so a long pattern and its label each keep the
 /// row's width.

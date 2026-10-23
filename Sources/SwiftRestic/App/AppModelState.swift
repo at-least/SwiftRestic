@@ -155,7 +155,7 @@ enum SidebarItem: Hashable {
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     case console
     /// Find Files: a page with no row, as the console has none — reached
-    /// from Repository ▸ Find Files in Snapshots… (⇧⌘F) off a page with a
+    /// from Repository ▸ Find Files in Backups… (⇧⌘F) off a page with a
     /// Files tab, a repository page's search field, and Search All
     /// Backups…. Until 2026-10-18 a sheet, whose restores stacked a second
     /// sheet on it.
@@ -223,8 +223,8 @@ struct FileNode: Hashable, Sendable {
 ///
 /// Not the in-flight state — `loadingSnapshots` owns that. A refresh that
 /// starts while a repository is in `failed` keeps the failure visible until
-/// it settles, so a background refresh cycle cannot make the error row
-/// flicker to a spinner and back every five minutes.
+/// it settles, so a background refresh cannot make the error row flicker
+/// to a spinner and back.
 enum SnapshotListingOutcome: Equatable {
     /// Never loaded: the app is still bootstrapping, or the refresh has not
     /// been attempted for this repository.

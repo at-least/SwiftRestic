@@ -47,9 +47,6 @@ extension AppModel {
         }
     }
 
-    /// Reconnects the saved shares among `volumes` — volumes a backup needs
-    /// that are away. A volume no share is saved for is left to the run's
-    /// away checks, as before; it gets no entry.
     /// One connection attempt to a network repository's server
     /// (`ServerProbe`), with the environment restic would run with — a proxy
     /// there means nothing is probed.
@@ -59,6 +56,9 @@ extension AppModel {
         return await serverProbe.check(repository, environment)
     }
 
+    /// Reconnects the saved shares among `volumes` — volumes a backup needs
+    /// that are away. A volume no share is saved for is left to the run's
+    /// away checks, as before; it gets no entry.
     func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
         var results: [ShareReconnect] = []
         for volume in volumes {

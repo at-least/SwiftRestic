@@ -704,7 +704,7 @@ struct FilesTreeRow: View {
     /// Why the chain's newest backup lacks it, when that backup's own run
     /// could not read it (`UnreadItems.reason`).
     let notRead: String?
-    /// The name, or for a root its whole path, tilde-abbreviated.
+    /// The name, or the path for a node with none.
     let title: String
     let isExpanded: Bool
     let onToggle: () -> Void

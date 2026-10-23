@@ -423,8 +423,8 @@ struct SnapshotIndexTests {
         #expect(summaries.values.allSatisfy { $0.count == 1 && $0.newest.id == "s1" })
     }
 
-    /// The Restore pane asks `contains` for every hit of a search, up to the
-    /// search's ceiling — far past one chunk.
+    /// `contains` takes a path list of any length; past one chunk it must
+    /// still answer every path.
     @Test("contains crosses the lookup chunk without losing paths")
     func containsCrossesChunkBoundary() async throws {
         let fixture = try IndexFixture()
@@ -764,9 +764,10 @@ struct SnapshotIndexTests {
             == ["/b/report", "/c/report", "/a/report-2"])
     }
 
-    /// Find Files lists a hit under its summary's newest snapshot and
-    /// restores it with the hit's kind; read together, the two describe that
-    /// same snapshot — even when equal times make "newest" a tiebreak.
+    /// Find Files shows a hit's kind on a row of its summary's newest
+    /// snapshot, and a restore of that row reads the kind in that snapshot
+    /// again (`contains`); the two must agree — even when equal times make
+    /// "newest" a tiebreak.
     @Test("searchWithSummaries' kind is the kind in its summary's newest snapshot, through a time tie")
     func searchWithSummariesKindMatchesNewest() async throws {
         let fixture = try IndexFixture()

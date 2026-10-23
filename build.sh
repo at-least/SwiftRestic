@@ -83,7 +83,7 @@ ACTION="${1:-build}"
 # signal term"), xcodebuild restarts it, the remaining tests pass, and the
 # run is still marked failed — verified live 2026-09-14, with a foreign
 # xcodebuild launching its own test runners seconds before each of our
-# runner's three deaths. The suite costs four minutes; a collision wastes
+# runner's three deaths. The suite costs about ten minutes; a collision wastes
 # all of it, so refuse to start while another instance exists. Test actions
 # only: a concurrent plain build does not touch the test-runner machinery.
 # Limits worth knowing: the check runs at start only (a session launched

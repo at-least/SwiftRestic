@@ -154,16 +154,16 @@ enum Scheduler {
         }
     }
 
-    /// A repository page's Last check or Last prune: the newest such run
-    /// of the repository, how long ago it started and — when it did not
-    /// succeed — how it ended ("3 days ago · failed"), since the stamp the
-    /// scheduler keeps is written for every attempt. The stamp's moment
-    /// alone when the history holds no run as new as it.
     /// The Maintenance card's Cleanup row while cleanup is off: stated, not
     /// hidden — retention runs after every backup, and only a prune frees
     /// what it removed.
     static let pruneOffText = "Off — space from removed backups isn't freed"
 
+    /// A repository page's Last check or Last cleanup: the newest such run
+    /// of the repository, how long ago it started and — when it did not
+    /// succeed — how it ended ("3 days ago · failed"), since the stamp the
+    /// scheduler keeps is written for every attempt. The stamp's moment
+    /// alone when the history holds no run as new as it.
     static func lastMaintenanceText(
         _ task: MaintenanceTask,
         of repository: Repository,
@@ -211,7 +211,7 @@ enum Scheduler {
         return newest
     }
 
-    /// A repository page's Next check or Next prune, as the scheduler will
+    /// A repository page's Next check or Next cleanup, as the scheduler will
     /// start it: the app-wide hold holds upkeep too, so a timed hold moves
     /// the date to its end and a due task under an open-ended one (Until I
     /// Resume, the battery) reads "Waiting", as a due plan's Next backup

@@ -182,7 +182,7 @@ extension AppModel: MaintenanceRunEngine.Sink {
     /// Stores a finished maintenance run with its log, announces a skip
     /// the user asked for, and notifies the external channels. A failure —
     /// a check that found errors is one where hooks are concerned — posts
-    /// no banner: the repository page's Last check or Last prune, its
+    /// no banner: the repository page's Last check or Last cleanup, its
     /// Recent problems and Activity's badge say it.
     func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
         var record = record

@@ -22,9 +22,8 @@ enum DiffCandidateGrouping {
         months(in: candidates, time: \.time, calendar: calendar)
     }
 
-    /// The same bucketing for anything with a moment — a folder's backups
-    /// in the Files pane's "As backed up" picker, a plan's in the sidebar's
-    /// fold, which share the Compare sheet's months.
+    /// The same bucketing for anything with a moment, so every list of
+    /// backups shares the Compare sheet's months.
     static func months<Item>(in items: [Item], time: (Item) -> Date, calendar: Calendar = .current) -> [Month<Item>] {
         var order: [DateComponents] = []
         var labels: [DateComponents: String] = [:]
@@ -59,8 +58,8 @@ enum DiffCandidateGrouping {
     /// flat under its caption and each older month is a submenu, so
     /// sixteen months of hourly backups open as one short menu rather than
     /// a 500-row scroll. Up to it the months are captions in one list
-    /// (`landmarks`), as decided for a history of a season; the sidebar's
-    /// fold keeps its captions whatever the span.
+    /// (`landmarks`), as decided for a history of a season; a page's
+    /// Backups tab keeps its captions whatever the span.
     static let flatMonthLimit = 3
 
     /// A picker's shape for `months` (newest first): the newest month flat

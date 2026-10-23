@@ -595,8 +595,9 @@ struct MenuBarStatusTests {
         failed.finishedAt = failed.startedAt
 
         // Runs outlive the repository that produced them — removing it keeps
-        // the history — so the line must yield explicitly, or a `?` icon's
-        // menu would open leading with "Nightly failed 2 hours ago".
+        // the history — so the line must yield explicitly, or the menu of an
+        // app with no repository would open leading with "Nightly failed 2
+        // hours ago".
         #expect(MenuBarStatus.problemLine(runs: [failed], hasNoRepositories: true) == nil)
         #expect(MenuBarStatus.problemLine(runs: [failed], hasNoRepositories: false) != nil)
 

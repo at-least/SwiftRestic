@@ -7,7 +7,7 @@ struct PlanDetailView: View {
     @Environment(\.now) private var now
     let planID: UUID
     /// Sends the pane to Activity — the "Last backup" value's destination,
-    /// wired by RootView so this view owns no navigation of its own.
+    /// wired by RootDetailView so this view owns no navigation of its own.
     var onShowRun: (() -> Void)? = nil
     /// The Files tab's "Search All Backups…": Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void

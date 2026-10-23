@@ -536,13 +536,12 @@ extension SnapshotIndex {
     }
 }
 
-/// A fixture's index whose every write is followed by
-/// `invariantViolations()`: (d)–(k) after each write, whether it succeeded
-/// or threw, and (a)–(c) too right after housekeeping. A violation becomes a
-/// test issue at the caller's line. The scripted suites write through this,
-/// except where a test's point is a write it cannot make: a numbered
-/// reconcile, a file prepared for the schema check, a stage planted to fail
-/// check (j).
+/// A fixture's index whose every write is followed by `invariantViolations()`:
+/// (d)–(k) and (m) after each write, whether it succeeded or threw, and (a)–(c)
+/// and (l) too right after housekeeping. A violation becomes a test issue at
+/// the caller's line. The scripted suites write through this, except where a
+/// test's point is a write it cannot make: a numbered reconcile, a file
+/// prepared for the schema check, a stage planted to fail check (j).
 final class CheckedIndex {
     let fixture: IndexFixture
     /// Letters known to be legitimately broken from here on (a reopen

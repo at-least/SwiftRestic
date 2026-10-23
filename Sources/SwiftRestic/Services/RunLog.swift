@@ -65,9 +65,10 @@ enum RunLog {
                 lines.append("… \(Format.plural(transcript.omittedLineCount, "line")) omitted …")
             }
             // restic's lines arrive one per entry; an app-written note can
-            // carry restic's multi-line words (a lock refusal inside
-            // "Retention skipped: …"), whose later lines stay under the text
-            // column instead of passing for untagged output at the margin.
+            // carry restic's multi-line words (a failed forget's error
+            // inside "Retention skipped: …"), whose later lines stay under
+            // the text column instead of passing for untagged output at the
+            // margin.
             let prefix = "\(clock.string(from: entry.time)) \(tag(for: entry.kind)) "
             let pieces = entry.text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
             lines.append(prefix + (pieces.first.map(String.init) ?? ""))

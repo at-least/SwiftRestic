@@ -25,7 +25,8 @@ struct DiffRestoreSelectionTests {
         let selection = try #require(RestoreSelection(DiffRestoreSelection.sources([gone, goneInside, checklist, changed], holder: holder)))
         #expect(selection.sources.map(\.path) == ["/src/sub", "/src/onboarding-checklist.txt", "/src/notes.txt"])
         #expect(selection.sources.map(\.snapshotID) == ["a1", "a1", "a2"])
-        // A diff names no node: restic lists each before restoring.
+        // A diff names no node: the restore finds each one's kind in its
+        // backup first.
         #expect(selection.sources.allSatisfy { $0.node == nil })
         #expect(selection.note == "“x.txt” is inside “sub” and is restored with it.")
 

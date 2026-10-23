@@ -106,6 +106,12 @@ struct PlanStatusTests {
             PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).value
                 == "Not scheduled"
         )
+        // The plan page has no Configuration card; Edit Plan… is where the
+        // setup is finished.
+        #expect(
+            PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).help
+                == "The scheduler skips this plan until its setup is complete. To finish it, choose Edit Plan…."
+        )
 
         // A repository ID the configuration no longer holds is the same skip.
         let dangling = completeDailyPlan()

@@ -171,8 +171,8 @@ struct OverviewMetricsTests {
         // The surfaces that say when a plan last backed up — the sidebar
         // caption, the repository page's Protection line, the plan page's
         // Last backup value — all read PlanStatus.lastBackupAt, spelled by
-        // one formatter as of one tick. The tray and Settings say no last
-        // backup at all.
+        // one formatter as of one tick. The menu bar's menu repeats the
+        // Protection line.
         let repository = UUID()
         let tick = Date.now
         let ago = { Format.ago($0, now: tick) }

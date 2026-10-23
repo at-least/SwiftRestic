@@ -313,9 +313,9 @@ extension SnapshotIndex {
     // MARK: - The stage
 
     /// The snapshot whose stream the stage holds rows of, if any. It holds
-    /// one snapshot's at most — `beginFull` clears it before its session can
-    /// stage a row, and only that session stages — so the first row answers
-    /// (`invariantViolations()` (j) checks the premise).
+    /// one snapshot's at most — `beginFull` clears another snapshot's before
+    /// its session can stage a row, and only that session stages — so the
+    /// first row answers (`invariantViolations()` (j) checks the premise).
     static func stageOwner(_ db: Database) throws -> Int64? {
         try Int64.fetchOne(db.cachedStatement(sql: SQL.stageOwner))
     }

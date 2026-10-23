@@ -1,13 +1,8 @@
 import Foundation
 
-/// A run's words outside its log: the Activity Detail column, the drawer's
-/// rows, Copy Details, and the name every app-wide surface calls the run by.
-/// The one place a run's one-line summary is worded, built on the plan
-/// page's facts (`PlanStatus.facts(for:)`) so Activity and the plan row
-/// cannot disagree.
 /// The one action that fixes a failure whose cause the app knows, offered
 /// where the failure is read — the Activity drawer and the plan's problem
-/// card. Each is a Repository menu item, under the menu's own word.
+/// card. Each title is a menu command's, under the menu's own word.
 enum RunFix: Equatable {
     /// restic exit 12: the stored password does not open the repository.
     case editRepository(UUID)
@@ -91,11 +86,12 @@ enum MaintenanceRetry: Equatable {
     }
 }
 
+/// A run's words outside its log: the Activity Detail column, the drawer's
+/// rows, Copy Details, and the name every app-wide surface calls the run by.
+/// The one place a run's one-line summary is worded, built on the plan
+/// page's facts (`PlanStatus.facts(for:)`) so Activity and the plan row
+/// cannot disagree.
 enum RunRecordPresentation {
-    /// The fix for a failed run, or nil when its cause has none the app can
-    /// perform. Only while the repository is still set up; Unlock…
-    /// only while no run here holds a lock on it, so "stale" means
-    /// nobody here is using it.
     /// The re-run a failed check or prune offers, or one that found errors;
     /// nil for any other run, a clean one, or one whose repository is gone.
     static func maintenanceRetry(for run: RunRecord, repositoryExists: Bool) -> MaintenanceRetry? {
@@ -117,6 +113,10 @@ enum RunRecordPresentation {
         return run.repositoryID
     }
 
+    /// The fix for a failed run, or nil when its cause has none the app can
+    /// perform. Only while the repository is still set up; Unlock…
+    /// only while no run here holds a lock on it, so "stale" means
+    /// nobody here is using it.
     static func fix(
         for run: RunRecord,
         repositoryExists: Bool,
@@ -274,7 +274,7 @@ enum RunRecordPresentation {
         case .restore:
             return restoreDetail(run) ?? run.outcome.displayName
         case .forget:
-            // Apply Retention Now…'s count ("Removed 2 snapshots. Their data
+            // Apply Retention Now…'s count ("Removed 2 backups. Their data
             // stays until the next cleanup."), one short line.
             return run.detailText ?? run.outcome.displayName
         case .check:
@@ -431,9 +431,7 @@ enum RunRecordPresentation {
             }
         case .restore:
             // A record with no stored destination says nothing: "Entire
-            // snapshot" would be a guess about it. That word is the
-            // drawer's, beside its Snapshot row — "backup" is the Restore
-            // pane's.
+            // backup" would be a guess about it.
             if let destination = run.destinationPath {
                 if let paths = run.sourcePaths {
                     lines.append("Items: \(paths.joined(separator: ", "))")

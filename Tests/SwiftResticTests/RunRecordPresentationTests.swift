@@ -685,8 +685,6 @@ struct RunRecordPresentationTests {
             versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1")
         )
         let lines = text.components(separatedBy: "\n")
-        // The drawer keeps "snapshot" beside its Snapshot row; "backup" is
-        // the Restore pane's word.
         #expect(lines.contains("Item: Entire backup"), "details were \(lines)")
         #expect(lines.contains("Restored to: /tmp/restored"))
     }

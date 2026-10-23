@@ -173,8 +173,8 @@ struct SidebarView: View {
         Button("Edit…") { onEditRepository(repository) }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
         Divider()
-        // The two the pane and the menu bar offer that a row most often
-        // wants; the shared confirmations ask first.
+        // The two of the Repository menu's a row most often wants; the
+        // shared confirmations ask first.
         Button("Check…") { router.request(.confirm(.check(repository.id))) }
             .disabled(!commands.canMaintain)
         Button("Clean Up Now…") { router.request(.confirm(.prune(repository.id))) }
@@ -611,10 +611,9 @@ private struct PlanSidebarRow: View {
     }
 }
 
-/// What a page's Backups tab says while it lists no backup — and a Files
-/// tab whose chain has none. "No backups yet" only once a listing has
-/// succeeded: before that it is still being read, and after a failure it
-/// says why.
+/// What a page's Backups tab says while it lists no backup. "No backups
+/// yet" only once a listing has succeeded: before that it is still being
+/// read, and after a failure it says why.
 struct BackupsStatusRow: View {
     @Environment(AppModel.self) private var model
     let repositoryID: UUID

@@ -36,8 +36,8 @@ enum RestoreDestinationKind: String, Sendable, CaseIterable {
 /// it.
 enum RestoreSubject: Sendable, Equatable {
     case item(name: String, path: String, isDirectory: Bool)
-    /// Two or more items — the Restore pane's multiple selection, with any
-    /// item inside a selected folder already dropped
+    /// Two or more items, with any item inside a selected folder already
+    /// dropped
     /// (`RestoreBatch.covering`).
     case items([RestoreItem])
     case wholeSnapshot(paths: [String])

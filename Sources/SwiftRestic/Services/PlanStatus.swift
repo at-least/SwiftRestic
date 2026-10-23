@@ -171,15 +171,6 @@ enum PlanStatus {
             .max { $0.startedAt < $1.startedAt }
     }
 
-    /// The plan page's Next backup value, from the same enumeration the
-    /// scheduler and the tray read, so the page cannot show a date nothing
-    /// will fire at. A paused plan says so instead of "Manually" — a paused
-    /// manual one without promising a schedule to resume; an enabled plan
-    /// the scheduler skips — no folders, or a repository it cannot find —
-    /// says it is not scheduled. A timed pause, the plan's own or the
-    /// app-wide `hold`, moves the date to its end; under an open-ended hold
-    /// a due run reads "Waiting", never "Due now". A due slot whose backup
-    /// is in flight reads "Running now".
     /// The plan editor's Schedule tab: the Next backup tile of the plan as
     /// Save would store it — the stored plan's run stamps and pause under
     /// the draft's schedule (`merging(draft:)`) — so the editor cannot
@@ -203,6 +194,15 @@ enum PlanStatus {
         )
     }
 
+    /// The plan page's Next backup value, from the same enumeration the
+    /// scheduler and the tray read, so the page cannot show a date nothing
+    /// will fire at. A paused plan says so instead of "Manually" — a paused
+    /// manual one without promising a schedule to resume; an enabled plan
+    /// the scheduler skips — an incomplete setup, or a repository it cannot
+    /// find — says it is not scheduled. A timed pause, the plan's own or the
+    /// app-wide `hold`, moves the date to its end; under an open-ended hold
+    /// a due run reads "Waiting", never "Due now". A due slot whose backup
+    /// is in flight reads "Running now".
     static func nextBackupTile(
         for plan: BackupPlan,
         existingRepositoryIDs: Set<UUID>,
@@ -236,7 +236,7 @@ enum PlanStatus {
         ).first?.date else {
             return TileFace(
                 value: "Not scheduled",
-                help: "The scheduler skips this plan until its setup is complete — see Configuration below."
+                help: "The scheduler skips this plan until its setup is complete. To finish it, choose Edit Plan…."
             )
         }
         // Nothing stamps the slot until the run ends, so "Running now"
@@ -309,7 +309,7 @@ enum PlanStatus {
         return nil
     }
 
-    /// The plan page's Configuration row: the sidebar's pause words, with
+    /// The plan page's Schedule row: the sidebar's pause words, with
     /// the schedule named under a pause — the row is where the schedule is
     /// stated, so it never drops it. An open-ended pause's caption already
     /// names it (a manual plan's has none); a timed one's names only its

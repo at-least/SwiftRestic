@@ -25,7 +25,7 @@ struct RootView: View {
     /// follows, in it (`startNewPlan`, `continuePlanAfterRepository`).
     @State private var planAfterRepository: PlanAfterRepository?
     /// The one confirmation up, from whichever surface asked — the menu
-    /// bar, a pane's toolbar, a sidebar menu. See `CommandPresentations`.
+    /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
     /// Apply Retention Now…'s sheet, for the plan it previews.
     @State private var retentionTarget: RetentionTarget?
@@ -144,11 +144,11 @@ struct RootView: View {
     }
 
     /// The toolbar's look and the banner announcements. Each pane carries
-    /// its own verbs, and no button is app-wide: a plan's or a group's page
-    /// searches in its Files tab's own field, the Restore pane's and the
-    /// Files tab's searches carry on in Find Files through their Search All
-    /// Backups…, and the Repository menu's Find Files in Snapshots… (⇧⌘F)
-    /// reaches the field or the sheet from anywhere. The console stays in
+    /// its own verbs, and no button is app-wide: a plan's page searches in
+    /// its Files tab's own field, the Restore pane's and the Files tab's
+    /// searches carry on in Find Files through their Search All Backups…,
+    /// and the Repository menu's Find Files in Backups… (⇧⌘F) reaches the
+    /// field or the Find Files page from anywhere. The console stays in
     /// the Repository menu too (restic Console…).
     private func chrome<V: View>(over content: V) -> some View {
         content
@@ -216,8 +216,8 @@ struct RootView: View {
     }
 
     /// A fresh plan for the editor, its repository preset when the ask came
-    /// from one: the editor fills in the first repository only when none is
-    /// set (`PlanEditorSheet`'s appear), so the preset survives.
+    /// from one: the editor fills in a repository only when none is set
+    /// (`PlanEditorSheet`'s appear), so the preset survives.
     private func newPlan(in repositoryID: UUID?) -> BackupPlan {
         var plan = BackupPlan()
         plan.repositoryID = repositoryID

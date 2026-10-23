@@ -95,17 +95,6 @@ enum MenuBarStatus {
             .max { $0.finishedAt < $1.finishedAt }
     }
 
-    /// The newest problem in the run history that still stands, as one
-    /// sentence, or `nil` while there is none. From `OverviewMetrics.problems`'s
-    /// week it drops the backup failures a later successful backup of the same
-    /// plan healed (`OverviewMetrics.isHealed`, the sidebar's rule): the dot
-    /// and this line lead the user in, and leading with a failure forever
-    /// would read as permanent breakage.
-    ///
-    /// Yields to `hasNoRepositories`: it must not answer the `unconfigured`
-    /// face with a failure of a removed repository's runs.
-    ///
-    /// `plans` and `repositories` name the subject by the one run-naming rule.
     /// One disabled line per repository whose listing has loaded, in the
     /// Protection line's exact words — "Home NAS — 3 of 3 plans protected ·
     /// Last backup 3 hours ago" — so the menu answers "did my backups run?"
@@ -118,6 +107,17 @@ enum MenuBarStatus {
         }
     }
 
+    /// The newest problem in the run history that still stands, as one
+    /// sentence, or `nil` while there is none. From `OverviewMetrics.problems`'s
+    /// week it drops the backup failures a later successful backup of the same
+    /// plan healed (`OverviewMetrics.isHealed`, the sidebar's rule): the dot
+    /// and this line lead the user in, and leading with a failure forever
+    /// would read as permanent breakage.
+    ///
+    /// Yields to `hasNoRepositories`: it must not answer the `unconfigured`
+    /// state with a failure of a removed repository's runs.
+    ///
+    /// `plans` and `repositories` name the subject by the one run-naming rule.
     static func problemLine(
         runs: [RunRecord],
         hasNoRepositories: Bool,

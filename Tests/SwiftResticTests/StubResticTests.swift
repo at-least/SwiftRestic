@@ -1079,7 +1079,7 @@ struct StubResticTests {
         let fixture = try makeFixture(mode: "default")
         defer { cleanUp(fixture.root) }
         var plan = fixture.plan
-        // Also prune is on: the real forget would prune, the preview must not.
+        // Also clean up is on: the real forget would prune, the preview must not.
         plan.retention.runPrune = true
 
         let preview = try await fixture.service.forgetPreview(fixture.context, plan: plan)

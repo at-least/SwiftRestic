@@ -506,10 +506,10 @@ struct DSTScheduleTests {
         return calendar
     }
 
-    /// A wall-clock instant in Los Angeles. Unlike `DateFormatter`, which
-    /// returns nil for a time inside the spring-forward gap, `Calendar`
-    /// resolves a nonexistent time to the edge of the gap — which is exactly
-    /// the behaviour under test.
+    /// A wall-clock instant in Los Angeles. Inside the spring-forward gap
+    /// `DateFormatter` returns nil, while `Calendar.date(from:)` moves the
+    /// time forward by the gap: 02:30 on 2026-03-08 is 03:30 PDT, not the
+    /// 03:00 the scheduler's `nextDate(…, matchingPolicy: .nextTime)` gives.
     private func la(_ hour: Int, _ minute: Int = 0, _ day: Int, _ month: Int, year: Int = 2026) -> Date {
         losAngeles.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
@@ -700,7 +700,7 @@ struct MaintenanceSchedulingTests {
         #expect(MaintenancePolicy().nextDate(for: .prune, addedAt: added) == nil)
     }
 
-    @Test("a new repository's checks read its data in twelve slices where reading costs only time; a cloud's, and one saved before, read the structure")
+    @Test("a new repository's checks read its data in twelve slices where reading costs only time; a cloud's reads the structure, and one saved before keeps its setting")
     func newRepositoryCheckDepth() throws {
         for kind in [Repository.Kind.local, .sftp] {
             let policy = MaintenancePolicy.forNewRepository(kind: kind)
@@ -849,7 +849,7 @@ struct MaintenanceSchedulingTests {
         #expect(last([]) == ago)
     }
 
-    @Test("the repository page's Next check and Next prune wait under a hold, and move to a timed hold's end")
+    @Test("the repository page's Next check and Next cleanup wait under a hold, and move to a timed hold's end")
     func nextMaintenanceUnderAHold() {
         let repository = repository {
             $0.maintenance.checkIntervalDays = 7

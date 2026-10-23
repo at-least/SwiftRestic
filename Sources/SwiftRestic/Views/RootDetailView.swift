@@ -124,8 +124,9 @@ struct RootDetailView: View {
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }
-        // A refresh can drop the selected record (retention ran, the
-        // repository was re-initialised); the pane must not dead-end.
+        // A refresh can drop the selected Other-backups group (retention
+        // ran, the repository was re-initialised); the pane must not
+        // dead-end.
         .onChange(of: model.snapshots) {
             onRevalidateSelection()
         }
