@@ -637,8 +637,9 @@ the generator after editing it; the PNGs are checked in.
   holds the item (the newer for added or changed, the older for removed);
   an item the newer backup's own run could not read is marked *!*, not
   read rather than removed, and the footer counts them;
-  the restore lists the node with restic first, since a diff names only a
-  path and a kind. Several rows restore together as in Find Files:
+  the restore reads the item's kind in that backup first — the index's,
+  or restic's listing where the index has not read it — since a diff names
+  only a path and a kind. Several rows restore together as in Find Files:
   *Restore Selected…* (Return) or the right-click *Restore N Items…*, one
   destination and one run ("from 2 backups, each item from the one it was
   found in"), a row inside a selected folder of the same backup coming with

@@ -333,8 +333,9 @@ struct FolderVersionsView: View {
     /// The selected items, or with nothing selected the folder itself, as
     /// of the chosen backup (`RestoreDestinationRequest.picked`'s rule). The
     /// items are the chosen backup's listing; the folder itself goes by its
-    /// path, which restic lists first: the picker offers every backup
-    /// holding the path, and one may hold it as a file (`RestoreSource.node`).
+    /// path, its kind in that backup read before it restores: the picker
+    /// offers every backup holding the path, and one may hold it as a file
+    /// (`RestoreSource.node`).
     private func restoreSelection() {
         guard let chosen else { return }
         let picked = selectedNodes.isEmpty

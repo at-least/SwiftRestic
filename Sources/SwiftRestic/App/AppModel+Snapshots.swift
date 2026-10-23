@@ -236,11 +236,19 @@ extension AppModel {
         return all.filter { $0.tags.contains(tag) }
     }
 
+    /// `path` as a node of its kind in a backup the index has read — no
+    /// restic process; nil when the index has not read that backup, or it
+    /// does not hold the path. Name, path and kind only: a restore routes by
+    /// nothing else.
+    func indexedNode(repositoryID: UUID, snapshotID: String, path: String) async throws -> SnapshotNode? {
+        let kinds = try await kinds(of: [path], inSnapshot: snapshotID, repositoryID: repositoryID)
+        guard let isDirectory = kinds[PathKey(path)] else { return nil }
+        return SnapshotNode(name: ResticPath.basename(of: path), type: isDirectory ? .dir : .file, path: path)
+    }
+
     /// The node restic lists for `path` in a backup — its parent's listing,
     /// matched by bytes: a sibling whose name only canonically equals this
-    /// one is another file. For a restore asked by path, its kind not read
-    /// for that backup (`RestoreSource.node`). A path the backup no longer
-    /// lists fails loudly.
+    /// one is another file. A path the backup no longer lists fails loudly.
     func listedNode(repositoryID: UUID, snapshotID: String, path: String) async throws -> SnapshotNode {
         let siblings = try await children(repositoryID: repositoryID, snapshotID: snapshotID, path: ResticPath.parent(of: path))
         guard let node = siblings.first(where: { PathKey($0.path) == PathKey(path) }) else {

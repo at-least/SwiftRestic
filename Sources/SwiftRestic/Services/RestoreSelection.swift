@@ -13,8 +13,10 @@ struct RestoreSource: RestoreBatchItem, Sendable, Equatable {
     /// restic's node for it, or one whose kind was read for this very
     /// backup: the restore takes its file or folder route from it as it is.
     /// Nil when the kind in hand was read anywhere else — another backup, a
-    /// diff, the disk — and restic lists the item in this backup first
-    /// (`AppModel.listedNode`): a path can be a file in one backup and a
+    /// diff, the disk — and the restore reads its kind in this backup first:
+    /// the index's, or restic's listing where the index has not read the
+    /// backup (`AppModel.restore(_:repositoryID:into:overwrite:)`): a path
+    /// can be a file in one backup and a
     /// folder in the next, and the other route fails it. A file restored as
     /// a folder is refused as "not a directory", an empty folder left at its
     /// landing; a folder restored as a file, where a folder of its name

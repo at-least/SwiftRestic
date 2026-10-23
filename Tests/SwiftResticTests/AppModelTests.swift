@@ -253,8 +253,8 @@ struct AppModelTests {
         try #require(backups.count == 2)
 
         // Find Files' index rows: the folder at the newer backup, the deleted
-        // file at the older, the newest that holds it — no node, so restic
-        // lists each first.
+        // file at the older, the newest that holds it — no node, so each
+        // one's kind in its backup is read first.
         let rows = [
             RestoreSource(name: source.lastPathComponent, path: source.path, isDirectory: true, snapshotID: backups[1].id, backupTime: backups[1].time, node: nil),
             RestoreSource(name: "b.txt", path: b.path, isDirectory: false, snapshotID: backups[0].id, backupTime: backups[0].time, node: nil),
@@ -339,6 +339,15 @@ struct AppModelTests {
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let older = try #require(model.snapshots(for: id, planID: harness.plan.id).min { $0.time < $1.time })
+        // Both backups indexed, so each kind comes from the index, not a listing.
+        let deadline = Date.now.addingTimeInterval(60)
+        while await !model.indexIsComplete(repositoryID: id), Date.now < deadline {
+            await model.tasks.drain()
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try #require(await model.indexIsComplete(repositoryID: id))
+        #expect(try await model.indexedNode(repositoryID: id, snapshotID: older.id, path: x.path)?.isDirectory == false)
+        #expect(try await model.indexedNode(repositoryID: id, snapshotID: older.id, path: y.path)?.isDirectory == true)
 
         func restore(_ item: URL, isDirectory: Bool, into directory: URL) async throws {
             let selection = try #require(RestoreSelection([RestoreSource(

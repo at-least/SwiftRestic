@@ -222,7 +222,7 @@ Launching and quitting:
 - **A restic call held open, on demand**: point `resticPathOverride` at a wrapper that logs its argv, sleeps while a marker file names its subcommand, and otherwise execs restic. Holding `snapshots` shows a surface before the listing lands. The sleep must end on TERM: a run's cancel sends TERM to the wrapper (`Process.terminate`), and a bare `sleep` under bash outlives the wrapper's death. Which call each surface makes:
   - Every restore is `restore`. A single file's is `restore <id>:<its folder> --include /<name>` into a hidden folder beside its landing from 2026-10-20 on; before, it was `restic dump`, the call the 2026-10-19 holds below held.
   - A plan's retention step is `forget`.
-  - A Find Files index hit is listed by `ls` of its folder before it restores. That `ls` misses the browse cache, which holds only folders restic has listed: here, none until the Files tab first shows.
+  - A Find Files index hit restores with its kind in its backup read from the index, no `ls`, from 2026-10-23 on; before, it was listed by `ls` of its folder first, which missed the browse cache. An item whose backup the index has not read is still listed by `ls`.
   - A cold index (no `index` folder) makes Find Files take the restic engine, whose rows carry restic's nodes and restore at once.
   On 2026-10-19:
   - `forget` held 25 s let Back Up All Plans Now be pressed during a plan's retention step (6d7b4c7).
@@ -237,7 +237,7 @@ Launching and quitting:
   - Keep raises no Replace alert.
   - Original location puts a scratch plan's file back in its scratch folder.
   - On 2026-10-19, eight Restore presses ran so, and two on 2026-10-20, none touching the Desktop.
-- **The refused restore can be raised live.** The sheet's Restore is disabled only while a restore runs, so the one gap is a listing. A Find Files index hit's restore lists its folder first, and Restore… elsewhere stays enabled meanwhile. On 2026-10-19:
+- **The refused restore can be raised live.** The sheet's Restore is disabled only while a restore runs, so the one gap is a listing. On 2026-10-19 a Find Files index hit's restore listed its folder first, and Restore… elsewhere stayed enabled meanwhile; from 2026-10-23 an index hit reads its kind from the index, so the gap needs an item whose backup the index has not read. On 2026-10-19:
   - The hit's Restore was pressed with `ls` held 30 s, then the Files tab's Restore… of the same file, with `dump` held 60 s.
   - When the listing returned, 31 s after the first press, "A restore is already running" showed, on 8bb001d and on 942dd90's build alike.
   - The refused restore writes no record and no file.

@@ -254,9 +254,9 @@ struct FileVersionsView: View {
     }
 
     /// The chosen version through the destination sheet: the find's node
-    /// once it has answered, else the path, which restic lists first: the
-    /// versions span every backup holding the path, and one may hold it as
-    /// a folder (`RestoreSource.node`).
+    /// once it has answered, else the path, its kind in that backup read
+    /// before it restores: the versions span every backup holding the path,
+    /// and one may hold it as a folder (`RestoreSource.node`).
     private func restoreChosen() {
         guard let chosen, let backup = chosen.snapshots.first else { return }
         let repositoryID = node.repositoryID

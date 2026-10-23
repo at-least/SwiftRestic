@@ -54,7 +54,7 @@ struct RestoreSelectionTests {
         #expect(selection.backupTime == nil)
         #expect(selection.snapshotShortID == "487ad622")
         #expect(selection.note == "“keep.txt” is inside “notes” and is restored with it.")
-        // The row's node travels with it: nil means restic lists it first.
+        // The row's node travels with it: nil means its kind in that backup is read first.
         #expect(selection.sources.map { $0.node == nil } == [false, true])
     }
 

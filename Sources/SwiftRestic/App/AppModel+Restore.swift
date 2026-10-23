@@ -62,9 +62,10 @@ extension AppModel {
 
     /// A picked selection's restore, once the destination sheet has its
     /// directories, one per item in order: each item's node — the row's own,
-    /// or listed by restic first (`listedNode`) — then one item restores as a
-    /// single item always has, several together. A listing that fails
-    /// restores nothing and says why in a banner.
+    /// else its kind in that backup from the index (`indexedNode`), else
+    /// listed by restic (`listedNode`) where the index has not read that
+    /// backup — then one item restores as a single item always has, several
+    /// together. A read that fails restores nothing and says why in a banner.
     func restore(
         _ selection: RestoreSelection,
         repositoryID: UUID,
@@ -78,6 +79,10 @@ extension AppModel {
                 let node: SnapshotNode
                 if let known = source.node {
                     node = known
+                } else if let indexed = try await indexedNode(
+                    repositoryID: repositoryID, snapshotID: source.snapshotID, path: source.path
+                ) {
+                    node = indexed
                 } else {
                     node = try await listedNode(repositoryID: repositoryID, snapshotID: source.snapshotID, path: source.path)
                 }
