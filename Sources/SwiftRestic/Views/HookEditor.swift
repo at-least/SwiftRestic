@@ -160,7 +160,7 @@ struct HookEditor: View {
                 } else {
                     // Only a before hook can call the run off; by the time the
                     // others run the work is already done.
-                    LabeledContent("If it fails", value: "Recorded in the run history")
+                    LabeledContent("If it fails", value: "Recorded in Activity")
                 }
 
                 DisclosureGroup("Available variables") {
@@ -193,7 +193,7 @@ struct HookEditor: View {
     SWIFTRESTIC_PLAN_ID           plan UUID
     SWIFTRESTIC_REPO_NAME         repository name
     SWIFTRESTIC_REPO_ID           repository UUID
-    SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed
+    SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed | skipped
     SWIFTRESTIC_SNAPSHOT_ID       set once the backup is written
     SWIFTRESTIC_ERROR             set only when something failed
     SWIFTRESTIC_FILES_NEW         file count
@@ -210,7 +210,7 @@ struct HookEditor: View {
     SWIFTRESTIC_PLAN_ID           empty — repository hooks have no plan
     SWIFTRESTIC_REPO_NAME         repository name
     SWIFTRESTIC_REPO_ID           repository UUID
-    SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed
+    SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed | skipped
     SWIFTRESTIC_FILES_NEW         0 — no backup ran
     SWIFTRESTIC_FILES_CHANGED     0 — no backup ran
     SWIFTRESTIC_BYTES_PROCESSED   0 — no backup ran

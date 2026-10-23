@@ -11,7 +11,7 @@ import Foundation
 extension RunRecord {
     /// A failed or completed-with-errors backup: what a stretch counts.
     var isBackupProblem: Bool {
-        kind == .backup && (outcome == .failed || outcome == .completedWithErrors)
+        kind == .backup && outcome.isProblem
     }
 
     /// A backup that leaves its plan's stretch as it was: skipped whole — a

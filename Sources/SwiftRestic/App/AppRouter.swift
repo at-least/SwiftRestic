@@ -271,7 +271,7 @@ final class AppRouter {
         }
         backupsSearchText[page] = nil
         backupSelection[page] = snapshotID
-        pageTabs[page] = .backups
+        setTab(.backups, of: page)
         selection = page
     }
 
@@ -291,9 +291,9 @@ final class AppRouter {
 /// A page's views — the toolbar's Overview | Backups | Files on a plan's
 /// page, Overview | Backups on a group's under Other backups
 /// (`SidebarItem.pageTabs`): its overview; its backups, each one's files
-/// beside the list; and its folders and files, each by version. The backups
-/// were the sidebar's, folded under their plan, until the HIG review of
-/// 2026-10-18: a sidebar shows no more than two levels.
+/// beside the list; and its folders and files, each by version. Not the
+/// sidebar's, folded under their plan: a sidebar shows no more than two
+/// levels (HIG, Sidebars).
 enum PageTab: Hashable, CaseIterable {
     case overview
     case backups

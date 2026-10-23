@@ -16,8 +16,8 @@ extension AppModel {
             // Name the repository: a Keychain failure for one repository
             // must not read as a problem with another's.
             post(Banner(
-                title: "Keychain",
-                message: "Could not save “\(label(of: repository))”'s password: \(error.localizedDescription)",
+                title: "Could not save the password for “\(label(of: repository))”",
+                message: error.localizedDescription,
                 isError: true
             ))
         }
@@ -62,7 +62,10 @@ extension AppModel {
             removedPlanNames: plans(in: repositoryID).map { label(of: $0) },
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID && activity[$0.id] != nil }
+                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.isBackup == true }
+                .map { label(of: $0) },
+            applyingRetentionNames: configuration.plans
+                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.isBackup == false }
                 .map { label(of: $0) },
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID
@@ -79,6 +82,7 @@ extension AppModel {
         removedPlanNames: [String],
         isRestoring: Bool,
         runningBackupNames: [String],
+        applyingRetentionNames: [String],
         isMaintaining: Bool,
         isConsoleRunning: Bool
     ) -> String {
@@ -95,6 +99,9 @@ extension AppModel {
         }
         if !runningBackupNames.isEmpty {
             consequences += " A backup (\(runningBackupNames.joined(separator: ", "))) is running and will be cancelled."
+        }
+        if !applyingRetentionNames.isEmpty {
+            consequences += " Retention is being applied to \(applyingRetentionNames.joined(separator: ", ")) and will be cancelled."
         }
         if isMaintaining {
             consequences += " Repository maintenance is running and will be cancelled."

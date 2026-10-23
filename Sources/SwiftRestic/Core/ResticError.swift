@@ -10,8 +10,12 @@ enum ResticError: Error, LocalizedError, Equatable {
     case commandFailed(exitCode: Int32, message: String)
     /// The run was cancelled by the user.
     case cancelled
-    /// A repository referenced by a plan is missing from the config.
+    /// The repository asked for is no longer in the configuration.
     case repositoryMissing
+    /// The plan asked for is no longer in the configuration.
+    case planMissing
+    /// The item a restore asked for by path is not in its backup's listing.
+    case itemNotListed(name: String)
     /// No password is stored for the repository.
     case passwordMissing(repositoryName: String)
     case processLaunchFailed(String)
@@ -92,7 +96,11 @@ enum ResticError: Error, LocalizedError, Equatable {
         case .cancelled:
             return "The operation was cancelled."
         case .repositoryMissing:
-            return "This plan points at a repository that no longer exists."
+            return "This repository is no longer in SwiftRestic."
+        case .planMissing:
+            return "This plan is no longer in SwiftRestic."
+        case let .itemNotListed(name):
+            return "“\(name)” is no longer listed in the chosen backup — refresh and try again."
         case let .passwordMissing(name):
             return "No password is stored for the repository “\(name)”."
         case let .processLaunchFailed(reason):

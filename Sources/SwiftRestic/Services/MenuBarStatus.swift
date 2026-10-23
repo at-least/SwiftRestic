@@ -377,7 +377,7 @@ enum MenuBarStatus {
     /// visibility as any other restic work.
     static func consoleLine(isRunning: Bool) -> RunningLine? {
         guard isRunning else { return nil }
-        return RunningLine(id: "console", text: "Console — command running")
+        return RunningLine(id: "console", text: "restic Console — command running")
     }
 
     /// Progress as the menu bar shows it: a percentage once restic is

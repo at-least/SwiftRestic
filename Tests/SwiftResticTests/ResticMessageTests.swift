@@ -265,7 +265,6 @@ struct ResticMessageTests {
             from: Data(json.utf8)
         )
         #expect(stats.totalSize == 80_314_095)
-        #expect(stats.totalBlobCount == 105)
         #expect(stats.snapshotsCount == 2)
     }
 
@@ -323,8 +322,11 @@ struct FindDecodingTests {
         let results = try ResticMessageDecoder.jsonDecoder.decode([FindResult].self, from: Data(json.utf8))
         #expect(results.count == 1)
         let result = try #require(results.first)
-        #expect(result.hits == 1)
         #expect(result.snapshot.hasPrefix("6ed59088"))
+        // A result naming no backup is a format change, never a backup "".
+        #expect(throws: DecodingError.self) {
+            try ResticMessageDecoder.jsonDecoder.decode([FindResult].self, from: Data(#"[{"matches":[]}]"#.utf8))
+        }
 
         let match = try #require(result.matches.first)
         #expect(match.name == "a.txt")
@@ -385,7 +387,11 @@ struct FindDecodingTests {
         #expect(stats.added.bytes == 1874)
         #expect(stats.removed.files == 1)
         #expect(stats.removed.bytes == 1500)
-        // Echoes the command line, so it is a short ID here.
-        #expect(stats.sourceSnapshot == "bfdafeae")
+        // A key gone is a format change, never a zero.
+        let short = #"{"message_type":"statistics","added":{"files":1,"dirs":1,"bytes":1874},"removed":{"files":1,"dirs":0,"bytes":1500}}"#
+        guard case .malformed? = ResticMessageDecoder.decode(line: short) else {
+            Issue.record("a statistics line without changed_files decoded")
+            return
+        }
     }
 }

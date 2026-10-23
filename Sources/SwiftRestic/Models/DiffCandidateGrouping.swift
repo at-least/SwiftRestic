@@ -43,7 +43,8 @@ enum DiffCandidateGrouping {
             }
             grouped[key, default: []].append(item)
         }
-        return order.map { Month(label: labels[$0] ?? "", items: grouped[$0] ?? []) }
+        // Every key in `order` was labelled and grouped above.
+        return order.map { Month(label: labels[$0]!, items: grouped[$0]!) }
     }
 
     /// The months of a long list, as landmarks to park the eye on — nil
@@ -96,8 +97,7 @@ enum DiffCandidateGrouping {
         }
         var shared: Set<String> = []
         for (key, count) in counts where count > 1 {
-            guard let time = representatives[key] else { continue }
-            shared.insert(displayedMinute(time))
+            shared.insert(displayedMinute(representatives[key]!))
         }
         return shared
     }

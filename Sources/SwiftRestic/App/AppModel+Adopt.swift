@@ -65,10 +65,10 @@ extension AppModel {
         }
         // Plan tags are the group's plumbing; what the user tagged is everything else.
         draft.tags = prefill.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
-        // Daily — a new plan's default — only when every prefilled folder is
-        // here to back up. Otherwise the folders are likely another Mac's,
-        // and a plan that cannot run here must not start on a schedule.
-        draft.schedule.frequency = Self.allSourcesExist([draft.path]) ? .daily : .manual
+        // Daily — a new plan's default — only when the prefilled folder is
+        // here to back up. Otherwise it is likely another Mac's, and a plan
+        // that cannot run here must not start on a schedule.
+        draft.schedule.frequency = Self.sourceExists(draft.path) ? .daily : .manual
         // The history is the point of adopting: nothing thins it until a
         // policy is chosen with the dry run's answer in view.
         draft.retention.isEnabled = false
@@ -108,7 +108,7 @@ extension AppModel {
         // came from another Mac, or — this Mac's own — it is gone.
         if prefill.hostname != localHostname {
             warnings.append("The folder comes from another Mac and may not exist here.")
-        } else if !Self.allSourcesExist([draft.path]) {
+        } else if !Self.sourceExists(draft.path) {
             warnings.append(Self.missingSourcesWarning)
         }
         // Both conditions: a stale foreign host is not another Mac still
@@ -186,12 +186,10 @@ extension AppModel {
     /// beside the plan editor's path.
     static let missingSourcesWarning = "This folder isn't on this Mac."
 
-    /// Whether every source folder (or file) is on this Mac now, tilde
+    /// Whether a plan's folder (or file) is on this Mac now, tilde
     /// expanded — the fact behind both the schedule's default and the
-    /// missing-folders warning.
-    static func allSourcesExist(_ sources: [String]) -> Bool {
-        sources.allSatisfy {
-            FileManager.default.fileExists(atPath: ($0 as NSString).expandingTildeInPath)
-        }
+    /// missing-folder warning.
+    nonisolated static func sourceExists(_ path: String) -> Bool {
+        FileManager.default.fileExists(atPath: (path as NSString).expandingTildeInPath)
     }
 }

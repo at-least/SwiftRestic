@@ -10,9 +10,9 @@ import SwiftUI
 /// repository holds backups none of its plans made (`BackupShelves`) — their
 /// groups, by the plan that made them when a plan tag says which, by folders
 /// and Mac otherwise. A plan's or a group's row is a page whose Backups tab
-/// lists its backups beside the one open: the content list, where until
-/// 2026-10-18 each folded open here, a year of rows deep. The context menus
-/// and the Add footer ride along.
+/// lists its backups beside the one open: the content list, not a fold
+/// here a year of rows deep. The context menus and the Add footer ride
+/// along.
 ///
 /// Every row is a top-level List row, and a repository's children are
 /// leading indentation (`Indent`). Only places carry a tag — a repository,
@@ -109,7 +109,7 @@ struct SidebarView: View {
     /// Arq's bare + in the corner. A missing restic is not repeated here: the
     /// banner above every pane (RootDetailView) already says it, with the
     /// install instruction a cursor-only triangle could not show. The bar
-    /// background stays — an open fold scrolls under it.
+    /// background stays — a long list scrolls under it.
     private var sidebarFooter: some View {
         HStack(spacing: 8) {
             Menu {
@@ -377,8 +377,7 @@ struct SidebarView: View {
             case let .plan(id, snapshots):
                 groupRow(
                     page: .orphanPlan(repositoryID: repository.id, planID: id),
-                    snapshots: snapshots,
-                    label: labels[.plan(id)],
+                    label: labels[.plan(id)]!,
                     repository: repository
                 )
                 .contextMenu {
@@ -390,7 +389,8 @@ struct SidebarView: View {
                 }
             case let .lineage(lineage):
                 let page = SidebarItem.lineage(repositoryID: repository.id, key: lineage.key)
-                groupRow(page: page, snapshots: lineage.snapshots, label: labels[.lineage(lineage.key)], repository: repository)
+                // `otherLabels` labels every group it is given.
+                groupRow(page: page, label: labels[.lineage(lineage.key)]!, repository: repository)
                     // Its backups and its files: no plan to open or adopt.
                     .contextMenu { showMenuItems(page, snapshots: lineage.snapshots, repository: repository) }
             }
@@ -405,12 +405,12 @@ struct SidebarView: View {
     /// label's caption and tooltip say which kind it is.
     private func groupRow(
         page: SidebarItem,
-        snapshots: [Snapshot],
-        label: SnapshotLineage.Label?,
+        label: SnapshotLineage.Label,
         repository: Repository
     ) -> some View {
-        let title = label?.title ?? "Backups"
-        let caption = label?.caption ?? .init(count: Format.plural(snapshots.count, "backup"))
+        let title = label.title
+        // `OtherBackupsGroup.labels` gives every group's label a caption.
+        let caption = label.caption!
         return Label {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -423,7 +423,7 @@ struct SidebarView: View {
         }
         .padding(.leading, Indent.child)
         .tag(page)
-        .help(label?.detail ?? "")
+        .help(label.detail)
         // The same plan, or the same folders from the same Mac, can have
         // left backups in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(model.label(of: repository))”")
@@ -455,7 +455,7 @@ struct SidebarView: View {
 
     /// Show Backups — the page's Backups tab, its newest backup open: the
     /// way into a group's backups from its row. A group's page has no Files
-    /// tab (2026-10-19), so no Show Files.
+    /// tab, so no Show Files.
     @ViewBuilder
     private func showMenuItems(_ page: SidebarItem, snapshots: [Snapshot], repository: Repository) -> some View {
         Button("Show Backups") {

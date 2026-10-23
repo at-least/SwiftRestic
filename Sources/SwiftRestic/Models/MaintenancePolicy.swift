@@ -52,11 +52,11 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
         return checkReadDataPercent > 0 ? .percent(checkReadDataPercent) : nil
     }
 
-    /// A new repository's depth by where it is (the user's pick,
-    /// 2026-10-17): its data read in slices where reading costs only time —
-    /// this Mac's disks, a network share, an SFTP server; the structure
-    /// alone where reading may be billed — a cloud provider, an rclone
-    /// remote, a REST server on a metered host — until chosen in the editor.
+    /// A new repository's depth by where it is (the user's pick): its data
+    /// read in slices where reading costs only time — this Mac's disks, a
+    /// network share, an SFTP server; the structure alone where reading may
+    /// be billed — a cloud provider, an rclone remote, a REST server on a
+    /// metered host — until chosen in the editor.
     static func defaultCheckDepth(for kind: Repository.Kind) -> CheckDepth {
         switch kind {
         case .local, .sftp: .rotating
@@ -72,9 +72,8 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
 
     /// What the editor gives a new repository: prune on, every 30 days, the
     /// first one 30 days after the repository is added — retention runs
-    /// after every backup, and only a prune frees what it removed
-    /// (2026-10-09) — and its kind's check depth (2026-10-17). A repository
-    /// saved before keeps its own settings.
+    /// after every backup, and only a prune frees what it removed — and its
+    /// kind's check depth. A repository saved before keeps its own settings.
     static func forNewRepository(kind: Repository.Kind) -> MaintenancePolicy {
         var policy = MaintenancePolicy()
         policy.pruneEnabled = true

@@ -62,6 +62,13 @@ private func reconnectAwayShares(
     return answers.filter { $0.failureReason != nil }
 }
 
+/// What a finished backup left for the plan's stamps: nothing (a failure, a
+/// cancel, a skip), or a snapshot of the plan's path
+/// (`BackupPlan.lastSuccessAt`).
+enum BackupStamp: Equatable, Sendable {
+    case nothing, whole
+}
+
 /// One backup run's lifecycle, so the sequencing — hooks → start ping →
 /// backup → retention → closing refresh → record — is unit-testable against
 /// a mock engine.
@@ -71,13 +78,6 @@ private func reconnectAwayShares(
 /// through the sink, which `AppModel` implements. `AppModel.runBackup` and
 /// friends remain the facade the views and the scheduler call — this type is
 /// not reachable from outside the model layer.
-/// What a finished backup left for the plan's stamps: nothing (a failure, a
-/// cancel, a skip), or a snapshot of the plan's path
-/// (`BackupPlan.lastSuccessAt`).
-enum BackupStamp: Equatable, Sendable {
-    case nothing, whole
-}
-
 @MainActor
 enum BackupRunEngine {
     /// The model surface a backup run drives. `AppModel` conforms; tests

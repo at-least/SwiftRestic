@@ -45,13 +45,15 @@ struct RootDetailView: View {
             // The one disabled-state whose cause the user cannot see from the
             // panes themselves: every restic-backed control is grey, and this
             // is why.
-            if !model.isResticAvailable {
+            // Only once the search for restic has answered: until then the
+            // binary is unknown, not missing.
+            if let problem = model.binaryProblem {
                 // Built in place, not posted: the condition is the model's
                 // binary state, so there is nothing to dismiss.
                 BannerView(
                     banner: Banner(
                         title: "restic is missing",
-                        message: model.binaryProblem ?? "restic could not be found. Install it with `brew install restic`, or set the path in Settings.",
+                        message: problem,
                         isError: true
                     ),
                     isDismissible: false
@@ -72,7 +74,6 @@ struct RootDetailView: View {
                     if let plan = model.plan(id: id) {
                         PlanDetailView(
                             planID: plan.id,
-                            onShowRun: { router.selection = .activity },
                             onSearchAllBackups: onSearchAllBackups
                         )
                     } else {

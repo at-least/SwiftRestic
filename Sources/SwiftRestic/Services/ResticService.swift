@@ -7,10 +7,6 @@ struct RepositoryContext: Sendable {
     var password: String
     var providerSecret: String?
 
-    /// Keys the app itself owns — see `ResticRunner.protectedEnvironmentKeys`,
-    /// which strips the same set from every child's inherited environment.
-    static let protectedEnvironmentKeys = ResticRunner.protectedEnvironmentKeys
-
     var environment: [String: String] {
         var env = repository.credentialEnvironment(secret: providerSecret)
         env.merge(repository.extraEnvironment) { _, new in new }
@@ -30,7 +26,7 @@ struct RepositoryContext: Sendable {
     /// editor screen can tell the user their setting has no effect.
     var overriddenExtraEnvironmentKeys: [String] {
         repository.extraEnvironment.keys
-            .filter { Self.protectedEnvironmentKeys.contains($0) }
+            .filter { ResticRunner.protectedEnvironmentKeys.contains($0) }
             .sorted()
     }
 
@@ -275,10 +271,7 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        guard let data = result.stdout.data(using: .utf8) else {
-            throw ResticError.commandFailed(exitCode: 0, message: "stats produced no output")
-        }
-        return try ResticMessageDecoder.jsonDecoder.decode(RepositoryStats.self, from: data)
+        return try ResticMessageDecoder.jsonDecoder.decode(RepositoryStats.self, from: Data(result.stdout.utf8))
     }
 
     func check(_ context: RepositoryContext, readDataSubset: CheckDataSubset?) async throws -> ResticSummary? {
@@ -789,9 +782,9 @@ struct ResticService: ResticClient {
     /// given subtree the root of the output. A single file goes through
     /// `restoreItems` — `restic restore <id>:<parent> --include /<name>` —
     /// into a hidden folder beside its landing, so it comes back with the
-    /// dates, permissions and extended attributes restic recorded, which
-    /// `restic dump` (this branch's command before) never wrote: the bytes
-    /// were all it gave, the restore's own time the file's modified date.
+    /// dates, permissions and extended attributes restic recorded — not
+    /// `restic dump`, which writes the bytes alone, the restore's own time
+    /// the file's modified date.
     ///
     /// `overwrite` always reaches restic explicitly, even for Replace, whose
     /// `always` is restic's default (0.17+): the command line in the run's
@@ -802,8 +795,7 @@ struct ResticService: ResticClient {
     /// name, and gives a folder that already exists the backed-up
     /// permissions and dates. The landing itself is safe —
     /// `createDirectory` below fails on a file there before restic runs.
-    /// The file branch keeps and replaces in-app, as it did when it dumped:
-    /// restic rewrites an existing file in place, so a failed or cancelled
+    /// The file branch keeps and replaces in-app: restic rewrites an existing file in place, so a failed or cancelled
     /// restore straight onto the landing would leave a file that is neither
     /// the user's nor the backed-up one. An existing landing skips restic
     /// entirely under Keep; the file lands by rename only once restic is

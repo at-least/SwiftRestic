@@ -1098,8 +1098,9 @@ final class BackfillBuffer: @unchecked Sendable {
         lock.unlock()
         if let failed { throw failed }
         // A buffer told to stop never declares coverage — the snapshot stays
-        // pending and the unwinding walk above handles its own error.
-        guard !cancelled else { return }
+        // pending. Its walk unwinds with its own error and never finishes
+        // it; one that did must not read as a full read landed.
+        if cancelled { throw CancellationError() }
         guard !empty else { throw IncompleteStream.emptyListing }
         // The decisive call propagates directly rather than being captured:
         // a failure here is exactly what must surface.

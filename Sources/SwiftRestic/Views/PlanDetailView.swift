@@ -6,9 +6,6 @@ struct PlanDetailView: View {
     /// The window's minute clock: Last backup and Next backup are as of it.
     @Environment(\.now) private var now
     let planID: UUID
-    /// Sends the pane to Activity — the "Last backup" value's destination,
-    /// wired by RootDetailView so this view owns no navigation of its own.
-    var onShowRun: (() -> Void)? = nil
     /// The Files tab's "Search All Backups…": Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
@@ -41,8 +38,7 @@ struct PlanDetailView: View {
         // Plan ▸ Edit Plan… and the sidebar row's Edit…, deleting Plan ▸
         // Delete Plan… and the row's menu —
         // the HIG's macOS toolbars: "it doesn't make sense to provide a
-        // toolbar item for every menu item". Until 2026-10-19 Edit sat at
-        // the toolbar's trailing corner.
+        // toolbar item for every menu item".
         // Opening the page marks the plan's problem seen — honestly, since
         // the problem row under the Backups card shows the failure for as
         // long as it stands. Keyed on the plan, not on appearing: moving
@@ -229,16 +225,9 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The row's landing: Activity with the problem run selected. A problem
-    /// run shows under both of Activity's filters, so the user's filter
-    /// stays as it was — only the "Last backup" value, which can land on a
-    /// clean run, has to clear it.
-    private func showInActivity(_ run: RunRecord) -> (() -> Void)? {
-        guard let onShowRun else { return nil }
-        return {
-            router.activityFocusRunID = run.id
-            onShowRun()
-        }
+    /// The row's landing: Activity with the problem run selected.
+    private func showInActivity(_ run: RunRecord) -> () -> Void {
+        { router.focusRun(run.id) }
     }
 
     @ViewBuilder
@@ -403,11 +392,11 @@ struct PlanDetailView: View {
         // question, because a snapshot carries what its backup added.
         let added = (lastSuccessfulRun?.dataAdded ?? snapshots.first?.dataAdded).flatMap { $0 > 0 ? $0 : nil }
         let text = added.map { "\(value) · added \(Format.bytes($0))" } ?? value
-        if let lastSuccessfulRun, let onShowRun {
+        if let lastSuccessfulRun {
+            // A clean run: Activity shows all if its Problems filter would
+            // hide it.
             Button {
-                router.activityShowsProblemsOnly = false
-                router.activityFocusRunID = lastSuccessfulRun.id
-                onShowRun()
+                router.focusRun(lastSuccessfulRun.id)
             } label: {
                 HStack(spacing: 4) {
                     Text(text)

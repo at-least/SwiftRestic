@@ -40,11 +40,12 @@ enum EditorRequirements {
     /// Test Connection's answer when no repository is at the location: a
     /// new repository's Save creates one there, an edit's Save creates
     /// nothing — its plans' backups would fail (restic exit 10) against the
-    /// empty path.
+    /// empty location, which the editor cannot change: another location is
+    /// another repository.
     static func noRepositoryYet(isNew: Bool) -> String {
         isNew
             ? "No repository at that location yet. Saving will create one."
-            : "No repository is at that path — backups to it would fail until one is created. Point it at the folder that holds the repository."
+            : "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository…."
     }
 
     /// Whether an edit's Save asks restic first: when it changes what

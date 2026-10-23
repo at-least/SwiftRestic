@@ -125,7 +125,8 @@ struct IndexBackfillBufferTests {
         buffer.append(IndexedEntry(path: "/data/a", isDirectory: false))
         buffer.cancel()
         buffer.append(IndexedEntry(path: "/data/b", isDirectory: false))
-        try? buffer.finish()
+        // Never a full read landed.
+        #expect(throws: CancellationError.self) { try buffer.finish() }
         #expect(recorder.recorded.isEmpty)
     }
 }

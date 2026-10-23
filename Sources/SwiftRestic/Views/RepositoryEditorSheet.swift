@@ -838,7 +838,9 @@ struct RepositoryEditorSheet: View {
             sharePassword = ""
         }
         await model.flushSave()
-        await model.refreshSnapshots(repositoryID: draft.id)
+        // Not awaited: a large remote's listing can take minutes, and the
+        // sheet would sit disabled through them.
+        model.scheduleSnapshotRefresh(repositoryID: draft.id)
         if isNew { onCreated(draft.id) }
         dismiss()
     }

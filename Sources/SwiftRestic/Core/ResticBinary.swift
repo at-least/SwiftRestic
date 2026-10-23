@@ -17,7 +17,6 @@ struct ResticBinary: Sendable {
     ]
 
     var url: URL
-    var version: String?
 
     /// Resolves the binary, preferring an explicit user override.
     static func locate(userOverride: String?) throws -> ResticBinary {

@@ -96,7 +96,7 @@ enum RunRecordPresentation {
     /// nil for any other run, a clean one, or one whose repository is gone.
     static func maintenanceRetry(for run: RunRecord, repositoryExists: Bool) -> MaintenanceRetry? {
         guard repositoryExists, let id = run.repositoryID,
-              run.outcome == .failed || run.outcome == .completedWithErrors
+              run.outcome.isProblem
         else { return nil }
         switch run.kind {
         case .check: return .check(id)

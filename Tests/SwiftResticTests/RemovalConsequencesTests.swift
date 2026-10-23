@@ -15,6 +15,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents", "Photos"],
                 isRestoring: false,
                 runningBackupNames: [],
+                applyingRetentionNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
             ) == "Its plans “Documents” and “Photos” are removed too. The backups in it are kept."
@@ -24,6 +25,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents"],
                 isRestoring: false,
                 runningBackupNames: [],
+                applyingRetentionNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
             ) == "Its plan “Documents” is removed too. The backups in it are kept."
@@ -35,6 +37,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents", "Photos", "Music"],
                 isRestoring: false,
                 runningBackupNames: [],
+                applyingRetentionNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
             ) == "Its plans “Documents”, “Photos” and “Music” are removed too. The backups in it are kept."
@@ -45,6 +48,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: [],
                 isRestoring: false,
                 runningBackupNames: [],
+                applyingRetentionNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
             ) == "The backups in it are kept."
@@ -57,11 +61,13 @@ struct RemovalConsequencesTests {
             removedPlanNames: ["Nightly"],
             isRestoring: true,
             runningBackupNames: ["Nightly", "Untitled Plan"],
+            applyingRetentionNames: ["Weekly"],
             isMaintaining: true,
             isConsoleRunning: true
         )
         #expect(sentence.contains("A restore from this repository is running and will be cancelled."))
         #expect(sentence.contains("A backup (Nightly, Untitled Plan) is running and will be cancelled."))
+        #expect(sentence.contains("Retention is being applied to Weekly and will be cancelled."))
         #expect(sentence.contains("Repository maintenance is running and will be cancelled."))
         #expect(sentence.contains("A console command is running and will be cancelled."))
     }

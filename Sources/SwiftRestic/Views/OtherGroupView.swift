@@ -6,7 +6,7 @@ import SwiftUI
 /// toolbar: the overview says what the history is and the facts that
 /// identify it; Backups lists them, each one's files beside the list. No
 /// Files tab, as a plan's page has: that lists a folder as this Mac holds it
-/// now, and these backups name none of this Mac's to list (2026-10-19).
+/// now, and these backups name none of this Mac's to list.
 ///
 /// Every fact comes from `OtherGroupPageSummary`, the one derivation the
 /// sidebar's labels already feed. No verbs in the toolbar: there is nothing

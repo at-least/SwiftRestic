@@ -44,8 +44,7 @@ struct RepositoryDetailView: View {
         // are the Repository menu's (all acting on this page's repository)
         // and the row's (all but the two repairs), each through the one
         // shared confirmation; Refresh is the row's, and the menu's Refresh
-        // All Backups (⌘R). Until 2026-10-19
-        // Refresh and Edit sat at the toolbar's trailing corner. A new plan
+        // All Backups (⌘R). A new plan
         // in this repository starts from the sidebar's + or ⌘N, both into
         // the repository on screen, or from its sidebar row's menu — and
         // from the Protection card while it has none. Getting files back

@@ -211,7 +211,9 @@ struct RootView: View {
     /// `onChange` closure: that expression pushes the chain past the
     /// compiler's type-check time limit.
     private func announceBanner(from old: [Banner], to new: [Banner]) {
-        guard new.count > old.count, let banner = new.first else { return }
+        // By identity, not count: past the queue's limit a new banner
+        // evicts an old one, and the count stays.
+        guard let banner = new.first, !old.contains(where: { $0.id == banner.id }) else { return }
         AccessibilityNotification.Announcement("\(banner.title). \(banner.message)").post()
     }
 
@@ -493,8 +495,11 @@ struct RootView: View {
         case let .editPlan(id):
             editingPlan = model.plan(id: id)
         case let .editPlanRetention(id):
-            editingPlanTab = .retention
-            editingPlan = model.plan(id: id)
+            // Only with a sheet to open: its dismissal is what resets the tab.
+            if let plan = model.plan(id: id) {
+                editingPlanTab = .retention
+                editingPlan = plan
+            }
         case let .editRepository(id):
             editingRepository = model.repository(id: id)
         case let .applyRetention(id):
@@ -539,7 +544,7 @@ struct RootView: View {
              .findFiles where model.configuration.repositories.isEmpty || !model.isResticAvailable:
             // Their menu items are disabled here; a selection parked on
             // either pane must not outlive the menu item that opens it.
-            router.selection = nil
+            router.selection = landing
         default:
             break
         }

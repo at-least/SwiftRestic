@@ -46,8 +46,12 @@ enum KeychainStore {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         switch status {
         case errSecSuccess:
-            guard let data = item as? Data else { return nil }
-            return String(data: data, encoding: .utf8)
+            // An item that is not text is a failure, not "nothing stored"
+            // (`SecretStore.load`'s rule).
+            guard let data = item as? Data, let text = String(data: data, encoding: .utf8) else {
+                throw KeychainError.unexpectedStatus(errSecDecode)
+            }
+            return text
         case errSecItemNotFound:
             return nil
         default:

@@ -189,7 +189,7 @@ struct SnapshotDiffView: View {
                 }
 
                 if let older, older.lineageKey != newer.lineageKey {
-                    Label("Different folders or host — most entries will show as added or removed", systemImage: "info.circle")
+                    Label("Different folders or Mac — most entries will show as added or removed", systemImage: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -212,7 +212,8 @@ struct SnapshotDiffView: View {
             ContentUnavailableView(
                 "No earlier backup of these folders",
                 systemImage: "clock.arrow.circlepath",
-                description: Text("This is the first backup of these folders from \(newer.hostname ?? "this host"). Choose another backup above to compare with it anyway.")
+                description: Text(newer.hostname.map { "This is the first backup of these folders from \($0). Choose another backup above to compare with it anyway." }
+                    ?? "This is the first backup of these folders. Choose another backup above to compare with it anyway.")
             )
         } else if isLoading {
             ProgressView("Comparing…")

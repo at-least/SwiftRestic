@@ -36,6 +36,9 @@ struct PlanEditorSheet: View {
     /// The network shares among the folders while mounted
     /// (`VolumePresence.mountedShare`), read off the main actor.
     @State private var mountedShares: [MountedShare] = []
+    /// Whether the path is gone from this Mac, read off the main actor
+    /// beside `mountedShares`: a stalled share can hold the read.
+    @State private var pathIsMissing = false
     /// Each share's password as typed, by volume name: empty leaves a saved
     /// one as it is.
     @State private var sharePasswords: [String: String] = [:]
@@ -449,7 +452,7 @@ struct PlanEditorSheet: View {
             }
             // A folder that is gone fails every backup; said here first.
             // Adopt's footer already says it, in the same words.
-            if mode != .adopt, !draft.path.isEmpty, !AppModel.allSourcesExist([draft.path]) {
+            if mode != .adopt, pathIsMissing {
                 Section {
                     Label {
                         Text(AppModel.missingSourcesWarning)
@@ -519,12 +522,16 @@ struct PlanEditorSheet: View {
         // The path's network share, read off the main actor: a stalled
         // share can hold the read for seconds.
         .task(id: draft.path) {
-            let path = ResticService.expandTilde(draft.path)
-            let shares = await Task.detached {
-                VolumePresence.mountedShare(holding: path).map { [$0] } ?? []
+            let path = draft.path
+            let (shares, missing) = await Task.detached {
+                (
+                    VolumePresence.mountedShare(holding: ResticService.expandTilde(path)).map { [$0] } ?? [],
+                    !path.isEmpty && !AppModel.sourceExists(path)
+                )
             }.value
             guard !Task.isCancelled else { return }
             mountedShares = shares
+            pathIsMissing = missing
         }
     }
 

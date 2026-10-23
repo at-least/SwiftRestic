@@ -4,9 +4,8 @@ import Observation
 /// A plan's Files tab's tree, one level per open folder: the plan's folder
 /// as this Mac holds it now, each item beside what the plan's backups hold
 /// of it — the way to a current file's past versions, which is what this
-/// view is for (2026-10-19; until then the tree listed every item any
-/// backup had held). Items only the backups hold are read too, and listed
-/// with Show Deleted Items.
+/// view is for; not every item any backup held. Items only the backups
+/// hold are read too, and listed with Show Deleted Items.
 ///
 /// Each level is read from the disk and the index, again when the
 /// repository's listing changes or the index takes it, and again when the

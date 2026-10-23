@@ -155,9 +155,22 @@ extension AppDelegate {
         })
             ?? NSApp.keyWindow
             ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })
-        guard let window = candidate else { return }
-        guard let data = await bestEffortPNG(of: window) else { return }
-        try? data.write(to: url)
+        // A capture that wrote nothing fails the run: a script reads the
+        // exit status, and a missing PNG must not pass for a photograph.
+        guard let window = candidate else {
+            Self.debugLog("capture failed: no window to photograph")
+            exit(1)
+        }
+        guard let data = await bestEffortPNG(of: window) else {
+            Self.debugLog("capture failed: no image of \(window.title)")
+            exit(1)
+        }
+        do {
+            try data.write(to: url)
+        } catch {
+            Self.debugLog("capture failed: \(error.localizedDescription)")
+            exit(1)
+        }
     }
 
     /// ScreenCaptureKit renders Tahoe's glass materials correctly;
@@ -172,34 +185,32 @@ extension AppDelegate {
         let windowID = CGWindowID(window.windowNumber)
         let scale = window.backingScaleFactor
 
-        if #available(macOS 14.0, *) {
-            // A lock-guarded box carries the SC result out: the SC task may
-            // ignore cancellation once a system prompt is up, so the leash
-            // abandons it rather than waiting, and cacheDisplay photographs
-            // the pane while the orphan settles.
-            let box = CaptureResultBox()
-            let scCapture = Task.detached(priority: .userInitiated) {
-                let data = try? await Self.screenCaptureKitPNG(windowID: windowID, scale: scale)
-                box.store(data)
+        // A lock-guarded box carries the SC result out: the SC task may
+        // ignore cancellation once a system prompt is up, so the leash
+        // abandons it rather than waiting, and cacheDisplay photographs
+        // the pane while the orphan settles.
+        let box = CaptureResultBox()
+        let scCapture = Task.detached(priority: .userInitiated) {
+            let data = try? await Self.screenCaptureKitPNG(windowID: windowID, scale: scale)
+            box.store(data)
+        }
+        var settled = false
+        var waited = 0.0
+        while waited < 6 {
+            try? await Task.sleep(for: .seconds(0.5))
+            waited += 0.5
+            guard let data = box.load() else { continue }
+            settled = true
+            if let data, !data.isEmpty {
+                Self.debugLog("capture backend: ScreenCaptureKit")
+                return data
             }
-            var settled = false
-            var waited = 0.0
-            while waited < 6 {
-                try? await Task.sleep(for: .seconds(0.5))
-                waited += 0.5
-                guard let data = box.load() else { continue }
-                settled = true
-                if let data, !data.isEmpty {
-                    Self.debugLog("capture backend: ScreenCaptureKit")
-                    return data
-                }
-                Self.debugLog("capture backend: ScreenCaptureKit failed — cacheDisplay fallback")
-                break
-            }
-            if !settled {
-                scCapture.cancel()
-                Self.debugLog("capture backend: ScreenCaptureKit timed out — cacheDisplay fallback")
-            }
+            Self.debugLog("capture backend: ScreenCaptureKit failed — cacheDisplay fallback")
+            break
+        }
+        if !settled {
+            scCapture.cancel()
+            Self.debugLog("capture backend: ScreenCaptureKit timed out — cacheDisplay fallback")
         }
 
         // The frame view, not the content view: the toolbar lives in the
@@ -257,7 +268,6 @@ extension AppDelegate {
     /// `SCContentFilter`) are non-Sendable snapshots that older SDKs reject
     /// sending across isolation, so fetch, filter and screenshot stay in one
     /// place; only the `Data` — plain bytes — travels back.
-    @available(macOS 14.0, *)
     private nonisolated static func screenCaptureKitPNG(windowID: CGWindowID, scale: CGFloat) async throws -> Data? {
         let content = try await shareableContentBox().content
         guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {

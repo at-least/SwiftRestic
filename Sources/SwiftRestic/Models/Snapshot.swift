@@ -126,32 +126,22 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
     }
 }
 
-/// One snapshot's worth of `restic find --json` results.
+/// One snapshot's worth of `restic find --json` results. Both keys are
+/// required: restic 0.19.1 writes them in every result, and a result with
+/// no snapshot would group and restore under a backup ID of "".
 struct FindResult: Sendable, Equatable, Decodable {
     var matches: [FindMatch]
-    var hits: Int
     /// Full snapshot ID.
     var snapshot: String
-
-    private enum CodingKeys: String, CodingKey { case matches, hits, snapshot }
-
-    init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        matches = try c.decodeIfPresent([FindMatch].self, forKey: .matches) ?? []
-        hits = try c.decodeIfPresent(Int.self, forKey: .hits) ?? 0
-        snapshot = try c.decodeIfPresent(String.self, forKey: .snapshot) ?? ""
-    }
 }
 
 /// `restic stats --json`.
 struct RepositoryStats: Sendable, Equatable, Decodable {
     var totalSize: Int64
-    var totalBlobCount: Int?
     var snapshotsCount: Int?
 
     private enum CodingKeys: String, CodingKey {
         case totalSize = "total_size"
-        case totalBlobCount = "total_blob_count"
         case snapshotsCount = "snapshots_count"
     }
 }

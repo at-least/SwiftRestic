@@ -78,7 +78,6 @@ struct ResticSummary: Sendable, Equatable, Decodable {
     var filesChanged: Int?
     var filesUnmodified: Int?
     var dataAdded: Int64?
-    var totalFilesProcessed: Int?
     var totalBytesProcessed: Int64?
     var snapshotID: String?
     // restore
@@ -95,7 +94,6 @@ struct ResticSummary: Sendable, Equatable, Decodable {
         case filesChanged = "files_changed"
         case filesUnmodified = "files_unmodified"
         case dataAdded = "data_added"
-        case totalFilesProcessed = "total_files_processed"
         case totalBytesProcessed = "total_bytes_processed"
         case snapshotID = "snapshot_id"
         case totalFiles = "total_files"
@@ -113,14 +111,12 @@ struct ResticVerboseStatus: Sendable, Equatable, Decodable {
     var item: String
     var duration: Double?
     var dataSize: Int64?
-    var metadataSize: Int64?
     /// `restore --verbose=2` uses `size` where `backup` uses `data_size`.
     var size: Int64?
 
     private enum CodingKeys: String, CodingKey {
         case action, item, duration, size
         case dataSize = "data_size"
-        case metadataSize = "metadata_size"
     }
 }
 
@@ -230,56 +226,23 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
 }
 
 /// The closing `message_type: statistics` line of `restic diff --json`.
+/// Every key is required: restic 0.19.1 writes them all, zeros included, so
+/// a missing one is a format change, decoded as `.malformed` — never a
+/// "0 files" the Compare sheet would show as fact.
 struct ResticDiffStatistics: Sendable, Equatable, Decodable {
     struct Counts: Sendable, Equatable, Decodable {
-        var files: Int = 0
-        var dirs: Int = 0
-        var others: Int = 0
-        var dataBlobs: Int = 0
-        var treeBlobs: Int = 0
-        var bytes: Int64 = 0
-
-        private enum CodingKeys: String, CodingKey {
-            case files, dirs, others, bytes
-            case dataBlobs = "data_blobs"
-            case treeBlobs = "tree_blobs"
-        }
-
-        init() {}
-
-        init(from decoder: any Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            files = try c.decodeIfPresent(Int.self, forKey: .files) ?? 0
-            dirs = try c.decodeIfPresent(Int.self, forKey: .dirs) ?? 0
-            others = try c.decodeIfPresent(Int.self, forKey: .others) ?? 0
-            dataBlobs = try c.decodeIfPresent(Int.self, forKey: .dataBlobs) ?? 0
-            treeBlobs = try c.decodeIfPresent(Int.self, forKey: .treeBlobs) ?? 0
-            bytes = try c.decodeIfPresent(Int64.self, forKey: .bytes) ?? 0
-        }
+        var files: Int
+        var dirs: Int
+        var bytes: Int64
     }
 
-    /// Whatever ID was passed on the command line — a short ID stays short — so
-    /// never match on these; use the IDs you asked for.
-    var sourceSnapshot: String
-    var targetSnapshot: String
     var changedFiles: Int
     var added: Counts
     var removed: Counts
 
     private enum CodingKeys: String, CodingKey {
         case added, removed
-        case sourceSnapshot = "source_snapshot"
-        case targetSnapshot = "target_snapshot"
         case changedFiles = "changed_files"
-    }
-
-    init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        sourceSnapshot = try c.decodeIfPresent(String.self, forKey: .sourceSnapshot) ?? ""
-        targetSnapshot = try c.decodeIfPresent(String.self, forKey: .targetSnapshot) ?? ""
-        changedFiles = try c.decodeIfPresent(Int.self, forKey: .changedFiles) ?? 0
-        added = try c.decodeIfPresent(Counts.self, forKey: .added) ?? Counts()
-        removed = try c.decodeIfPresent(Counts.self, forKey: .removed) ?? Counts()
     }
 }
 

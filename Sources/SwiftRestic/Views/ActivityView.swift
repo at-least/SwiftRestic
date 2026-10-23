@@ -19,7 +19,7 @@ struct ActivityView: View {
 
     private var visibleRuns: [RunRecord] {
         let base = router.activityShowsProblemsOnly
-            ? model.configuration.runs.filter { $0.outcome == .failed || $0.outcome == .completedWithErrors }
+            ? model.configuration.runs.filter(\.outcome.isProblem)
             : model.configuration.runs
         return base.sorted(using: sortOrder)
     }
@@ -186,7 +186,7 @@ struct ActivityView: View {
             }
         }
         .confirmationDialog(
-            "Clear the run history?",
+            "Clear the history in Activity?",
             isPresented: $isConfirmingClear,
             titleVisibility: .visible
         ) {
@@ -194,7 +194,7 @@ struct ActivityView: View {
                 model.clearRunHistory()
             }
         } message: {
-            Text("This permanently removes all \(model.configuration.runs.count) run records and their logs. The backups in your repositories are not affected.")
+            Text("This permanently removes the \(Format.plural(model.configuration.runs.count, "item")) in Activity, with their logs. The backups in your repositories are not affected.")
         }
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target)
@@ -219,6 +219,10 @@ struct ActivityView: View {
         .task(id: router.activityFocusRunID) {
             guard let id = router.activityFocusRunID else { return }
             router.activityFocusRunID = nil
+            // A run the Problems filter hides is shown by showing all.
+            if router.activityShowsProblemsOnly, !visibleRuns.contains(where: { $0.id == id }) {
+                router.activityShowsProblemsOnly = false
+            }
             if visibleRuns.contains(where: { $0.id == id }) {
                 selection = id
             }

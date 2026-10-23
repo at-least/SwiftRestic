@@ -37,29 +37,6 @@ struct Card<Accessory: View, Content: View>: View {
     }
 }
 
-// MARK: - Sheet header
-
-/// Title row for utility sheets, which live outside the navigation stack and
-/// would otherwise carry no identity of their own.
-struct SheetHeader: View {
-    let title: LocalizedStringKey
-    var subtitle: LocalizedStringKey?
-
-    var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.headline)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-        }
-    }
-}
-
 // MARK: - Sheet tabs
 
 /// An editor sheet's tabs: a segmented picker over the chosen pane, where a

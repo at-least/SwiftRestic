@@ -166,7 +166,7 @@ extension AppModel {
             plans: configuration.plans,
             newestBackupOutcome: newest,
             running: runningPlanIDs,
-            sourcesExist: { Self.allSourcesExist([$0.path]) },
+            sourcesExist: { Self.sourceExists($0.path) },
             repositoryReachable: { plan in
                 guard let repository = configuration.repository(id: plan.repositoryID) else { return false }
                 return repository.kind != .local || VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) != false

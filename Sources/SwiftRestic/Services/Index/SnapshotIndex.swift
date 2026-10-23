@@ -368,8 +368,7 @@ enum IndexError: Error, Equatable {
 /// pool readers, beside the writer.
 final class SnapshotIndex: @unchecked Sendable {
     /// 4: version 3 with the file-node cache in the creation script, where
-    /// an open had added it to every file since the cache came (2026-10-18:
-    /// the one such step, squashed, its files rebuilt once). 3: version 2
+    /// an open had added it to every file since the cache came. 3: version 2
     /// had no `edit` or `blind`, and a file without them knows nothing of
     /// content changes, so it is rebuilt rather than read as if no file had
     /// ever changed. (1 is taken too: development builds wrote it.)
@@ -623,7 +622,10 @@ final class SnapshotIndex: @unchecked Sendable {
                 best = (rank, time, hash, planned)
             }
             for chainID in try Int64.fetchAll(db.cachedStatement(sql: SQL.pendingChains)) {
-                guard let window = try Self.chainWindow(db, chainID) else { continue }
+                // The chain row was just selected in this read.
+                guard let window = try Self.chainWindow(db, chainID) else {
+                    throw DatabaseError(message: "pending chain \(chainID) has no chain row")
+                }
                 guard let lo = window.lo, let hi = window.hi else {
                     let pending = try Row.fetchCursor(db.cachedStatement(sql: SQL.pendingDesc), arguments: [chainID])
                     while let row = try pending.next() {
@@ -1021,7 +1023,10 @@ final class SnapshotIndex: @unchecked Sendable {
         }
         var result: [Int64: VersionSummary] = [:]
         for (node, held) in latest {
-            guard let hash = try String.fetchOne(newest, arguments: [node, held.chain, held.time]) else { continue }
+            // The counts row above proved this snapshot, in this read.
+            guard let hash = try String.fetchOne(newest, arguments: [node, held.chain, held.time]) else {
+                throw DatabaseError(message: "node \(node)'s newest snapshot in chain \(held.chain) vanished inside one read")
+            }
             result[node] = VersionSummary(count: held.count, newest: IndexVersion(id: hash, time: date(micros: held.time)))
         }
         return result
@@ -1397,7 +1402,10 @@ final class SnapshotIndex: @unchecked Sendable {
                 prefix = known
                 break
             }
-            guard let row = try Row.fetchOne(byID, arguments: [current]) else { break }
+            // A missing ancestor would cut the path short ("/b" for "/a/b").
+            guard let row = try Row.fetchOne(byID, arguments: [current]) else {
+                throw DatabaseError(message: "node \(current), an ancestor of node \(id), is missing")
+            }
             climbed.append((current, row["name"]))
             current = row["parent"]
         }

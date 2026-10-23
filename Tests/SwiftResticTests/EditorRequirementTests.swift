@@ -298,6 +298,6 @@ struct EditorRequirementTests {
             == "No repository at that location yet. Saving will create one.")
         // An edit's Save creates nothing: its plans would fail against it.
         #expect(EditorRequirements.noRepositoryYet(isNew: false)
-            == "No repository is at that path — backups to it would fail until one is created. Point it at the folder that holds the repository.")
+            == "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository….")
     }
 }

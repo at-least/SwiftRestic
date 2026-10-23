@@ -314,6 +314,9 @@ struct FolderVersionsView: View {
     /// rows the new listing still holds.
     private func fetch() async {
         nodes = []
+        loadError = nil
+        // A cancelled read leaves its spinner up; the next ask clears it.
+        isLoading = false
         guard let version = chosen else { return }
         isLoading = true
         do {

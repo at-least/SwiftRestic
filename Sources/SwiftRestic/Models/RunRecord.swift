@@ -36,6 +36,11 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         /// problem surface counts it (`detailText` says why).
         case skipped
 
+        /// What every problem surface counts — Activity's Problems filter,
+        /// the overview, a stretch, a retry: a failure, or a run that
+        /// finished with warnings.
+        var isProblem: Bool { self == .failed || self == .completedWithErrors }
+
         var displayName: String {
             switch self {
             case .succeeded: "Succeeded"

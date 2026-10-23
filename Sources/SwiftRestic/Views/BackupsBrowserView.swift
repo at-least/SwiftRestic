@@ -3,12 +3,11 @@ import SwiftUI
 /// A page's Backups tab: the page's backups, newest first, on the leading
 /// side — a section per month once the history passes one — and the open
 /// one's files on the trailing side (`RestorePaneView`), the Files tab's own
-/// layout. They were the sidebar's, folded under their plan, until the HIG
-/// review of 2026-10-18 (Sidebars: "In general, show no more than two
-/// levels of hierarchy in a sidebar. When a data hierarchy is deeper than
-/// two levels, consider using a split view interface that includes a
-/// content list between the sidebar items and detail view") — this list is
-/// that content list, and its edge drags.
+/// layout. Not the sidebar's, folded under their plan: the HIG's Sidebars
+/// ("In general, show no more than two levels of hierarchy in a sidebar.
+/// When a data hierarchy is deeper than two levels, consider using a split
+/// view interface that includes a content list between the sidebar items
+/// and detail view") — this list is that content list, and its edge drags.
 ///
 /// Which backup is open is the router's, per page, so leaving the page and
 /// coming back finds it as it was left; a page opens on its newest backup.

@@ -488,8 +488,11 @@ extension AppModel {
             postDragImpossibleBanner("The repository no longer exists — pick a backup from a current repository in the sidebar.")
             return provider
         }
-        guard let service = try? service() else {
-            postDragImpossibleBanner(binaryProblem ?? "restic could not be found.")
+        let service: any ResticClient
+        do {
+            service = try self.service()
+        } catch {
+            postDragImpossibleBanner(error.localizedDescription)
             return provider
         }
         let secrets = self.secrets

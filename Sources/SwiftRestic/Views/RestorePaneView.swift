@@ -11,8 +11,7 @@ import SwiftUI
 /// chosen, here. Switching records keeps the folder you are in, and the
 /// restore progress strip lives on the window above every pane, so it
 /// outlives a pane switch. The window's title is the page's, its subtitle
-/// the open backup's moment: the pane sets neither — it once titled the
-/// window "Restore".
+/// the open backup's moment: the pane sets neither.
 struct RestorePaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -46,6 +45,9 @@ struct RestorePaneView: View {
     @FocusState private var listIsFocused: Bool
     @State private var isLoadingTree = false
     @State private var loadError: String?
+    /// Why the search could not answer — the Files tab's "Search failed",
+    /// never a folder that could not be read.
+    @State private var searchError: String?
     /// Set when the focused folder does not exist in the selected record.
     @State private var folderMissing = false
     /// The record the tree on screen was built for. A folder listing that
@@ -55,7 +57,14 @@ struct RestorePaneView: View {
     /// The fetch tasks, so the pane's departure can stop them: an expand
     /// that outlives the pane keeps a restic listing running and writes
     /// into state nobody reads. A key present is a fetch already running.
-    @State private var fetchTasks: [String: Task<Void, Never>] = [:]
+    /// Keyed by backup too: a slow listing of one backup's folder must not
+    /// hold back the same folder's listing in the backup switched to.
+    @State private var fetchTasks: [FetchKey: Task<Void, Never>] = [:]
+
+    private struct FetchKey: Hashable {
+        let snapshotID: String
+        let path: String
+    }
     /// The query in flight, so the next keystroke cancels it: a slower older
     /// search finishing last must not overwrite the newer one's answers.
     @State private var searchTask: Task<Void, Never>?
@@ -192,6 +201,12 @@ struct RestorePaneView: View {
             } description: {
                 Text(loadError).textSelection(.enabled)
             }
+        } else if let searchError {
+            ContentUnavailableView {
+                Label("Search failed", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(searchError).textSelection(.enabled)
+            }
         } else if let result = searchResult {
             if result.inThisBackup.isEmpty {
                 // Not a dead end: the index knows whether other backups
@@ -210,7 +225,7 @@ struct RestorePaneView: View {
             ContentUnavailableView {
                 Label("Not in this backup", systemImage: "folder.badge.questionmark")
             } description: {
-                Text("This folder does not exist in the selected backup. Pick another backup in the list, or go up a level.")
+                Text("This folder does not exist in the selected backup. Pick another backup in the list.")
             }
         } else if tree.rows.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
@@ -696,6 +711,7 @@ struct RestorePaneView: View {
 
         isLoadingTree = true
         loadError = nil
+        searchError = nil
         folderMissing = false
         // The query the pane came with, against this record: after the
         // resets above, which an index failure's answer must outlive, and
@@ -751,8 +767,10 @@ struct RestorePaneView: View {
                     guard !Task.isCancelled else { return }
                     tree.replaceChildren(of: needed, nodes: nodes)
                 } catch {
+                    // The folder is in the tree, so its listing failed:
+                    // say why, not that the folder is missing.
                     guard !Task.isCancelled else { return }
-                    folderMissing = true
+                    loadError = error.localizedDescription
                     isLoadingTree = false
                     return
                 }
@@ -775,13 +793,14 @@ struct RestorePaneView: View {
         // One fetch per directory at a time: a double-click racing itself
         // must not land two listings (the tree is replace-idempotent, but
         // skipping the duplicate spares a restic round trip).
-        guard fetchTasks[needed] == nil else { return }
+        let fetchKey = FetchKey(snapshotID: record.id, path: needed)
+        guard fetchTasks[fetchKey] == nil else { return }
         // A focus change that keeps the row selected, as NSOutlineView's
         // does — not `navigate(to:)`, whose deselect would send the next ↓
         // back to the top of the list.
         currentPath = path
-        fetchTasks[needed] = Task {
-            defer { fetchTasks[needed] = nil }
+        fetchTasks[fetchKey] = Task {
+            defer { fetchTasks[fetchKey] = nil }
             do {
                 let nodes = try await model.children(
                     repositoryID: repositoryID,
@@ -826,6 +845,7 @@ struct RestorePaneView: View {
         guard !query.isEmpty, let record else {
             searchTask?.cancel()
             searchResult = nil
+            searchError = nil
             // Clearing the search is a fresh look: a stale load error
             // replaces the whole browser, and must not read as still failing.
             loadError = nil
@@ -861,7 +881,8 @@ struct RestorePaneView: View {
                 )
             } catch {
                 guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
-                loadError = (error as? ResticError)?.errorDescription ?? error.localizedDescription
+                searchResult = nil
+                searchError = error.localizedDescription
                 return
             }
             guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
@@ -874,9 +895,10 @@ struct RestorePaneView: View {
                 indexIsComplete: indexIsComplete
             )
             selection = []
-            // The index answered: a load error from an earlier failed read
-            // must not sit in front of these results or behind them.
+            // The index answered: an error from an earlier failed read or
+            // search must not sit in front of these results or behind them.
             loadError = nil
+            searchError = nil
         }
     }
 

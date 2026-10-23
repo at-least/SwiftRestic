@@ -252,10 +252,7 @@ extension AppModel {
     func listedNode(repositoryID: UUID, snapshotID: String, path: String) async throws -> SnapshotNode {
         let siblings = try await children(repositoryID: repositoryID, snapshotID: snapshotID, path: ResticPath.parent(of: path))
         guard let node = siblings.first(where: { PathKey($0.path) == PathKey(path) }) else {
-            throw ResticError.commandFailed(
-                exitCode: 0,
-                message: "“\(ResticPath.basename(of: path))” is no longer listed in the chosen backup — refresh and try again."
-            )
+            throw ResticError.itemNotListed(name: ResticPath.basename(of: path))
         }
         return node
     }

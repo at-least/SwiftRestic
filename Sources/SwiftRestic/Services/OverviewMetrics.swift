@@ -128,8 +128,7 @@ enum OverviewMetrics {
     /// eight days old.
     static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {
         runs.filter {
-            $0.finishedAt >= since
-                && ($0.outcome == .failed || $0.outcome == .completedWithErrors)
+            $0.finishedAt >= since && $0.outcome.isProblem
         }
     }
 
@@ -205,7 +204,7 @@ enum OverviewMetrics {
         var newestBackupProblem: [UUID: RunRecord] = [:]
         var standing: Set<UUID> = []
         let since = problemWindowStart(from: now)
-        for run in runs where run.outcome == .failed || run.outcome == .completedWithErrors {
+        for run in runs where run.outcome.isProblem {
             if run.kind == .backup, let planID = run.planID {
                 if newestBackupProblem[planID].map({ $0.finishedAt < run.finishedAt }) ?? true {
                     newestBackupProblem[planID] = run

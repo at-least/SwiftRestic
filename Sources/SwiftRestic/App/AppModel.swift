@@ -347,12 +347,11 @@ final class AppModel {
         self.loginItemInstallable = LoginItem.isInInstallableLocation
         #endif
         // The console's whole view of its owner: run a command, persist the
-        // history. The fallback matches ResticError.cancelled's words — a
-        // gone owner is the quit unwinding, and the pane should say what
-        // happened the way the rest of the app does.
+        // history. A gone owner is the quit unwinding: the pane says so in
+        // the words the rest of the app uses for a cancel.
         console.runCommand = { [weak self] repositoryID, arguments in
             await self?.runConsoleCommand(repositoryID: repositoryID, arguments: arguments)
-                ?? "The operation was cancelled."
+                ?? ResticError.cancelled.localizedDescription
         }
         console.persistHistory = { [weak self] history in
             self?.configuration.settings.consoleHistory = history

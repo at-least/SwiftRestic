@@ -33,7 +33,8 @@ struct DragRestoreProviderTests {
         let unresolved = model.dragRestoreProvider(repositoryID: repository.id, snapshotID: "s1", node: node)
         #expect(unresolved.registeredTypeIdentifiers.isEmpty)
         #expect(model.banners.contains {
-            $0.title == "Cannot drag to restore" && $0.message == (model.binaryProblem ?? "restic could not be found.")
+            $0.title == "Cannot drag to restore"
+                && $0.message == ResticError.binaryNotFound(searched: ResticBinary.searchPaths).localizedDescription
         })
     }
 }

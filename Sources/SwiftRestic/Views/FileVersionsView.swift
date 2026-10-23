@@ -85,7 +85,9 @@ struct FileVersionsView: View {
         // preview closes, when another version is chosen — a preview must
         // show the version the list says — and when the pane goes.
         .previewSession(previewer)
-        .onChange(of: chosenID) { previewer.end() }
+        // The chosen version's id, not the binding's: with none picked the
+        // newest is chosen, and a new backup can change which that is.
+        .onChange(of: chosen?.id) { previewer.end() }
     }
 
     /// What the disk read is keyed by: the path, whether a restore is

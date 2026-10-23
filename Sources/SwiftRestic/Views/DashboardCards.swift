@@ -265,9 +265,7 @@ struct RecentProblemsCard: View {
         }
     }
 
-    /// Activity with that run selected. A problem run shows under both of
-    /// Activity's filters, so the user's filter stays as it was — the plan
-    /// row's and the incomplete strip's rule.
+    /// Activity with that run selected.
     private func showInActivity(_ run: RunRecord) {
         router.focusRun(run.id)
     }

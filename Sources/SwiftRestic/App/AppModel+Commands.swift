@@ -103,7 +103,7 @@ extension AppModel {
     /// nil when it can.
     private func retentionBlocker(for plan: BackupPlan) -> String? {
         guard plan.isConfigurationComplete, let repository = repository(id: plan.repositoryID) else {
-            return "This plan needs a repository and at least one folder."
+            return "This plan needs a repository and a folder or file to back up."
         }
         guard plan.retention.isEnabled else { return "Retention is off for this plan." }
         guard plan.retention.isSafeToRun else {

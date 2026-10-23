@@ -183,9 +183,7 @@ struct AppModelTests {
             repositoryID: harness.repository.id, snapshotID: snapshot.id, path: harness.sourceDirectory.path
         )
         #expect(folder.isDirectory)
-        await #expect(throws: ResticError.commandFailed(
-            exitCode: 0, message: "“gone.txt” is no longer listed in the chosen backup — refresh and try again."
-        )) {
+        await #expect(throws: ResticError.itemNotListed(name: "gone.txt")) {
             try await model.listedNode(
                 repositoryID: harness.repository.id, snapshotID: snapshot.id,
                 path: harness.sourceDirectory.appendingPathComponent("gone.txt").path

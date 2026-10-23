@@ -82,7 +82,7 @@ struct SecretStore: Sendable {
     static var injectedForCapture: SecretStore? {
         let environment = ProcessInfo.processInfo.environment
         guard let password = environment["SWIFTRESTIC_REPO_PASSWORD"], !password.isEmpty,
-              environment["SWIFTRESTIC_CONFIG_DIR"] != nil
+              environment["SWIFTRESTIC_CONFIG_DIR"]?.isEmpty == false
         else { return nil }
         let providerSecret = environment["SWIFTRESTIC_REPO_SECRET"]
         let sharePassword = environment["SWIFTRESTIC_SHARE_PASSWORD"]

@@ -3,10 +3,9 @@ import SwiftUI
 /// What Restore… does on the page in view — a backup's tree on a Backups
 /// tab, a folder or a file on a Files tab, Find Files' results — published
 /// by the pane that holds it for File ▸ Restore…: the menu bar's way to the
-/// pane's own restore, its bottom bar's prominent button. From 2026-10-19
-/// to 2026-10-21 that button sat in the window toolbar's trailing side, the
-/// HIG's place for a page's primary action; the user asked for the bottom
-/// bar back.
+/// pane's own restore, its bottom bar's prominent button. Not in the window
+/// toolbar's trailing side, the HIG's place for a page's primary action:
+/// the user chose the bottom bar.
 struct RestoreCommand {
     /// What it restores, in the pane's words: "Restore…" for a selection,
     /// "Restore Folder…" or "Restore Entire Backup…" for the whole of what

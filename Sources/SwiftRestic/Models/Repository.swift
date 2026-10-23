@@ -242,7 +242,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// The location as the repository page shows it: restic's repository
     /// string, a local path tilde-abbreviated — a REST server's without the
     /// login a URL saved before the login had fields of its own still
-    /// carries (fa972e9), which restic is still handed: this is also a
+    /// carries, which restic is still handed: this is also a
     /// twin's label, which every notification, hook and webhook says.
     var displayLocation: String {
         switch kind {

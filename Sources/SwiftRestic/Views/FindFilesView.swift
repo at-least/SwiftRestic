@@ -4,8 +4,8 @@ import SwiftUI
 /// restores what it finds — a page of the main window, as the console is,
 /// with its query in the toolbar's search field, where the HIG puts search
 /// ("Put a search field at the trailing side of the toolbar for many
-/// common uses"). It was a sheet until 2026-10-18, its restores stacking a
-/// second sheet on it ("Display only one sheet at a time").
+/// common uses"). Not a sheet: its restores would stack a second sheet on
+/// it ("Display only one sheet at a time").
 ///
 /// This is the "I deleted something months ago and don't know which backup has
 /// it" case, which browsing backup by backup does not solve.
@@ -454,7 +454,8 @@ struct FindFilesView: View {
                         pattern: searchedPattern, repositoryID: searchedRepository
                     )
                     guard !Task.isCancelled else { return }
-                    rows = built
+                    rows = built.rows
+                    resultsTruncated = built.truncated
                 } else {
                     let found = try await model.findFiles(
                         repositoryID: searchedRepository,
@@ -502,7 +503,9 @@ struct FindFilesView: View {
     /// in one read of the index, so every row names a restorable snapshot.
     /// Sorted newest-first by that snapshot, matching the restic engine's
     /// row order.
-    private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> [Row] {
+    /// Whether the list was cut comes back beside the rows, for the caller
+    /// to set past its cancellation check.
+    private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> (rows: [Row], truncated: Bool) {
         // A thrown index failure propagates to the page's own error message.
         let found = try await model.searchIndexWithSummaries(pattern: pattern, repositoryID: repositoryID)
         var rows: [Row] = []
@@ -532,16 +535,17 @@ struct FindFilesView: View {
                 hit: hit
             ))
         }
-        resultsTruncated = dropped > 0 || found.hits.count >= AppModel.indexSearchLimit
+        let truncated = dropped > 0 || found.hits.count >= AppModel.indexSearchLimit
         // Rows of one snapshot keep the search's order: name, then path,
         // bytewise — so equal times never shuffle between searches.
-        return rows.enumerated()
+        let sorted = rows.enumerated()
             .sorted { a, b in
                 let timeA = a.element.snapshotTime ?? .distantPast
                 let timeB = b.element.snapshotTime ?? .distantPast
                 return timeA != timeB ? timeA > timeB : a.offset < b.offset
             }
             .map(\.element)
+        return (sorted, truncated)
     }
 
     /// The listing's times for the rows that have none, once it lands: a

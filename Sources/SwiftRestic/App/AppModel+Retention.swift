@@ -5,7 +5,7 @@ extension AppModel {
 
     /// The retention sheet's preview, for a saved plan.
     func previewRetention(planID: UUID) async throws -> RetentionPreview {
-        guard let plan = plan(id: planID) else { throw ResticError.repositoryMissing }
+        guard let plan = plan(id: planID) else { throw ResticError.planMissing }
         return try await previewRetention(plan: plan)
     }
 

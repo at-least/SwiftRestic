@@ -157,8 +157,7 @@ enum SidebarItem: Hashable {
     /// Find Files: a page with no row, as the console has none — reached
     /// from Repository ▸ Find Files in Backups… (⇧⌘F) off a page with a
     /// Files tab, a repository page's search field, and Search All
-    /// Backups…. Until 2026-10-18 a sheet, whose restores stacked a second
-    /// sheet on it.
+    /// Backups…. Not a sheet: its restores would stack a second sheet on it.
     case findFiles
     case activity
 }
@@ -166,8 +165,8 @@ enum SidebarItem: Hashable {
 extension SidebarItem {
     /// The views the page's toolbar switches between: a plan's Overview |
     /// Backups | Files, a group's under Other backups Overview | Backups —
-    /// its backups name no folder of this Mac for a Files tab to list
-    /// (2026-10-19) — and none for every other page.
+    /// its backups name no folder of this Mac for a Files tab to list —
+    /// and none for every other page.
     var pageTabs: [PageTab] {
         switch self {
         case .plan: PageTab.allCases

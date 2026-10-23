@@ -2057,6 +2057,10 @@ struct AppModelStubTests {
 
         harness.model.applyRetention(planID: planID)
         #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        // What quitting and removing the repository would interrupt: retention, not a backup.
+        #expect(harness.model.quitInterruptions == ["Retention is being applied"])
+        #expect(harness.model.removalConsequences(for: harness.repository.id)
+            .contains("Retention is being applied to \(harness.model.label(of: harness.plan)) and will be cancelled."))
         harness.model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
         await harness.model.waitForRun(planID: planID)
 

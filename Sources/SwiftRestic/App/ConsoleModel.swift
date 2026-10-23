@@ -19,17 +19,18 @@ struct PendingCommand {
 /// history — arrive as closures injected by `AppModel` at wiring, so the
 /// console carries no back-reference to its owner. They cannot be init
 /// parameters — the closures capture the owner, and the owner owns this —
-/// so an unwired console says so in the output pane instead of dropping a
-/// confirmed command on the floor in silence.
+/// so an unwired console traps rather than drop a confirmed command.
 @MainActor
 @Observable
 final class ConsoleModel {
     /// Runs a command against a repository — `AppModel.runConsoleCommand`,
     /// the engine chokepoint, handed over at wiring.
-    var runCommand: ((_ repositoryID: UUID, _ arguments: [String]) async -> String)?
+    var runCommand: (_ repositoryID: UUID, _ arguments: [String]) async -> String = { _, _ in
+        preconditionFailure("the console was never wired")
+    }
     /// Persists the secret-filtered history — the configuration write,
     /// handed over at wiring.
-    var persistHistory: (([String]) -> Void)?
+    var persistHistory: ([String]) -> Void = { _ in preconditionFailure("the console was never wired") }
 
     var repositoryID: UUID?
     var commandText = "snapshots --compact"
@@ -180,10 +181,7 @@ final class ConsoleModel {
 
     private func execute(_ arguments: [String], record entry: String) {
         guard let repositoryID, !isRunning else { return }
-        guard let command = runCommand else {
-            output = "The console was not wired to a repository engine — this is a SwiftRestic bug."
-            return
-        }
+        let command = runCommand
         isRunning = true
         runningRepositoryID = repositoryID
         output = "Running…"
@@ -215,7 +213,7 @@ final class ConsoleModel {
     /// a bug report, and a history miss is a small price next to a stored
     /// secret.
     private func persist() {
-        persistHistory?(history.filter { !Self.mayCarrySecret($0) })
+        persistHistory(history.filter { !Self.mayCarrySecret($0) })
     }
 
     private static func mayCarrySecret(_ command: String) -> Bool {
