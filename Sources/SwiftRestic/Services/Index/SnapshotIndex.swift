@@ -938,7 +938,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// path-keyed form is what its incomplete strip asks of the backup
     /// before, what a restore by path asks of the backup it restores from,
     /// and what the tests hold that read to.
-    func contains(paths: [String], inSnapshot snapshotID: String) async throws -> [PathKey: Bool] {
+    func kinds(of paths: [String], inSnapshot snapshotID: String) async throws -> [PathKey: Bool] {
         try await pool.read { db in
             guard let target = try Target.fetch(db, snapshotID), target.state == State.indexed else { return [:] }
             var lookup = try NodeLookup(db)
@@ -1471,8 +1471,9 @@ final class SnapshotIndex: @unchecked Sendable {
 
     // MARK: - Test support
 
-    /// Every statement the index prepares — the open-time schema probe, the
-    /// connection pragmas and the test-support invariant checks aside —
+    /// Every statement the index prepares — the open-time schema probe and
+    /// scripts, the connection pragmas and the test-support invariant checks
+    /// aside —
     /// under its property name in `SnapshotIndexSchema.Statements`, IN lists
     /// at `lookupChunk`. Read by
     /// reflection, so declaring a statement is registering it:

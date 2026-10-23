@@ -43,7 +43,7 @@ struct ResticBinary: Sendable {
         }
 
         // Last resort: whatever PATH we did inherit.
-        if let fromPath = Self.lookupOnPath() {
+        if let fromPath = Self.onInheritedPath("restic") {
             return ResticBinary(url: URL(fileURLWithPath: fromPath))
         }
         throw ResticError.binaryNotFound(searched: searched)
@@ -60,30 +60,29 @@ struct ResticBinary: Sendable {
         return FileManager.default.isExecutableFile(atPath: path)
     }
 
+    /// Where a helper restic shells out to is looked for, in order, before
+    /// the inherited PATH; restic's PATH must hold each, or a helper found
+    /// here is one restic cannot run (ResticCoreTests pins it).
+    static let helperDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
+
     /// Looks for a helper binary restic shells out to (currently only `rclone`).
     ///
     /// Without this the failure surfaces as an opaque "command not found" buried
     /// in restic's stderr.
     static func locateHelper(named name: String) -> URL? {
-        let directories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
-        for directory in directories {
+        for directory in helperDirectories {
             let candidate = "\(directory)/\(name)"
             if Self.isExecutableFile(atPath: candidate) {
                 return URL(fileURLWithPath: candidate)
             }
         }
-        guard let pathValue = ProcessInfo.processInfo.environment["PATH"] else { return nil }
-        for directory in pathValue.split(separator: ":") {
-            let candidate = URL(fileURLWithPath: String(directory)).appendingPathComponent(name)
-            if Self.isExecutableFile(atPath: candidate.path) { return candidate }
-        }
-        return nil
+        return onInheritedPath(name).map { URL(fileURLWithPath: $0) }
     }
 
-    private static func lookupOnPath() -> String? {
+    private static func onInheritedPath(_ name: String) -> String? {
         guard let pathValue = ProcessInfo.processInfo.environment["PATH"] else { return nil }
         for dir in pathValue.split(separator: ":") {
-            let candidate = URL(fileURLWithPath: String(dir)).appendingPathComponent("restic").path
+            let candidate = URL(fileURLWithPath: String(dir)).appendingPathComponent(name).path
             if Self.isExecutableFile(atPath: candidate) { return candidate }
         }
         return nil

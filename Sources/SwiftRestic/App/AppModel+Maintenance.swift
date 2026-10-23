@@ -23,12 +23,12 @@ extension AppModel {
     var lockedRepositories: [UUID: String] {
         var reasons: [UUID: String] = [:]
         for (repositoryID, work) in maintenance {
-            let name = repository(id: repositoryID).map { label(of: $0) } ?? "The repository"
+            let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
             reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
         }
         for (planID, run) in activity where run.phase == .applyingRetention {
             guard let plan = plan(id: planID), let repositoryID = plan.repositoryID, reasons[repositoryID] == nil else { continue }
-            let name = repository(id: repositoryID).map { label(of: $0) } ?? "The repository"
+            let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
             reasons[repositoryID] = "\(name) is applying retention for “\(label(of: plan))” — backups wait until it finishes."
         }
         return reasons

@@ -702,8 +702,8 @@ struct RepositoryLabelTests {
         let other = local("/Volumes/Samsung/restic")
         #expect(t7.label(among: [t7, other]) == "T7")
         // A REST server's twins read as their URLs — without the login a URL
-        // saved before the login had fields of its own still carries
-        // (fa972e9): the label is every surface's, notifications, hooks and
+        // saved before the login had fields of its own still carries: the
+        // label is every surface's, notifications, hooks and
         // webhooks among them.
         var me = Repository()
         me.kind = .rest

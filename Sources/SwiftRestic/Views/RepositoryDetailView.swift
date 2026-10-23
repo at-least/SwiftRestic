@@ -47,18 +47,7 @@ struct RepositoryDetailView: View {
         .navigationTitle(repository.map { model.label(of: $0) } ?? "Repository")
         // The toolbar holds the search field alone; the page's verbs are the
         // menus' — the HIG's macOS toolbars: "it doesn't make sense to
-        // provide a toolbar item for every menu item". Edit Repository… is
-        // the Repository menu's and the sidebar row's (Edit… there); Check,
-        // Clean Up, the lock and index repairs and Remove from SwiftRestic…
-        // are the Repository menu's (all acting on this page's repository)
-        // and the row's (all but the two repairs), each through the one
-        // shared confirmation; Refresh is the row's, and the menu's Refresh
-        // All Backups (⌘R). A new plan
-        // in this repository starts from the sidebar's + or ⌘N, both into
-        // the repository on screen, or from its sidebar row's menu — and
-        // from the Protection card while it has none. Getting files back
-        // starts from a plan's Backups or Files tab, or from the search
-        // field.
+        // provide a toolbar item for every menu item".
         // Every backup in the repository, the toolbar's search on the page
         // that stands for it: Return carries the query into Find Files, the
         // page that lists what matches, and leaves this field empty for the

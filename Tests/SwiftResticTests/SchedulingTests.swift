@@ -12,21 +12,19 @@ struct SchedulingTests {
     @Test("a schedule's time reads in the Mac's own clock, 12- or 24-hour")
     func summaryFollowsTheClock() {
         // Locales pinned: en_US keeps a 12-hour clock, en_GB a 24-hour one.
-        // AppKit spells AM and PM after a narrow no-break space.
-        func flat(_ text: String) -> String { text.replacingOccurrences(of: "\u{202F}", with: " ") }
         let us = Locale(identifier: "en_US")
         let gb = Locale(identifier: "en_GB")
         var schedule = Schedule()
         schedule.frequency = .daily
         schedule.hour = 14
         schedule.minute = 5
-        #expect(flat(schedule.summary(calendar: calendar, locale: us)) == "Daily at 2:05 PM")
+        #expect(flatSpaces(schedule.summary(calendar: calendar, locale: us)) == "Daily at 2:05 PM")
         #expect(schedule.summary(calendar: calendar, locale: gb) == "Daily at 14:05")
         schedule.frequency = .weekly
         schedule.weekday = 1
         schedule.hour = 3
         schedule.minute = 0
-        #expect(flat(schedule.summary(calendar: calendar, locale: us)) == "Sunday at 3:00 AM")
+        #expect(flatSpaces(schedule.summary(calendar: calendar, locale: us)) == "Sunday at 3:00 AM")
         #expect(schedule.summary(calendar: calendar, locale: gb) == "Sunday at 03:00")
     }
 
@@ -291,19 +289,19 @@ struct SchedulingTests {
         let now = utcDate("2026-09-05 02:00:30")
 
         #expect(Scheduler.duePlans(
-            in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing
+            in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing, calendar: calendar
         ).map { $0.label(among: []) } == ["downloads", "elsewhere"])
 
         // Held back, not dropped: while the first runs its repository is busy,
         // and once it has run, the other is due on the next tick.
         #expect(Scheduler.duePlans(
             in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing,
-            busyPlanIDs: [downloads.id, elsewhere.id], busyRepositoryIDs: [shared, other]
+            busyPlanIDs: [downloads.id, elsewhere.id], busyRepositoryIDs: [shared, other], calendar: calendar
         ).isEmpty)
         var ran = downloads
         ran.lastRunAt = utcDate("2026-09-05 02:00:40")
         #expect(Scheduler.duePlans(
-            in: [ran, dotfiles], now: utcDate("2026-09-05 02:01:30"), existingRepositoryIDs: existing
+            in: [ran, dotfiles], now: utcDate("2026-09-05 02:01:30"), existingRepositoryIDs: existing, calendar: calendar
         ).map { $0.label(among: []) } == ["dotfiles"])
 
         // The plan whose slot passed longer ago goes first, whatever the
@@ -312,7 +310,7 @@ struct SchedulingTests {
         var early = makePlan("early", shared, lastRunAt: "2026-09-04 01:00:00")
         early.schedule.hour = 1
         #expect(Scheduler.duePlans(
-            in: [downloads, early], now: now, existingRepositoryIDs: existing
+            in: [downloads, early], now: now, existingRepositoryIDs: existing, calendar: calendar
         ).map { $0.label(among: []) } == ["early"])
     }
 }

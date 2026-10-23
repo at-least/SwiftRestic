@@ -152,12 +152,9 @@ struct RestorePaneView: View {
             footer(record: record)
         }
         .restoreCommand(restore(record: record))
-        // Fits the narrowest detail column the window allows beside the
-        // Backups tab's list: its 940-pt minimum less the sidebar at its
-        // 340-pt maximum, the split's 8 pt and the list at its 150-pt
-        // narrowest (SwiftResticApp.swift, SidebarView.swift,
-        // BackupsBrowserView.swift). Still a minimum: it also bounds the
-        // split view's zero-width sizing query.
+        // At most the narrowest detail column the window allows beside the
+        // Backups tab's list. Still a minimum: it also bounds the split
+        // view's zero-width sizing query.
         .frame(minWidth: 400)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -610,11 +607,10 @@ struct RestorePaneView: View {
         default: nil
         }
         let isPlain = press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
-        if let arrow, isPlain, selection.count > 1, searchResult == nil {
+        if let arrow, isPlain, selection.count > 1 {
             // Finder's outline with several rows selected: → opens every
             // selected folder and ← closes every open one; the selection
-            // stays where it is. Not over search results, whose paths can
-            // name tree rows hidden behind them.
+            // stays where it is.
             for node in selectedNodes where node.isDirectory {
                 switch tree.arrowStep(arrow, from: node.path) {
                 case .expand(let path), .collapse(let path): expand(path: path)
@@ -624,9 +620,7 @@ struct RestorePaneView: View {
             return .handled
         }
         if let arrow, isPlain, selection.count == 1 {
-            // A search's hit names no tree row: the arrow stays.
-            let selected = searchResult == nil ? selection.first.flatMap { tree.row(id: $0)?.node.path } : nil
-            guard let selected else { return .handled }
+            guard let selected = selection.first.flatMap({ tree.row(id: $0)?.node.path }) else { return .handled }
             switch tree.arrowStep(arrow, from: selected) {
             case .expand(let path), .collapse(let path):
                 // The step already knows the direction; expand toggles.
@@ -674,7 +668,7 @@ struct RestorePaneView: View {
     /// that row: a step the eye can follow, where a focus change alone
     /// showed nothing but a cleared selection.
     private var upStep: (from: String, parent: String)? {
-        let selected = searchResult == nil ? selection.first.flatMap { tree.row(id: $0)?.node.path } : nil
+        let selected = selection.first.flatMap { tree.row(id: $0)?.node.path }
         guard let from = selection.count == 1 ? selected : currentPath,
               let parent = BrowserListGrammar.parent(of: from),
               tree.node(at: parent) != nil
@@ -1048,7 +1042,7 @@ private struct IncompleteSnapshotStrip: View {
         let paths = lines.compactMap { run.unreadableItemPaths?[$0] }
         return HStack(alignment: .top, spacing: 8) {
             // Beside words that say the same thing: decoration to VoiceOver.
-            Image(systemName: RunRecord.Outcome.completedWithErrors.symbolName ?? "exclamationmark.triangle.fill")
+            Image(systemName: RunRecord.Outcome.completedWithErrors.symbolName!)
                 .foregroundStyle(StatusPalette.status(.completedWithErrors))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {

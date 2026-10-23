@@ -3,7 +3,8 @@ import Testing
 
 /// The per-repository resolved-context cache: a restic call does not re-read
 /// the secret store every time, and every input a context actually depends
-/// on invalidates by comparison — no save-site hooks to keep honest.
+/// on invalidates by comparison, except the password, which `upsert` drops
+/// explicitly.
 @MainActor
 @Suite("resolved context cache")
 struct ContextCacheTests {
@@ -33,7 +34,7 @@ struct ContextCacheTests {
         let backing = SecretStore.inMemory([repository.id: ("stored-password", nil)])
         let counting = SecretStore(
             load: { id in
-                await counter.increment()
+                counter.increment()
                 return try await backing.load(id)
             },
             save: backing.save,

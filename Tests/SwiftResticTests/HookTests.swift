@@ -151,7 +151,7 @@ struct HookTests {
 
         var disabled = hook("skipped", command: "exit 1")
         disabled.isEnabled = false
-        var blank = hook("blank", command: "   ")
+        let blank = hook("blank", command: "   ")
 
         let hooks = [
             hook("first", command: "exit 0"),

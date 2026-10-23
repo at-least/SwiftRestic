@@ -35,8 +35,8 @@ fi
 # SwiftRestic module to import. Such an import resolves only against the
 # app's module an earlier build left in DerivedData — xcodebuild warns that
 # the tests are "missing a dependency on 'SwiftRestic'" and the build passes —
-# while a clean checkout fails: CI's build of 189ba91 stopped at "Unable to
-# resolve module dependency: 'SwiftRestic'" (3e844ab took the imports out).
+# while a clean checkout fails with "Unable to resolve module dependency:
+# 'SwiftRestic'".
 tests=Tests/SwiftResticTests
 if [ ! -d "$tests" ]; then
     echo "error: test-import lint path is missing: $tests (update the path in build.sh)" >&2
@@ -81,10 +81,8 @@ ACTION="${1:-build}"
 # Two xcodebuild test sessions on one machine stomp each other's testmanagerd
 # sessions: the loser's runner gets SIGTERM'd mid-run ("Test crashed with
 # signal term"), xcodebuild restarts it, the remaining tests pass, and the
-# run is still marked failed — verified live 2026-09-14, with a foreign
-# xcodebuild launching its own test runners seconds before each of our
-# runner's three deaths. The suite costs about ten minutes; a collision wastes
-# all of it, so refuse to start while another instance exists. Test actions
+# run is still marked failed. The suite costs about ten minutes; a
+# collision wastes all of it, so refuse to start while another instance exists. Test actions
 # only: a concurrent plain build does not touch the test-runner machinery.
 # Limits worth knowing: the check runs at start only (a session launched
 # mid-run is what the restart check below catches), it cannot see test runs

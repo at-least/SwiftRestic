@@ -192,6 +192,9 @@ enum ProtectedLocations {
     /// component and without case, as the default APFS volume does:
     /// `~/LibraryX` is not `~/Library`.
     static func needsFullDiskAccess(_ source: String, home: String) -> Bool {
+        // Not a location (a new plan's empty path): every subtree starts
+        // with no components.
+        guard source.hasPrefix("/") || source.hasPrefix("~") else { return false }
         let path = components(source, home: home)
         let protected = homeSubtrees.map { components(home + "/" + $0, home: home) }
             + systemSubtrees.map { components($0, home: home) }

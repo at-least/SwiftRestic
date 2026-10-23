@@ -112,6 +112,9 @@ enum BackupRunEngine {
         /// stay after retention: it reads the listing the forget left, which
         /// the index then takes.
         func refreshSnapshots(repositoryID: UUID) async
+        /// The maintenance engine's closing refresh, outside this task: for a
+        /// run whose retention step was stopped, whose task is cancelled.
+        func scheduleSnapshotRefresh(repositoryID: UUID)
         /// The listing of a repository whose drive the run found away, in
         /// the run's words — its share's reconnect already tried, and not
         /// tried again by a refresh.
@@ -347,7 +350,14 @@ enum BackupRunEngine {
             }
 
             // A cache must never delay, and never fail, the run that feeds it.
-            await sink.refreshSnapshots(repositoryID: repository.id)
+            // A stop during retention — or one landing just after restic
+            // returned — leaves this task cancelled, which would kill an
+            // inline refresh.
+            if record.outcome == .cancelled || Task.isCancelled {
+                sink.scheduleSnapshotRefresh(repositoryID: repository.id)
+            } else {
+                await sink.refreshSnapshots(repositoryID: repository.id)
+            }
         } catch let ResticError.commandFailed(_, message) where message.hasPrefix(RunRecord.everySourceMissingMessage) {
             // The plan's folder missing: restic wrote nothing and said so.
             // On a drive that is away the run is skipped — a mount brings it

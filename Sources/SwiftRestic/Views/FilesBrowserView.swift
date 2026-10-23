@@ -401,7 +401,7 @@ struct FilesBrowserView: View {
             // An action, not a place: it selects the folder whose rows it
             // stands for, and the pane lists them all.
             Button { router.filesSelection[roots] = folder } label: {
-                Text("\(Format.count(count)) more items…")
+                Text("\(Format.plural(count, "more item"))…")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -524,8 +524,7 @@ extension View {
 extension View {
     /// A plan's page's search, in the window toolbar's trailing field — the
     /// HIG's place for it ("Put a search field at the trailing side of the
-    /// toolbar for many common uses"), where each tab had carried a field of
-    /// its own above its list. Its scope follows the tab: on Backups, the
+    /// toolbar for many common uses"). Its scope follows the tab: on Backups, the
     /// open backup; on Files and Overview, the page's files across every
     /// backup — typed on Overview, the page turns to Files, where the hits
     /// list. ⇧⌘F focuses it (`AppRouter.searchFocus`).

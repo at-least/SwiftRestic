@@ -18,9 +18,7 @@ extension AppModel {
         guard let repository = repository(id: plan.repositoryID)
         else { throw ResticError.repositoryMissing }
         do {
-            try await reconnectShare(before: repository)
-            let service = try service()
-            let context = try await context(for: repository)
+            let (service, context) = try await resticContext(for: repository)
             return try await service.forgetPreview(context, plan: plan)
         } catch {
             noteAuthFailure(error, repositoryID: repository.id)

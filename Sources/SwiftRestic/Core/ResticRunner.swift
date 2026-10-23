@@ -393,12 +393,12 @@ actor ResticRunner {
     /// we inherited: they would win over the per-repository values restic is
     /// handed (restic ranks PASSWORD_COMMAND and PASSWORD_FILE above PASSWORD),
     /// and the app always supplies them explicitly.
-    private static func baseEnvironment() -> [String: String] {
+    static func baseEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         for key in Self.protectedEnvironmentKeys {
             env.removeValue(forKey: key)
         }
-        let extraPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        let extraPaths = ResticBinary.helperDirectories + ["/bin", "/usr/sbin", "/sbin"]
         let existing = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
         var merged = existing
         for path in extraPaths where !merged.contains(path) { merged.append(path) }

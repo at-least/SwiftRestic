@@ -56,7 +56,7 @@ struct ConfigStoreTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        // Before 2026-10-17 one pair in Settings held back every
+        // An earlier build's one pair in Settings held back every
         // repository, a disk on this Mac too.
         let json = """
         {
@@ -113,7 +113,7 @@ struct ConfigStoreTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        // Before 2026-10-18 a plan held a list of folders.
+        // An earlier build's plan held a list of folders.
         let json = """
         {
           "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "name": "Home Disk",
@@ -553,7 +553,7 @@ struct TolerantDecodingTests {
         #expect(loaded.configuration.plans.map(\.excludePatterns) == [
             // The defaults ~/dotfiles cannot hold go; the patterns given
             // stay, even one anchored elsewhere, in their order — and
-            // **/node_modules, a default until 2026-10-21, is one of them.
+            // **/node_modules, an earlier default, is one of them.
             anywhere + ["**/node_modules", "~/elsewhere/cache", "*.log"],
             // The home folder holds the home-anchored ones; the drive and
             // startup-disk ones, which it cannot hold, go.
@@ -942,9 +942,11 @@ struct TolerantDecodingTests {
         var repository = Repository()
         repository.localPath = "/Users/someone/Survivor"
         configuration.repositories = [repository]
+        // After three saves the live file and .1 are empty, and .2 is the
+        // first save's "Survivor".
         try await store.save(configuration)
-        try await store.save(AppConfiguration())  // generation .1: an empty config
-        try await store.save(AppConfiguration())  // generation .2: the "Survivor" config
+        try await store.save(AppConfiguration())
+        try await store.save(AppConfiguration())
 
         // Corrupt both the live file and .1: .2 still holds "Survivor".
         for name in ["config.json", "config.json.1"] {

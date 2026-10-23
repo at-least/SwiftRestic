@@ -112,7 +112,7 @@ extension AppModel {
                 stats = repositoryStats[repositoryID]
             } catch {
                 stats = nil
-                if !statsFailureNoted.contains(repositoryID) {
+                if !statsFailureNoted.contains(repositoryID), configuration.repository(id: repositoryID) != nil {
                     statsFailureNoted.insert(repositoryID)
                     post(Banner(
                         title: "Could not read “\(label(of: repository))”'s size",
@@ -342,6 +342,9 @@ extension AppModel {
                 ignoreCase: false,
                 snapshotIDs: unanswered.count <= Self.fileHistoryNamedLimit ? unanswered : []
             )
+            // Removed meanwhile: its answers went with it, and nothing would
+            // clear these.
+            guard self.repository(id: repositoryID) != nil else { throw ResticError.repositoryMissing }
             var found: [String: SnapshotNode] = [:]
             for result in results {
                 if let match = result.matches.first(where: { PathKey($0.path) == pathKey }) {

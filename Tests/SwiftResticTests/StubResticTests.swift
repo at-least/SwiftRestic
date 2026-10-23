@@ -110,7 +110,7 @@ struct StubRestic: Sendable {
                 trace "$SWIFTRESTIC_STUB-arm"
                 # The selective modes hang one subcommand only: AppModel fires
                 # follow-up snapshot/stats refreshes once a run ends, and those
-                # must answer instead of burning their 300 s refresh timeout.
+                # must answer instead of running into the refresh timeout.
                 hang_this=1
                 if [ "$SWIFTRESTIC_STUB" = "hang-backup" ]; then
                     case " $* " in
@@ -415,7 +415,7 @@ struct StubRestic: Sendable {
                 ;;
             tccblocked)
                 # A backup macOS's privacy protection partly refused, in the
-                # shapes restic 0.19.1 printed on 2026-09-26: a folder it may
+                # shapes restic 0.19.1 printed: a folder it may
                 # not list arrives twice (scan, then archival) with EPERM's
                 # words, a mode-000 file once with EACCES's. The home folder
                 # is spelled out so the test never depends on $HOME reaching
@@ -746,8 +746,8 @@ struct StubResticTests {
 
     @Test("a timeout names what restic was retrying when it was stopped")
     func timeoutNamesTheRetriedCause() async throws {
-        // restic 0.19.1's own line against a stopped rest-server
-        // (2026-10-17), then a hang the timeout ends.
+        // restic 0.19.1's own line against a stopped rest-server, then a
+        // hang the timeout ends.
         let retrying = #"Stat(<config/>) returned error, retrying after 38.601553609s: Head "http://:***@127.0.0.1:18000/demo/config": "#
             + "dial tcp 127.0.0.1:18000: connect: connection refused"
         do {

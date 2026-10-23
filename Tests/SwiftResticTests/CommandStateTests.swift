@@ -58,9 +58,9 @@ struct CommandStateTests {
         model.maintenance[repository.id] = MaintenanceActivity(task: .prune)
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
         #expect(!model.planCommands(for: nil).canBackUpAll)
-        #expect(model.backupLockReason(for: documents) == "Home NAS is running a cleanup — backups wait until it finishes.")
+        #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a cleanup — backups wait until it finishes.")
         model.maintenance[repository.id] = MaintenanceActivity(task: .check)
-        #expect(model.backupLockReason(for: documents) == "Home NAS is running a check — backups wait until it finishes.")
+        #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a check — backups wait until it finishes.")
         model.maintenance = [:]
 
         // Another plan's backup shares the lock; its retention step does not.
@@ -69,7 +69,7 @@ struct CommandStateTests {
         model.activity[photos.id] = PlanActivity(phase: .applyingRetention)
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
         #expect(model.backupLockReason(for: documents)
-            == "Home NAS is applying retention for “Photos” — backups wait until it finishes.")
+            == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
     }
 
     @Test("Back Up All queues a plan behind another plan's run on its repository, its retention step too, and leaves out one whose repository a check or prune holds")

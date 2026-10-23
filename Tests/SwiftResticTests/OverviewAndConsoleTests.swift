@@ -103,8 +103,7 @@ struct OverviewMetricsTests {
         ])
         #expect(rows.last?.stateText.hasPrefix("Last backup ") == true)
         #expect(rows.last?.isProtected == true)
-        // The failure row is the only unknown-and-failing one, and the only
-        // loaded one with no lastBackupAt to count.
+        // The failure row is the only failing one, and has no lastBackupAt.
         #expect(rows.filter(\.didFail).map(\.planName) == ["Failed"])
         #expect(rows.first { $0.planName == "Failed" }?.lastBackupAt == nil)
     }
@@ -747,7 +746,7 @@ struct CommandLineTokenizerTests {
         // characters it reserves — a Windows path must not lose its slashes.
         #expect(CommandLineTokenizer.tokenize(#"ls "C:\Users\me""#) == ["ls", #"C:\Users\me"#])
         #expect(CommandLineTokenizer.tokenize(#"echo "a\$b""#) == ["echo", "a$b"])
-        // And outside quotes it still escapes whatever follows.
+        // Inside double quotes a backslash still escapes a backslash.
         #expect(CommandLineTokenizer.tokenize(#"ls "a\\b""#) == ["ls", #"a\b"#])
     }
 

@@ -143,13 +143,8 @@ struct RootView: View {
         }
     }
 
-    /// The toolbar's look and the banner announcements. Each pane carries
-    /// its own verbs, and no button is app-wide: a plan's page searches in
-    /// its Files tab's own field, the Restore pane's and the Files tab's
-    /// searches carry on in Find Files through their Search All Backups…,
-    /// and the Repository menu's Find Files in Backups… (⇧⌘F) reaches the
-    /// field or the Find Files page from anywhere. The console stays in
-    /// the Repository menu too (restic Console…).
+    /// The toolbar's look and the banner announcements. No toolbar button
+    /// is app-wide: each pane carries its own verbs.
     private func chrome<V: View>(over content: V) -> some View {
         content
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)

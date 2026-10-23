@@ -55,7 +55,7 @@ enum RetentionProjection {
         now: Date = .now,
         calendar: Calendar = .current
     ) -> Outcome? {
-        guard policy.isEnabled, policy.isSafeToRun else { return nil }
+        guard policy.isSafeToRun else { return nil }
         let step: TimeInterval
         switch schedule.frequency {
         case .manual:

@@ -10,8 +10,9 @@ struct RetentionPreview: Sendable, Equatable {
     /// Newest first, like every other snapshot list.
     var removed: [Snapshot]
 
-    /// One group of `forget --json`'s answer. restic writes `remove` as
-    /// `null` when nothing goes; `keep` is read the same way, defensively.
+    /// One group of `forget --json`'s answer. restic writes an empty list as
+    /// `null` (a Go nil slice): `remove` when nothing goes, `keep` when
+    /// nothing stays.
     /// `reasons`, `host`, `paths` and `tags` are not needed: the plan's tag
     /// already scoped the command.
     private struct Group: Decodable {
@@ -73,7 +74,7 @@ struct RetentionPreview: Sendable, Equatable {
         let total = kept.count + removed.count
         guard total > 0 else { return "This plan has no backups in the repository yet." }
         if removed.isEmpty {
-            return "All \(Format.plural(total, "backup")) would stay."
+            return total == 1 ? "The backup would stay." : "All \(Format.plural(total, "backup")) would stay."
         }
         return "With this policy, \(Format.plural(total, "backup")) would become \(kept.count)."
     }
@@ -84,7 +85,7 @@ struct RetentionPreview: Sendable, Equatable {
         guard removed > 0 else { return "No backups needed removing." }
         let snapshots = Format.plural(removed, "backup")
         return pruned
-            ? "Removed \(snapshots) and freed their space."
-            : "Removed \(snapshots). Their data stays until the next cleanup."
+            ? "Removed \(snapshots) and freed \(removed == 1 ? "its" : "their") space."
+            : "Removed \(snapshots). \(removed == 1 ? "Its" : "Their") data stays until the next cleanup."
     }
 }

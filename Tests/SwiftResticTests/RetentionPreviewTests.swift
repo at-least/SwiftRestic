@@ -60,8 +60,8 @@ struct RetentionPreviewTests {
         #expect(kept.removed.isEmpty)
         #expect(kept.kept.count == 5)
 
-        // Never seen from restic; read defensively rather than failing the
-        // whole preview.
+        // Nothing kept: restic's keep list is a Go nil slice then, written
+        // as null, like remove's.
         for keep in [#""keep":null,"#, ""] {
             let output = """
             [{"host":"probe-mac","paths":["/probe/src"],\(keep)\
@@ -125,7 +125,11 @@ struct RetentionPreviewTests {
         #expect(RetentionPreview.appliedSummary(removed: 2, pruned: false)
             == "Removed 2 backups. Their data stays until the next cleanup.")
         #expect(RetentionPreview.appliedSummary(removed: 1, pruned: true)
-            == "Removed 1 backup and freed their space.")
+            == "Removed 1 backup and freed its space.")
+        #expect(RetentionPreview.appliedSummary(removed: 1, pruned: false)
+            == "Removed 1 backup. Its data stays until the next cleanup.")
+        #expect(RetentionPreview.appliedSummary(removed: 2, pruned: true)
+            == "Removed 2 backups and freed their space.")
     }
 
     @Test("the preview's command differs from the real forget only by its dry-run flags")

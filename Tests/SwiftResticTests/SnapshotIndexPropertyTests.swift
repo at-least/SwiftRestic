@@ -561,14 +561,14 @@ private final class PropertyRun {
             }
         }
         for snapshot in alive {
-            let got = try await index.contains(paths: paths, inSnapshot: snapshot.id)
+            let got = try await index.kinds(of: paths, inSnapshot: snapshot.id)
             let want = snapshot.content.byPathKey
             if got != want {
                 fail("mismatch", "\(label): contains(\(snapshot.id.suffix(4))) differs: extra \(Set(got.keys).subtracting(want.keys).map(\.path).sorted()) missing \(Set(want.keys).subtracting(got.keys).map(\.path).sorted())")
             }
         }
         for dead in world.all.keys where !world.alive.contains(dead) {
-            if try await !index.contains(paths: paths, inSnapshot: dead).isEmpty {
+            if try await !index.kinds(of: paths, inSnapshot: dead).isEmpty {
                 fail("mismatch", "\(label): contains answered for unlisted \(dead.suffix(4))")
             }
         }

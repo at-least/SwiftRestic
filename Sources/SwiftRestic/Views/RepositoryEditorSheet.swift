@@ -339,9 +339,6 @@ struct RepositoryEditorSheet: View {
             }
 
             Section("Bandwidth") {
-                // Typeable, not steppers. Values are clamped on commit; the
-                // assignment itself refreshes the field even when the clamp
-                // lands on the value it already held.
                 limitField("Upload limit (KiB/s)", $draft.uploadLimitKiBps)
                 limitField("Download limit (KiB/s)", $draft.downloadLimitKiBps)
                 Text("Backups upload; restores and checks that read data download — on a drive attached to this Mac too.")
@@ -692,7 +689,7 @@ struct RepositoryEditorSheet: View {
     private func loadRcloneRemotes() async -> [RcloneRemote] {
         // The helper lookup stats the PATH — off the main actor, the same
         // rule resolveBinary's own probe follows.
-        guard let rclone = await Task.detached { ResticBinary.locateHelper(named: "rclone") }.value
+        guard let rclone = await Task.detached(operation: { ResticBinary.locateHelper(named: "rclone") }).value
         else { return [] }
         return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
     }
@@ -736,7 +733,7 @@ struct RepositoryEditorSheet: View {
         // restic shells out to rclone for this backend; catch a missing helper
         // here rather than letting it surface as an opaque failure from restic.
         if draft.requiresRcloneBinary,
-           await Task.detached { ResticBinary.locateHelper(named: "rclone") }.value == nil
+           await Task.detached(operation: { ResticBinary.locateHelper(named: "rclone") }).value == nil
         {
             status = .failure(ResticError.rcloneMissing)
             return false
@@ -773,12 +770,10 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// Keeps the typed value inside restic's accepted range: out-of-range
-    /// input is corrected on commit, never mid-keystroke.
     /// A bandwidth limit in KiB/s, restic's unit: empty is no limit (0),
-    /// shown as the prompt. Typeable, not a stepper; clamped on commit, the
-    /// assignment refreshing the field even when the clamp lands on the
-    /// value it already held.
+    /// shown as the prompt. Typeable, not a stepper; out-of-range input is
+    /// clamped on commit, never mid-keystroke, the assignment refreshing the
+    /// field even when the clamp lands on the value it already held.
     private func limitField(_ title: String, _ binding: Binding<Int>) -> some View {
         TextField(
             title,

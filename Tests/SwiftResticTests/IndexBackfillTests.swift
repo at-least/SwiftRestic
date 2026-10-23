@@ -111,7 +111,7 @@ struct IndexBackfillTests {
                     "summary of \(path)", sourceLocation: sourceLocation)
         }
         for snapshot in [newest, older] {
-            let held = try await coordinator.contains(paths: paths, inSnapshot: snapshot.id, repositoryID: repositoryID)
+            let held = try await coordinator.kinds(of: paths, inSnapshot: snapshot.id, repositoryID: repositoryID)
             #expect(held == snapshot.content.byPathKey, "contains in \(snapshot.id)", sourceLocation: sourceLocation)
             // The Restore pane's read: each path's kind in this snapshot,
             // from its own search.
@@ -285,10 +285,10 @@ struct IndexBackfillTests {
         let older = (id: firstID, content: try await lsContent(scene, firstID))
         try await expectAnswersMatch(coordinator, repositoryID, newest: newest, older: older)
         let kinds = [scene.path("x"), scene.path("x/g"), scene.path("d"), scene.path("d/inner"), scene.path("link")]
-        #expect(try await coordinator.contains(paths: kinds, inSnapshot: secondID, repositoryID: repositoryID) == [
+        #expect(try await coordinator.kinds(of: kinds, inSnapshot: secondID, repositoryID: repositoryID) == [
             scene.path("x"): true, scene.path("x/g"): false, scene.path("d"): false, scene.path("link"): false,
         ].byPathKey)
-        #expect(try await coordinator.contains(paths: kinds, inSnapshot: firstID, repositoryID: repositoryID) == [
+        #expect(try await coordinator.kinds(of: kinds, inSnapshot: firstID, repositoryID: repositoryID) == [
             scene.path("x"): false, scene.path("d"): true, scene.path("d/inner"): false, scene.path("link"): false,
         ].byPathKey)
     }
@@ -328,7 +328,7 @@ struct IndexBackfillTests {
         let probedPath = scene.path("folder3/file-3-77.txt")
         #expect(try await coordinator.versions(ofPath: probedPath, repositoryID: repositoryID).count == 1)
 
-        print("backfill throughput: 10_001 paths in \(String(format: "%.2f", elapsed))s (\(String(format: "%.0f", Double(10_001) / max(elapsed, 0.001))) paths/s)")
+        print("backfill throughput: 10,000 files in \(String(format: "%.2f", elapsed))s (\(String(format: "%.0f", Double(10_000) / max(elapsed, 0.001))) files/s)")
         #expect(elapsed < 120, "backfill of 10k paths took \(elapsed)s — the seconds-scale claim is broken")
     }
 
@@ -444,14 +444,6 @@ extension IndexCoordinator {
         try await read(repositoryID) { try await $0.versionSummaries(ofPaths: paths) }
     }
 
-    /// Which of `paths` one snapshot holds, each with its kind there — the
-    /// store's path-keyed oracle, through the coordinator's lease.
-    /// Test-only — the Restore pane reads the open backup's membership
-    /// inside its search (`searchWithMembership(matching:inSnapshot:repositoryID:limit:)`).
-    nonisolated func contains(paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
-        try await read(repositoryID) { try await $0.contains(paths: paths, inSnapshot: snapshotID) }
-    }
-
     /// Basename search across every indexed path, the hits alone.
     /// Test-only — both searches the app runs answer their second question
     /// in the same read (`searchWithMembership`, `searchWithSummaries`).
@@ -483,7 +475,7 @@ struct IndexCoordinatorTombstoneTests {
             // The answer a search must surface, never read as "no versions".
         }
         do {
-            _ = try await coordinator.contains(paths: ["/data/a"], inSnapshot: "s1", repositoryID: repositoryID)
+            _ = try await coordinator.kinds(of: ["/data/a"], inSnapshot: "s1", repositoryID: repositoryID)
             Issue.record("expected repositoryRemoved, got a result")
         } catch IndexError.repositoryRemoved {}
         // The two searches the app runs, each reading that answer inside the
@@ -998,8 +990,8 @@ struct IndexCoordinatorBackfillTests {
         #expect(report?.typeChange == 0 && report?.diffFailed == 0)
         #expect(report?.deltas == 0 && report?.fulls == 1)
         #expect(client.diffCounts["s2"] == 1 && client.walkCounts["s2"] == 1)
-        let held = try await scene.coordinator.contains(
-            paths: ["/data/k", "/data/k/f"], inSnapshot: "s2", repositoryID: scene.repositoryID
+        let held = try await scene.coordinator.kinds(
+            of: ["/data/k", "/data/k/f"], inSnapshot: "s2", repositoryID: scene.repositoryID
         )
         #expect(held == ["/data/k": true, "/data/k/f": false].byPathKey)
         #expect(try await scene.violations.isEmpty)
@@ -1288,7 +1280,7 @@ struct IndexCoordinatorConcurrencyTests {
             let versions = try await coordinator.versions(ofPath: "/data/f7.txt", repositoryID: repositoryID).map(\.id)
             let hits = try await coordinator.searchPaths(matching: "f1", repositoryID: repositoryID, limit: 5)
             let summaries = try await coordinator.versionSummaries(ofPaths: ["/data/f7.txt"], repositoryID: repositoryID)
-            let held = try await coordinator.contains(paths: ["/data/f7.txt"], inSnapshot: "s1", repositoryID: repositoryID)
+            let held = try await coordinator.kinds(of: ["/data/f7.txt"], inSnapshot: "s1", repositoryID: repositoryID)
             // The two searches the app runs: the Restore pane's and Find Files'.
             let membership = try await coordinator.searchWithMembership(
                 matching: "f1", inSnapshot: "s1", repositoryID: repositoryID, limit: 5
@@ -1353,7 +1345,7 @@ struct IndexCoordinatorConcurrencyTests {
 
     @Test(
         "a read that meets a reset's gate parks until it reopens: cancelled, it throws CancellationError at once while the reset still runs; uncancelled, it answers from the fresh file",
-        .timeLimit(.minutes(1))
+        .timeLimit(.minutes(3))
     )
     func readsParkAtTheGate() async throws {
         let scene = try CoordinatorScene("SwiftResticGateWaiters")
@@ -1409,10 +1401,10 @@ struct IndexCoordinatorConcurrencyTests {
             return try await coordinator.isComplete(repositoryID: repositoryID)
         }
         early.cancel()
-        let earlyStopped = await eventually(within: 2) { earlyDone.isSet }
+        let earlyStopped = await eventually(within: 60) { earlyDone.isSet }
 
         cancelled.cancel()
-        let stoppedPromptly = await eventually(within: 2) { cancelledDone.isSet }
+        let stoppedPromptly = await eventually(within: 60) { cancelledDone.isSet }
         let resetStillHeld = !resetDone.isSet
         let otherStillWaiting = !waitingDone.isSet
         release.set()

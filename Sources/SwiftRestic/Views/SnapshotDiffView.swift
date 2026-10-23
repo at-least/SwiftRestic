@@ -32,8 +32,7 @@ struct SnapshotDiffView: View {
     /// The query the filter actually applies: `searchText` as it settles —
     /// every keystroke restarts the debounce task below, and the row scan
     /// runs under this settled value (see `computeRows`), so typing a word
-    /// scans once at the end, not once per character over up to twenty
-    /// thousand changes.
+    /// scans once at the end, not once per character.
     @State private var appliedSearchText = ""
     /// The diff's pre-lowercased search index, rebuilt when a diff lands —
     /// not on every keystroke it exists to serve.
@@ -473,8 +472,7 @@ struct SnapshotDiffView: View {
 
     /// The change rows the current kind filter and path search admit,
     /// computed off the render path: every keystroke re-renders the sheet,
-    /// and the scan costs linearly in the change list (44 ms at the
-    /// 20,000-change cap), all on the main actor. Keyed by `RowFilterKey`
+    /// and the scan is linear in the change list, all on the main actor. Keyed by `RowFilterKey`
     /// it runs once per settled query in a detached task; the cancellation
     /// guard drops a scan whose inputs were replaced mid-flight.
     private func computeRows() async {

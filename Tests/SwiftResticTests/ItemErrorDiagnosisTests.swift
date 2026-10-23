@@ -21,7 +21,7 @@ struct ItemErrorDiagnosisTests {
         #expect(ItemErrorDiagnosis.kind(of: "1 restic message could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete.") == .other)
         #expect(ItemErrorDiagnosis.kind(of: "/src/gone does not exist, skipping") == .other)
         // A parent folder's extended-attribute failure: restic ends this
-        // message with a newline, and the stored line keeps it.
+        // message with a newline, which the classifier reads past.
         #expect(ItemErrorDiagnosis.kind(of: "/Users/u/Library/Safari: can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted\n") == .blockedByMacOS)
 
         let tally = ItemErrorDiagnosis.tally([
@@ -108,7 +108,9 @@ struct ItemErrorDiagnosisTests {
             #expect(ProtectedLocations.needsFullDiskAccess(source, home: home), "\(source)")
         }
         for source in ["/Users/u/Documents", "/Users/u/Library/Preferences", "/Users/u/LibraryX",
-                       "/Users/u/Library/MailX", "/Volumes/NAS", "/Users/other", "~/Documents"] {
+                       "/Users/u/Library/MailX", "/Volumes/NAS", "/Users/other", "~/Documents",
+                       // A new plan's empty path, before anything is typed.
+                       "", "  "] {
             #expect(!ProtectedLocations.needsFullDiskAccess(source, home: home), "\(source)")
         }
     }

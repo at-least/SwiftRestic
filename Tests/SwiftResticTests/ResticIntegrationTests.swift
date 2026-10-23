@@ -256,9 +256,6 @@ struct ResticIntegrationTests {
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
 
-        // restic stamps snapshots with second granularity, so backups taken in
-        // the same second can tie and keep-last's notion of "newest" becomes
-        // unstable. Spacing the runs out makes the expected survivor exact.
         func runPlan(_ plan: BackupPlan) async throws -> String {
             try "change \(UUID().uuidString)".write(
                 to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
@@ -266,7 +263,6 @@ struct ResticIntegrationTests {
                 encoding: .utf8
             )
             let outcome = try await fixture.service.backup(fixture.context, plan: plan)
-            try await Task.sleep(for: .milliseconds(1100))
             return try #require(outcome.summary?.snapshotID)
         }
 
@@ -321,8 +317,6 @@ struct ResticIntegrationTests {
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
 
-        // Spaced a second apart: restic stamps whole seconds, and keep-last's
-        // "newest" must be exact for the IDs below to be.
         var planIDs: [String] = []
         for index in 0 ..< 3 {
             try "change \(index)".write(
@@ -332,7 +326,6 @@ struct ResticIntegrationTests {
             )
             let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
             planIDs.append(try #require(outcome.summary?.snapshotID))
-            try await Task.sleep(for: .milliseconds(1100))
         }
         var otherPlan = fixture.plan
         otherPlan.id = UUID()
@@ -350,9 +343,7 @@ struct ResticIntegrationTests {
         // situation a user opening the sheet mid-backup is in. It reads its
         // file from a pipe this test holds open, so the lock is held for as
         // long as the preview and the control below take, however slowly
-        // restic runs: a 30 s sleep in its place let the lock go before the
-        // control forget on a loaded Mac (2026-10-09, the test at 228 s
-        // against its usual 12), and the forget pruned two snapshots.
+        // restic runs.
         let binary = try ResticBinary.locate(userOverride: nil)
         let holder = Process()
         holder.executableURL = binary.url
@@ -433,7 +424,7 @@ struct ResticIntegrationTests {
 
         // Two backups one plan made, and no plan configured anywhere — the
         // group sits under Other backups waiting to be adopted.
-        var plan = fixture.plan
+        let plan = fixture.plan
         for index in 0 ..< 2 {
             try "change \(index)".write(
                 to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
@@ -1133,8 +1124,7 @@ struct ResticIntegrationTests {
         fixture.service.home = home.path
         fixture.plan.excludeDeveloperFiles = true
         // The switch alone: no row of the plan's own may be what skips a
-        // folder here — node_modules among them, the switch's since
-        // 2026-10-21.
+        // folder here — node_modules among them, now the switch's.
         fixture.plan.excludePatterns = []
 
         // The developers' own layouts: a virtualenv by its name, a Cargo
@@ -1336,8 +1326,8 @@ struct ResticCheckDamageTests {
             "check exited 1 on damage but named no errors: \(String(describing: summary))"
         )
 
-        // The structure alone passes the same damage — the default a
-        // repository had before 2026-10-17 — while a rotation of slices
+        // The structure alone passes the same damage — an earlier build's
+        // default — while a rotation of slices
         // reads the damaged pack in exactly one of them.
         #expect((try await service.check(context, readDataSubset: nil)?.numErrors ?? 0) == 0)
         var slicesFindingIt = 0

@@ -30,7 +30,6 @@ struct VolumeCapacityTests {
         let capacity = try #require(VolumeCapacity.of(path: FileManager.default.temporaryDirectory.path))
         #expect(capacity.totalBytes > 0)
         #expect(capacity.freeBytes > 0)
-        #expect(capacity.usedBytes >= 0)
         #expect(capacity.usedFraction > 0 && capacity.usedFraction <= 1)
     }
 

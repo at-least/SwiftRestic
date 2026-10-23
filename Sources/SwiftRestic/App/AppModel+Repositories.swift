@@ -43,9 +43,12 @@ extension AppModel {
             providerSecret: providerSecret
         ).overriddenExtraEnvironmentKeys
         if !overridden.isEmpty {
+            let one = overridden.count == 1
             post(Banner(
-                title: "Ignored environment variables",
-                message: "\(overridden.joined(separator: ", ")) is set by SwiftRestic itself; an entry for it in “\(label(of: repository))”'s extra environment (configuration file) has no effect.",
+                title: one ? "Ignored environment variable" : "Ignored environment variables",
+                message: one
+                    ? "\(overridden[0]) is set by SwiftRestic itself, so the entry for it in “\(label(of: repository))”'s extra environment has no effect. Remove it from SwiftRestic's configuration file."
+                    : "\(Format.list(overridden)) are set by SwiftRestic itself, so their entries in “\(label(of: repository))”'s extra environment have no effect. Remove them from SwiftRestic's configuration file.",
                 level: .warning
             ))
         }

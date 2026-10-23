@@ -294,7 +294,11 @@ struct FileVersionsView: View {
     }
 
     private func readDetails() async {
-        guard !versions.isEmpty else { return }
+        guard !versions.isEmpty else {
+            // Nothing to ask: the disk line may speak.
+            isReadingDetails = false
+            return
+        }
         isReadingDetails = true
         do {
             let found = try await model.fileHistory(

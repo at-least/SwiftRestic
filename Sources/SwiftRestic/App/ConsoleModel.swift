@@ -74,8 +74,11 @@ final class ConsoleModel {
     }
 
     func run() {
+        // The Run button's own gate: the field's Return submits while a
+        // command runs, and a confirmation armed then would have nowhere to
+        // run.
+        guard canRun else { return }
         let arguments = CommandLineTokenizer.tokenize(commandText)
-        guard !arguments.isEmpty, repositoryID != nil else { return }
         // A shell refuses an unclosed quote; so does the console. Closing it
         // silently would confirm — or run — a mangled argument the user
         // never typed, which is exactly the failure a confirmation exists

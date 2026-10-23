@@ -12,10 +12,9 @@ private struct CheckTarget: Identifiable {
     var id: UUID { repositoryID }
 }
 
-/// Every destructive confirmation, once, Check…'s sheet and Apply Retention
-/// Now…'s sheet —
-/// wherever they are asked from: the Plan and Repository menus, the panes'
-/// toolbars, the sidebar's menus. One dialog with the model's words
+/// Every command's confirmation, once — the dialogs, Check…'s sheet and
+/// Apply Retention Now…'s sheet — wherever they are asked from: the Plan and
+/// Repository menus, the panes' toolbars, the sidebar's menus. One dialog with the model's words
 /// (`AppModel.confirmationCopy(for:)`), so no two surfaces can word one
 /// action two ways, and none adds a dialog of its own. A modifier of its
 /// own because RootView's chain sits at the compiler's type-check limit.

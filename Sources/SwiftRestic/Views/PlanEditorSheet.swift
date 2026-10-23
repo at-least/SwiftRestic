@@ -560,7 +560,7 @@ struct PlanEditorSheet: View {
                 .editorSwitches()
             // A timed Pause Schedule leaves the switch on; without this line
             // the editor would read as if the plan were running on schedule.
-            if draft.isEnabled, let end = draft.activePauseEnd(at: .now) {
+            if draft.isEnabled, let end = draft.activePauseEnd(at: now) {
                 Text("Paused until \(Format.pauseEnd(end)) — scheduled runs resume by themselves then.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

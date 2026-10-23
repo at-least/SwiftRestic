@@ -2,9 +2,9 @@ import Foundation
 import Testing
 
 /// The run engines' sequencing and outcome mapping, driven through a mock
-/// client and a recording sink — no process, no binary, milliseconds per
-/// case. The stub-shell and real-restic suites own everything below the
-/// `ResticClient` seam.
+/// client and a recording sink. restic is mocked; hooks still run as real
+/// `/bin/sh` processes. The stub-shell and real-restic suites own everything
+/// below the `ResticClient` seam.
 @MainActor
 @Suite("backup run engine")
 struct BackupRunEngineTests {
@@ -20,7 +20,14 @@ struct BackupRunEngineTests {
         func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
         func label(of repository: Repository) -> String { repository.label(among: [repository]) }
 
-        func service() throws -> any ResticClient { throw ResticError.repositoryMissing }
+        /// What `service()` answers; set by `serving(_:)`.
+        var client = MockResticClient()
+        func serving(_ client: MockResticClient) -> Self {
+            self.client = client
+            return self
+        }
+
+        func service() throws -> any ResticClient { client }
         func context(for repository: Repository) async throws -> RepositoryContext {
             log.append("context")
             return RepositoryContext(repository: repository, password: "test")
@@ -47,8 +54,16 @@ struct BackupRunEngineTests {
             log.append("ping:\(event.stage)")
         }
 
+        /// Per refresh, whether it ran in a cancelled task.
+        var refreshCancelled: [Bool] = []
         func refreshSnapshots(repositoryID: UUID) async {
             log.append("refresh")
+            refreshCancelled.append(Task.isCancelled)
+        }
+
+        func scheduleSnapshotRefresh(repositoryID: UUID) {
+            log.append("refresh-scheduled")
+            Task { await refreshSnapshots(repositoryID: repositoryID) }
         }
 
         func noteRepositoryAway(repositoryID: UUID, reason: String) {
@@ -108,7 +123,7 @@ struct BackupRunEngineTests {
         let sink = RecordingSink()
         let client = MockResticClient().onBackup(.success(successOutcome()))
         let plan = makePlan()
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         // The ping must precede the backup (a monitor's timer starts at the
         // ping), the success stamp must land before anything later can fail
@@ -140,7 +155,7 @@ struct BackupRunEngineTests {
         let unreachable = "the server could not be reached"
         outOfReach.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .unreachable(unreachable))]
         let client = MockResticClient().onBackup(.success(successOutcome()))
-        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: outOfReach))
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: outOfReach.serving(client))
         // Asked once, before the run is decided.
         #expect(outOfReach.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(volume)"], "log was \(outOfReach.log)")
         #expect(try #require(outOfReach.log.firstIndex(of: "reconnect:\(volume)")) < (try #require(outOfReach.log.firstIndex(of: "mark:nothing"))))
@@ -154,7 +169,7 @@ struct BackupRunEngineTests {
         let refused = "the share did not accept the user name and password"
         refusing.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .refused(refused))]
         let untouched = MockResticClient().onBackup(.success(successOutcome()))
-        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: untouched, base: refusing))
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: refusing.serving(untouched))
         #expect(untouched.callLog.isEmpty)
         #expect(refusing.log.contains("mark:nothing"), "log was \(refusing.log)")
         let failed = try #require(refusing.deliveredRecords.first)
@@ -172,7 +187,7 @@ struct BackupRunEngineTests {
         let untouched = MockResticClient().onBackup(.success(successOutcome()))
         var plan = makePlan()
         plan.path = "/Volumes/\(volume)/Projects"
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: untouched, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(untouched))
         #expect(untouched.callLog.isEmpty)
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .failed)
@@ -188,7 +203,7 @@ struct BackupRunEngineTests {
         let client = MockResticClient().onBackup(.failure(ResticError.commandFailed(exitCode: 1, message: RunRecord.everySourceMissingMessage)))
         var plan = makePlan()
         plan.path = "/Volumes/\(away)/c"
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         #expect(sink.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(away)"], "log was \(sink.log)")
         let record = try #require(sink.deliveredRecords.first)
@@ -199,7 +214,7 @@ struct BackupRunEngineTests {
         let here = RecordingSink()
         await BackupRunEngine.perform(
             plan: makePlan(), repository: Repository(),
-            sink: StubServiceSink(client: MockResticClient().onBackup(.success(successOutcome())), base: here)
+            sink: here.serving(MockResticClient().onBackup(.success(successOutcome())))
         )
         #expect(!here.log.contains { $0.hasPrefix("reconnect") }, "log was \(here.log)")
     }
@@ -212,7 +227,7 @@ struct BackupRunEngineTests {
         repository.localPath = "/Users/Shared/engine-repo"
         let line = "Fatal: unable to save snapshot: write /Users/Shared/engine-repo/data/52/526d-tmp-1: no space left on device"
         let client = MockResticClient().onBackup(.failure(ResticError.commandFailed(exitCode: 1, message: line)))
-        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: sink.serving(client))
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .failed)
         #expect(record.failureMessage == RunRecord.repositoryFullMessage(resticMessage: line, repository: repository))
@@ -225,7 +240,7 @@ struct BackupRunEngineTests {
         let sink = RecordingSink()
         let client = MockResticClient().onBackup(.success(successOutcome(snapshotID: nil)))
         let plan = makePlan()
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         #expect(!sink.log.contains { $0.hasPrefix("phase:applyingRetention") })
         // The run itself still succeeded and was delivered.
@@ -239,7 +254,7 @@ struct BackupRunEngineTests {
             .failure(ResticError.commandFailed(exitCode: 12, message: "wrong password"))
         )
         let plan = makePlan()
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         #expect(sink.log.contains("mark:nothing"))
         #expect(sink.log.contains("auth-noted"))
@@ -270,16 +285,18 @@ struct BackupRunEngineTests {
         let sink = RecordingSink()
         let client = MockResticClient().onBackup(.success(successOutcome()))
         let task = Task {
-            await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+            await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
         }
         // The hang is what guarantees the cancel lands inside the hook, the
         // window where a cancel must read as a cancellation, not a hook
         // failure.
-        let deadline = Date.now.addingTimeInterval(10)
+        // A loaded Mac can stretch a shell's start well past seconds, and a
+        // cancel landing before the hook would test another case.
+        let deadline = Date.now.addingTimeInterval(60)
         while Date.now < deadline, !FileManager.default.fileExists(atPath: hookStarted.path) {
             try await Task.sleep(for: .milliseconds(50))
         }
-        #expect(FileManager.default.fileExists(atPath: hookStarted.path), "the hook never started")
+        try #require(FileManager.default.fileExists(atPath: hookStarted.path), "the hook never started")
         task.cancel()
         await task.value
 
@@ -302,7 +319,7 @@ struct BackupRunEngineTests {
             .onBackup(.success(successOutcome()))
             .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
         let plan = makePlan()
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         let record = sink.deliveredRecords[0]
         #expect(record.outcome == .completedWithErrors)
@@ -323,7 +340,7 @@ struct BackupRunEngineTests {
         var repository = Repository()
         repository.kind = .rest
         repository.restURL = "http://127.0.0.1:18000/app"
-        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: sink.serving(client))
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .skipped)
@@ -343,13 +360,13 @@ struct BackupRunEngineTests {
         var repository = Repository()
         repository.kind = .rest
         repository.restURL = "http://127.0.0.1:18000/app"
-        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: sink.serving(client))
         #expect(sink.log.contains("probe"))
         #expect(client.callLog.first == "backup")
 
         let localSink = RecordingSink()
         let localClient = MockResticClient().onBackup(.success(successOutcome())).onForget(.success(0))
-        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: localClient, base: localSink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: localSink.serving(localClient))
         #expect(!localSink.log.contains("probe"))
         #expect(localClient.callLog.first == "backup")
     }
@@ -361,7 +378,7 @@ struct BackupRunEngineTests {
             .onBackup(.success(successOutcome()))
             .onForget(.failure(ResticError.snapshotsNotRemoved(removed: 0, refused: 1, reason: "403 Forbidden")))
         let plan = makePlan()
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         let record = sink.deliveredRecords[0]
         #expect(record.outcome == .completedWithErrors)
@@ -383,7 +400,7 @@ struct BackupRunEngineTests {
             .onBackup(.success(successOutcome()))
             .onForget(.failure(ResticError.cancelled))
         let plan = makePlan()
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .cancelled, "outcome was \(record.outcome), itemErrors \(record.itemErrors)")
@@ -397,13 +414,30 @@ struct BackupRunEngineTests {
         #expect(!sink.log.contains("auth-noted"))
     }
 
+    @Test("a backup stopped during its retention step still refreshes the listing, outside its cancelled task")
+    func stopDuringRetentionStillRefreshes() async throws {
+        // The snapshot stands and the forget may have removed some before the
+        // stop: the listing must be read again, and a refresh inside the
+        // stopped run's task would be killed by its cancel.
+        let sink = RecordingSink()
+        let client = MockResticClient()
+            .onBackup(.success(successOutcome()))
+            .onForget(.failure(ResticError.cancelled))
+        let run = Task { await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client)) }
+        run.cancel()
+        await run.value
+
+        #expect(await eventually(within: 60) { !sink.refreshCancelled.isEmpty })
+        #expect(sink.refreshCancelled == [false], "log was \(sink.log)")
+    }
+
     @Test("a retention skip is never summarised as an unreadable item")
     func retentionSkipIsNotAnUnreadableItem() async throws {
         let sink = RecordingSink()
         let client = MockResticClient()
             .onBackup(.success(successOutcome()))
             .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
-        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         let record = try #require(sink.deliveredRecords.first)
         let summary = PlanStatus.summary(of: record)
@@ -423,7 +457,7 @@ struct BackupRunEngineTests {
         let outcome = BackupOutcome(summary: nil, itemErrors: ["/etc/x: permission denied"], exitCode: 3)
         let client = MockResticClient().onBackup(.success(outcome))
         let plan = makePlan()
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
         #expect(sink.deliveredRecords[0].itemErrors == ["/etc/x: permission denied"])
@@ -434,7 +468,7 @@ struct BackupRunEngineTests {
         let sink = RecordingSink()
         let outcome = BackupOutcome(summary: nil, itemErrors: ["/etc/x: permission denied"], exitCode: 3)
         let client = MockResticClient().onBackup(.success(outcome))
-        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         let summary = PlanStatus.summary(of: try #require(sink.deliveredRecords.first))
         #expect(summary.headline == "Backup completed with warnings")
@@ -451,7 +485,7 @@ struct BackupRunEngineTests {
         outcome.itemErrors = ["/src/a.pdf: permission denied", "/src/Missing does not exist, skipping"]
         outcome.exitCode = 3
         let client = MockResticClient().onBackup(.success(outcome))
-        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.exitCode == 3)
@@ -468,7 +502,7 @@ struct BackupRunEngineTests {
         outcome.itemPaths = ["/src/a.pdf: permission denied": "/src/a.pdf"]
         outcome.exitCode = 3
         let client = MockResticClient().onBackup(.success(outcome))
-        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.unreadableItemPaths == ["/src/a.pdf: permission denied": "/src/a.pdf"])
@@ -487,12 +521,9 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(
             plan: makePlan(),
             repository: Repository(),
-            sink: StubServiceSink(
-                client: MockResticClient()
+            sink: retention.serving(MockResticClient()
                     .onBackup(.success(successOutcome()))
-                    .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked"))),
-                base: retention
-            )
+                    .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked"))))
         )
 
         // A reporting gap in restic's output: the run must never read clean,
@@ -503,7 +534,7 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(
             plan: makePlan(),
             repository: Repository(),
-            sink: StubServiceSink(client: MockResticClient().onBackup(.success(gap)), base: decoding)
+            sink: decoding.serving(MockResticClient().onBackup(.success(gap)))
         )
 
         // A failing after-success hook: the user's script, not the snapshot.
@@ -517,7 +548,7 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(
             plan: plan,
             repository: Repository(),
-            sink: StubServiceSink(client: MockResticClient().onBackup(.success(successOutcome())), base: hook)
+            sink: hook.serving(MockResticClient().onBackup(.success(successOutcome())))
         )
 
         let retentionRecord = try #require(retention.deliveredRecords.first)
@@ -549,7 +580,7 @@ struct BackupRunEngineTests {
         let client = MockResticClient()
             .onBackup(.success(outcome))
             .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
-        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.itemErrorCount == 60)
@@ -580,7 +611,7 @@ struct BackupRunEngineTests {
             hook("prepare", event: .beforeBackup, command: "true"),
             hook("celebrate", event: .afterSuccess, command: "true"),
         ]
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         #expect(client.transcriptBound["backup"] == true)
         #expect(client.transcriptBound["forget"] == true)
@@ -597,7 +628,7 @@ struct BackupRunEngineTests {
         let client = MockResticClient()
             .onBackup(.success(successOutcome()))
             .onForget(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
-        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         #expect(sink.deliveredRecords.first?.outcome == .completedWithErrors)
         #expect(sink.deliveredNotes.contains { $0.hasPrefix("Retention skipped:") }, "notes were \(sink.deliveredNotes)")
@@ -614,10 +645,7 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(
             plan: makePlan(),
             repository: Repository(),
-            sink: StubServiceSink(
-                client: MockResticClient().onBackup(.success(outcome)).onExit("backup", 3).onExit("forget", 0),
-                base: partial
-            )
+            sink: partial.serving(MockResticClient().onBackup(.success(outcome)).onExit("backup", 3).onExit("forget", 0))
         )
         #expect(partial.deliveredRecords.first?.exitCode == 3)
 
@@ -627,12 +655,9 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(
             plan: makePlan(),
             repository: Repository(),
-            sink: StubServiceSink(
-                client: MockResticClient()
+            sink: failed.serving(MockResticClient()
                     .onBackup(.failure(ResticError.commandFailed(exitCode: 12, message: "wrong password")))
-                    .onExit("backup", 12),
-                base: failed
-            )
+                    .onExit("backup", 12))
         )
         let failedRecord = try #require(failed.deliveredRecords.first)
         #expect(failedRecord.outcome == .failed)
@@ -647,7 +672,7 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(
             plan: plan,
             repository: Repository(),
-            sink: StubServiceSink(client: MockResticClient().onExit("backup", 0), base: aborted)
+            sink: aborted.serving(MockResticClient().onExit("backup", 0))
         )
         let abortedRecord = try #require(aborted.deliveredRecords.first)
         #expect(abortedRecord.outcome == .failed)
@@ -665,7 +690,7 @@ struct BackupRunEngineTests {
             + ["/Users/u/locked.txt: open /Users/u/locked.txt: permission denied"]
         outcome.exitCode = 3
         let client = MockResticClient().onBackup(.success(outcome))
-        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: StubServiceSink(client: client, base: sink))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         let record = try #require(sink.deliveredRecords.first)
         // The stored lines themselves: `unreadableItems` slices to 50 on its
@@ -686,7 +711,14 @@ struct MaintenanceRunEngineTests {
         var cancellationMessage = "cancelled in test"
         func label(of repository: Repository) -> String { repository.label(among: [repository]) }
 
-        func service() throws -> any ResticClient { throw ResticError.repositoryMissing }
+        /// What `service()` answers; set by `serving(_:)`.
+        var client = MockResticClient()
+        func serving(_ client: MockResticClient) -> Self {
+            self.client = client
+            return self
+        }
+
+        func service() throws -> any ResticClient { client }
         func context(for repository: Repository) async throws -> RepositoryContext {
             log.append("context")
             return RepositoryContext(repository: repository, password: "test")
@@ -768,7 +800,7 @@ struct MaintenanceRunEngineTests {
             repository: Repository(),
             task: .check,
             readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: client, base: sink)
+            sink: sink.serving(client)
         )
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
         #expect(sink.deliveredRecords[0].detailText == "No errors found.")
@@ -785,7 +817,7 @@ struct MaintenanceRunEngineTests {
             let client = MockResticClient().onCheck(answer)
             await MaintenanceRunEngine.perform(
                 repository: repository, task: .check, readDataPercentOverride: override,
-                sink: StubMaintenanceServiceSink(client: client, base: sink)
+                sink: sink.serving(client)
             )
             return (sink, client)
         }
@@ -822,7 +854,7 @@ struct MaintenanceRunEngineTests {
             repository: repository,
             task: .check,
             readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: client, base: sink)
+            sink: sink.serving(client)
         )
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .skipped)
@@ -850,7 +882,7 @@ struct MaintenanceRunEngineTests {
         let untouched = MockResticClient().onCheck(.success(ResticSummary()))
         await MaintenanceRunEngine.perform(
             repository: repository, task: .check, readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: untouched, base: sink)
+            sink: sink.serving(untouched)
         )
         #expect(untouched.callLog.isEmpty)
         let record = try #require(sink.deliveredRecords.first)
@@ -876,7 +908,7 @@ struct MaintenanceRunEngineTests {
         let waiting = MockResticClient().onCheck(.success(ResticSummary()))
         await MaintenanceRunEngine.perform(
             repository: repository, task: .check, readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: waiting, base: outOfReach)
+            sink: outOfReach.serving(waiting)
         )
         #expect(outOfReach.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(volume)"], "log was \(outOfReach.log)")
         #expect(waiting.callLog.isEmpty)
@@ -892,7 +924,7 @@ struct MaintenanceRunEngineTests {
         let untouched = MockResticClient().onCheck(.success(ResticSummary()))
         await MaintenanceRunEngine.perform(
             repository: repository, task: .check, readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: untouched, base: refusing)
+            sink: refusing.serving(untouched)
         )
         #expect(untouched.callLog.isEmpty)
         let failed = try #require(refusing.deliveredRecords.first)
@@ -901,8 +933,6 @@ struct MaintenanceRunEngineTests {
         #expect(refusing.log.contains("stamp:check"))
         #expect(!refusing.log.contains("drive-away"))
         #expect(failed.refusedShares == [volume])
-        // A share reconnected is mounted, and the run reads it as here — the
-        // presence check the backup engine makes too; seen live against Samba.
     }
 
     @Test("a cancelled check still refreshes snapshots, outside the cancelled task")
@@ -914,7 +944,7 @@ struct MaintenanceRunEngineTests {
                 repository: Repository(),
                 task: .check,
                 readDataPercentOverride: nil,
-                sink: StubMaintenanceServiceSink(client: client, base: sink)
+                sink: sink.serving(client)
             )
         }
         task.cancel()
@@ -947,7 +977,7 @@ struct MaintenanceRunEngineTests {
             repository: Repository(),
             task: .check,
             readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: client, base: sink)
+            sink: sink.serving(client)
         )
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
         // One sentence for the verdict, so the Detail column carries it
@@ -966,7 +996,7 @@ struct MaintenanceRunEngineTests {
             repository: Repository(),
             task: .check,
             readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: client, base: sink)
+            sink: sink.serving(client)
         )
         #expect(sink.log == ["context", "password-missing"])
         #expect(sink.deliveredRecords.isEmpty)
@@ -987,7 +1017,7 @@ struct MaintenanceRunEngineTests {
             repository: repository,
             task: .check,
             readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: client, base: sink)
+            sink: sink.serving(client)
         )
         // Same rule as the backup engine: the hook's failure is recorded and
         // it turns the record amber — a problem dot, a notifyOnFailure —
@@ -1004,7 +1034,7 @@ struct MaintenanceRunEngineTests {
             repository: Repository(),
             task: .check,
             readDataPercentOverride: nil,
-            sink: StubMaintenanceServiceSink(client: client, base: sink)
+            sink: sink.serving(client)
         )
         #expect(client.transcriptBound["check"] == true)
         #expect(sink.deliveredRecords.count == 1)
@@ -1187,83 +1217,4 @@ struct RetentionRunEngineTests {
         #expect(cancelled.failureMessage == stoppedSink.cancellationMessage(for: plan.id))
         #expect(stoppedSink.log.last == "schedule-refresh")
     }
-}
-
-/// The recording sinks answer `service()` with the mock — a tiny wrapper so
-/// the sink classes above stay pure logs.
-@MainActor
-private final class StubServiceSink: BackupRunEngine.Sink {
-    let client: MockResticClient
-    let base: BackupRunEngineTests.RecordingSink
-    init(client: MockResticClient, base: BackupRunEngineTests.RecordingSink) {
-        self.client = client
-        self.base = base
-    }
-
-    func cancellationMessage(for planID: UUID) -> String { base.cancellationMessage(for: planID) }
-    func label(of plan: BackupPlan) -> String { base.label(of: plan) }
-    func label(of repository: Repository) -> String { base.label(of: repository) }
-    func service() throws -> any ResticClient { client }
-    func context(for repository: Repository) async throws -> RepositoryContext {
-        try await base.context(for: repository)
-    }
-    func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID) {
-        base.setActivityPhase(phase, for: planID)
-    }
-    func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {
-        base.progressReporter(planID: planID)
-    }
-    func markPlanRun(_ planID: UUID, at date: Date, wrote stamp: BackupStamp) {
-        base.markPlanRun(planID, at: date, wrote: stamp)
-    }
-    func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-        base.noteAuthFailure(error, repositoryID: repositoryID)
-    }
-    func addStartPing(_ event: NotificationEvent) { base.addStartPing(event) }
-    func refreshSnapshots(repositoryID: UUID) async { await base.refreshSnapshots(repositoryID: repositoryID) }
-    func noteRepositoryAway(repositoryID: UUID, reason: String) { base.noteRepositoryAway(repositoryID: repositoryID, reason: reason) }
-    func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
-        await base.deliver(record: record, plan: plan, transcript: transcript)
-    }
-    func makeHookRunner() -> HookRunner { base.makeHookRunner() }
-    func reconnectShares(volumes: [String]) async -> [ShareReconnect] { await base.reconnectShares(volumes: volumes) }
-    func probeServer(of repository: Repository) async -> ServerProbe.Outcome? { await base.probeServer(of: repository) }
-}
-
-@MainActor
-private final class StubMaintenanceServiceSink: MaintenanceRunEngine.Sink {
-    let client: MockResticClient
-    let base: MaintenanceRunEngineTests.RecordingSink
-    init(client: MockResticClient, base: MaintenanceRunEngineTests.RecordingSink) {
-        self.client = client
-        self.base = base
-    }
-
-    var cancellationMessage: String { base.cancellationMessage }
-    func label(of repository: Repository) -> String { base.label(of: repository) }
-    func service() throws -> any ResticClient { client }
-    func context(for repository: Repository) async throws -> RepositoryContext {
-        try await base.context(for: repository)
-    }
-    func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void {
-        base.lineReporter(repositoryID: repositoryID)
-    }
-    func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date) {
-        base.stampMaintenance(repositoryID: repositoryID, task: task, at: date)
-    }
-    func markPasswordMissing(repositoryID: UUID) { base.markPasswordMissing(repositoryID: repositoryID) }
-    func markDriveAway(repositoryID: UUID) { base.markDriveAway(repositoryID: repositoryID) }
-    func markServerAway(repositoryID: UUID) { base.markServerAway(repositoryID: repositoryID) }
-    func advanceCheckDataSlice(repositoryID: UUID) { base.advanceCheckDataSlice(repositoryID: repositoryID) }
-    func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-        base.noteAuthFailure(error, repositoryID: repositoryID)
-    }
-    func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
-        await base.deliver(record: record, repository: repository, transcript: transcript)
-    }
-    func refreshSnapshots(repositoryID: UUID) async { await base.refreshSnapshots(repositoryID: repositoryID) }
-    func scheduleSnapshotRefresh(repositoryID: UUID) { base.scheduleSnapshotRefresh(repositoryID: repositoryID) }
-    func makeHookRunner() -> HookRunner { base.makeHookRunner() }
-    func reconnectShares(volumes: [String]) async -> [ShareReconnect] { await base.reconnectShares(volumes: volumes) }
-    func probeServer(of repository: Repository) async -> ServerProbe.Outcome? { await base.probeServer(of: repository) }
 }

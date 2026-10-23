@@ -204,7 +204,7 @@ final class StatementGate: @unchecked Sendable {
     /// On the index's one writer connection.
     static func onWriter(_ index: SnapshotIndex) throws -> StatementGate {
         let gate = StatementGate()
-        try index.pool.writeWithoutTransaction { gate.install(on: $0) }
+        index.pool.writeWithoutTransaction { gate.install(on: $0) }
         return gate
     }
 
@@ -216,15 +216,21 @@ final class StatementGate: @unchecked Sendable {
         let installed = Counter()
         for _ in 0 ..< count {
             DispatchQueue.global().async {
-                try? index.pool.read { db in
-                    gate.install(on: db)
-                    installed.increment()
-                    let deadline = Date().addingTimeInterval(60)
-                    while installed.value < count, Date() < deadline { usleep(1_000) }
+                do {
+                    try index.pool.read { db in
+                        gate.install(on: db)
+                        installed.increment()
+                        let deadline = Date().addingTimeInterval(60)
+                        while installed.value < count, Date() < deadline { usleep(1_000) }
+                    }
+                } catch {
+                    Issue.record("a reader could not take its gate: \(error)")
                 }
             }
         }
-        _ = await eventually(within: 60) { installed.value == count }
+        if !(await eventually(within: 60) { installed.value == count }) {
+            Issue.record("gates installed on \(installed.value) of \(count) readers")
+        }
         return gate
     }
 
@@ -538,13 +544,13 @@ extension SnapshotIndex {
         let counter = UnsafeMutablePointer<Int>.allocate(capacity: 1)
         counter.initialize(to: 0)
         defer { counter.deallocate() }
-        try pool.writeWithoutTransaction { db in
+        pool.writeWithoutTransaction { db in
             sqlite3_progress_handler(db.sqliteConnection, 1, { context in
                 context?.assumingMemoryBound(to: Int.self).pointee += 1
                 return 0
             }, UnsafeMutableRawPointer(counter))
         }
-        defer { try? pool.writeWithoutTransaction { db in sqlite3_progress_handler(db.sqliteConnection, 0, nil, nil) } }
+        defer { pool.writeWithoutTransaction { db in sqlite3_progress_handler(db.sqliteConnection, 0, nil, nil) } }
         try body()
         return counter.pointee
     }
@@ -579,7 +585,7 @@ extension SnapshotIndex {
             guard status == SQLITE_OK else {
                 throw DatabaseError(message: "sqlite3_db_status(CACHE_WRITE) returned \(status)")
             }
-            let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 4096
+            let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size")!
             return WriteCounters(rows: db.totalChangesCount, walBytes: Int(pages) * (pageSize + 24))
         }
     }

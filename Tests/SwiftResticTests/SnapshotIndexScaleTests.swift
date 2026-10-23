@@ -806,7 +806,7 @@ private final class ScaleRun {
         #expect(hits.count == limit)
         let openID = id(chain: 0, tick: listed[0].max() ?? -1)
         let membership = try await index.searchWithMembership(matching: "i", limit: limit, inSnapshot: openID)
-        let separate = try await index.contains(paths: hits.map(\.path), inSnapshot: openID)
+        let separate = try await index.kinds(of: hits.map(\.path), inSnapshot: openID)
         #expect(membership.hits == hits)
         #expect(membership.inSnapshot == separate)
         #expect(!membership.inSnapshot.isEmpty, "the open backup holds none of the hits: the comparison above compared nothing")
@@ -840,7 +840,7 @@ private final class ScaleRun {
                 } else {
                     let found = try await index.searchPaths(matching: "i", limit: limit)
                     let startContains = Date()
-                    _ = try await index.contains(paths: found.map(\.path), inSnapshot: openID)
+                    _ = try await index.kinds(of: found.map(\.path), inSnapshot: openID)
                     membershipSecond += Date().timeIntervalSince(startContains)
                     membershipTwo += Date().timeIntervalSince(start)
                     let startSummaries = Date()

@@ -12,11 +12,9 @@ import Foundation
 /// mark never changes silhouette or size between faces.
 ///
 /// Every face is a template image: the menu bar tints it with its own label
-/// ink, whatever the bar's appearance. The attention face used to be a
-/// baked bitmap with a blue dot, keyed on the status button's effective
-/// appearance; applied at launch, before the button follows the bar, it
-/// drew black ink on a dark bar and the mark vanished behind its dot. A
-/// template has no ink to get wrong.
+/// ink, whatever the bar's appearance. Not a baked bitmap keyed on the
+/// status button's effective appearance: applied at launch, before the
+/// button follows the bar, that draws black ink on a dark bar.
 ///
 /// The plate stack, ring and head mirror the app icon's construction in
 /// `Tools/GenerateAppIcon.swift`, so the tray and the Dock icon read as one
@@ -138,14 +136,14 @@ enum MenuBarLogo {
         case running(Int)
     }
 
+    /// Template ink: the bar tints it, so only its alpha counts.
+    private static let ink = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
+
     /// Same ring-and-arrowhead construction as the icon generator, minus the
     /// tile, plus the snapshot stack, settled or pulsing, or the exclamation
     /// mark in its place — template rendering tints from the alpha channel
     /// alone, so a faded plate survives as gray. The construction fills the
     /// canvas proportionally, so the mark scales with it (the hero).
-    /// Template ink: the bar tints it, so only its alpha counts.
-    private static let ink = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
-
     private static func draw(in rect: CGRect, into context: CGContext, content: Content) {
         let s = impliedSize * rect.width / canvasSize
         let stroke = s * 0.068

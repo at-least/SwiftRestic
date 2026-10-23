@@ -164,7 +164,7 @@ struct OtherBackupsCard: View {
                 }
             }
             .buttonStyle(HoverableButtonStyle())
-            .accessibilityLabel("\(label.title): \(label.caption?.text ?? ""). Show group page")
+            .accessibilityLabel(([label.title] + [label.caption?.text].compactMap { $0 }).joined(separator: ": ") + ". Show group page")
             Button("Adopt as a Backup Plan…") { onAdoptGroup(repositoryID, planID) }
                 .controlSize(.small)
                 // The group page's own words for the verb it opens.

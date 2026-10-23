@@ -82,7 +82,7 @@ struct RetentionProjectionTests {
 
     @Test("the default policy spans years")
     func defaultPolicy() throws {
-        var policy = RetentionPolicy()
+        let policy = RetentionPolicy()
         let outcome = try #require(RetentionProjection.project(
             policy: policy,
             schedule: hourlySchedule,

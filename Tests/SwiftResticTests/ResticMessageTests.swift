@@ -1,9 +1,10 @@
 import Foundation
 import Testing
 
-/// Every literal in this file is verbatim restic 0.19.1 output. This is the
-/// layer that breaks silently when restic changes its JSON, so the fixtures
-/// are never hand-written.
+/// Fixtures quoted as restic's output are verbatim 0.19.1; the malformed and
+/// unknown cases are hand-made. This is the layer that breaks silently when
+/// restic changes its JSON, so a fixture of a real shape is never
+/// hand-written.
 @Suite("restic JSON decoding")
 struct ResticMessageTests {
     @Test("backup status line")

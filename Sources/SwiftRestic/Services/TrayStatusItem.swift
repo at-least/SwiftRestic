@@ -55,8 +55,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         )
     }
 
-    /// The observed inputs are exactly the ones `iconState` and the hold
-    /// read. The configuration is observed whole — run-record appends
+    /// The observed inputs are the ones `iconState` and the hold read, the
+    /// clock aside: a problem ageing out of the attention window waits for
+    /// the next configuration write. The configuration is observed whole — run-record appends
     /// included, which the attention face reads, and the hold's pause and
     /// battery setting; the battery reading is
     /// written only when it changes; a pause running out is cleared by the

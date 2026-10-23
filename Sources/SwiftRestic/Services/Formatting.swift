@@ -6,8 +6,7 @@ import Foundation
 /// tables, the once-a-second progress strips — and formatter construction is
 /// the expensive half of each call, so the instances are built once. Not all
 /// of them are Sendable across SDKs (these helpers also run on the
-/// notification broadcast's background task), so every use crosses the lock
-/// pattern `ResticDateFormat.parse` already established.
+/// notification broadcast's background task), so every use takes the lock.
 enum Format {
     /// "A", "A and B", "A, B and C".
     static func list(_ items: [String]) -> String {
@@ -212,8 +211,7 @@ enum Format {
     /// the tile's weekday or dated form. Under 12 hours ahead the time
     /// alone, even past midnight: nothing respells the menu bar's VoiceOver
     /// label at midnight, so "tomorrow 12:30 AM" would go on naming the
-    /// wrong day until the pause ends. (The window's captions are respelled
-    /// each minute by its clock, MinuteClock.swift.)
+    /// wrong day until the pause ends.
     static func pauseEnd(
         _ date: Date,
         now: Date = .now,

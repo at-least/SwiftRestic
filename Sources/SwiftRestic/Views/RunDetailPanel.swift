@@ -73,8 +73,8 @@ struct RunDetailPanel: View {
     private var rows: some View {
         switch run.kind {
         case .backup:
-            if run.snapshotID != nil {
-                DetailRow("Backup") { RunSnapshotRow(run: run, onCompare: onCompare) }
+            if let snapshotID = run.snapshotID {
+                DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID, onCompare: onCompare) }
             }
             // Why there was nothing to back up — the Detail column's words.
             if run.outcome == .skipped, let reason = run.detailText {
@@ -82,7 +82,7 @@ struct RunDetailPanel: View {
             }
             // A standing skip: one record for every run the drive was away.
             if let since = run.skippedSince, let count = run.skipCount {
-                DetailRow("Since", "\(Format.timestamp(since)) · \(count) runs")
+                DetailRow(run.outcome == .failed ? "Failing since" : "Skipped since", "\(Format.timestamp(since)) · \(Format.plural(count, "run"))")
             }
             if RunRecordPresentation.hasBackupNumbers(run) {
                 DetailRow(
@@ -94,8 +94,8 @@ struct RunDetailPanel: View {
             repositoryRow
             exitRow
         case .restore:
-            if run.snapshotID != nil {
-                DetailRow("Backup") { RunSnapshotRow(run: run, onCompare: onCompare) }
+            if let snapshotID = run.snapshotID {
+                DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID, onCompare: onCompare) }
             }
             // Records that predate destination tracking have none; their
             // rows are left out rather than guessed.
@@ -350,10 +350,10 @@ private struct RunSnapshotRow: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     let run: RunRecord
+    let snapshotID: String
     let onCompare: (SnapshotDiffTarget) -> Void
 
     var body: some View {
-        let snapshotID = run.snapshotID ?? ""
         let short = String(snapshotID.prefix(8))
         let link = model.snapshotLink(for: run)
         HStack(spacing: 8) {

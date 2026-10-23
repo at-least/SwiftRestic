@@ -106,7 +106,8 @@ enum Scheduler {
         now: Date = .now,
         existingRepositoryIDs: Set<UUID>,
         busyPlanIDs: Set<UUID> = [],
-        busyRepositoryIDs: Set<UUID> = []
+        busyRepositoryIDs: Set<UUID> = [],
+        calendar: Calendar = .current
     ) -> [BackupPlan] {
         var startingRepositoryIDs = Set<UUID>()
         return plans
@@ -118,12 +119,12 @@ enum Scheduler {
                 guard !busyPlanIDs.contains(plan.id) else { return false }
                 if busyRepositoryIDs.contains(repositoryID) { return false }
                 guard plan.schedule.frequency != .manual else { return false }
-                guard let due = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now) else { return false }
+                guard let due = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now, calendar: calendar) else { return false }
                 return due <= now
             }
             .sorted { lhs, rhs in
-                let lhsDue = lhs.schedule.nextRunDate(after: lhs.lastRunAt, now: now) ?? now
-                let rhsDue = rhs.schedule.nextRunDate(after: rhs.lastRunAt, now: now) ?? now
+                let lhsDue = lhs.schedule.nextRunDate(after: lhs.lastRunAt, now: now, calendar: calendar) ?? now
+                let rhsDue = rhs.schedule.nextRunDate(after: rhs.lastRunAt, now: now, calendar: calendar) ?? now
                 return lhsDue < rhsDue
             }
             // The first filter kept only plans with a repository.

@@ -411,7 +411,7 @@ actor IndexCoordinator {
     /// Restore pane's incomplete strip asks it of the backup before, and a
     /// restore by path of the backup it restores from.
     nonisolated func kinds(of paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
-        try await read(repositoryID) { try await $0.contains(paths: paths, inSnapshot: snapshotID) }
+        try await read(repositoryID) { try await $0.kinds(of: paths, inSnapshot: snapshotID) }
     }
 
     /// Whether every listed snapshot has been read — the consumers' "the
@@ -715,7 +715,8 @@ struct BackfillReport: Sendable, Equatable {
     var deltas = 0
     /// Diffs abandoned on a `T` line.
     var typeChange = 0
-    /// Diffs restic failed, or wrote lines of that did not decode.
+    /// Diffs restic failed or wrote lines of that did not decode, and deltas
+    /// the index failed to write.
     var diffFailed = 0
     /// Diffs the index refused for a kind change they did not spell out.
     var kindChanged = 0

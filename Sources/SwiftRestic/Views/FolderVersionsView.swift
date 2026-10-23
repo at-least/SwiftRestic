@@ -284,13 +284,13 @@ struct FolderVersionsView: View {
     }
 
     /// The folder's changes from the backup before to the chosen one, from
-    /// the index — one read, no restic.
+    /// the index — one read, no restic. The last pair's go as the read
+    /// starts, as `fetch` drops the last listing: under the new pair they
+    /// would read as its changes.
     private func readChanges() async {
-        guard let chosen, let previous else {
-            changes = nil
-            changesError = nil
-            return
-        }
+        changes = nil
+        changesError = nil
+        guard let chosen, let previous else { return }
         do {
             let read = try await model.indexedChanges(
                 underPath: node.path, inChain: node.chainKey,

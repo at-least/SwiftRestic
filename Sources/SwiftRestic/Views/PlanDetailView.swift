@@ -77,7 +77,6 @@ struct PlanDetailView: View {
     /// none: its Schedule row already says "Manually".
     @ViewBuilder
     private func scheduleControl(_ plan: BackupPlan) -> some View {
-        let now = Date.now
         if !plan.isScheduleActive(at: now) {
             Button("Resume Schedule", systemImage: "play.circle") {
                 model.resumePlanSchedule(id: plan.id)

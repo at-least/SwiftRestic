@@ -6,7 +6,7 @@ struct RcloneRemotesTests {
     @Test("`listremotes --long` output parses into names and types, a remote's description aside")
     func longOutput() {
         // `-l` is rclone's global --links, not --long: listremotes -l printed
-        // names alone on every rclone tried, 1.50.2 to 1.75.2 (2026-10-16).
+        // names alone on every rclone tried, 1.50.2 to 1.75.2.
         #expect(RcloneRemoteLister.arguments == ["listremotes", "--long"])
         // rclone 1.50.2 prints "name: type"; 1.75.2 pads the type and adds
         // the remote's description after it.

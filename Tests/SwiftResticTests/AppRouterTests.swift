@@ -142,12 +142,10 @@ struct AppRouterTests {
         #expect(lineage == .lineage(repositoryID: repositoryID, key: key))
         for page in [group, lineage] {
             #expect(page.pageTabs == [.overview, .backups])
-            #expect(!page.pageTabs.isEmpty)
             router.tabBinding(for: page).wrappedValue = .backups
             #expect(router.tab(of: page) == .backups)
         }
         for page: SidebarItem in [.repository(repositoryID), .activity, .console, .findFiles] {
-            #expect(page.pageTabs.isEmpty)
             #expect(page.pageTabs.isEmpty)
         }
     }

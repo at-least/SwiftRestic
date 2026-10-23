@@ -1095,8 +1095,8 @@ struct AppModelTests {
     @Test("quitting during a backup still gets the run onto disk, and records why it stopped")
     func shutdownPersistsInFlightRun() async throws {
         // hang-backup, not hang: after the run ends the model refreshes
-        // snapshots and stats, and those must answer instead of burning their
-        // 300 s refresh timeout.
+        // snapshots and stats, and those must answer instead of running into
+        // the refresh timeout.
         let harness = try await makeHarness(stubMode: "hang-backup")
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
@@ -1129,7 +1129,7 @@ struct AppModelTests {
     @Test("a run the user cancels is recorded as cancelled, not as an interruption")
     func userCancellationIsRecorded() async throws {
         // hang-backup, not hang: the post-run refresh must answer instead of
-        // burning its 300 s timeout.
+        // running into its timeout.
         let harness = try await makeHarness(stubMode: "hang-backup")
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
@@ -1199,7 +1199,7 @@ struct AppModelTests {
 @MainActor
 struct BannerQueueTests {
     private func makeModel() -> AppModel {
-        var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+        let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
         return AppModel(
             store: ConfigStore(
                 directory: FileManager.default.temporaryDirectory
@@ -1330,7 +1330,7 @@ struct ListingGenerationTests {
 @MainActor
 struct UpsertStampTests {
     private func makeModel() -> AppModel {
-        var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+        let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
         return AppModel(
             store: ConfigStore(
                 directory: FileManager.default.temporaryDirectory
@@ -1451,7 +1451,7 @@ struct PausingTests {
     private func plan(_ name: String) -> BackupPlan {
         var plan = BackupPlan()
         plan.repositoryID = UUID()
-        plan.path = "/tmp"
+        plan.path = "/tmp/" + name
         return plan
     }
 
@@ -1658,7 +1658,7 @@ struct StartAtLoginSurfaceTests {
 @MainActor
 struct RunReporterTokenTests {
     private func makeModel() -> AppModel {
-        var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+        let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
         return AppModel(
             store: ConfigStore(
                 directory: FileManager.default.temporaryDirectory
@@ -1681,7 +1681,7 @@ struct RunReporterTokenTests {
     @Test("a late progress hop from a finished backup never lands in the next run's strip")
     func lateBackupProgressHopDrops() async throws {
         let model = makeModel()
-        var plan = BackupPlan()
+        let plan = BackupPlan()
         model.upsert(plan: plan)
 
         // Run 1: a strip is installed and the engine captures its reporter.
@@ -1720,7 +1720,7 @@ struct RunReporterTokenTests {
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/tmp/somewhere"
-        try await model.upsert(repository: repository, password: nil, providerSecret: nil)
+        await model.upsert(repository: repository, password: nil, providerSecret: nil)
 
         model.installMaintenanceActivity(repositoryID: repository.id, task: .prune)
         let reporter = model.lineReporter(repositoryID: repository.id)
@@ -1779,8 +1779,10 @@ struct KeychainFailureHonestyTests {
         )
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticKeychainSave-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
         let model = AppModel(store: ConfigStore(directory: root), secrets: secrets)
         model.isLoaded = true
+        model.suppressConfigurationSave = true
 
         var repository = Repository()
         repository.kind = .local
@@ -2326,13 +2328,10 @@ struct RestoreBannerTests {
 struct IndexCompletenessTests {
     @Test("a listing whose reconcile has not returned is not complete, however complete the index is for the one before")
     func completenessWaitsForTheReconcile() async {
-        let model = AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticIndexCompleteness-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory([:])
-        )
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticIndexCompleteness-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory([:]))
         let repositoryID = UUID()
 
         // The index takes an empty listing: complete for it.
@@ -2348,6 +2347,7 @@ struct IndexCompletenessTests {
         model.indexReconcile(repositoryID: repositoryID, listing: [], generation: 2)
         await model.tasks.drain()
         #expect(await model.indexIsComplete(repositoryID: repositoryID))
+        await model.shutdown()
     }
 }
 

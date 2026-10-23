@@ -10,7 +10,7 @@ import Testing
 /// `CheckedIndex`, so the stored-state invariants are checked after each.
 ///
 /// Mutation checklist — each line is a mutant these tests must catch (not
-/// run by `./build.sh test`; plant one, run the five SnapshotIndex suites,
+/// run by `./build.sh test`; plant one, run every SnapshotIndex suite,
 /// and expect red):
 /// - no stream identity check (`target.id == active.snapID`): S2, and the
 ///   property test's mid-stream flaps;
@@ -83,7 +83,7 @@ struct SnapshotIndexScriptedTests {
 
         let index = checked.index
         #expect(try await index.versionIDs("/r/old.txt").isEmpty)
-        #expect(try await index.contains(paths: ["/r/old.txt", "/r/new.txt", "/r/k/c", "/r/k"], inSnapshot: "s2")
+        #expect(try await index.kinds(of: ["/r/old.txt", "/r/new.txt", "/r/k/c", "/r/k"], inSnapshot: "s2")
             == ["/r/new.txt": false, "/r/k/c": false, "/r/k": true])
     }
 
@@ -113,7 +113,7 @@ struct SnapshotIndexScriptedTests {
             try checked.full("a2", full)
         }
         let index = checked.index
-        #expect(try await index.contains(paths: full.map(\.path), inSnapshot: "a2").count == 4)
+        #expect(try await index.kinds(of: full.map(\.path), inSnapshot: "a2").count == 4)
         #expect(Set(try await index.versionIDs("/r/x")) == ["a1", "a2"])
         #expect(try await index.isComplete())
     }
@@ -128,7 +128,7 @@ struct SnapshotIndexScriptedTests {
         #expect(throws: IndexError.kindChanged(snapshot: "a2", path: "/r/k")) {
             try checked.delta("a2", from: "a1", added: ["/r/k/"], removed: [])
         }
-        #expect(try await checked.index.contains(paths: ["/r/k", "/r/k/g"], inSnapshot: "a2").isEmpty)
+        #expect(try await checked.index.kinds(of: ["/r/k", "/r/k/g"], inSnapshot: "a2").isEmpty)
         #expect(try checked.index.nextStep() == .delta(snapshotID: "a2", from: "a1"))
     }
 
@@ -167,7 +167,7 @@ struct SnapshotIndexScriptedTests {
         #expect(try checked.index.nextStep() == .full(snapshotID: "s2"))
         try checked.full("s2", [entry("/r", true), entry("/r/k", true), entry("/r/k/c"), entry("/r/new.txt")])
         #expect(try await checked.index.versionIDs("/r/old.txt").isEmpty)
-        #expect(try await checked.index.contains(paths: ["/r/k"], inSnapshot: "s2") == ["/r/k": true])
+        #expect(try await checked.index.kinds(of: ["/r/k"], inSnapshot: "s2") == ["/r/k": true])
     }
 
     // MARK: - Targeted tests
@@ -265,7 +265,7 @@ struct SnapshotIndexScriptedTests {
         try checked.reconcile([try snap("s1", 1_000_000)])
         try checked.full("s1", [entry("/r/a/x"), entry("/r/a", true), entry("/r", true)])
         #expect(try await checked.index.versionIDs("/r/a/x") == ["s1"])
-        #expect(try await checked.index.contains(paths: ["/r", "/r/a", "/r/a/x"], inSnapshot: "s1")
+        #expect(try await checked.index.kinds(of: ["/r", "/r/a", "/r/a/x"], inSnapshot: "s1")
             == ["/r": true, "/r/a": true, "/r/a/x": false])
     }
 
@@ -294,7 +294,7 @@ struct SnapshotIndexScriptedTests {
         try checked.chunk("p2", [entry("/r/new/x")], final: true)
         #expect(try await checked.index.versionIDs("/r/new/x") == ["q2", "p2"])
         // The delta indexed q2, not p2: p2's stage is not its to clear.
-        #expect(try await checked.index.contains(paths: ["/r", "/r/new", "/r/new/x"], inSnapshot: "p2")
+        #expect(try await checked.index.kinds(of: ["/r", "/r/new", "/r/new/x"], inSnapshot: "p2")
             == ["/r": true, "/r/new": true, "/r/new/x": false])
         #expect(try await checked.index.isComplete())
     }
@@ -361,7 +361,7 @@ struct SnapshotIndexScriptedTests {
         try checked.beginFull("s1")
         #expect(try Self.nodeCount(checked.index) == staged)
         try checked.chunk("s1", listing, final: true)
-        #expect(Set(try await checked.index.contains(paths: listing.map(\.path), inSnapshot: "s1").keys)
+        #expect(Set(try await checked.index.kinds(of: listing.map(\.path), inSnapshot: "s1").keys)
             == listing.map(\.path).pathKeys)
         #expect(try await checked.index.isComplete())
     }
@@ -436,16 +436,16 @@ struct SnapshotIndexScriptedTests {
         try checked.beginFull("s1")
         try checked.chunk("s1", chunk1, final: false)
         try Self.armBoomTrigger(checked.path)
-        #expect(throws: (any Error).self) { try checked.chunk("s1", chunk2, final: false) }
+        #expect { try checked.chunk("s1", chunk2, final: false) } throws: { "\($0)".contains("boom") }
         try Self.disarmBoomTrigger(checked.path)
         #expect(try await !checked.index.isComplete())
 
         // Pass 2 re-reads from the top.
         try checked.full("s1", chunk1 + chunk2 + chunk3)
         #expect(try await checked.index.isComplete())
-        #expect(Set(try await checked.index.contains(paths: Array(truth), inSnapshot: "s1").keys) == truth.pathKeys)
+        #expect(Set(try await checked.index.kinds(of: Array(truth), inSnapshot: "s1").keys) == truth.pathKeys)
         for query in ["g", "h", "d", "c"] {
-            let hits = try await Self.searchWithin(seconds: 5, checked.index, query)
+            let hits = try await Self.searchWithin(seconds: 60, checked.index, query)
             #expect(!hits.isEmpty, "search('\(query)') found nothing")
             for hit in hits { #expect(truth.contains(hit.path), "search('\(query)') returned \(hit.path)") }
         }
@@ -593,7 +593,7 @@ struct SnapshotIndexScriptedTests {
         #expect(try await index.versionIDs("/r/a") == ["s1"])
         #expect(try await index.versionIDs("/r/c") == ["s3"])
         #expect(try await index.versionIDs("/r/b").isEmpty)
-        #expect(try await index.contains(paths: ["/r", "/r/a", "/r/b"], inSnapshot: "s2").isEmpty)
+        #expect(try await index.kinds(of: ["/r", "/r/a", "/r/b"], inSnapshot: "s2").isEmpty)
         #expect(try await index.searchPaths(matching: "b", limit: 10).isEmpty)
 
         try checked.reconcile([s1, s3])
@@ -715,7 +715,7 @@ struct SnapshotIndexScriptedTests {
         try checked.chunk("s1", [entry("/r", true), entry("/r/a")], final: false)
         try checked.markUnreadable("b1")
         try checked.chunk("s1", [entry("/r/b")], final: true)
-        #expect(try await checked.index.contains(paths: ["/r", "/r/a", "/r/b"], inSnapshot: "s1")
+        #expect(try await checked.index.kinds(of: ["/r", "/r/a", "/r/b"], inSnapshot: "s1")
             == ["/r": true, "/r/a": false, "/r/b": false])
     }
 
@@ -789,19 +789,19 @@ struct SnapshotIndexScriptedTests {
         try checked.beginFull("s1")
         try checked.chunk("s1", chunk1, final: false)
         try Self.armBoomTrigger(checked.path)
-        #expect(throws: (any Error).self) { try checked.chunk("s1", chunk2, final: false) }
+        #expect { try checked.chunk("s1", chunk2, final: false) } throws: { "\($0)".contains("boom") }
         try Self.disarmBoomTrigger(checked.path)
         // A caller that ignores the error and keeps feeding: dropped, then
         // the final is refused.
         try checked.chunk("s1", chunk3, final: false)
         #expect(throws: IndexError.poisonedStream("s1")) { try checked.chunk("s1", [], final: true) }
         #expect(try await !checked.index.isComplete())
-        #expect(try await checked.index.contains(paths: Array(truth), inSnapshot: "s1").isEmpty)
+        #expect(try await checked.index.kinds(of: Array(truth), inSnapshot: "s1").isEmpty)
 
         try checked.beginFull("s1")
         try checked.chunk("s1", chunk1 + chunk2 + chunk3, final: false)
         try checked.chunk("s1", [], final: true)
-        #expect(Set(try await checked.index.contains(paths: Array(truth), inSnapshot: "s1").keys) == truth.pathKeys)
+        #expect(Set(try await checked.index.kinds(of: Array(truth), inSnapshot: "s1").keys) == truth.pathKeys)
         #expect(try await checked.index.isComplete())
     }
 

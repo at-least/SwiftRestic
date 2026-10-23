@@ -105,8 +105,8 @@ struct SnapshotLineageTests {
 
     @Test("two plans' interleaved backups of the same folders stay two groups, never one plan's name")
     func sharedLineageTitleIsStable() throws {
-        var hourly = BackupPlan()
-        var nightly = BackupPlan()
+        let hourly = BackupPlan()
+        let nightly = BackupPlan()
         let hourlyTag = ResticService.planTag(hourly.id)
         let nightlyTag = ResticService.planTag(nightly.id)
 

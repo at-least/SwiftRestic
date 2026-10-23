@@ -123,7 +123,7 @@ struct ResticErrorTests {
 
     @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic could not get from it")
     func rcloneWords() {
-        // restic 0.19.1 with rclone 1.75.2, as seen 2026-10-16: rclone's own
+        // restic 0.19.1 with rclone 1.75.2: rclone's own
         // verdict reaches stderr as "rclone: <date> <time> CRITICAL: …", and
         // the exit_error JSON carries only "error talking HTTP to rclone".
         let fatal = "Fatal: unable to open repository at rclone:sftp:backups/restic: error talking HTTP to rclone: exit status 1"
@@ -177,7 +177,7 @@ struct ResticErrorTests {
     @Test("restic's Go stack trace never reaches a message; a second line of restic's own stays")
     func goStackTraceIsCut() {
         // restic 0.19.1's forget on an append-only server, as its exit_error
-        // carried it (2026-10-17): an error with no message of its own is
+        // carried it: an error with no message of its own is
         // formatted with %+v, which appends the stack it was made on.
         let traced = "failed to remove one or more snapshots\nmain.init\n\tgithub.com/restic/restic/cmd/restic/cmd_forget.go:67\n"
             + "runtime.doInit1\n\truntime/proc.go:8103\nruntime.doInit\n\truntime/proc.go:8070\nruntime.main\n\truntime/proc.go:258\n"
@@ -317,6 +317,17 @@ struct ResticBinaryTests {
         let sh = ResticBinary.locateHelper(named: "sh")
         #expect(sh?.path.hasSuffix("/sh") == true)
         #expect(ResticBinary.locateHelper(named: "definitely-not-a-real-helper") == nil)
+    }
+
+    @Test("every folder a helper is looked for in is on restic's PATH")
+    func helperFoldersAreOnResticsPath() throws {
+        // The editor accepts rclone where locateHelper finds it; restic runs
+        // it from its PATH, so a folder only the lookup knows would pass the
+        // editor and fail every run with "rclone is not installed".
+        let path = try #require(ResticRunner.baseEnvironment()["PATH"]).split(separator: ":").map(String.init)
+        for directory in ResticBinary.helperDirectories {
+            #expect(path.contains(directory), "\(directory) missing from \(path)")
+        }
     }
 }
 

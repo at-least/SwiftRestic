@@ -260,6 +260,30 @@ struct ResticFilesTreeTests {
         await model.shutdown()
     }
 
+    @MainActor
+    @Test("a repository removed while one file's find runs gets none of its answers back")
+    func fileHistoryOutlivedByItsRepository() async throws {
+        let scene = try await ReadAheadScene()
+        defer { try? FileManager.default.removeItem(at: scene.root) }
+        let model = scene.model
+        let file = scene.files[1]
+        let ids = try #require(try await scene.newest()[file])
+
+        let asking = Task { try await model.fileHistory(repositoryID: scene.repositoryID, path: file.path, backupIDs: ids) }
+        // The wrapper logs the find as it starts; restic then derives its
+        // key before it answers.
+        let deadline = ContinuousClock.now + .seconds(30)
+        while scene.finds().isEmpty, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(!scene.finds().isEmpty, "the click never started its find")
+        model.deleteRepository(id: scene.repositoryID)
+        _ = try? await asking.value
+
+        #expect(model.fileHistoryAnswers.isEmpty)
+        await model.shutdown()
+    }
+
     /// Find Files' restic engine — what runs while the index still reads,
     /// and what a Files tab's "Search All Backups…" hands a bare word to.
     @MainActor

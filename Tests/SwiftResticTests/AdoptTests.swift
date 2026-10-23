@@ -268,7 +268,7 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [newest])
-        var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
 
         let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.historyLine == "This backup becomes this plan's history.")
@@ -559,7 +559,7 @@ struct AdoptionPreviewLineTests {
         #expect(RetentionPreview(kept: [snapshot("b"), snapshot("a")], removed: []).adoptionLine
             == "All 2 backups would stay.")
         #expect(RetentionPreview(kept: [snapshot("a")], removed: []).adoptionLine
-            == "All 1 backup would stay.")
+            == "The backup would stay.")
         // Nothing to judge: the honest empty, not a claim of survival.
         #expect(RetentionPreview(kept: [], removed: []).adoptionLine
             == "This plan has no backups in the repository yet.")

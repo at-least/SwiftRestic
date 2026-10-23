@@ -33,7 +33,7 @@ struct ConsoleModelTests {
     func routeChoosesTheRepository() throws {
         let (app, console, root) = try makeHarness()
         defer { try? FileManager.default.removeItem(at: root) }
-        var other = Repository()
+        let other = Repository()
         app.configuration.repositories.append(other)
         app.consoleDidAppear()
         #expect(console.repositoryID == app.configuration.repositories.first?.id)
@@ -60,6 +60,35 @@ struct ConsoleModelTests {
         console.cancelPending()
         #expect(console.pendingDestructive == nil)
         #expect(console.output.isEmpty)
+    }
+
+    @Test("Return while a command runs arms nothing: a confirmed command would have nowhere to run")
+    func submitWhileRunningArmsNothing() async throws {
+        let console = ConsoleModel()
+        console.persistHistory = { _ in }
+        let (started, startedSignal) = AsyncStream<Void>.makeStream()
+        let (release, releaseSignal) = AsyncStream<Void>.makeStream()
+        console.runCommand = { _, _ in
+            startedSignal.yield()
+            for await _ in release { break }
+            return "done"
+        }
+        console.repositoryID = UUID()
+        console.commandText = "snapshots"
+        console.run()
+        for await _ in started { break }
+        #expect(console.isRunning)
+
+        console.commandText = "forget abc"
+        console.run()
+        #expect(console.pendingDestructive == nil)
+        console.commandText = #"ls "open"#
+        console.run()
+        #expect(console.output == "Running…")
+
+        releaseSignal.yield()
+        await console.waitForCommand()
+        #expect(console.output == "done")
     }
 
     @Test("a line ending inside an open quote is refused, not run mangled")

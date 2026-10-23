@@ -117,11 +117,8 @@ struct RootDetailView: View {
                 }
             }
         }
-        // Repository ▸ restic Console… disables on restic availability as
-        // well as on an empty repository list, and only count changes
-        // revalidate the selection — a binary lost while the console pane is
-        // open would otherwise park the selection on a pane the menu now
-        // refuses.
+        // Find Files and the console need restic: a binary lost while either
+        // is open must move the selection off it.
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }

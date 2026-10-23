@@ -146,10 +146,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     /// Run `--prune` as part of `forget`. Slow, so off by default.
     var runPrune: Bool = false
 
-    /// The all-defaults initializer — by hand, since `init(from:)`
-    /// suppresses the memberwise one — also serves `init()`, so no second
-    /// default initializer is declared alongside it.
-
     init(
         isEnabled: Bool = true,
         keepLast: Int = 0,

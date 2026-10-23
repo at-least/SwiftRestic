@@ -1020,23 +1020,31 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("a refresh that outlives its repository settles nothing")
+    @Test("a refresh whose repository is removed mid-read settles nothing")
     func refreshAfterDeletionSettlesNothing() async throws {
-        // "missing" answers exit 10 quickly, but the refresh can still race a
-        // deletion: whichever way the command lands, the removed repository
-        // must come back with no rows, no outcome and no banner.
-        let harness = try await makeHarness(mode: "missing")
+        let harness = try await makeHarness(mode: "snaprows")
         defer { try? FileManager.default.removeItem(at: harness.root) }
-        // The launch refresh already announced the missing repository; only
-        // what the refresh after the deletion posts is under test.
+        let id = harness.repository.id
         let bannersBeforeDeletion = harness.model.banners
 
-        harness.model.deleteRepository(id: harness.repository.id)
-        await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
+        // The listing answers, the size read hangs: the removal lands while
+        // restic is still being asked.
+        harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "hang-stats"
+        let reading = Task { await harness.model.refreshSnapshots(repositoryID: id) }
+        #expect(
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
+            "the stub never established its stats hang"
+        )
+        harness.model.deleteRepository(id: id)
+        // The stopped size read answers nothing, which is a stats failure.
+        for pid in StubRestic.findProcesses(matching: harness.stub.sleepMarker) {
+            kill(pid_t(pid)!, SIGTERM)
+        }
+        await reading.value
 
-        #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
-        #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .idle)
-        #expect(harness.model.banners == bannersBeforeDeletion)
+        #expect(harness.model.snapshots(for: id).isEmpty)
+        #expect(harness.model.snapshotListingOutcome(for: id) == .idle)
+        #expect(harness.model.banners == bannersBeforeDeletion, "banners were \(harness.model.banners.map(\.title))")
 
         await harness.model.shutdown()
     }
@@ -2924,11 +2932,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        // `isLoaded` is already true while bootstrap assigns the loaded
-        // configuration, so the didSet would schedule a save 400 ms after
-        // every launch — `suppressConfigurationSave` silences that one
-        // assignment. No save task may exist after bootstrap: loading is
-        // not a user edit.
+        // Loading is not an edit: no save task may exist after bootstrap.
         #expect(harness.model.saveTask == nil)
         #expect(harness.model.isConfigurationUnreadable == false)
         await harness.model.shutdown()

@@ -126,9 +126,9 @@ struct SnapshotIndexTests {
         #expect(try await index.versions(ofPath: "/data/x", inChain: planA).map(\.id) == ["newer", "older"])
         #expect(try await index.contentVersions(ofPath: "/data/y", inChain: planA).flatMap { $0.snapshots.map(\.id) }
             == ["newer", "older"])
-        #expect(try await index.contains(paths: ["/data/x", "/data/y"], inSnapshot: "older")
+        #expect(try await index.kinds(of: ["/data/x", "/data/y"], inSnapshot: "older")
             == ["/data/x": false, "/data/y": true].byPathKey)
-        #expect(try await index.contains(paths: ["/data/x", "/data/y"], inSnapshot: "newer")
+        #expect(try await index.kinds(of: ["/data/x", "/data/y"], inSnapshot: "newer")
             == ["/data/x": true, "/data/y": false].byPathKey)
     }
 
@@ -451,7 +451,7 @@ struct SnapshotIndexTests {
         try index.ingestWhole("s1", [IndexedEntry(path: "/many", isDirectory: true)] + all.map {
             IndexedEntry(path: $0, isDirectory: false)
         })
-        let held = try await index.contains(paths: all, inSnapshot: "s1")
+        let held = try await index.kinds(of: all, inSnapshot: "s1")
         #expect(Set(held.keys) == all.pathKeys)
         #expect(held.values.allSatisfy { $0 == false })
     }
@@ -465,11 +465,11 @@ struct SnapshotIndexTests {
             "s1": ["/data": true, "/data/k": false],
             "s2": ["/data": true, "/data/k": true, "/data/k/c": false],
         ])
-        #expect(try await index.contains(paths: ["/data/k", "/data/k/c", "/data/none"], inSnapshot: "s1") == ["/data/k": false])
-        #expect(try await index.contains(paths: ["/data/k", "/data/k/c"], inSnapshot: "s2") == ["/data/k": true, "/data/k/c": false])
-        #expect(try await index.contains(paths: ["/data/k"], inSnapshot: "ghost").isEmpty)
+        #expect(try await index.kinds(of: ["/data/k", "/data/k/c", "/data/none"], inSnapshot: "s1") == ["/data/k": false])
+        #expect(try await index.kinds(of: ["/data/k", "/data/k/c"], inSnapshot: "s2") == ["/data/k": true, "/data/k/c": false])
+        #expect(try await index.kinds(of: ["/data/k"], inSnapshot: "ghost").isEmpty)
         _ = try index.reconcile(listing: [try snap("s1", t0), try snap("s2", t1), try snap("s3", t2)])
-        #expect(try await index.contains(paths: ["/data/k"], inSnapshot: "s3").isEmpty)
+        #expect(try await index.kinds(of: ["/data/k"], inSnapshot: "s3").isEmpty)
     }
 
     /// Node lookup is byte-exact, while Swift's `==` on String is canonical
@@ -488,7 +488,7 @@ struct SnapshotIndexTests {
         #expect(try await index.versionIDs(nfc).isEmpty)
         for asked in [[nfc, nfd], [nfd, nfc]] {
             #expect(try await index.versionSummaries(ofPaths: asked).count == 1, "\(asked.map { Array($0.utf8) })")
-            #expect(try await index.contains(paths: asked, inSnapshot: "s1").count == 1, "\(asked.map { Array($0.utf8) })")
+            #expect(try await index.kinds(of: asked, inSnapshot: "s1").count == 1, "\(asked.map { Array($0.utf8) })")
         }
     }
 
@@ -513,8 +513,8 @@ struct SnapshotIndexTests {
         let hits = try await index.searchPaths(matching: "caf", limit: 10)
         #expect(hits.count == 2)
         let paths = hits.map(\.path)
-        let inS1 = try await index.contains(paths: paths, inSnapshot: "s1")
-        let inS2 = try await index.contains(paths: paths, inSnapshot: "s2")
+        let inS1 = try await index.kinds(of: paths, inSnapshot: "s1")
+        let inS2 = try await index.kinds(of: paths, inSnapshot: "s2")
         let summaries = try await index.versionSummaries(ofPaths: paths)
         // The Restore pane's reading: a hit is in the open backup iff
         // inRecord[hit.path] != nil.
@@ -714,7 +714,7 @@ struct SnapshotIndexTests {
         #expect(hits.map(\.path) == ["/data/k", "/data/k/k-inner", "/data/k-old"])
         for snapshotID in ["s1", "s2", "ghost"] {
             let found = try await index.searchWithMembership(matching: "k", limit: 10, inSnapshot: snapshotID)
-            let separate = try await index.contains(paths: hits.map(\.path), inSnapshot: snapshotID)
+            let separate = try await index.kinds(of: hits.map(\.path), inSnapshot: snapshotID)
             #expect(found.hits == hits && found.hits.map(\.path) == hits.map(\.path), "\(snapshotID)")
             #expect(found.inSnapshot == separate, "\(snapshotID)")
         }
@@ -801,7 +801,7 @@ struct SnapshotIndexTests {
         #expect(summary.newest.id == "a-second")
         // Counted in a-second's chain, plan B's, as its Files tab lists.
         #expect(summary.count == 1)
-        let inNewest = try await index.contains(paths: ["/data/k"], inSnapshot: summary.newest.id)
+        let inNewest = try await index.kinds(of: ["/data/k"], inSnapshot: summary.newest.id)
         #expect(inNewest["/data/k"] == hit.isDirectory)
         #expect(hit.isDirectory)
     }
@@ -953,9 +953,9 @@ struct SnapshotIndexTests {
         #expect(try await index.versionIDs("/data/new.txt") == ["s2"])
         #expect(try await index.versionIDs("/data/newdir") == ["s2"])
         #expect(try await index.versionIDs("/data/x") == ["s2", "s1"])
-        #expect(try await index.contains(paths: ["/data/x", "/data/gone.txt"], inSnapshot: "s1")
+        #expect(try await index.kinds(of: ["/data/x", "/data/gone.txt"], inSnapshot: "s1")
             == ["/data/x": false, "/data/gone.txt": false])
-        #expect(try await index.contains(paths: ["/data/x", "/data/newdir", "/data/new.txt", "/data/gone.txt"], inSnapshot: "s2")
+        #expect(try await index.kinds(of: ["/data/x", "/data/newdir", "/data/new.txt", "/data/gone.txt"], inSnapshot: "s2")
             == ["/data/x": true, "/data/newdir": true, "/data/new.txt": false])
         #expect(try await index.isComplete())
     }
@@ -973,7 +973,7 @@ struct SnapshotIndexTests {
             snapshotID: "s2", from: "s1",
             added: ["/data/new\u{0600}/", "/data/new\u{0600}/h.txt"], removed: []
         )
-        #expect(try await index.contains(paths: ["/data/new\u{0600}", "/data/new\u{0600}/h.txt"], inSnapshot: "s2")
+        #expect(try await index.kinds(of: ["/data/new\u{0600}", "/data/new\u{0600}/h.txt"], inSnapshot: "s2")
             == ["/data/new\u{0600}": true, "/data/new\u{0600}/h.txt": false])
         #expect(try await index.versionIDs("/data/new\u{0600}") == ["s2"])
     }

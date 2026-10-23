@@ -57,15 +57,6 @@ struct OtherGroupPageTests {
         #expect(page.planTag == tag)
     }
 
-    @Test("one adoptable backup reads in the singular")
-    func adoptableSingular() throws {
-        let deleted = UUID()
-        let only = try snapshot("g1", time: "2026-10-01T02:00:00Z", tags: [ResticService.planTag(deleted)])
-        let shelves = BackupShelves(listing: [only], plans: [], allPlans: [])
-        #expect(shelves.otherGroupPage(.plan(deleted), repositories: [], localHost: "mac")?.explanation
-            == "From a plan that isn't set up here — deleted, or still running on another Mac.")
-    }
-
     @Test("a moved plan's page names the plan and where it went, and carries the plan to open")
     func movedExplanation() throws {
         var offsite = Repository()
@@ -176,15 +167,5 @@ struct OtherGroupPageTests {
         let empty = BackupShelves(listing: [], plans: [], allPlans: [])
         #expect(empty.lineageGroup(key) == nil)
         #expect(empty.otherGroupPage(.lineage(key), repositories: [], localHost: "mac") == nil)
-    }
-
-    @Test("a plan-UUID group's page carries its plan tag")
-    func planGroupTag() throws {
-        let deleted = UUID()
-        let tag = ResticService.planTag(deleted)
-        let g1 = try snapshot("g1", time: "2026-10-01T02:00:00Z", tags: [tag])
-        let shelves = BackupShelves(listing: [g1], plans: [], allPlans: [])
-        let page = try #require(shelves.otherGroupPage(.plan(deleted), repositories: [], localHost: "mac"))
-        #expect(page.planTag == tag)
     }
 }

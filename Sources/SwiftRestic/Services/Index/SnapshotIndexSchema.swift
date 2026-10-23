@@ -4,8 +4,9 @@ import Foundation
 ///
 /// One place to review the whole contract: `SnapshotIndex` spells no
 /// statement inline (the open-time schema probe, the connection pragmas and
-/// the test-support invariant checks aside), and every statement here is a
-/// stored property of `Statements`, so `SnapshotIndex.registeredStatements`
+/// the test-support invariant checks aside), and every statement here but
+/// the `create` and `temporary` scripts run at open is a stored property of
+/// `Statements`, so `SnapshotIndex.registeredStatements`
 /// finds each one the plan tests must pin by reflection. (Swift values
 /// rather than resource files: these sources compile into both the app and
 /// the test target, whose bundle roots differ, and values need no bundle

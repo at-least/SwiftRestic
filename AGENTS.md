@@ -76,7 +76,8 @@ changing it:
   (build.sh's lint fails closed), and only the `SnapshotIndex*.swift` files
   import GRDB — nothing above the store touches SQL.
 - Every statement the index prepares — the open-time schema probe, the
-  connection pragmas and the test-support invariant checks aside — is a
+  `create` and `temporary` scripts, the connection pragmas and the
+  test-support invariant checks aside — is a
   stored `let` of `SnapshotIndexSchema.Statements` (an `InList` when its
   text depends on an IN list's length), which
   `SnapshotIndex.registeredStatements` reads by reflection, so declaring a

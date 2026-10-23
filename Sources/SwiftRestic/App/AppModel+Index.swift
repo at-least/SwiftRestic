@@ -110,14 +110,19 @@ extension AppModel {
     /// reconcile must land even though it runs through the same
     /// coordinator. The listing goes in under the generation it was read
     /// with: the fresh store has taken no number, and a refresh newer than
-    /// it still wins.
+    /// it still wins. Both are read after the reset, not before: a refresh
+    /// whose reconcile reached the old store meanwhile has moved them on,
+    /// and the older listing would leave the fresh store behind the
+    /// generation `indexIsComplete` reads as taken.
     func rebuildIndex(repositoryID: UUID) {
-        let listing = snapshots[repositoryID] ?? []
-        let generation = snapshotsGeneration[repositoryID] ?? 0
-        Task {
+        tasks.addBackground(Task {
             await indexCoordinator.resetRepository(repositoryID: repositoryID)
-            indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
-        }
+            indexReconcile(
+                repositoryID: repositoryID,
+                listing: snapshots[repositoryID] ?? [],
+                generation: snapshotsGeneration[repositoryID] ?? 0
+            )
+        })
     }
 
     /// The search's hit ceiling, shared with the views that report

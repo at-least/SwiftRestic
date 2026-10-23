@@ -325,10 +325,7 @@ struct RestoreDestinationSheet: View {
             .help(fullPath)
     }
 
-    private static var desktop: URL {
-        FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop", isDirectory: true)
-    }
+    private static var desktop: URL { .desktopDirectory }
 
     private static func abbreviated(_ url: URL) -> String {
         (url.path as NSString).abbreviatingWithTildeInPath
