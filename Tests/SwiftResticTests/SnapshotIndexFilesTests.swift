@@ -328,6 +328,25 @@ struct SnapshotIndexFilesTests {
         #expect(try count(index, "blind") == 0)
     }
 
+    @Test("two edits across a forgotten backup may be a change undone: the cut is uncertain, as the folder's change list says")
+    func twoEditsAcrossADeathAreUncertain() async throws {
+        let checked = try CheckedIndex()
+        let index = checked.index
+        let all = [try snap("s1", 10), try snap("s2", 20), try snap("s3", 30)]
+        try checked.reconcile(all)
+        // A, then B, then A again.
+        try checked.runToDone(
+            ["s1": file, "s2": file, "s3": file],
+            revisions: ["s1": ["/data/f": 1], "s2": ["/data/f": 2], "s3": ["/data/f": 1]]
+        )
+        #expect(try await versions(index) == ["changed:s3", "changed:s2", "first:s1"])
+
+        try checked.reconcile([all[0], all[2]])
+        try checked.housekeeping()
+        #expect(try count(index, "edit") == 2)
+        #expect(try await versions(index) == ["uncertain:s3", "first:s1"])
+    }
+
     @Test("a file absent in between is a new version, whatever it held when it came back")
     func absenceIsUncertain() async throws {
         let checked = try CheckedIndex()

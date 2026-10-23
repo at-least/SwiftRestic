@@ -1055,6 +1055,14 @@ struct RetentionRunEngineTests {
             log.append("reconnect:\(volumes.joined(separator: ","))")
             return reconnectAnswer
         }
+
+        /// The canned answer to a server probe; every ask is logged.
+        var probeAnswer: ServerProbe.Outcome? = .reachable
+
+        func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
+            log.append("probe")
+            return probeAnswer
+        }
     }
 
     private func makePlan() -> BackupPlan {
@@ -1083,6 +1091,38 @@ struct RetentionRunEngineTests {
         #expect(sink.deliveredRecords.first?.failureMessage
             == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the share did not accept the user name and password.")
         #expect(sink.deliveredRecords.first?.refusedShares == [volume])
+    }
+
+    @Test("Apply Retention on a drive that is away, with no share saved for it, fails the run in those words, no forget")
+    func retentionOnADriveAway() async throws {
+        let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/Volumes/\(volume)/restic"
+        let client = MockResticClient().onForget(.success(2))
+        let sink = RecordingSink(client: client)
+        await RetentionRunEngine.perform(plan: makePlan(), repository: repository, sink: sink)
+
+        #expect(sink.log == ["context", "reconnect:\(volume)", "deliver:failed", "schedule-refresh"], "log was \(sink.log)")
+        #expect(client.callLog.isEmpty)
+        #expect(sink.deliveredRecords.first?.failureMessage == "“\(volume)” is not connected.")
+        #expect(sink.deliveredRecords.first?.refusedShares == nil)
+    }
+
+    @Test("Apply Retention on a network repository whose server is out of reach fails the run in those words, no forget")
+    func retentionOnAServerAway() async throws {
+        var repository = Repository()
+        repository.kind = .rest
+        repository.restURL = "https://nas.local:8000/"
+        let client = MockResticClient().onForget(.success(2))
+        let sink = RecordingSink(client: client)
+        sink.probeAnswer = .unreachable("the connection timed out")
+        await RetentionRunEngine.perform(plan: makePlan(), repository: repository, sink: sink)
+
+        #expect(sink.log == ["context", "probe", "deliver:failed", "schedule-refresh"], "log was \(sink.log)")
+        #expect(client.callLog.isEmpty)
+        #expect(sink.deliveredRecords.first?.failureMessage
+            == RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: "the connection timed out"))
     }
 
     @Test("a clean run records a forget under the plan and refreshes the listing")

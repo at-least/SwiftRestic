@@ -128,8 +128,9 @@ struct NotificationEvent: Sendable, Equatable {
         case .started:
             return "\(operation) started: \(subject)"
         case .succeeded:
-            return "\(operation) succeeded: \(subject) — \(Format.bytes(dataAdded)) added"
-                + " in \(Format.duration(duration))"
+            // Only a backup adds data; a check's or a cleanup's 0 is not news.
+            let added = operation == RunRecord.Kind.backup.payloadOperation ? " — \(Format.bytes(dataAdded)) added" : ""
+            return "\(operation) succeeded: \(subject)\(added) in \(Format.duration(duration))"
         case .warned:
             let count = warningCount ?? warnings.count
             return "\(operation) completed with \(Format.plural(count, "warning")): \(subject)"

@@ -721,6 +721,9 @@ enum RetentionRunEngine {
         /// Mounts the saved network shares among `volumes`, as for a backup
         /// (`AppModel.reconnectShares`).
         func reconnectShares(volumes: [String]) async -> [ShareReconnect]
+        /// One connection attempt to a network repository's server
+        /// (`ServerProbe`); nil when there is nothing to ask first.
+        func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
     }
 
     static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
@@ -737,29 +740,34 @@ enum RetentionRunEngine {
         do {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
-            // The maintenance engine's rule for the repository's network
-            // share: reconnected first; still away, no forget, and the run
-            // says why.
-            let failures = repository.kind == .local
-                ? await reconnectAwayShares(
+            // The maintenance engine's checks before restic: the drive's
+            // share reconnected first, and a drive or server still away
+            // fails the run in those words, no forget — restic's "does not
+            // exist" or its quarter-hour of retries would say less.
+            if repository.kind == .local {
+                let failures = await reconnectAwayShares(
                     of: [repository.resolvedLocalPath],
                     transcript: transcript,
                     reconnect: { await sink.reconnectShares(volumes: $0) }
                 )
-                : []
-            if failures.isEmpty {
+                if VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+                    record.outcome = .failed
+                    let refused = failures.filter(\.isRefusal).map(\.volumeName)
+                    if !refused.isEmpty { record.refusedShares = refused }
+                    record.failureMessage = RunRecord.skippedReason(
+                        sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
+                    )
+                }
+            } else if case let .unreachable(why)? = await sink.probeServer(of: repository) {
+                record.outcome = .failed
+                record.failureMessage = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
+            }
+            if record.outcome != .failed {
                 let removed = try await RunTranscript.$current.withValue(transcript) {
                     try await service.forget(context, plan: plan)
                 }
                 record.outcome = .succeeded
                 record.detailText = RetentionPreview.appliedSummary(removed: removed, pruned: plan.retention.runPrune)
-            } else {
-                record.outcome = .failed
-                let refused = failures.filter(\.isRefusal).map(\.volumeName)
-                if !refused.isEmpty { record.refusedShares = refused }
-                record.failureMessage = RunRecord.skippedReason(
-                    sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
-                )
             }
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))

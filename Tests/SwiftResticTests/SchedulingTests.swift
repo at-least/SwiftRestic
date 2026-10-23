@@ -732,6 +732,23 @@ struct MaintenanceSchedulingTests {
         #expect(CheckDataSubset.percent(100).words == "all of the data")
     }
 
+    @Test("an editor save keeps the model's maintenance stamps and the check's next slice")
+    func repositoryMergingKeepsMaintenanceState() {
+        let stored = repository {
+            $0.maintenance.lastCheckAt = self.date("2026-09-08 12:00:00")
+            $0.maintenance.lastPruneAt = self.date("2026-09-01 12:00:00")
+            $0.maintenance.nextCheckDataSlice = 4
+        }
+        var draft = stored
+        draft.maintenance.lastCheckAt = nil
+        draft.maintenance.lastPruneAt = nil
+        draft.maintenance.nextCheckDataSlice = 3
+        let merged = stored.merging(draft: draft)
+        #expect(merged.maintenance.lastCheckAt == stored.maintenance.lastCheckAt)
+        #expect(merged.maintenance.lastPruneAt == stored.maintenance.lastPruneAt)
+        #expect(merged.maintenance.nextCheckDataSlice == 4)
+    }
+
     @Test("Last check names what the newest check read")
     func lastCheckNamesItsDepth() {
         let repository = repository { $0.maintenance.lastCheckAt = self.date("2026-09-08 12:00:00") }

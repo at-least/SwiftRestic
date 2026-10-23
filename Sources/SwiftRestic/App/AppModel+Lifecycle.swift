@@ -108,8 +108,7 @@ extension AppModel {
     }
 
     func bootstrap() async {
-        guard !isLoaded else { return }
-        isLoaded = true
+        guard !isLoaded, !isBootstrapping else { return }
         isBootstrapping = true
         let launchDate = Date.now
         // Whether the history in memory is the one on disk: not when no
@@ -128,10 +127,10 @@ extension AppModel {
             historyIsWhole = loaded.decodeNotes.isEmpty
             repositoriesAreWhole = loaded.decodeNotes.isEmpty && loaded.recoveredFrom == nil
             // Writing back what was just loaded is not a user edit, and it must
-            // not become one: with `isLoaded` already true, the didSet would
-            // schedule a save that committed every tolerant-decode substitution
-            // before the banner naming them could be read — and burned a
-            // rotation generation on every clean launch besides.
+            // not become one: the didSet would schedule a save that committed
+            // every tolerant-decode substitution before the banner naming them
+            // could be read — and burned a rotation generation on every clean
+            // launch besides.
             suppressConfigurationSave = true
             configuration = loaded.configuration
             suppressConfigurationSave = false
@@ -163,6 +162,7 @@ extension AppModel {
                 isError: true
             ))
         }
+        isLoaded = true
         // Reset any activity left behind by a crash mid-backup. The progress
         // pair is cleared with it everywhere else; bootstrap keeps the rule.
         activity.removeAll()
@@ -291,8 +291,10 @@ extension AppModel {
                 try ResticBinary.locate(userOverride: override)
             }.value
             binary = located
+            // A program that cannot answer `restic version` is no restic:
+            // every run would fail, and the feature flags would guess.
+            resticVersion = try await service().version()
             binaryProblem = nil
-            resticVersion = (try? await service().version()) ?? ""
         } catch {
             binary = nil
             resticVersion = ""

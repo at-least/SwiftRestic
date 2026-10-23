@@ -270,15 +270,16 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         }
     }
 
-    /// The stored repository wins over an editor's draft for the maintenance
-    /// stamps — the same rule as `BackupPlan.merging(draft:)`: the model
-    /// writes them while the editor holds its older copy, and a check that
-    /// finished mid-edit must not look like it never happened or the
-    /// scheduler repeats it.
+    /// The stored repository wins over an editor's draft for what the model
+    /// writes after each check and cleanup — the stamps and the check's next
+    /// slice — the same rule as `BackupPlan.merging(draft:)`: the editor
+    /// holds its older copy, and a check that finished mid-edit must not
+    /// look like it never happened, or the scheduler repeats it.
     func merging(draft: Repository) -> Repository {
         var merged = draft
         merged.maintenance.lastCheckAt = maintenance.lastCheckAt
         merged.maintenance.lastPruneAt = maintenance.lastPruneAt
+        merged.maintenance.nextCheckDataSlice = maintenance.nextCheckDataSlice
         return merged
     }
 

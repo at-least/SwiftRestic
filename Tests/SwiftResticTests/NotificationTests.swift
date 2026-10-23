@@ -161,6 +161,20 @@ struct NotificationTests {
     }
 
     @MainActor
+    @Test("only a backup's success says how much data it added")
+    func onlyABackupSaysDataAdded() {
+        var check = RunRecord(kind: .check, planName: "NAS")
+        check.outcome = .succeeded
+        check.finishedAt = check.startedAt.addingTimeInterval(4)
+        let checkSummary = AppModel.notificationEvent(for: check, repositoryName: "NAS").summary
+        #expect(checkSummary == "Check succeeded: NAS in \(Format.duration(4))", "summary was \(checkSummary)")
+        var backup = RunRecord(kind: .backup, planName: "Docs")
+        backup.outcome = .succeeded
+        backup.dataAdded = 0
+        #expect(AppModel.notificationEvent(for: backup, repositoryName: "NAS").summary.contains("— \(Format.bytes(0)) added"))
+    }
+
+    @MainActor
     @Test("the local notification's title is the run's display name")
     func notificationTitleNamesPlanAndRepository() {
         var home = Repository()

@@ -26,7 +26,7 @@ extension AppModel {
         // unchanged, so the entry dies here rather than serving stale
         // credentials until an exit-12 happens to clear it (a wrong provider
         // secret never would).
-        resolvedContexts[repository.id] = nil
+        forgetContext(repository.id)
 
         if let index = configuration.repositories.firstIndex(where: { $0.id == repository.id }) {
             configuration.repositories[index] = configuration.repositories[index].merging(draft: repository)
@@ -169,7 +169,7 @@ extension AppModel {
         upkeepAwaitingServer.remove(id)
         backupQueue[id] = nil
         statsFailureNoted.remove(id)
-        resolvedContexts[id] = nil
+        forgetContext(id)
         fileHistoryAnswers = fileHistoryAnswers.filter { $0.key.repositoryID != id }
     }
 
@@ -191,9 +191,19 @@ extension AppModel {
         if let cached = resolvedContexts[repository.id], cached.repository == repository {
             return cached.context
         }
+        let generation = contextGenerations[repository.id, default: 0]
         let context = try await Self.dragContext(repository: repository, label: label(of: repository), secrets: secrets)
-        resolvedContexts[repository.id] = (repository, context)
+        if contextGenerations[repository.id, default: 0] == generation {
+            resolvedContexts[repository.id] = (repository, context)
+        }
         return context
+    }
+
+    /// Drops a repository's cached context, and keeps any secret read
+    /// already in flight from caching what it read.
+    func forgetContext(_ repositoryID: UUID) {
+        resolvedContexts[repositoryID] = nil
+        contextGenerations[repositoryID, default: 0] += 1
     }
 
     /// Change Password: the repository's key moves to `newPassword` with
@@ -213,7 +223,9 @@ extension AppModel {
             noteAuthFailure(error, repositoryID: repositoryID)
             throw error
         }
-        resolvedContexts[repositoryID] = nil
+        // After the save, whatever it answered: until it lands the
+        // Keychain and the cache both hold the old password.
+        defer { forgetContext(repositoryID) }
         do {
             try await secrets.save(repositoryID, newPassword, nil)
         } catch {
@@ -247,7 +259,7 @@ extension AppModel {
     /// makes expensive.
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
         guard case let ResticError.commandFailed(code, _) = error, code == 12 || code == 1 else { return }
-        resolvedContexts[repositoryID] = nil
+        forgetContext(repositoryID)
     }
 
     /// The engine seam: everything above `ResticClient` is written against

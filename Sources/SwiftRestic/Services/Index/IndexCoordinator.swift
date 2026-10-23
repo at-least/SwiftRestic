@@ -495,7 +495,7 @@ actor IndexCoordinator {
     /// Captures files' nodes — by path, then by snapshot ID — for next time,
     /// and returns at once, as `cacheListing` does: the version rows have
     /// their sizes and dates in hand.
-    nonisolated func cacheFileNodes(_ nodes: [String: [String: SnapshotNode]], repositoryID: UUID) {
+    nonisolated func cacheFileNodes(_ nodes: [PathKey: [String: SnapshotNode]], repositoryID: UUID) {
         cacheWrites.start { [self] in
             let captured = nodes.mapValues { $0.mapValues(CachedListingNode.init) }
             _ = await cacheAccess(repositoryID) {

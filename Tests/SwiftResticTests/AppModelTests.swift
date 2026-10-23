@@ -1820,6 +1820,60 @@ struct ConfigurationSaveTests {
     }
 }
 
+extension ConfigurationSaveTests {
+    /// The load is held open by its size: a history this long takes the
+    /// store far longer to decode than the test takes to edit and flush.
+    @Test("an edit made while the configuration is still loading is never saved over it")
+    func noSaveBeforeTheLoad() async throws {
+        let watchdog = HangWatchdog(seconds: 120, "a load or a flush never returned")
+        defer { watchdog.disarm() }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticSaveDuringLoad-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        var stored = AppConfiguration()
+        stored.settings.maxRunHistory = 50
+        stored.runs = (0 ..< 200_000).map { RunRecord(kind: .backup, planName: "Plan \($0)") }
+        try await ConfigStore(directory: root).save(stored)
+
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        let boot = Task { await model.bootstrap() }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(model.configuration.runs.isEmpty, "the load finished before the edit; the test proves nothing")
+        model.configuration.settings.maxRunHistory = 7
+        await model.flushSave()
+        // Read at once: bootstrap's own saves, if any, are debounced.
+        struct Settings: Decodable {
+            struct Values: Decodable { let maxRunHistory: Int }
+            let settings: Values
+        }
+        let live = try Data(contentsOf: root.appendingPathComponent("config.json"))
+        #expect(try JSONDecoder().decode(Settings.self, from: live).settings.maxRunHistory == 50)
+        await boot.value
+    }
+}
+
+@Suite("locating restic")
+@MainActor
+struct ResolveBinaryTests {
+    @Test("a program at the restic path that cannot answer `restic version` is no restic: the app says why")
+    func failedVersionIsAProblem() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticBadBinary-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let program = root.appendingPathComponent("not-restic")
+        try "#!/bin/sh\necho 'not restic' >&2\nexit 1\n".write(to: program, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        model.configuration.settings.resticPathOverride = program.path
+        await model.resolveBinary()
+        #expect(!model.isResticAvailable)
+        #expect(model.binaryProblem != nil)
+        #expect(model.resticVersion == "")
+    }
+}
+
 @Suite("snapshot index location")
 @MainActor
 struct IndexLocationTests {

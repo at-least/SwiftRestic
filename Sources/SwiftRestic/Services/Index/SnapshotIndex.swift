@@ -527,12 +527,14 @@ final class SnapshotIndex: @unchecked Sendable {
                 .sorted { a, b in
                     a.micros != b.micros ? a.micros < b.micros : Self.bytesLess(a.snapshot.id, b.snapshot.id)
                 }
-            var chains: [String: (id: Int64, next: Int64)] = [:]
+            // Keyed by bytes, as the chain table's UNIQUE key is: a String
+            // key would merge NFC and NFD spellings of one lineage's paths.
+            var chains: [PathKey: (id: Int64, next: Int64)] = [:]
             let insert = try db.cachedStatement(sql: SQL.snapInsert)
             for (snapshot, micros) in arrivals {
                 let key = Self.chainKey(for: snapshot)
                 let chain: (id: Int64, next: Int64)
-                if let known = chains[key] {
+                if let known = chains[PathKey(key)] {
                     chain = known
                 } else {
                     try db.cachedStatement(sql: SQL.chainInsert).execute(arguments: [key])
@@ -540,10 +542,9 @@ final class SnapshotIndex: @unchecked Sendable {
                         throw DatabaseError(message: "chain row for \(key) vanished inside its own transaction")
                     }
                     chain = (row["id"], row["next_seq"])
-                    chains[key] = chain
                 }
                 try insert.execute(arguments: [snapshot.id, chain.id, chain.next, micros])
-                chains[key] = (chain.id, chain.next + 1)
+                chains[PathKey(key)] = (chain.id, chain.next + 1)
             }
             for chain in chains.values {
                 try db.cachedStatement(sql: SQL.chainNextSeq).execute(arguments: [chain.next, chain.id])
@@ -761,19 +762,26 @@ final class SnapshotIndex: @unchecked Sendable {
             for (k, i) in bySeq.enumerated() where k > 0 {
                 let lower = held[bySeq[k - 1]]
                 let upper = held[i]
-                /// Whether a mark lies in `(lower.seq, upper.seq]`; the
+                /// How many marks lie in `(lower.seq, upper.seq]`; the
                 /// cursor walks the sorted marks once across the whole pass.
-                func crossed(_ marks: [Int64], _ cursor: inout Int) -> Bool {
+                func crossed(_ marks: [Int64], _ cursor: inout Int) -> Int {
                     while cursor < marks.count, marks[cursor] <= lower.seq { cursor += 1 }
-                    return cursor < marks.count && marks[cursor] <= upper.seq
+                    var count = 0
+                    while cursor < marks.count, marks[cursor] <= upper.seq {
+                        count += 1
+                        cursor += 1
+                    }
+                    return count
                 }
                 let edited = crossed(edits, &nextEdit)
-                let blind = crossed(blinds, &nextBlind)
+                let blind = crossed(blinds, &nextBlind) > 0
+                // `changes(underPath:)`'s rule: two or more edits may be a
+                // change undone across a backup forgotten since.
                 if upper.run != lower.run {
                     begins.append(.uncertain)
-                } else if edited {
+                } else if edited == 1, !blind {
                     begins.append(.changed)
-                } else if blind {
+                } else if edited > 0 || blind {
                     begins.append(.uncertain)
                 }
                 segment[i] = begins.count - 1
@@ -1171,17 +1179,17 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// Caches files' nodes as `restic find` reported them — by path, exact
-    /// and by bytes as the index keys paths, then by snapshot ID — in one
-    /// write. As immutable as a listing: a repeated capture leaves the first
+    /// Caches files' nodes as `restic find` reported them — by path's
+    /// bytes, as the index keys paths, then by snapshot ID — in one write.
+    /// As immutable as a listing: a repeated capture leaves the first
     /// standing.
-    func recordFileNodes(_ nodes: [String: [String: CachedListingNode]]) async throws {
+    func recordFileNodes(_ nodes: [PathKey: [String: CachedListingNode]]) async throws {
         let payloads = try nodes.mapValues { try $0.mapValues { try Self.json($0) } }
         try await pool.write { db in
             for (path, bySnapshot) in payloads {
                 for (snapshotID, payload) in bySnapshot {
                     try db.cachedStatement(sql: SQL.cacheOwnerPut).execute(arguments: [snapshotID])
-                    try db.cachedStatement(sql: SQL.cacheFileNodePut).execute(arguments: [snapshotID, path, payload])
+                    try db.cachedStatement(sql: SQL.cacheFileNodePut).execute(arguments: [snapshotID, path.path, payload])
                 }
             }
         }

@@ -401,6 +401,9 @@ struct ResticService: ResticClient {
                 environment: context.environment
             )
         )
+        // The browse cache keeps a listing for good: a lost line must not
+        // become a missing item.
+        try Self.requireWhole(result, item: "node")
         let normalized = ResticPath.normalized(path)
         var nodes: [SnapshotNode] = []
         for message in result.messages {
@@ -724,12 +727,14 @@ struct ResticService: ResticClient {
     /// snapshot retention chose under "remove", deleted or not — then one
     /// "unable to remove snapshot/<id> from the repository" line per
     /// snapshot it could not delete, so the ones that went are the
-    /// difference. An exit 3 without those lines stays restic's failure.
+    /// difference. An exit 3 without those lines, or with JSON that does
+    /// not decode, stays restic's failure: no count is claimed unread.
     static func removalFailure(_ result: ResticRunResult) -> ResticError {
         let lines = result.stderr.split(separator: "\n")
         let refused = lines.filter { $0.hasPrefix("unable to remove snapshot/") }.count
-        guard refused > 0 else { return .commandFailed(exitCode: result.exitCode, message: result.failureMessage) }
-        let chosen = (try? countRemoved(forgetOutput: result.stdout)) ?? refused
+        guard refused > 0, let chosen = try? countRemoved(forgetOutput: result.stdout) else {
+            return .commandFailed(exitCode: result.exitCode, message: result.failureMessage)
+        }
         // "Remove(<snapshot/860f8ac74b>) failed: unexpected HTTP response
         // (403): 403 Forbidden" — its last part names the cause.
         let reason = lines.first { $0.hasPrefix("Remove(") && $0.contains(") failed: ") }

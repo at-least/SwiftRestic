@@ -70,6 +70,23 @@ struct SnapshotIndexTests {
         #expect(try await index.versions(ofPath: "/data/f", inChain: "swiftrestic-plan-unknown").isEmpty)
     }
 
+    @Test("untagged backups of canonically equal, byte-distinct paths arriving in one listing get a chain each")
+    func reconcileKeepsByteDistinctLineages() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let listing = [
+            try snap("nfc", t0, tags: [], paths: ["/caf\u{e9}"]),
+            try snap("nfd", t1, tags: [], paths: ["/cafe\u{301}"]),
+        ]
+        try index.reconcile(listing: listing)
+        _ = try index.runToDone(Dictionary(uniqueKeysWithValues: listing.map { ($0.id, ["/data": true, "/data/f": false]) }))
+        let nfcKey = SnapshotIndex.chainKey(for: listing[0])
+        let nfdKey = SnapshotIndex.chainKey(for: listing[1])
+        #expect(!nfcKey.utf8.elementsEqual(nfdKey.utf8))
+        #expect(try await index.versions(ofPath: "/data/f", inChain: nfcKey).map(\.id) == ["nfc"])
+        #expect(try await index.versions(ofPath: "/data/f", inChain: nfdKey).map(\.id) == ["nfd"])
+    }
+
     @Test("Find Files' summary counts the backups of its newest copy's chain — the Files tab its row opens — not every plan's")
     func summaryCountsTheNewestChain() async throws {
         let fixture = try IndexFixture()

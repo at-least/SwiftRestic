@@ -1162,6 +1162,16 @@ struct StubResticTests {
         #expect(collector.content == ["/src": true, "/src/notes.txt": false, "/src/after.txt": false])
     }
 
+    @Test("a folder's listing with a node line that did not decode fails, never a shorter folder the browse cache would keep")
+    func listDirectoryThrowsOnAShortListing() async throws {
+        let fixture = try makeFixture(mode: "lsmalformed")
+        defer { cleanUp(fixture.root) }
+
+        await #expect(throws: ResticError.malformedOutput(detail: "1 node line did not decode")) {
+            try await fixture.service.listDirectory(fixture.context, snapshotID: "feedface00000000", path: "/src")
+        }
+    }
+
     /// Time-limited like the coordinator suites: a full read that failed
     /// and stopped landing in the pass's skip set would make the pass spawn
     /// the stub's `ls` forever.

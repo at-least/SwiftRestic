@@ -134,6 +134,9 @@ final class AppModel {
     /// scheduler leaves it alone until the network changes
     /// (`networkPathChanged`) or a listing reads the repository again.
     var upkeepAwaitingServer: Set<UUID> = []
+    /// Whether `configuration` holds what bootstrap loaded. Until then no
+    /// save runs: an edit made during the load would write the defaults
+    /// over the file.
     var isLoaded = false
     /// True while `bootstrap` is still reading the configuration and locating
     /// restic. The views show a loading state instead of the empty states:
@@ -232,6 +235,9 @@ final class AppModel {
     /// holds them in each child's environment.
     @ObservationIgnored var resolvedContexts:
         [UUID: (repository: Repository, context: RepositoryContext)] = [:]
+    /// Bumped by every `forgetContext`: a secret read that began before a
+    /// password save may answer the old password, and must not cache it.
+    @ObservationIgnored var contextGenerations: [UUID: Int] = [:]
     /// What `fileHistory` has read of a file in a backup — its node, with
     /// the size and modification time a Files pane's version row shows —
     /// for the session; the index keeps it across launches. A backup ID is
@@ -297,11 +303,10 @@ final class AppModel {
     /// interrupted by quitting rather than "Cancelled".
     var isShuttingDown = false
     /// Silences the debounced save for one assignment — bootstrap writing back
-    /// what it just loaded. `isLoaded` is already true during the load, so the
-    /// `configuration` didSet would otherwise schedule a save 400 ms after
-    /// launch: a rewrite the user never asked for, and one that makes tolerant
-    /// decoding's substituted defaults permanent before the banner explaining
-    /// them has even been read.
+    /// what it just loaded. The `configuration` didSet would otherwise
+    /// schedule a save 400 ms after launch: a rewrite the user never asked
+    /// for, and one that makes tolerant decoding's substituted defaults
+    /// permanent before the banner explaining them has even been read.
     @ObservationIgnored var suppressConfigurationSave = false
 
     /// The hostname this Mac's backups carry, which the names under Other

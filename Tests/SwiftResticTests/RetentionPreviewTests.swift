@@ -84,6 +84,25 @@ struct RetentionPreviewTests {
         }
     }
 
+    @Test("a forget that could not remove some backups counts the ones that went, and an output it cannot read claims no count")
+    func partialRemovalCountsOrStaysRestics() throws {
+        let stderr = """
+        Remove(<snapshot/860f8ac74b>) failed: unexpected HTTP response (403): 403 Forbidden
+        unable to remove snapshot/860f8ac74b from the repository
+        """
+        let two = """
+        [{"host":"probe-mac","paths":["/probe/src"],"keep":[],"remove":[\(Self.snapshotJSON(String(repeating: "a", count: 64), "2026-09-21T10:00:00+08:00")),\(Self.snapshotJSON(String(repeating: "b", count: 64), "2026-09-22T10:00:00+08:00"))]}]
+        """
+        let counted = ResticService.removalFailure(ResticRunResult(exitCode: 3, messages: [], stdout: two, stderr: stderr))
+        #expect(counted == .snapshotsNotRemoved(removed: 1, refused: 1, reason: "403 Forbidden"))
+
+        let unread = ResticService.removalFailure(ResticRunResult(exitCode: 3, messages: [], stdout: "not json", stderr: stderr))
+        guard case .commandFailed(exitCode: 3, _) = unread else {
+            Issue.record("an unreadable forget output became \(unread)")
+            return
+        }
+    }
+
     @Test("the sheet's summary and the record's detail say what retention did")
     func summaryAndAppliedWording() throws {
         let oldest = try Self.snapshot(String(repeating: "1", count: 64), "2026-09-21T10:00:00+08:00")

@@ -352,7 +352,7 @@ extension AppModel {
                 }
             }
             for (backupID, node) in found { fileHistoryAnswers[key(backupID)] = node }
-            indexCoordinator.cacheFileNodes([path: found], repositoryID: repositoryID)
+            indexCoordinator.cacheFileNodes([PathKey(path): found], repositoryID: repositoryID)
         }
         var history: [String: SnapshotNode] = [:]
         for backupID in backupIDs {
@@ -428,13 +428,13 @@ extension AppModel {
             )
             // Removed meanwhile: its answers went with it.
             guard self.repository(id: repositoryID) != nil else { return }
-            var found: [String: [String: SnapshotNode]] = [:]
+            var found: [PathKey: [String: SnapshotNode]] = [:]
             for result in results {
                 for match in result.matches {
                     // What a click asks, no more: every backup named holds
                     // the folder's other files too.
                     guard let file = wanted[PathKey(match.path)], file.ids.contains(result.snapshot) else { continue }
-                    found[file.path, default: [:]][result.snapshot] = match.node
+                    found[PathKey(file.path), default: [:]][result.snapshot] = match.node
                     fileHistoryAnswers[key(result.snapshot, file.path)] = match.node
                 }
             }
