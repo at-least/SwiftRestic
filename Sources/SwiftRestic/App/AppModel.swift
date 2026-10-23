@@ -262,6 +262,9 @@ final class AppModel {
     /// `SWIFTRESTIC_CONFIG_DIR` included); a test pointing the store
     /// elsewhere gets its own folder.
     let indexCoordinator: IndexCoordinator
+    /// Where drag restores and previews copy files out, and the only folder
+    /// the launch sweep empties (`stagingDirectory(for:)`).
+    let stagingDirectory: URL
     /// State of the restic console pane (see `ConsoleModel`); its two
     /// injected closures are set below, at the end of `init`.
     let console = ConsoleModel()
@@ -329,6 +332,7 @@ final class AppModel {
         self.serverProbe = serverProbe
         self.localHostname = localHostname
         self.indexCoordinator = IndexCoordinator(directory: store.directory)
+        self.stagingDirectory = Self.stagingDirectory(for: store.directory)
         self.viewDefaults = defaults
         self.problemsSeenAt = ProblemDotsStore.load(from: defaults)
         #if DEBUG

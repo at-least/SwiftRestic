@@ -2,9 +2,9 @@ import Foundation
 import Testing
 
 /// The literal branches of the shared formatters: the sentinel strings and the
-/// guards around them. The formatters take the machine's locale, and most pins
-/// here are exact English ("1m 30s", "Today 9:00 PM"), so the suite assumes an
-/// en locale.
+/// guards around them. The dates are spelled in `newYorkCalendar()`'s en_US;
+/// the other formatters take the machine's locale, and their pins are exact
+/// English ("1m 30s"), so the suite assumes an en locale.
 @Suite("Shared formatting")
 struct FormattingTests {
     @Test("missing values read as an em dash, never as an empty string")
@@ -118,34 +118,37 @@ struct FormattingTests {
 
     @Test("tile timestamps keep the part a tile would truncate — morning or evening")
     func tileTimestamps() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "America/New_York")!
-        // The formatter separates a time from its meridiem with a narrow
-        // no-break space, which is invisible in a test failure's printout —
-        // flatten it so a pin compares what it appears to compare.
-        func flat(_ value: String) -> String {
-            value.replacingOccurrences(of: "\u{202F}", with: " ")
-        }
+        let calendar = newYorkCalendar()
         func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int) -> Date {
             calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
         }
         let now = date(2026, 9, 9, 10) // a Wednesday, mid-morning
 
         // A moment that has already passed is due, never a date in the past tense.
-        #expect(flat(Format.tileTimestamp(date(2026, 9, 9, 8), now: now, calendar: calendar)) == "Due now")
-        #expect(flat(Format.tileTimestamp(date(2026, 9, 9, 21), now: now, calendar: calendar)) == "Today 9:00 PM")
-        #expect(flat(Format.tileTimestamp(date(2026, 9, 10, 21), now: now, calendar: calendar)) == "Tomorrow 9:00 PM")
+        #expect(flatSpaces(Format.tileTimestamp(date(2026, 9, 9, 8), now: now, calendar: calendar)) == "Due now")
+        #expect(flatSpaces(Format.tileTimestamp(date(2026, 9, 9, 21), now: now, calendar: calendar)) == "Today 9:00 PM")
+        #expect(flatSpaces(Format.tileTimestamp(date(2026, 9, 10, 21), now: now, calendar: calendar)) == "Tomorrow 9:00 PM")
         // Inside the week the day name leads; September 14, 2026 is a Monday.
-        #expect(flat(Format.tileTimestamp(date(2026, 9, 14, 21), now: now, calendar: calendar)) == "Mon 9:00 PM")
+        #expect(flatSpaces(Format.tileTimestamp(date(2026, 9, 14, 21), now: now, calendar: calendar)) == "Mon 9:00 PM")
         // Further out the month leads, and the time is still spelled in full.
-        let inDecember = flat(Format.tileTimestamp(date(2026, 12, 24, 21), now: now, calendar: calendar))
+        let inDecember = flatSpaces(Format.tileTimestamp(date(2026, 12, 24, 21), now: now, calendar: calendar))
         #expect(inDecember.hasSuffix("9:00 PM"))
         #expect(inDecember.contains("Dec"))
         #expect(!inDecember.contains("Today") && !inDecember.contains("Tomorrow"))
         // A different year keeps the year, so the tile cannot imply this December.
-        let nextYear = flat(Format.tileTimestamp(date(2027, 12, 24, 21), now: now, calendar: calendar))
+        let nextYear = flatSpaces(Format.tileTimestamp(date(2027, 12, 24, 21), now: now, calendar: calendar))
         #expect(nextYear.contains("2027"))
         #expect(nextYear.hasSuffix("9:00 PM"))
+    }
+
+    @Test("a calendar's own locale names the clock: a 24-hour region reads 21:00")
+    func twentyFourHourCalendar() {
+        var calendar = newYorkCalendar()
+        calendar.locale = Locale(identifier: "en_GB")
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 9, hour: 10))!
+        let evening = calendar.date(from: DateComponents(year: 2026, month: 9, day: 9, hour: 21))!
+        #expect(flatSpaces(Format.tileTimestamp(evening, now: now, calendar: calendar)) == "Today 21:00")
+        #expect(flatSpaces(Format.pauseEnd(evening, now: now, calendar: calendar)) == "21:00")
     }
 
     @Test("a version's size change is signed in the sizes' own units, and an equal size says so")
@@ -157,8 +160,7 @@ struct FormattingTests {
 
     @Test("an item's last backup day reads after until, with the year only when it is another one")
     func untilDays() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let calendar = newYorkCalendar()
         func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int) -> Date {
             calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
         }
@@ -173,30 +175,22 @@ struct FormattingTests {
 
     @Test("a pause end reads naturally after until")
     func pauseEndSpelling() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "America/New_York")!
-        func flat(_ value: String) -> String {
-            value.replacingOccurrences(of: "\u{202F}", with: " ")
-        }
+        let calendar = newYorkCalendar()
         func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
             calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
         }
         let now = date(2026, 9, 9, 10) // the tile fixture's Wednesday morning
 
-        #expect(flat(Format.pauseEnd(date(2026, 9, 9, 15, 40), now: now, calendar: calendar)) == "3:40 PM")
+        #expect(flatSpaces(Format.pauseEnd(date(2026, 9, 9, 15, 40), now: now, calendar: calendar)) == "3:40 PM")
         // Until Tomorrow's own end: the day, not a midnight time.
-        #expect(flat(Format.pauseEnd(date(2026, 9, 10, 0), now: now, calendar: calendar)) == "tomorrow")
-        #expect(flat(Format.pauseEnd(date(2026, 9, 10, 9), now: now, calendar: calendar)) == "tomorrow 9:00 AM")
-        #expect(flat(Format.pauseEnd(date(2026, 9, 14, 21), now: now, calendar: calendar)) == "Mon 9:00 PM")
+        #expect(flatSpaces(Format.pauseEnd(date(2026, 9, 10, 0), now: now, calendar: calendar)) == "tomorrow")
+        #expect(flatSpaces(Format.pauseEnd(date(2026, 9, 10, 9), now: now, calendar: calendar)) == "tomorrow 9:00 AM")
+        #expect(flatSpaces(Format.pauseEnd(date(2026, 9, 14, 21), now: now, calendar: calendar)) == "Mon 9:00 PM")
     }
 
     @Test("an hour's pause across midnight reads the same before and after it")
     func pauseEndAcrossMidnight() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "America/New_York")!
-        func flat(_ value: String) -> String {
-            value.replacingOccurrences(of: "\u{202F}", with: " ")
-        }
+        let calendar = newYorkCalendar()
         func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
             calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
         }
@@ -205,10 +199,10 @@ struct FormattingTests {
         // still up at 12:10 AM — where "tomorrow 12:30 AM" would name a day
         // too late. (The window's captions are respelled each minute.)
         let end = date(2026, 9, 27, 0, 30)
-        #expect(flat(Format.pauseEnd(end, now: date(2026, 9, 26, 23, 30), calendar: calendar)) == "12:30 AM")
-        #expect(flat(Format.pauseEnd(end, now: date(2026, 9, 27, 0, 10), calendar: calendar)) == "12:30 AM")
+        #expect(flatSpaces(Format.pauseEnd(end, now: date(2026, 9, 26, 23, 30), calendar: calendar)) == "12:30 AM")
+        #expect(flatSpaces(Format.pauseEnd(end, now: date(2026, 9, 27, 0, 10), calendar: calendar)) == "12:30 AM")
         // Until Tomorrow's own end keeps its word: it lapses at midnight.
-        #expect(flat(Format.pauseEnd(date(2026, 9, 27, 0), now: date(2026, 9, 26, 23, 30), calendar: calendar)) == "tomorrow")
+        #expect(flatSpaces(Format.pauseEnd(date(2026, 9, 27, 0), now: date(2026, 9, 26, 23, 30), calendar: calendar)) == "tomorrow")
     }
 
     @Test("repeated and alternating calls keep their own formatting")

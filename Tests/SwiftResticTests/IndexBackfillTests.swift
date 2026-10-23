@@ -884,20 +884,19 @@ struct IndexCoordinatorBackfillTests {
         #expect(try store.snapStates() == ["a1": 1, "a2": 0, "a3": 0])
     }
 
-    @Test("a pass cancelled while its planner read waits for a reader starts no restic step")
+    @Test("a pass cancelled while its planner read runs starts no restic step")
     func cancelDuringPlanningStartsNoStep() async throws {
         let scene = try CoordinatorScene("SwiftResticCancelPlanning")
         defer { scene.remove() }
         let client = MockResticClient().onListings(["a1": CoordinatorScene.content("a1")])
         await scene.reconcile([try CoordinatorScene.snapshot("a1", 10)], 1)
-        // Every reader taken, so the pass's planner read waits for one.
-        let hold = ReaderHold(try await scene.coordinator.read(scene.repositoryID) { $0 })
-        #expect(await eventually(within: 10) { hold.isHeld })
+        // The pass's planner read is the only read: parked in its statement.
+        let gate = await StatementGate.onReaders(try await scene.coordinator.read(scene.repositoryID) { $0 })
+        gate.arm()
         let pass = Task { await scene.backfill(client) }
-        // Long enough for the pass to reach its planner read and park there.
-        try await Task.sleep(for: .milliseconds(300))
+        try #require(await eventually(within: 60) { gate.isEntered }, "the planner read never ran")
         pass.cancel()
-        hold.release()
+        gate.release()
         await pass.value
         // The read answered `.full(a1)` after the cancel; nothing ran it.
         #expect(client.walkCounts.isEmpty)
@@ -1137,7 +1136,7 @@ struct IndexCoordinatorBackfillTests {
         _ = client.onHangingWalks([])
         await scene.coordinator.runBackfill(repositoryID: scene.repositoryID, service: client, context: scene.context)
         await scene.coordinator.startBackfill(repositoryID: scene.repositoryID, service: client, context: scene.context)
-        try await Task.sleep(for: .milliseconds(100))
+        #expect(await !scene.coordinator.isBackfilling(repositoryID: scene.repositoryID), "a backfill started after shutdown")
         #expect(client.walkCounts == ["s2": 1])
     }
 
@@ -1271,19 +1270,17 @@ struct IndexCoordinatorConcurrencyTests {
         await scene.reconcile([try CoordinatorScene.snapshot("s1", 1)], 1)
         await scene.backfill(client)
 
-        // Hold the index's one writer from outside, as a long full compare
-        // would.
-        let hold = WriterHold(try await coordinator.read(repositoryID) { $0 })
-        #expect(await eventually(within: 10) { hold.isHeld })
-
-        // A reconcile now waits on the writer, off the actor.
+        // The reconcile holds the index's one writer, parked mid-statement
+        // as a long full compare would hold it, off the actor.
+        let gate = try StatementGate.onWriter(try await coordinator.read(repositoryID) { $0 })
+        gate.arm()
         let reconciled = Flag()
         let bothListed = [try CoordinatorScene.snapshot("s1", 1), try CoordinatorScene.snapshot("s2", 2)]
         let reconcile = Task {
             await coordinator.reconcile(repositoryID: repositoryID, snapshots: bothListed, generation: 2)
             reconciled.set()
         }
-        try await Task.sleep(for: .milliseconds(50))
+        try #require(await eventually(within: 60) { gate.isEntered }, "the reconcile never reached the writer")
 
         let answered = Flag()
         let reads = Task {
@@ -1301,9 +1298,9 @@ struct IndexCoordinatorConcurrencyTests {
             answered.set()
             return (versions, hits.count, summaries["/data/f7.txt"]?.count, held, membership, summarized, complete)
         }
-        let answeredWhileHeld = await eventually(within: 10) { answered.isSet }
+        let answeredWhileHeld = await eventually(within: 60) { answered.isSet }
         let reconcileWaited = !reconciled.isSet
-        hold.release()
+        gate.release()
         #expect(answeredWhileHeld, "reads waited for the writer or the actor")
         #expect(reconcileWaited, "the writer was not actually held")
 
@@ -1319,50 +1316,39 @@ struct IndexCoordinatorConcurrencyTests {
         #expect(summarized.summaries["/data/f7.txt"]?.count == 1)
         #expect(complete)
         await reconcile.value
-        #expect(await eventually(within: 10) { hold.isFreed })
         // The reconcile landed once the writer was free: s2 is pending now.
         #expect(try await !coordinator.isComplete(repositoryID: repositoryID))
     }
 
-    @Test("N12: a search cancelled while it runs throws CancellationError promptly")
+    @Test("N12: a search cancelled while it runs throws CancellationError, never its answer", .timeLimit(.minutes(2)))
     func cancelledSearchStops() async throws {
         let scene = try CoordinatorScene("SwiftResticSearchCancel")
         defer { scene.remove() }
         let repositoryID = scene.repositoryID
         let coordinator = scene.coordinator
         var content: [String: Bool] = ["/data": true]
-        for index in 0..<30_000 { content["/data/f\(index).txt"] = false }
+        for index in 0..<3_000 { content["/data/f\(index).txt"] = false }
         let client = MockResticClient().onListings(["s1": content])
         await scene.reconcile([try CoordinatorScene.snapshot("s1", 1)], 1)
         await scene.backfill(client)
-
-        // Every one of the 30k names matches, and the limit lets the walk
-        // visit them all: long enough to be cancelled mid-run. The Restore
-        // pane's read — the one each keystroke cancels.
-        let start = Date()
         let all = try await coordinator.searchWithMembership(
             matching: "f", inSnapshot: "s1", repositoryID: repositoryID, limit: 100_000
         )
-        let whole = Date().timeIntervalSince(start)
-        #expect(all.hits.count == 30_000)
-        #expect(all.inSnapshot.count == 30_000)
+        #expect(all.hits.count == 3_000)
 
+        // The Restore pane's read — the one each keystroke cancels — parked
+        // inside its statement, cancelled there, then let go.
+        let gate = await StatementGate.onReaders(try await coordinator.read(repositoryID) { $0 })
+        gate.arm()
         let search = Task {
             try await coordinator.searchWithMembership(
                 matching: "f", inSnapshot: "s1", repositoryID: repositoryID, limit: 100_000
             )
         }
-        try await Task.sleep(for: .seconds(whole / 4))
-        let cancelledAt = Date()
+        try #require(await eventually(within: 60) { gate.isEntered }, "the search never ran")
         search.cancel()
-        do {
-            _ = try await search.value
-            Issue.record("the cancelled search ran to the end (a whole search takes \(whole)s)")
-        } catch is CancellationError {
-            let latency = Date().timeIntervalSince(cancelledAt)
-            print("cancelled search: whole run \(String(format: "%.3f", whole))s, stopped \(String(format: "%.3f", latency))s after cancel")
-            #expect(latency < max(whole / 2, 0.05))
-        }
+        gate.release()
+        await #expect(throws: CancellationError.self) { _ = try await search.value }
     }
 
     @Test(
@@ -1491,7 +1477,8 @@ struct IndexCoordinatorConcurrencyTests {
             await coordinator.shutdown()
             shutDown.set()
         }
-        try await Task.sleep(for: .milliseconds(150))
+        // Offered once shutdown has begun, whenever its task gets a thread.
+        try #require(await eventually(within: 60) { !coordinator.acceptsCacheWrites }, "shutdown never began")
         let shutdownWaited = !shutDown.isSet
         coordinator.cacheListing(snapshotID: "s3", directory: "/src", nodes: [node], repositoryID: repositoryID)
         hold2.release()

@@ -127,6 +127,7 @@ struct AppModelTests {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
+        defer { try? FileManager.default.removeItem(at: model.stagingDirectory) }
 
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
@@ -148,11 +149,14 @@ struct AppModelTests {
             repository: harness.repository,
             repositoryLabel: model.label(of: harness.repository),
             snapshotID: snapshot.id,
-            node: node
+            node: node,
+            stagingDirectory: model.stagingDirectory
         )
 
         #expect(url.lastPathComponent == "a.txt")
         #expect(url.deletingLastPathComponent().lastPathComponent.hasPrefix(AppModel.dragRestorePrefix))
+        #expect(url.deletingLastPathComponent().deletingLastPathComponent().resolvingSymlinksInPath().path
+            == model.stagingDirectory.resolvingSymlinksInPath().path)
         #expect(try String(contentsOf: url, encoding: .utf8) == "one")
 
         // A drag restore is not a UI restore: it borrows neither the progress
@@ -409,6 +413,7 @@ struct AppModelTests {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
+        defer { try? FileManager.default.removeItem(at: model.stagingDirectory) }
 
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
@@ -488,6 +493,7 @@ struct AppModelTests {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
+        defer { try? FileManager.default.removeItem(at: model.stagingDirectory) }
 
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
@@ -495,7 +501,7 @@ struct AppModelTests {
             model.snapshots(for: harness.repository.id, planID: harness.plan.id).first
         )
         func previewFolders() throws -> Set<String> {
-            Set(try FileManager.default.contentsOfDirectory(atPath: FileManager.default.temporaryDirectory.path)
+            Set(((try? FileManager.default.contentsOfDirectory(atPath: model.stagingDirectory.path)) ?? [])
                 .filter { $0.hasPrefix(AppModel.previewPrefix) })
         }
         let before = try previewFolders()
@@ -841,30 +847,41 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("the launch sweep removes old drag and preview staging and nothing else")
-    func dragStagingSweep() throws {
+    @Test("the launch sweep empties its own configuration's staging folder of drag and preview copies, and nothing else")
+    @MainActor
+    func dragStagingSweep() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticSweep-\(UUID().uuidString)")
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        let staging = model.stagingDirectory
+        // Another configuration's — another SwiftRestic's, running — and the
+        // shared temporary folder's own, which earlier builds staged in.
+        let otherStaging = AppModel.stagingDirectory(for: root.appendingPathComponent("other"))
+        #expect(otherStaging != staging)
         let temp = FileManager.default.temporaryDirectory
-        let stale = temp.appendingPathComponent("\(AppModel.dragRestorePrefix)\(UUID().uuidString)")
-        let file = temp.appendingPathComponent("\(AppModel.dragRestorePrefix)\(UUID().uuidString)")
-        let preview = temp.appendingPathComponent("\(AppModel.previewPrefix)\(UUID().uuidString)")
-        let unrelated = temp.appendingPathComponent("SwiftRestic-Keep-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
+        let stale = staging.appendingPathComponent("\(AppModel.dragRestorePrefix)\(UUID().uuidString)")
+        let file = staging.appendingPathComponent("\(AppModel.dragRestorePrefix)\(UUID().uuidString)")
+        let preview = staging.appendingPathComponent("\(AppModel.previewPrefix)\(UUID().uuidString)")
+        let unrelated = staging.appendingPathComponent("SwiftRestic-Keep-\(UUID().uuidString)")
+        let othersPreview = otherStaging.appendingPathComponent("\(AppModel.previewPrefix)\(UUID().uuidString)")
+        let sharedPreview = temp.appendingPathComponent("\(AppModel.previewPrefix)\(UUID().uuidString)")
+        for folder in [stale, preview, unrelated, othersPreview, sharedPreview] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
         try "x".write(to: file, atomically: true, encoding: .utf8)
-        try FileManager.default.createDirectory(at: preview, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
         defer {
-            try? FileManager.default.removeItem(at: stale)
-            try? FileManager.default.removeItem(at: file)
-            try? FileManager.default.removeItem(at: preview)
-            try? FileManager.default.removeItem(at: unrelated)
+            for url in [root, staging, otherStaging, sharedPreview] { try? FileManager.default.removeItem(at: url) }
         }
 
-        AppModel.sweepDragRestoreStaging()
+        await model.bootstrap()
+        await model.tasks.drain()
 
         #expect(!FileManager.default.fileExists(atPath: stale.path))
         #expect(!FileManager.default.fileExists(atPath: file.path))
         #expect(!FileManager.default.fileExists(atPath: preview.path))
         #expect(FileManager.default.fileExists(atPath: unrelated.path))
+        #expect(FileManager.default.fileExists(atPath: othersPreview.path), "another configuration's preview was deleted")
+        #expect(FileManager.default.fileExists(atPath: sharedPreview.path), "the shared temporary folder was swept")
+        await model.shutdown()
     }
 
     @Test("retention runs after the backup and trims the plan's own snapshots")

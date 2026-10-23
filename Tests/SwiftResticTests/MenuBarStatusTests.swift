@@ -703,17 +703,9 @@ struct MenuBarStatusTests {
 
     // MARK: - Holds, stops and the dimmed face
 
-    /// New York, as FormattingTests' tile timestamps; the formatter's narrow
-    /// no-break space before AM/PM is flattened so a pin reads as it prints.
-    private var newYork: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "America/New_York")!
-        return calendar
-    }
+    private var newYork: Calendar { newYorkCalendar() }
 
-    private func flat(_ value: String) -> String {
-        value.replacingOccurrences(of: "\u{202F}", with: " ")
-    }
+    private func flat(_ value: String) -> String { flatSpaces(value) }
 
     @Test("a hold replaces the next-run headline and names itself")
     func holdLeadsAndHeadlineStepsAside() throws {

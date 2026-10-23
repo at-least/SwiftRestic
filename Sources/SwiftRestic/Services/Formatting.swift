@@ -180,7 +180,7 @@ enum Format {
     /// said only when it is not this one. The row's tooltip carries the
     /// full moment.
     static func until(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
-        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        let style = style(calendar)
         let day = calendar.component(.year, from: date) == calendar.component(.year, from: now)
             ? date.formatted(style.month(.abbreviated).day())
             : date.formatted(style.year().month(.abbreviated).day())
@@ -198,14 +198,7 @@ enum Format {
         calendar: Calendar = .current
     ) -> String {
         guard date > now else { return "Due now" }
-        // The calendar owns the time zone: a date the calendar placed at 9 PM
-        // must not be re-expressed in the machine's zone (tests pass a fixed
-        // one; users simply get their own).
-        let zone = calendar.timeZone
-        func style() -> Date.FormatStyle {
-            Date.FormatStyle(calendar: calendar, timeZone: zone)
-        }
-        let time = date.formatted(style().hour().minute())
+        let time = date.formatted(style(calendar).hour().minute())
         if calendar.isDate(date, inSameDayAs: now) { return "Today \(time)" }
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
            calendar.isDate(date, inSameDayAs: tomorrow)
@@ -226,11 +219,7 @@ enum Format {
         now: Date = .now,
         calendar: Calendar = .current
     ) -> String {
-        let zone = calendar.timeZone
-        func style() -> Date.FormatStyle {
-            Date.FormatStyle(calendar: calendar, timeZone: zone)
-        }
-        let time = date.formatted(style().hour().minute())
+        let time = date.formatted(style(calendar).hour().minute())
         if calendar.isDate(date, inSameDayAs: now) { return time }
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
            calendar.isDate(date, inSameDayAs: tomorrow)
@@ -239,6 +228,14 @@ enum Format {
             return date.timeIntervalSince(now) < 12 * 3600 ? time : "tomorrow \(time)"
         }
         return datedForm(date, now: now, calendar: calendar, time: time)
+    }
+
+    /// The calendar owns the zone and the locale: a date it placed at 9 PM
+    /// is not re-expressed in the machine's zone, nor in its 12- or 24-hour
+    /// clock when the calendar names its own (`Calendar.current` names the
+    /// user's).
+    private static func style(_ calendar: Calendar) -> Date.FormatStyle {
+        Date.FormatStyle(locale: calendar.locale ?? .autoupdatingCurrent, calendar: calendar, timeZone: calendar.timeZone)
     }
 
     /// The far end both next-run and pause-end spellings share: weekday and
@@ -250,7 +247,7 @@ enum Format {
         calendar: Calendar,
         time: String
     ) -> String {
-        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        let style = style(calendar)
         if date.timeIntervalSince(now) < 7 * 86_400 {
             return "\(date.formatted(style.weekday(.abbreviated))) \(time)"
         }

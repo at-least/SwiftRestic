@@ -142,32 +142,43 @@ final class NodeCollector: @unchecked Sendable {
     }
 }
 
-/// Holds every reader connection of an index's pool from outside, each on a
-/// background thread, until `release()`: a read begun meanwhile waits for a
-/// reader, which parks the caller inside that read for as long as the test
-/// needs. `isHeld` turns true once every reader is taken.
-final class ReaderHold: @unchecked Sendable {
+/// Parks a statement mid-run, where a sleep could only hope one runs: armed,
+/// the SQLite progress handler it puts on a connection marks the gate
+/// entered at the statement's first step and holds it there until
+/// `release` (a minute at most). A cancel sent meanwhile reaches the
+/// statement as GRDB sends it — `sqlite3_interrupt` — and is seen once the
+/// handler returns. Retained for good: a connection may outlive the test's
+/// reference, and its handler points here.
+final class StatementGate: @unchecked Sendable {
     private let lock = NSLock()
-    private var taken = 0
+    private var armed = false
+    private var entered = false
     private var released = false
-    private let count: Int
 
-    init(_ index: SnapshotIndex) {
-        count = index.pool.configuration.maximumReaderCount
-        for _ in 0 ..< count {
-            DispatchQueue.global().async {
-                try? index.pool.read { _ in
-                    self.take()
-                    while !self.isReleased { usleep(2_000) }
-                }
-            }
-        }
+    func arm() {
+        lock.lock()
+        armed = true
+        lock.unlock()
     }
 
-    var isHeld: Bool {
+    var isEntered: Bool {
         lock.lock()
         defer { lock.unlock() }
-        return taken == count
+        return entered
+    }
+
+    func release() {
+        lock.lock()
+        released = true
+        lock.unlock()
+    }
+
+    private func shouldHold() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard armed, !released else { return false }
+        entered = true
+        return true
     }
 
     private var isReleased: Bool {
@@ -176,16 +187,61 @@ final class ReaderHold: @unchecked Sendable {
         return released
     }
 
-    private func take() {
-        lock.lock()
-        taken += 1
-        lock.unlock()
+    fileprivate func step() {
+        guard shouldHold() else { return }
+        let deadline = Date().addingTimeInterval(60)
+        while !isReleased, Date() < deadline { usleep(1_000) }
     }
 
-    func release() {
-        lock.lock()
-        released = true
-        lock.unlock()
+    private func install(on db: Database) {
+        let context = Unmanaged.passRetained(self).toOpaque()
+        sqlite3_progress_handler(db.sqliteConnection, 1, { context in
+            Unmanaged<StatementGate>.fromOpaque(context!).takeUnretainedValue().step()
+            return 0
+        }, context)
+    }
+
+    /// On the index's one writer connection.
+    static func onWriter(_ index: SnapshotIndex) throws -> StatementGate {
+        let gate = StatementGate()
+        try index.pool.writeWithoutTransaction { gate.install(on: $0) }
+        return gate
+    }
+
+    /// On every reader connection: each is held until all are, so no
+    /// connection is visited twice.
+    static func onReaders(_ index: SnapshotIndex) async -> StatementGate {
+        let gate = StatementGate()
+        let count = index.pool.configuration.maximumReaderCount
+        let installed = Counter()
+        for _ in 0 ..< count {
+            DispatchQueue.global().async {
+                try? index.pool.read { db in
+                    gate.install(on: db)
+                    installed.increment()
+                    let deadline = Date().addingTimeInterval(60)
+                    while installed.value < count, Date() < deadline { usleep(1_000) }
+                }
+            }
+        }
+        _ = await eventually(within: 60) { installed.value == count }
+        return gate
+    }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        var value: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return count
+        }
+
+        func increment() {
+            lock.lock()
+            count += 1
+            lock.unlock()
+        }
     }
 }
 

@@ -168,7 +168,8 @@ extension AppModel {
         // Drag-restore staging and preview copies from previous sessions
         // are pure leftovers — Finder finished with those drops long ago. Not awaited: a slow
         // temp directory must not hold the first screen behind the spinner.
-        Task.detached { Self.sweepDragRestoreStaging() }
+        let staging = stagingDirectory
+        tasks.addBackground(Task.detached { Self.sweepDragRestoreStaging(in: staging) })
         // Logs whose records are gone — a crash between a log's write and
         // the save that would have kept its record, a trim the quit never
         // drained. Only from a history that read whole: an unreadable

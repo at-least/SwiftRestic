@@ -223,6 +223,12 @@ actor IndexCoordinator {
         reports[repositoryID]
     }
 
+    /// Whether a backfill `startBackfill` began is still running: the
+    /// tests' view of a refused start; the app never reads it.
+    func isBackfilling(repositoryID: UUID) -> Bool {
+        backfillTasks[repositoryID] != nil
+    }
+
     /// How one step ended.
     private enum StepEnd {
         case landed
@@ -509,6 +515,12 @@ actor IndexCoordinator {
     /// waits here; so do tests that read back what they just captured.
     nonisolated func cacheWritesSettled() async {
         await cacheWrites.settled()
+    }
+
+    /// False once `shutdown` began: a capture offered now is dropped. The
+    /// tests' view; the app never reads it.
+    nonisolated var acceptsCacheWrites: Bool {
+        !cacheWrites.isClosed
     }
 
     /// `read` for the caches: best-effort, so a failure is nil, and a reset
@@ -926,14 +938,20 @@ private final class StoreRegistry: @unchecked Sendable {
 private final class CacheWrites: @unchecked Sendable {
     private let lock = NSLock()
     private var running: [UUID: Task<Void, Never>] = [:]
-    private var isClosed = false
+    private var closed = false
+
+    var isClosed: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return closed
+    }
 
     /// Runs `body` in a task of its own, unless `close` came first.
     func start(_ body: @escaping @Sendable () async -> Void) {
         let ticket = UUID()
         lock.lock()
         defer { lock.unlock() }
-        guard !isClosed else { return }
+        guard !closed else { return }
         // Created under the lock, so the task's own removal, which takes the
         // lock, cannot run before its entry exists.
         running[ticket] = Task {
@@ -944,7 +962,7 @@ private final class CacheWrites: @unchecked Sendable {
 
     func close() {
         lock.lock()
-        isClosed = true
+        closed = true
         lock.unlock()
     }
 

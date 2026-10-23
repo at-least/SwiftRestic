@@ -208,4 +208,31 @@ struct FileTreeTests {
         #expect(tree.arrowStep(.left, from: "/nope") == .stay)
         #expect(tree.arrowStep(.right, from: "/nope") == .stay)
     }
+
+    @Test("two folders whose names differ only in Unicode normalization are two rows, each acted on by its own bytes")
+    func normalizationTwinsStayApart() throws {
+        // "é" precomposed and decomposed: equal as Swift Strings, two names
+        // to a file system that keeps the bytes it was given.
+        let composed = "/src/caf\u{E9}"
+        let decomposed = "/src/cafe\u{301}"
+        #expect(composed == decomposed)
+        var tree = FileTree(roots: [dir("/src")])
+        _ = tree.toggleExpanded(path: "/src")
+        tree.replaceChildren(of: "/src", nodes: [dir(composed), dir(decomposed)])
+        #expect(Set(tree.rows.map(\.id)).count == 3, "two rows share an id")
+
+        #expect(tree.toggleExpanded(path: decomposed) == decomposed)
+        tree.replaceChildren(of: decomposed, nodes: [file(decomposed + "/inner.txt")])
+        let paths = tree.rows.map { PathKey($0.node.path) }
+        #expect(paths == [PathKey("/src"), PathKey(composed), PathKey(decomposed), PathKey(decomposed + "/inner.txt")])
+        #expect(tree.rows[1].expanded == false)
+        #expect(tree.rows[2].expanded == true)
+        #expect(tree.node(at: decomposed).map { PathKey($0.path) } == PathKey(decomposed))
+        guard case let .selectParent(parent) = tree.arrowStep(.left, from: decomposed + "/inner.txt") else {
+            Issue.record("← on the child did not select its parent")
+            return
+        }
+        #expect(PathKey(parent) == PathKey(decomposed))
+        #expect(tree.row(id: FileTree.id(of: decomposed)).map { PathKey($0.node.path) } == PathKey(decomposed))
+    }
 }

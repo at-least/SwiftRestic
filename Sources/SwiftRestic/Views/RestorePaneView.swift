@@ -300,7 +300,7 @@ struct RestorePaneView: View {
             // chevron does, and leaves a file alone. The list also sends
             // Return here — Return is spent in `handleKeyPress` first.
             .contextMenu(forSelectionType: String.self) { ids in
-                if ids.count == 1, let path = ids.first, let node = tree.node(at: path) {
+                if ids.count == 1, let id = ids.first, let node = tree.row(id: id)?.node {
                     showVersionsItem(path: node.path, isDirectory: node.isDirectory)
                     if !node.isDirectory {
                         // The tree's node is restic's own, size included.
@@ -308,22 +308,22 @@ struct RestorePaneView: View {
                     }
                 }
             } primaryAction: { ids in
-                guard ids.count == 1, let path = ids.first,
-                      tree.node(at: path)?.isDirectory == true
+                guard ids.count == 1, let id = ids.first,
+                      let node = tree.row(id: id)?.node, node.isDirectory
                 else { return }
-                expand(path: path)
+                expand(path: node.path)
             }
             .onKeyPress(phases: .down) { press in
                 // Left's parent may sit above the visible rows; the list
                 // does not follow a selection it did not make itself.
-                handleKeyPress(press) { proxy.scrollTo($0) }
+                handleKeyPress(press) { proxy.scrollTo(FileTree.id(of: $0)) }
             }
             .help("Drag items to Finder to restore them there.")
             // Initial as well: the routed focus is set while the spinner stands
             // in for this list, so the list meets it on its first appearance.
             .onChange(of: revealPath, initial: true) { _, target in
                 guard let target else { return }
-                proxy.scrollTo(target, anchor: .center)
+                proxy.scrollTo(FileTree.id(of: target), anchor: .center)
                 revealPath = nil
             }
         }
@@ -623,7 +623,10 @@ struct RestorePaneView: View {
             }
             return .handled
         }
-        if let arrow, isPlain, selection.count == 1, let selected = selection.first {
+        if let arrow, isPlain, selection.count == 1 {
+            // A search's hit names no tree row: the arrow stays.
+            let selected = searchResult == nil ? selection.first.flatMap { tree.row(id: $0)?.node.path } : nil
+            guard let selected else { return .handled }
             switch tree.arrowStep(arrow, from: selected) {
             case .expand(let path), .collapse(let path):
                 // The step already knows the direction; expand toggles.
@@ -671,7 +674,8 @@ struct RestorePaneView: View {
     /// that row: a step the eye can follow, where a focus change alone
     /// showed nothing but a cleared selection.
     private var upStep: (from: String, parent: String)? {
-        guard let from = selection.count == 1 ? selection.first : currentPath,
+        let selected = searchResult == nil ? selection.first.flatMap { tree.row(id: $0)?.node.path } : nil
+        guard let from = selection.count == 1 ? selected : currentPath,
               let parent = BrowserListGrammar.parent(of: from),
               tree.node(at: parent) != nil
         else { return nil }
@@ -688,7 +692,7 @@ struct RestorePaneView: View {
         reveal(child)
         selection = []
         Task {
-            selection = [parent]
+            selection = [FileTree.id(of: parent)]
             reveal(parent)
         }
     }
@@ -793,7 +797,7 @@ struct RestorePaneView: View {
         guard !Task.isCancelled else { return }
         // The routed folder is open: select it and bring it on screen.
         if let focus, deepest == focus {
-            selection = [focus]
+            selection = [FileTree.id(of: focus)]
             revealPath = focus
         }
         isLoadingTree = false

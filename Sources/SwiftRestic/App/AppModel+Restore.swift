@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import UniformTypeIdentifiers
 
@@ -497,6 +498,7 @@ extension AppModel {
         }
         let secrets = self.secrets
         let repositoryLabel = label(of: repository)
+        let staging = stagingDirectory
 
         // The promise is typed by *content*, not as a file URL:
         // `public.file-url` declares the file's contents are a URL bookmark
@@ -518,7 +520,8 @@ extension AppModel {
                         repository: repository,
                         repositoryLabel: repositoryLabel,
                         snapshotID: snapshotID,
-                        node: node
+                        node: node,
+                        stagingDirectory: staging
                     )
                     completion(url, false, nil)
                 } catch {
@@ -566,9 +569,11 @@ extension AppModel {
         repository: Repository,
         repositoryLabel: String,
         snapshotID: String,
-        node: SnapshotNode
+        node: SnapshotNode,
+        stagingDirectory: URL
     ) async throws -> URL {
-        let destination = FileManager.default.temporaryDirectory
+        try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+        let destination = stagingDirectory
             .appendingPathComponent("\(dragRestorePrefix)\(UUID().uuidString)")
         _ = try await service.restore(
             await Self.dragContext(repository: repository, label: repositoryLabel, secrets: secrets),
@@ -630,7 +635,8 @@ extension AppModel {
     func previewCopy(repositoryID: UUID, snapshotID: String, node: SnapshotNode) async throws -> URL {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         let (service, context) = try await resticContext(for: repository)
-        let folder = FileManager.default.temporaryDirectory
+        try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+        let folder = stagingDirectory
             .appendingPathComponent("\(Self.previewPrefix)\(UUID().uuidString)")
         do {
             _ = try await service.restore(
@@ -669,15 +675,25 @@ extension AppModel {
     /// sweep in `bootstrap` and the creator above can never drift apart.
     nonisolated static let dragRestorePrefix = "SwiftRestic-Drag-"
 
+    /// The staging folder of the configuration in `configDirectory`, inside
+    /// the temporary folder. One per configuration, not the temporary folder
+    /// itself: every SwiftRestic of this user — a scratch instance, a test
+    /// run — shares that, and a launch sweep there deletes the copies
+    /// another one is showing.
+    nonisolated static func stagingDirectory(for configDirectory: URL) -> URL {
+        let digest = SHA256.hash(data: Data(configDirectory.standardizedFileURL.path.utf8))
+        let name = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+        return FileManager.default.temporaryDirectory.appendingPathComponent("SwiftRestic-Staging-\(name)")
+    }
+
     /// Removes drag-restore staging directories and preview copies left
     /// behind by earlier sessions. Run at launch only, never at shutdown:
     /// Finder may still be copying from a directory a just-finished drop
     /// handed over, and no callback says when that ends — deleting on our
     /// side of the handoff is a race. A launch sweep has no such window:
     /// nothing from a previous session can still be mid-copy.
-    nonisolated static func sweepDragRestoreStaging(fileManager: FileManager = .default) {
-        let temp = fileManager.temporaryDirectory
-        guard let contents = try? fileManager.contentsOfDirectory(at: temp, includingPropertiesForKeys: nil)
+    nonisolated static func sweepDragRestoreStaging(in directory: URL, fileManager: FileManager = .default) {
+        guard let contents = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         else { return }
         for url in contents where url.lastPathComponent.hasPrefix(dragRestorePrefix)
             || url.lastPathComponent.hasPrefix(previewPrefix) {

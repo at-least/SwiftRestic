@@ -9,7 +9,7 @@ struct FileTreeRow: Identifiable, Equatable {
     /// Directories start unloaded; `ls` fills them on first expansion.
     var childrenLoaded: Bool
 
-    var id: String { node.path }
+    var id: String { FileTree.id(of: node.path) }
 }
 
 /// The visible rows of a lazily-loaded file tree, as one flat array — the
@@ -19,8 +19,24 @@ struct FileTreeRow: Identifiable, Equatable {
 /// expansion, receives the directory whose children must be fetched, and
 /// feeds listings back through `replaceChildren`. A snapshot switch rebuilds
 /// from the roots; the caller re-expands whatever spine it wants to keep.
+///
+/// Paths are matched by their bytes (`PathKey`), never with String's `==`,
+/// which calls two names that differ only in Unicode normalization equal —
+/// a file system that keeps the bytes it was given holds both.
 struct FileTree: Equatable {
     private(set) var rows: [FileTreeRow] = []
+
+    /// A row's identity for SwiftUI's list and selection: the path's bytes.
+    static func id(of path: String) -> String { PathKey(path).hex }
+
+    func row(id: String) -> FileTreeRow? {
+        rows.first { $0.id == id }
+    }
+
+    private func index(of path: String) -> Int? {
+        let key = PathKey(path)
+        return rows.firstIndex { PathKey($0.node.path) == key }
+    }
 
     init(roots: [SnapshotNode]) {
         reset(to: roots)
@@ -31,8 +47,7 @@ struct FileTree: Equatable {
     /// never been loaded — the caller fetches them and calls
     /// `replaceChildren`; nil means the view has nothing to fetch.
     mutating func toggleExpanded(path: String) -> String? {
-        guard let index = rows.firstIndex(where: { $0.node.path == path }),
-              rows[index].node.isDirectory
+        guard let index = index(of: path), rows[index].node.isDirectory
         else { return nil }
         if rows[index].expanded {
             rows[index].expanded = false
@@ -55,8 +70,7 @@ struct FileTree: Equatable {
     /// folder showing as closed — and stays unloaded so re-expanding asks
     /// again.
     mutating func replaceChildren(of path: String, nodes: [SnapshotNode]) {
-        guard let index = rows.firstIndex(where: { $0.node.path == path }),
-              rows[index].expanded
+        guard let index = index(of: path), rows[index].expanded
         else { return }
         rows[index].childrenLoaded = true
         let depth = rows[index].depth
@@ -89,13 +103,13 @@ struct FileTree: Equatable {
     /// may have closed it — by ← or its chevron — while the listing was in
     /// flight, and a toggle would reopen it, empty, with no listing coming.
     mutating func collapse(path: String) {
-        guard rows.first(where: { $0.node.path == path })?.expanded == true else { return }
+        guard let index = index(of: path), rows[index].expanded else { return }
         _ = toggleExpanded(path: path)
     }
 
     /// The row's full node, for restore actions.
     func node(at path: String) -> SnapshotNode? {
-        rows.first { $0.node.path == path }?.node
+        index(of: path).map { rows[$0].node }
     }
 }
 
@@ -121,7 +135,7 @@ extension FileTree {
     /// it and Right asks nothing more. A path that is not a row (a search
     /// hit left selected) stays.
     func arrowStep(_ arrow: HorizontalArrow, from path: String) -> ArrowStep {
-        guard let index = rows.firstIndex(where: { $0.node.path == path }) else { return .stay }
+        guard let index = index(of: path) else { return .stay }
         let row = rows[index]
         switch arrow {
         case .right:
