@@ -236,8 +236,10 @@ struct FileVersionsView: View {
     }
 
     /// The file as the chosen version's newest backup holds it: the find's
-    /// node when it has answered, else the bare path, which restores the
-    /// same bytes.
+    /// node when it has answered, else the bare path as a file — a drag's
+    /// guess until then. A drag lands in a fresh folder, where restic's file
+    /// route brings a folder through as well: only the promised type can be
+    /// wrong. Restore… does not guess (`restoreChosen`).
     private func restorable(_ version: ContentVersion) -> (backup: IndexVersion, node: SnapshotNode)? {
         guard let backup = version.snapshots.first else { return nil }
         let node = details[backup.id] ?? SnapshotNode(name: self.node.name, type: .file, path: self.node.path)
@@ -251,17 +253,26 @@ struct FileVersionsView: View {
         return model.dragRestoreProvider(repositoryID: node.repositoryID, snapshotID: backup.id, node: file)
     }
 
+    /// The chosen version through the destination sheet: the find's node
+    /// once it has answered, else the path, which restic lists first: the
+    /// versions span every backup holding the path, and one may hold it as
+    /// a folder (`RestoreSource.node`).
     private func restoreChosen() {
-        guard let chosen, let (backup, file) = restorable(chosen) else { return }
+        guard let chosen, let backup = chosen.snapshots.first else { return }
         let repositoryID = node.repositoryID
+        let found = details[backup.id]
+        guard let selection = RestoreSelection([RestoreSource(
+            name: node.name, path: node.path, isDirectory: false,
+            snapshotID: backup.id, backupTime: backup.time, node: found
+        )]) else { return }
         destinationRequest = RestoreDestinationRequest(
-            subject: .item(name: file.name, path: file.path, isDirectory: false),
+            subject: selection.subject,
             backupTime: backup.time,
             snapshotShortID: String(backup.id.prefix(8)),
             // The row was picked by this time; the sheet says it back.
-            versionModified: file.mtime
+            versionModified: found?.mtime
         ) { directories, overwrite in
-            model.restore(repositoryID: repositoryID, snapshotID: backup.id, node: file, to: directories[0], overwrite: overwrite)
+            Task { await model.restore(selection, repositoryID: repositoryID, into: directories, overwrite: overwrite) }
         }
     }
 

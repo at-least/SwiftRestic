@@ -93,6 +93,28 @@ struct SnapshotIndexTests {
         #expect(summary?.count == 3)
     }
 
+    @Test("a path's backups in its chain include those where it had the other kind, each with its own kind there")
+    func versionsSpanAKindChange() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        // x a file, then a folder; y a folder, then a file.
+        let listing = [try snap("older", t0), try snap("newer", t1)]
+        try index.reconcile(listing: listing)
+        try index.runToDone([
+            "older": ["/data": true, "/data/x": false, "/data/y": true, "/data/y/inner": false],
+            "newer": ["/data": true, "/data/x": true, "/data/x/g": false, "/data/y": false],
+        ])
+        // What a Files tab's folder pane offers for x and its file pane for y:
+        // both backups, so a version pane's own kind is not the backup's.
+        #expect(try await index.versions(ofPath: "/data/x", inChain: planA).map(\.id) == ["newer", "older"])
+        #expect(try await index.contentVersions(ofPath: "/data/y", inChain: planA).flatMap { $0.snapshots.map(\.id) }
+            == ["newer", "older"])
+        #expect(try await index.contains(paths: ["/data/x", "/data/y"], inSnapshot: "older")
+            == ["/data/x": false, "/data/y": true].byPathKey)
+        #expect(try await index.contains(paths: ["/data/x", "/data/y"], inSnapshot: "newer")
+            == ["/data/x": true, "/data/y": false].byPathKey)
+    }
+
     @Test("reconcile is idempotent: a second pass over the same listing changes nothing")
     func reconcileIdempotent() async throws {
         let fixture = try IndexFixture()

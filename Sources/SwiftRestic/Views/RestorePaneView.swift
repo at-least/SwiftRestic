@@ -370,8 +370,9 @@ struct RestorePaneView: View {
             if ids.count == 1, let id = ids.first, let hit = hits.first(where: { $0.id == id }) {
                 showVersionsItem(path: hit.path, isDirectory: hit.isDirectory)
                 if !hit.isDirectory, let record {
-                    // A hit is the index's, which carries no size: restic
-                    // lists the file first, as its restore does.
+                    // A hit is the index's, which carries no size, and the
+                    // preview's gate reads one: restic lists the file first.
+                    // Its restore needs only the kind, which the hit has.
                     previewItem { [model, repositoryID] in
                         try await model.listedNode(repositoryID: repositoryID, snapshotID: record.id, path: hit.path)
                     }
@@ -498,8 +499,9 @@ struct RestorePaneView: View {
 
     /// A hit as the node its restore and its drag both get, made in one
     /// place so the two cannot disagree. Hits are already filtered to paths
-    /// the selected backup contains and carry their kind, so the node goes
-    /// straight to the restore, whose file and folder routes differ.
+    /// the selected backup contains and carry their kind in it — the index's
+    /// read of this backup — so the node goes straight to the restore, whose
+    /// file and folder routes differ (`RestoreSource.node`).
     private func node(for hit: SearchHit) -> SnapshotNode {
         let name = (hit.path as NSString).lastPathComponent
         return SnapshotNode(

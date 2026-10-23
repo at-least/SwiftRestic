@@ -331,16 +331,18 @@ struct FolderVersionsView: View {
     }
 
     /// The selected items, or with nothing selected the folder itself, as
-    /// of the chosen backup (`RestoreDestinationRequest.picked`'s rule).
+    /// of the chosen backup (`RestoreDestinationRequest.picked`'s rule). The
+    /// items are the chosen backup's listing; the folder itself goes by its
+    /// path, which restic lists first: the picker offers every backup
+    /// holding the path, and one may hold it as a file (`RestoreSource.node`).
     private func restoreSelection() {
         guard let chosen else { return }
         let picked = selectedNodes.isEmpty
-            ? [SnapshotNode(name: node.name, type: .dir, path: node.path)]
-            : selectedNodes
-        destinationRequest = RestoreDestinationRequest.picked(
-            picked.map { RestoreSource($0, snapshotID: chosen.id, backupTime: chosen.time) },
-            repositoryID: node.repositoryID,
-            model: model
-        )
+            ? [RestoreSource(
+                name: node.name, path: node.path, isDirectory: true,
+                snapshotID: chosen.id, backupTime: chosen.time, node: nil
+            )]
+            : selectedNodes.map { RestoreSource($0, snapshotID: chosen.id, backupTime: chosen.time) }
+        destinationRequest = RestoreDestinationRequest.picked(picked, repositoryID: node.repositoryID, model: model)
     }
 }

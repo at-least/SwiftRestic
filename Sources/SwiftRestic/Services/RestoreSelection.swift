@@ -10,12 +10,16 @@ struct RestoreSource: RestoreBatchItem, Sendable, Equatable {
     let isDirectory: Bool
     let snapshotID: String
     let backupTime: Date?
-    /// restic's node for it when the row carries one — a tree row's, a
-    /// restic-engine hit's. Nil to have restic list it before restoring
-    /// (`AppModel.listedNode`): a diff names a path and a kind, never a
-    /// node, and an index row's kind is the index's, a cache's — a folder it
-    /// called a file would take a file's restore, which never restores into
-    /// a folder already at its landing.
+    /// restic's node for it, or one whose kind was read for this very
+    /// backup: the restore takes its file or folder route from it as it is.
+    /// Nil when the kind in hand was read anywhere else — another backup, a
+    /// diff, the disk — and restic lists the item in this backup first
+    /// (`AppModel.listedNode`): a path can be a file in one backup and a
+    /// folder in the next, and the other route fails it. A file restored as
+    /// a folder is refused as "not a directory", an empty folder left at its
+    /// landing; a folder restored as a file, where a folder of its name
+    /// already stands, is kept whole under Keep and, holding anything,
+    /// refused under Replace.
     let node: SnapshotNode?
 }
 

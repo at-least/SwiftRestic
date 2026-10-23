@@ -315,6 +315,60 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("an item asked for by path from a backup where it had the other kind restores as that backup holds it")
+    func restoreByPathAcrossAKindChange() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let fileManager = FileManager.default
+        let x = harness.sourceDirectory.appendingPathComponent("x")
+        let y = harness.sourceDirectory.appendingPathComponent("y")
+
+        // x a file, then a folder; y a folder, then a file.
+        try "one".write(to: x, atomically: true, encoding: .utf8)
+        try fileManager.createDirectory(at: y, withIntermediateDirectories: true)
+        try "inner".write(to: y.appendingPathComponent("inner"), atomically: true, encoding: .utf8)
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        try fileManager.removeItem(at: x)
+        try fileManager.createDirectory(at: x, withIntermediateDirectories: true)
+        try "g".write(to: x.appendingPathComponent("g"), atomically: true, encoding: .utf8)
+        try fileManager.removeItem(at: y)
+        try "two".write(to: y, atomically: true, encoding: .utf8)
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let older = try #require(model.snapshots(for: id, planID: harness.plan.id).min { $0.time < $1.time })
+
+        func restore(_ item: URL, isDirectory: Bool, into directory: URL) async throws {
+            let selection = try #require(RestoreSelection([RestoreSource(
+                name: item.lastPathComponent, path: item.path, isDirectory: isDirectory,
+                snapshotID: older.id, backupTime: older.time, node: nil
+            )]))
+            await model.restore(selection, repositoryID: id, into: [directory], overwrite: .keepExisting)
+            await waitUntilRestoreFinishes(in: model, within: 60)
+        }
+
+        // The folder pane's folder itself, x asked for as a folder: the older
+        // backup holds a file there, and the file comes back.
+        let fresh = harness.root.appendingPathComponent("fresh")
+        try fileManager.createDirectory(at: fresh, withIntermediateDirectories: true)
+        try await restore(x, isDirectory: true, into: fresh)
+        #expect(try String(contentsOf: fresh.appendingPathComponent("x"), encoding: .utf8) == "one")
+
+        // The file pane's version, y asked for as a file: the older backup
+        // holds a folder, restored into the folder already at the landing.
+        let held = harness.root.appendingPathComponent("held")
+        try fileManager.createDirectory(at: held.appendingPathComponent("y"), withIntermediateDirectories: true)
+        try "mine".write(to: held.appendingPathComponent("y/mine"), atomically: true, encoding: .utf8)
+        try await restore(y, isDirectory: false, into: held)
+        #expect(try String(contentsOf: held.appendingPathComponent("y/inner"), encoding: .utf8) == "inner")
+        #expect(try String(contentsOf: held.appendingPathComponent("y/mine"), encoding: .utf8) == "mine")
+        #expect(model.configuration.runs.filter { $0.kind == .restore }.map(\.outcome) == [.succeeded, .succeeded])
+
+        await model.shutdown()
+    }
+
     @Test("a console command that can change the backups re-reads the listing; one that only reads does not")
     func consoleRefreshesAfterAMutatingCommand() async throws {
         let harness = try await makeHarness()

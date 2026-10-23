@@ -600,8 +600,9 @@ struct FindFilesView: View {
     /// keep/replace choice lives — each from its row's backup, a folder
     /// leaving to itself only the rows of its own backup
     /// (`RestoreDestinationRequest.picked`). A restic-engine row carries
-    /// restic's node; an index row's is listed first, its kind being the
-    /// index's (`RestoreSource.node`).
+    /// restic's node; an index row's is listed first: its kind is its
+    /// search hit's, not read for the backup its summary names
+    /// (`RestoreSource.node`).
     private func restoreSelection(_ picked: [Row]) {
         guard let repositoryID else { return }
         destinationRequest = RestoreDestinationRequest.picked(
