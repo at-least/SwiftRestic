@@ -10,20 +10,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse
     ) async {
         let identifier = response.notification.request.identifier
-        // A quiet plan's notification opens the plan; a run's, the run.
-        if identifier.hasPrefix(AppModel.quietPlanNotificationPrefix),
-           let planID = UUID(uuidString: String(identifier.dropFirst(AppModel.quietPlanNotificationPrefix.count))) {
-            await MainActor.run {
-                router?.selection = .plan(planID)
-                tray?.openMainWindow()
-            }
-            return
-        }
-        guard let runID = UUID(uuidString: identifier) else { return }
-        await MainActor.run {
-            router?.focusRun(runID)
-            tray?.openMainWindow()
-        }
+        await MainActor.run { openNotification(identifier) }
     }
 }
 
@@ -43,8 +30,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.model = model
         self.router = router
         tray = TrayStatusItem(model: model, router: router)
-        // A clicked notification opens its run; without a delegate the
-        // click only brings the app forward.
+        if let identifier = notificationAwaitingWiring {
+            notificationAwaitingWiring = nil
+            openNotification(identifier)
+        }
+    }
+
+    /// A notification clicked while the app was quit relaunches it, and its
+    /// response can arrive before the window's task wires the router: it
+    /// waits here for `wireAppSurface`.
+    private var notificationAwaitingWiring: String?
+
+    /// A quiet plan's notification opens the plan — while it still exists;
+    /// a run's, the run.
+    private func openNotification(_ identifier: String) {
+        guard let model, let router else {
+            notificationAwaitingWiring = identifier
+            return
+        }
+        if identifier.hasPrefix(AppModel.quietPlanNotificationPrefix),
+           let planID = UUID(uuidString: String(identifier.dropFirst(AppModel.quietPlanNotificationPrefix.count))) {
+            if model.plan(id: planID) != nil { router.selection = .plan(planID) }
+        } else if let runID = UUID(uuidString: identifier) {
+            router.focusRun(runID)
+        } else {
+            return
+        }
+        tray?.openMainWindow()
+    }
+
+    /// Before launch finishes, as UserNotifications asks: a click that
+    /// launched the app is delivered to the delegate set by then. Without
+    /// one the click only brings the app forward.
+    func applicationWillFinishLaunching(_ notification: Notification) {
         if AppModel.supportsNotifications {
             UNUserNotificationCenter.current().delegate = self
         }
@@ -201,9 +219,6 @@ struct SwiftResticApp: App {
             .environment(router)
             .frame(minWidth: 940, minHeight: 600)
             .task {
-                // Removes the leftover key of the sidebar's removed
-                // Backups | Files control.
-                UserDefaults.standard.removeObject(forKey: "SidebarMode")
                 appDelegate.wireAppSurface(model: model, router: router)
                 await model.bootstrap()
             }

@@ -876,23 +876,23 @@ struct MaintenanceSchedulingTests {
         let now = date("2026-09-10 00:00:00")
         let prune = date("2026-10-01 00:00:00")
         // The check fell due on the 8th.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, now: now) == "Due now")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == "Due now")
         // The hold holds checks and prunes too: due, but not now.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: nil), now: now) == "Waiting")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, now: now) == "Waiting")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: nil), driveAway: false, awaitingServer: false, now: now) == "Waiting")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: false, awaitingServer: false, now: now) == "Waiting")
         // A timed hold moves it to the end, where the scheduler picks it up.
         let end = date("2026-09-10 01:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: end), now: now)
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: end), driveAway: false, awaitingServer: false, now: now)
             == Format.timestamp(end))
         // A date beyond the hold keeps its own.
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: nil, now: now) == Format.timestamp(prune))
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .paused(until: end), now: now)
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == Format.timestamp(prune))
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .paused(until: end), driveAway: false, awaitingServer: false, now: now)
             == Format.timestamp(prune))
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .onBattery, now: now)
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .onBattery, driveAway: false, awaitingServer: false, now: now)
             == Format.timestamp(prune))
 
         let off = self.repository { $0.maintenance.checkEnabled = false }
-        #expect(Scheduler.nextMaintenanceText(.check, of: off, among: [off], hold: .paused(until: nil), now: now) == "Off")
+        #expect(Scheduler.nextMaintenanceText(.check, of: off, among: [off], hold: .paused(until: nil), driveAway: false, awaitingServer: false, now: now) == "Off")
     }
 
     @Test("a check waiting for its repository's drive is no last check, and Next check says what it waits for")
@@ -916,11 +916,11 @@ struct MaintenanceSchedulingTests {
             == "\(Format.ago(date("2026-09-02 12:00:00"), now: now)) · failed")
         // Due: it waits for the drive, not "Due now" — under a hold too,
         // which the drive would outlast.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, now: now) == "When “\(volume)” is connected")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, now: now) == "When “\(volume)” is connected")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
         // Not due yet: its date, as for any repository.
         repository.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
 
         // A server out of reach: its due check waits for it in the same way.
         var server = self.repository {
@@ -929,10 +929,10 @@ struct MaintenanceSchedulingTests {
             $0.maintenance.checkIntervalDays = 7
             $0.maintenance.lastCheckAt = self.date("2026-09-02 12:00:00")
         }
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, awaitingServer: true, now: now) == "When “nas.local” can be reached")
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, awaitingServer: false, now: now) == "Due now")
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: true, now: now) == "When “nas.local” can be reached")
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: false, now: now) == "Due now")
         server.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, awaitingServer: true, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: true, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
     }
 
     @Test("the schedule summarises itself for the plan list")
@@ -1336,6 +1336,14 @@ struct LoginItemTests {
         #expect(!LoginItem.isInstallableLocation("/Users/me/Downloads/SwiftRestic.app"))
         #expect(!LoginItem.isInstallableLocation("/Volumes/SwiftRestic/SwiftRestic.app"))
         #expect(!LoginItem.isInstallableLocation("/tmp/SwiftRestic.app"))
+    }
+
+    @Test("Settings' caption says each state the daemon can answer, and the editor's confirmation is the enabled one's words")
+    func stateDescriptions() {
+        #expect(LoginItem.description(of: .enabled) == "SwiftRestic will start at login.")
+        #expect(LoginItem.description(of: .notFound).hasPrefix("macOS could not find this copy"))
+        #expect(LoginItem.description(of: .needsApproval).hasPrefix("Waiting for approval"))
+        #expect(LoginItemAdvice.enabledConfirmation == LoginItem.description(of: .enabled))
     }
 
     @Test("an installed copy is accepted")

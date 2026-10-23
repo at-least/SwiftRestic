@@ -471,7 +471,7 @@ struct AppModelStubTests {
         #expect(restores.count == 2, "restores: \(restores)")
         #expect(restores.first?.contains("latest:/src --target \(destination.path) --include /Project --include /notes.txt --overwrite never") == true,
                 "first: \(restores.first ?? "none")")
-        #expect(restores.last?.contains(#"latest:/pictures --target \#(destination.path) --include /a\[1\].jpg"#) == true,
+        #expect(restores.last?.contains(#"latest:/pictures --target \#(destination.path) --include /a\[1].jpg"#) == true,
                 "last: \(restores.last ?? "none")")
 
         let records = harness.model.configuration.runs

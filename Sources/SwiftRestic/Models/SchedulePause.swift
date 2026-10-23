@@ -26,8 +26,9 @@ enum PauseLength: String, CaseIterable, Identifiable, Sendable {
         case .oneHour:
             return now.addingTimeInterval(3600)
         case .untilTomorrow:
-            guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) else { return nil }
-            return calendar.startOfDay(for: tomorrow)
+            // Not a nil on failure: nil is Until I Resume, a pause that never
+            // ends by itself.
+            return calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: now)!)
         case .untilResumed:
             return nil
         }

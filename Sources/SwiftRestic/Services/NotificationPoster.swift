@@ -45,7 +45,7 @@ enum NotificationPayload {
         case .webhook:
             var object: [String: Any] = [
                 "stage": event.stage.rawValue,
-                "operation": event.operation,
+                "operation": event.kind.payloadOperation,
                 "plan": event.planName,
                 "repository": event.repositoryName,
                 "summary": event.summary,

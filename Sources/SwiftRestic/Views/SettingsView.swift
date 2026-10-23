@@ -127,14 +127,16 @@ struct SettingsView: View {
                     // confirms or corrects it.
                     set: { value in model.requestStartsAtLogin(value) }
                 ))
-                .disabled(!LoginItem.isInInstallableLocation && !model.startsAtLogin)
-                Text(LoginItem.isInInstallableLocation
-                    ? LoginItem.statusDescription
+                .disabled(!model.loginItemInstallable && !model.startsAtLogin)
+                // The model's copies of the daemon's answer: a read here
+                // would be an XPC round trip on every render.
+                Text(model.loginItemInstallable
+                    ? LoginItem.description(of: model.loginItemState)
                     : LoginItem.notInstalledMessage)
                     .font(.caption)
-                    .foregroundStyle(LoginItem.needsApproval ? Theme.warning : .secondary)
+                    .foregroundStyle(model.loginItemNeedsApproval ? Theme.warning : .secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if LoginItem.needsApproval {
+                if model.loginItemNeedsApproval {
                     Button("Open Login Items") { LoginItem.openLoginItemsSettings() }
                 }
 
@@ -526,7 +528,7 @@ struct NotificationChannelsTab: View {
                             isTesting = false
                         }
                     }
-                        .disabled(!channel.isUsable || isTesting)
+                        .disabled(!channel.hasUsableURL || isTesting)
                         if isTesting {
                             ProgressView().controlSize(.small)
                         }
@@ -535,10 +537,6 @@ struct NotificationChannelsTab: View {
                     // it — a global banner would land on a different window
                     // than the Settings one the user is looking at.
                     switch testOutcome {
-                    case .unusable:
-                        Label("That URL does not look usable.", systemImage: "xmark.octagon.fill")
-                            .foregroundStyle(Theme.danger)
-                            .font(.callout)
                     case .failed(let failure):
                         Label {
                             Text(failure)

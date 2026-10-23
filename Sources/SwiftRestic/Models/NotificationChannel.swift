@@ -49,8 +49,13 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
         name.trimmingCharacters(in: .whitespaces).isEmpty ? kind.displayName : name
     }
 
-    var isUsable: Bool {
-        isEnabled && URL(string: url.trimmingCharacters(in: .whitespaces))?.scheme?.hasPrefix("http") == true
+    var isUsable: Bool { isEnabled && hasUsableURL }
+
+    /// Whether the URL is one the app posts to — http or https, never a
+    /// file or custom scheme. Send Test Notification needs only this: a
+    /// webhook is tested before it is switched on.
+    var hasUsableURL: Bool {
+        URL(string: url.trimmingCharacters(in: .whitespaces))?.scheme?.hasPrefix("http") == true
     }
 
     func wants(_ stage: NotificationEvent.Stage) -> Bool {
@@ -95,7 +100,7 @@ struct NotificationEvent: Sendable, Equatable {
     var stage: Stage
     var planName: String
     var repositoryName: String
-    var operation: String = "Backup"
+    var kind: RunRecord.Kind
     var snapshotID: String?
     var errorMessage: String?
     /// Excerpts only — the first few warnings, for the message body. The full
@@ -124,12 +129,15 @@ struct NotificationEvent: Sendable, Equatable {
         let subject = planName.isEmpty
             ? repositoryName
             : RunRecordPresentation.planWithRepository(planName, repositoryName: repositoryName)
+        // The app's word for the run, as every screen says it; the payload's
+        // `operation` keeps the word filters match on (`payloadOperation`).
+        let operation = kind.displayName
         switch stage {
         case .started:
             return "\(operation) started: \(subject)"
         case .succeeded:
             // Only a backup adds data; a check's or a cleanup's 0 is not news.
-            let added = operation == RunRecord.Kind.backup.payloadOperation ? " — \(Format.bytes(dataAdded)) added" : ""
+            let added = kind == .backup ? " — \(Format.bytes(dataAdded)) added" : ""
             return "\(operation) succeeded: \(subject)\(added) in \(Format.duration(duration))"
         case .warned:
             let count = warningCount ?? warnings.count
@@ -137,7 +145,7 @@ struct NotificationEvent: Sendable, Equatable {
                 + (warnings.first.map { " — \($0)" } ?? "")
                 + (hint.map { "\n" + $0 } ?? "")
         case .failed:
-            return "\(operation) FAILED: \(subject) — \(errorMessage ?? "no details")"
+            return "\(operation) failed: \(subject) — \(errorMessage ?? "no details")"
         case .cancelled:
             return "\(operation) cancelled before finishing: \(subject)"
         case .skipped:

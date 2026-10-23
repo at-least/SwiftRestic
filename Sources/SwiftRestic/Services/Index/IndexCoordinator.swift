@@ -657,9 +657,10 @@ actor IndexCoordinator {
     }
 
     /// Opens the repository's file, creating the folder and the schema on
-    /// first use. A file that will not open — another schema, a corrupt
-    /// file — is deleted with its sidecars and opened afresh: the index has a
-    /// full rebuild path, so this is the fast recovery, not data loss. Runs
+    /// first use. A file that is no use — another schema, a corrupt file
+    /// (`SnapshotIndex.isUnusableFile`) — is deleted with its sidecars and
+    /// opened afresh: the index has a full rebuild path, so this is the fast
+    /// recovery, not data loss. Any other failure throws, deleting nothing. Runs
     /// only under the registry's lock, and only when no store of the
     /// repository is open or closing, so no other pool has the file open.
     private nonisolated func openStore(_ repositoryID: UUID) throws -> SnapshotIndex {
@@ -667,7 +668,7 @@ actor IndexCoordinator {
         let path = fileURL(for: repositoryID)
         do {
             return try SnapshotIndex(path: path.path)
-        } catch {
+        } catch where SnapshotIndex.isUnusableFile(error) {
             Self.removeIndexFiles(at: path)
             return try SnapshotIndex(path: path.path)
         }

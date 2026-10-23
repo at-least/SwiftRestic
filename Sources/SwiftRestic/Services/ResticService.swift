@@ -775,6 +775,55 @@ struct ResticService: ResticClient {
 
     // MARK: - Restore
 
+    /// How a single file's staged restore was placed.
+    enum StagedFileCommit: Equatable {
+        case committed
+        /// No-replace only: the target was taken, and the staged output
+        /// was left for the caller's cleanup.
+        case keptExisting
+    }
+
+    /// Moves the file a single file's restore wrote beside its landing onto
+    /// its target: `rename(2)` when it may replace what is there,
+    /// `renamex_np(RENAME_EXCL)` otherwise. `renameExclusive` answers 0 or
+    /// the errno; it is a parameter so the volumes that refuse the flag can
+    /// be tested without mounting one.
+    static func commitStagedFile(
+        _ staging: URL,
+        to target: URL,
+        replacingExisting: Bool,
+        renameExclusive: (String, String) -> Int32 = { from, to in
+            renamex_np(from, to, UInt32(RENAME_EXCL)) == 0 ? 0 : Darwin.errno
+        }
+    ) throws -> StagedFileCommit {
+        func moveFailed(_ failure: Int32) -> ResticError {
+            .stagedFileMoveFailed(path: target.path, reason: String(cString: Darwin.strerror(failure)))
+        }
+        if replacingExisting {
+            guard Darwin.rename(staging.path, target.path) == 0 else { throw moveFailed(Darwin.errno) }
+            return .committed
+        }
+        switch renameExclusive(staging.path, target.path) {
+        case 0:
+            return .committed
+        case EEXIST:
+            return .keptExisting
+        case ENOTSUP:
+            // A volume without VOL_CAP_INT_RENAME_EXCL refuses the flag even
+            // for a free name (exFAT does). Look, then rename — lstat, so a
+            // dangling symlink counts as taken. The gap between the two is
+            // the one non-atomic window, and it exists only on such volumes.
+            if (try? FileManager.default.attributesOfItem(atPath: target.path)) != nil {
+                return .keptExisting
+            }
+            guard Darwin.rename(staging.path, target.path) == 0 else { throw moveFailed(Darwin.errno) }
+            return .committed
+        case let failure:
+            throw moveFailed(failure)
+        }
+    }
+
+
     /// Restores one node into `destinationDirectory`, without recreating the
     /// original absolute path above it.
     ///
@@ -854,7 +903,7 @@ struct ResticService: ResticClient {
             overwrite: overwrite,
             onProgress: onProgress
         )
-        switch try ResticRunner.commitStagedDump(
+        switch try Self.commitStagedFile(
             Self.restoredItemURL(for: node, in: staging),
             to: target,
             replacingExisting: overwrite == .replaceExisting

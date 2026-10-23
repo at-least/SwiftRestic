@@ -191,15 +191,11 @@ enum RestoreBatch {
     }
 
     /// The `--include` that restores one item of its group: anchored at the
-    /// group's folder, with every character restic's patterns treat as
-    /// special escaped, so a name matches only itself. Unescaped, "a[1].txt"
-    /// matches nothing and "star*.txt" matches "starfish.txt" too.
+    /// group's folder, escaped as every pattern the app hands restic is
+    /// (`ResticService.globEscaped`), so a name matches only itself.
+    /// Unescaped, "a[1].txt" matches nothing and "star*.txt" matches
+    /// "starfish.txt" too.
     static func includePattern(forName name: String) -> String {
-        var pattern = String.UnicodeScalarView(["/"])
-        for scalar in name.unicodeScalars {
-            if "\\*?[]".unicodeScalars.contains(scalar) { pattern.append("\\") }
-            pattern.append(scalar)
-        }
-        return String(pattern)
+        "/" + ResticService.globEscaped(name)
     }
 }

@@ -143,12 +143,14 @@ final class AppModel {
     /// on a slow disk the default (empty) configuration otherwise reads as a
     /// fresh install — or as breakage — for the first seconds.
     var isBootstrapping = false
-    /// Mirrors `LoginItem.status`, which is not observable on its own.
+    /// Mirrors `LoginItem.state`, which is not observable on its own —
+    /// optimistically, while a click waits for the daemon.
     var startsAtLogin = false
-    /// Whether the login item waits for approval in System Settings — the
-    /// daemon's answer only, written beside `startsAtLogin` from the same
-    /// read and never optimistically.
-    var loginItemNeedsApproval = false
+    /// The login item as the daemon last answered — written beside
+    /// `startsAtLogin` from the same read and never optimistically.
+    var loginItemState: LoginItemState = .off
+    /// Whether the login item waits for approval in System Settings.
+    var loginItemNeedsApproval: Bool { loginItemState == .needsApproval }
     /// Whether this copy could be registered as a login item, read once at
     /// launch so the plan editor's start-at-login offer does not resolve
     /// symlinks on every render. It feeds only what the surfaces offer:

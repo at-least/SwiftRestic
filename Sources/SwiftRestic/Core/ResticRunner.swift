@@ -36,9 +36,11 @@ struct ResticInvocation: Sendable {
     /// stops keeping them at some cap of its own.
     var retainMessages: Bool = true
 
-    /// A redacted rendering for logs and error messages, through the console
-    /// tokenizer's shell-style quoting, so a path with spaces stays one word
-    /// on screen instead of reading as two arguments the run never received.
+    /// The arguments for logs and error messages — without the environment,
+    /// so the password stays out, but every argument as given — through the
+    /// console tokenizer's shell-style quoting, so a path with spaces stays
+    /// one word on screen instead of reading as two arguments the run never
+    /// received.
     var displayCommand: String {
         CommandLineTokenizer.render(["restic"] + arguments)
     }
@@ -293,9 +295,9 @@ actor ResticRunner {
         }
         defer { reaper.cancel() }
 
-        let exitCode: Int32
+        let result: ResticRunResult
         do {
-            exitCode = try await withTaskCancellationHandler {
+            result = try await withTaskCancellationHandler {
                 // restic writes its per-item error events to stderr, not stdout —
                 // a partial backup's `message_type: error` lines (and its exit_error)
                 // only reach the result if stderr is decoded too. The decoder drops
@@ -312,34 +314,16 @@ actor ResticRunner {
                 )
                 let stderr = await stderrOutcome
                 let code = await exit.value()
-
-                // Same-actor call: nothing here actually suspends.
-                self.store(
-                    handle: handle,
-                    stdout: stdoutOutcome,
-                    stderr: stderr.text,
-                    stderrMessages: stderr.messages
-                )
                 try Task.checkCancellation()
-                return code            } onCancel: {
+                return Self.result(exitCode: code, stdout: stdoutOutcome, stderr: stderr)
+            } onCancel: {
                 box.terminate()
             }
         } catch is CancellationError {
-            // Nothing will read this run's captured output; dropping it keeps a
-            // cancelled command from squatting on memory inside the actor.
-            _ = takeCaptured(handle: handle)
             transcript?.note("Stopped: cancelled")
             throw ResticError.cancelled
         }
-
-        let captured = takeCaptured(handle: handle)
-        let result = ResticRunResult(
-            exitCode: exitCode,
-            messages: captured.messages,
-            stdout: captured.stdout,
-            stderr: captured.stderr,
-            malformedCount: captured.malformedCount
-        )
+        let exitCode = result.exitCode
 
         if box.idleTimedOut {
             let seconds = invocation.idleTimeout ?? 0
@@ -366,90 +350,31 @@ actor ResticRunner {
         return result
     }
 
-    /// How a single file's staged restore was placed.
-    enum DumpCommit: Equatable {
-        case committed
-        /// No-replace only: the target was taken, and the staged output
-        /// was left for the caller's cleanup.
-        case keptExisting
-    }
-
-    /// Moves the file a single file's restore wrote beside its landing onto
-    /// its target: `rename(2)` when it may replace what is there,
-    /// `renamex_np(RENAME_EXCL)` otherwise. `renameExclusive` answers 0 or
-    /// the errno; it is a parameter so the volumes that refuse the flag can
-    /// be tested without mounting one.
-    static func commitStagedDump(
-        _ staging: URL,
-        to target: URL,
-        replacingExisting: Bool,
-        renameExclusive: (String, String) -> Int32 = { from, to in
-            renamex_np(from, to, UInt32(RENAME_EXCL)) == 0 ? 0 : Darwin.errno
-        }
-    ) throws -> DumpCommit {
-        func moveFailed(_ failure: Int32) -> ResticError {
-            .dumpMoveFailed(path: target.path, reason: String(cString: Darwin.strerror(failure)))
-        }
-        if replacingExisting {
-            guard Darwin.rename(staging.path, target.path) == 0 else { throw moveFailed(Darwin.errno) }
-            return .committed
-        }
-        switch renameExclusive(staging.path, target.path) {
-        case 0:
-            return .committed
-        case EEXIST:
-            return .keptExisting
-        case ENOTSUP:
-            // A volume without VOL_CAP_INT_RENAME_EXCL refuses the flag even
-            // for a free name (exFAT does). Look, then rename — lstat, so a
-            // dangling symlink counts as taken. The gap between the two is
-            // the one non-atomic window, and it exists only on such volumes.
-            if (try? FileManager.default.attributesOfItem(atPath: target.path)) != nil {
-                return .keptExisting
-            }
-            guard Darwin.rename(staging.path, target.path) == 0 else { throw moveFailed(Darwin.errno) }
-            return .committed
-        case let failure:
-            throw moveFailed(failure)
-        }
-    }
-
     /// Terminates every running restic process. Used when the app quits.
     func terminateAll() {
         for box in running.values { box.terminate() }
     }
 
-    // MARK: - Capture bookkeeping
-
-    private var captured: [UUID: (
-        messages: [ResticMessage], stdout: String, stderr: String, malformedCount: Int
-    )] = [:]
+    // MARK: - Capture
 
     /// stderr's decoded events are appended after stdout's, so a backup's
     /// per-item errors land after its summary. Order within each stream is
     /// preserved, and every consumer reads one stream's events or does reversed
     /// lookup, so the interleaving is never load-bearing.
-    private func store(
-        handle: UUID,
+    private static func result(
+        exitCode: Int32,
         stdout: StreamReader.Outcome,
-        stderr: String,
-        stderrMessages: [ResticMessage]
-    ) {
-        captured[handle] = (
-            stdout.messages + stderrMessages,
-            stdout.text,
-            stderr,
-            stdout.malformedCount + stderrMessages.filter { message in
+        stderr: StreamReader.Outcome
+    ) -> ResticRunResult {
+        ResticRunResult(
+            exitCode: exitCode,
+            messages: stdout.messages + stderr.messages,
+            stdout: stdout.text,
+            stderr: stderr.text,
+            malformedCount: stdout.malformedCount + stderr.messages.filter { message in
                 if case .malformed = message { return true } else { return false }
             }.count
         )
-    }
-
-    private func takeCaptured(handle: UUID) -> (
-        messages: [ResticMessage], stdout: String, stderr: String, malformedCount: Int
-    ) {
-        defer { captured[handle] = nil }
-        return captured[handle] ?? ([], "", "", 0)
     }
 
     // MARK: - Environment
@@ -459,8 +384,8 @@ actor ResticRunner {
     /// silently point restic at another repository or break authentication —
     /// the class of bug behind backrest's issue #1139 — so they are stripped
     /// from every child's inheritance here, and
-    /// `RepositoryContext.protectedEnvironmentKeys` reads the same set to
-    /// flag the settings that can have no effect.
+    /// `RepositoryContext.overriddenExtraEnvironmentKeys` reads the same set
+    /// to flag the settings that can have no effect.
     static let protectedEnvironmentKeys: Set<String> = [
         "RESTIC_REPOSITORY", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE", "RESTIC_PASSWORD_COMMAND",
     ]

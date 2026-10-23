@@ -41,9 +41,9 @@ enum ScheduleHold: Equatable, Sendable {
 /// `now`.
 enum Scheduler {
     /// The plans a newly mounted volume brings back: each the scheduler
-    /// would start by itself whose newest backup was skipped — its folders
-    /// or its repository's drive were missing — and whose folders and
-    /// repository are all here now. They run at once
+    /// would start by itself whose newest backup was skipped — its folder
+    /// or its repository's drive was missing — and whose folder and
+    /// repository are both here now. They run at once
     /// instead of waiting a whole interval for the next slot. (The app-wide
     /// hold is the caller's guard, as for the tick.)
     static func catchUpAfterMount(
@@ -215,24 +215,23 @@ enum Scheduler {
     /// start it: the app-wide hold holds upkeep too, so a timed hold moves
     /// the date to its end and a due task under an open-ended one (Until I
     /// Resume, the battery) reads "Waiting", as a due plan's Next backup
-    /// value does — never
-    /// "Due now". A due task whose local repository's drive is away waits
-    /// for the drive, hold or not: "When “Archive SSD” is connected".
+    /// value does — never "Due now". A due task whose local repository's
+    /// drive is away waits for the drive, hold or not: "When “Archive SSD”
+    /// is connected". `driveAway` is read by the caller off the main actor:
+    /// a stalled network share can hold the read for seconds.
     static func nextMaintenanceText(
         _ task: MaintenanceTask,
         of repository: Repository,
         among repositories: [Repository],
         hold: ScheduleHold?,
-        awaitingServer: Bool = false,
+        driveAway: Bool,
+        awaitingServer: Bool,
         now: Date = .now
     ) -> String {
         guard let due = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt) else {
             return "Off"
         }
-        if due <= now, repository.kind == .local,
-           VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false,
-           let volume = VolumePresence.volumeName(of: repository.resolvedLocalPath)
-        {
+        if due <= now, driveAway, let volume = VolumePresence.volumeName(of: repository.resolvedLocalPath) {
             return "When “\(volume)” is connected"
         }
         if due <= now, awaitingServer {

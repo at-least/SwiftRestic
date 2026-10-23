@@ -415,6 +415,17 @@ final class SnapshotIndex: @unchecked Sendable {
     /// including an empty `user_version` over existing tables, which is what
     /// the older index format looks like — throws `schemaMismatch` with the
     /// pool already closed, so the owner can delete the file and open again.
+    /// Whether an open failed because the file is no use as this index —
+    /// another schema, or bytes SQLite cannot read as a database — which a
+    /// rebuild fixes. Any other failure (a folder in the way, a full disk,
+    /// a lock) is not the file's, and deleting it would throw a warm index
+    /// away for nothing.
+    static func isUnusableFile(_ error: Error) -> Bool {
+        if case IndexError.schemaMismatch = error { return true }
+        guard let database = error as? DatabaseError else { return false }
+        return database.resultCode == .SQLITE_CORRUPT || database.resultCode == .SQLITE_NOTADB
+    }
+
     init(path: String) throws {
         let pool = try DatabasePool(path: path, configuration: Self.configuration())
         do {

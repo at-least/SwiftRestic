@@ -21,6 +21,9 @@ struct RepositoryEditorSheet: View {
     /// stored password" and the probe's fallback both read it, so the sheet
     /// asks the Keychain once.
     @State private var storedSecrets: (password: String?, providerSecret: String?)?
+    /// The Keychain's read failed: whether a password is stored is
+    /// unknown, and the fields must say neither "saved" nor "required".
+    @State private var secretsReadFailed = false
     @State private var status: Status?
     @State private var isWorking = false
     /// The edit Save could not verify. Save Anyway stands only while the
@@ -640,6 +643,9 @@ struct RepositoryEditorSheet: View {
         if isNew {
             return "Everything is encrypted with it, and it can't be recovered — keep it in your password manager."
         }
+        if secretsReadFailed {
+            return "The Keychain could not be read. Leave this blank to keep whatever password it holds, or enter the password to replace it."
+        }
         if hasStoredPassword == false {
             return ResticError.passwordMissing(repositoryName: draftLabel).localizedDescription
                 + " Enter it here to read it and back up to it."
@@ -650,6 +656,7 @@ struct RepositoryEditorSheet: View {
     /// The password field's prompt: what an empty field means.
     private var passwordPrompt: String {
         if isNew { return "Required" }
+        if secretsReadFailed { return "Not read from Keychain" }
         return hasStoredPassword == false ? "Required" : "Saved in Keychain"
     }
 
@@ -674,6 +681,7 @@ struct RepositoryEditorSheet: View {
             // password stored" and a save would silently keep whatever the
             // Keychain actually holds, hiding the failure either way.
             status = .failure("Could not read the stored secrets: \(error.localizedDescription)")
+            secretsReadFailed = true
         }
     }
 
@@ -828,12 +836,19 @@ struct RepositoryEditorSheet: View {
             password: password.isEmpty ? nil : password,
             providerSecret: draft.secretFieldLabel == nil || draft.kind == .sftp ? nil : providerSecret
         )
+        // The repository is saved from here on: a share password that does
+        // not save is said by the app, and the sheet closes as saved — kept
+        // open, it would offer Add Repository and ask to discard a
+        // repository the sidebar already shows.
         if !sharePassword.isEmpty, let share = folderShare?.share {
             do {
                 try await model.saveNetworkShare(share, password: sharePassword)
             } catch {
-                status = .failure("The repository is saved, but the share's password could not be: \(error.localizedDescription)")
-                return
+                model.post(Banner(
+                    title: "Could not save the password for “\(share.volumeName)”",
+                    message: "“\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
+                    isError: true
+                ))
             }
             sharePassword = ""
         }

@@ -629,19 +629,7 @@ struct RestorePaneView: View {
                 // The step already knows the direction; expand toggles.
                 expand(path: path)
             case .selectParent(let path):
-                // The list applies a selection set in code only to rows it
-                // has realized, on or near the screen: selecting a parent
-                // scrolled out of view straight away leaves the child
-                // selected as well — two selected rows, and the next ↓ goes
-                // on from the child. So the child comes into view and is
-                // deselected in this turn, and the parent is selected and
-                // scrolled to in the next.
-                reveal(selected)
-                selection = []
-                Task {
-                    selection = [path]
-                    reveal(path)
-                }
+                selectParent(path, of: selected, reveal: reveal)
             case .stay:
                 break
             }
@@ -661,24 +649,48 @@ struct RestorePaneView: View {
         // The shared Finder grammar, with this pane's open action: a
         // directory's Return expands it in place rather than entering it —
         // the tree already holds every loaded row.
+        let up = upStep
         return BrowserListGrammar.keyPress(
             press,
             selected: selectedRow,
-            hasParent: currentPath != nil,
+            hasParent: up != nil,
             open: { expand(path: $0.path) },
-            goUp: { goUp() }
+            goUp: {
+                guard let up else { return }
+                currentPath = up.parent
+                selectParent(up.parent, of: up.from, reveal: reveal)
+            }
         )
     }
 
     // MARK: - Navigation
 
-    /// Moves to a folder, or back to the root level with nil: the tree on
-    /// screen already holds every loaded row, so this is only a focus change.
-    /// Re-focusing the current folder is a no-op that keeps the selection.
-    private func navigate(to path: String?) {
-        guard path != currentPath else { return }
-        currentPath = path
+    /// Where ⌫ and ⌘↑ go: from the selected row — or, with none, the folder
+    /// in focus — to the folder holding it, when that folder is a row of the
+    /// tree. The tree on screen holds every loaded row, so going up selects
+    /// that row: a step the eye can follow, where a focus change alone
+    /// showed nothing but a cleared selection.
+    private var upStep: (from: String, parent: String)? {
+        guard let from = selection.count == 1 ? selection.first : currentPath,
+              let parent = BrowserListGrammar.parent(of: from),
+              tree.node(at: parent) != nil
+        else { return nil }
+        return (from, parent)
+    }
+
+    /// The list applies a selection set in code only to rows it has
+    /// realized, on or near the screen: selecting a parent scrolled out of
+    /// view straight away leaves the child selected as well — two selected
+    /// rows, and the next ↓ goes on from the child. So the child comes into
+    /// view and is deselected in this turn, and the parent is selected and
+    /// scrolled to in the next.
+    private func selectParent(_ parent: String, of child: String, reveal: @escaping (String) -> Void) {
+        reveal(child)
         selection = []
+        Task {
+            selection = [parent]
+            reveal(parent)
+        }
     }
 
     // MARK: - Loading
@@ -796,7 +808,7 @@ struct RestorePaneView: View {
         let fetchKey = FetchKey(snapshotID: record.id, path: needed)
         guard fetchTasks[fetchKey] == nil else { return }
         // A focus change that keeps the row selected, as NSOutlineView's
-        // does — not `navigate(to:)`, whose deselect would send the next ↓
+        // does — not a deselect, which would send the next ↓
         // back to the top of the list.
         currentPath = path
         fetchTasks[fetchKey] = Task {
@@ -823,16 +835,6 @@ struct RestorePaneView: View {
                 tree.collapse(path: path)
                 loadError = error.localizedDescription
             }
-        }
-    }
-
-    private func goUp() {
-        guard let currentPath else { return }
-        let roots = record?.paths ?? []
-        if roots.contains(currentPath) {
-            navigate(to: nil)
-        } else {
-            navigate(to: BrowserListGrammar.parent(of: currentPath))
         }
     }
 

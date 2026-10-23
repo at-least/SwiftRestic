@@ -16,7 +16,7 @@ enum LoginItemAdvice {
 
     /// The confirmation after the editor's Start at Login — the same words
     /// the Settings caption uses for the same state.
-    static let enabledConfirmation = "SwiftRestic will start at login."
+    static let enabledConfirmation = LoginItem.description(of: .enabled)
 
     /// Nil once the app starts at login. Otherwise approval comes before
     /// location: an existing registration needs only approving, wherever the

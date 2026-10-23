@@ -214,7 +214,7 @@ extension AppModel {
         }
         let loginItem = await Task.detached { LoginItem.state }.value
         startsAtLogin = loginItem == .enabled
-        loginItemNeedsApproval = loginItem == .needsApproval
+        loginItemState = loginItem
         await resolveBinary()
         // The loading state covers configuration plus the binary probe: both
         // decide what the first real screen looks like (panes, or the
@@ -335,12 +335,14 @@ extension AppModel {
         // The daemon's answer, written only while this change is still the
         // newest: a newer click's optimistic value already says what the
         // switch must show, and its own turn will read the daemon after.
-        func syncFromDaemon() async {
+        @discardableResult
+        func syncFromDaemon() async -> LoginItemState {
             let state = await Task.detached { LoginItem.state }.value
             if generation == loginItemGeneration {
                 startsAtLogin = state == .enabled
-                loginItemNeedsApproval = state == .needsApproval
+                loginItemState = state
             }
+            return state
         }
         if enabled, !LoginItem.isInInstallableLocation {
             post(Banner(
@@ -353,11 +355,11 @@ extension AppModel {
         }
         do {
             try await Task.detached { try LoginItem.setEnabled(enabled) }.value
-            await syncFromDaemon()
-            if enabled, await Task.detached { LoginItem.needsApproval }.value {
+            let state = await syncFromDaemon()
+            if enabled, state == .needsApproval {
                 post(Banner(
                     title: "Approval needed",
-                    message: await Task.detached { LoginItem.statusDescription }.value,
+                    message: LoginItem.description(of: state),
                     isError: false,
                     symbolName: "info.circle"
                 ))
@@ -379,7 +381,7 @@ extension AppModel {
         // read landing beside it must not stomp that back to daemon-stale.
         if loginItemChanges.isIdle {
             startsAtLogin = state == .enabled
-            loginItemNeedsApproval = state == .needsApproval
+            loginItemState = state
         }
     }
 

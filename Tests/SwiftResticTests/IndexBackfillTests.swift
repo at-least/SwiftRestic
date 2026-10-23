@@ -529,6 +529,35 @@ struct IndexCoordinatorTombstoneTests {
         #expect(try await scene.coordinator.isComplete(repositoryID: scene.repositoryID))
         #expect(try await scene.violations.isEmpty)
     }
+
+    @Test("N10b: a file that is not a database is deleted and rebuilt on open")
+    func notADatabaseRebuilds() async throws {
+        let scene = try CoordinatorScene("SwiftResticNotADatabase")
+        defer { scene.remove() }
+        let file = scene.coordinator.fileURL(for: scene.repositoryID)
+        try FileManager.default.createDirectory(at: scene.coordinator.indexDirectory, withIntermediateDirectories: true)
+        try Data(String(repeating: "not a database ", count: 400).utf8).write(to: file)
+
+        #expect(try await !scene.coordinator.isComplete(repositoryID: scene.repositoryID))
+        #expect(try await scene.versions("/data/s1.txt").isEmpty)
+    }
+
+    @Test("N10c: an open that fails for any other reason deletes nothing and says why")
+    func otherOpenFailureKeepsTheFile() async throws {
+        let scene = try CoordinatorScene("SwiftResticOpenFails")
+        defer { scene.remove() }
+        // A folder where the file goes: SQLite cannot open it, and nothing
+        // about it says the index is stale or damaged.
+        let file = scene.coordinator.fileURL(for: scene.repositoryID)
+        let marker = file.appendingPathComponent("keep")
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: marker)
+
+        await #expect(throws: (any Error).self) {
+            _ = try await scene.coordinator.isComplete(repositoryID: scene.repositoryID)
+        }
+        #expect(FileManager.default.fileExists(atPath: marker.path))
+    }
 }
 
 /// The listing-generation guard, through the coordinator, without restic.

@@ -262,7 +262,8 @@ enum BackupRunEngine {
             let startEvent = NotificationEvent(
                 stage: .started,
                 planName: planLabel,
-                repositoryName: sink.label(of: repository)
+                repositoryName: sink.label(of: repository),
+                kind: .backup
             )
             sink.addStartPing(startEvent)
 

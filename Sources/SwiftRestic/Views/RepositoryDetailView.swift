@@ -24,6 +24,15 @@ struct RepositoryDetailView: View {
     /// re-eval (progress ticks, banners) that would also stall the main
     /// thread each time.
     @State private var volumeCapacity: VolumeCapacity?
+    /// Whether a local repository's drive is away, for Next check and Next
+    /// cleanup — read off the body for `volumeCapacity`'s reason, again
+    /// each minute.
+    @State private var driveAway = false
+
+    private struct DriveReadKey: Equatable {
+        let repositoryID: UUID
+        let minute: Date
+    }
 
     private var repository: Repository? { model.repository(id: repositoryID) }
 
@@ -112,6 +121,15 @@ struct RepositoryDetailView: View {
             if !Task.isCancelled {
                 volumeCapacity = read
             }
+        }
+        .task(id: DriveReadKey(repositoryID: repository.id, minute: now)) {
+            guard repository.kind == .local else {
+                driveAway = false
+                return
+            }
+            let path = repository.resolvedLocalPath
+            let away = await Task.detached { VolumePresence.isMounted(volumeOf: path) == false }.value
+            if !Task.isCancelled { driveAway = away }
         }
     }
 
@@ -224,7 +242,7 @@ struct RepositoryDetailView: View {
                     let awaitingServer = model.upkeepAwaitingServer.contains(repositoryID)
                     DetailRow("Next check", Scheduler.nextMaintenanceText(
                         .check, of: repository, among: model.configuration.repositories,
-                        hold: hold, awaitingServer: awaitingServer, now: now
+                        hold: hold, driveAway: driveAway, awaitingServer: awaitingServer, now: now
                     ))
                     if repository.maintenance.pruneEnabled {
                         DetailRow("Last cleanup") {
@@ -235,7 +253,7 @@ struct RepositoryDetailView: View {
                         }
                         DetailRow("Next cleanup", Scheduler.nextMaintenanceText(
                             .prune, of: repository, among: model.configuration.repositories,
-                            hold: hold, awaitingServer: awaitingServer, now: now
+                            hold: hold, driveAway: driveAway, awaitingServer: awaitingServer, now: now
                         ))
                     } else {
                         // Off is a fact the page states beside the disk bar,

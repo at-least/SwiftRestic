@@ -13,12 +13,10 @@ enum LoginItemState: Sendable, Equatable {
 /// only if the app comes back after a restart. `SMAppService` registers that
 /// without a LaunchAgent plist or helper tool.
 enum LoginItem {
-    static var status: SMAppService.Status { SMAppService.mainApp.status }
-
-    /// `status` in the model's terms — one XPC round trip for both mirrors,
-    /// where a caller would otherwise read `status` twice.
+    /// The daemon's answer in the model's terms: a synchronous XPC round
+    /// trip, so callers read it off the main actor.
     static var state: LoginItemState {
-        switch status {
+        switch SMAppService.mainApp.status {
         case .enabled: .enabled
         case .requiresApproval: .needsApproval
         case .notFound: .notFound
@@ -27,18 +25,15 @@ enum LoginItem {
         }
     }
 
-    /// What to tell the user about the current state.
-    static var statusDescription: String {
-        switch status {
+    /// What to tell the user about a state.
+    static func description(of state: LoginItemState) -> String {
+        switch state {
         case .enabled: "SwiftRestic will start at login."
-        case .notRegistered: "SwiftRestic will not start at login, so scheduled backups only run while it is open."
-        case .requiresApproval: "Waiting for approval in System Settings › General › Login Items."
+        case .off: "SwiftRestic will not start at login, so scheduled backups only run while it is open."
+        case .needsApproval: "Waiting for approval in System Settings › General › Login Items."
         case .notFound: "macOS could not find this copy of the app. Move it to /Applications and try again."
-        @unknown default: "Unknown state."
         }
     }
-
-    static var needsApproval: Bool { status == .requiresApproval }
 
     /// Whether this copy of the app is somewhere a login item can point at.
     ///

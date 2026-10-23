@@ -7,23 +7,27 @@ extension AppModel {
     /// The outcome of a Settings › Webhooks test, reported inline where the
     /// user clicked rather than as a global banner on another window.
     enum TestNotificationOutcome: Equatable, Sendable {
-        case unusable
         case delivered
         case failed(String)
     }
 
-    /// Sends one channel a sample event so the user can confirm it is wired up.
+    /// Sends one channel a sample event so the user can confirm it is wired
+    /// up — switched on or not: the switch decides what runs send, and the
+    /// test is how the user learns it works before turning it on.
     func sendTestNotification(_ channel: NotificationChannel) async -> TestNotificationOutcome {
+        precondition(channel.hasUsableURL, "Send Test Notification is disabled for an unusable URL")
+        var channel = channel
+        channel.isEnabled = true
         let event = NotificationEvent(
             stage: .succeeded,
             planName: "Test",
             repositoryName: "SwiftRestic",
+            kind: .backup,
             dataAdded: 1_234_567,
             duration: 12
         )
-        guard let payload = NotificationPayload.request(for: channel, event: event) else {
-            return .unusable
-        }
+        // On, with a URL the precondition checked: `request` declines nothing else.
+        let payload = NotificationPayload.request(for: channel, event: event)!
         if let failure = await NotificationPoster.send(payload) {
             return .failed(failure)
         }

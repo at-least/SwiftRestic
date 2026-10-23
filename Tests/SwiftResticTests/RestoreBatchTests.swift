@@ -122,7 +122,7 @@ struct RestoreBatchTests {
     @Test("an include matches its one name: restic's pattern characters are escaped")
     func includePattern() {
         #expect(RestoreBatch.includePattern(forName: "plain name.txt") == "/plain name.txt")
-        #expect(RestoreBatch.includePattern(forName: "a[1].txt") == #"/a\[1\].txt"#)
+        #expect(RestoreBatch.includePattern(forName: "a[1].txt") == #"/a\[1].txt"#)
         #expect(RestoreBatch.includePattern(forName: "star*?.txt") == #"/star\*\?.txt"#)
         #expect(RestoreBatch.includePattern(forName: #"back\slash"#) == #"/back\\slash"#)
         #expect(RestoreBatch.includePattern(forName: "-dash") == "/-dash")

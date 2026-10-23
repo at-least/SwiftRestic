@@ -20,7 +20,7 @@ enum RunFix: Equatable {
     /// The repository's network share refused to reconnect
     /// (`RunRecord.refusedShares`): its editor holds the share's password.
     case editRepositoryShare(UUID)
-    /// A network share holding the plan's folders refused to reconnect: the
+    /// A network share holding the plan's folder refused to reconnect: the
     /// plan editor's Files tab holds the share's password.
     case editPlanShare(UUID)
     /// The repository's disk filled up during a backup

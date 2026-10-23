@@ -167,7 +167,7 @@ extension AppModel {
             stage: stage,
             planName: record.planName,
             repositoryName: repositoryName,
-            operation: record.kind.payloadOperation,
+            kind: record.kind,
             snapshotID: record.snapshotID,
             // A skipped run's reason is its detail, not a failure.
             errorMessage: record.failureMessage ?? (record.outcome == .skipped ? record.detailText : nil),

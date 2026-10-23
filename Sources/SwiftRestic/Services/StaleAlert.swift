@@ -53,7 +53,7 @@ enum StaleAlert {
         return plans.compactMap { plan in
             guard plan.isScheduleActive(at: now), plan.schedule.frequency != .manual,
                   plan.isConfigurationComplete, !running.contains(plan.id),
-                  let last = plan.lastSuccessAt ?? latestSnapshotTimes[plan.id],
+                  let last = PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshotTimes[plan.id]),
                   plan.staleAlertedFor != last
             else { return nil }
             let quiet = now.timeIntervalSince(last)

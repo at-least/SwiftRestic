@@ -16,6 +16,7 @@ struct NotificationTests {
             stage: stage,
             planName: "Documents",
             repositoryName: "NAS",
+            kind: .backup,
             snapshotID: "abc12345",
             errorMessage: stage == .failed ? "repository is locked" : nil,
             warnings: stage == .warned ? ["/etc/x: permission denied"] : [],
@@ -59,7 +60,7 @@ struct NotificationTests {
         let slackData = try #require(slack.body)
         let slackBody = try JSONSerialization.jsonObject(with: slackData) as? [String: Any]
         #expect(slackBody?["text"] as? String != nil)
-        #expect((slackBody?["text"] as? String)?.contains("FAILED") == true)
+        #expect((slackBody?["text"] as? String)?.contains("Backup failed") == true)
 
         let discord = try #require(NotificationPayload.request(
             for: channel(.discord, url: "https://discord.com/api/webhooks/x"),
@@ -97,12 +98,13 @@ struct NotificationTests {
         prune.outcome = .failed
         #expect(prune.kind.displayName == "Cleanup")
         let event = AppModel.notificationEvent(for: prune, repositoryName: "NAS")
-        #expect(event.operation == "Prune")
+        #expect(event.kind.payloadOperation == "Prune")
+        #expect(event.summary.hasPrefix("Cleanup failed: "), "summary was \(event.summary)")
         let request = try #require(NotificationPayload.request(for: channel(.webhook, url: "https://example.com/hook"), event: event))
         let data = try #require(request.body)
         let body = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(body["operation"] as? String == "Prune")
-        #expect(AppModel.notificationEvent(for: RunRecord(kind: .forget, planName: "Docs"), repositoryName: "NAS").operation == "Retention")
+        #expect(AppModel.notificationEvent(for: RunRecord(kind: .forget, planName: "Docs"), repositoryName: "NAS").kind.payloadOperation == "Retention")
     }
 
     @Test("a channel with no usable URL produces no request")
@@ -149,15 +151,13 @@ struct NotificationTests {
         // which Documents.
         #expect(event(.succeeded).summary.contains("Documents (NAS)"))
         // A check or prune reports the repository in planName as well; the
-        // rule's same-name guard leaves it said once. (The hand-built event
-        // keeps the struct's "Backup" default for `operation`, which is not
-        // what is being pinned here.)
-        let check = NotificationEvent(stage: .failed, planName: "NAS", repositoryName: "NAS", errorMessage: "locked")
-        #expect(check.summary == "Backup FAILED: NAS — locked", "summary was \(check.summary)")
+        // rule's same-name guard leaves it said once.
+        let check = NotificationEvent(stage: .failed, planName: "NAS", repositoryName: "NAS", kind: .check, errorMessage: "locked")
+        #expect(check.summary == "Check failed: NAS — locked", "summary was \(check.summary)")
         #expect(!check.summary.contains("NAS (NAS)"))
         // An event with no plan names the repository alone.
-        let bare = NotificationEvent(stage: .failed, planName: "", repositoryName: "NAS", errorMessage: "locked")
-        #expect(bare.summary == "Backup FAILED: NAS — locked", "summary was \(bare.summary)")
+        let bare = NotificationEvent(stage: .failed, planName: "", repositoryName: "NAS", kind: .prune, errorMessage: "locked")
+        #expect(bare.summary == "Cleanup failed: NAS — locked", "summary was \(bare.summary)")
     }
 
     @MainActor
@@ -203,6 +203,7 @@ struct NotificationTests {
             stage: .warned,
             planName: "Documents",
             repositoryName: "NAS",
+            kind: .backup,
             warnings: ["/Users/u/Library/Mail: open /Users/u/Library/Mail: operation not permitted"],
             hint: hint
         )
@@ -305,7 +306,7 @@ struct NotificationSafetyTests {
         #expect(healthchecks.wants(.cancelled))
         #expect(!slack.wants(.cancelled))
 
-        let event = NotificationEvent(stage: .cancelled, planName: "Docs", repositoryName: "NAS")
+        let event = NotificationEvent(stage: .cancelled, planName: "Docs", repositoryName: "NAS", kind: .backup)
         let request = try #require(NotificationPayload.request(for: healthchecks, event: event))
         #expect(request.url.absoluteString == "https://hc-ping.com/abc-123/fail")
     }
@@ -324,6 +325,7 @@ struct NotificationSafetyTests {
             stage: .warned,
             planName: record.planName,
             repositoryName: "NAS",
+            kind: .backup,
             warnings: Array(record.itemErrors.prefix(5))
         )
         var webhook = NotificationChannel()
@@ -362,7 +364,8 @@ struct WarningCountTests {
         var event = NotificationEvent(
             stage: .warned,
             planName: "Documents",
-            repositoryName: "NAS"
+            repositoryName: "NAS",
+            kind: .backup
         )
         event.warnings = ["warning 1", "warning 2", "warning 3", "warning 4", "warning 5"]
         event.warningCount = 500

@@ -37,7 +37,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// A single file's restore ran to completion but the file restic wrote
     /// beside the landing could not be moved into place. The staged copy is
     /// gone; whatever the destination held before is untouched.
-    case dumpMoveFailed(path: String, reason: String)
+    case stagedFileMoveFailed(path: String, reason: String)
     /// A Keep restore onto something that is already there, with a restic
     /// older than 0.17: it has no `--overwrite` and would replace it.
     /// Refused before restic runs.
@@ -112,7 +112,7 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "Stopped reporting any progress for \(Int(seconds))s and was stopped as hung — check the repository's connection and try again."
         case let .malformedOutput(detail):
             return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output — none of its numbers were guessed at."
-        case let .dumpMoveFailed(path, reason):
+        case let .stagedFileMoveFailed(path, reason):
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
         case let .keepNeedsNewerRestic(path):
             return "Keeping the files already at \(path) needs restic 0.17 or later — this restic would replace them, so nothing was restored. Update restic, restore into an empty folder, or choose “Replace it with the backed-up version”."

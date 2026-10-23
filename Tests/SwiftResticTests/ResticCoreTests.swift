@@ -489,7 +489,7 @@ struct RateLimitTests {
 struct StagedFileCommitTests {
     private func makeDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticDump-\(UUID().uuidString)")
+            .appendingPathComponent("SwiftResticStagedFile-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
@@ -505,7 +505,7 @@ struct StagedFileCommitTests {
         let free = directory.appendingPathComponent("a.txt")
         let freeStaging = directory.appendingPathComponent(".a.txt.1.partial")
         try Data("new".utf8).write(to: freeStaging)
-        let landed = try ResticRunner.commitStagedDump(
+        let landed = try ResticService.commitStagedFile(
             freeStaging, to: free, replacingExisting: false, renameExclusive: refusesFlag
         )
         #expect(landed == .committed)
@@ -515,7 +515,7 @@ struct StagedFileCommitTests {
         try Data("mine".utf8).write(to: taken)
         let takenStaging = directory.appendingPathComponent(".b.txt.1.partial")
         try Data("new".utf8).write(to: takenStaging)
-        let kept = try ResticRunner.commitStagedDump(
+        let kept = try ResticService.commitStagedFile(
             takenStaging, to: taken, replacingExisting: false, renameExclusive: refusesFlag
         )
         #expect(kept == .keptExisting)

@@ -150,7 +150,13 @@ enum PlanStatus {
     /// row all read this one moment, so the same backup cannot read three
     /// ways side by side.
     static func lastBackupAt(plan: BackupPlan, latestSnapshot: Snapshot?) -> Date? {
-        plan.lastSuccessAt ?? latestSnapshot?.time
+        lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshot?.time)
+    }
+
+    /// The same moment from the latest snapshot's time alone — the quiet-plan
+    /// alert's form, which holds times, not snapshots.
+    static func lastBackupAt(plan: BackupPlan, latestSnapshotTime: Date?) -> Date? {
+        plan.lastSuccessAt ?? latestSnapshotTime
     }
 
     /// The run the plan page's Last backup value lands on: the newest
