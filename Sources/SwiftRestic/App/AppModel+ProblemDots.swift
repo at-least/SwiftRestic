@@ -97,7 +97,7 @@ enum ProblemDotsStore {
 
     static func save(_ stamps: [UUID: Date], to defaults: UserDefaults) {
         let coded = Dictionary(uniqueKeysWithValues: stamps.map { ($0.key.uuidString, $0.value) })
-        guard let data = try? JSONEncoder().encode(coded) else { return }
-        defaults.set(data, forKey: key)
+        // A dictionary of strings and dates always encodes.
+        defaults.set(try! JSONEncoder().encode(coded), forKey: key)
     }
 }

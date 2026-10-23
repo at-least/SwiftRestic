@@ -164,7 +164,7 @@ extension AppModel {
             // rows beside an error beat a blank card that reads as "nothing
             // backed up". No banner: the sidebar's row and every page of the
             // repository say it, for as long as it lasts — a banner over
-            // every page said it again (the HIG review of 2026-10-18).
+            // every page said it again.
             guard configuration.repository(id: repositoryID) != nil else { return }
             noteAuthFailure(error, repositoryID: repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(error.localizedDescription)
@@ -181,7 +181,7 @@ extension AppModel {
     /// The listing's words for restic's exit 10 — no repository where this
     /// one is saved: two sentences, the sidebar showing the first alone.
     /// What to do is exit 10's own (`ResticError.noRepositoryAtLocation`):
-    /// a saved repository's location is fixed (ad173dc), so its settings
+    /// a saved repository's location is fixed, so its settings
     /// can't repoint it, and where it is now is a new repository.
     nonisolated static func missingRepositoryReason(kind: Repository.Kind) -> String {
         kind == .local

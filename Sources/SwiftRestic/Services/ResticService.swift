@@ -75,7 +75,8 @@ struct BackupOutcome: Sendable {
     /// `ResticService.unreadableItems(errors:stderr:)`.
     var itemErrors: [String]
     var exitCode: Int32
-    /// A reporting gap: restic messages that failed to decode. Kept apart
+    /// A reporting gap: restic messages that failed to decode, or no
+    /// summary. Kept apart
     /// from `itemErrors` because nothing restic read was lost — but the run
     /// must not read clean either.
     var decodingWarning: String? = nil
@@ -515,7 +516,7 @@ struct ResticService: ResticClient {
         args += [olderID, newerID]
 
         let collector = DiffCollector(limit: SnapshotDiff.changeLimit)
-        _ = try await runner.run(
+        let outcome = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
                 arguments: args,
@@ -524,6 +525,7 @@ struct ResticService: ResticClient {
             ),
             onMessage: { message in collector.consume(message) }
         )
+        try Self.requireWhole(outcome, item: "diff")
         var result = collector.result
         result.olderID = olderID
         result.newerID = newerID
@@ -615,9 +617,15 @@ struct ResticService: ResticClient {
         // run's numbers may be wrong, and "wrong" must not look like "clean".
         // One line, so the run record says so; beside the unreadable items,
         // never counted among them.
-        let decodingWarning = result.malformedCount > 0
-            ? "\(result.malformedCount) restic \(result.malformedCount == 1 ? "message" : "messages") could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete."
-            : nil
+        // A run that ends without its summary is the same gap: its numbers
+        // and snapshot are unknown, not zero.
+        let decodingWarning: String? = if result.malformedCount > 0 {
+            "\(result.malformedCount) restic \(result.malformedCount == 1 ? "message" : "messages") could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete."
+        } else if result.summary == nil {
+            "restic reported no summary — a restic update may have changed its output; the run's numbers are unknown."
+        } else {
+            nil
+        }
         return BackupOutcome(
             summary: result.summary,
             itemErrors: Self.unreadableItems(errors: result.itemErrors, stderr: result.stderr),
@@ -884,7 +892,7 @@ struct ResticService: ResticClient {
         // check spares the download; the commit below closes the window.
         if overwrite == .keepExisting, RestoreDestinationRules.itemExists(at: target) {
             RunTranscript.current?.note("Kept the file already at \(target.path); restic did not run.")
-            return Self.keptFileSummary(node: node)
+            return Self.keptFileSummary()
         }
         // Beside the landing, so the commit is a rename on one volume. What
         // the commit did not take — a failed, cancelled or kept restore's
@@ -912,7 +920,7 @@ struct ResticService: ResticClient {
             return summary
         case .keptExisting:
             RunTranscript.current?.note("Kept the file that appeared at \(target.path) during the restore; the restored copy was discarded.")
-            return Self.keptFileSummary(node: node)
+            return Self.keptFileSummary()
         }
     }
 
@@ -994,7 +1002,7 @@ struct ResticService: ResticClient {
     /// carries (one file seen, none restored, one skipped). The callers also
     /// note it in the run's log, which would otherwise hold no command at
     /// all.
-    private static func keptFileSummary(node: SnapshotNode) -> ResticSummary {
+    private static func keptFileSummary() -> ResticSummary {
         var summary = ResticSummary()
         summary.totalFiles = 1
         summary.filesRestored = 0

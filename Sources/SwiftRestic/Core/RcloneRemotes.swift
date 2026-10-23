@@ -23,7 +23,7 @@ struct RcloneRemoteLister: Sendable {
 
     /// `--long`, not `-l`: that is rclone's global `--links`, and with it
     /// listremotes printed names alone on every rclone tried, 1.50.2 to
-    /// 1.75.2 (2026-10-16).
+    /// 1.75.2.
     static let arguments = ["listremotes", "--long"]
 
     /// Empty on any failure — a missing or misbehaving rclone degrades the

@@ -10,6 +10,7 @@ struct RunLogSheet: View {
     let run: RunRecord
 
     @State private var text: String?
+    @State private var failure: String?
     @State private var isLoaded = false
     @State private var finder = LogFinder()
 
@@ -35,6 +36,12 @@ struct RunLogSheet: View {
             Group {
                 if let text {
                     LogTextView(text: text, finder: finder)
+                } else if let failure {
+                    ContentUnavailableView(
+                        "The log could not be read",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(failure)
+                    )
                 } else if isLoaded {
                     ContentUnavailableView(
                         "Log file not found",
@@ -66,7 +73,11 @@ struct RunLogSheet: View {
         }
         .frame(minWidth: 720, minHeight: 460)
         .task {
-            text = await model.loadRunLog(run)
+            do {
+                text = try await model.loadRunLog(run)
+            } catch {
+                failure = error.localizedDescription
+            }
             isLoaded = true
         }
     }
@@ -81,7 +92,7 @@ private struct LogTextView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
-        guard let view = scroll.documentView as? NSTextView else { return scroll }
+        let view = scroll.documentView as! NSTextView
         finder.textView = view
         view.isEditable = false
         view.isSelectable = true
@@ -96,7 +107,8 @@ private struct LogTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        guard let view = scroll.documentView as? NSTextView, view.string != text else { return }
+        let view = scroll.documentView as! NSTextView
+        guard view.string != text else { return }
         show(text, in: view)
     }
 

@@ -16,7 +16,7 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
     /// each time (`--read-data-subset=n/N`), so every pack is read once
     /// every N checks; 0 for the percentage above. A structure-only check
     /// passed a pack with one bit flipped that its slice caught (restic
-    /// 0.19.1, 2026-10-17).
+    /// 0.19.1).
     var checkDataSlices: Int = 0
     /// The slice the next scheduled check reads, 1 … `checkDataSlices`.
     var nextCheckDataSlice: Int = 1

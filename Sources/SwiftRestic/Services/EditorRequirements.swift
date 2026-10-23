@@ -14,18 +14,18 @@ enum EditorRequirements {
     /// the draft's own saved entry among them), its history being restic's
     /// for that path. That one binds a plan being added — new, or adopted
     /// — alone: a saved plan's path is fixed, so in an edit it could only
-    /// catch twins a configuration from before 2026-10-18 holds, and keep
+    /// catch twins an older build's configuration holds, and keep
     /// their Save grey with nothing in the sheet to change.
     static func plan(_ draft: BackupPlan, isNew: Bool, among plans: [BackupPlan]) -> String? {
         if draft.path.trimmingCharacters(in: .whitespaces).isEmpty {
-            return "Choose a folder to back up."
+            return "Choose a folder or file to back up."
         }
         if draft.repositoryID == nil {
             return "Choose a repository to save it."
         }
         let path = comparable(draft.path)
         if isNew, plans.contains(where: { $0.id != draft.id && $0.repositoryID == draft.repositoryID && comparable($0.path) == path }) {
-            return "This repository already has a plan for this folder."
+            return "This repository already has a plan for this folder or file."
         }
         return nil
     }
@@ -137,8 +137,8 @@ enum EditorRequirements {
         // Without a name of their own, two entries for one place would be
         // two identical rows — and two schedulers' checks and prunes on one
         // repository. A new one's rule alone: a saved repository's location
-        // is fixed, so in an edit it could only catch twins a configuration
-        // from before 2026-10-18 holds, and keep their Save grey — a
+        // is fixed, so in an edit it could only catch twins an older
+        // build's configuration holds, and keep their Save grey — a
         // password this Mac lacks never entered.
         let location = comparableLocation(draft)
         if isNew, let other = repositories.first(where: { $0.id != draft.id && comparableLocation($0) == location }) {

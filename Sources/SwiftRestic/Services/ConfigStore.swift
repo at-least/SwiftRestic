@@ -69,7 +69,7 @@ struct AppConfiguration: Codable, Sendable {
         moveAppWideRateLimits(upload: stored.uploadLimitKiBps, download: stored.downloadLimitKiBps)
     }
 
-    /// Builds before 2026-10-17 held one pair of rate limits in the
+    /// Older builds held one pair of rate limits in the
     /// settings, for every repository, a disk on this Mac too. It stays
     /// with the repositories reached over a network — every kind but a
     /// local folder, and a local folder on a saved network share — which it
@@ -95,7 +95,7 @@ struct AppConfiguration: Codable, Sendable {
     }
 }
 
-/// A plan as a configuration holds it. Builds before 2026-10-18 saved a
+/// A plan as a configuration holds it. Older builds saved a
 /// list of folders per plan (`sources`); a plan is one path now, so a list
 /// becomes one plan per folder, in its order, each folder once. The first
 /// keeps the plan's id — the tag its backups carry, so its history stays
@@ -143,8 +143,8 @@ private struct StoredPlan: Decodable {
     }
 }
 
-/// `settings` as a configuration holds it, with the rate limits builds
-/// before 2026-10-17 kept there for every repository
+/// `settings` as a configuration holds it, with the rate limits older
+/// builds kept there for every repository
 /// (`AppConfiguration.moveAppWideRateLimits`) — read in the same decode,
 /// so a settings object that does not read is noted once.
 private struct StoredSettings: Decodable {

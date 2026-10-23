@@ -529,7 +529,7 @@ extension AppModel {
                     // UI restore's own failure path.
                     await MainActor.run { [weak self] in
                         guard let self, !self.isShuttingDown else { return }
-                        let message = (error as? ResticError)?.errorDescription ?? error.localizedDescription
+                        let message = error.localizedDescription
                         self.post(Banner(title: "Drag restore failed", message: message, isError: true))
                     }
                 }

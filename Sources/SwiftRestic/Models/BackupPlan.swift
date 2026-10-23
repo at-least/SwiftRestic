@@ -293,7 +293,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// The folder or file the plan backs up, as typed or picked (a tilde
     /// expands at run time). Fixed once the plan is saved, like its
     /// repository: restic keeps one history per set of paths, so another
-    /// path is another plan. Builds before 2026-10-18 saved a list
+    /// path is another plan. Older builds saved a list
     /// (`sources`), split into one plan per entry at load
     /// (`AppConfiguration`).
     var path: String = ""
@@ -327,7 +327,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// Leave out what developer tools rebuild, with restic's `--exclude`
     /// for the fitting rules (`developerExcludes(for:)`) and
     /// `--exclude-if-present` for the Cargo marker. On for new plans (the
-    /// user's call, 2026-10-21); a plan saved without the key reads it off,
+    /// user's call); a plan saved without the key reads it off,
     /// so its backups do not change under a switch it never asked for. The
     /// rules are read off the folder at each run and are never rows in the
     /// plan's own list.
@@ -437,12 +437,15 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         repositoryID != nil && !path.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// Why a plan that is not `isConfigurationComplete` cannot run.
+    static let incompleteConfigurationReason = "This plan needs a repository and a folder or file to back up."
+
     /// What every surface calls the plan — it has no name of its own: the
     /// last component of its path, the folder's or file's name. When
     /// another of `plans` backs up, to the same repository, a path ending
     /// in the same name, each reads as its path, tilde-abbreviated, so the
-    /// two never look alike. "Untitled Plan" while it has no path. Builds
-    /// before 2026-10-18 stored a name; a configuration's key is ignored.
+    /// two never look alike. "Untitled Plan" while it has no path. Older
+    /// builds stored a name; a configuration's key is ignored.
     func label(among plans: [BackupPlan]) -> String {
         let name = Self.lastComponent(of: path)
         guard !name.isEmpty else { return "Untitled Plan" }

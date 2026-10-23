@@ -187,11 +187,11 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 
     /// What a check read besides the structure, in the repository page's
     /// words — "part 3 of 12", "5% of the data", "all of the data" — or
-    /// "structure only". Nil for any other run, and for a check recorded
-    /// before 2026-10-17.
+    /// "structure only". Nil for any other run, and for a check an older
+    /// build recorded.
     var checkRead: String?
 
-    /// A check recorded before 2026-10-23 stored "data slice 3 of 12",
+    /// A check an older build recorded stored "data slice 3 of 12",
     /// "5% of data" or "all data"; read in today's words, so Last check
     /// never mixes the two.
     static func currentCheckWords(_ stored: String) -> String {
@@ -211,7 +211,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var skippedSince: Date?
     /// The snapshots the runs this record counts wrote before its own,
     /// newest first — a backup around an away drive wrote one per run, in
-    /// builds before 2026-10-18 whose plans held several folders. Each
+    /// older builds whose plans held several folders. Each
     /// resolves to this record (`backupRunsBySnapshot`), so an earlier
     /// backup keeps its incomplete mark and its drawer after the merge. Nil
     /// for a whole skip's record; no run writes it now.
@@ -467,7 +467,7 @@ extension RunRecord {
     /// A backup that went around an away drive's folders and wrote a
     /// snapshot of the rest: the rest is backed up, the drive's folders are
     /// not, which the Protection card names and a later whole backup heals.
-    /// Only builds before 2026-10-18, whose plans held several folders,
+    /// Only older builds, whose plans held several folders,
     /// recorded one — a plan of one path is backed up or skipped whole —
     /// and the history keeps them.
     var isPartialSkip: Bool {

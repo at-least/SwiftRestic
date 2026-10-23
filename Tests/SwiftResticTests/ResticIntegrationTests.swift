@@ -557,7 +557,9 @@ struct ResticIntegrationTests {
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
             try process.run()
+            defer { if process.isRunning { process.terminate() } }
             await Self.waitForExit(process)
+            try #require(!process.isRunning, "restic init was still running after 30 s")
             return process.terminationStatus
         }
 

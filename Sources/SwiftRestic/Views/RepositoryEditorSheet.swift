@@ -40,8 +40,9 @@ struct RepositoryEditorSheet: View {
     /// Whether the user picked a check depth: until then a new
     /// repository's depth follows its kind (`MaintenancePolicy.defaultCheckDepth`).
     @State private var depthChosen = false
-    /// Remotes reported by the user's own rclone, or `nil` when unknown or
-    /// unavailable — the Remote field then stays a plain text field.
+    /// Remotes reported by the user's own rclone — empty when it could not
+    /// list them, the Remote field then a plain text field — or `nil` until
+    /// they are read, and for any kind but rclone.
     @State private var rcloneRemotes: [RcloneRemote]?
     /// The local folder's network share while it is mounted
     /// (`VolumePresence.mountedShare`), read off the main actor.
@@ -680,7 +681,7 @@ struct RepositoryEditorSheet: View {
             // Prefill failed — say so. Blank fields would read as "no
             // password stored" and a save would silently keep whatever the
             // Keychain actually holds, hiding the failure either way.
-            status = .failure("Could not read the stored secrets: \(error.localizedDescription)")
+            status = .failure("Couldn't read the password from your Keychain: \(error.localizedDescription)")
             secretsReadFailed = true
         }
     }

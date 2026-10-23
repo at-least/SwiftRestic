@@ -56,10 +56,10 @@ extension AppModel {
     }
 
     /// A run's log text, read off the main actor; nil when the file is gone.
-    func loadRunLog(_ run: RunRecord) async -> String? {
+    func loadRunLog(_ run: RunRecord) async throws -> String? {
         let logs = runLogs
         let id = run.id
-        return await Task.detached(priority: .userInitiated) { logs.read(id) }.value
+        return try await Task.detached(priority: .userInitiated) { try logs.read(id) }.value
     }
 
     /// Where the drawer's snapshot row can take the user. Nil for a run

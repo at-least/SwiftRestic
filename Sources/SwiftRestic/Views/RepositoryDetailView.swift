@@ -256,8 +256,8 @@ struct RepositoryDetailView: View {
                             hold: hold, driveAway: driveAway, awaitingServer: awaitingServer, now: now
                         ))
                     } else {
-                        // Off is a fact the page states beside the disk bar,
-                        // not two rows that vanish; Edit is its fix.
+                        // Off is a fact the page states, not two rows that
+                        // vanish; Edit is its fix.
                         DetailRow("Cleanup", Scheduler.pruneOffText)
                     }
                 }

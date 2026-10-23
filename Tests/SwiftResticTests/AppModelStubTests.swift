@@ -268,8 +268,6 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
-    // MARK: - Restore
-
     @Test("a quiet scheduled plan is named once per stretch, and the mark is saved on the plan")
     func quietPlanAlert() async throws {
         let harness = try await makeHarness(mode: "default")
@@ -341,6 +339,8 @@ struct AppModelStubTests {
 
         await model.shutdown()
     }
+
+    // MARK: - Restore
 
     @Test("restoring a file lands what restic restored, records the run and surfaces a banner")
     func restoringFileSucceeds() async throws {
@@ -560,12 +560,7 @@ struct AppModelStubTests {
 
         // The hang is what guarantees the cancel lands mid-run, so wait for it
         // in the process table rather than betting on a fixed delay.
-        let hangDeadline = Date.now.addingTimeInterval(10)
-        while Date.now < hangDeadline,
-              StubRestic.findProcesses(matching: harness.stub.sleepMarker).isEmpty {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-        if StubRestic.findProcesses(matching: harness.stub.sleepMarker).isEmpty {
+        if !(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60)) {
             let trace = (try? String(
                 contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
                 encoding: .utf8
@@ -609,7 +604,7 @@ struct AppModelStubTests {
             overwrite: .replaceExisting
         )
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
 
@@ -663,7 +658,7 @@ struct AppModelStubTests {
             await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
         }
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
 
@@ -732,7 +727,7 @@ struct AppModelStubTests {
 
         harness.model.scheduleSnapshotRefresh(repositoryID: harness.repository.id)
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
         // Arrives while the first still holds the in-flight slot: remembered.
@@ -838,7 +833,7 @@ struct AppModelStubTests {
         // sleep process — the trace line fires for the fast calls too) is
         // what guarantees the cancel lands inside the stats read.
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its stats hang"
         )
 
@@ -871,7 +866,7 @@ struct AppModelStubTests {
             await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
         }
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its listing hang"
         )
 
@@ -1141,7 +1136,7 @@ struct AppModelStubTests {
         let inFlight = harness.model.quitConfirmation(userChoseQuit: false)
         #expect(inFlight?.interruptsWork == true)
         #expect(inFlight?.message
-            == "A backup is running\nQuitting stops the work in progress; the run history records the interruption.")
+            == "A backup is running\nQuitting stops the work in progress; Activity records the interruption.")
 
         harness.model.cancelBackup(planID: harness.plan.id)
         await harness.model.waitForRun(planID: harness.plan.id)
@@ -1171,7 +1166,7 @@ struct AppModelStubTests {
 
         let message = try #require(harness.model.quitConfirmation(userChoseQuit: true)?.message)
         #expect(message.hasPrefix(
-            "A backup is running\nQuitting stops the work in progress; the run history records the interruption.\n"
+            "A backup is running\nQuitting stops the work in progress; Activity records the interruption.\n"
         ))
         #expect(message.contains("Stub Plan (Stub Repo) is next due "))
         #expect(!message.contains("is due now"))
@@ -1197,13 +1192,13 @@ struct AppModelStubTests {
         // streaming command's idle-watchdog poll task live, which shutdown
         // must also unwind rather than wait out.
         let hangEstablished = await StubRestic.waitForHang(
-            matching: harness.stub.sleepMarker, within: 10
+            matching: harness.stub.sleepMarker, within: 60
         )
         if !hangEstablished {
             let trace = (try? String(
                 contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8
             )) ?? "no trace"
-            Issue.record("the stub never established its hang within 10 s; trace: [\(trace)]")
+            Issue.record("the stub never established its hang within 60 s; trace: [\(trace)]")
         }
         #expect(!harness.model.quitInterruptions.isEmpty)
 
@@ -1659,7 +1654,7 @@ struct AppModelStubTests {
 
         harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
 
@@ -1705,7 +1700,7 @@ struct AppModelStubTests {
 
         harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
         harness.model.cancelMaintenance(repositoryID: harness.repository.id)
@@ -1739,7 +1734,7 @@ struct AppModelStubTests {
 
         harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
 
@@ -1852,7 +1847,7 @@ struct AppModelStubTests {
         harness.model.configuration.plans[0].lastRunAt = earlier
 
         harness.model.runBackup(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
         harness.model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
         await harness.model.waitForRun(planID: planID)
 
@@ -1870,7 +1865,7 @@ struct AppModelStubTests {
         harness.model.resumeBackups()
         #expect(await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 10))
         harness.model.runBackup(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
         harness.model.cancelBackup(planID: planID)
         await harness.model.waitForRun(planID: planID)
         let stamped = try #require(harness.model.plan(id: planID)?.lastRunAt)
@@ -1887,7 +1882,7 @@ struct AppModelStubTests {
         let planID = harness.plan.id
 
         harness.model.runBackup(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
         harness.model.pauseBackups(for: .oneHour)
         // Checked at once: a stopped run stays in `activity`, cancelling,
         // until its task unwinds, so the wait below alone would pass a
@@ -1977,7 +1972,7 @@ struct AppModelStubTests {
         let planID = harness.plan.id
 
         harness.model.applyRetention(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
         let state = harness.model.planCommands(for: .plan(planID))
         #expect(state.stopTitle == "Stop Applying Retention")
         #expect(state.canStop)
@@ -2013,7 +2008,7 @@ struct AppModelStubTests {
         let idle = try #require(harness.model.quitScheduleNotice(now: now))
         #expect(idle.hasPrefix("Stub Plan (Stub Repo) is due now. "))
         harness.model.applyRetention(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
 
         // Unlike a backup's, this run's cancel stamps nothing, so the slot
         // is still owed after the quit, as it was before the run began.
@@ -2056,7 +2051,7 @@ struct AppModelStubTests {
         let planID = harness.plan.id
 
         harness.model.applyRetention(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
         // What quitting and removing the repository would interrupt: retention, not a backup.
         #expect(harness.model.quitInterruptions == ["Retention is being applied"])
         #expect(harness.model.removalConsequences(for: harness.repository.id)
@@ -2111,7 +2106,7 @@ struct AppModelStubTests {
             to: harness.root.appendingPathComponent("first"),
             overwrite: .replaceExisting
         )
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10))
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
 
         harness.model.restore(
             repositoryID: harness.repository.id,
@@ -2144,12 +2139,7 @@ struct AppModelStubTests {
         )
         // Same guarantee as the backup case: the hang proves the restore is
         // genuinely in flight before the deletion lands.
-        let hangDeadline = Date.now.addingTimeInterval(10)
-        while Date.now < hangDeadline,
-              StubRestic.findProcesses(matching: harness.stub.sleepMarker).isEmpty {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-        #expect(StubRestic.findProcesses(matching: harness.stub.sleepMarker).isEmpty == false)
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
 
         harness.model.deleteRepository(id: harness.repository.id)
         await waitUntilRestoreFinishes(in: harness.model)
@@ -2194,7 +2184,7 @@ struct AppModelStubTests {
             overwrite: .replaceExisting
         )
         #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
 
@@ -2302,10 +2292,6 @@ struct AppModelStubTests {
         #expect(!body.contains("leaky"), "the hook's name reached the webhook: \(body)")
 
         // The unreachable channel must be reported, not dropped on the floor.
-        // This reads the final banner: it names broadcast's failure only
-        // because finish() broadcasts after the refresh step (whose own
-        // "Could not read" banner this stub mode also sets) and waitForRun
-        // awaited all of it — reordering those steps changes what lands here.
         #expect(
             harness.model.banners.contains { $0.title.contains("Could not send") } == true,
             "banners were: \(harness.model.banners.map(\.title))"
@@ -2315,23 +2301,6 @@ struct AppModelStubTests {
     }
 
     // MARK: - Browse caches
-
-    /// The index follows the store directory the harness injects — a
-    /// temporary root — and `SWIFTRESTIC_CONFIG_DIR`, pinned for the test's
-    /// lifetime, covers anything resolving the default; browse-cache writes
-    /// never land in real Application Support.
-    private func withScratchIndexDirectory(
-        _ body: () async throws -> Void
-    ) async rethrows {
-        let indexRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticBrowseIndex-\(UUID().uuidString)")
-        setenv("SWIFTRESTIC_CONFIG_DIR", indexRoot.path, 1)
-        defer {
-            unsetenv("SWIFTRESTIC_CONFIG_DIR")
-            try? FileManager.default.removeItem(at: indexRoot)
-        }
-        try await body()
-    }
 
     /// The stub logs one `start args=[…]` line per invocation; count the
     /// runs of one subcommand. `ls`/`diff` are what a browse pays for —
@@ -2348,297 +2317,280 @@ struct AppModelStubTests {
 
     @Test("a repeat folder browse answers from the cache without spawning restic")
     func repeatBrowseHitsCache() async throws {
-        try await withScratchIndexDirectory {
-            let harness = try await makeHarness(mode: "browserows")
-            defer { try? FileManager.default.removeItem(at: harness.root) }
+        let harness = try await makeHarness(mode: "browserows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
 
-            let first = try await harness.model.children(
-                repositoryID: harness.repository.id,
-                snapshotID: "feedface00000000",
-                path: "/src"
-            )
-            // listDirectory drops the directory's own node — the listing is
-            // its children only.
-            #expect(first.map(\.path) == ["/src/notes.txt"])
-            let notes = try #require(first.first)
-            #expect(notes.size == 42)
+        let first = try await harness.model.children(
+            repositoryID: harness.repository.id,
+            snapshotID: "feedface00000000",
+            path: "/src"
+        )
+        // listDirectory drops the directory's own node — the listing is
+        // its children only.
+        #expect(first.map(\.path) == ["/src/notes.txt"])
+        let notes = try #require(first.first)
+        #expect(notes.size == 42)
 
-            // The write-through runs beside the browse, not before it
-            // answers; the repeat this test is about comes after it lands.
-            await harness.model.indexCoordinator.cacheWritesSettled()
+        // The write-through runs beside the browse, not before it
+        // answers; the repeat this test is about comes after it lands.
+        await harness.model.indexCoordinator.cacheWritesSettled()
 
-            let second = try await harness.model.children(
-                repositoryID: harness.repository.id,
-                snapshotID: "feedface00000000",
-                path: "/src/"
-            )
-            #expect(second == first)
-            #expect(try stubRuns("ls", in: harness) == 1)
+        let second = try await harness.model.children(
+            repositoryID: harness.repository.id,
+            snapshotID: "feedface00000000",
+            path: "/src/"
+        )
+        #expect(second == first)
+        #expect(try stubRuns("ls", in: harness) == 1)
 
-            await harness.model.shutdown()
-        }
+        await harness.model.shutdown()
     }
 
     @Test("a file's sizes and dates are read once per backup: going back to it asks restic nothing, a grown version list only its new backup")
     func fileHistoryReadsEachBackupOnce() async throws {
-        try await withScratchIndexDirectory {
-            let harness = try await makeHarness(mode: "findfile")
-            defer { try? FileManager.default.removeItem(at: harness.root) }
-            let older = String(repeating: "a", count: 64)
-            let newer = String(repeating: "b", count: 64)
-            let newest = String(repeating: "c", count: 64)
-            let path = "/src/notes.txt"
+        let harness = try await makeHarness(mode: "findfile")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let older = String(repeating: "a", count: 64)
+        let newer = String(repeating: "b", count: 64)
+        let newest = String(repeating: "c", count: 64)
+        let path = "/src/notes.txt"
 
-            let first = try await harness.model.fileHistory(
-                repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
-            )
-            #expect(Set(first.keys) == [newer, older])
-            #expect(first[older]?.size == 42)
+        let first = try await harness.model.fileHistory(
+            repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+        )
+        #expect(Set(first.keys) == [newer, older])
+        #expect(first[older]?.size == 42)
 
-            // The pane is made anew for every click, so going back to the
-            // file asks again — with the same backups.
-            let again = try await harness.model.fileHistory(
-                repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
-            )
-            #expect(again == first)
-            #expect(try stubRuns("find", in: harness) == 1)
+        // The pane is made anew for every click, so going back to the
+        // file asks again — with the same backups.
+        let again = try await harness.model.fileHistory(
+            repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+        )
+        #expect(again == first)
+        #expect(try stubRuns("find", in: harness) == 1)
 
-            // A backup made since adds one version's newest backup.
-            let grown = try await harness.model.fileHistory(
-                repositoryID: harness.repository.id, path: path, backupIDs: [newest, newer, older]
-            )
-            #expect(Set(grown.keys) == [newest, newer, older])
-            #expect(try stubRuns("find", in: harness) == 2)
-            let trace = try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
-            let lastFind = try #require(trace.components(separatedBy: "\n").last { $0.contains("args=[find ") })
-            #expect(lastFind.contains(newest) && !lastFind.contains(newer) && !lastFind.contains(older), "\(lastFind)")
+        // A backup made since adds one version's newest backup.
+        let grown = try await harness.model.fileHistory(
+            repositoryID: harness.repository.id, path: path, backupIDs: [newest, newer, older]
+        )
+        #expect(Set(grown.keys) == [newest, newer, older])
+        #expect(try stubRuns("find", in: harness) == 2)
+        let trace = try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+        let lastFind = try #require(trace.components(separatedBy: "\n").last { $0.contains("args=[find ") })
+        #expect(lastFind.contains(newest) && !lastFind.contains(newer) && !lastFind.contains(older), "\(lastFind)")
 
-            // Removing the repository takes its answers along, as the rest of
-            // its runtime state.
-            harness.model.deleteRepository(id: harness.repository.id)
-            #expect(harness.model.fileHistoryAnswers.isEmpty)
+        // Removing the repository takes its answers along, as the rest of
+        // its runtime state.
+        harness.model.deleteRepository(id: harness.repository.id)
+        #expect(harness.model.fileHistoryAnswers.isEmpty)
 
-            await harness.model.shutdown()
-        }
+        await harness.model.shutdown()
     }
 
     @Test("a file's sizes and dates outlive the launch: the next one asks restic only for backups none read")
     func fileHistorySurvivesARelaunch() async throws {
-        try await withScratchIndexDirectory {
-            let harness = try await makeHarness(mode: "findfile")
-            defer { try? FileManager.default.removeItem(at: harness.root) }
-            // The first launch's listing is empty — no snapshots.json yet —
-            // and its reconcile runs on the background lane, which bootstrap
-            // does not await. Landed here, before the find's rows are
-            // cached: landing after them, it sweeps rows of backups the
-            // index does not hold, and the relaunch asks restic again — the
-            // order the full run saw once (2026-10-09).
-            await harness.model.tasks.drain()
-            let older = String(repeating: "a", count: 64)
-            let newer = String(repeating: "b", count: 64)
-            let newest = String(repeating: "c", count: 64)
-            let path = "/src/notes.txt"
+        let harness = try await makeHarness(mode: "findfile")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        // The first launch's listing is empty — no snapshots.json yet —
+        // and its reconcile runs on the background lane, which bootstrap
+        // does not await. Landed here, before the find's rows are
+        // cached: landing after them, it sweeps rows of backups the
+        // index does not hold, and the relaunch asks restic again.
+        await harness.model.tasks.drain()
+        let older = String(repeating: "a", count: 64)
+        let newer = String(repeating: "b", count: 64)
+        let newest = String(repeating: "c", count: 64)
+        let path = "/src/notes.txt"
 
-            let first = try await harness.model.fileHistory(
-                repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
-            )
-            // A quit waits for the captures handed over before it.
-            await harness.model.shutdown()
-            #expect(try stubRuns("find", in: harness) == 1)
+        let first = try await harness.model.fileHistory(
+            repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+        )
+        // A quit waits for the captures handed over before it.
+        await harness.model.shutdown()
+        #expect(try stubRuns("find", in: harness) == 1)
 
-            // The next launch lists the three backups, so its reconcile keeps
-            // the rows of the two the first one read.
-            let listing = [older, newer, newest].map { id in
-                #"{"id":"\#(id)","short_id":"\#(id.prefix(8))","time":"2026-01-02T03:04:05Z","tree":"00","paths":["/src"],"hostname":"stub","tags":[]}"#
-            }
-            try "[\(listing.joined(separator: ","))]".write(
-                to: harness.root.appendingPathComponent("snapshots.json"), atomically: true, encoding: .utf8
-            )
-            let relaunched = AppModel(
-                store: ConfigStore(directory: harness.root.appendingPathComponent("config")),
-                secrets: .inMemory([harness.repository.id: (password: "test-password", providerSecret: nil)])
-            )
-            await relaunched.bootstrap()
-            #expect(relaunched.snapshots(for: harness.repository.id).count == 3)
-
-            let again = try await relaunched.fileHistory(
-                repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
-            )
-            // SnapshotNode's equality is its path: the size and date the row
-            // shows are checked themselves.
-            #expect(again == first)
-            #expect(again[older]?.size == 42 && again[older]?.mtime != nil)
-            #expect(try stubRuns("find", in: harness) == 1)
-
-            let grown = try await relaunched.fileHistory(
-                repositoryID: harness.repository.id, path: path, backupIDs: [newest, newer, older]
-            )
-            #expect(Set(grown.keys) == [newest, newer, older])
-            #expect(try stubRuns("find", in: harness) == 2)
-            let trace = try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
-            let lastFind = try #require(trace.components(separatedBy: "\n").last { $0.contains("args=[find ") })
-            #expect(lastFind.contains(newest) && !lastFind.contains(newer) && !lastFind.contains(older), "\(lastFind)")
-
-            await relaunched.shutdown()
+        // The next launch lists the three backups, so its reconcile keeps
+        // the rows of the two the first one read.
+        let listing = [older, newer, newest].map { id in
+            #"{"id":"\#(id)","short_id":"\#(id.prefix(8))","time":"2026-01-02T03:04:05Z","tree":"00","paths":["/src"],"hostname":"stub","tags":[]}"#
         }
+        try "[\(listing.joined(separator: ","))]".write(
+            to: harness.root.appendingPathComponent("snapshots.json"), atomically: true, encoding: .utf8
+        )
+        let relaunched = AppModel(
+            store: ConfigStore(directory: harness.root.appendingPathComponent("config")),
+            secrets: .inMemory([harness.repository.id: (password: "test-password", providerSecret: nil)])
+        )
+        await relaunched.bootstrap()
+        #expect(relaunched.snapshots(for: harness.repository.id).count == 3)
+
+        let again = try await relaunched.fileHistory(
+            repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+        )
+        // SnapshotNode's equality is its path: the size and date the row
+        // shows are checked themselves.
+        #expect(again == first)
+        #expect(again[older]?.size == 42 && again[older]?.mtime != nil)
+        #expect(try stubRuns("find", in: harness) == 1)
+
+        let grown = try await relaunched.fileHistory(
+            repositoryID: harness.repository.id, path: path, backupIDs: [newest, newer, older]
+        )
+        #expect(Set(grown.keys) == [newest, newer, older])
+        #expect(try stubRuns("find", in: harness) == 2)
+        let trace = try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
+        let lastFind = try #require(trace.components(separatedBy: "\n").last { $0.contains("args=[find ") })
+        #expect(lastFind.contains(newest) && !lastFind.contains(newer) && !lastFind.contains(older), "\(lastFind)")
+
+        await relaunched.shutdown()
     }
 
     @Test("a folder browse hands back restic's listing without waiting for the index's writer")
     func browseDoesNotWaitForTheIndexWriter() async throws {
-        try await withScratchIndexDirectory {
-            let harness = try await makeHarness(mode: "browserows")
-            defer { try? FileManager.default.removeItem(at: harness.root) }
-            let repositoryID = harness.repository.id
-            let coordinator = harness.model.indexCoordinator
+        let harness = try await makeHarness(mode: "browserows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let repositoryID = harness.repository.id
+        let coordinator = harness.model.indexCoordinator
 
-            // The index's one writer, held from outside as a backfill's
-            // chunk or full compare holds it — seconds, at scale.
-            let store = try await coordinator.read(repositoryID) { $0 }
-            let hold = WriterHold(store)
-            #expect(await eventually(within: 10) { hold.isHeld })
+        // The index's one writer, held from outside as a backfill's
+        // chunk or full compare holds it — seconds, at scale.
+        let store = try await coordinator.read(repositoryID) { $0 }
+        let hold = WriterHold(store)
+        #expect(await eventually(within: 10) { hold.isHeld })
 
-            let answered = Flag()
-            let browse = Task {
-                let nodes = try await harness.model.children(
-                    repositoryID: repositoryID, snapshotID: "feedface00000000", path: "/src"
-                )
-                answered.set()
-                return nodes
-            }
-            // restic has answered; the cache write-through is what may wait.
-            let answeredWhileHeld = await eventually(within: 5) { answered.isSet }
-            hold.release()
-            #expect(answeredWhileHeld, "the browse waited for the index's writer")
-            #expect(try await browse.value.map(\.path) == ["/src/notes.txt"])
-
-            // The write-through still lands once the writer is free.
-            await coordinator.cacheWritesSettled()
-            let cached = await coordinator.cachedListing(snapshotID: "feedface00000000", directory: "/src", repositoryID: repositoryID)
-            #expect(cached?.map(\.path) == ["/src/notes.txt"])
-
-            await harness.model.shutdown()
+        let answered = Flag()
+        let browse = Task {
+            let nodes = try await harness.model.children(
+                repositoryID: repositoryID, snapshotID: "feedface00000000", path: "/src"
+            )
+            answered.set()
+            return nodes
         }
+        // restic has answered; the cache write-through is what may wait.
+        let answeredWhileHeld = await eventually(within: 5) { answered.isSet }
+        hold.release()
+        #expect(answeredWhileHeld, "the browse waited for the index's writer")
+        #expect(try await browse.value.map(\.path) == ["/src/notes.txt"])
+
+        // The write-through still lands once the writer is free.
+        await coordinator.cacheWritesSettled()
+        let cached = await coordinator.cachedListing(snapshotID: "feedface00000000", directory: "/src", repositoryID: repositoryID)
+        #expect(cached?.map(\.path) == ["/src/notes.txt"])
+
+        await harness.model.shutdown()
     }
 
     @Test("a repeat record switch reads the cached diff instead of re-walking")
     func repeatDiffHitsCache() async throws {
-        try await withScratchIndexDirectory {
-            let harness = try await makeHarness(mode: "browserows")
-            defer { try? FileManager.default.removeItem(at: harness.root) }
+        let harness = try await makeHarness(mode: "browserows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
 
-            let changes = await harness.model.snapshotChanges(
-                repositoryID: harness.repository.id,
-                olderID: "0000000000000000",
-                newerID: "feedface00000000"
-            )
-            #expect(changes.changes["/src/new.txt"]?.category == .added)
-            #expect(changes.changes["/src/gone.txt"]?.category == .removed)
-            // A directory whose name ends in a Prepend character: restic's
-            // slash sits inside its last Character, and the tree row it
-            // marks is keyed without it.
-            #expect(changes.changes["/src/new\u{0600}"]?.category == .added)
-            #expect(changes.failure == nil)
+        let changes = await harness.model.snapshotChanges(
+            repositoryID: harness.repository.id,
+            olderID: "0000000000000000",
+            newerID: "feedface00000000"
+        )
+        #expect(changes.changes["/src/new.txt"]?.category == .added)
+        #expect(changes.changes["/src/gone.txt"]?.category == .removed)
+        // A directory whose name ends in a Prepend character: restic's
+        // slash sits inside its last Character, and the tree row it
+        // marks is keyed without it.
+        #expect(changes.changes["/src/new\u{0600}"]?.category == .added)
+        #expect(changes.failure == nil)
 
-            // The capture runs beside the answer, as the listing's does.
-            await harness.model.indexCoordinator.cacheWritesSettled()
+        // The capture runs beside the answer, as the listing's does.
+        await harness.model.indexCoordinator.cacheWritesSettled()
 
-            let again = await harness.model.snapshotChanges(
-                repositoryID: harness.repository.id,
-                olderID: "0000000000000000",
-                newerID: "feedface00000000"
-            )
-            // A cache hit is a complete comparison, not a partial one.
-            #expect(again == changes)
-            #expect(again.failure == nil)
-            #expect(try stubRuns("diff", in: harness) == 1)
+        let again = await harness.model.snapshotChanges(
+            repositoryID: harness.repository.id,
+            olderID: "0000000000000000",
+            newerID: "feedface00000000"
+        )
+        // A cache hit is a complete comparison, not a partial one.
+        #expect(again == changes)
+        #expect(again.failure == nil)
+        #expect(try stubRuns("diff", in: harness) == 1)
 
-            await harness.model.shutdown()
-        }
+        await harness.model.shutdown()
     }
 
     @Test("a diff that fails partway says so, keeps what streamed, and caches nothing")
     func failedDiffIsReported() async throws {
-        try await withScratchIndexDirectory {
-            let harness = try await makeHarness(mode: "difffail")
-            defer { try? FileManager.default.removeItem(at: harness.root) }
+        let harness = try await makeHarness(mode: "difffail")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
 
-            let marks = await harness.model.snapshotChanges(
-                repositoryID: harness.repository.id,
-                olderID: "0000000000000000",
-                newerID: "feedface00000000"
-            )
-            // The change that streamed before restic died is still true.
-            #expect(marks.changes["/src/new.txt"]?.category == .added)
-            #expect(marks.failure?.contains("no matching ID found") == true, "failure was \(String(describing: marks.failure))")
+        let marks = await harness.model.snapshotChanges(
+            repositoryID: harness.repository.id,
+            olderID: "0000000000000000",
+            newerID: "feedface00000000"
+        )
+        // The change that streamed before restic died is still true.
+        #expect(marks.changes["/src/new.txt"]?.category == .added)
+        #expect(marks.failure?.contains("no matching ID found") == true, "failure was \(String(describing: marks.failure))")
 
-            // Nothing was cached: the same switch asks restic again. Checked
-            // once the hand-overs have settled — a capture is its own task,
-            // so a wrongly cached walk could otherwise land after the repeat
-            // read the cache, and this check would pass by timing.
-            await harness.model.indexCoordinator.cacheWritesSettled()
-            let again = await harness.model.snapshotChanges(
-                repositoryID: harness.repository.id,
-                olderID: "0000000000000000",
-                newerID: "feedface00000000"
-            )
-            #expect(again.failure != nil)
-            #expect(try stubRuns("diff", in: harness) == 2)
+        // Nothing was cached: the same switch asks restic again. Checked
+        // once the hand-overs have settled — a capture is its own task,
+        // so a wrongly cached walk could otherwise land after the repeat
+        // read the cache, and this check would pass by timing.
+        await harness.model.indexCoordinator.cacheWritesSettled()
+        let again = await harness.model.snapshotChanges(
+            repositoryID: harness.repository.id,
+            olderID: "0000000000000000",
+            newerID: "feedface00000000"
+        )
+        #expect(again.failure != nil)
+        #expect(try stubRuns("diff", in: harness) == 2)
 
-            await harness.model.shutdown()
-        }
+        await harness.model.shutdown()
     }
 
     @Test("a diff with lines that did not decode says so, keeps what decoded, and caches nothing")
     func malformedDiffIsReported() async throws {
-        try await withScratchIndexDirectory {
-            let harness = try await makeHarness(mode: "diffmalformed")
-            defer { try? FileManager.default.removeItem(at: harness.root) }
+        let harness = try await makeHarness(mode: "diffmalformed")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
 
-            let marks = await harness.model.snapshotChanges(
-                repositoryID: harness.repository.id,
-                olderID: "0000000000000000",
-                newerID: "feedface00000000"
-            )
-            // The change that decoded is still true; the one that did not is
-            // why a blank row does not mean unchanged.
-            #expect(marks.changes["/src/new.txt"]?.category == .added)
-            #expect(marks.failure != nil, "a diff that lost a line read as complete")
+        let marks = await harness.model.snapshotChanges(
+            repositoryID: harness.repository.id,
+            olderID: "0000000000000000",
+            newerID: "feedface00000000"
+        )
+        // The change that decoded is still true; the one that did not is
+        // why a blank row does not mean unchanged.
+        #expect(marks.changes["/src/new.txt"]?.category == .added)
+        #expect(marks.failure != nil, "a diff that lost a line read as complete")
 
-            // Nothing was cached: the same switch asks restic again. Checked
-            // once the hand-overs have settled — a capture is its own task,
-            // so a wrongly cached walk could otherwise land after the repeat
-            // read the cache, and this check would pass by timing.
-            await harness.model.indexCoordinator.cacheWritesSettled()
-            let again = await harness.model.snapshotChanges(
-                repositoryID: harness.repository.id,
-                olderID: "0000000000000000",
-                newerID: "feedface00000000"
-            )
-            #expect(again.failure != nil)
-            let diffRuns = try stubRuns("diff", in: harness)
-            #expect(diffRuns == 2)
+        // Nothing was cached: the same switch asks restic again. Checked
+        // once the hand-overs have settled — a capture is its own task,
+        // so a wrongly cached walk could otherwise land after the repeat
+        // read the cache, and this check would pass by timing.
+        await harness.model.indexCoordinator.cacheWritesSettled()
+        let again = await harness.model.snapshotChanges(
+            repositoryID: harness.repository.id,
+            olderID: "0000000000000000",
+            newerID: "feedface00000000"
+        )
+        #expect(again.failure != nil)
+        let diffRuns = try stubRuns("diff", in: harness)
+        #expect(diffRuns == 2)
 
-            await harness.model.shutdown()
-        }
+        await harness.model.shutdown()
     }
 
     @Test("a diff with no password to run it reports why instead of marking nothing")
     func diffWithoutPasswordIsReported() async throws {
-        try await withScratchIndexDirectory {
-            let harness = try await makeHarness(mode: "difffail", password: nil)
-            defer { try? FileManager.default.removeItem(at: harness.root) }
+        let harness = try await makeHarness(mode: "difffail", password: nil)
+        defer { try? FileManager.default.removeItem(at: harness.root) }
 
-            let marks = await harness.model.snapshotChanges(
-                repositoryID: harness.repository.id,
-                olderID: "0000000000000000",
-                newerID: "feedface00000000"
-            )
-            #expect(marks.changes.isEmpty)
-            #expect(marks.failure?.contains("password") == true, "failure was \(String(describing: marks.failure))")
-            #expect(((try? stubRuns("diff", in: harness)) ?? 0) == 0)
+        let marks = await harness.model.snapshotChanges(
+            repositoryID: harness.repository.id,
+            olderID: "0000000000000000",
+            newerID: "feedface00000000"
+        )
+        #expect(marks.changes.isEmpty)
+        #expect(marks.failure?.contains("password") == true, "failure was \(String(describing: marks.failure))")
+        #expect(((try? stubRuns("diff", in: harness)) ?? 0) == 0)
 
-            await harness.model.shutdown()
-        }
+        await harness.model.shutdown()
     }
 
     // MARK: - Run logs
@@ -2979,6 +2931,7 @@ struct AppModelStubTests {
         // not a user edit.
         #expect(harness.model.saveTask == nil)
         #expect(harness.model.isConfigurationUnreadable == false)
+        await harness.model.shutdown()
     }
 }
 

@@ -56,9 +56,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     }
 
     /// The observed inputs are exactly the ones `iconState` and the hold
-    /// read — reading more would re-fire this loop on every run-record
-    /// append. The hold's pause and battery setting live in the
-    /// configuration, observed here as a whole; the battery reading is
+    /// read. The configuration is observed whole — run-record appends
+    /// included, which the attention face reads, and the hold's pause and
+    /// battery setting; the battery reading is
     /// written only when it changes; a pause running out is cleared by the
     /// scheduler's tick, and that write is what brings the face back.
     private func refresh() {

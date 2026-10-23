@@ -28,11 +28,14 @@ struct CommandPresentations: ViewModifier {
     func body(content: Content) -> some View {
         // Read on every render: the delete message says whether a run will be
         // stopped, and a run can start or end while the dialog is up.
+        // A target gone while its question is up takes the question with it:
+        // its button would act on nothing.
         let copy = pendingConfirmation.flatMap { model.confirmationCopy(for: $0) }
+        let presented = copy == nil ? nil : pendingConfirmation
         // Check asks how much data to read as well, which an alert's three
         // buttons cannot hold with a Cancel beside them: it is a sheet.
-        let checkTarget: CheckTarget? = if case let .check(id) = pendingConfirmation { CheckTarget(repositoryID: id) } else { nil }
-        let dialog = checkTarget == nil ? pendingConfirmation : nil
+        let checkTarget: CheckTarget? = if case let .check(id) = presented { CheckTarget(repositoryID: id) } else { nil }
+        let dialog = checkTarget == nil ? presented : nil
         return content
             .confirmationDialog(
                 copy?.title ?? "",
@@ -51,8 +54,10 @@ struct CommandPresentations: ViewModifier {
                 get: { checkTarget },
                 set: { if $0 == nil { pendingConfirmation = nil } }
             )) { target in
-                CheckSheet(copy: copy) { readDataPercent in
-                    check(target.repositoryID, readDataPercent: readDataPercent)
+                if let copy {
+                    CheckSheet(copy: copy) { readDataPercent in
+                        check(target.repositoryID, readDataPercent: readDataPercent)
+                    }
                 }
             }
             .sheet(item: $retentionTarget) { target in
@@ -106,13 +111,13 @@ struct CommandPresentations: ViewModifier {
 /// backed-up data to read back — none checks the structure alone.
 private struct CheckSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let copy: ConfirmationCopy?
+    let copy: ConfirmationCopy
     let run: (Int) -> Void
     @State private var readDataPercent = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(copy?.title ?? "")
+            Text(copy.title)
                 .font(.headline)
             Picker("Data to read", selection: $readDataPercent) {
                 Text("Structure only").tag(0)
@@ -121,7 +126,7 @@ private struct CheckSheet: View {
             }
             .fixedSize()
             .help("Reading data back finds damage the structure check misses, and takes longer.")
-            Text(copy?.message ?? "")
+            Text(copy.message)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

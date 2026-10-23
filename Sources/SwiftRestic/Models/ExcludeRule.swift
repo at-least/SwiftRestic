@@ -74,7 +74,7 @@ struct ExcludeRule: Hashable, Sendable {
     /// working copy without its object store is "not a git repository". A
     /// plan gets the ones that can match under its path
     /// (`BackupPlan.defaultExcludes(for:)`). The first five are the list
-    /// builds before 2026-10-21 offered, unchanged and first, but for
+    /// older builds offered, unchanged and first, but for
     /// `**/node_modules`, which went to the developer switch's JavaScript
     /// rules: plans saved with it keep it as their own row.
     static let defaults: [ExcludeRule] = [

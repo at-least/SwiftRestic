@@ -175,9 +175,6 @@ extension SidebarItem {
         }
     }
 
-    /// Whether the page has the toolbar's tabs at all.
-    var hasPageTabs: Bool { !pageTabs.isEmpty }
-
     /// The page of a group under `repositoryID`'s Other backups, either kind.
     static func otherGroup(repositoryID: UUID, id: OtherBackupsGroup.ID) -> SidebarItem {
         switch id {

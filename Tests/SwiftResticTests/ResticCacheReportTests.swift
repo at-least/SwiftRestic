@@ -65,6 +65,18 @@ struct ResticCacheReportTests {
         #expect(AppModel.cleanupNote(before: after, after: after) == "Nothing was unused for 30 days.")
     }
 
+    @Test("a new measurement drops the last cleanup's note, which speaks of a report no longer shown")
+    @MainActor
+    func measurementDropsTheNote() async {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ResticCacheNote-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        model.resticCacheNote = "Removed 3 folders, 9 MB."
+        // No restic found: the measurement fails, and the note goes all the same.
+        await model.measureResticCache()
+        #expect(model.resticCacheNote == nil)
+    }
+
     @Test("restic's binary units convert to bytes; an unknown unit is refused")
     func units() {
         #expect(ResticCacheReport.bytes(value: "512", unit: "B") == 512)

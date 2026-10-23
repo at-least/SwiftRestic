@@ -124,10 +124,14 @@ struct IndexBackfillBufferTests {
         }
         buffer.append(IndexedEntry(path: "/data/a", isDirectory: false))
         buffer.cancel()
-        buffer.append(IndexedEntry(path: "/data/b", isDirectory: false))
+        // A whole chunk's worth after the cancel: enough to flush, were the
+        // cancel not heeded.
+        for index in 0 ..< SnapshotIndex.chunkSize {
+            buffer.append(IndexedEntry(path: "/data/b\(index)", isDirectory: false))
+        }
         // Never a full read landed.
         #expect(throws: CancellationError.self) { try buffer.finish() }
-        #expect(recorder.recorded.isEmpty)
+        #expect(recorder.attempted.isEmpty)
     }
 }
 

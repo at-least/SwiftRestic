@@ -63,31 +63,37 @@ struct ServerAwayTests {
             }
         }
 
-        let words = "“127.0.0.1” cannot be reached (connection refused)."
-        #expect(model.snapshotListingOutcomes[repository.id] == .failed(words))
+        // A failed requirement still stops the model, whose scheduler would
+        // otherwise tick on into later tests.
+        do {
+            let words = "“127.0.0.1” cannot be reached (connection refused)."
+            #expect(model.snapshotListingOutcomes[repository.id] == .failed(words))
 
-        // The scheduler's first tick starts the due backup, which skips.
-        await waitForRuns(1)
-        let skipped = try #require(model.configuration.runs.first)
-        #expect(skipped.outcome == .skipped)
-        #expect(skipped.detailText == words)
-        #expect(resticCommands().isEmpty, "restic ran: \(resticCommands())")
+            // The scheduler's first tick starts the due backup, which skips.
+            await waitForRuns(1)
+            let skipped = try #require(model.configuration.runs.first)
+            #expect(skipped.outcome == .skipped)
+            #expect(skipped.detailText == words)
+            #expect(resticCommands().isEmpty, "restic ran: \(resticCommands())")
 
-        // The server back: the network's change reads the listing again and
-        // runs the plan whose backup it skipped.
-        await answer.set(.reachable)
-        model.networkPathChanged()
-        await waitForRuns(2)
-        await model.waitForRun(planID: plan.id)
-        let ran = try #require(model.configuration.runs.first)
-        #expect(ran.outcome == .succeeded, "outcome \(ran.outcome), \(ran.failureMessage ?? "")")
-        #expect(resticCommands().contains { $0.contains(" backup ") || $0.contains("[backup ") }, "restic ran: \(resticCommands())")
-        let deadline = Date.now.addingTimeInterval(10)
-        while model.snapshotListingOutcomes[repository.id] != .loaded, Date.now < deadline {
-            try? await Task.sleep(for: .milliseconds(50))
+            // The server back: the network's change reads the listing again and
+            // runs the plan whose backup it skipped.
+            await answer.set(.reachable)
+            model.networkPathChanged()
+            await waitForRuns(2)
+            await model.waitForRun(planID: plan.id)
+            let ran = try #require(model.configuration.runs.first)
+            #expect(ran.outcome == .succeeded, "outcome \(ran.outcome), \(ran.failureMessage ?? "")")
+            #expect(resticCommands().contains { $0.contains(" backup ") || $0.contains("[backup ") }, "restic ran: \(resticCommands())")
+            let deadline = Date.now.addingTimeInterval(10)
+            while model.snapshotListingOutcomes[repository.id] != .loaded, Date.now < deadline {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            #expect(model.snapshotListingOutcomes[repository.id] == .loaded)
+        } catch {
+            await model.shutdown()
+            throw error
         }
-        #expect(model.snapshotListingOutcomes[repository.id] == .loaded)
-
         await model.shutdown()
     }
 }

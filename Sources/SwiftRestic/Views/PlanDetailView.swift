@@ -281,13 +281,17 @@ struct PlanDetailView: View {
                 onSearchAllBackups: onSearchAllBackups
             )
         } else {
-            ContentUnavailableView {
-                Label("No repository set", systemImage: "questionmark.folder")
-            } description: {
-                Text("Choose a repository for this plan to back up to.")
-            } actions: {
-                Button("Edit Plan…") { router.request(.editPlan(planID)) }
-            }
+            noRepository
+        }
+    }
+
+    private var noRepository: some View {
+        ContentUnavailableView {
+            Label("No repository set", systemImage: "questionmark.folder")
+        } description: {
+            Text("Choose a repository for this plan to back up to.")
+        } actions: {
+            Button("Edit Plan…") { router.request(.editPlan(planID)) }
         }
     }
 
@@ -302,13 +306,7 @@ struct PlanDetailView: View {
                 onSearchAllBackups: onSearchAllBackups
             )
         } else {
-            ContentUnavailableView {
-                Label("No repository set", systemImage: "questionmark.folder")
-            } description: {
-                Text("Choose a repository for this plan to back up to.")
-            } actions: {
-                Button("Edit Plan…") { router.request(.editPlan(planID)) }
-            }
+            noRepository
         }
     }
 

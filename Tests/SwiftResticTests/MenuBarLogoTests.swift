@@ -145,11 +145,14 @@ struct MenuBarLogoTests {
 
     /// Visual-audit harness: set `SWIFTRESTIC_TRAY_FACE_DIR` to a directory and
     /// the four faces and the hero mark land there as 8x PNGs, composed on
-    /// white. A no-op (passing test) when the variable is unset, so ordinary
-    /// runs never write files.
-    @Test("dump the tray faces as PNGs for visual audit")
+    /// white. Skipped when the variable is unset, so ordinary runs never
+    /// write files.
+    @Test(
+        "dump the tray faces as PNGs for visual audit",
+        .enabled(if: ProcessInfo.processInfo.environment["SWIFTRESTIC_TRAY_FACE_DIR"] != nil)
+    )
     func dumpFaces() throws {
-        guard let directory = ProcessInfo.processInfo.environment["SWIFTRESTIC_TRAY_FACE_DIR"] else { return }
+        let directory = try #require(ProcessInfo.processInfo.environment["SWIFTRESTIC_TRAY_FACE_DIR"])
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         let faces: [(String, NSImage, CGFloat)] = [
             ("idle", MenuBarLogo.image(), 18),

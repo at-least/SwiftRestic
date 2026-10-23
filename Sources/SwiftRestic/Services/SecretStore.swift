@@ -14,7 +14,7 @@ struct SecretStore: Sendable {
     /// scheduled backup's diagnosis would point nowhere near the truth.
     var load: @Sendable (UUID) async throws -> (password: String?, providerSecret: String?)
     var save: @Sendable (UUID, String?, String?) async throws -> Void
-    var remove: @Sendable (UUID) async -> Void
+    var remove: @Sendable (UUID) async throws -> Void
     /// A network share's password, by the share's ID (`NetworkShare`).
     var loadSharePassword: @Sendable (UUID) async throws -> String?
     /// Stores a share's password; nil or empty removes it.
@@ -42,8 +42,8 @@ struct SecretStore: Sendable {
             }.value
         },
         remove: { repositoryID in
-            await Task.detached(priority: .userInitiated) {
-                KeychainStore.deleteAll(repositoryID: repositoryID)
+            try await Task.detached(priority: .userInitiated) {
+                try KeychainStore.deleteAll(repositoryID: repositoryID)
             }.value
         },
         loadSharePassword: { shareID in

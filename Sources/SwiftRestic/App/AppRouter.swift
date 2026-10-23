@@ -5,9 +5,9 @@ import SwiftUI
 /// which sheet a menu command asked for, where Activity should land, and the
 /// main-window action the AppKit tray needs.
 ///
-/// Split out of `AppModel`: none of this is domain state — it is the
-/// navigation surface the views and the menu bar share, and pane switches
-/// would otherwise write through the same object the domains mutate. Intents
+/// Not on `AppModel`: none of this is domain state — it is the navigation
+/// surface the views and the menu bar share, and pane switches would
+/// otherwise write through the same object the domains mutate. Intents
 /// asked while the window is closed survive until the window exists.
 @MainActor
 @Observable
@@ -64,7 +64,7 @@ final class AppRouter {
     /// Transient, never persisted: whether a plan's Files tree lists, after
     /// each folder's own items, what only its backups hold — items deleted
     /// from this Mac since. View ▸ Show Deleted Items, off at every launch
-    /// (the user's call, 2026-10-19).
+    /// (the user's call).
     var filesShowsDeletedItems = false
 
     /// A folder a backup's tree should open and select when it next loads
@@ -170,7 +170,7 @@ final class AppRouter {
     /// An item the Files tab was asked to show — Show Versions', a search
     /// hit picked, one opened from the pane — waiting for the tab's tree to
     /// read the levels on its way: one it lists only as deleted turns Show
-    /// Deleted Items on, so it has a row (the user's call, 2026-10-19).
+    /// Deleted Items on, so it has a row (the user's call).
     /// Transient; the tab spends it (`FilesTree.reveal`).
     var filesRevealRequest: FileNode?
 

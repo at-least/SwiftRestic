@@ -4,8 +4,9 @@ import Testing
 @Suite("Snapshot comparison")
 struct SnapshotDiffTests {
     private func snapshot(_ id: String, time: String, paths: [String], host: String = "mac") throws -> Snapshot {
+        let pathsJSON = String(decoding: try JSONEncoder().encode(paths), as: UTF8.self)
         let json = """
-        {"id":"\(id)","short_id":"\(id.prefix(8))","time":"\(time)","paths":\(paths.map { "\"\($0)\"" }),"hostname":"\(host)","tags":[]}
+        {"id":"\(id)","short_id":"\(id.prefix(8))","time":"\(time)","paths":\(pathsJSON),"hostname":"\(host)","tags":[]}
         """
         return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
     }
@@ -99,7 +100,9 @@ struct DiffCandidateGroupingTests {
         let feb1 = try snapshot("f1", time: "2026-02-01T02:00:00Z")
         let feb2 = try snapshot("f2", time: "2026-02-03T02:00:00Z")
 
-        let buckets = DiffCandidateGrouping.months(in: [feb2, feb1, jan])
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let buckets = DiffCandidateGrouping.months(in: [feb2, feb1, jan], calendar: calendar)
 
         #expect(buckets.count == 2)
         // Input is newest first, so first sight of a month names the group.

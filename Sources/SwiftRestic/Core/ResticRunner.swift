@@ -85,8 +85,6 @@ struct ResticRunResult: Sendable {
     /// after …" line on stderr — "Stat(<config/>) returned error, retrying
     /// after 38.6s: Head "http://…/config": dial tcp 127.0.0.1:18000:
     /// connect: connection refused" gives "connection refused" — or empty.
-    /// A timed-out listing said only that it timed out, while restic had
-    /// named the cause from its first second (restic 0.19.1, 2026-10-17).
     static func retryCause(in stderr: String) -> String {
         guard let line = stderr.split(separator: "\n").last(where: { $0.contains(" returned error, retrying after ") }) else { return "" }
         return line.components(separatedBy: ": ").last ?? ""
@@ -371,9 +369,7 @@ actor ResticRunner {
             messages: stdout.messages + stderr.messages,
             stdout: stdout.text,
             stderr: stderr.text,
-            malformedCount: stdout.malformedCount + stderr.messages.filter { message in
-                if case .malformed = message { return true } else { return false }
-            }.count
+            malformedCount: stdout.malformedCount + stderr.malformedCount
         )
     }
 
@@ -445,7 +441,6 @@ private final class ProcessBox: @unchecked Sendable {
 
     init(_ process: Process) {
         self.process = process
-        self.lastActivity = ProcessInfo.processInfo.systemUptime
     }
 
     /// Ends the process. The two flags record *why*: one for the wall-clock
@@ -730,8 +725,12 @@ private final class StreamReader: @unchecked Sendable {
                     if chunk.isEmpty { break }
                     absorb(chunk)
                 }
-                if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8), !line.isEmpty {
-                    consume(line)
+                if !buffer.isEmpty {
+                    if let line = String(data: buffer, encoding: .utf8) {
+                        consume(line)
+                    } else {
+                        outcome.malformedCount += 1
+                    }
                 }
                 box.close()
                 markFinished()

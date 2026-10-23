@@ -242,10 +242,10 @@ enum Scheduler {
         return Format.timestamp(date)
     }
 
-    /// Every enabled, complete plan's next run date, in plan order — the one
-    /// enumeration the scheduler's pick and the plan page's Next backup
-    /// value both derive from, so no surface can announce a run the
-    /// scheduler will never fire. Dates are raw: the surfaces label a past
+    /// Every enabled, complete plan's next run date, in plan order — what
+    /// `nextScheduledRun` and the plan page's Next backup value read. Its
+    /// rules must stay those `duePlans` starts a run by, or a surface
+    /// announces a run the scheduler will never fire. Dates are raw: the surfaces label a past
     /// one "Due now" — "Waiting" under a hold, "Running now" while its
     /// backup is in flight; only `nextScheduledRun` clamps to `now`.
     ///

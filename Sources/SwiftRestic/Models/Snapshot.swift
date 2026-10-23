@@ -82,7 +82,7 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
-        type = (try? c.decode(Kind.self, forKey: .type)) ?? .irregular
+        type = try c.decode(Kind.self, forKey: .type)
         path = try c.decode(String.self, forKey: .path)
         size = try c.decodeIfPresent(Int64.self, forKey: .size)
         mtime = try c.decodeIfPresent(Date.self, forKey: .mtime)
@@ -101,12 +101,12 @@ extension SnapshotNode {
 /// One file `restic find --json` matched, inside one snapshot.
 struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var path: String
-    var type: String
+    var type: SnapshotNode.Kind
     var size: Int64?
     var mtime: Date?
 
     var id: String { path }
-    var isDirectory: Bool { type == "dir" }
+    var isDirectory: Bool { type == .dir }
     var name: String { (path as NSString).lastPathComponent }
 
     /// Identity is the path, matching `id`; equality and hashing follow.
@@ -115,11 +115,7 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
 
     /// The node shape the restore code already understands.
     var node: SnapshotNode {
-        var node = SnapshotNode(
-            name: name,
-            type: SnapshotNode.Kind(rawValue: type) ?? .file,
-            path: path
-        )
+        var node = SnapshotNode(name: name, type: type, path: path)
         node.size = size
         node.mtime = mtime
         return node

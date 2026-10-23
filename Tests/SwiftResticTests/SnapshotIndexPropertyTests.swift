@@ -50,8 +50,12 @@ struct SnapshotIndexPropertyTests {
 
     static var scale: (seeds: Int, rounds: Int) {
         guard let value = ProcessInfo.processInfo.environment["SWIFTRESTIC_INDEX_PROPERTY"] else { return (3, 15) }
-        let parts = value.split(separator: ",").compactMap { Int($0) }
-        return parts.count == 2 ? (parts[0], parts[1]) : (3, 15)
+        // A typo must not quietly run the light scale in the heavy one's place.
+        let parts = value.split(separator: ",").map { Int($0) }
+        guard parts.count == 2, let seeds = parts[0], let rounds = parts[1] else {
+            fatalError("SWIFTRESTIC_INDEX_PROPERTY is \(value); it takes seeds,rounds — 40,30")
+        }
+        return (seeds, rounds)
     }
 
     @Test("the index answers exactly what a brute-force model of the listings says", arguments: variants)

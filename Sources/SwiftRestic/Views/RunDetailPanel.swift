@@ -181,17 +181,17 @@ struct RunDetailPanel: View {
 
     // MARK: - Messages
 
+    private var hasMessages: Bool {
+        run.failureMessage != nil || (run.kind == .prune && run.detailText != nil)
+            || !run.itemErrors.isEmpty || !run.hookMessages.isEmpty
+    }
+
     /// What the run left in words: the failure in red, prune's
     /// output tail, what to do about the unreadable items, restic's item
     /// lines, and the hooks' own lines — which stay here, on this Mac, and
     /// never reach Copy Details. The unreadable items come under restic's
     /// count and end with how many were not stored, the way Copy Details
     /// and the Restore strip say it.
-    private var hasMessages: Bool {
-        run.failureMessage != nil || (run.kind == .prune && run.detailText != nil)
-            || !run.itemErrors.isEmpty || !run.hookMessages.isEmpty
-    }
-
     @ViewBuilder
     private var messages: some View {
         let (unreadable, unlisted) = run.unreadableItemListing()
@@ -374,7 +374,7 @@ private struct RunSnapshotRow: View {
                 Text("\(short) — no longer in the repository")
                     .monospaced()
                     .textSelection(.enabled)
-                    .help("Removed after this run — by retention, a cleanup, or another app.")
+                    .help("Removed after this run — by retention or another app.")
             case .unavailable?:
                 let help = "This repository's list of backups isn't loaded right now."
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)

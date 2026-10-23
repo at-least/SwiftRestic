@@ -97,7 +97,7 @@ extension AppModel {
         let interruptions = quitInterruptions
         var lines = interruptions
         if !interruptions.isEmpty {
-            lines.append("Quitting stops the work in progress; the run history records the interruption.")
+            lines.append("Quitting stops the work in progress; Activity records the interruption.")
         }
         if userChoseQuit, let notice = quitScheduleNotice(now: now) {
             lines.append(notice)
@@ -165,11 +165,6 @@ extension AppModel {
             ))
         }
         isLoaded = true
-        // Reset any activity left behind by a crash mid-backup. The progress
-        // pair is cleared with it everywhere else; bootstrap keeps the rule.
-        activity.removeAll()
-        planProgress.removeAll()
-        maintenance.removeAll()
         // Drag-restore staging and preview copies from previous sessions
         // are pure leftovers — Finder finished with those drops long ago. Not awaited: a slow
         // temp directory must not hold the first screen behind the spinner.
@@ -384,6 +379,4 @@ extension AppModel {
             loginItemState = state
         }
     }
-
-    var resticPath: String { binary?.url.path ?? "" }
 }

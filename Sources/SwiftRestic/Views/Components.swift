@@ -45,7 +45,7 @@ struct Card<Accessory: View, Content: View>: View {
 /// height by a short window — the main window at its 652 pt minimum — the
 /// last change comes before the control can size itself, and the control
 /// stays 0×0, drawn as a box reading "R…": `NSTabViewSegmentedControl` at
-/// 0×0 beside an intrinsic 160.5×24 (macOS 27.0.1, 2026-10-15). A relayout
+/// 0×0 beside an intrinsic 160.5×24 (macOS 27.0.1). A relayout
 /// left it so; only another size change of the tab view fixed it.
 ///
 /// A pane is built when first shown and kept after, as a `TabView` keeps its
@@ -323,7 +323,7 @@ struct RemovedNamesLine: View {
 
 // MARK: - Network shares
 
-/// A repository's folder or a plan's folders on a network share: which
+/// A repository's folder or a plan's folder on a network share: which
 /// share, and the password SwiftRestic reconnects it with before a backup
 /// when it is not mounted (`NetworkShare`). Rows, so a Form lays them out
 /// as its own and a stack stacks them. A secure field reads back empty, so
@@ -603,7 +603,7 @@ struct SnapshotCompletenessMark: View {
     let run: RunRecord?
 
     private static let outcome = RunRecord.Outcome.completedWithErrors
-    private static let symbolName = outcome.symbolName ?? "exclamationmark.triangle.fill"
+    private static let symbolName = outcome.symbolName!
 
     var body: some View {
         switch run?.snapshotCompleteness {
@@ -1078,10 +1078,9 @@ extension View {
 
 // MARK: - Full Disk Access
 
-/// The one way to the grant, wherever the app asks for it: Settings, the
-/// Activity drawer, the plan page's problem row and the plan editor. The
-/// grant cannot be requested by prompt, so the list in System Settings is
-/// where it happens.
+/// The one way to the grant, wherever the app asks for it. The grant
+/// cannot be requested by prompt, so the list in System Settings is where
+/// it happens.
 struct FullDiskAccessButton: View {
     @Environment(AppModel.self) private var model
 

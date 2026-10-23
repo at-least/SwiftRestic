@@ -345,7 +345,7 @@ struct PlanEditorSheet: View {
 
     /// The first backup of a new scheduled plan starts within a minute of
     /// the button that saves it — Create for a fresh plan, Adopt for a
-    /// prefilled one whose folders are all here. The scheduler ticks once a
+    /// prefilled one whose path is here. The scheduler ticks once a
     /// minute and a never-run plan counts as immediately due. Stated on the
     /// Schedule tab, beside the picker that could avoid it.
     private var startsFirstBackupOnCreate: Bool {
@@ -467,11 +467,11 @@ struct PlanEditorSheet: View {
             // backup comes back with warnings. The check is a few string
             // comparisons (ProtectedLocations).
             if model.fullDiskAccess != .granted,
-               let source = ProtectedLocations.firstProtectedSource([draft.path], home: NSHomeDirectory())
+               ProtectedLocations.needsFullDiskAccess(draft.path, home: NSHomeDirectory())
             {
                 Section {
                     Label {
-                        Text("Without Full Disk Access, parts of “\((source as NSString).abbreviatingWithTildeInPath)” can't be read, and its backups end with warnings.")
+                        Text("Without Full Disk Access, parts of “\((draft.path as NSString).abbreviatingWithTildeInPath)” can't be read, and its backups end with warnings.")
                             .fixedSize(horizontal: false, vertical: true)
                     } icon: {
                         // Orange on the glyph only; the sentence says it all.
@@ -575,11 +575,11 @@ struct PlanEditorSheet: View {
 
             switch draft.schedule.frequency {
             case .manual:
-                Text("This plan only runs when you press Back Up Now.")
+                Text("This plan only runs when you click Back Up Now.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                // Why the adopt draft opened on Manual: the folders it
-                // prefilled from were not all here to back up.
+                // Why the adopt draft opened on Manual: the path it
+                // prefilled was not here to back up.
                 if adoptDefaultedToManual {
                     Text("Recommended — the folder may not exist on this Mac.")
                         .font(.caption)

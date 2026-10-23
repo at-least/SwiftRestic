@@ -198,18 +198,28 @@ struct HookTests {
 
     @Test("a cancelled run is not recorded as a failed hook")
     func cancelledHookIsNotAFailure() async throws {
+        let started = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticHookStarted-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: started) }
         var hook = BackupHook()
         hook.name = "slow gate"
         hook.event = .beforeBackup
-        hook.command = "sleep 30"
+        hook.command = "touch '\(started.path)'; sleep 30"
         hook.failureBehaviour = .abortBackup
 
         let task = Task {
             await HookRunner(runner: ResticRunner())
                 .runHooks([hook], event: .beforeBackup, context: context(event: .beforeBackup))
         }
+        // Cancelled while the hook runs, not before it starts.
+        try #require(
+            await eventually(within: 60) { FileManager.default.fileExists(atPath: started.path) },
+            "the hook never started"
+        )
         task.cancel()
         let result = await task.value
+        #expect(result.cancelled)
+        #expect(result.outcomes.count == 1)
 
         // The user's cancel must not masquerade as the hook failing: no
         // "exited -1" line reading as a hook error, and no abort decision

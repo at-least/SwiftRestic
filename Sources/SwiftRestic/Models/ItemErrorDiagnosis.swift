@@ -200,10 +200,6 @@ enum ProtectedLocations {
         }
     }
 
-    static func firstProtectedSource(_ sources: [String], home: String) -> String? {
-        sources.first { needsFullDiskAccess($0, home: home) }
-    }
-
     /// `~` expanded against `home`, `.` and `..` resolved, lowercased. No
     /// symlinks are followed: a source is compared as the user wrote it.
     private static func components(_ path: String, home: String) -> [String] {

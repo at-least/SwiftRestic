@@ -5,7 +5,7 @@ import Foundation
 /// item beside what the backups hold of it (`FilesTree`). A listed name has
 /// the bytes the file system gave it, which restic records too — an NFC
 /// and an NFD name each came back byte for byte from a listing and from
-/// `restic ls --json` on APFS (2026-10-19) — so a listed path and an
+/// `restic ls --json` on APFS — so a listed path and an
 /// indexed one are one `PathKey`. Each call reads the file system, which a
 /// stalled share can hold for seconds: callers run it off the main actor.
 enum DiskFolder {
@@ -140,7 +140,7 @@ enum FolderAbsence: Error, Equatable, Sendable {
 
     /// A Foundation error's POSIX code underneath, which a listing's
     /// CocoaError carries (260 over ENOENT, 257 over EACCES, 256 over
-    /// ENOTDIR, seen 2026-10-19).
+    /// ENOTDIR).
     init(path: String, error: any Error) {
         let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
         if let underlying, underlying.domain == NSPOSIXErrorDomain {
@@ -198,7 +198,7 @@ enum FolderAbsence: Error, Equatable, Sendable {
     /// What to do about it. A drive away is to connect; a folder gone, to
     /// put back or back up with a new plan, a failed backup's words
     /// (`RunRecord.folderGoneAdvice`) — no button for either (the user's
-    /// call, 2026-10-19). UNVERIFIED (third-party guides; not tried on
+    /// call). UNVERIFIED (third-party guides; not tried on
     /// macOS 27): macOS applies a Full Disk Access grant to an app already
     /// open once it restarts — System Settings offers "Quit & Reopen" — so
     /// those steps end there. The file permissions are the folder's own,

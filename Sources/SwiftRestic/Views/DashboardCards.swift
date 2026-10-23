@@ -50,7 +50,7 @@ struct ProtectionCard: View {
                     // throughout, as the caveat's do.
                     captionLines(summary.failureLines, symbol: RunRecord.Outcome.failed.symbolName!, tint: StatusPalette.status(.failed))
                     captionLines(summary.attentionLines, symbol: "exclamationmark.triangle.fill", tint: Theme.warning)
-                    captionLines(summary.skippedLines, symbol: RunRecord.Outcome.skipped.symbolName ?? "minus.circle", tint: .secondary)
+                    captionLines(summary.skippedLines, symbol: RunRecord.Outcome.skipped.symbolName!, tint: .secondary)
                     captionLines(summary.heldLines, symbol: "pause.circle", tint: .secondary)
                 } else {
                     // No count is honest yet: the card's first glance says why.

@@ -167,7 +167,7 @@ struct ContextCacheTests {
         await #expect(throws: ResticError.self) { try await model.context(for: repository) }
         // The store gains the password afterwards; without a cached failure
         // in the way, the very next call succeeds.
-        try? await model.secrets.save(repository.id, "late-password", nil)
+        try await model.secrets.save(repository.id, "late-password", nil)
         let context = try await model.context(for: repository)
         #expect(context.password == "late-password")
     }

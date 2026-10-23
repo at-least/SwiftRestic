@@ -46,7 +46,8 @@ struct ConsoleModelTests {
 
     @Test("a destructive command arms a confirmation instead of running")
     func destructiveArms() throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         console.commandText = "prune"
 
@@ -63,7 +64,8 @@ struct ConsoleModelTests {
 
     @Test("a line ending inside an open quote is refused, not run mangled")
     func unterminatedQuoteIsRefused() throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         console.commandText = #"forget --keep-daily "7"#
 
@@ -78,7 +80,8 @@ struct ConsoleModelTests {
 
     @Test("confirming a destructive command runs it and records the history")
     func confirmationRuns() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         console.commandText = "prune"
         console.run()
@@ -102,7 +105,8 @@ struct ConsoleModelTests {
 
     @Test("a non-destructive command runs without confirmation")
     func plainCommandRuns() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         console.commandText = "snapshots --compact"
 
@@ -115,7 +119,8 @@ struct ConsoleModelTests {
 
     @Test("secret-bearing commands reach the session's history but not the configuration")
     func secretFilter() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         console.commandText = "key add new-key"
         // `key` is a destructive subcommand, so it arms first.
@@ -129,7 +134,8 @@ struct ConsoleModelTests {
 
     @Test("re-running a command moves it to the top instead of duplicating it")
     func historyDeduplicates() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         console.commandText = "snapshots"
         console.run()
@@ -146,7 +152,8 @@ struct ConsoleModelTests {
 
     @Test("a pane re-entry keeps the session's history, secrets included")
     func appearKeepsSessionHistory() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         // Secret-carrying but non-destructive, so seedHistory's plain run()
         // executes it: `key …` would only arm the confirmation.
@@ -164,7 +171,8 @@ struct ConsoleModelTests {
 
     @Test("removing a history entry removes it from both surfaces")
     func removeFromHistory() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         console.commandText = "snapshots"
         console.run()
@@ -189,7 +197,8 @@ struct ConsoleModelTests {
 
     @Test("↑ walks the history newest first and clamps at the oldest; ↓ returns to the draft")
     func arrowRecallWalksHistoryAndReturnsToDraft() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         await seedHistory(["snapshots --compact", "version"], console: console)
         #expect(console.history.first == "version")
@@ -209,7 +218,8 @@ struct ConsoleModelTests {
 
     @Test("submitting a command ends the recall walk")
     func submittingEndsRecall() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         await seedHistory(["version"], console: console)
 
@@ -226,7 +236,8 @@ struct ConsoleModelTests {
 
     @Test("an empty history has nothing to recall")
     func emptyHistoryRecallsNothing() throws {
-        let (_, console, _) = try makeHarness()
+        let (_, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         #expect(console.recallPrevious(current: "ls") == nil)
         #expect(console.recallNext() == nil)
     }
@@ -235,7 +246,8 @@ struct ConsoleModelTests {
 extension ConsoleModelTests {
     @Test("a pane re-entry ends an in-flight recall walk and keeps the session's history")
     func appearEndsRecallWalk() async throws {
-        let (app, console, _) = try makeHarness()
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
         // Two of the three commands carry secrets, so the persisted list is
         // shorter than the session's history.

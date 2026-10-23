@@ -3,15 +3,8 @@ import Testing
 
 @Suite("Overview metrics")
 struct OverviewMetricsTests {
-    private func date(_ string: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.date(from: string)!
-    }
-
     private func run(plan: String, at day: String, added: Int64) -> RunRecord {
-        var record = RunRecord(kind: .backup, planName: plan, startedAt: date(day))
+        var record = RunRecord(kind: .backup, planName: plan, startedAt: utcDate(day))
         record.dataAdded = added
         return record
     }
@@ -22,7 +15,7 @@ struct OverviewMetricsTests {
         let code = UUID()
         let repository = UUID()
         func problem(_ planID: UUID?, _ kind: RunRecord.Kind, _ outcome: RunRecord.Outcome, hour: Int) -> RunRecord {
-            var record = RunRecord(kind: kind, planID: planID, repositoryID: repository, startedAt: date("2026-10-01 00:00:00").addingTimeInterval(Double(hour) * 3600))
+            var record = RunRecord(kind: kind, planID: planID, repositoryID: repository, startedAt: utcDate("2026-10-01 00:00:00").addingTimeInterval(Double(hour) * 3600))
             record.outcome = outcome
             return record
         }
@@ -31,7 +24,8 @@ struct OverviewMetricsTests {
         let failure = problem(code, .backup, .failed, hour: 30)
         let documentsFailed = problem(documents, .backup, .failed, hour: 20)
         let check = problem(nil, .check, .completedWithErrors, hour: 10)
-        let groups = OverviewMetrics.problemGroups(warnings.shuffled() + [failure, documentsFailed, check])
+        var generator = SeededGenerator(seed: 7)
+        let groups = OverviewMetrics.problemGroups(warnings.shuffled(using: &generator) + [failure, documentsFailed, check])
         #expect(groups.map(\.count) == [7, 1, 1, 1])
         #expect(groups.map(\.newest.id) == [warnings[6].id, failure.id, documentsFailed.id, check.id])
         // The same plan failing is its own row, not folded into its warnings.
@@ -78,7 +72,7 @@ struct OverviewMetricsTests {
             plan("Empty", repository: empty),
             plan("Adopted", repository: adopted),
         ]
-        let latest = snapshot("snapHealthy", at: date("2026-09-05 10:00:00"))
+        let latest = snapshot("snapHealthy", at: utcDate("2026-09-05 10:00:00"))
         let rows = OverviewMetrics.protectionRows(
             plans: plans,
             latestSnapshot: { repository, _ in repository == healthy ? latest : nil },
@@ -263,7 +257,7 @@ struct OverviewMetricsTests {
         let rows = OverviewMetrics.protectionRows(
             plans: [plan("Fine", repository: healthy), first, plan("Waiting", repository: idle)],
             latestSnapshot: { repository, _ in
-                repository == healthy ? snapshot("snapFine", at: date("2026-09-05 10:00:00")) : nil
+                repository == healthy ? snapshot("snapFine", at: utcDate("2026-09-05 10:00:00")) : nil
             },
             repositoryHasSnapshots: { $0 == healthy },
             listingOutcome: { $0 == idle ? .idle : .loaded },
@@ -397,36 +391,36 @@ struct OverviewMetricsTests {
     @Test("the Protection line counts known rows, names the newest last backup, and carries the hold")
     func protectionLine() {
         let rows = [
-            protectionRow("Protected", isKnown: true, isProtected: true, lastBackupAt: date("2026-09-05 09:00:00")),
-            protectionRow("Exposed", isKnown: true, isProtected: false, lastBackupAt: date("2026-09-05 10:00:00")),
+            protectionRow("Protected", isKnown: true, isProtected: true, lastBackupAt: utcDate("2026-09-05 09:00:00")),
+            protectionRow("Exposed", isKnown: true, isProtected: false, lastBackupAt: utcDate("2026-09-05 10:00:00")),
             protectionRow("Reading", isKnown: false, isProtected: false),
         ]
         // The still-reading plan is in neither number, and the last backup
         // is the newer of the two moments that have one.
         let plain = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 3,
-            willNotRun: { _ in nil }, hold: nil, now: date("2026-09-05 11:00:00"),
+            willNotRun: { _ in nil }, hold: nil, now: utcDate("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
         #expect(plain?.text == "1 of 2 plans protected · Last backup 1 hour ago")
         #expect(plain?.showsResume == false)
 
         // The hold's words are the hold's own summary, joined on.
-        let end = date("2026-09-05 14:00:00")
+        let end = utcDate("2026-09-05 14:00:00")
         let paused = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
-            willNotRun: { _ in nil }, hold: .paused(until: end), now: date("2026-09-05 11:00:00"),
+            willNotRun: { _ in nil }, hold: .paused(until: end), now: utcDate("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
         #expect(paused?.text == "1 of 2 plans protected · Last backup 1 hour ago · "
-            + ScheduleHold.paused(until: end).summary(now: date("2026-09-05 11:00:00")))
+            + ScheduleHold.paused(until: end).summary(now: utcDate("2026-09-05 11:00:00")))
         #expect(paused?.showsResume == true)
 
         // Only the user's own pause gets the button; the battery's ends by
         // plugging in.
         let onBattery = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
-            willNotRun: { _ in nil }, hold: .onBattery, now: date("2026-09-05 11:00:00"),
+            willNotRun: { _ in nil }, hold: .onBattery, now: utcDate("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
         #expect(onBattery?.text == "1 of 2 plans protected · Last backup 1 hour ago · Backups wait for power — this Mac is on battery")
@@ -437,7 +431,7 @@ struct OverviewMetricsTests {
         let single = OverviewMetrics.protectionSummary(
             rows: [protectionRow("Only", isKnown: true, isProtected: true, lastBackupAt: nil)],
             listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil,
-            now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
+            now: utcDate("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         )
         #expect(single?.text == "1 of 1 plan protected")
         let neverRan = OverviewMetrics.protectionSummary(
@@ -446,7 +440,7 @@ struct OverviewMetricsTests {
                 protectionRow("Adopted", isKnown: true, isProtected: false),
             ],
             listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil,
-            now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
+            now: utcDate("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         )
         #expect(neverRan?.text == "0 of 2 plans protected")
     }
@@ -454,14 +448,14 @@ struct OverviewMetricsTests {
     @Test("the Protection card names each protected plan that will not run by itself, in the sidebar's words")
     func protectionNamesPlansThatWillNotRun() {
         let repository = UUID()
-        let now = date("2026-09-05 11:00:00")
+        let now = utcDate("2026-09-05 11:00:00")
         var photos = plan("Photos", repository: repository)
         photos.schedule.frequency = .weekly
         photos.isEnabled = false
         var documents = plan("Documents", repository: repository)
         documents.path = "/Users/someone/Documents"
         documents.schedule.frequency = .daily
-        documents.pausedUntil = date("2026-09-05 13:00:00")
+        documents.pausedUntil = utcDate("2026-09-05 13:00:00")
         // Its repository is gone, so the scheduler never runs it.
         var code = plan("Code", repository: UUID())
         code.schedule.frequency = .hourly
@@ -489,7 +483,7 @@ struct OverviewMetricsTests {
         let rows = plans.map {
             ProtectionRow(
                 plan: $0, among: [], stateText: "Last backup 1 hour ago",
-                isKnown: true, isProtected: true, didFail: false, lastBackupAt: date("2026-09-05 10:00:00")
+                isKnown: true, isProtected: true, didFail: false, lastBackupAt: utcDate("2026-09-05 10:00:00")
             )
         }
         let byID = Dictionary(uniqueKeysWithValues: plans.map { ($0.id, $0) })
@@ -525,10 +519,10 @@ struct OverviewMetricsTests {
     @Test("the Protection card names each plan that is not protected in the sidebar warning's words, and a run in flight")
     func protectionNamesItsSubjects() {
         let repository = UUID()
-        let now = date("2026-09-05 11:00:00")
+        let now = utcDate("2026-09-05 11:00:00")
         let documents = ProtectionRow(
             plan: plan("Documents", repository: repository), among: [], stateText: "Last backup 1 hour ago",
-            isKnown: true, isProtected: true, didFail: false, lastBackupAt: date("2026-09-05 10:00:00")
+            isKnown: true, isProtected: true, didFail: false, lastBackupAt: utcDate("2026-09-05 10:00:00")
         )
         let code = ProtectionRow(
             plan: plan("Code", repository: repository), among: [], stateText: "Failed — 3 hours ago",
@@ -581,22 +575,22 @@ struct OverviewMetricsTests {
 
     @Test("the Protection line waits for a succeeded listing")
     func protectionLineWaitsForTheListing() {
-        let rows = [protectionRow("Fine", isKnown: true, isProtected: true, lastBackupAt: date("2026-09-05 10:00:00"))]
+        let rows = [protectionRow("Fine", isKnown: true, isProtected: true, lastBackupAt: utcDate("2026-09-05 10:00:00"))]
         // Still reading, or unreadable: the caveat under Details speaks,
         // and the line hides — with plans and without.
         #expect(OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: false, otherBackupsCount: 2,
-            willNotRun: { _ in nil }, hold: .paused(until: nil), now: date("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
+            willNotRun: { _ in nil }, hold: .paused(until: nil), now: utcDate("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         ) == nil)
         #expect(OverviewMetrics.protectionSummary(
             rows: [], listingLoaded: false, otherBackupsCount: 2,
-            willNotRun: { _ in nil }, hold: nil, now: date("2026-09-05 11:00:00")
+            willNotRun: { _ in nil }, hold: nil, now: utcDate("2026-09-05 11:00:00")
         ) == nil)
     }
 
     @Test("with no plans, the line names the adoptable side — or nothing to name")
     func protectionLineWithNoPlans() {
-        let now = date("2026-09-05 11:00:00")
+        let now = utcDate("2026-09-05 11:00:00")
         let withHistory = OverviewMetrics.protectionSummary(
             rows: [], listingLoaded: true, otherBackupsCount: 6, willNotRun: { _ in nil }, hold: nil, now: now
         )
@@ -665,16 +659,16 @@ struct OverviewMetricsTests {
         old.outcome = .failed
         #expect(OverviewMetrics.problemCount(
             runs: [failed, warned, old],
-            since: date("2026-09-01 00:00:00")
+            since: utcDate("2026-09-01 00:00:00")
         ) == 2)
     }
 
     @Test("a repository's problems are the week's problems that ran against it, of every kind")
     func problemsOfOneRepository() {
         let nas = UUID()
-        let since = date("2026-09-01 00:00:00")
+        let since = utcDate("2026-09-01 00:00:00")
         func problem(_ kind: RunRecord.Kind, in repository: UUID?, at day: String) -> RunRecord {
-            var record = RunRecord(kind: kind, planName: "Docs", repositoryID: repository, startedAt: date(day))
+            var record = RunRecord(kind: kind, planName: "Docs", repositoryID: repository, startedAt: utcDate(day))
             record.outcome = .failed
             return record
         }
@@ -699,9 +693,9 @@ struct OverviewMetricsTests {
     func problemsCountFromFinishedAt() {
         var overnight = run(plan: "Docs", at: "2026-09-04 23:00:00", added: 0)
         overnight.outcome = .failed
-        overnight.finishedAt = date("2026-09-05 06:00:00")
+        overnight.finishedAt = utcDate("2026-09-05 06:00:00")
 
-        let since = date("2026-09-05 00:00:00")
+        let since = utcDate("2026-09-05 00:00:00")
         // Started before the window, failed inside it: this morning's news,
         // not eight days old. A start-time basis would drop it, and the
         // tray's line counts it — the two must agree on an overnight run

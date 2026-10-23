@@ -229,8 +229,10 @@ enum MenuBarStatus {
                     title: "Back Up “\(name)” Now",
                     action: .backUp,
                     isEnabled: plan.isConfigurationComplete && isResticAvailable && lockReason == nil,
-                    // The Plan menu's own words for a missing restic.
-                    disabledReason: isResticAvailable ? lockReason : "restic is missing."
+                    // The Plan menu's own words for each reason.
+                    disabledReason: !plan.isConfigurationComplete ? BackupPlan.incompleteConfigurationReason
+                        : !isResticAvailable ? "restic is missing."
+                        : lockReason
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
@@ -356,8 +358,9 @@ enum MenuBarStatus {
         repositories: [Repository],
         maintenance: [UUID: MaintenanceActivity]
     ) -> [RunningLine] {
-        repositories.filter { maintenance[$0.id] != nil }.map { repository in
-            let task = maintenance[repository.id]?.task.displayName.lowercased() ?? "maintenance"
+        repositories.compactMap { repository in
+            guard let work = maintenance[repository.id] else { return nil }
+            let task = work.task.displayName.lowercased()
             return RunningLine(
                 id: "maintenance-\(repository.id.uuidString)",
                 text: "\(repository.label(among: repositories)) — \(task) running"

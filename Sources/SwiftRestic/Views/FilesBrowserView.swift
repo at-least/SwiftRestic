@@ -170,7 +170,7 @@ struct FilesBrowserView: View {
         // A request to show an item — Show Versions', a hit picked, one
         // opened from the pane — is spent once the tree can answer it: one
         // it lists only as deleted turns Show Deleted Items on, so it has a
-        // row (the user's call, 2026-10-19), the View menu's tick saying so.
+        // row (the user's call), the View menu's tick saying so.
         .onChange(of: reveal, initial: true) { _, answer in
             guard let answer, answer != .wait else { return }
             router.filesRevealRequest = nil
@@ -196,8 +196,7 @@ struct FilesBrowserView: View {
 
     /// The tab when the plan's folder can't be read: why, what to do about
     /// a refusal and the fix to press, and the way to what the backups hold
-    /// of it — no tree of an older backup in its place (the user's calls,
-    /// 2026-10-19: the reason only, then the reason with its fix).
+    /// of it — no tree of an older backup in its place (the user's call).
     private func unavailable(_ absence: FolderAbsence) -> some View {
         let remedy = absence.remedy(fullDiskAccess: model.fullDiskAccess)
         return ContentUnavailableView {
@@ -368,7 +367,7 @@ struct FilesBrowserView: View {
                 outcome = .hits(FilesSearchAnswer.entries(found.hits, under: roots, present: present))
                 isTruncated = found.isTruncated
             } catch {
-                outcome = .failed((error as? ResticError)?.errorDescription ?? error.localizedDescription)
+                outcome = .failed(error.localizedDescription)
             }
             guard !Task.isCancelled else { return }
             searchAnswer = FilesSearchAnswer(

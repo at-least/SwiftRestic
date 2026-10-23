@@ -286,7 +286,7 @@ struct SnapshotDiffView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Theme.Space.cardPadding)
             .cardSurface()
-            .help("Bytes written to the repository by this backup, and bytes the repository no longer holds because of it")
+            .help("Data this backup holds that the backup it is compared with does not, and data that one holds that this backup does not")
         }
         .padding(12)
     }

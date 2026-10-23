@@ -259,8 +259,7 @@ enum OverviewMetrics {
         standingProblem: (_ planID: UUID) -> RunRecord?,
         relative: (Date) -> String = { Format.relative($0) }
     ) -> [ProtectionRow] {
-        // Stable severity sort: Swift's sort is not documented stable, so the
-        // plan order breaks ties inside each rank.
+        // Swift's sort is stable: plan order breaks ties inside each rank.
         plans
             .map { plan -> ProtectionRow in
                 let listed = listingRow(
@@ -303,11 +302,7 @@ enum OverviewMetrics {
                 }
                 return listed
             }
-            .enumerated()
-            .sorted { lhs, rhs in
-                (lhs.element.severityRank, lhs.offset) < (rhs.element.severityRank, rhs.offset)
-            }
-            .map(\.element)
+            .sorted { $0.severityRank < $1.severityRank }
     }
 
     /// A plan's row as its snapshot listing alone tells it.

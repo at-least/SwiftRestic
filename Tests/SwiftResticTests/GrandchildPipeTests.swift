@@ -104,8 +104,10 @@ struct GrandchildPipeTests {
         let script = try installScript("""
             echo '{"message_type":"status","percent_done":0}'
             sleep 293 &
+            touch "$(dirname "$0")/holding"
             wait
             """)
+        let holding = script.deletingLastPathComponent().appendingPathComponent("holding")
         defer {
             try? FileManager.default.removeItem(at: script.deletingLastPathComponent())
             killOrphan(matching: "sleep 293")
@@ -113,13 +115,16 @@ struct GrandchildPipeTests {
 
         let runner = ResticRunner()
         let task = Task {
-            try? await runner.run(binary: script, invocation: ResticInvocation(arguments: []))
+            try await runner.run(binary: script, invocation: ResticInvocation(arguments: []))
         }
-        // Let the hang establish: the child is in `wait`, the grandchild holds.
-        try? await Task.sleep(for: .seconds(1))
+        // The hang established: the child is in `wait`, the grandchild holds.
+        try #require(
+            await eventually(within: 60) { FileManager.default.fileExists(atPath: holding.path) },
+            "the script never reached its wait"
+        )
         let start = Date()
         task.cancel()
-        _ = await task.value
+        await #expect(throws: ResticError.cancelled) { try await task.value }
         let elapsed = Date().timeIntervalSince(start)
         #expect(elapsed < 30, "cancel took \(elapsed)s to answer; the grandchild is holding the pipes")
         await runner.terminateAll()

@@ -399,7 +399,7 @@ struct FilesTreeTests {
         #expect(warmed.calls.isEmpty)
     }
 
-    @Test("a read a restart cancelled is read again by the restarted task — never left Reading… with no reader")
+    @Test("a read a restart cancelled is read again by the restarted task — never left Reading… with no reader", .timeLimit(.minutes(1)))
     func cancelledReadIsReadAgain() async {
         let model = AppModel(
             store: ConfigStore(

@@ -151,8 +151,13 @@ struct RunLogStore: Sendable {
         try Data(text.utf8).write(to: url(for: id), options: .atomic)
     }
 
-    func read(_ id: UUID) -> String? {
-        try? String(contentsOf: url(for: id), encoding: .utf8)
+    /// Nil when the run has no log file; any other failure throws.
+    func read(_ id: UUID) throws -> String? {
+        do {
+            return try String(contentsOf: url(for: id), encoding: .utf8)
+        } catch CocoaError.fileReadNoSuchFile {
+            return nil
+        }
     }
 
     /// The logs of runs leaving the history. A missing file is fine — not

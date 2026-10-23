@@ -68,7 +68,7 @@ extension AppModel: RetentionRunEngine.Sink {
     /// no channel alert (see `RetentionRunEngine`). How it went is the plan
     /// page's — its Backups count, or its problem card and the sidebar's
     /// caption for a failure — and Activity's, where a banner over every
-    /// page said it again (the HIG review of 2026-10-18).
+    /// page said it again.
     func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
         var record = record
         await seal(&record, transcript: transcript)

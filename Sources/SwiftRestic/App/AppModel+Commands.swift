@@ -103,7 +103,7 @@ extension AppModel {
     /// nil when it can.
     private func retentionBlocker(for plan: BackupPlan) -> String? {
         guard plan.isConfigurationComplete, let repository = repository(id: plan.repositoryID) else {
-            return "This plan needs a repository and a folder or file to back up."
+            return BackupPlan.incompleteConfigurationReason
         }
         guard plan.retention.isEnabled else { return "Retention is off for this plan." }
         guard plan.retention.isSafeToRun else {
@@ -190,12 +190,12 @@ extension AppModel {
             } else {
                 landing = "Backups already written to the repository are not deleted."
             }
-            return ConfirmationCopy(
-                title: "Delete “\(name)”?",
-                message: isRunning(planID: id)
-                    ? "The running backup will be stopped and recorded as cancelled. \(landing)"
-                    : "The plan and its schedule are removed. \(landing)"
-            )
+            let message = switch activity[id]?.isBackup {
+            case true?: "The running backup will be stopped and recorded as cancelled. \(landing)"
+            case false?: "Applying retention will be stopped and recorded as cancelled. \(landing)"
+            case nil: "The plan and its schedule are removed. \(landing)"
+            }
+            return ConfirmationCopy(title: "Delete “\(name)”?", message: message)
         case let .removeRepository(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(

@@ -6,10 +6,7 @@
 /// ls` never does, and neither lists the root itself. The browser's tree,
 /// the Change column's marks, the browse cache and the snapshot index all
 /// key a path without the marker, and strip it here rather than each
-/// carrying a copy that can drift. Other readers still cut at the last
-/// separator their own way —
-/// `FindMatch.name`, `SnapshotNode.directory(path:)` and the restore pane's
-/// search rows through NSString.
+/// carrying a copy that can drift.
 ///
 /// The rules read UTF-8 bytes — unicode scalars for a cut — never
 /// Characters. `/` is one byte that no other scalar's encoding contains, so

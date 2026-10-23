@@ -105,9 +105,16 @@ enum KeychainStore {
     }
 
     /// Removes every secret belonging to a repository that is being deleted.
-    static func deleteAll(repositoryID: UUID) {
+    /// Tries every slot; the first failure throws once all were tried.
+    static func deleteAll(repositoryID: UUID) throws {
+        var failure: Error?
         for slot in [Slot.repositoryPassword, .providerSecret] {
-            try? delete(ownerID: repositoryID, slot: slot)
+            do {
+                try delete(ownerID: repositoryID, slot: slot)
+            } catch {
+                failure = failure ?? error
+            }
         }
+        if let failure { throw failure }
     }
 }

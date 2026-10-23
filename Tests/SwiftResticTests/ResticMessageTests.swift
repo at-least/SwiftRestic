@@ -298,6 +298,28 @@ struct ResticMessageTests {
         #expect(reason.contains("percent_done"), "the reason should name the field: \(reason)")
     }
 
+    @Test("a node of a type the app does not know is malformed, never a guessed kind")
+    func nodeOfUnknownTypeIsMalformed() {
+        guard case let .malformed(type, _)? = ResticMessageDecoder.decode(
+            line: #"{"name":"a","type":"whiteout","path":"/a","struct_type":"node","message_type":"node"}"#
+        ) else {
+            Issue.record("expected a malformed message")
+            return
+        }
+        #expect(type == "node")
+    }
+
+    @Test("an error line with no text in either shape is malformed, never an item error with blank words")
+    func errorWithoutMessageIsMalformed() {
+        guard case let .malformed(type, _)? = ResticMessageDecoder.decode(
+            line: #"{"message_type":"error","during":"archival","item":"/a"}"#
+        ) else {
+            Issue.record("expected a malformed message")
+            return
+        }
+        #expect(type == "error")
+    }
+
     @Test("forget --json reports removals per group")
     func forgetCounting() throws {
         let output = #"[{"tags":null,"host":"mac","paths":["/tmp/data"],"keep":[{"id":"a"}],"remove":[{"id":"b"},{"id":"c"}],"reasons":[]},{"tags":null,"host":"mac","paths":["/tmp/data2"],"keep":[{"id":"d"}],"remove":null,"reasons":[]}]"#

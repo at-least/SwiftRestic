@@ -94,6 +94,11 @@ struct CommandStateTests {
         #expect(!model.isRunning(planID: documents.id))
         #expect(!model.isQueued(music.id))
         #expect(!model.isRunning(planID: music.id))
+
+        // A deleted plan leaves its queue: adopting its backups again brings
+        // back the same ID, which a stale entry would start.
+        model.deletePlan(id: documents.id)
+        #expect(!model.isQueued(documents.id))
     }
 
     @Test("excluding an unreadable item adds its exact path to the plan once, glob characters escaped")
@@ -461,6 +466,10 @@ struct CommandStateTests {
         model.configuration.plans = [unset]
         #expect(model.planCommands(for: .plan(unset.id)).retentionBlocker
             == "This plan needs a repository and a folder or file to back up.")
+        // Back Up Now says the same, where it said nothing.
+        #expect(!model.planCommands(for: .plan(unset.id)).canBackUp)
+        #expect(model.planCommands(for: .plan(unset.id)).backUpDisabledReason
+            == "This plan needs a repository and a folder or file to back up.")
     }
 
     @Test("the app-wide pause items follow the tray's rules")
@@ -516,6 +525,10 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
         #expect(model.confirmationCopy(for: .removeRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))
+        // Apply Retention Now… is no backup.
+        model.activity[plan.id]?.isBackup = false
+        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
+            .hasPrefix("Applying retention will be stopped and recorded as cancelled.") == true)
         model.activity[plan.id] = nil
 
         // The check dialog says which size of slow the user is holding.

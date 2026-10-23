@@ -115,7 +115,7 @@ struct SettingsView: View {
                 )
                 ExpandableCaption(
                     summary: "Shows what's running, and opens SwiftRestic after its window is closed.",
-                    detail: "The icon pulses while work is in progress (held still with Reduce Motion), dims while backups are paused or waiting for power, wears a warning mark while a run from the last seven days failed or completed with warnings, and shows a question mark until a repository is set up."
+                    detail: "The icon pulses while work is in progress (held still with Reduce Motion), dims while backups are paused or waiting for power, and wears a warning mark while a run from the last seven days failed or completed with warnings."
                 )
             }
 
@@ -206,8 +206,8 @@ struct SettingsView: View {
             // The pane's title names it; no section heading repeats it.
             Section {
                 Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
-                // What it gates (`AppModel.notify(about:)`), in the alert
-                // channels' own event words.
+                // What it gates (`AppModel.notify(about:)`), in the
+                // webhooks' own event words.
                 Toggle("Notify when a backup fails or completes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
                 // `RunRecord.problemStretch`: the rule said where it is set.
                 Text("A failure that repeats with the same cause notifies once.")
@@ -246,7 +246,7 @@ struct SettingsView: View {
                     TextField(
                         "Path",
                         text: $model.configuration.settings.resticPathOverride,
-                        prompt: Text(model.resticPath.isEmpty ? "Searching the usual locations" : model.resticPath)
+                        prompt: Text(model.binary?.url.path ?? (model.binaryProblem == nil ? "Searching the usual locations" : ""))
                     )
                     Button("Choose…") {
                         if let url = FilePicker.chooseExecutable() {
@@ -555,7 +555,7 @@ struct NotificationChannelsTab: View {
                         EmptyView()
                     }
                     ExpandableCaption(
-                        summary: "A failed notification is reported here but never changes what the run history says happened.",
+                        summary: "A failed notification is reported here but never changes what Activity says happened.",
                         detail: "The backup either ran or it did not."
                     )
                 }

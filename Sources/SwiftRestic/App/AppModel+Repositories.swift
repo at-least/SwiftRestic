@@ -153,7 +153,18 @@ extension AppModel {
         tasks.addBackground(Task { [indexCoordinator] in
             await indexCoordinator.dropRepository(repositoryID: id)
         })
-        tasks.addBackground(Task { [secrets] in await secrets.remove(id) })
+        tasks.addBackground(Task { [weak self, secrets] in
+            do {
+                try await secrets.remove(id)
+            } catch {
+                self?.post(Banner(
+                    title: "The removed repository's secrets are still in your Keychain",
+                    message: error.localizedDescription
+                        + " In Keychain Access they are named “\(KeychainStore.service)”, with accounts that start \(id.uuidString).",
+                    isError: true
+                ))
+            }
+        })
     }
 
     /// The per-repository runtime state, dropped in one place — so a new

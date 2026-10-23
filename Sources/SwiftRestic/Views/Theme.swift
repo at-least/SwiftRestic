@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// SwiftRestic's design tokens — the single place that owns colour, spacing and
-/// corner radii, so views never repeat literal values.
+/// SwiftRestic's shared colours and spacing.
 ///
 /// Colour is native: the app follows the user's system accent and Apple's
 /// semantic status colours, which adapt to appearance and Increase Contrast
@@ -24,7 +23,7 @@ enum Theme {
     // MARK: Spacing (points)
 
     enum Space {
-        /// Gap between cards in a detail pane.
+        /// Gap between sections.
         static let section: CGFloat = 16
         /// Inner padding of a card.
         static let cardPadding: CGFloat = 14

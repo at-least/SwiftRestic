@@ -200,9 +200,8 @@ enum PlanStatus {
         )
     }
 
-    /// The plan page's Next backup value, from the same enumeration the
-    /// scheduler and the tray read, so the page cannot show a date nothing
-    /// will fire at. A paused plan says so instead of "Manually" — a paused
+    /// The plan page's Next backup value, from `Scheduler.upcomingRuns`, so
+    /// the page cannot show a date nothing will fire at. A paused plan says so instead of "Manually" — a paused
     /// manual one without promising a schedule to resume; an enabled plan
     /// the scheduler skips — an incomplete setup, or a repository it cannot
     /// find — says it is not scheduled. A timed pause, the plan's own or the
@@ -336,7 +335,7 @@ enum PlanStatus {
     /// problem first, beside its glyph, the pause on a line of its own. The
     /// last backup is `lastBackupAt`'s one moment, so history a plan
     /// arrived with counts here as well. A plan with no backup that the
-    /// scheduler skips — no folders, or a repository it cannot find — reads
+    /// scheduler skips — no folder or file, or a repository it cannot find — reads
     /// "Not scheduled", as its Next backup value does, rather than a
     /// schedule it will not keep.
     ///

@@ -128,7 +128,7 @@ extension SnapshotLineage {
 
         var labels: [Key: Label] = [:]
         for lineage in lineages {
-            let title = titles[lineage.key] ?? ""
+            let title = titles[lineage.key]!
             let folders = lineage.key.folderList
             let host = lineage.key.hostname ?? "Unknown host"
             var qualifiers: [String] = []
@@ -273,7 +273,7 @@ extension OtherBackupsGroup {
         var labels: [ID: SnapshotLineage.Label] = [:]
         for group in groups {
             let newest = group.snapshots[0]
-            let title = titles[group.id] ?? ""
+            let title = titles[group.id]!
             // The lineage key's sorted paths: the one order every folder
             // list reads, whatever order the snapshot lists them in.
             let folders = newest.lineageKey.folderList

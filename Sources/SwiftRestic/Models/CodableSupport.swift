@@ -4,9 +4,11 @@ import Foundation
 ///
 /// The synthesized `Decodable` conformance requires every key to be present,
 /// so a `config.json` written before a field existed would fail to decode —
-/// taking every schedule and repository down with it. Every persisted model
-/// decodes through these instead: an unknown, missing or malformed field
-/// falls back to its default.
+/// taking every schedule and repository down with it. A persisted model
+/// whose fields have defaults decodes through these instead: an unknown,
+/// missing or malformed field falls back to its default. One with nothing
+/// to fall back to (`NetworkShare`, `SchedulePause`) decodes strictly, and
+/// the field holding it falls back whole.
 ///
 /// Tolerance is not silence: a field that is *present* but unreadable is a
 /// reporting gap, not a missing key. With a `DecodeNoteBox` bound around the

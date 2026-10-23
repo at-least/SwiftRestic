@@ -125,12 +125,6 @@ struct RootDetailView: View {
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }
-        // A refresh can drop the selected Other-backups group (retention
-        // ran, the repository was re-initialised); the pane must not
-        // dead-end.
-        .onChange(of: model.snapshots) {
-            onRevalidateSelection()
-        }
         #if DEBUG
         .onChange(of: model.snapshots) {
             // SWIFTRESTIC_CAPTURE_PANE=restore: the first repository's
@@ -193,25 +187,6 @@ struct WelcomeView: View {
 
             Text("SwiftRestic")
                 .font(.largeTitle.weight(.bold))
-
-            if let problem = model.binaryProblem {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("restic is not available")
-                            .font(.headline)
-                        // Not height-pinned, for BannerView's reason: this
-                        // column does not scroll.
-                        Text(problem)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(Theme.Space.cardPadding)
-                .frame(maxWidth: 460)
-                .cardSurface()
-            }
 
             VStack(spacing: 8) {
                 HStack(spacing: 10) {

@@ -159,12 +159,18 @@ struct RunLogTests {
         try store.write("kept log", for: kept)
         try store.write("removed log", for: removed)
         try store.write("untouched log", for: untouched)
-        #expect(store.read(kept) == "kept log")
+        #expect(try store.read(kept) == "kept log")
         #expect(store.url(for: kept).lastPathComponent == "\(kept.uuidString).log")
 
+        // A log that is there but does not read is an error, never "not found".
+        let garbled = UUID()
+        try Data([0xFF, 0xFE, 0x00]).write(to: store.url(for: garbled))
+        #expect(throws: (any Error).self) { try store.read(garbled) }
+        store.remove([garbled])
+
         store.remove([removed])
-        #expect(store.read(removed) == nil)
-        #expect(store.read(untouched) == "untouched log")
+        #expect(try store.read(removed) == nil)
+        #expect(try store.read(untouched) == "untouched log")
 
         // The sweep: an unknown old log goes; a known one, a new one and
         // anything not named <UUID>.log stay.
@@ -188,9 +194,9 @@ struct RunLogTests {
 
         let swept = store.sweep(keeping: [kept, untouched], olderThan: cutoff)
         #expect(swept == 1)
-        #expect(store.read(orphan) == nil)
-        #expect(store.read(kept) == "kept log")
-        #expect(store.read(fresh) == "fresh")
+        #expect(try store.read(orphan) == nil)
+        #expect(try store.read(kept) == "kept log")
+        #expect(try store.read(fresh) == "fresh")
         #expect(FileManager.default.fileExists(atPath: notes.path))
         #expect(FileManager.default.fileExists(atPath: oddName.path))
 

@@ -131,12 +131,7 @@ final class ConsoleModel {
     /// The entry ↓ should show: one step newer per press, and past the newest
     /// back to the draft the field held when the walk started.
     func recallNext() -> String? {
-        // A history shorter than the index it was walked with (the persisted
-        // list drops secrets) ends the walk rather than indexing past it.
-        guard let index = historyIndex, index < history.count else {
-            endRecall()
-            return nil
-        }
+        guard let index = historyIndex else { return nil }
         if index == 0 {
             let draft = recalledDraft
             endRecall()

@@ -52,30 +52,28 @@ struct TaskRegistryTests {
         let registry = TaskRegistry()
         let flags = Flags()
 
-        // A is in the registry when drain begins. It signals that drain must
-        // now be suspended awaiting it, then holds well past B's lifetime.
+        // A is in the registry when drain begins, and finishes only once B
+        // is installed — a handoff, so B lands while drain is suspended on A
+        // however load stretches the clocks.
         let aSlot = TaskRegistry.Slot.plan(UUID())
         registry.install(Task {
-            flags.mark("a-started")
-            try? await Task.sleep(for: .milliseconds(500))
+            while !flags.isMarked("b-installed") {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
             flags.mark("a")
             registry.clear(aSlot)
         }, in: aSlot)
 
-        // B lands while drain is suspended on A, and outlives A by a wide
-        // margin: a drain that stopped once A finished would drop B
+        // B outlives A: a drain that stopped once A finished would drop B
         // un-awaited.
         Task {
-            while !flags.isMarked("a-started") {
-                try? await Task.sleep(for: .milliseconds(5))
-            }
-            try? await Task.sleep(for: .milliseconds(200))
             let bSlot = TaskRegistry.Slot.plan(UUID())
             registry.install(Task {
                 try? await Task.sleep(for: .milliseconds(500))
                 flags.mark("b")
                 registry.clear(bSlot)
             }, in: bSlot)
+            flags.mark("b-installed")
         }
 
         await registry.drain()

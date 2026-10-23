@@ -13,6 +13,7 @@ extension AppModel {
         guard !isWorkingOnResticCache else { return }
         isWorkingOnResticCache = true
         defer { isWorkingOnResticCache = false }
+        resticCacheNote = nil
         do {
             resticCache = .measured(try await service().cacheReport())
         } catch {
@@ -27,6 +28,7 @@ extension AppModel {
         guard case let .measured(before) = resticCache, !isWorkingOnResticCache else { return }
         isWorkingOnResticCache = true
         defer { isWorkingOnResticCache = false }
+        resticCacheNote = nil
         do {
             try await service().cleanupCache()
             let after = try await service().cacheReport()

@@ -122,6 +122,7 @@ extension AppModel {
 
     func deletePlan(id: UUID) {
         tasks.cancel(.plan(id))
+        removeFromBackupQueue(id)
         pauseStoppedPlanIDs.remove(id)
         configuration.plans.removeAll { $0.id == id }
         activity[id] = nil

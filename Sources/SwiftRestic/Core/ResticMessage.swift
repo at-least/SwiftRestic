@@ -139,7 +139,7 @@ struct ResticErrorMessage: Sendable, Equatable, Decodable {
         if let nested = try c.decodeIfPresent(Payload.self, forKey: .error) {
             message = nested.message
         } else {
-            message = try c.decodeIfPresent(String.self, forKey: .message) ?? ""
+            message = try c.decode(String.self, forKey: .message)
         }
         during = try c.decodeIfPresent(String.self, forKey: .during)
         item = try c.decodeIfPresent(String.self, forKey: .item)

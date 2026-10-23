@@ -9,13 +9,6 @@ struct SchedulingTests {
         return calendar
     }
 
-    private func date(_ string: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.date(from: string)!
-    }
-
     @Test("a schedule's time reads in the Mac's own clock, 12- or 24-hour")
     func summaryFollowsTheClock() {
         // Locales pinned: en_US keeps a 12-hour clock, en_GB a 24-hour one.
@@ -59,7 +52,7 @@ struct SchedulingTests {
     func manualNeverDue() {
         var schedule = Schedule()
         schedule.frequency = .manual
-        #expect(schedule.nextRunDate(after: nil, now: date("2026-09-05 12:00:00")) == nil)
+        #expect(schedule.nextRunDate(after: nil, now: utcDate("2026-09-05 12:00:00")) == nil)
     }
 
     @Test("an hourly plan that has never run is due immediately")
@@ -67,7 +60,7 @@ struct SchedulingTests {
         var schedule = Schedule()
         schedule.frequency = .hourly
         schedule.intervalHours = 4
-        let now = date("2026-09-05 12:00:00")
+        let now = utcDate("2026-09-05 12:00:00")
         #expect(schedule.nextRunDate(after: nil, now: now) == now)
     }
 
@@ -76,9 +69,9 @@ struct SchedulingTests {
         var schedule = Schedule()
         schedule.frequency = .hourly
         schedule.intervalHours = 4
-        let lastRun = date("2026-09-05 08:00:00")
-        let next = schedule.nextRunDate(after: lastRun, now: date("2026-09-05 09:00:00"))
-        #expect(next == date("2026-09-05 12:00:00"))
+        let lastRun = utcDate("2026-09-05 08:00:00")
+        let next = schedule.nextRunDate(after: lastRun, now: utcDate("2026-09-05 09:00:00"))
+        #expect(next == utcDate("2026-09-05 12:00:00"))
     }
 
     @Test("a daily plan that missed its window while asleep is due now")
@@ -91,12 +84,12 @@ struct SchedulingTests {
         // 02:00 has passed today and the last run was yesterday morning, so the
         // plan must fire rather than silently skipping to tomorrow.
         let next = try #require(schedule.nextRunDate(
-            after: date("2026-09-04 02:00:00"),
-            now: date("2026-09-05 09:30:00"),
+            after: utcDate("2026-09-04 02:00:00"),
+            now: utcDate("2026-09-05 09:30:00"),
             calendar: calendar
         ))
-        #expect(next == date("2026-09-05 02:00:00"))
-        #expect(next <= date("2026-09-05 09:30:00"))
+        #expect(next == utcDate("2026-09-05 02:00:00"))
+        #expect(next <= utcDate("2026-09-05 09:30:00"))
     }
 
     @Test("a daily plan that already ran today waits for tomorrow")
@@ -105,11 +98,11 @@ struct SchedulingTests {
         schedule.frequency = .daily
         schedule.hour = 2
         let next = schedule.nextRunDate(
-            after: date("2026-09-05 02:00:05"),
-            now: date("2026-09-05 09:30:00"),
+            after: utcDate("2026-09-05 02:00:05"),
+            now: utcDate("2026-09-05 09:30:00"),
             calendar: calendar
         )
-        #expect(next == date("2026-09-06 02:00:00"))
+        #expect(next == utcDate("2026-09-06 02:00:00"))
     }
 
     // 2026-08-31 and 2026-09-07 are both Mondays (weekday 2); 2026-09-05 is a
@@ -121,11 +114,11 @@ struct SchedulingTests {
         schedule.weekday = 2
         schedule.hour = 2
         let next = schedule.nextRunDate(
-            after: date("2026-08-24 02:00:00"),
-            now: date("2026-09-05 12:00:00"),
+            after: utcDate("2026-08-24 02:00:00"),
+            now: utcDate("2026-09-05 12:00:00"),
             calendar: calendar
         )
-        #expect(next == date("2026-08-31 02:00:00"))
+        #expect(next == utcDate("2026-08-31 02:00:00"))
     }
 
     @Test("a weekly plan that never ran is due at the most recent slot, not the next one")
@@ -136,10 +129,10 @@ struct SchedulingTests {
         schedule.hour = 2
         let next = schedule.nextRunDate(
             after: nil,
-            now: date("2026-09-05 12:00:00"),
+            now: utcDate("2026-09-05 12:00:00"),
             calendar: calendar
         )
-        #expect(next == date("2026-08-31 02:00:00"))
+        #expect(next == utcDate("2026-08-31 02:00:00"))
     }
 
     @Test("a weekly plan that already ran at its slot waits for the next week")
@@ -149,13 +142,13 @@ struct SchedulingTests {
         schedule.weekday = 2
         schedule.hour = 2
         // Exactly at the slot counts as having run it; a few seconds later too.
-        for lastRun in [date("2026-08-31 02:00:00"), date("2026-08-31 02:00:05")] {
+        for lastRun in [utcDate("2026-08-31 02:00:00"), utcDate("2026-08-31 02:00:05")] {
             let next = schedule.nextRunDate(
                 after: lastRun,
-                now: date("2026-09-05 12:00:00"),
+                now: utcDate("2026-09-05 12:00:00"),
                 calendar: calendar
             )
-            #expect(next == date("2026-09-07 02:00:00"))
+            #expect(next == utcDate("2026-09-07 02:00:00"))
         }
     }
 
@@ -181,7 +174,7 @@ struct SchedulingTests {
 
         let due = Scheduler.duePlans(
             in: [ready, disabled, incomplete, busy],
-            now: date("2026-09-05 12:00:00"),
+            now: utcDate("2026-09-05 12:00:00"),
             existingRepositoryIDs: [repositoryID],
             busyPlanIDs: [busy.id]
         )
@@ -197,7 +190,7 @@ struct SchedulingTests {
         plan.schedule.frequency = .hourly
         plan.schedule.intervalHours = 1
 
-        let now = date("2026-09-05 12:00:00")
+        let now = utcDate("2026-09-05 12:00:00")
         // The repository set is empty, as if the repository was deleted out from
         // under the plan (or a hand-edited config never had it).
         let existing: Set<UUID> = []
@@ -233,10 +226,10 @@ struct SchedulingTests {
             return plan
         }
 
-        let now = date("2026-09-05 12:00:00")
+        let now = utcDate("2026-09-05 12:00:00")
         // Ran at 10:00, hourly: next due 11:00 — already past, which is the
         // card's "Due now" case and proves the date comes back unclamped.
-        let overdue = makePlan(name: "overdue", enabled: true, path: "/tmp", lastRunAt: date("2026-09-05 10:00:00"))
+        let overdue = makePlan(name: "overdue", enabled: true, path: "/tmp", lastRunAt: utcDate("2026-09-05 10:00:00"))
         let disabled = makePlan(name: "disabled", enabled: false, path: "/tmp", lastRunAt: nil)
         // An incomplete plan must not be listed: the card would announce it
         // as due forever while the scheduler never fires it.
@@ -248,7 +241,7 @@ struct SchedulingTests {
             existingRepositoryIDs: [repositoryID]
         )
         #expect(upcoming.map { $0.plan.label(among: []) } == ["overdue"])
-        #expect(upcoming.first?.date == date("2026-09-05 11:00:00"))
+        #expect(upcoming.first?.date == utcDate("2026-09-05 11:00:00"))
     }
 
     @Test("a plan whose repository is busy is held back, not dropped")
@@ -260,7 +253,7 @@ struct SchedulingTests {
         plan.schedule.frequency = .hourly
         plan.schedule.intervalHours = 1
 
-        let now = date("2026-09-05 12:00:00")
+        let now = utcDate("2026-09-05 12:00:00")
         let existing: Set<UUID> = [repositoryID]
         #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map { $0.label(among: []) } == ["waiting"])
 
@@ -284,7 +277,7 @@ struct SchedulingTests {
             plan.schedule.frequency = .daily
             plan.schedule.hour = 2
             plan.schedule.minute = 0
-            plan.lastRunAt = date(lastRunAt)
+            plan.lastRunAt = utcDate(lastRunAt)
             return plan
         }
         // Two plans on one repository at the same 02:00 slot: started
@@ -295,7 +288,7 @@ struct SchedulingTests {
         let dotfiles = makePlan("dotfiles", shared, lastRunAt: "2026-09-04 02:00:00")
         let elsewhere = makePlan("elsewhere", other, lastRunAt: "2026-09-04 02:00:00")
         let existing: Set<UUID> = [shared, other]
-        let now = date("2026-09-05 02:00:30")
+        let now = utcDate("2026-09-05 02:00:30")
 
         #expect(Scheduler.duePlans(
             in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing
@@ -308,9 +301,9 @@ struct SchedulingTests {
             busyPlanIDs: [downloads.id, elsewhere.id], busyRepositoryIDs: [shared, other]
         ).isEmpty)
         var ran = downloads
-        ran.lastRunAt = date("2026-09-05 02:00:40")
+        ran.lastRunAt = utcDate("2026-09-05 02:00:40")
         #expect(Scheduler.duePlans(
-            in: [ran, dotfiles], now: date("2026-09-05 02:01:30"), existingRepositoryIDs: existing
+            in: [ran, dotfiles], now: utcDate("2026-09-05 02:01:30"), existingRepositoryIDs: existing
         ).map { $0.label(among: []) } == ["dotfiles"])
 
         // The plan whose slot passed longer ago goes first, whatever the
@@ -329,13 +322,6 @@ struct SchedulingTests {
 /// scheduler will actually fire.
 @Suite("Pausing the schedule")
 struct PauseSchedulingTests {
-    private func date(_ string: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.date(from: string)!
-    }
-
     private let repositoryID = UUID()
 
     private func dailyPlan(name: String = "Nightly", lastRunAt: Date?) -> BackupPlan {
@@ -355,28 +341,28 @@ struct PauseSchedulingTests {
         // machine's calendar, so the dates are chosen to hold in any zone:
         // the last run is 25 hours before `now`, so some 02:00 slot has
         // passed uncovered whatever the offset.
-        var plan = dailyPlan(lastRunAt: date("2026-09-24 02:00:00"))
-        plan.pausedUntil = date("2026-09-25 09:00:00")
+        var plan = dailyPlan(lastRunAt: utcDate("2026-09-24 02:00:00"))
+        plan.pausedUntil = utcDate("2026-09-25 09:00:00")
         let existing: Set<UUID> = [repositoryID]
 
-        #expect(Scheduler.duePlans(in: [plan], now: date("2026-09-25 03:00:00"), existingRepositoryIDs: existing).isEmpty)
+        #expect(Scheduler.duePlans(in: [plan], now: utcDate("2026-09-25 03:00:00"), existingRepositoryIDs: existing).isEmpty)
         #expect(
-            Scheduler.duePlans(in: [plan], now: date("2026-09-25 09:00:30"), existingRepositoryIDs: existing)
+            Scheduler.duePlans(in: [plan], now: utcDate("2026-09-25 09:00:30"), existingRepositoryIDs: existing)
                 .map(\.id) == [plan.id]
         )
         let upcoming = try #require(
-            Scheduler.upcomingRuns(in: [plan], now: date("2026-09-25 03:00:00"), existingRepositoryIDs: existing).first
+            Scheduler.upcomingRuns(in: [plan], now: utcDate("2026-09-25 03:00:00"), existingRepositoryIDs: existing).first
         )
-        #expect(upcoming.date == date("2026-09-25 09:00:00"))
+        #expect(upcoming.date == utcDate("2026-09-25 09:00:00"))
     }
 
     @Test("a lapsed pause is inert, and a switched-off plan stays off whatever its pause date says")
     func lapsedOrOverruledPause() {
-        let now = date("2026-09-25 12:00:00")
+        let now = utcDate("2026-09-25 12:00:00")
         let existing: Set<UUID> = [repositoryID]
-        let plain = dailyPlan(lastRunAt: date("2026-09-24 02:00:00"))
+        let plain = dailyPlan(lastRunAt: utcDate("2026-09-24 02:00:00"))
         var lapsed = plain
-        lapsed.pausedUntil = date("2026-09-25 11:00:00")
+        lapsed.pausedUntil = utcDate("2026-09-25 11:00:00")
 
         #expect(
             Scheduler.duePlans(in: [lapsed], now: now, existingRepositoryIDs: existing).map(\.id)
@@ -390,15 +376,15 @@ struct PauseSchedulingTests {
 
         var off = plain
         off.isEnabled = false
-        off.pausedUntil = date("2026-09-25 13:00:00")
+        off.pausedUntil = utcDate("2026-09-25 13:00:00")
         #expect(Scheduler.duePlans(in: [off], now: now, existingRepositoryIDs: existing).isEmpty)
-        #expect(Scheduler.duePlans(in: [off], now: date("2026-09-25 14:00:00"), existingRepositoryIDs: existing).isEmpty)
+        #expect(Scheduler.duePlans(in: [off], now: utcDate("2026-09-25 14:00:00"), existingRepositoryIDs: existing).isEmpty)
         #expect(Scheduler.upcomingRuns(in: [off], now: now, existingRepositoryIDs: existing).isEmpty)
     }
 
     @Test("the app-wide hold: a live pause wins, battery holds only when asked, a lapsed pause holds nothing")
     func scheduleHoldPrecedence() {
-        let now = date("2026-09-25 12:00:00")
+        let now = utcDate("2026-09-25 12:00:00")
         let inAnHour = now.addingTimeInterval(3600)
 
         #expect(
@@ -436,13 +422,13 @@ struct PauseSchedulingTests {
 
     @Test("a timed app-wide hold pushes every upcoming run to its end; an open-ended one leaves dates raw")
     func heldUntilClampsUpcoming() {
-        let now = date("2026-09-25 12:00:00")
+        let now = utcDate("2026-09-25 12:00:00")
         let heldUntil = now.addingTimeInterval(3600)
         let existing: Set<UUID> = [repositoryID]
-        var first = dailyPlan(name: "First", lastRunAt: date("2026-09-23 02:00:00"))
+        var first = dailyPlan(name: "First", lastRunAt: utcDate("2026-09-23 02:00:00"))
         first.schedule.frequency = .hourly
         first.schedule.intervalHours = 1
-        let second = dailyPlan(name: "Second", lastRunAt: date("2026-09-23 02:00:00"))
+        let second = dailyPlan(name: "Second", lastRunAt: utcDate("2026-09-23 02:00:00"))
 
         let held = Scheduler.upcomingRuns(in: [first, second], now: now, existingRepositoryIDs: existing, heldUntil: heldUntil)
         #expect(held.count == 2)
@@ -467,7 +453,7 @@ struct PauseSchedulingTests {
 
     @Test("pause lengths end where their names say, across DST and a zone with no midnight")
     func pauseLengthEnds() throws {
-        let now = date("2026-09-25 12:00:00")
+        let now = utcDate("2026-09-25 12:00:00")
         #expect(PauseLength.oneHour.end(from: now) == now.addingTimeInterval(3600))
         #expect(PauseLength.untilResumed.end(from: now) == nil)
         #expect(PauseLength.allCases.map(\.menuTitle) == ["For 1 Hour", "Until Tomorrow", "Until I Resume"])
@@ -587,13 +573,6 @@ struct DSTScheduleTests {
 
 @Suite("Upcoming run")
 struct UpcomingRunTests {
-    private func date(_ string: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.date(from: string)!
-    }
-
     private func plan(
         name: String,
         frequency: Schedule.Frequency,
@@ -614,13 +593,13 @@ struct UpcomingRunTests {
 
     @Test("the soonest upcoming run wins, manual and incomplete plans are never listed")
     func soonestWins() {
-        let soon = plan(name: "hourly", frequency: .hourly, lastRun: date("2026-09-05 11:50:00"))
-        let later = plan(name: "daily", frequency: .daily, lastRun: date("2026-09-05 02:00:00"))
+        let soon = plan(name: "hourly", frequency: .hourly, lastRun: utcDate("2026-09-05 11:50:00"))
+        let later = plan(name: "daily", frequency: .daily, lastRun: utcDate("2026-09-05 02:00:00"))
         let manual = plan(name: "manual", frequency: .manual, lastRun: nil)
         let disabled = plan(name: "disabled", frequency: .hourly, lastRun: nil, enabled: false)
         let incomplete = plan(name: "incomplete", frequency: .hourly, lastRun: nil, path: "")
 
-        let now = date("2026-09-05 12:00:00")
+        let now = utcDate("2026-09-05 12:00:00")
         let next = Scheduler.nextScheduledRun(
             in: [manual, later, disabled, incomplete, soon],
             now: now,
@@ -628,15 +607,15 @@ struct UpcomingRunTests {
         )
         #expect(next?.plan.id == soon.id)
         // An hourly plan that ran ten minutes ago is due in fifty.
-        #expect(next?.date == date("2026-09-05 12:50:00"))
+        #expect(next?.date == utcDate("2026-09-05 12:50:00"))
     }
 
     @Test("an overdue plan is shown as due now, not in the past")
     func overdueIsClampedToNow() {
         // Last ran five hours ago on an hourly schedule: the date is in the past,
         // and the menu bar must not show a negative countdown.
-        let overdue = plan(name: "hourly", frequency: .hourly, lastRun: date("2026-09-05 07:00:00"))
-        let now = date("2026-09-05 12:00:00")
+        let overdue = plan(name: "hourly", frequency: .hourly, lastRun: utcDate("2026-09-05 07:00:00"))
+        let now = utcDate("2026-09-05 12:00:00")
         let next = Scheduler.nextScheduledRun(in: [overdue], now: now, existingRepositoryIDs: Set([overdue.repositoryID!]))
         #expect(next?.date == now)
     }
@@ -644,25 +623,18 @@ struct UpcomingRunTests {
     @Test("no runnable plan means no upcoming run")
     func noneScheduled() {
         let manual = plan(name: "manual", frequency: .manual, lastRun: nil)
-        #expect(Scheduler.nextScheduledRun(in: [manual], now: date("2026-09-05 12:00:00"), existingRepositoryIDs: []) == nil)
-        #expect(Scheduler.nextScheduledRun(in: [], now: date("2026-09-05 12:00:00"), existingRepositoryIDs: []) == nil)
+        #expect(Scheduler.nextScheduledRun(in: [manual], now: utcDate("2026-09-05 12:00:00"), existingRepositoryIDs: []) == nil)
+        #expect(Scheduler.nextScheduledRun(in: [], now: utcDate("2026-09-05 12:00:00"), existingRepositoryIDs: []) == nil)
     }
 }
 
 @Suite("Repository maintenance scheduling")
 struct MaintenanceSchedulingTests {
-    private func date(_ string: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.date(from: string)!
-    }
-
     private func repository(_ configure: (inout Repository) -> Void) -> Repository {
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/tmp/repo"
-        repository.createdAt = date("2026-09-01 00:00:00")
+        repository.createdAt = utcDate("2026-09-01 00:00:00")
         configure(&repository)
         return repository
     }
@@ -674,10 +646,10 @@ struct MaintenanceSchedulingTests {
         // the moment it appears in the sidebar.
         #expect(Scheduler.dueMaintenance(
             in: [repository],
-            now: date("2026-09-05 00:00:00")
+            now: utcDate("2026-09-05 00:00:00")
         ).isEmpty)
 
-        let due = Scheduler.dueMaintenance(in: [repository], now: date("2026-09-09 00:00:00"))
+        let due = Scheduler.dueMaintenance(in: [repository], now: utcDate("2026-09-09 00:00:00"))
         #expect(due.map(\.task) == [.check])
     }
 
@@ -688,15 +660,15 @@ struct MaintenanceSchedulingTests {
             $0.maintenance.pruneEnabled = true
             $0.maintenance.pruneIntervalDays = 1
         }
-        let due = Scheduler.dueMaintenance(in: [repository], now: date("2026-09-10 00:00:00"))
+        let due = Scheduler.dueMaintenance(in: [repository], now: utcDate("2026-09-10 00:00:00"))
         #expect(due.map(\.task) == [.prune])
     }
 
     @Test("a repository added from now on prunes 30 days after it was added; one saved without the key stays off")
     func newRepositoryPrunes() {
-        let added = date("2026-10-09 00:00:00")
-        #expect(MaintenancePolicy.forNewRepository(kind: .local).nextDate(for: .prune, addedAt: added) == date("2026-11-08 00:00:00"))
-        #expect(MaintenancePolicy.forNewRepository(kind: .local).nextDate(for: .check, addedAt: added) == date("2026-10-16 00:00:00"))
+        let added = utcDate("2026-10-09 00:00:00")
+        #expect(MaintenancePolicy.forNewRepository(kind: .local).nextDate(for: .prune, addedAt: added) == utcDate("2026-11-08 00:00:00"))
+        #expect(MaintenancePolicy.forNewRepository(kind: .local).nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"))
         #expect(MaintenancePolicy().nextDate(for: .prune, addedAt: added) == nil)
     }
 
@@ -735,8 +707,8 @@ struct MaintenanceSchedulingTests {
     @Test("an editor save keeps the model's maintenance stamps and the check's next slice")
     func repositoryMergingKeepsMaintenanceState() {
         let stored = repository {
-            $0.maintenance.lastCheckAt = self.date("2026-09-08 12:00:00")
-            $0.maintenance.lastPruneAt = self.date("2026-09-01 12:00:00")
+            $0.maintenance.lastCheckAt = utcDate("2026-09-08 12:00:00")
+            $0.maintenance.lastPruneAt = utcDate("2026-09-01 12:00:00")
             $0.maintenance.nextCheckDataSlice = 4
         }
         var draft = stored
@@ -751,19 +723,19 @@ struct MaintenanceSchedulingTests {
 
     @Test("Last check names what the newest check read")
     func lastCheckNamesItsDepth() {
-        let repository = repository { $0.maintenance.lastCheckAt = self.date("2026-09-08 12:00:00") }
-        let now = date("2026-09-10 12:00:00")
-        var check = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: date("2026-09-08 12:00:00"))
+        let repository = repository { $0.maintenance.lastCheckAt = utcDate("2026-09-08 12:00:00") }
+        let now = utcDate("2026-09-10 12:00:00")
+        var check = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: utcDate("2026-09-08 12:00:00"))
         check.outcome = .succeeded
         check.checkRead = "part 3 of 12"
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now)
-            == "\(Format.ago(date("2026-09-08 12:00:00"), now: now)) · part 3 of 12")
+            == "\(Format.ago(utcDate("2026-09-08 12:00:00"), now: now)) · part 3 of 12")
         check.checkRead = "structure only"
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now)
-            == "\(Format.ago(date("2026-09-08 12:00:00"), now: now)) · structure only")
+            == "\(Format.ago(utcDate("2026-09-08 12:00:00"), now: now)) · structure only")
         // A check recorded before the depth was: its time alone.
         check.checkRead = nil
-        #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now) == Format.ago(date("2026-09-08 12:00:00"), now: now))
+        #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now) == Format.ago(utcDate("2026-09-08 12:00:00"), now: now))
     }
 
     @Test("a check recorded in the old words reads in today's")
@@ -789,13 +761,13 @@ struct MaintenanceSchedulingTests {
             $0.maintenance.checkEnabled = false
             $0.maintenance.pruneEnabled = false
         }
-        #expect(Scheduler.dueMaintenance(in: [repository], now: date("2027-01-01 00:00:00")).isEmpty)
+        #expect(Scheduler.dueMaintenance(in: [repository], now: utcDate("2027-01-01 00:00:00")).isEmpty)
     }
 
     @Test("a busy repository is skipped entirely")
     func busyRepositoryIsSkipped() {
         let repository = repository { $0.maintenance.checkIntervalDays = 1 }
-        let now = date("2026-09-10 00:00:00")
+        let now = utcDate("2026-09-10 00:00:00")
         #expect(Scheduler.dueMaintenance(in: [repository], now: now).count == 1)
         #expect(Scheduler.dueMaintenance(
             in: [repository],
@@ -807,17 +779,17 @@ struct MaintenanceSchedulingTests {
     @Test("running a task pushes the next one out by a full interval")
     func lastRunMovesTheSchedule() {
         var repository = repository { $0.maintenance.checkIntervalDays = 7 }
-        repository.maintenance.lastCheckAt = date("2026-09-09 00:00:00")
-        #expect(Scheduler.dueMaintenance(in: [repository], now: date("2026-09-12 00:00:00")).isEmpty)
-        #expect(Scheduler.dueMaintenance(in: [repository], now: date("2026-09-16 00:00:01")).count == 1)
+        repository.maintenance.lastCheckAt = utcDate("2026-09-09 00:00:00")
+        #expect(Scheduler.dueMaintenance(in: [repository], now: utcDate("2026-09-12 00:00:00")).isEmpty)
+        #expect(Scheduler.dueMaintenance(in: [repository], now: utcDate("2026-09-16 00:00:01")).count == 1)
     }
 
     @Test("the repository page's Last check reads the newest check run with how it ended, the stamp only without one")
     func lastMaintenanceReadsTheRecord() {
         var repository = repository { $0.maintenance.checkIntervalDays = 7 }
-        let now = date("2026-09-10 12:00:00")
+        let now = utcDate("2026-09-10 12:00:00")
         func check(_ outcome: RunRecord.Outcome, at stamp: String, repository id: UUID? = nil) -> RunRecord {
-            var run = RunRecord(kind: .check, planName: "repo", repositoryID: id ?? repository.id, startedAt: date(stamp))
+            var run = RunRecord(kind: .check, planName: "repo", repositoryID: id ?? repository.id, startedAt: utcDate(stamp))
             run.outcome = outcome
             return run
         }
@@ -827,10 +799,10 @@ struct MaintenanceSchedulingTests {
         // Neither a stamp nor a record.
         #expect(last([]) == "Never")
         // A record without a stamp — history older than the stamp itself.
-        #expect(last([check(.succeeded, at: "2026-09-08 12:00:00")]) == Format.ago(date("2026-09-08 12:00:00"), now: now))
+        #expect(last([check(.succeeded, at: "2026-09-08 12:00:00")]) == Format.ago(utcDate("2026-09-08 12:00:00"), now: now))
 
-        repository.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
-        let ago = Format.ago(date("2026-09-09 12:00:00"), now: now)
+        repository.maintenance.lastCheckAt = utcDate("2026-09-09 12:00:00")
+        let ago = Format.ago(utcDate("2026-09-09 12:00:00"), now: now)
         // The stamp is written for every attempt; the record says how it went.
         #expect(last([check(.succeeded, at: "2026-09-09 12:00:00")]) == ago)
         #expect(last([check(.failed, at: "2026-09-09 12:00:00")]) == "\(ago) · failed")
@@ -873,15 +845,15 @@ struct MaintenanceSchedulingTests {
             $0.maintenance.pruneEnabled = true
             $0.maintenance.pruneIntervalDays = 30
         }
-        let now = date("2026-09-10 00:00:00")
-        let prune = date("2026-10-01 00:00:00")
+        let now = utcDate("2026-09-10 00:00:00")
+        let prune = utcDate("2026-10-01 00:00:00")
         // The check fell due on the 8th.
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == "Due now")
         // The hold holds checks and prunes too: due, but not now.
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: nil), driveAway: false, awaitingServer: false, now: now) == "Waiting")
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: false, awaitingServer: false, now: now) == "Waiting")
         // A timed hold moves it to the end, where the scheduler picks it up.
-        let end = date("2026-09-10 01:00:00")
+        let end = utcDate("2026-09-10 01:00:00")
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: end), driveAway: false, awaitingServer: false, now: now)
             == Format.timestamp(end))
         // A date beyond the hold keeps its own.
@@ -902,37 +874,37 @@ struct MaintenanceSchedulingTests {
             $0.kind = .local
             $0.localPath = "/Volumes/\(volume)/restic"
             $0.maintenance.checkIntervalDays = 7
-            $0.maintenance.lastCheckAt = self.date("2026-09-02 12:00:00")
+            $0.maintenance.lastCheckAt = utcDate("2026-09-02 12:00:00")
         }
-        let now = date("2026-09-10 12:00:00")
-        var failed = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: date("2026-09-02 12:00:00"))
+        let now = utcDate("2026-09-10 12:00:00")
+        var failed = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: utcDate("2026-09-02 12:00:00"))
         failed.outcome = .failed
-        var waited = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: date("2026-09-10 11:00:00"))
+        var waited = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: utcDate("2026-09-10 11:00:00"))
         waited.outcome = .skipped
         waited.detailText = "“\(volume)” is not connected."
         // The skip is no check: the last one is still the failure before it.
         #expect(Scheduler.newestMaintenanceRun(.check, of: repository, runs: [waited, failed])?.id == failed.id)
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [waited, failed], now: now)
-            == "\(Format.ago(date("2026-09-02 12:00:00"), now: now)) · failed")
+            == "\(Format.ago(utcDate("2026-09-02 12:00:00"), now: now)) · failed")
         // Due: it waits for the drive, not "Due now" — under a hold too,
         // which the drive would outlast.
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
         // Not due yet: its date, as for any repository.
-        repository.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
+        repository.maintenance.lastCheckAt = utcDate("2026-09-09 12:00:00")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == Format.timestamp(utcDate("2026-09-16 12:00:00")))
 
         // A server out of reach: its due check waits for it in the same way.
         var server = self.repository {
             $0.kind = .rest
             $0.restURL = "http://nas.local:8000/backups"
             $0.maintenance.checkIntervalDays = 7
-            $0.maintenance.lastCheckAt = self.date("2026-09-02 12:00:00")
+            $0.maintenance.lastCheckAt = utcDate("2026-09-02 12:00:00")
         }
         #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: true, now: now) == "When “nas.local” can be reached")
         #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: false, now: now) == "Due now")
-        server.maintenance.lastCheckAt = date("2026-09-09 12:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: true, now: now) == Format.timestamp(date("2026-09-16 12:00:00")))
+        server.maintenance.lastCheckAt = utcDate("2026-09-09 12:00:00")
+        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: true, now: now) == Format.timestamp(utcDate("2026-09-16 12:00:00")))
     }
 
     @Test("the schedule summarises itself for the plan list")

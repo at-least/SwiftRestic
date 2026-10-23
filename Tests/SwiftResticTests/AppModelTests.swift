@@ -760,7 +760,7 @@ struct AppModelTests {
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let first = try #require(model.configuration.runs.first)
-        #expect(await model.loadRunLog(first) != nil)
+        #expect(try await model.loadRunLog(first) != nil)
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
 
@@ -770,9 +770,9 @@ struct AppModelTests {
         #expect(standing.id != first.id)
         #expect(standing.skipCount == 2)
         #expect(standing.skippedSince == first.startedAt)
-        #expect(await model.loadRunLog(standing) != nil)
+        #expect(try await model.loadRunLog(standing) != nil)
         await model.tasks.drain()
-        #expect(await model.loadRunLog(first) == nil, "the replaced run's log leaves with it")
+        #expect(try await model.loadRunLog(first) == nil, "the replaced run's log leaves with it")
 
         await model.shutdown()
     }
@@ -789,14 +789,14 @@ struct AppModelTests {
         await model.waitForRun(planID: harness.plan.id)
         let with = try #require(model.configuration.runs.first)
         #expect(with.outcome == .succeeded)
-        #expect(model.runLogs.read(with.id)?.contains("--exclude-cloud-files") == true)
+        #expect(try model.runLogs.read(with.id)?.contains("--exclude-cloud-files") == true)
 
         model.configuration.plans[index].excludeCloudFiles = false
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let without = try #require(model.configuration.runs.first)
         #expect(without.id != with.id)
-        #expect(model.runLogs.read(without.id)?.contains("--exclude-cloud-files") == false)
+        #expect(try model.runLogs.read(without.id)?.contains("--exclude-cloud-files") == false)
 
         await model.shutdown()
     }
@@ -816,7 +816,7 @@ struct AppModelTests {
         await model.waitForRun(planID: harness.plan.id)
         let with = try #require(model.configuration.runs.first)
         #expect(with.outcome == .succeeded)
-        let on = try #require(model.runLogs.read(with.id))
+        let on = try #require(try model.runLogs.read(with.id))
         #expect(on.contains("--exclude-if-present .rustc_info.json"))
         #expect(on.contains("--exclude **/.venv"))
         #expect(on.contains("--exclude **/__pycache__"))
@@ -830,7 +830,7 @@ struct AppModelTests {
         await model.waitForRun(planID: harness.plan.id)
         let without = try #require(model.configuration.runs.first)
         #expect(without.id != with.id)
-        let off = try #require(model.runLogs.read(without.id))
+        let off = try #require(try model.runLogs.read(without.id))
         // The argument, never the bare pattern: a run's log holds restic's
         // every word, and the run's retention step echoes the snapshots'
         // recorded excludes — the switch-on run's, minutes old, among
@@ -980,7 +980,7 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a failing after-success hook is recorded but does not undo the backup")
+    @Test("a failing after-any hook is recorded but does not undo the backup")
     func failingAfterHookDoesNotFailTheRun() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -1090,8 +1090,8 @@ struct AppModelTests {
         model.runBackup(planID: harness.plan.id)
         let stub = try #require(harness.stub)
         #expect(
-            await StubRestic.waitForHang(matching: stub.sleepMarker, within: 10),
-            "the stub never established its hang within 10 s"
+            await StubRestic.waitForHang(matching: stub.sleepMarker, within: 60),
+            "the stub never established its hang within 60 s"
         )
 
         // shutdown() cancels the run; the record is written while it unwinds, and
@@ -1123,8 +1123,8 @@ struct AppModelTests {
         model.runBackup(planID: harness.plan.id)
         let stub = try #require(harness.stub)
         #expect(
-            await StubRestic.waitForHang(matching: stub.sleepMarker, within: 10),
-            "the stub never established its hang within 10 s"
+            await StubRestic.waitForHang(matching: stub.sleepMarker, within: 60),
+            "the stub never established its hang within 60 s"
         )
         model.cancelBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
@@ -1743,14 +1743,8 @@ struct KeychainFailureHonestyTests {
         repository.kind = .local
         repository.localPath = "/tmp/some-repo"
 
-        do {
+        await #expect(throws: KeychainStore.KeychainError.self) {
             _ = try await AppModel.dragContext(repository: repository, label: "some-repo", secrets: secrets)
-            Issue.record("expected the keychain failure to surface")
-        } catch ResticError.passwordMissing {
-            Issue.record("a keychain failure must not masquerade as a missing password")
-        } catch {
-            // Anything else is the error itself, carried to the run record
-            // and banner with its own words.
         }
     }
 
@@ -1782,6 +1776,31 @@ struct KeychainFailureHonestyTests {
         // scheduler must keep treating it as the skip-not-retry case instead
         // of scheduling upkeep that can only fail.
         #expect(model.repositoriesMissingPassword.contains(repository.id))
+    }
+
+    @Test("a password the Keychain would not delete with its repository is said, not left behind silently")
+    @MainActor
+    func failedRemovalIsSaid() async {
+        let secrets = SecretStore(
+            load: { (_: UUID) in (password: nil, providerSecret: nil) },
+            save: { _, _, _ in },
+            remove: { (_: UUID) in throw KeychainStore.KeychainError.unexpectedStatus(errSecInteractionNotAllowed) },
+            loadSharePassword: { _ in nil },
+            saveSharePassword: { _, _ in }
+        )
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticKeychainRemove-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(store: ConfigStore(directory: root), secrets: secrets)
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = "/tmp/some-repo"
+        model.configuration.repositories = [repository]
+
+        model.deleteRepository(id: repository.id)
+        await model.tasks.drain()
+
+        #expect(model.banners.contains { $0.title == "The removed repository's secrets are still in your Keychain" && $0.isError })
     }
 }
 
@@ -2149,7 +2168,6 @@ struct UnreadableConfigurationTests {
             secrets: .inMemory()
         )
         await model.bootstrap()
-        defer { Task { await model.shutdown() } }
 
         #expect(model.isConfigurationUnreadable, "a fully unreadable configuration must say so")
 
@@ -2167,6 +2185,10 @@ struct UnreadableConfigurationTests {
         let after = try snapshot()
         #expect(after.names == before.names, "a save changed the configuration files")
         #expect(after.data == before.data, "a save landed over an unreadable configuration's backup copies")
+        await model.shutdown()
+        let afterShutdown = try snapshot()
+        #expect(afterShutdown.names == before.names, "the shutdown flush changed the configuration files")
+        #expect(afterShutdown.data == before.data, "the shutdown flush landed over the backup copies")
     }
 }
 

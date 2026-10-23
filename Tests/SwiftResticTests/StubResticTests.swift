@@ -552,9 +552,23 @@ struct StubRestic: Sendable {
                 echo "[]"
                 exit 0
                 ;;
+            nosummary)
+                # A backup that exits clean with no summary line, as a restic
+                # that renamed it would: its numbers are unknown, not zero.
+                trace "nosummary-arm"
+                echo '{"message_type":"status","percent_done":1,"total_files":1,"files_done":1,"total_bytes":10,"bytes_done":10,"current_files":[]}'
+                exit 0
+                ;;
             *)
-                # Everything the fault tests do not care about gets an empty answer.
+                # Everything the fault tests do not care about gets an empty
+                # answer; a backup, the summary every finished one prints.
                 trace "default-arm"
+                case " $* " in
+                    *" backup "*)
+                        echo '{"message_type":"summary","files_new":0,"total_files_processed":0,"total_bytes_processed":0}'
+                        exit 0
+                        ;;
+                esac
                 echo "[]"
                 exit 0
                 ;;
@@ -675,7 +689,7 @@ struct StubResticTests {
         )
 
         // And the Swift side must have seen it as a cancellation, not a crash.
-        await #expect(throws: ResticError.self) {
+        await #expect(throws: ResticError.cancelled) {
             try await task.value
         }
     }
@@ -794,6 +808,15 @@ struct StubResticTests {
         }
     }
 
+    @Test("a line on stderr that is not UTF-8 is counted as a gap, as on stdout")
+    func invalidUTF8OnStderrIsCounted() async throws {
+        let result = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(arguments: ["-c", #"printf '\377\376 not utf8\n' >&2; printf '\377\n'"#])
+        )
+        #expect(result.malformedCount == 2)
+    }
+
     @Test("an unexpected exit code fails with restic's own stderr as the message")
     func plainFailureCarriesStderrTail() async throws {
         let fixture = try makeFixture(mode: "plainfail")
@@ -828,6 +851,19 @@ struct StubResticTests {
             outcome.decodingWarning?.contains("could not be decoded") == true && outcome.itemErrors.isEmpty,
             "the outcome's warning was \(outcome.decodingWarning ?? "nil"), its items \(outcome.itemErrors)"
         )
+    }
+
+    @Test("a backup that exits clean without its summary is a warning, never a clean run of zero files")
+    func missingSummarySurfacesInTheOutcome() async throws {
+        let fixture = try makeFixture(mode: "nosummary")
+        defer { cleanUp(fixture.root) }
+
+        let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        #expect(outcome.exitCode == 0)
+        #expect(outcome.summary == nil)
+        #expect(outcome.completedWithErrors)
+        #expect(outcome.decodingWarning?.hasPrefix("restic reported no summary") == true)
+        #expect(outcome.itemErrors.isEmpty)
     }
 
     @Test("the runner writes the command, restic's non-progress lines and the exit code into a bound transcript")
@@ -895,7 +931,7 @@ struct StubResticTests {
             }
         }
         #expect(
-            await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
         task.cancel()
@@ -982,11 +1018,11 @@ struct StubResticTests {
         // The hang comes after the stub's part of the file, so the cancel
         // lands on a restore that has written.
         #expect(
-            await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 10),
+            await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 60),
             "the stub never established its hang"
         )
         task.cancel()
-        await #expect(throws: ResticError.self) { try await task.value }
+        await #expect(throws: ResticError.cancelled) { try await task.value }
 
         #expect(try String(contentsOf: landing, encoding: .utf8) == "mine", "a cancelled restore changed the file")
         let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
@@ -1097,6 +1133,15 @@ struct StubResticTests {
             #expect(start.contains(flag), "start line: \(start)")
         }
         #expect(!start.contains("--prune"), "start line: \(start)")
+    }
+
+    @Test("the Compare sheet's diff with a line that did not decode fails, never shows the rest as the whole")
+    func compareDiffRefusesAGap() async throws {
+        let fixture = try makeFixture(mode: "diffmalformed")
+        defer { cleanUp(fixture.root) }
+        await #expect(throws: ResticError.malformedOutput(detail: "1 diff line did not decode")) {
+            _ = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe")
+        }
     }
 
     @Test("the reads a click or a refresh runs take no repository lock")

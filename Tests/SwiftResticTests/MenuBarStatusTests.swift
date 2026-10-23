@@ -472,7 +472,11 @@ struct MenuBarStatusTests {
 
         // A run that started outside the window but finished inside it is
         // still news.
-        #expect(MenuBarStatus.problemLine(runs: [overnight], hasNoRepositories: false) != nil)
+        var long = RunRecord(planName: "Long")
+        long.outcome = .failed
+        long.startedAt = .now.addingTimeInterval(-8 * 86_400)
+        long.finishedAt = .now.addingTimeInterval(-1 * 3_600)
+        #expect(MenuBarStatus.problemLine(runs: [long], hasNoRepositories: false) != nil)
     }
 
     @Test("a failure older than the dashboard's seven-day window is old news")

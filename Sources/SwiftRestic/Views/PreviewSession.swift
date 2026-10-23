@@ -12,7 +12,8 @@ final class PreviewSession {
     /// What Quick Look shows; nil closes it.
     var url: URL?
     /// Why the last preview could not open — the size gate or the copy's
-    /// failure — until the next starts.
+    /// failure — or that its copy could not be deleted, until the next
+    /// starts.
     private(set) var failure: String?
     var isCopying: Bool { task != nil }
     /// The copy this session made and has not deleted yet — apart from
@@ -30,8 +31,9 @@ final class PreviewSession {
         snapshotID: String,
         node: @escaping @MainActor () async throws -> SnapshotNode
     ) {
-        end()
+        // Cleared first: ending the last preview can fail to delete its copy.
         failure = nil
+        end()
         task = Task {
             do {
                 let file = try await node()

@@ -111,8 +111,5 @@ struct ItemErrorDiagnosisTests {
                        "/Users/u/Library/MailX", "/Volumes/NAS", "/Users/other", "~/Documents"] {
             #expect(!ProtectedLocations.needsFullDiskAccess(source, home: home), "\(source)")
         }
-        #expect(ProtectedLocations.firstProtectedSource(["/Users/u/Documents", "/Users/u/Library/Messages"], home: home)
-            == "/Users/u/Library/Messages")
-        #expect(ProtectedLocations.firstProtectedSource(["/Users/u/Documents"], home: home) == nil)
     }
 }

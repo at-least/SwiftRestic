@@ -22,7 +22,7 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "When a backup fails",
-            text: "Activity lists every run. Select one to see what happened, with Show Log… and Copy Details below it — and a button for the fix, when there is one. A backup that couldn't read some files still saves the rest and is marked Completed with warnings."
+            text: "Activity lists every backup, check and restore. Select one to see what happened, with Show Log… and Copy Details below it — and a button for the fix, when there is one. A backup that couldn't read some files still saves the rest and is marked Completed with warnings."
         ),
         Topic(
             title: "Keep the history tidy",

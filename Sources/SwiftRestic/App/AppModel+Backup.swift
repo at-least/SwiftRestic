@@ -98,7 +98,7 @@ extension AppModel {
         activity.keys.contains { plan(id: $0)?.repositoryID == repositoryID }
     }
 
-    private func removeFromBackupQueue(_ planID: UUID) {
+    func removeFromBackupQueue(_ planID: UUID) {
         for (repositoryID, queue) in backupQueue where queue.contains(where: { $0.planID == planID }) {
             let rest = queue.filter { $0.planID != planID }
             backupQueue[repositoryID] = rest.isEmpty ? nil : rest
@@ -241,7 +241,7 @@ extension AppModel: BackupRunEngine.Sink {
     /// Activity records a skip. How every other run went is the sidebar's
     /// caption, the plan page's problem card, Activity's badge and the menu
     /// bar's — where a banner over every page said it again, the whole
-    /// queue's worth after Back Up All (the HIG review of 2026-10-18).
+    /// queue's worth after Back Up All.
     /// A skip nobody asked for — a drive away at every slot of an hourly
     /// plan — stays in Activity, and the quiet-plan alert speaks if the
     /// drive stays away. The queue is global, so the title names the plan

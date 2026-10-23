@@ -523,7 +523,7 @@ struct FindFilesView: View {
             let newest = summary.newest
             let match = FindMatch(
                 path: hit.path,
-                type: hit.isDirectory ? "dir" : "file",
+                type: hit.isDirectory ? .dir : .file,
                 size: nil,
                 mtime: nil
             )
@@ -555,7 +555,7 @@ struct FindFilesView: View {
     /// the rows, never a sort — and the rows are rewritten rather than
     /// looked up beside, because the Table's cells follow their row's
     /// data: a lookup the parent held left the column on its short IDs
-    /// after the listing landed (seen live, 2026-10-09). The restore
+    /// after the listing landed (seen live). The restore
     /// request reads the same row, so the sheet names the moment the
     /// column shows.
     private func fillLateTimes() {

@@ -230,7 +230,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// bucket; Azure its container; rclone its remote. When another of
     /// `repositories` would read the same, each reads as its location
     /// (`displayLocation`). "Untitled Repository" while it has no location.
-    /// Builds before 2026-10-18 stored a name; a configuration's key is
+    /// Older builds stored a name; a configuration's key is
     /// ignored.
     func label(among repositories: [Repository]) -> String {
         let short = shortLabel

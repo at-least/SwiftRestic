@@ -411,10 +411,6 @@ final class SnapshotIndex: @unchecked Sendable {
 
     // MARK: - Opening
 
-    /// Opens (or creates) the file at `path`. A file with any other schema —
-    /// including an empty `user_version` over existing tables, which is what
-    /// the older index format looks like — throws `schemaMismatch` with the
-    /// pool already closed, so the owner can delete the file and open again.
     /// Whether an open failed because the file is no use as this index —
     /// another schema, or bytes SQLite cannot read as a database — which a
     /// rebuild fixes. Any other failure (a folder in the way, a full disk,
@@ -426,6 +422,10 @@ final class SnapshotIndex: @unchecked Sendable {
         return database.resultCode == .SQLITE_CORRUPT || database.resultCode == .SQLITE_NOTADB
     }
 
+    /// Opens (or creates) the file at `path`. A file with any other schema —
+    /// including an empty `user_version` over existing tables, which is what
+    /// the older index format looks like — throws `schemaMismatch` with the
+    /// pool already closed, so the owner can delete the file and open again.
     init(path: String) throws {
         let pool = try DatabasePool(path: path, configuration: Self.configuration())
         do {
