@@ -352,8 +352,6 @@ struct FindFilesView: View {
 
     private func footer(_ rows: [Row]) -> some View {
         VStack(spacing: 10) {
-            RestoreProgressStrip()
-
             HStack {
                 if !rows.isEmpty {
                     VStack(alignment: .leading, spacing: 1) {

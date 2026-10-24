@@ -194,8 +194,9 @@ struct RestoreRecordHeading: Equatable, Sendable {
 
     /// The Change column title's tooltip: what the marks are measured
     /// against, and that what this backup no longer holds is not among
-    /// them — its tree has no row for it.
-    static func columnHelp(for comparison: ChangeComparison?) -> String {
+    /// them — its tree has no row for it. nil when the comparison failed:
+    /// the line above the tree is that fact's carrier.
+    static func columnHelp(for comparison: ChangeComparison?) -> String? {
         switch comparison {
         case nil:
             "How each item changed since the previous backup of these folders from this Mac"
@@ -206,8 +207,8 @@ struct RestoreRecordHeading: Equatable, Sendable {
         case let .compared(baseline, _):
             "Added or modified since the backup of \(Format.timestamp(baseline.time)), the previous one of these folders "
                 + "from this Mac. To see what was deleted, Control-click this backup in the list and choose Compare with Previous"
-        case let .failed(baseline, reason):
-            "Could not compare with the backup of \(Format.timestamp(baseline.time)): \(Format.firstSentence(reason))"
+        case .failed:
+            nil
         }
     }
 

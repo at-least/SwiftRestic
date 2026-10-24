@@ -156,10 +156,9 @@ struct FileVersionsView: View {
     /// The pane's foot: Show in Backups at the left beside the reads'
     /// errors — a way to another view of the same moment, not an action on
     /// the file — and at the right the chosen version's ways out, Preview
-    /// and Restore, above them the strip that reports a restore in flight.
+    /// and Restore.
     private var footer: some View {
         VStack(spacing: 10) {
-            RestoreProgressStrip()
             HStack {
                 if let detailsError {
                     Label("Sizes and dates could not be read", systemImage: "exclamationmark.triangle")

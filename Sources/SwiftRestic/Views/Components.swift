@@ -539,10 +539,11 @@ struct OperationProgressView: View {
 
 // MARK: - Restore progress strip
 
-/// The app-level restore strip: while a restore runs, its progress is a fact
-/// above whatever surface is on screen, wired to the model's cancel. A
-/// restore outlives the pane that started it, so every browser surface and
-/// the window's detail column show the same strip instead of private copies.
+/// The restore strip: while a restore runs, its progress is a fact above
+/// whatever surface is on screen, wired to the model's cancel. A restore
+/// outlives the pane that started it, so the strip's home is the window's
+/// detail column, above every pane; the panes add no copy of their own, and
+/// the Compare sheet carries one only while it covers that strip.
 struct RestoreProgressStrip: View {
     @Environment(AppModel.self) private var model
     /// Replaces an empty description. The app-level strip over the panes has

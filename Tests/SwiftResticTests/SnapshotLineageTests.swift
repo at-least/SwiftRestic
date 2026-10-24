@@ -349,7 +349,6 @@ struct SnapshotLineageTests {
             + "To see what was deleted, Control-click this backup in the list and choose Compare with Previous")
         #expect(RestoreRecordHeading.columnHelp(for: .firstBackup) == "First backup of these folders — nothing to compare with")
         #expect(RestoreRecordHeading.columnHelp(for: .comparing(baseline: baseline)) == "Comparing with the backup of \(since)…")
-        #expect(RestoreRecordHeading.columnHelp(for: .failed(baseline: baseline, reason: "Fatal: injected. More."))
-            == "Could not compare with the backup of \(since): Fatal: injected")
+        #expect(RestoreRecordHeading.columnHelp(for: .failed(baseline: baseline, reason: "Fatal: injected. More.")) == nil)
     }
 }

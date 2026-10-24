@@ -173,8 +173,9 @@ struct RestorePaneView: View {
         return comparison
     }
 
-    /// What the Change column compares with, for its title's tooltip.
-    private var changeColumnHelp: String {
+    /// What the Change column compares with, for its title's tooltip —
+    /// nil when the comparison failed, the line above the tree saying so.
+    private var changeColumnHelp: String? {
         RestoreRecordHeading.columnHelp(for: shownComparison(for: record))
     }
 
@@ -508,7 +509,7 @@ struct RestorePaneView: View {
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(selectedNodes.isEmpty || model.isRestoring || record == nil)
-                .help("Restore the selected items from this backup (Return)")
+                .help("Restore the selected items from this backup")
         }
         .padding(12)
     }
@@ -1134,7 +1135,7 @@ private final class RowContentWidth {
 private struct TreeColumnHeader: View {
     let rowContentWidth: RowContentWidth
     /// What the Change column compares with (`RestoreRecordHeading.columnHelp`).
-    let changeHelp: String
+    let changeHelp: String?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1147,8 +1148,8 @@ private struct TreeColumnHeader: View {
             Spacer(minLength: 12)
             Text("Change")
                 .frame(width: 56, alignment: .leading)
-                .help(changeHelp)
-            Text("Last Modified")
+                .modifier(TileHelp(help: changeHelp))
+            Text("Date Modified")
                 .frame(width: 140, alignment: .trailing)
             Text("Size")
                 .frame(width: 70, alignment: .trailing)

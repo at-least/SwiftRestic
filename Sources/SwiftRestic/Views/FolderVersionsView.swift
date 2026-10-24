@@ -220,11 +220,9 @@ struct FolderVersionsView: View {
 
     /// The pane's foot: Show in Backups at the left — a way to another
     /// view of the same moment, not an action on the folder — and the
-    /// restore at the right, above them the strip that reports one in
-    /// flight.
+    /// restore at the right.
     private var footer: some View {
         VStack(spacing: 10) {
-            RestoreProgressStrip()
             HStack {
                 Button("Show in Backups") {
                     guard let chosen,
@@ -233,7 +231,7 @@ struct FolderVersionsView: View {
                     router.showBackup(chosen.id, on: page, repositoryID: node.repositoryID, focusPath: node.path)
                 }
                 .disabled(chosen == nil)
-                .help("Open this backup at this folder on the Backups tab — see what changed, search it, or restore from it")
+                .help("Open this backup at this folder on the Backups tab")
                 Spacer()
                 // By the rows selected in this listing, not the ids kept
                 // across a flip: while a backup's listing is read, or after
@@ -243,7 +241,7 @@ struct FolderVersionsView: View {
                     .disabled(chosen == nil || model.isRestoring)
                     .help(selectedNodes.isEmpty
                         ? "Restore this whole folder as of the chosen backup"
-                        : "Restore the selected items as of the chosen backup (Return)")
+                        : "Restore the selected items as of the chosen backup")
             }
         }
         .padding(12)
