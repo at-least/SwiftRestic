@@ -69,7 +69,7 @@ enum MenuBarStatus {
         now: Date = .now
     ) -> String {
         let base = switch state {
-        case .unconfigured: "SwiftRestic, no repository configured yet"
+        case .unconfigured: "SwiftRestic, no repository set"
         case .idle: "SwiftRestic"
         case .running: "SwiftRestic, work in progress"
         case .problem: "SwiftRestic, a recent run had a problem"
@@ -171,7 +171,7 @@ enum MenuBarStatus {
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring else { return nil }
         guard hold == nil, isResticAvailable else { return nil }
-        if hasNoRepositories { return "No repository set up yet" }
+        if hasNoRepositories { return "No repository set" }
         guard let nextRun else { return "No backups scheduled" }
         let name = RunRecordPresentation.planWithRepository(nextRun.plan, plans: plans, repositories: repositories)
         // The plan page's Next backup tile spells the same moment in these

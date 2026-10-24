@@ -37,7 +37,7 @@ extension AppModel {
     /// stands for, since a run that completed with errors wears the same dot
     /// as a failure. Nil when there is no dot.
     func unseenProblemLabel(for planID: UUID) -> String? {
-        unseenProblem(for: planID).map { "\($0.outcome.displayName), not yet viewed" }
+        unseenProblem(for: planID).map { "New problem — \($0.outcome.displayName)" }
     }
 
     /// The standing problem behind the dot, while it is unseen.

@@ -88,7 +88,8 @@ struct OtherGroupView: View {
     /// from it: adopting, for a plan no configuration sets up, or the plan
     /// itself, for one that now backs up elsewhere — a history left by a
     /// move earlier builds allowed; a saved plan's repository no longer
-    /// changes. Backups no plan made have no way on: the sentence says why.
+    /// changes. Backups no plan made have their way on in the sentence too:
+    /// the console's tag, which the row's tooltip no longer spells out.
     private func explanationCard(_ summary: OtherGroupPageSummary) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(summary.explanation)

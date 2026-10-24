@@ -144,21 +144,27 @@ struct SidebarView: View {
     @ViewBuilder
     private func planContextMenu(_ plan: BackupPlan) -> some View {
         let commands = model.planCommands(for: .plan(plan.id))
-        Button("Back Up Now") { model.runBackup(planID: plan.id) }
-            // The rule every Back Up Now follows, the menu bar's included:
-            // enabled only for a complete, idle plan with restic to run it —
-            // an error banner is not a substitute for a disabled item.
-            .disabled(!commands.canBackUp)
-        Button("Edit") { onEditPlan(plan) }
+        // The plan card's swap, worded as the Plan menu's: a running plan's
+        // row offers the Stop that matters now, not a second backup.
+        if model.isRunning(planID: plan.id) {
+            Button(commands.stopTitle) { model.cancelBackup(planID: plan.id) }
+                .disabled(!commands.canStop)
+        } else {
+            Button("Back Up Now") { model.runBackup(planID: plan.id) }
+                // The rule every Back Up Now follows, the menu bar's included:
+                // enabled only for a complete, idle plan with restic to run it —
+                // an error banner is not a substitute for a disabled item.
+                .disabled(!commands.canBackUp)
+        }
+        Button("Edit Plan") { onEditPlan(plan) }
         // The Schedule card's pair, word for word. The row's caption says the
         // pause while the schedule is held; manual runs stay possible either
-        // way, and a manual plan has no schedule to pause.
+        // way, and a manual plan has no schedule to pause — no item either,
+        // as the card has no control (the menu bar's Plan menu keeps its
+        // dimmed item, a regular menu's place to say why).
         if !plan.isScheduleActive(at: .now) {
             Button("Resume Schedule") { model.resumePlanSchedule(id: plan.id) }
-        } else if plan.schedule.frequency == .manual {
-            Button("Pause Schedule") {}
-                .disabled(true)
-        } else {
+        } else if plan.schedule.frequency != .manual {
             Menu("Pause Schedule") {
                 ForEach(PauseLength.allCases) { length in
                     Button(length.menuTitle) {
@@ -178,7 +184,7 @@ struct SidebarView: View {
         let commands = model.repositoryCommands(for: .repository(repository.id))
         Button("New Backup Plan") { onNewPlan(repository.id) }
         Divider()
-        Button("Edit") { onEditRepository(repository) }
+        Button("Edit Repository") { onEditRepository(repository) }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
         Divider()
         // The two of the Repository menu's a row most often wants; the
@@ -368,7 +374,7 @@ struct SidebarView: View {
             .lineLimit(1)
             .padding(.leading, Indent.child)
             .padding(.top, 4)
-            .help("Backups in “\(model.label(of: repository))” that none of its plans made — from another Mac or the restic console, a deleted plan, or a plan that now backs up elsewhere")
+            .help("Backups in “\(model.label(of: repository))” that none of its plans made")
             // Named for its repository: every repository can have one.
             .accessibilityLabel("\(title) in “\(model.label(of: repository))”, \(count)")
             .accessibilityAddTraits(.isHeader)
@@ -413,7 +419,8 @@ struct SidebarView: View {
     /// Mac's folders that no plan made. A page, a plan row's grammar: the
     /// row selects, and its page lists the group's backups. Its box sits in
     /// the icon column, so its title starts where plan names do; the
-    /// label's caption and tooltip say which kind it is.
+    /// label's caption says which kind it is, and its tooltip keeps the
+    /// folders and the Mac.
     private func groupRow(
         page: SidebarItem,
         label: SnapshotLineage.Label,
@@ -483,23 +490,30 @@ private enum Indent {
     static let child: CGFloat = 12
 }
 
-/// An Other backups group's second line. The count and the kind keep their
-/// width; the qualifiers between them take what is left and lose their
-/// middle first, so "not set up here" survives a long hostname. Each piece
-/// after the first carries its own leading separator.
+/// An Other backups group's second line. The count and the kind always read
+/// whole; the qualifiers between them are the piece that yields — all of
+/// them when the line fits, none of them when it does not, never a
+/// mid-word fragment (the row's tooltip keeps the folders and the Mac), as
+/// FilesTreeRow yields its tag to the name.
 private struct GroupCaptionLine: View {
     let caption: SnapshotLineage.Label.Caption
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text(caption.count)
-            if !caption.qualifiers.isEmpty {
-                Text(" · " + caption.qualifiers.joined(separator: " · "))
-                    .truncationMode(.middle)
-                    .layoutPriority(-1)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                Text(caption.count)
+                if !caption.qualifiers.isEmpty {
+                    Text(" · " + caption.qualifiers.joined(separator: " · "))
+                }
+                if !caption.kind.isEmpty {
+                    Text(" · " + caption.kind.joined(separator: " · "))
+                }
             }
-            if !caption.kind.isEmpty {
-                Text(" · " + caption.kind.joined(separator: " · "))
+            HStack(spacing: 0) {
+                Text(caption.count)
+                if !caption.kind.isEmpty {
+                    Text(" · " + caption.kind.joined(separator: " · "))
+                }
             }
         }
         .lineLimit(1)
@@ -624,10 +638,14 @@ private struct PlanSidebarRow: View {
 
 /// What a page's Backups tab says while it lists no backup. "No backups
 /// yet" only once a listing has succeeded: before that it is still being
-/// read, and after a failure it says why.
+/// read, and after a failure it says why. A plan's page offers its verb
+/// under the words — the pane would otherwise hold nothing to do; a
+/// group's page has no plan to run, so the words stand alone.
 struct BackupsStatusRow: View {
     @Environment(AppModel.self) private var model
     let repositoryID: UUID
+    /// The plan whose page this is, when Back Up Now is on offer.
+    let planID: UUID?
 
     var body: some View {
         let outcome = model.snapshotListingOutcome(for: repositoryID)
@@ -658,9 +676,17 @@ struct BackupsStatusRow: View {
                 .controlSize(.small)
             }
         } else {
-            Text("No backups yet")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("No backups yet")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if let planID {
+                    Button("Back Up Now") { model.runBackup(planID: planID) }
+                        // The rule every Back Up Now follows.
+                        .disabled(!model.planCommands(for: .plan(planID)).canBackUp)
+                        .controlSize(.small)
+                }
+            }
         }
     }
 }

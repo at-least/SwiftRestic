@@ -44,6 +44,12 @@ struct BackupsBrowserView: View {
         Self.openBackup(in: backups, picked: router.backupSelection[page])
     }
 
+    /// The plan whose empty list can offer Back Up Now — a plan page's;
+    /// a group's page has no plan to run and passes none.
+    private var statusRowPlanID: UUID? {
+        if case let .plan(planID) = page { planID } else { nil }
+    }
+
     var body: some View {
         // An HStack, not HSplitView: the Files tab's reason — the split
         // would not narrow the pane below the width it first laid out at.
@@ -67,7 +73,7 @@ struct BackupsBrowserView: View {
         if backups.isEmpty {
             // "No backups yet" only once the listing says so; before that
             // it is being read, and after a failure the row says why.
-            BackupsStatusRow(repositoryID: repositoryID)
+            BackupsStatusRow(repositoryID: repositoryID, planID: statusRowPlanID)
                 .padding(12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {

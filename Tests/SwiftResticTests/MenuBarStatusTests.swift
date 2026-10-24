@@ -103,7 +103,7 @@ struct MenuBarStatusTests {
     func noRepositoriesHeadline() {
         #expect(
             MenuBarStatus.headline(activity: [:], hasNoRepositories: true, plans: [], repositories: [], nextRun: nil)
-                == "No repository set up yet"
+                == "No repository set"
         )
         // Running work still holds the headline back even with no repository —
         // the same rule as every other running state.

@@ -105,10 +105,10 @@ struct ProblemDotTests {
     func unseenLabelNamesOutcome() {
         let model = makeModel()
         model.configuration.runs = [record(.completedWithErrors, finishedAt: hour1)]
-        #expect(model.unseenProblemLabel(for: planID) == "Completed with warnings, not yet viewed")
+        #expect(model.unseenProblemLabel(for: planID) == "New problem — Completed with warnings")
 
         model.configuration.runs = [record(.failed, finishedAt: hour1)]
-        #expect(model.unseenProblemLabel(for: planID) == "Failed, not yet viewed")
+        #expect(model.unseenProblemLabel(for: planID) == "New problem — Failed")
 
         // Seen: the dot and its label go, the standing problem stays named.
         model.markProblemSeen(planID: planID)

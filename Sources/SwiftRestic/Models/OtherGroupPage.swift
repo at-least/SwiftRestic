@@ -73,10 +73,12 @@ struct OtherGroupPageSummary: Equatable {
 
         if planID == nil {
             // The labels' "outside SwiftRestic", as a sentence: no plan
-            // made them, so there is no plan to adopt them into.
+            // made them, so there is no plan to adopt them into — and the
+            // one way in, named here because the row's tooltip is only the
+            // identity line.
             explanation = snapshots.count == 1
-                ? "Made outside SwiftRestic, so it can't become a plan."
-                : "Made outside SwiftRestic, so they can't become a plan."
+                ? "Made outside SwiftRestic, so it can't become a plan. Repository ▸ restic Console can tag it into one; tagging rewrites every backup's ID."
+                : "Made outside SwiftRestic, so they can't become a plan. Repository ▸ restic Console can tag them into one; tagging rewrites every backup's ID."
         } else if let formerPlan {
             let name = formerPlan.label(among: allPlans)
             // Where it went: the destination the sidebar's caption names,

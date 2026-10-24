@@ -150,12 +150,14 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         // setup question — the same yield MenuBarStatus defines. The subject
         // names the repository, so a failure from one repository cannot read
         // as another's.
+        var newsTheTopLineRepeats: Set<String> = []
         if let problem = MenuBarStatus.problemLine(
             runs: model.configuration.runs,
             hasNoRepositories: hasNoRepositories,
             plans: model.configuration.plans,
             repositories: model.configuration.repositories
         ), let run = MenuBarStatus.newestStandingProblem(runs: model.configuration.runs) {
+            newsTheTopLineRepeats = newsLineRepeating(run)
             // The one status line that goes somewhere: the run it names,
             // in Activity — the plan card's Show in Activity route.
             let item = NSMenuItem(title: problem, action: #selector(showProblem(_:)), keyEquivalent: "")
@@ -246,7 +248,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 menu.addItem(item)
             }
         } else if let group = groups.first {
-            addRowsAndNews(of: group, to: menu)
+            addRowsAndNews(of: group, to: menu, skippingNews: newsTheTopLineRepeats)
         }
 
         menu.addItem(.separator())
@@ -284,7 +286,16 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    private func addRowsAndNews(of group: MenuBarStatus.PlanGroup, to menu: NSMenu) {
+    /// The rows, then the group's news under a separator. `skippingNews`
+    /// holds the line the menu's top problem line already says — skipped
+    /// only in the flat menu, where the two sit either side of one
+    /// separator and would say the one fact twice; inside a submenu the top
+    /// line is off-screen while it is open, so a submenu keeps every line.
+    private func addRowsAndNews(
+        of group: MenuBarStatus.PlanGroup,
+        to menu: NSMenu,
+        skippingNews: Set<String> = []
+    ) {
         for row in group.rows {
             let action: Selector? = switch row.action {
             case .backUp: #selector(backUpNow(_:))
@@ -300,12 +311,33 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             item.representedObject = row.planID.uuidString
             menu.addItem(item)
         }
-        if !group.newsLines.isEmpty {
+        let news = group.newsLines.filter { !skippingNews.contains($0) }
+        if !news.isEmpty {
             menu.addItem(.separator())
-            for line in group.newsLines {
+            for line in news {
                 menu.addItem(disabledItem(line))
             }
         }
+    }
+
+    /// The plan's news caption the top problem line says again — the line
+    /// `MenuBarStatus.newsLines` puts first, derived from the same inputs
+    /// `planGroups` built the group's lines from. The pause note that may
+    /// follow it is another fact and stays; empty when the run names no
+    /// plan (a check, a prune) or is not the plan's standing problem.
+    private func newsLineRepeating(_ run: RunRecord) -> Set<String> {
+        guard let plan = model.configuration.plans.first(where: { $0.id == run.planID }),
+              let problem = model.currentProblem(for: plan.id),
+              problem.id == run.id
+        else { return [] }
+        let members = model.configuration.plans.filter { $0.repositoryID == plan.repositoryID }
+        return Set(MenuBarStatus.newsLines(
+            for: plan,
+            among: members,
+            activity: model.activity[plan.id],
+            problem: problem,
+            now: .now
+        ).prefix(1))
     }
 
     private func disabledItem(_ title: String) -> NSMenuItem {

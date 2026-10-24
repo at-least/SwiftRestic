@@ -89,8 +89,9 @@ extension SnapshotLineage {
         /// derives it). Nil where no row shows the label: a plan's records
         /// sit under a plan row whose caption is `PlanStatus`'s.
         var caption: Caption?
-        /// Every folder and the host — and, for a group under Other
-        /// backups, who wrote it — for the row's tooltip.
+        /// Every folder and the host — the row tooltip's identity line,
+        /// here and under Other backups; who wrote a group there is said by
+        /// its caption's kind and, as a sentence, on the group's page.
         var detail: String
 
         /// A group row's second line in the pieces the row lays out: the
@@ -130,7 +131,7 @@ extension SnapshotLineage {
         for lineage in lineages {
             let title = titles[lineage.key]!
             let folders = lineage.key.folderList
-            let host = lineage.key.hostname ?? "Unknown host"
+            let host = lineage.key.hostname ?? "Unknown Mac"
             var qualifiers: [String] = []
             if severalHosts { qualifiers.append(host) }
             if titleCounts[title, default: 0] > 1 { qualifiers.append(folders) }
@@ -277,7 +278,7 @@ extension OtherBackupsGroup {
             // The lineage key's sorted paths: the one order every folder
             // list reads, whatever order the snapshot lists them in.
             let folders = newest.lineageKey.folderList
-            let host = newest.hostname ?? "Unknown host"
+            let host = newest.hostname ?? "Unknown Mac"
             var qualifiers: [String] = []
             // Another Mac's backups are what a name here must warn about;
             // this Mac's own name said nothing, and a long hostname crowds
@@ -288,7 +289,13 @@ extension OtherBackupsGroup {
                 count: Format.plural(group.snapshots.count, "backup"),
                 qualifiers: qualifiers
             )
-            var detail = "\(folders) — from \(host)"
+            // The tooltip is the identity line only — folders and host. The
+            // kind's story sits on the group's page
+            // (`OtherGroupPageSummary.explanation`), where there is room for
+            // it; no quotes around a destination a cut can strand — the
+            // short spelling still truncates its tail when even the count
+            // and kind overflow.
+            let detail = "\(folders) — from \(host)"
             if case let .plan(id, _) = group {
                 let plan = plans.first { $0.id == id }
                 // A configured plan: it backs up elsewhere now, which is why
@@ -297,20 +304,15 @@ extension OtherBackupsGroup {
                 // removing a repository takes its plans — so a plan that
                 // names none says no destination rather than a wrong one.
                 if let plan, let destination = repositories.first(where: { $0.id == plan.repositoryID }) {
-                    caption.kind = ["now backs up to “\(destination.label(among: repositories))”"]
-                    detail += "\nThe “\(title)” plan backs up to “\(destination.label(among: repositories))” now; these are its earlier backups."
+                    caption.kind = ["now backs up to \(destination.label(among: repositories))"]
                 } else if plan == nil {
                     // No configuration holds this plan: it was deleted here,
                     // or is still running on another Mac — the two cannot be
                     // told apart, so the row asserts neither.
                     caption.kind = ["not set up here"]
-                    detail += "\nBacked up by a plan not set up here"
                 }
             } else {
                 caption.kind = ["outside SwiftRestic"]
-                detail += "\nThese backups carry no plan ID, so they can't be adopted. "
-                    + "restic's `tag` command (Repository ▸ restic Console) can give them one, "
-                    + "but it rewrites every backup's ID."
             }
             labels[group.id] = SnapshotLineage.Label(
                 title: title,

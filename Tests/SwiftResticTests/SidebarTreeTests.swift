@@ -215,16 +215,14 @@ struct SidebarTreeTests {
                               tags: [ResticService.planTag(deleted)])
         let shelves = BackupShelves(listing: [m1, x1, g1], plans: [], allPlans: [music])
         let labels = shelves.otherLabels(repositories: [offsite], localHost: "mac")
-        #expect(labels[.plan(music.id)]?.caption?.text == "1 backup · now backs up to “Offsite”")
+        #expect(labels[.plan(music.id)]?.caption?.text == "1 backup · now backs up to Offsite")
         #expect(labels[.lineage(x1.lineageKey)]?.caption?.text == "1 backup · outside SwiftRestic")
         #expect(labels[.plan(deleted)]?.caption?.text == "1 backup · not set up here")
-        #expect(labels[.plan(music.id)]?.detail
-            == "/Data/Music — from mac\nThe “Music” plan backs up to “Offsite” now; these are its earlier backups.")
-        #expect(labels[.plan(deleted)]?.detail == "/Data/Gone — from mac\nBacked up by a plan not set up here")
-        #expect(labels[.lineage(x1.lineageKey)]?.detail == "/Data/Sites — from mac\n"
-            + "These backups carry no plan ID, so they can't be adopted. "
-            + "restic's `tag` command (Repository ▸ restic Console) can give them one, "
-            + "but it rewrites every backup's ID.")
+        // The tooltip is the identity line; the kind's story is the group
+        // page's (`OtherGroupPageTests` pins its sentences).
+        #expect(labels[.plan(music.id)]?.detail == "/Data/Music — from mac")
+        #expect(labels[.plan(deleted)]?.detail == "/Data/Gone — from mac")
+        #expect(labels[.lineage(x1.lineageKey)]?.detail == "/Data/Sites — from mac")
         // The restore header names the orphan record by its group, as the
         // sidebar row does.
         #expect(RestoreRecordHeading(record: g1, label: labels[.plan(deleted)], comparison: nil).name
@@ -247,10 +245,7 @@ struct SidebarTreeTests {
         #expect(labels[.lineage(x1.lineageKey)]?.title == "Alpha, Zeta")
         #expect(labels[.plan(deleted)]?.qualifier == "/Data/Alpha, /Data/Zeta")
         #expect(labels[.lineage(x1.lineageKey)]?.caption?.text == "1 backup · /Data/Alpha, /Data/Zeta · outside SwiftRestic")
-        #expect(labels[.lineage(x1.lineageKey)]?.detail == "/Data/Alpha, /Data/Zeta — from mac\n"
-            + "These backups carry no plan ID, so they can't be adopted. "
-            + "restic's `tag` command (Repository ▸ restic Console) can give them one, "
-            + "but it rewrites every backup's ID.")
+        #expect(labels[.lineage(x1.lineageKey)]?.detail == "/Data/Alpha, /Data/Zeta — from mac")
     }
 
     @Test("backups no plan tag marks keep grouping by folders and Mac")
@@ -308,16 +303,14 @@ struct SidebarTreeTests {
         #expect(others[.plan(music.id)] == SnapshotLineage.Label(
             title: "Music",
             qualifier: "/Data/Music",
-            caption: .init(count: "1 backup", qualifiers: ["/Data/Music"], kind: ["now backs up to “Offsite”"]),
-            detail: "/Data/Music — from mac\nThe “Music” plan backs up to “Offsite” now; these are its earlier backups."
+            caption: .init(count: "1 backup", qualifiers: ["/Data/Music"], kind: ["now backs up to Offsite"]),
+            detail: "/Data/Music — from mac"
         ))
         #expect(others[.lineage(x1.lineageKey)] == SnapshotLineage.Label(
             title: "Music",
             qualifier: "old-mac · /Data/Music",
             caption: .init(count: "1 backup", qualifiers: ["old-mac", "/Data/Music"], kind: ["outside SwiftRestic"]),
-            detail: "/Data/Music — from old-mac\nThese backups carry no plan ID, so they can't be adopted. "
-                + "restic's `tag` command (Repository ▸ restic Console) can give them one, "
-                + "but it rewrites every backup's ID."
+            detail: "/Data/Music — from old-mac"
         ))
         #expect(shelves.label(of: x1, repositories: [offsite], localHost: "mac") == others[.lineage(x1.lineageKey)])
         // The restore header names an orphan record the way the sidebar names

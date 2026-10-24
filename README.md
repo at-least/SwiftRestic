@@ -47,8 +47,9 @@ the generator after editing it; the PNGs are checked in.
   `swiftrestic-plan-` tag, so a deleted plan's history stays one group), or,
   for backups no plan made, by restic's own `host,paths` grouping. Each
   group's caption says which kind — *not set up here*, *now backs up to
-  “Offsite”*, *outside SwiftRestic* — and names the Mac its newest backup came
-  from when that isn't this one. A plan's row wears a folder, as in Arq's
+  Offsite*, *outside SwiftRestic* — and names the Mac its newest backup came
+  from when that isn't this one; the row's tooltip keeps the folders and the
+  Mac, and the kind's story sits on the group's page. A plan's row wears a folder, as in Arq's
   tree, and gives its last backup (*“Last backup 1 hour ago”*); its page, the tray and Settings say when it runs next,
   and the tray's menu carries each repository's Protection line (*“3 of 3
   plans protected · Last backup 3 hours ago”* atop its repository's submenu,
@@ -64,6 +65,8 @@ the generator after editing it; the PNGs are checked in.
   newest first, a section per month once they span more than one, beside
   the open one's files (its tree, as *Browsing and restore* below says); the
   list's edge drags, and the window's subtitle is the open backup's moment.
+  An empty list says *No backups yet*, with *Back Up Now* under it on a
+  plan's page.
   Files is a tree on the left (drag its edge to widen
   it) of the plan's folder as this Mac holds it now, and the picked item on
   the right — what the tab is for: a current file's past versions (until
@@ -169,7 +172,9 @@ the generator after editing it; the PNGs are checked in.
   (until 2026-10-19 a group's page had one too). Overview says what
   the history is: a plan not set up here (deleted, or running on another
   Mac), a plan that now backs up elsewhere (*Open the “Music” Plan*), or
-  backups no plan made, which can't be adopted. Its Backups card brackets
+  backups no plan made, which can't be adopted — their sentence names
+  Repository ▸ restic Console's `tag` as the way to make them a plan's
+  history, at the cost of every backup's ID. Its Backups card brackets
   the history (newest, oldest), names the Macs and folder sets, carries the
   exclude patterns and user tags; the plan tag, when there is one, is its
   right-click *Copy Plan Tag* rather than a row of its own. Its row's menu has *Show Backups*,
@@ -217,7 +222,7 @@ the generator after editing it; the PNGs are checked in.
   last "… and N more in Activity" row opens Activity's Problems; then
   location, size and maintenance. Its toolbar holds the search field alone:
   *Edit Repository* is the Repository menu's and the repository row's
-  (*Edit*), *Refresh* the row's and the menu's *Refresh All Backups* (⌘R),
+  (the same words), *Refresh* the row's and the menu's *Refresh All Backups* (⌘R),
   as the HIG has it on the Mac: "it doesn't make sense to provide a toolbar
   item for every menu item" (until 2026-10-19 *Refresh* and *Edit* sat at
   the toolbar's right). The *Backups* row
@@ -319,7 +324,7 @@ the generator after editing it; the PNGs are checked in.
   only ever touch its own. A plan's page
   is three cards, the first two each with its verb in its corner, both also
   in the Plan menu and the row's menu, which open the editor too (*Edit
-  Plan*, *Edit* on the row; until 2026-10-19 also *Edit* at the toolbar's
+  Plan* on both; until 2026-10-19 also *Edit* at the toolbar's
   right):
   *Backups* (last backup, count, retention) with *Back Up Now* — *Stop*
   while it runs; *Schedule* (and when it runs next) with *Pause* (*Pause

@@ -212,7 +212,7 @@ extension Snapshot {
     static func distinctHosts(of snapshots: [Snapshot]) -> [String] {
         var hosts: [String] = []
         for snapshot in snapshots {
-            let host = snapshot.hostname ?? "Unknown host"
+            let host = snapshot.hostname ?? "Unknown Mac"
             if !hosts.contains(host) { hosts.append(host) }
         }
         return hosts
