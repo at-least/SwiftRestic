@@ -132,11 +132,11 @@ struct SnapshotDiffView: View {
                     // the repository was just removed and the load below has
                     // nothing to compare anyway.
                     Text(
-                        "Changes in backup \(newer.shortID)"
+                        "Changes in backup"
                             + (model.repository(id: target.repositoryID).map { " — \(model.label(of: $0))" } ?? "")
                     )
                         .font(.headline)
-                    Text(Format.timestamp(newer.time))
+                    Text(Format.timestamp(newer.time) + " · \(newer.shortID)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -223,13 +223,21 @@ struct SnapshotDiffView: View {
             } description: {
                 Text(loadError).textSelection(.enabled)
             }
+        } else if let diff, diff.changes.isEmpty {
+            // Nothing changed: said once, with no zero statistics, no
+            // filters and no footer count around it.
+            ContentUnavailableView(
+                "No differences",
+                systemImage: "equal.circle",
+                description: Text("The two backups contain the same files.")
+            )
         } else if let diff {
             VStack(spacing: 0) {
                 statistics(diff)
                 Divider()
                 filters(diff)
                 Divider()
-                changeList(diff, rows: rows)
+                changeList(rows: rows)
             }
         } else {
             Color.clear
@@ -313,15 +321,11 @@ struct SnapshotDiffView: View {
         .padding(.vertical, 8)
     }
 
+    /// Only reached with a diff that has changes: `content` returns the
+    /// sheet's empty state first.
     @ViewBuilder
-    private func changeList(_ diff: SnapshotDiff, rows: [ResticDiffChange]?) -> some View {
-        if diff.changes.isEmpty {
-            ContentUnavailableView(
-                "No differences",
-                systemImage: "equal.circle",
-                description: Text("The two backups contain the same files.")
-            )
-        } else if let rows {
+    private func changeList(rows: [ResticDiffChange]?) -> some View {
+        if let rows {
             if rows.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
@@ -395,7 +399,7 @@ struct SnapshotDiffView: View {
         VStack(spacing: 10) {
             RestoreProgressStrip()
             HStack {
-                if let diff, let shown = changeRows?.count {
+                if let diff, let shown = changeRows?.count, !diff.changes.isEmpty {
                     Text(footerText(diff, shown: shown))
                         .font(.caption)
                         .foregroundStyle(.secondary)

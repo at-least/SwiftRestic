@@ -808,7 +808,7 @@ the generator after editing it; the PNGs are checked in.
   record which backup, which item and where it went. A failure the drawer
   offers a fix for says the fix in its own words, so the plan page's problem
   card and the notification do too — exit 12 "The password doesn’t open this repository
-  — check it in the repository settings.", exit 10 "No repository is at its
+  — check it in the repository editor.", exit 10 "No repository is at its
   location — put it back, or add it where it is now as a new repository."
   (*Add Repository*), exit 11 "The repository is locked — if no other Mac is
   using it, unlock it." (*Unlock*) — each followed

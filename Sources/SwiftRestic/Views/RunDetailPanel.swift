@@ -314,7 +314,7 @@ struct RunFixButton: View {
             case let .pruneNow(id): router.request(.confirm(.prune(id)))
             }
         }
-        .help(fix.help)
+        .modifier(TileHelp(help: fix.help))
     }
 }
 

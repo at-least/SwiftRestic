@@ -408,7 +408,8 @@ struct WarningCountTests {
         #expect(!event.summary.contains("5 warnings"), "summary was: \(event.summary)")
 
         // Without a count (hand-built events, or a run with none), the
-        // sample's own length is the answer.
+        // sample answers, minus retention-prefixed lines: they are stored
+        // after the count and are not warnings.
         var bare = event
         bare.warningCount = nil
         #expect(bare.summary.contains("5 warnings"), "summary was: \(bare.summary)")
@@ -417,6 +418,16 @@ struct WarningCountTests {
         two.warnings = ["one", "two"]
         two.warningCount = nil
         #expect(two.summary.contains("2 warnings"), "summary was: \(two.summary)")
+
+        // A retention-only record: its one stored line is the retention skip,
+        // so the outcome carries no number — the line itself follows.
+        var retention = event
+        retention.warnings = [RunRecord.retentionSkippedPrefix + "locked"]
+        retention.warningCount = nil
+        #expect(
+            retention.summary == "Backup completed with warnings: Documents (NAS) — Retention skipped: locked",
+            "summary was: \(retention.summary)"
+        )
     }
 }
 

@@ -24,11 +24,11 @@ struct ResticErrorTests {
             message: "Fatal: wrong password"
         ).errorDescription ?? ""
         #expect(wrongPassword.contains("doesn’t open this repository"))
-        #expect(wrongPassword.contains("check it in the repository settings"))
+        #expect(wrongPassword.contains("check it in the repository editor"))
         #expect(wrongPassword.contains("Fatal: wrong password"))
         #expect(
             ResticError.commandFailed(exitCode: 12, message: "")
-                .errorDescription?.contains("check it in the repository settings") == true
+                .errorDescription?.contains("check it in the repository editor") == true
         )
 
         // A missing repository and a lock carry their fix the same way: the

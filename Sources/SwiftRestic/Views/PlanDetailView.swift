@@ -166,9 +166,6 @@ struct PlanDetailView: View {
                                 .help(Format.timestamp(summary.finishedAt))
                         }
                         if let message = summary.message {
-                            // Middle truncation, as Activity's Detail column
-                            // does for failures: restic's messages lead with
-                            // the subject and end with the verdict.
                             Text(message)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)

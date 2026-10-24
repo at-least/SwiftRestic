@@ -140,14 +140,17 @@ struct NotificationEvent: Sendable, Equatable {
             let added = kind == .backup ? " — \(Format.bytes(dataAdded)) added" : ""
             return "\(operation) succeeded: \(subject)\(added) in \(Format.duration(duration))"
         case .warned:
-            let count = warningCount ?? warnings.count
-            return "\(operation) completed with \(Format.plural(count, "warning")): \(subject)"
+            // A retention line is appended to `itemErrors` after
+            // `itemErrorCount` is set, so it can sit in the sample without
+            // being in any count — not a warning, and never counted one.
+            let counted = warningCount ?? warnings.filter { !$0.hasPrefix(RunRecord.retentionSkippedPrefix) }.count
+            return "\(operation) \(counted > 0 ? "completed with \(Format.plural(counted, "warning"))" : "completed with warnings"): \(subject)"
                 + (warnings.first.map { " — \($0)" } ?? "")
                 + (hint.map { "\n" + $0 } ?? "")
         case .failed:
             return "\(operation) failed: \(subject) — \(errorMessage ?? "no details")"
         case .cancelled:
-            return "\(operation) cancelled before finishing: \(subject)"
+            return "\(operation) cancelled: \(subject)"
         case .skipped:
             return "\(operation) skipped: \(subject)" + (errorMessage.map { " — \($0)" } ?? "")
         }

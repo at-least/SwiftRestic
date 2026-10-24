@@ -68,7 +68,7 @@ enum ResticError: Error, LocalizedError, Equatable {
                 // never succeed here. restic's words stay for the discriminating
                 // detail (wrong password vs no matching key vs a damaged key
                 // file), first sentence only — stderr can run multi-line.
-                let base = "The password doesn’t open this repository — check it in the repository settings."
+                let base = "The password doesn’t open this repository — check it in the repository editor."
                 let restic = Format.firstSentence(message)
                 return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
             }
@@ -96,9 +96,9 @@ enum ResticError: Error, LocalizedError, Equatable {
         case .cancelled:
             return "The operation was cancelled."
         case .repositoryMissing:
-            return "This repository is no longer in SwiftRestic."
+            return "This repository is no longer set up in SwiftRestic."
         case .planMissing:
-            return "This plan is no longer in SwiftRestic."
+            return "This plan is no longer set up in SwiftRestic."
         case let .itemNotListed(name):
             return "“\(name)” is no longer listed in the chosen backup — refresh and try again."
         case let .passwordMissing(name):
@@ -170,9 +170,8 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// check before restic runs, and a run's failure after.
     static let rcloneMissing = "rclone is not installed. Install it with brew install rclone."
 
-    /// Exit 10's cause and fix, the failure's message and its button's
-    /// tooltip alike. A repository's location is fixed, so where it is now
-    /// is a new repository, as a moved plan folder is a new plan.
+    /// Exit 10's cause and fix. A repository's location is fixed, so where
+    /// it is now is a new repository, as a moved plan folder is a new plan.
     static let noRepositoryAtLocation = "No repository is at its location — put it back, or add it where it is now as a new repository"
 
     /// restic's documented exit codes.

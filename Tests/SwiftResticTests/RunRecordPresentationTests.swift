@@ -260,9 +260,12 @@ struct RunRecordPresentationTests {
         #expect(RunFix.editRepository(repository).title == "Edit Repository")
         #expect(RunFix.addRepository.title == "Add Repository")
         #expect(RunFix.removeStaleLocks(repository).title == "Unlock")
-        // Each says the cause it fixes.
-        #expect(RunFix.editRepository(repository).help == "The password doesn’t open this repository — check it in the repository settings")
-        #expect(RunFix.addRepository.help == "No repository is at its location — put it back, or add it where it is now as a new repository")
+        // The failure message beside the button already says the cause.
+        #expect(RunFix.editRepository(repository).help == nil)
+        #expect(RunFix.addRepository.help == nil)
+        // Unlock's is kept: the stored message never says who does not hold
+        // the lock.
+        #expect(RunFix.removeStaleLocks(repository).help == "A lock no run here holds is in the way")
     }
 
     @Test("a failure for a network share that refused offers the editor holding its password: the repository's for its own share, the plan's for a folder's")
@@ -314,8 +317,7 @@ struct RunRecordPresentationTests {
         refused.outcome = .completedWithErrors
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == nil)
         #expect(RunFix.editPlanRetention(plan).title == "Edit Plan")
-        #expect(RunFix.editPlanRetention(plan).help
-            == "The repository refuses to delete backups — turn this plan’s retention off, or thin it where deletions are allowed")
+        #expect(RunFix.editPlanRetention(plan).help == nil)
     }
 
     @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now; a write anywhere else keeps restic's")

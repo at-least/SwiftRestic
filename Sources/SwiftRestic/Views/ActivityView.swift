@@ -135,11 +135,7 @@ struct ActivityView: View {
                             // whole sentence is the tooltip, and the drawer
                             // leads a problem run with it.
                             .lineLimit(1)
-                            // Failure messages lead with the subject and end
-                            // with the verdict; tail truncation would cut
-                            // exactly the verdict, so a long path sacrifices
-                            // its middle instead.
-                            .truncationMode(run.failureMessage != nil ? .middle : .tail)
+                            .truncationMode(.tail)
                             .help(detail)
                     }
                     .width(min: 80, ideal: 200)

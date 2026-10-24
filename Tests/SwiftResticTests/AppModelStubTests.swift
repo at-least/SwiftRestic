@@ -2221,7 +2221,7 @@ struct AppModelStubTests {
             return
         }
         #expect(message.contains("doesn’t open this repository"))
-        #expect(message.contains("check it in the repository settings"))
+        #expect(message.contains("check it in the repository editor"))
 
         await harness.model.shutdown()
     }

@@ -43,17 +43,14 @@ enum RunFix: Equatable {
         }
     }
 
-    /// The button's tooltip: the cause it fixes.
-    var help: String {
+    /// The button's tooltip: the fact the failure message beside it lacks;
+    /// nil where that message already says it.
+    var help: String? {
         switch self {
-        case .editRepository: "The password doesn’t open this repository — check it in the repository settings"
-        case .addRepository: ResticError.noRepositoryAtLocation
-        case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
-        case .newPlan: "Back the folder up where it is now, with a new plan"
-        case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
+        case .editRepository, .addRepository, .newPlan, .pruneNow, .editPlanRetention: nil
+        case .removeStaleLocks: "A lock no run here holds is in the way"
+        case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository editor"
         case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan editor’s Excluding tab"
-        case .pruneNow: "What the failed backup uploaded stays in the repository until a cleanup frees it"
-        case .editPlanRetention: "The repository refuses to delete backups — turn this plan’s retention off, or thin it where deletions are allowed"
         }
     }
 }

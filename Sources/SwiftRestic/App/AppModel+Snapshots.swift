@@ -145,7 +145,7 @@ extension AppModel {
             guard configuration.repository(id: repositoryID) != nil else { return }
             repositoriesMissingPassword.insert(repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(
-                "Waiting for a repository password — add it in the repository settings to read this repository."
+                "Waiting for a repository password — add it in the repository editor to read this repository."
             )
         } catch let ResticError.commandFailed(code, _) where code == 10 {
             // restic's "does not exist": the repository is not where it was
