@@ -46,7 +46,7 @@ struct RepositoryCommandState: Equatable {
     /// selection's.
     var canFind = false
     var canRefreshAll = false
-    /// restic Console, the menu's and the sidebar footer's: the console
+    /// restic Console, the menu's and the sidebar row's: the console
     /// picks its own repository, so it needs only one to exist.
     var canOpenConsole = false
     /// Check, Clean Up, Unlock, Rebuild Search Index: restic work

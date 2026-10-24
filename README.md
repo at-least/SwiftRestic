@@ -31,7 +31,9 @@ the generator after editing it; the PNGs are checked in.
 
 ## What it does
 
-- **Repositories in the sidebar** — each repository is a row with its plans
+- **Repositories in the sidebar** — between Activity, first so its problem
+  badge never scrolls away, and restic Console, last; the foot of the
+  sidebar holds only the + for new plans and repositories. Each repository is a row with its plans
   always in view beneath it (or *New Backup Plan* while it has none): two
   levels, the most Apple's guidelines give a sidebar ("When a data hierarchy
   is deeper than two levels, consider using a split view interface that
@@ -617,7 +619,7 @@ the generator after editing it; the PNGs are checked in.
   when you do not know which backup still has the file, then restore the
   match (while the index still reads, a word with no glob character is
   looked for inside names, as `*word*`). Find Files is a page of the window,
-  with no sidebar row (as the console has none), its query in the toolbar's
+  with no sidebar row (the toolbar's field is its way in), its query in the toolbar's
   search field and a repository picker above the results; once the
   repository's index has read every backup it searches as you type, and
   until then restic's walk runs on Return or *Search*. Until 2026-10-18 it
@@ -788,7 +790,7 @@ the generator after editing it; the PNGs are checked in.
   stay run-driven.
 - **restic console** — run any restic command against a repository and read its
   own output, for what the UI does not cover (*Repository › restic
-  Console*, or the terminal button at the foot of the sidebar). A command that may change the backups — the ones it confirms
+  Console*, or the sidebar's last row). A command that may change the backups — the ones it confirms
   first, plus `tag` and `copy` — re-reads the listing when it ends, so the
   sidebar, Files tabs and counts drop what a `forget` removed at once. A
   check that found errors advises "`restic repair` can recover some

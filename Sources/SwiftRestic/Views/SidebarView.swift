@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The split view's sidebar: each repository with its plans always in view
-/// beneath it, then Activity — two levels, the HIG's most for a sidebar
+/// The split view's sidebar: Activity, then each repository with its plans
+/// always in view beneath it, then restic Console — two levels, the HIG's most for a sidebar
 /// ("When a data hierarchy is deeper than two levels, consider using a
 /// split view interface that includes a content list between the sidebar
 /// items and detail view"). The repository's row opens its page, which is
@@ -57,26 +57,8 @@ struct SidebarView: View {
                 runs: model.configuration.runs,
                 since: OverviewMetrics.problemWindowStart(from: now)
             )
-            Section {
-                ForEach(model.configuration.repositories) { repository in
-                    let shelves = model.shelves(for: repository.id)
-                    repositoryRow(repository)
-                    ForEach(
-                        SidebarTree.children(
-                            of: repository.id,
-                            in: model.configuration.plans,
-                            hasOtherBackups: shelves.hasOtherBackups
-                        ),
-                        id: \.self
-                    ) { child in
-                        childRows(child, of: repository, shelves: shelves)
-                    }
-                }
-            }
-
-            // Header-less: one row needs no title above it. The restic
-            // console has no row — it is a power tool, reached from
-            // Repository ▸ restic Console.
+            // First, above the repositories: its badge is every
+            // repository's news and must not scroll away under a long tree.
             Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
                     // The window's unread badge: the week's problems, as a
@@ -99,6 +81,31 @@ struct SidebarView: View {
                     // .contextMenu after .tag do no such harm.
                     .tag(SidebarItem.activity)
             }
+
+            Section {
+                ForEach(model.configuration.repositories) { repository in
+                    let shelves = model.shelves(for: repository.id)
+                    repositoryRow(repository)
+                    ForEach(
+                        SidebarTree.children(
+                            of: repository.id,
+                            in: model.configuration.plans,
+                            hasOtherBackups: shelves.hasOtherBackups
+                        ),
+                        id: \.self
+                    ) { child in
+                        childRows(child, of: repository, shelves: shelves)
+                    }
+                }
+            }
+
+            // Last: a power tool, a place rather than an action, so a row
+            // and not a footer button (the user's call).
+            Section {
+                Label("restic Console", systemImage: "terminal")
+                    .tag(SidebarItem.console)
+                    .disabled(!model.repositoryCommands(for: router.selection).canOpenConsole)
+            }
         }
         .listStyle(.sidebar)
         .focusOnClick($isFocused)
@@ -106,7 +113,7 @@ struct SidebarView: View {
         .safeAreaInset(edge: .bottom) { sidebarFooter }
     }
 
-    /// Arq's bare + in the corner, and restic Console at the other end. A
+    /// Arq's bare + in the corner; actions only, every page is a row. A
     /// missing restic is not repeated here: the
     /// banner above every pane (RootDetailView) already says it, with the
     /// install instruction a cursor-only triangle could not show. The bar
@@ -128,15 +135,6 @@ struct SidebarView: View {
             .help("Add a backup plan or a repository")
 
             Spacer()
-
-            // Icon-only like the + (the user's call); the tooltip names it.
-            Button { router.request(.showConsole) } label: {
-                Label("restic Console", systemImage: "terminal")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.borderless)
-            .disabled(!model.repositoryCommands(for: router.selection).canOpenConsole)
-            .help("restic Console: run restic commands against a repository")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

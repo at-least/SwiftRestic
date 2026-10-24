@@ -132,8 +132,8 @@ struct Banner: Identifiable, Equatable {
     var staysUntilDismissed: Bool { level == .error || level == .warning }
 }
 
-/// Which pane the detail column is showing — the sidebar's selection, or the
-/// console, which has no row and arrives from Repository ▸ restic Console.
+/// Which pane the detail column is showing — the sidebar's selection, or
+/// Find Files, which has no row.
 /// Lives beside the model because menu-bar commands must read it: a Plan
 /// menu "Back Up Now" that stays enabled over a non-plan selection is a menu
 /// that lies.
@@ -154,7 +154,8 @@ enum SidebarItem: Hashable {
     /// selection revalidates to the repository's page once it is gone.
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     case console
-    /// Find Files: a page with no row, as the console has none — reached
+    /// Find Files: a page with no row — the toolbar's search field is its
+    /// way in, and a row would be a second one — reached
     /// from Repository ▸ Find Files in Backups (⇧⌘F) off a page with a
     /// Files tab, a repository page's search field, and Search All
     /// Backups. Not a sheet: its restores would stack a second sheet on it.
