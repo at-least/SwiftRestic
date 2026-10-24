@@ -8,8 +8,8 @@ import SwiftUI
 /// the user chose the bottom bar.
 struct RestoreCommand {
     /// What it restores, in the pane's words: "Restore" for a selection,
-    /// "Restore Folder" or "Restore Entire Backup" for the whole of what
-    /// is open, "Restore Selected" for Find Files' rows.
+    /// "Restore Folder" for the whole of what is open, "Restore Selected"
+    /// for Find Files' rows.
     let title: String
     let isEnabled: Bool
     let run: () -> Void

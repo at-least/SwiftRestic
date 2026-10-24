@@ -375,15 +375,4 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         record("restoreItems:\(overwrite.resticValue):\(parent):\(nodes.map(\.name).joined(separator: ","))")
         return nil
     }
-
-    func restoreWholeSnapshot(
-        _ context: RepositoryContext,
-        snapshotID: String,
-        destinationDirectory: URL,
-        overwrite: RestoreOverwritePolicy,
-        onProgress: (@Sendable (OperationProgress) -> Void)?
-    ) async throws -> ResticSummary? {
-        record("restoreWhole:\(overwrite.resticValue)")
-        return nil
-    }
 }

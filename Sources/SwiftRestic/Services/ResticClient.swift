@@ -143,13 +143,4 @@ protocol ResticClient: Sendable {
         overwrite: RestoreOverwritePolicy,
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> ResticSummary?
-
-    @discardableResult
-    func restoreWholeSnapshot(
-        _ context: RepositoryContext,
-        snapshotID: String,
-        destinationDirectory: URL,
-        overwrite: RestoreOverwritePolicy,
-        onProgress: (@Sendable (OperationProgress) -> Void)?
-    ) async throws -> ResticSummary?
 }

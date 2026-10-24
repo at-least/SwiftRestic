@@ -3,14 +3,11 @@ import SwiftUI
 
 /// One restore waiting for its destination: what, from which backup, and
 /// what to run once the sheet has an answer. Every Restore in the app
-/// builds one — the Restore pane's two, Find Files and the Files view's — so
+/// builds one — the Restore pane's, Find Files and the Files view's — so
 /// the destination and the keep/replace choice are asked in one place.
 struct RestoreDestinationRequest: Identifiable {
     let id = UUID()
     let subject: RestoreSubject
-    /// The backup's one name (`SnapshotLineage.displayName`), which a
-    /// whole-backup restore's header needs; an item restore names the item.
-    var backupName: String?
     /// A line under the headline about how the selection became the
     /// subject: selected items inside a selected folder, which come with it
     /// (`RestoreBatch.coveredNote`).
@@ -26,8 +23,7 @@ struct RestoreDestinationRequest: Identifiable {
     var versionModified: Date?
     /// Starts the restore with this policy, into these directories: one per
     /// item, in order (`RestoreSubject.directoryCount`) — the same folder for
-    /// all, or for Original location each item's own parent — and one for
-    /// an item or a whole backup.
+    /// all, or for Original location each item's own parent.
     let perform: @MainActor ([URL], RestoreOverwritePolicy) -> Void
 
     /// The picked rows' restore — every surface's that restores a selection:
@@ -201,9 +197,10 @@ struct RestoreDestinationSheet: View {
     }
 
     private var headline: String {
-        if let itemName { return "Restore “\(itemName)”" }
-        if let items { return "Restore \(Format.plural(items.count, "item"))" }
-        return request.backupName.map { "Restore all of “\($0)”" } ?? "Restore the whole backup"
+        switch request.subject {
+        case let .item(name, _, _): "Restore “\(name)”"
+        case let .items(items): "Restore \(Format.plural(items.count, "item"))"
+        }
     }
 
     private var backupLine: String {
@@ -217,9 +214,10 @@ struct RestoreDestinationSheet: View {
 
     /// The name the folder panel and the alerts use for what is restored.
     private var subjectName: String {
-        if let itemName { return "“\(itemName)”" }
-        if let items { return "the \(Format.plural(items.count, "item"))" }
-        return request.backupName.map { "all of “\($0)”" } ?? "the whole backup"
+        switch request.subject {
+        case let .item(name, _, _): "“\(name)”"
+        case let .items(items): "the \(Format.plural(items.count, "item"))"
+        }
     }
 
     /// Selected items that would land on each other in one folder — the
@@ -265,18 +263,10 @@ struct RestoreDestinationSheet: View {
                 caption("More than one selected item is named \(collidingNames.map { "“\($0)”" }.joined(separator: ", ")) — in one folder they would land on each other. Restore them one at a time, or to their original locations.")
             } else if let folder = chosenFolder {
                 let landing = RestoreDestinationRules.landings(for: request.subject, into: [folder]).first ?? folder
-                if itemName != nil {
-                    pathCaption("Will restore to \(Self.abbreviated(landing))", fullPath: landing.path)
-                } else if let items {
+                if let items {
                     pathCaption("Will restore the \(Format.plural(items.count, "item")) into \(Self.abbreviated(folder))", fullPath: folder.path)
                 } else {
-                    // restic recreates each backed-up folder's whole path
-                    // inside the target: said in the tooltip, not a second
-                    // line.
-                    pathCaption(
-                        "Will restore into \(Self.abbreviated(folder))",
-                        fullPath: "\(folder.path)\nEach folder is recreated under its full original path inside it."
-                    )
+                    pathCaption("Will restore to \(Self.abbreviated(landing))", fullPath: landing.path)
                 }
             } else {
                 caption("No folder chosen")
@@ -305,8 +295,7 @@ struct RestoreDestinationSheet: View {
     }
 
     /// A sentence, which wraps. Height-pinned: the Form sizes its rows from
-    /// a one-line measure and otherwise cuts the whole-backup sentence to
-    /// one line. Safe in this sheet, unlike in the window's detail column:
+    /// a one-line measure and otherwise cuts a long sentence to one line. Safe in this sheet, unlike in the window's detail column:
     /// the sheet's fixed 460-pt width is the only width it is ever asked at.
     private func caption(_ text: String) -> some View {
         Text(text)
@@ -394,7 +383,7 @@ struct RestoreDestinationSheet: View {
             // Cancel pressed while the look ran: nothing starts, and
             // nothing is remembered.
             guard !Task.isCancelled else { return }
-            guard existing.isEmpty || confirmReplace(existing, in: directories[0]) else { return }
+            guard existing.isEmpty || confirmReplace(existing) else { return }
             guard !Task.isCancelled else { return }
             commit(directories, chosen, kind: chosenKind)
         }
@@ -404,7 +393,7 @@ struct RestoreDestinationSheet: View {
     /// the person's intent and not marked destructive — the HIG's Empty
     /// Trash case — yet no button is the default, the HIG's way to make
     /// people read first. Escape keeps NSAlert's route to "Cancel".
-    private func confirmReplace(_ existing: [URL], in destination: URL) -> Bool {
+    private func confirmReplace(_ existing: [URL]) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
         let backupOf = request.backupTime.map { " of \(Format.timestamp($0))" } ?? ""
@@ -425,12 +414,6 @@ struct RestoreDestinationSheet: View {
             let names = existing.map { "“\($0.lastPathComponent)”" }
             alert.messageText = existing.count == 1 ? "Replace \(names[0])?" : "Replace \(Format.count(existing.count)) existing items?"
             alert.informativeText = "\(names.joined(separator: ", ")) \(existing.count == 1 ? "is" : "are") already where \(existing.count == 1 ? "it" : "they") would be restored. Files that differ from the backup\(backupOf) will be replaced with the backed-up versions; files that aren't in the backup stay as they are."
-        case .wholeSnapshot:
-            alert.messageText = "Replace existing files?"
-            let folders = existing.count == 1
-                ? "1 of the backup's folders already exists"
-                : "\(Format.count(existing.count)) of the backup's folders already exist"
-            alert.informativeText = "\(folders) in “\(Self.abbreviated(destination))”. Files in them that differ from the backup will be replaced; files that aren't in the backup stay as they are."
         }
         alert.addButton(withTitle: "Replace")
         alert.addButton(withTitle: "Cancel")

@@ -2303,18 +2303,6 @@ struct RestoreBannerTests {
         )
         #expect(silent.title == "Restored a.txt")
         #expect(silent.message == "/Users/x/Restored/a.txt")
-
-        // A whole backup lands as a folder of recreated paths: the banner
-        // names that folder and reveals it. "Backup" is the restore
-        // surfaces' shared word, the Restore pane included.
-        let destination = URL(fileURLWithPath: "/Users/x/Restored")
-        let whole = AppModel.restoreBanner(
-            itemName: nil, isDirectory: true, landing: destination,
-            summary: summary(restored: 12, skipped: 4), policy: .keepExisting
-        )
-        #expect(whole.title == "Restored the whole backup")
-        #expect(whole.message == "/Users/x/Restored\nKept 4 existing files as they were.")
-        #expect(whole.revealPaths == ["/Users/x/Restored"])
     }
 }
 

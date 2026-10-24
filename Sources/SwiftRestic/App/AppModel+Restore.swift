@@ -168,69 +168,21 @@ extension AppModel {
         names.count == 1 ? names[0] : "\(names[0]) and \(Format.count(names.count - 1)) more"
     }
 
-    /// Restores every file in a snapshot, keeping the original absolute layout
-    /// beneath `destination`.
-    func restoreWholeSnapshot(
-        repositoryID: UUID,
-        snapshotID: String,
-        to destination: URL,
-        overwrite: RestoreOverwritePolicy
-    ) {
-        let reporter = restoreProgressReporter()
-        // The strip names the backup by SnapshotLineage's one naming rule,
-        // as the sheet that started it did; the record keeps the ID, the
-        // drawer's vocabulary.
-        let backup = snapshots(for: repositoryID).first { $0.id == snapshotID || $0.shortID == snapshotID }
-        let name = backup.map { SnapshotLineage.displayName(of: $0, label: recordLabel(of: $0, repositoryID: repositoryID)) }
-        beginRestore(
-            repositoryID: repositoryID,
-            label: "backup \(snapshotID.prefix(8))",
-            description: name.map { "Restoring the whole “\($0)” backup" } ?? "Restoring the whole backup",
-            snapshotID: snapshotID,
-            sourcePath: nil,
-            destinationPath: destination.path
-        ) { service, context in
-            try await service.restoreWholeSnapshot(
-                context,
-                snapshotID: snapshotID,
-                destinationDirectory: destination,
-                overwrite: overwrite,
-                onProgress: reporter
-            )
-        } onSuccess: { [weak self] summary in
-            self?.post(Self.restoreBanner(
-                itemName: nil,
-                isDirectory: true,
-                landing: destination,
-                summary: summary,
-                policy: overwrite
-            ))
-        }
-    }
-
     /// The banner a finished restore posts: where it landed — the item
-    /// itself, which Reveal in Finder selects, or the folder a whole backup
-    /// went into — and, under Keep, what restic left as it was. restic's
+    /// itself, which Reveal in Finder selects — and, under Keep, what
+    /// restic left as it was. restic's
     /// files_restored counts directories too, so only files_skipped means
     /// kept. Under Replace a skipped file already matched the backup, which
     /// is not worth a line. "Backup", the restore surfaces' word: the
     /// Restore pane shows this banner too.
     nonisolated static func restoreBanner(
-        itemName: String?,
+        itemName: String,
         isDirectory: Bool,
         landing: URL,
         summary: ResticSummary?,
         policy: RestoreOverwritePolicy
     ) -> Banner {
         let kept = policy == .keepExisting ? summary?.filesSkipped ?? 0 : 0
-        guard let itemName else {
-            return Banner(
-                title: "Restored the whole backup",
-                message: [landing.path, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
-                isError: false,
-                revealPaths: [landing.path]
-            )
-        }
         if !isDirectory, kept > 0, (summary?.filesRestored ?? 0) == 0 {
             return Banner(
                 title: "Kept the existing “\(itemName)”",
@@ -285,7 +237,7 @@ extension AppModel {
         }
     }
 
-    /// One item, or a whole backup: a run of one restic restore. See
+    /// One item: a run of one restic restore. See
     /// `beginRestore(repositoryID:steps:onSuccess:)`.
     private func beginRestore(
         repositoryID: UUID,
@@ -316,9 +268,9 @@ extension AppModel {
     /// Shared bookkeeping for every restore shape: one run at a time,
     /// progress published, and each step's outcome written to the run
     /// history either way — with the backup it read (its `snapshotID`), the
-    /// items (`sourcePath`, `sourcePaths`, neither for a whole backup) and
+    /// items (`sourcePath`, `sourcePaths`) and
     /// where they land (`destinationPath`: the restored item itself, or the
-    /// folder several items or a whole backup go into), plus the step's
+    /// folder several items go into), plus the step's
     /// log. A step's `label` is its record's subject in Activity, its
     /// `description` the progress strip's title. The steps run in order and
     /// the first that fails or is cancelled ends the run: its banner says

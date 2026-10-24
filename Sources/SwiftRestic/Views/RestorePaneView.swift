@@ -424,33 +424,27 @@ struct RestorePaneView: View {
         }
     }
 
-    /// What the pane restores, for File ▸ Restore: the selected items, or
-    /// with nothing selected the whole backup — the same restores the
-    /// bottom bar's two buttons offer, the menu naming whichever applies.
+    /// What the pane restores, for File ▸ Restore: the selected items, the
+    /// bottom bar's Restore. No whole-backup restore (the user's call,
+    /// 2026-10-24): the tree's top rows are the backed-up folders, so
+    /// selecting them restores everything, Original location included.
     private func restore(record: Snapshot?) -> RestoreCommand {
-        let nodes = selectedNodes
-        return RestoreCommand(
-            title: nodes.isEmpty ? "Restore Entire Backup" : "Restore",
-            isEnabled: !model.isRestoring && record != nil,
-            run: { nodes.isEmpty ? restoreWholeRecord() : restoreSelection() }
+        RestoreCommand(
+            title: "Restore",
+            isEnabled: !selectedNodes.isEmpty && !model.isRestoring && record != nil,
+            run: { restoreSelection() }
         )
     }
 
-    /// The pane's three ways out of a record, in one row: the whole backup
-    /// on the left, the primary Restore for the selection on the right,
-    /// and the drag named in between. The hint shows over a list whose
-    /// rows drag — the tree, or a search's hits; while a search lists hits
-    /// and other backups hold more, the middle says so and offers the way
-    /// there — never both. The keep/replace decision lives in the
-    /// destination sheet, not as a permanent caption under every browse.
+    /// The pane's two ways out of a record, in one row: the primary Restore
+    /// for the selection on the right, and the drag named beside it. The
+    /// hint shows over a list whose rows drag — the tree, or a search's
+    /// hits; while a search lists hits and other backups hold more, the bar
+    /// says so and offers the way there — never both. The keep/replace
+    /// decision lives in the destination sheet, not as a permanent caption
+    /// under every browse.
     private func footer(record: Snapshot?) -> some View {
         HStack(spacing: 12) {
-            // Titles stay whole; the note beside them is what gives way.
-            Button("Restore Entire Backup") { restoreWholeRecord() }
-                .disabled(model.isRestoring || record == nil)
-                .help("Restore everything in this backup — each folder is recreated under its full original path inside the folder you choose")
-                .fixedSize()
-            Spacer(minLength: 12)
             // An empty result says it in the empty state, button included.
             if let result = searchResult, !result.inThisBackup.isEmpty, let note = result.note {
                 Text(note)
@@ -467,6 +461,7 @@ struct RestorePaneView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            Spacer(minLength: 12)
             Button("Restore") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -912,31 +907,6 @@ struct RestorePaneView: View {
             repositoryID: repositoryID,
             model: model
         )
-    }
-
-    /// The whole record, named the way the header and its page name it —
-    /// its qualifier included, which tells two same-titled groups apart —
-    /// and dated; the sheet says the layout restic will produce: `restore
-    /// <id> --target` recreates every absolute path under the target.
-    private func restoreWholeRecord() {
-        guard let record else { return }
-        let repositoryID = repositoryID
-        destinationRequest = RestoreDestinationRequest(
-            subject: .wholeSnapshot(paths: record.paths),
-            backupName: SnapshotLineage.displayName(
-                of: record,
-                label: model.recordLabel(of: record, repositoryID: repositoryID)
-            ),
-            backupTime: record.time,
-            snapshotShortID: record.shortID
-        ) { directories, overwrite in
-            model.restoreWholeSnapshot(
-                repositoryID: repositoryID,
-                snapshotID: record.id,
-                to: directories[0],
-                overwrite: overwrite
-            )
-        }
     }
 }
 

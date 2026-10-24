@@ -32,20 +32,22 @@ enum RestoreDestinationKind: String, Sendable, CaseIterable {
     case originalLocation
 }
 
-/// What is being restored: one item of a backup, several, or the whole of
-/// it.
+/// What is being restored: one item of a backup, or several. No whole
+/// backup: its backed-up folders are items like any other (the user's call).
 enum RestoreSubject: Sendable, Equatable {
     case item(name: String, path: String, isDirectory: Bool)
     /// Two or more items, with any item inside a selected folder already
     /// dropped
     /// (`RestoreBatch.covering`).
     case items([RestoreItem])
-    case wholeSnapshot(paths: [String])
 
     /// One directory per item, in order — the shape the destination sheet
-    /// hands its restore: one for an item or a whole backup.
+    /// hands its restore.
     var directoryCount: Int {
-        if case let .items(items) = self { items.count } else { 1 }
+        switch self {
+        case .item: 1
+        case let .items(items): items.count
+        }
     }
 }
 
@@ -77,17 +79,12 @@ enum RestoreDestinationRules {
     /// `/tmp` for an existing `/private/tmp` and would fail an honest path.
     /// Its last component must survive the landing rule unchanged, or the
     /// item would land beside itself. The parent must exist and be writable.
-    /// A whole backup has no single parent: `restic restore --target /`
-    /// would write the metadata of every root-owned directory above the
-    /// backed-up folders.
     static func originalLocation(
         for subject: RestoreSubject,
         directoryExists: (String) -> Bool,
         isWritable: (String) -> Bool
     ) -> OriginalLocation {
         switch subject {
-        case .wholeSnapshot:
-            return .unavailable(reason: "A whole backup can't be put back in one step. Select a folder in it and restore that to its original location.")
         case let .item(name, path, _):
             return originalLocation(name: name, path: path, directoryExists: directoryExists, isWritable: isWritable)
         case let .items(items):
@@ -140,17 +137,13 @@ enum RestoreDestinationRules {
 
     /// Where a restore into `directories` (one per item, as
     /// `RestoreSubject.directoryCount` counts them) writes: each item under
-    /// the one landing rule (`ResticService.restoredItemURL(named:in:)`),
-    /// or each backed-up folder under its full original path (`restic
-    /// restore <id> --target` recreates them).
+    /// the one landing rule (`ResticService.restoredItemURL(named:in:)`).
     static func landings(for subject: RestoreSubject, into directories: [URL]) -> [URL] {
         switch subject {
         case let .item(name, _, _):
             [ResticService.restoredItemURL(named: name, in: directories[0])]
         case let .items(items):
             zip(items, directories).map { ResticService.restoredItemURL(named: $0.name, in: $1) }
-        case let .wholeSnapshot(paths):
-            paths.map { directories[0].appendingPathComponent($0) }
         }
     }
 

@@ -536,8 +536,11 @@ the generator after editing it; the PNGs are checked in.
   backup"); the display may still sleep, and a closed lid sleeps the Mac.
 - **Browsing and restore** — a page's restore is its pane's bottom bar's
   *Restore*, prominent at the bar's trailing corner, and *File ▸ Restore*
-  runs the same restore from the menu bar; on a backup's tree the bar leads
-  with *Restore Entire Backup* for the whole backup. The restore sat in
+  runs the same restore from the menu bar. There is no whole-backup
+  restore: a backup's tree starts at its backed-up folders, so selecting
+  them restores everything (*Restore Entire Backup* went on 2026-10-24, the
+  user's call: it rebuilt the full original paths and could not go back to
+  the original location). The restore sat in
   the window toolbar from 2026-10-19 to 2026-10-21 — the HIG's "Only
   specify one primary action, and put it on the trailing side of the
   toolbar" — until the user asked for the bottom bar back, which the HIG
@@ -546,9 +549,7 @@ the generator after editing it; the PNGs are checked in.
   *Show Backups* (a group's menu) and *Show in Backups* (the Files tab) opens
   the one browser at that backup, on its page's Backups tab beside the list:
   its folders as a tree with a Change column and search. Restore by dragging to Finder,
-  or by the bar's *Restore* (or Return) on a selection — *Restore Entire
-  Backup* with nothing selected, which recreates the full original paths
-  inside the chosen folder;
+  or by the bar's *Restore* (or Return) on a selection;
   per-node restores land in the chosen folder with no path rebuilt above
   them. A file alone is restored into a hidden folder beside its landing,
   with the dates, permissions and extended attributes restic recorded, and
@@ -567,7 +568,7 @@ the generator after editing it; the PNGs are checked in.
   permissions and dates) or replaced (`--overwrite always`, comparing
   contents rather than size and date), confirming when something is there
   to replace. restic before 0.17 has no `--overwrite`; keeping then restores
-  a folder or whole backup only where nothing is there yet.
+  a folder only where nothing is there yet.
   - *The Change column* compares with the previous backup of the same
     folders from the same Mac — not the row below, which for a plan whose
     folders changed is a backup of other folders; the header names the open
@@ -854,7 +855,7 @@ the generator after editing it; the PNGs are checked in.
   page), *Show Deleted Items* for a plan's Files tab, and *Show Problems
   Only* for
   Activity. *File ▸ Restore* is the pane's Restore of the page in view
-  (*Restore Entire Backup*, *Restore Folder* by what it would restore), and
+  (*Restore Folder* on a Files tab's folder with nothing selected), and
   *Help ▸ SwiftRestic Help* (⌘?) opens a window of its own — how to back
   up a folder, get a file back, read a failed run, keep the history tidy
   and adopt backups from elsewhere, then six terms (task-first since

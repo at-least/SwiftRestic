@@ -233,7 +233,7 @@ struct FolderVersionsView: View {
                     router.showBackup(chosen.id, on: page, repositoryID: node.repositoryID, focusPath: node.path)
                 }
                 .disabled(chosen == nil)
-                .help("Open this backup at this folder on the Backups tab — see what changed, search it, or restore the whole backup")
+                .help("Open this backup at this folder on the Backups tab — see what changed, search it, or restore from it")
                 Spacer()
                 // By the rows selected in this listing, not the ids kept
                 // across a flip: while a backup's listing is read, or after

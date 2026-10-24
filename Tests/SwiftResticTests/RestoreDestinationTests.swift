@@ -64,9 +64,6 @@ struct RestoreDestinationTests {
         #expect(tmpDirectories.map(\.path) == ["/private/tmp/p"])
         #expect(tmpLandings.map(\.path) == ["/private/tmp/p/Project"])
 
-        #expect(original(.wholeSnapshot(paths: ["/Users/x/Documents"]))
-            == .unavailable(reason: "A whole backup can't be put back in one step. Select a folder in it and restore that to its original location."))
-
         // A combining mark right after the separator: a Character-level split
         // would merge it into the "/" and lose the name.
         let combining = RestoreSubject.item(name: "\u{0301}leading.txt", path: "/Users/x/Documents/\u{0301}leading.txt", isDirectory: false)
@@ -95,7 +92,6 @@ struct RestoreDestinationTests {
             == .unavailable(reason: "“Trip”: SwiftRestic can't write to “/Users/x/Pictures”."))
         #expect(items.directoryCount == 2)
         #expect(RestoreSubject.item(name: "a", path: "/a", isDirectory: false).directoryCount == 1)
-        #expect(RestoreSubject.wholeSnapshot(paths: ["/a", "/b"]).directoryCount == 1)
     }
 
     @Test("landings and replace-confirmation targets")
@@ -108,9 +104,6 @@ struct RestoreDestinationTests {
         #expect(RestoreDestinationRules.landings(
             for: .item(name: "a/../../x", path: "/p/x", isDirectory: false), into: [destination]
         ).map(\.path) == ["/dest/x"])
-        #expect(RestoreDestinationRules.landings(
-            for: .wholeSnapshot(paths: ["/p/A", "/p/B"]), into: [destination]
-        ).map(\.path) == ["/dest/p/A", "/dest/p/B"])
         // Several items: each in its own directory, by the same rule.
         #expect(RestoreDestinationRules.landings(
             for: .items([

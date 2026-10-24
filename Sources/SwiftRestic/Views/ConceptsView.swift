@@ -18,7 +18,7 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Get a file back",
-            text: "Select the file on the plan's Files tab and click Restore to put it back. Repository ▸ Find Files in Backups finds a file by name in every backup, and Restore Entire Backup, on the Backups tab, brings back everything from one moment."
+            text: "Select the file on the plan's Files tab and click Restore to put it back. Repository ▸ Find Files in Backups finds a file by name in every backup. To bring back everything from one moment, open the backup on the Backups tab, select its top folder, and click Restore."
         ),
         Topic(
             title: "When a backup fails",
