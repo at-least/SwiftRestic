@@ -97,11 +97,10 @@ struct OtherGroupView: View {
                 .textSelection(.enabled)
             Spacer(minLength: 12)
             if let plan = summary.formerPlan {
-                Button("Open the “\(model.label(of: plan))” Plan") {
+                Button("Show Plan") {
                     router.selection = .plan(plan.id)
                 }
                 .controlSize(.small)
-                .help("Show this plan’s page, where it backs up now")
             } else if summary.isAdoptable, case let .plan(planID) = groupID {
                 // The flow's main entry; the group's context menu carries the
                 // same verb.
@@ -114,15 +113,26 @@ struct OtherGroupView: View {
         .cardSurface()
     }
 
-    /// The history's identifying facts. Newest and Oldest bracket it; Made
-    /// on, Folders, Excludes and Tags say what it holds — rows omitted
-    /// when there is nothing to say. The plan tag, an identifier a person
-    /// rarely reads, is the card's Copy Plan Tag, not a row.
+    /// The history's identifying facts. The count line leads, the card's
+    /// title labelling it, with how far back the history reaches; Newest
+    /// names the latest, and Made on, Folders, Excludes and Tags say what
+    /// it holds — rows omitted when there is nothing to say. The plan tag,
+    /// an identifier a person rarely reads, is the card's Copy Plan Tag,
+    /// not a row.
     private func backupsCard(_ summary: OtherGroupPageSummary) -> some View {
         Card("Backups") {
             DetailGrid {
+                // As the plan page's Backups card: the title labels this
+                // line, so it goes unlabelled and first.
+                Text(OverviewMetrics.snapshotsLine(
+                    total: groupBackups.count,
+                    otherBackups: 0,
+                    repositoryHasPlans: false,
+                    since: summary.oldestAt,
+                    noun: true
+                ))
+                .monospacedDigit()
                 DetailRow("Newest", Format.timestamp(summary.newestAt))
-                DetailRow("Oldest", Format.timestamp(summary.oldestAt))
                 DetailRow("Made on") {
                     Text(summary.madeFrom)
                 }
@@ -132,6 +142,7 @@ struct OtherGroupView: View {
                             Text(set)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
+                                .help(set)
                         }
                     }
                 }

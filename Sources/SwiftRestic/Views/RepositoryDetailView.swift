@@ -79,6 +79,7 @@ struct RepositoryDetailView: View {
                                 .textSelection(.enabled)
                                 .lineLimit(2)
                                 .truncationMode(.middle)
+                                .help(repository.displayLocation)
                         }
                         // Facts read from the repository, only once it has
                         // been read: a row of dashes says nothing the
@@ -142,7 +143,7 @@ struct RepositoryDetailView: View {
             )
             Text(tile.value)
                 .monospacedDigit()
-                .help(tile.help ?? "")
+                .modifier(TileHelp(help: tile.help))
         case let .failed(message):
             Text("—").help(message)
         case .idle:
@@ -224,12 +225,14 @@ struct RepositoryDetailView: View {
                         )
                     }
                     // As the scheduler will start them: the hold holds upkeep
-                    // too, so a due task reads "Waiting", never "Due now".
+                    // too, so a due task reads "Waiting", never "Due now", and
+                    // one in flight reads "Running now".
                     let hold = model.scheduleHold
                     let awaitingServer = model.upkeepAwaitingServer.contains(repositoryID)
                     DetailRow("Next check", Scheduler.nextMaintenanceText(
                         .check, of: repository, among: model.configuration.repositories,
-                        hold: hold, driveAway: driveAway, awaitingServer: awaitingServer, now: now
+                        hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
+                        isRunning: model.maintenance[repositoryID]?.task == .check, now: now
                     ))
                     if repository.maintenance.pruneEnabled {
                         DetailRow("Last cleanup") {
@@ -240,7 +243,8 @@ struct RepositoryDetailView: View {
                         }
                         DetailRow("Next cleanup", Scheduler.nextMaintenanceText(
                             .prune, of: repository, among: model.configuration.repositories,
-                            hold: hold, driveAway: driveAway, awaitingServer: awaitingServer, now: now
+                            hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
+                            isRunning: model.maintenance[repositoryID]?.task == .prune, now: now
                         ))
                     } else {
                         // Off is a fact the page states, not two rows that

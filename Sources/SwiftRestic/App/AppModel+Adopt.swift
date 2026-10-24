@@ -95,7 +95,7 @@ extension AppModel {
         var warnings: [String] = []
         if let foreign = snapshots.first(where: { $0.hostname != localHostname }) {
             let lead = foreign == newest ? "The newest backup" : "The newest backup from another Mac"
-            warnings.append("\(lead) was made on “\(foreign.hostname ?? "Unknown Mac")” on \(Format.timestamp(foreign.time)).")
+            warnings.append("\(lead) was made on “\(foreign.hostname ?? "Unknown Mac")”, \(Format.timestamp(foreign.time)).")
         }
         // The adopt sheet shows the path, it does not change it: the folder
         // came from another Mac, or — this Mac's own — it is gone.

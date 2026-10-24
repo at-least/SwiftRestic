@@ -847,6 +847,11 @@ struct MaintenanceSchedulingTests {
         let prune = utcDate("2026-10-01 00:00:00")
         // The check fell due on the 8th.
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == "Due now")
+        // In flight: "Running now", ahead of hold, drive and server — the
+        // stamp lands when restic finishes.
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: true, awaitingServer: false, isRunning: true, now: now) == "Running now")
+        // Not due yet, the date stands while a run is in flight.
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, isRunning: true, now: now) == Format.timestamp(prune))
         // The hold holds checks and prunes too: due, but not now.
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: nil), driveAway: false, awaitingServer: false, now: now) == "Waiting")
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: false, awaitingServer: false, now: now) == "Waiting")

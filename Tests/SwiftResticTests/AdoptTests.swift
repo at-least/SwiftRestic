@@ -290,7 +290,7 @@ struct AdoptTests {
                 + " Nothing in “Home Disk” changes.")
         #expect(briefing.repositoryLine == "Home Disk")
         #expect(briefing.warnings == [
-            "The newest backup was made on “other-mac” on \(Format.timestamp(newest.time)).",
+            "The newest backup was made on “other-mac”, \(Format.timestamp(newest.time)).",
             "The folder comes from another Mac and may not exist here.",
             "These backups are recent — a plan on another Mac may still be writing them.",
         ])
@@ -314,7 +314,7 @@ struct AdoptTests {
         loadModel(model, repository: repository, listing: [foreign])
         let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z"))?.warnings == [
-            "The newest backup was made on “other-mac” on \(Format.timestamp(foreign.time)).",
+            "The newest backup was made on “other-mac”, \(Format.timestamp(foreign.time)).",
             "The folder comes from another Mac and may not exist here.",
         ])
 
@@ -381,7 +381,7 @@ struct AdoptTests {
 
         let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.warnings.first
-            == "The newest backup from another Mac was made on “laptop” on \(Format.timestamp(foreign.time)).")
+            == "The newest backup from another Mac was made on “laptop”, \(Format.timestamp(foreign.time)).")
         // Two Macs made the history; the header counts them.
         #expect(briefing.madeLine.hasPrefix("Made \(Format.historySpan(oldest: foreign.time, newest: local.time)) from 2 Macs."))
         // A foreign writer is the dialog's rule on its own — no recency needed.

@@ -173,11 +173,12 @@ the generator after editing it; the PNGs are checked in.
   this Mac holds it, and a group's backups name none of this Mac's to list
   (until 2026-10-19 a group's page had one too). Overview says what
   the history is: a plan not set up here (deleted, or running on another
-  Mac), a plan that now backs up elsewhere (*Open the “Music” Plan*), or
+  Mac), a plan that now backs up elsewhere (*Show Plan*), or
   backups no plan made, which can't be adopted — their sentence names
   Repository ▸ restic Console's `tag` as the way to make them a plan's
-  history, at the cost of every backup's ID. Its Backups card brackets
-  the history (newest, oldest), names the Macs and folder sets, carries the
+  history, at the cost of every backup's ID. Its Backups card leads with
+  the count and how far back the history reaches, names the newest and
+  the Macs and folder sets, carries the
   exclude patterns and user tags; the plan tag, when there is one, is its
   right-click *Copy Plan Tag* rather than a row of its own. Its row's menu has *Show Backups*,
   the Backups tab on the newest backup. The toolbar's search field searches

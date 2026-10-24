@@ -18,8 +18,8 @@ struct OtherGroupPageSummary: Equatable {
     /// The explanation card's whole sentence.
     var explanation: String
     /// The one configured plan the group belonged to, when it still is
-    /// one: the moved variant's "Open the … Plan" target. Nil for an
-    /// adoptable group, whose page offers the adopt verb instead.
+    /// one: the moved variant's Show Plan target. Nil for an adoptable
+    /// group, whose page offers the adopt verb instead.
     var formerPlan: BackupPlan?
     /// Whether the page offers Adopt (`BackupShelves.adoptablePath`).
     var isAdoptable: Bool

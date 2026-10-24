@@ -464,7 +464,7 @@ struct SidebarView: View {
             }
         }
         if let formerPlan {
-            Button("Open the “\(model.label(of: formerPlan))” Plan") {
+            Button("Show Plan") {
                 router.selection = .plan(formerPlan.id)
             }
         }

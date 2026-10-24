@@ -216,7 +216,9 @@ enum Scheduler {
     /// start it: the app-wide hold holds upkeep too, so a timed hold moves
     /// the date to its end and a due task under an open-ended one (Until I
     /// Resume, the battery) reads "Waiting", as a due plan's Next backup
-    /// value does — never "Due now". A due task whose local repository's
+    /// value does — never "Due now". A due task already in flight reads
+    /// "Running now", ahead of hold, drive and server: the stamp lands only
+    /// when restic finishes. A due task whose local repository's
     /// drive is away waits for the drive, hold or not: "When “Archive SSD”
     /// is connected". `driveAway` is read by the caller off the main actor:
     /// a stalled network share can hold the read for seconds.
@@ -227,10 +229,14 @@ enum Scheduler {
         hold: ScheduleHold?,
         driveAway: Bool,
         awaitingServer: Bool,
+        isRunning: Bool = false,
         now: Date = .now
     ) -> String {
         guard let due = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt) else {
             return "Off"
+        }
+        if due <= now, isRunning {
+            return "Running now"
         }
         if due <= now, driveAway, let volume = VolumePresence.volumeName(of: repository.resolvedLocalPath) {
             return "When “\(volume)” is connected"
