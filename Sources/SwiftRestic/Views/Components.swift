@@ -485,9 +485,17 @@ struct OperationProgressView: View {
                 }
             }
 
-            ProgressView(value: progress.fraction)
-                .progressViewStyle(.linear)
-                .accessibilityLabel(Text(title))
+            // Indeterminate until restic reports numbers: a determinate
+            // bar parked at 0% does not move and reads as stalled.
+            if progress == OperationProgress() {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .accessibilityLabel(Text(title))
+            } else {
+                ProgressView(value: progress.fraction)
+                    .progressViewStyle(.linear)
+                    .accessibilityLabel(Text(title))
+            }
 
             // The numbers once restic has reported any: before that — a
             // plan's before-backup hooks, restic starting up — they read
@@ -1191,7 +1199,8 @@ struct UnreadableItemLine: View {
         }
         .confirmationDialog(
             "Exclude “\(path.map { ($0 as NSString).lastPathComponent } ?? "")” from “\(plan.map { model.label(of: $0) } ?? "")”?",
-            isPresented: $isConfirmingExclude
+            isPresented: $isConfirmingExclude,
+            titleVisibility: .visible
         ) {
             if let path, let plan {
                 Button("Exclude") { model.exclude(path: path, fromPlan: plan.id) }

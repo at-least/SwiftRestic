@@ -141,6 +141,9 @@ struct HookEditor: View {
                             RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
                                 .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
                         )
+                        // The section header does not label the field for
+                        // VoiceOver and Voice Control.
+                        .accessibilityLabel(Text("Command"))
                     Text(verbatim: "Runs through /bin/sh with the app’s own privileges, which are not sandboxed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

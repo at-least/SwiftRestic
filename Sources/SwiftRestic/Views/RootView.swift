@@ -208,7 +208,10 @@ struct RootView: View {
         // By identity, not count: past the queue's limit a new banner
         // evicts an old one, and the count stays.
         guard let banner = new.first, !old.contains(where: { $0.id == banner.id }) else { return }
-        AccessibilityNotification.Announcement("\(banner.title). \(banner.message)").post()
+        // The visible banner drops an empty message; the announcement must
+        // not read one as a trailing ". ".
+        let text = banner.message.isEmpty ? banner.title : "\(banner.title). \(banner.message)"
+        AccessibilityNotification.Announcement(text).post()
     }
 
     /// A fresh plan for the editor, its repository preset when the ask came

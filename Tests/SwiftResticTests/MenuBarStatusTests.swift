@@ -855,5 +855,12 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil) == "SwiftRestic")
         #expect(MenuBarStatus.accessibilityDescription(for: .problem, hold: nil) == "SwiftRestic, a recent run had a problem")
         #expect(MenuBarStatus.accessibilityDescription(for: .running, hold: nil) == "SwiftRestic, work in progress")
+
+        // Restic missing has no face of its own; its words join the label
+        // the way the menu's leading line words it.
+        #expect(MenuBarStatus.accessibilityDescription(for: .idle, isResticAvailable: false)
+            == "SwiftRestic, restic is missing — backups are on hold")
+        #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil, isResticAvailable: true)
+            == "SwiftRestic")
     }
 }

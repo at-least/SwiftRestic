@@ -60,12 +60,13 @@ enum MenuBarStatus {
         }
     }
 
-    /// The face's words, with the hold when one is in force — the dimmed
-    /// face is otherwise invisible to VoiceOver ("SwiftRestic, backups
-    /// paused until 3:40 PM").
+    /// The face's words, with the hold when one is in force and restic
+    /// missing — neither shows in the glyph, so the words carry them
+    /// ("SwiftRestic, backups paused until 3:40 PM").
     static func accessibilityDescription(
         for state: IconState,
         hold: ScheduleHold? = nil,
+        isResticAvailable: Bool = true,
         now: Date = .now
     ) -> String {
         let base = switch state {
@@ -74,10 +75,17 @@ enum MenuBarStatus {
         case .running: "SwiftRestic, work in progress"
         case .problem: "SwiftRestic, a recent run had a problem"
         }
-        guard let hold else { return base }
-        let summary = hold.summary(now: now)
-        let clause = summary.prefix(1).lowercased() + summary.dropFirst()
-        return state == .idle ? "\(base), \(clause)" : "\(base); \(clause)"
+        var clauses: [String] = []
+        if let hold {
+            let summary = hold.summary(now: now)
+            clauses.append(summary.prefix(1).lowercased() + summary.dropFirst())
+        }
+        if let missing = resticMissingLine(isResticAvailable: isResticAvailable) {
+            clauses.append(missing)
+        }
+        guard !clauses.isEmpty else { return base }
+        let separator = state == .idle ? ", " : "; "
+        return base + clauses.map { separator + $0 }.joined()
     }
 
     /// Whether the icon wears its dimmed face: a hold is in force and nothing

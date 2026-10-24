@@ -55,8 +55,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         )
     }
 
-    /// The observed inputs are the ones `iconState` and the hold read, the
-    /// clock aside: a problem ageing out of the attention window waits for
+    /// The observed inputs are the ones `iconState`, the hold and the
+    /// VoiceOver words read, the clock aside: a problem ageing out of the
+    /// attention window waits for
     /// the next configuration write. The configuration is observed whole — run-record appends
     /// included, which the attention face reads, and the hold's pause and
     /// battery setting; the battery reading is
@@ -65,7 +66,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     private func refresh() {
         let state = currentState()
         statusItem.isVisible = model.configuration.settings.showMenuBarExtra
-        applyFace(for: state, hold: model.scheduleHold)
+        applyFace(for: state, hold: model.scheduleHold, isResticAvailable: model.isResticAvailable)
         armPulse(for: state)
 
         withObservationTracking {
@@ -78,12 +79,15 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             _ = model.configuration.settings.showMenuBarExtra
             _ = model.isOnBattery
             _ = model.isOnMeteredNetwork
+            _ = model.isResticAvailable
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
     }
 
-    private func applyFace(for state: MenuBarStatus.IconState, hold: ScheduleHold?) {
+    private func applyFace(
+        for state: MenuBarStatus.IconState, hold: ScheduleHold?, isResticAvailable: Bool
+    ) {
         let button = statusItem.button
         switch MenuBarStatus.glyph(for: state) {
         case .logo:
@@ -101,7 +105,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         // still functional" look for a status item — so a problem's
         // exclamation mark stays readable under it. The words go to VoiceOver.
         button?.appearsDisabled = MenuBarStatus.appearsHeld(state: state, hold: hold)
-        button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(for: state, hold: hold))
+        button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(
+            for: state, hold: hold, isResticAvailable: isResticAvailable))
     }
 
     /// The pulse timer lives only while the running face is up, and checks
