@@ -110,7 +110,7 @@ struct PlanStatusTests {
         // setup is finished.
         #expect(
             PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).help
-                == "The scheduler skips this plan until its setup is complete. To finish it, choose Edit Plan."
+                == "This plan isn't scheduled because its setup is incomplete. To finish it, choose Edit Plan."
         )
 
         // A repository ID the configuration no longer holds is the same skip.
@@ -231,7 +231,7 @@ struct PlanStatusTests {
         #expect(tile.help?.hasPrefix(Format.timestamp(end)) == true, "help was \(String(describing: tile.help))")
     }
 
-    @Test("a plan's own timed pause moves its tile to the pause's end and says so")
+    @Test("a plan's own timed pause moves its tile to the pause's end, said by the Schedule row alone")
     func ownTimedPauseClampsTile() {
         var plan = completeDailyPlan()
         plan.lastRunAt = now.addingTimeInterval(-2 * 86_400)
@@ -240,13 +240,12 @@ struct PlanStatusTests {
 
         let tile = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], now: now)
         #expect(tile.value == Format.tileTimestamp(end, now: now))
-        #expect(
-            tile.help == "\(Format.timestamp(end)) — scheduled runs are paused until \(Format.pauseEnd(end, now: now))",
-            "help was \(String(describing: tile.help))"
-        )
+        // The Schedule row above the value states the pause; the help does
+        // not repeat it.
+        #expect(tile.help == Format.timestamp(end), "help was \(String(describing: tile.help))")
     }
 
-    @Test("a plan paused inside an app-wide pause names the pause that sets its date, once")
+    @Test("an app-wide pause that sets the date is named once; a plan's own pause is never named")
     func overlappingPausesNameOne() {
         var plan = completeDailyPlan()
         plan.lastRunAt = now.addingTimeInterval(-2 * 86_400)
@@ -254,13 +253,13 @@ struct PlanStatusTests {
         let later = now.addingTimeInterval(7200)
 
         // The plan's own pause outlasts the app-wide one and sets the date;
-        // the help must not name the same pause twice.
+        // the help names no pause — the Schedule row states it.
         plan.pausedUntil = later
         let own = PlanStatus.nextBackupTile(
             for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: sooner), now: now
         )
         #expect(own.value == Format.tileTimestamp(later, now: now))
-        #expect(own.help == "\(Format.timestamp(later)) — scheduled runs are paused until \(Format.pauseEnd(later, now: now))")
+        #expect(own.help == Format.timestamp(later))
 
         // The app-wide pause outlasts the plan's and sets the date.
         plan.pausedUntil = sooner
@@ -276,7 +275,7 @@ struct PlanStatusTests {
         )
         #expect(
             battery.help
-                == "\(Format.timestamp(sooner)) — scheduled runs are paused until \(Format.pauseEnd(sooner, now: now)). \(ScheduleHold.onBattery.summary(now: now))."
+                == "\(Format.timestamp(sooner)). \(ScheduleHold.onBattery.summary(now: now))."
         )
     }
 
@@ -524,7 +523,9 @@ struct PlanStatusTests {
         #expect(summary.message == partial.itemErrors[50])
         #expect(summary.facts == ["120 unreadable items", "Retention skipped"])
 
-        // Two items: both listed, nothing left over, no message to repeat them.
+        // Two items: both listed, nothing left over, no message to repeat
+        // them — and the count dropped from the facts, which the item list
+        // below the card's facts line states outright.
         var two = run(.completedWithErrors)
         two.itemErrors = Array(items.prefix(2))
         two.itemErrorCount = 2
@@ -532,7 +533,7 @@ struct PlanStatusTests {
         #expect(twoSummary.items == Array(items.prefix(2)))
         #expect(twoSummary.unlistedItemCount == 0)
         #expect(twoSummary.message == nil)
-        #expect(twoSummary.facts == ["2 unreadable items"])
+        #expect(twoSummary.facts.isEmpty)
 
         // The card's when-line: the problem's stretch, said as one; the
         // Recent problems card's row counts the week in its own words.

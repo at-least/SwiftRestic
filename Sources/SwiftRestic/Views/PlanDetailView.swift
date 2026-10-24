@@ -51,7 +51,8 @@ struct PlanDetailView: View {
 
     /// The Backups card's verb: Back Up Now, Stop while a run is in
     /// flight — worded as every command that ends a run is; the progress
-    /// strip keeps its Cancel. The Plan menu's predicates, so the card and
+    /// strip above the cards reports the run without a Cancel of its own —
+    /// Stop (⌘.) ends it. The Plan menu's predicates, so the card and
     /// the menu bar cannot disagree about either.
     @ViewBuilder
     private func backUpControl(_ plan: BackupPlan) -> some View {
@@ -67,7 +68,7 @@ struct PlanDetailView: View {
                 model.runBackup(planID: plan.id)
             }
             .disabled(!commands.canBackUp)
-            .help(commands.backUpDisabledReason ?? "Run this plan's backup now (⌘B)")
+            .modifier(TileHelp(help: commands.backUpDisabledReason))
         }
     }
 
@@ -94,7 +95,7 @@ struct PlanDetailView: View {
             } primaryAction: {
                 model.pausePlanSchedule(id: plan.id, for: .untilResumed)
             }
-            .help("Stop scheduled runs until you resume — or pick a length from the arrow. Back Up Now still works")
+            .help("Stop scheduled runs until you resume — Back Up Now still works")
         }
     }
 
@@ -103,7 +104,7 @@ struct PlanDetailView: View {
     /// says; the help must not promise one.
     private func resumeHelp(_ plan: BackupPlan, now: Date) -> String {
         if let end = plan.activePauseEnd(at: now) {
-            return "Paused until \(Format.pauseEnd(end)) — run this plan on its schedule again now"
+            return "Paused until \(Format.pauseEnd(end)) — run this plan on its schedule again"
         }
         if plan.schedule.frequency == .manual {
             return "Switch “Run on schedule” back on — this plan has no schedule, so it still runs only when you click Back Up Now"
@@ -124,8 +125,7 @@ struct PlanDetailView: View {
                 OperationProgressView(
                     title: activity.phase.displayName,
                     progress: model.planProgress[planID] ?? OperationProgress(),
-                    startedAt: activity.startedAt,
-                    onCancel: { model.cancelBackup(planID: planID) }
+                    startedAt: activity.startedAt
                 )
             }
         }
@@ -319,7 +319,10 @@ struct PlanDetailView: View {
         return Card("Backups") {
             DetailGrid {
                 DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
-                DetailRow("Backups") { snapshotsValue(plan, snapshots: snapshots) }
+                // The card's title labels this line: a DetailRow here would
+                // read "Backups" twice, stacked.
+                snapshotsValue(plan, snapshots: snapshots)
+                    .accessibilityLabel("Backups")
                 // Applying it now is Plan ▸ Apply Retention Now (and the
                 // sidebar row's menu); what it will keep is the editor's
                 // Retention tab.
@@ -346,7 +349,10 @@ struct PlanDetailView: View {
         let schedule = PlanStatus.scheduleRow(for: plan)
         return Card("Schedule") {
             DetailGrid {
-                DetailRow("Schedule", schedule)
+                // The card's title labels this line, as the Backups card's
+                // does its count.
+                Text(schedule)
+                    .accessibilityLabel("Schedule: \(schedule)")
                 // With the schedule switched off the row above reads
                 // "Paused — Daily at 2:00 AM" and Next backup could only
                 // repeat "Paused" (`nextBackupTile`); a timed pause keeps
@@ -354,7 +360,7 @@ struct PlanDetailView: View {
                 if plan.isEnabled {
                     DetailRow("Next backup") {
                         Text(next.value)
-                            .help(next.help ?? "")
+                            .modifier(TileHelp(help: next.help))
                     }
                 }
             }
@@ -419,10 +425,12 @@ struct PlanDetailView: View {
             HStack(spacing: 8) {
                 switch model.snapshotListingOutcome(for: repositoryID) {
                 case .loaded where !snapshots.isEmpty:
-                    // The count and how far back the plan's history reaches
-                    // — the repository page's own line, for this plan alone.
+                    // The count and how far back the plan's history reaches,
+                    // the count leading with its noun under the card's title
+                    // — the repository page's line, for this plan alone.
                     let tile = OverviewMetrics.snapshotsTile(
-                        total: snapshots.count, otherBackups: 0, repositoryHasPlans: true, snapshots: snapshots, subject: "of this plan"
+                        total: snapshots.count, otherBackups: 0, repositoryHasPlans: true, snapshots: snapshots, subject: "of this plan",
+                        noun: true
                     )
                     // When the count was read, in the tooltip with the rest.
                     let updated = model.snapshotsLoadedAt(for: repositoryID)
@@ -437,9 +445,8 @@ struct PlanDetailView: View {
                             : "None from this plan yet — the repository holds others"
                     )
                     .foregroundStyle(.secondary)
-                case let .failed(message):
+                case .failed:
                     Text("—")
-                        .help(message)
                     Button("Try Again") {
                         Task { await model.refreshSnapshots(repositoryID: repositoryID) }
                     }
@@ -471,7 +478,7 @@ struct PlanDetailView: View {
         let skips = PlanSkips.on(in: plan)
         return Card("Excluding") {
             if skips.isEmpty, plan.excludePatterns.isEmpty {
-                Text("Nothing is left out.")
+                Text("Nothing is left out")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {

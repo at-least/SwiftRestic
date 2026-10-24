@@ -122,6 +122,13 @@ enum PlanStatus {
         }
 
         var facts = facts(for: run)
+        // The card lists the unreadable items under the facts line, so once
+        // every one is listed there the count says nothing new. It stands
+        // while items are left to Activity (unlisted > 0) or none was
+        // listed, where it is the only place the count is said.
+        if !listedItems.isEmpty, unlisted == 0 {
+            facts.removeAll { $0 == Format.plural(run.itemErrorCount, "unreadable item") }
+        }
         // A retention-only warning already says so in its message; beside
         // any other fact the line stays, so the facts read as Activity's
         // Detail column does.
@@ -225,13 +232,13 @@ enum PlanStatus {
             }
             return TileFace(
                 value: "Paused",
-                help: "Scheduled runs are paused (\(plan.schedule.summary)). Click Resume to run on it again — Back Up Now still works."
+                help: "Scheduled runs are paused (\(plan.schedule.summary)). Click Resume to start them again — Back Up Now still works."
             )
         }
         guard plan.schedule.frequency != .manual else {
             // The row asks when; "Manually" answered how. The schedule row
             // above it keeps the word.
-            return TileFace(value: "When you click Back Up Now", help: "This plan runs only when you click Back Up Now.")
+            return TileFace(value: "When you click Back Up Now", help: nil)
         }
         guard let next = Scheduler.upcomingRuns(
             in: [plan],
@@ -241,14 +248,14 @@ enum PlanStatus {
         ).first?.date else {
             return TileFace(
                 value: "Not scheduled",
-                help: "The scheduler skips this plan until its setup is complete. To finish it, choose Edit Plan."
+                help: "This plan isn't scheduled because its setup is incomplete. To finish it, choose Edit Plan."
             )
         }
         // Nothing stamps the slot until the run ends, so "Running now"
         // must beat "Waiting" and the "Due now" below — a Back Up Now
         // under a hold runs and stamps the slot too.
         if isBackingUp, next <= now {
-            return TileFace(value: "Running now", help: "This plan is backing up now.")
+            return TileFace(value: "Running now", help: nil)
         }
         if let hold, next <= now {
             let when = switch hold {
@@ -259,22 +266,18 @@ enum PlanStatus {
             return TileFace(value: "Waiting", help: "\(hold.summary(now: now)). This plan is due and runs \(when).")
         }
         let pauseEnd = plan.activePauseEnd(at: now)
-        var namesPlanPause = pauseEnd != nil
         var namesHold = hold != nil
         if let pauseEnd, let holdEnd = hold?.resumesAt {
             // Both timed, and both read "paused until": naming both would
             // say one pause twice with two times. The later end is the
             // date, so that pause is the one named — on a tie the app-wide
             // one, which covers the plan's. A hold with no end (the
-            // battery, Until I Resume) sets no date and stays named beside
-            // the plan's.
-            namesPlanPause = pauseEnd > holdEnd
-            namesHold = !namesPlanPause
+            // battery, Until I Resume) sets no date and stays named. The
+            // plan's own pause is named nowhere here: the Schedule row
+            // above the value states it.
+            namesHold = pauseEnd <= holdEnd
         }
         var help = Format.timestamp(next)
-        if namesPlanPause, let pauseEnd {
-            help += " — scheduled runs are paused until \(Format.pauseEnd(pauseEnd, now: now))"
-        }
         if namesHold, let hold {
             help += ". \(hold.summary(now: now))."
         }

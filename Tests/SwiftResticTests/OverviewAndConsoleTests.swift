@@ -631,6 +631,16 @@ struct OverviewMetricsTests {
         #expect(OverviewMetrics.snapshotsLine(total: 0, otherBackups: 0, repositoryHasPlans: true, since: nil) == "0")
     }
 
+    @Test("a count under a card title leads with its noun; the rowed forms keep the bare count")
+    func snapshotsLineNoun() {
+        // The plan page's count renders under the card's own title, so the
+        // noun says what the dropped row label said.
+        let oldest = Date(timeIntervalSince1970: 1_748_782_800)
+        #expect(OverviewMetrics.snapshotsLine(total: 1, otherBackups: 0, repositoryHasPlans: true, noun: true) == "1 backup")
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 0, repositoryHasPlans: true, since: oldest, noun: true)
+            == "11 backups · since \(Format.day(oldest))")
+    }
+
     @Test("the Snapshots tile names the oldest backup behind its face, read from the end of the newest-first listing")
     func snapshotsTile() {
         let oldest = Date(timeIntervalSince1970: 1_748_782_800)

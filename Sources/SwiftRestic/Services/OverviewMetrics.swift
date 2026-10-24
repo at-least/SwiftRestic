@@ -459,10 +459,15 @@ enum OverviewMetrics {
     /// backup's moment behind it. `snapshots` are newest first, as every
     /// listing is (the pages read their newest from `first`), so the oldest
     /// is the last.
-    static func snapshotsTile(total: Int, otherBackups: Int, repositoryHasPlans: Bool, snapshots: [Snapshot], subject: String) -> TileFace {
+    static func snapshotsTile(
+        total: Int, otherBackups: Int, repositoryHasPlans: Bool, snapshots: [Snapshot], subject: String, noun: Bool = false
+    ) -> TileFace {
         let oldest = snapshots.last?.time
         return TileFace(
-            value: snapshotsLine(total: total, otherBackups: otherBackups, repositoryHasPlans: repositoryHasPlans, since: oldest),
+            value: snapshotsLine(
+                total: total, otherBackups: otherBackups, repositoryHasPlans: repositoryHasPlans,
+                since: oldest, noun: noun
+            ),
             help: oldest.map { "The oldest backup \(subject) is from \(Format.timestamp($0))." }
         )
     }
@@ -472,8 +477,12 @@ enum OverviewMetrics {
     /// them (another Mac, a deleted plan, the console, restic elsewhere), so
     /// the line names the place, not a cause. A repository with no plans
     /// shelves everything under "Backups": there is nothing to split.
-    static func snapshotsLine(total: Int, otherBackups: Int, repositoryHasPlans: Bool, since: Date? = nil) -> String {
-        var line = Format.count(total)
+    /// `noun` leads the line with the word ("12 backups") where no row label
+    /// above it says it; the bare count is the default.
+    static func snapshotsLine(
+        total: Int, otherBackups: Int, repositoryHasPlans: Bool, since: Date? = nil, noun: Bool = false
+    ) -> String {
+        var line = noun ? Format.plural(total, "backup") : Format.count(total)
         if repositoryHasPlans, otherBackups > 0 {
             line += otherBackups == total
                 ? " · all in Other backups"

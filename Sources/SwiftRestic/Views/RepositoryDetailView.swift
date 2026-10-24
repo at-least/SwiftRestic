@@ -190,7 +190,7 @@ struct RepositoryDetailView: View {
                                 .monospacedDigit()
                             }
                             Spacer()
-                            Button("Cancel", role: .destructive) {
+                            Button("Cancel") {
                                 model.cancelMaintenance(repositoryID: repositoryID)
                             }
                             .controlSize(.small)

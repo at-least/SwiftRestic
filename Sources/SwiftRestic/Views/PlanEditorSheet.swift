@@ -610,7 +610,7 @@ struct PlanEditorSheet: View {
 
             switch draft.schedule.frequency {
             case .manual:
-                Text("This plan only runs when you click Back Up Now.")
+                Text("This plan runs only when you click Back Up Now.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 // Why the adopt draft opened on Manual: the path it
@@ -651,7 +651,7 @@ struct PlanEditorSheet: View {
             ) {
                 LabeledContent("Next backup") {
                     Text(next.value)
-                        .help(next.help ?? "")
+                        .modifier(TileHelp(help: next.help))
                 }
             }
 

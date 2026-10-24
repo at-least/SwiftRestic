@@ -233,7 +233,7 @@ struct StatTile: View {
 }
 
 /// `.help` only when there is text to show; an empty tooltip would still hit.
-private struct TileHelp: ViewModifier {
+struct TileHelp: ViewModifier {
     let help: String?
 
     func body(content: Content) -> some View {
@@ -471,7 +471,7 @@ struct OperationProgressView: View {
                 Text(title).font(.headline)
                 Spacer()
                 if let onCancel {
-                    Button("Cancel", role: .destructive, action: onCancel)
+                    Button("Cancel", action: onCancel)
                         .controlSize(.small)
                 }
             }

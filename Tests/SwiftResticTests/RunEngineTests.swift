@@ -472,10 +472,11 @@ struct BackupRunEngineTests {
 
         let summary = PlanStatus.summary(of: try #require(sink.deliveredRecords.first))
         #expect(summary.headline == "Backup completed with warnings")
-        // The card lists the item itself, with its fixes; no message repeats it.
+        // The card lists the item itself, with its fixes; no message repeats
+        // it, and with every item listed the facts drop the count too.
         #expect(summary.items == ["/etc/x: permission denied"])
         #expect(summary.message == nil)
-        #expect(summary.facts == ["1 unreadable item"])
+        #expect(summary.facts.isEmpty)
     }
 
     @Test("restic's exit 3 is stored, and marks the snapshot it wrote incomplete")

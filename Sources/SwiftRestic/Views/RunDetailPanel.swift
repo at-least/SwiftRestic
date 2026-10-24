@@ -269,11 +269,9 @@ struct RunDetailPanel: View {
                     // does nothing.
                     Button("Back Up Now") { model.runBackup(planID: planID) }
                         .disabled(!model.planCommands(for: .plan(planID)).canBackUp)
-                        .help(
-                            model.isRunning(planID: planID)
-                                ? "This plan's backup is already running"
-                                : "Run this plan's backup now"
-                        )
+                        .modifier(TileHelp(help: model.isRunning(planID: planID)
+                            ? "This plan's backup is already running"
+                            : model.planCommands(for: .plan(planID)).backUpDisabledReason))
                 }
             }
             Spacer(minLength: 0)
