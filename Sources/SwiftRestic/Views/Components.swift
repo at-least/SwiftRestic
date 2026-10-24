@@ -746,10 +746,8 @@ struct SnapshotNodeRow: View {
 /// the clipboard, and an NSOpenPanel per entry is the app's biggest
 /// efficiency tax.
 struct PathListEditor: View {
+    /// The field's accessibility label.
     let title: String
-    /// Names the list's meaning in the row: sources and excludes do not
-    /// wear the same icon.
-    var systemImage = "folder.badge.gearshape"
     @Binding var paths: [String]
     var placeholder = "Add a pattern"
     /// Choose Items's panel: what it asks for and its button.
@@ -759,98 +757,86 @@ struct PathListEditor: View {
     /// entered as its own path, matching itself alone (`PathListEntry`).
     var escapesPickedGlobs = false
 
-    /// Excludes: the rows grouped by what each rule skips, each the app
-    /// offered labelled (`ExcludeRule.sections`); off, one plain list.
-    var groupsExcludeRules = false
-    /// Excludes: the developer switch's rules for the folder, shown among
-    /// the plan's own patterns under their groups while it is on. They are
-    /// not `paths` — the run fits them to the folder — so they cannot be
-    /// selected or removed.
-    var switchRules: [ExcludeRule] = []
-
     @State private var selection: Set<String> = []
     @State private var draft = ""
     @State private var isDropTargeted = false
 
+    /// About six one-line rows: the list scrolls past them rather than
+    /// pushing the switches off the sheet.
+    private static let listHeight: CGFloat = 132
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
-
-            VStack(spacing: 0) {
-                List(selection: $selection) {
-                    if groupsExcludeRules {
-                        ForEach(ExcludeRule.sections(stored: paths, developer: switchRules)) { section in
-                            Section(section.category.title) {
-                                ForEach(section.rows) { row in
-                                    // Leaving the tag off is not enough: the
-                                    // ForEach's String ids tag every row.
-                                    ExcludeRowText(row: row)
-                                        .tag(row.line)
-                                        .selectionDisabled(!row.isStored)
-                                }
-                            }
-                        }
-                    } else {
-                        ForEach(paths, id: \.self) { path in
-                            Text(path)
-                                .font(.callout)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .tag(path)
-                        }
-                    }
+        VStack(spacing: 0) {
+            List(selection: $selection) {
+                ForEach(paths, id: \.self) { path in
+                    Text(path)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(path)
+                        .tag(path)
                 }
-                // The plan editor's give: the lists grow toward 220 when the
-                // sheet has room, and shrink first when it does not — the adopt
-                // sheet stacks a header strip and footer warnings on the same
-                // frame, and content that outgrows a sheet loses its top edge.
-                .frame(minHeight: 44, maxHeight: 220)
-                .dropDestination(for: URL.self) { urls, _ in
-                    // Only file URLs are paths: a dragged web link's `.path`
-                    // would silently become a pattern matching nothing.
-                    let filePaths = urls.filter(\.isFileURL).map(\.path)
-                    guard !filePaths.isEmpty else { return false }
-                    addPaths(filePaths, picked: true)
-                    return true
-                } isTargeted: { isDropTargeted = $0 }
-                Divider()
-                // + chooses items in a panel, as Time Machine's exclusions
-                // do; a pattern is typed in the field below.
-                HStack(spacing: 0) {
-                    ListBarButton(symbol: "plus", title: "Choose Items") { browse() }
-                    Divider()
-                        .frame(height: 14)
-                    ListBarButton(symbol: "minus", title: "Remove") {
-                        paths.removeAll { selection.contains($0) }
-                        selection.removeAll()
-                    }
-                    .disabled(selection.isEmpty)
-                    Spacer()
-                }
-                .padding(.horizontal, 2)
-                .frame(height: 24)
             }
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                    .strokeBorder(
-                        isDropTargeted ? Theme.tint : Color.primary.opacity(0.09),
-                        lineWidth: isDropTargeted ? 2 : 1
-                    )
-            )
-
-            HStack(spacing: 6) {
+            .listStyle(.plain)
+            .alternatingRowBackgrounds()
+            .environment(\.defaultMinListRowHeight, 22)
+            .overlay {
+                if paths.isEmpty {
+                    Text("Drag folders and files here, or click +.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(12)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: Self.listHeight)
+            .dropDestination(for: URL.self) { urls, _ in
+                // Only file URLs are paths: a dragged web link's `.path`
+                // would silently become a pattern matching nothing.
+                let filePaths = urls.filter(\.isFileURL).map(\.path)
+                guard !filePaths.isEmpty else { return false }
+                addPaths(filePaths, picked: true)
+                return true
+            } isTargeted: { isDropTargeted = $0 }
+            Divider()
+            // + chooses items in a panel, as Time Machine's exclusions do;
+            // a pattern is typed into the bar's field beside it.
+            HStack(spacing: 0) {
+                ListBarButton(symbol: "plus", title: "Choose Items") { browse() }
+                Divider()
+                    .frame(height: 14)
+                ListBarButton(symbol: "minus", title: "Remove") {
+                    paths.removeAll { selection.contains($0) }
+                    selection.removeAll()
+                }
+                .disabled(selection.isEmpty)
+                Divider()
+                    .frame(height: 14)
                 // The placeholder is a prompt, not a label: inside a form a
                 // title would stand beside the field as a row's label.
                 TextField(text: $draft, prompt: Text(placeholder)) { Text(title) }
                     .labelsHidden()
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .font(.callout)
+                    .padding(.horizontal, 8)
                     .onSubmit(addDraft)
                 Button("Add", action: addDraft)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .padding(.trailing, 6)
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
             }
+            .padding(.leading, 2)
+            .frame(height: 26)
         }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                .strokeBorder(
+                    isDropTargeted ? Theme.tint : Color.primary.opacity(0.09),
+                    lineWidth: isDropTargeted ? 2 : 1
+                )
+        )
     }
 
     private func addDraft() {
@@ -878,41 +864,44 @@ struct PathListEditor: View {
     }
 }
 
-// MARK: - Exclude rows
+// MARK: - Skip switches
 
-/// An exclude rule's row — the Excluding card's and the editor's list's,
-/// the developer switch's rules among them: the line as restic is given it,
-/// and below it, for a rule the app offered, what it leaves out and who
-/// puts it back. Stacked, so a long pattern and its label each keep the
-/// row's width.
-struct ExcludeRowText: View {
-    let row: ExcludeRule.Row
+/// The plan editor's *Skip* switches by the names the editor and the plan
+/// page's Excluding card both give them.
+enum PlanSkips {
+    static let finderFiles = "Finder files and the Trash"
+    static let systemFiles = "App caches and system files"
+    static let caches = "Folders marked as caches"
+    static let developerFiles = "Developer files"
+    static let cloudFiles = "Online-only files"
+    static let otherDisks = "Other disks mounted inside"
 
-    /// The line and label in full, and for a developer switch's rule how to
-    /// back that up after all — it has no row to remove.
-    private var help: String {
-        var lines = [row.line]
-        if let rule = row.rule { lines.append(rule.label) }
-        if !row.isStored { lines.append("Left out by Skip developer files — turn it off to back this up.") }
-        return lines.joined(separator: "\n")
+    static let cachesHelp = "Folders holding a CACHEDIR.TAG file."
+    static let otherDisksHelp = "Folders on another disk mounted inside this one."
+
+    /// The rules a defaults switch passes, one a line, for its tooltip.
+    static func rulesHelp(_ categories: Set<ExcludeCategory>) -> String {
+        ExcludeRule.defaults
+            .filter { categories.contains($0.category) }
+            .map { "\($0.pattern) — \($0.what)" }
+            .joined(separator: "\n")
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(row.line)
-                .font(.callout)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if let rule = row.rule {
-                Text(rule.label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
+    /// The switches `plan` has on, in the editor's order, each with its
+    /// tooltip. Developer files names its ticked groups when not all are.
+    static func on(in plan: BackupPlan) -> [(title: String, help: String)] {
+        var items: [(title: String, help: String)] = []
+        if plan.skipsFinderFiles { items.append((finderFiles, rulesHelp(ExcludeCategory.finderFiles))) }
+        if plan.skipsSystemFiles { items.append((systemFiles, rulesHelp(ExcludeCategory.systemFiles))) }
+        if plan.excludeCaches { items.append((caches, cachesHelp)) }
+        if plan.excludeDeveloperFiles {
+            let groups = plan.developerGroups.map(\.title)
+            let isAll = plan.developerGroups == ExcludeCategory.developerGroups
+            items.append((isAll ? developerFiles : "\(developerFiles): \(Format.list(groups))", groups.joined(separator: "\n")))
         }
-        .help(help)
-        .accessibilityElement(children: .combine)
+        if plan.excludeCloudFiles { items.append((cloudFiles, "Files kept only in iCloud Drive or OneDrive.")) }
+        if plan.oneFileSystem { items.append((otherDisks, otherDisksHelp)) }
+        return items
     }
 }
 
@@ -1199,7 +1188,7 @@ struct UnreadableItemLine: View {
                 Button("Exclude") { model.exclude(path: path, fromPlan: plan.id) }
             }
         } message: {
-            Text("Its next backups skip \(path ?? "") — backups already made keep it. The plan's exclude patterns list it, and Edit Plan takes it out again.")
+            Text("Its next backups skip \(path ?? "") — backups already made keep it. Edit Plan lists it under Also skip, where − takes it out again.")
         }
         .task(id: path) {
             guard let path else { return }

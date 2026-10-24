@@ -191,14 +191,11 @@ struct PlanEditorSheet: View {
             }
             .padding(12)
         }
-        // Resizable, not fixed: forty pasted exclude patterns do not fit the
-        // default frame, and a fixed sheet turns its list into a mailbox slot
-        // at exactly the moment the user has the most to paste. Tall enough
-        // that the Hooks tab's Command field clears the fixed hook list band
-        // without scrolling. Adopt's header strip and footer warnings fit the
-        // same frame because the Files tab's lists give way first
-        // (PathListEditor's floor); content that outgrows the sheet is
-        // centred in it.
+        // Resizable, not fixed. Tall enough that the Hooks tab's Command
+        // field clears the fixed hook list band without scrolling. The Files
+        // tab's form scrolls, its exclude list a fixed band that scrolls on
+        // its own, so adopt's header strip and footer warnings fit the same
+        // frame.
         .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 620)
         .onAppear {
             draft.repositoryID = EditorRequirements.initialRepositoryID(
@@ -209,14 +206,6 @@ struct PlanEditorSheet: View {
             // Snapshot after the defaulting above, so an untouched sheet is
             // not born dirty.
             if initial == nil { initial = draft }
-        }
-        // A new plan's excludes follow its path while they are still the
-        // defaults for the path before — the home folder's caches appear for
-        // the home folder, not for ~/dotfiles — and stop once the list is
-        // edited, so a hand-made list is never replaced.
-        .onChange(of: draft.path) { oldPath, newPath in
-            guard mode == .new, draft.excludePatterns == BackupPlan.defaultExcludes(for: oldPath) else { return }
-            draft.excludePatterns = BackupPlan.defaultExcludes(for: newPath)
         }
         .confirmationDialog(
             "Discard changes?",
@@ -482,41 +471,62 @@ struct PlanEditorSheet: View {
                     FullDiskAccessButton()
                 }
             }
+            // What the app knows to leave out, as switches under one verb;
+            // the list below holds only what the user added.
             Section {
-                PathListEditor(
-                    title: "Exclude patterns",
-                    systemImage: "eye.slash",
-                    paths: $draft.excludePatterns,
-                    placeholder: "e.g. **/node_modules",  // a String variable, so not parsed as Markdown
-                    browseMessage: "Choose folders and files to leave out of backups",
-                    browsePrompt: "Exclude",
-                    escapesPickedGlobs: true,
-                    groupsExcludeRules: true,
-                    // The set a run of this draft passes restic, fitted to
-                    // the folder as it is typed, among the rows while the
-                    // switch below is on.
-                    switchRules: draft.excludeDeveloperFiles ? BackupPlan.developerRules(for: draft.path) : []
-                )
-            }
-            Section {
-                Toggle("Skip folders marked as caches", isOn: $draft.excludeCaches)
-                    .help("Folders holding a CACHEDIR.TAG file.")
+                Toggle(isOn: $draft.skipsFinderFiles) {
+                    Text(PlanSkips.finderFiles)
+                    Text("Finder’s .DS_Store files and what’s already in the Trash.")
+                }
+                .help(PlanSkips.rulesHelp(ExcludeCategory.finderFiles))
+                Toggle(isOn: $draft.skipsSystemFiles) {
+                    Text(PlanSkips.systemFiles)
+                    Text("Caches, logs, search indexes and other files macOS and apps make again.")
+                }
+                .help(PlanSkips.rulesHelp(ExcludeCategory.systemFiles))
+                Toggle(PlanSkips.caches, isOn: $draft.excludeCaches)
+                    .help(PlanSkips.cachesHelp)
                 // No row anywhere can name what a simulator or a container
                 // disk held, so the trade is said here, once.
-                Toggle(isOn: $draft.excludeDeveloperFiles) {
-                    Text("Skip developer files")
+                Toggle(isOn: Binding(
+                    get: { draft.excludeDeveloperFiles },
+                    set: { draft.setSkipsDeveloperFiles($0) }
+                )) {
+                    Text(PlanSkips.developerFiles)
                     Text(developerFilesCaption)
                 }
-                Toggle("Stay on one file system", isOn: $draft.oneFileSystem)
-                    .help("Folders on another disk mounted inside this one are skipped.")
+                if draft.excludeDeveloperFiles {
+                    developerGroupBoxes
+                }
                 // No row anywhere can show a file that was left out, so the
                 // trade is said here, once.
                 Toggle(isOn: $draft.excludeCloudFiles) {
-                    Text("Skip online-only files")
+                    Text(PlanSkips.cloudFiles)
                     Text(cloudFilesCaption)
                 }
+                // restic's --one-file-system, said as what it skips.
+                Toggle(PlanSkips.otherDisks, isOn: $draft.oneFileSystem)
+                    .help(PlanSkips.otherDisksHelp)
+            } header: {
+                Text("Skip")
             }
             .editorSwitches()
+            Section {
+                PathListEditor(
+                    title: "Also skip",
+                    paths: $draft.excludePatterns,
+                    placeholder: "Type a pattern, e.g. **/*.iso",  // a String variable, so not parsed as Markdown
+                    browseMessage: "Choose folders and files to leave out of backups",
+                    browsePrompt: "Exclude",
+                    escapesPickedGlobs: true
+                )
+            } header: {
+                Text("Also skip")
+            } footer: {
+                Text("Patterns follow restic’s rules: * matches within a name, ** across folders.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         // The path's network share, read off the main actor: a stalled
@@ -535,11 +545,36 @@ struct PlanEditorSheet: View {
         }
     }
 
+    /// One checkbox per developer group, under the switch while it is on;
+    /// its help lists what it leaves out.
+    private var developerGroupBoxes: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 3), alignment: .leading, spacing: 6) {
+            ForEach(ExcludeCategory.developerGroups, id: \.self) { group in
+                Toggle(group.title, isOn: Binding(
+                    get: { draft.developerGroups.contains(group) },
+                    set: { draft.setSkips(group, $0) }
+                ))
+                .toggleStyle(.checkbox)
+                .controlSize(.regular)
+                .help(developerGroupHelp(group))
+            }
+        }
+        .padding(.leading, 4)
+    }
+
+    /// What ticking `group` leaves out: its rules, then its marker's
+    /// folders.
+    private func developerGroupHelp(_ group: ExcludeCategory) -> String {
+        (BackupPlan.developerExcludes(groups: [group])
+            + ExcludeRule.developerMarkers.filter { $0.category == group }.map(\.line))
+            .joined(separator: "\n")
+    }
+
     /// What the developer switch covers, and its one trade: the rules'
     /// names are the tools' own, what they download again — the contents
     /// of the simulators and the machines are the part nobody rebuilds.
     private var developerFilesCaption: String {
-        "Leaves out what developer tools download or build again, simulators and Docker or OrbStack disks included — whatever is inside those isn't backed up."
+        "Leaves out what the ticked languages' tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn't backed up."
     }
 
     /// What the cloud-files switch does with this restic: 0.19 brought

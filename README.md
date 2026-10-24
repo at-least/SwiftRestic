@@ -179,12 +179,12 @@ the generator after editing it; the PNGs are checked in.
   context menu, or the repository page's *Other backups* card, listing each
   adoptable group while there is one) opens the plan editor with, from the
   newest backup this Mac made — or the newest of all when another Mac made
-  them all — its folder, exclude patterns and user tags, each pattern the
-  app offers in its own `~` spelling (restic records them tilde expanded);
-  a backup whose recorded patterns hold most of the developer rules fitted
-  to its folder — not all, since a later build may add one — adopts with
-  *Skip developer files* on and those rules not copied as rows (restic
-  records them, not the marker); the folder and the repository are the backups' own, the schedule is Daily
+  them all — its folder, *Skip* switches, exclude patterns and user tags:
+  each recorded pattern the app offers is read in its own `~` spelling
+  (restic records them tilde expanded) and turns its switch on — a
+  developer group when most of its rules are there, not all, since a later
+  build may add one (restic records the rules, not the markers) — and the
+  rest are the plan's own patterns; the folder and the repository are the backups' own, the schedule is Daily
   only when the folder exists here, and retention is off. A group whose
   backup holds several folders — a plan of an earlier build — cannot be
   adopted, since a plan backs up one; its page says so. Adopting
@@ -322,12 +322,12 @@ the generator after editing it; the PNGs are checked in.
   *Backups* (last backup, count, retention) with *Back Up Now* — *Stop*
   while it runs; *Schedule* (and when it runs next) with *Pause* (*Pause
   Schedule* in the menus), its arrow offering the lengths, or *Resume*
-  (*Resume Schedule*) — none for a manual plan; *Excluding*, everything it leaves out, grouped by kind — first
-  *Added by you*, then Finder & Trash, apps' caches & state, search indexes,
-  a drive's or the startup disk's own, each developer language and tool —
-  every rule the app offers labelled with what it is and who puts it back
-  ("Virtualenvs · pip installs them again"), the patterns as typed (the rest
-  of how it runs, its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors
+  (*Resume Schedule*) — none for a manual plan; *Excluding*, what it leaves out as the editor's Files tab says
+  it — *Skip*, the switches that are on, each with its rules in its
+  tooltip (*Developer files* naming its groups when not all are ticked),
+  then *Also skip*, the user's own patterns as typed — with *Edit*, which
+  opens the editor on its Files tab, where these are changed (the rest of
+  how it runs, its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,
   how many backups in a row ended that way for the same cause ("3 times in
@@ -337,70 +337,89 @@ the generator after editing it; the PNGs are checked in.
   drawer's diagnosis, and up to five unreadable items with the drawer's
   *Reveal in Finder* and *Exclude from “Documents”* menu, then "… and N
   more in Activity"; *Show in Activity* opens the run. The editor
-  preselects the repository only when there is just one, starts a new
-  plan's excludes with the defaults its folder can hold — `.DS_Store`
-  anywhere (`**/node_modules`, a default until 2026-10-21, is the developer
-  switch's below; plans saved with it keep it as their own row); for a
-  folder they lie in, the home folder's
-  regenerable state (`~/Library/Caches`, `~/.Trash`,
-  `~/Library/Application Support/Steam`, `~/Library/Logs`, Spotlight's
-  per-user index, saved window state, per-app HTTP stores, sandboxed
-  apps' caches, app-group caches, Mail's Envelope Index, Photos' search
-  index and caches); a volume's root bookkeeping (`.Spotlight-V100`,
-  `.fseventsd`, `.Trashes`, `.DocumentRevisions-V100`, `.TemporaryItems`)
-  for a plan of the volume itself, of `/Volumes` or of `/`; the startup
-  disk's own (`/System`, the swap and sleep images, `/private/var/folders`,
-  `/private/tmp`, `/Library/Caches`, `/Library/Logs`) for a plan of `/`,
-  `/private`, `/private/var` or `/Library`, each getting the ones lying
-  under it — and keeps them following the
-  folder until the list is edited (a plan saved with defaults its folder
-  cannot hold sheds them at load; patterns typed in stay), says when a folder
-  is not on this Mac, takes excludes chosen in a panel (the + beneath the list, − removing) or dropped from Finder
+  preselects the repository only when there is just one, and opens on
+  its Files tab: a *Skip* group of switches, then *Also skip*, the patterns
+  the user added. *Finder files and the Trash* (`.DS_Store`, `~/.Trash`)
+  and *App caches and system files* — the home folder's regenerable state
+  (`~/Library/Caches`, `~/Library/Application Support/Steam`,
+  `~/Library/Logs`, Spotlight's per-user index, saved window state, per-app
+  HTTP stores, sandboxed apps' caches, app-group caches, Mail's Envelope
+  Index, Photos' search index and caches), a volume's root bookkeeping
+  (`.Spotlight-V100`, `.fseventsd`, `.Trashes`, `.DocumentRevisions-V100`,
+  `.TemporaryItems`) and the startup disk's own (`/System`, the swap and
+  sleep images, `/private/var/folders`, `/private/tmp`, `/Library/Caches`,
+  `/Library/Logs`) — are on for new plans (`**/node_modules`, a default
+  until 2026-10-21, is the developer switch's below; plans saved with it
+  keep it as their own row). A plan stores the switches, not their rules,
+  and a run passes each switch's rules beside the user's own patterns,
+  whatever the folder — a rule naming nothing under it matches nothing —
+  so a rule a later build adds reaches every plan with its switch on. A
+  plan saved before the switches reads them from its list once, at load:
+  one is on when any of its rules is there, and the rules the switches now
+  pass leave the list. A run passes no rule naming the plan's folder itself or a folder
+  above it (a plan inside `/private/var/folders`, of `~/Library/Caches`),
+  which would leave nothing to back up. The *Also skip* list shows only the
+  user's own patterns, one line each, scrolling past about six. The editor
+  also says when a folder is not on this Mac, takes excludes chosen in a panel (the + in the bar beneath the list, − removing, a pattern typed into the field beside them) or dropped from Finder
   as their own paths (glob characters escaped), and shows *Next backup* for
   the schedule being chosen, as Save would store it. A daily or weekly
   schedule's *At* is macOS's own time field, in the Mac's 12- or 24-hour
   clock, as every schedule then reads ("Daily at 2:00 AM", "Daily at 02:00"
   under a 24-hour clock) — the form of the *Next backup* value beside it,
-  where it had been a fixed 24-hour "02:00". *Skip online-only files*
+  where it had been a fixed 24-hour "02:00". *Skip › Online-only files*
   (iCloud Drive, OneDrive) passes restic's `--exclude-cloud-files`: on
   for new plans, off for plans saved before the option (their backups do not
   change under it), and only with restic 0.19 or later, which brought the
   flag to macOS (restic's changelog) — the editor says when this restic is
   older. What restic does with an online-only file without the flag was not
-  tried: it would mean reading a real iCloud Drive file. *Skip developer
-  files* (named *Skip what developer tools rebuild* until 2026-10-21) passes restic `--exclude` for the rules its folder fits and
-  `--exclude-if-present .rustc_info.json` — a Cargo `target` is skipped by
-  the marker file a build writes into it, never by its generic name, so a
-  folder of the user's that is only named target stays and the marker itself
-  is kept. The marker sits only in the build folder (cargo's own source;
-  none in `~/.cargo`), so it can take the user's files with it only where
-  `CARGO_TARGET_DIR` or `build.target-dir` points the build into a folder
-  that holds them — a folder restic then empties to the marker alone, exit
-  0 (0.19.1, probed). A virtualenv goes by its usual names (`.venv`,
-  `venv`), not by its marker: a project made one in place (`python -m venv
-  .`) holds the user's code beside pyvenv.cfg, and restic would leave that
-  out with it (0.19.1, probed); a virtualenv named otherwise is backed up,
-  and a folder named so that is not one is left out. The rules are what the
-  tools download and build again: virtualenvs, a project's
-  `node_modules`, the
-  languages' bytecode, type-check and test caches, the package managers' and
-  toolchains' stores under the home folder, the frameworks' build folders
-  (`.next`, DerivedData, Pods), the version managers' installed toolchains,
-  Xcode's per-device symbol dumps — and, the switch's trade, the simulators'
-  devices and the containers' machine disks (CoreSimulator, Docker, OrbStack,
-  Lima, Colima, Podman, Vagrant): whatever was installed inside one is not
-  backed up, and the editor's caption says so beside the switch.
-  On for new plans (since 2026-10-21) and off for plans saved before the
-  option; adopting a backup turns it on when that backup recorded most of
-  the rules it passes. On, the rules
-  follow the folder the way the defaults do (a plan of `~/Documents` gets the
-  folder patterns alone, one of the home folder gets the home rules too) and
-  are never stored in the plan's own list — while the switch is on, the
-  editor's exclude list and the plan page's *Excluding* card show each under
-  its kind beside the plan's own patterns, labelled; in the editor they
-  cannot be selected or removed (their help says to turn the switch off to
-  back one up), and they leave the list when it is turned off. A pattern the
-  user typed carries no label and sits under *Added by you*, first.
+  tried: it would mean reading a real iCloud Drive file. *Skip › Developer
+  files* (named *Skip what developer tools rebuild* until 2026-10-21) holds
+  one checkbox per group, shown under the switch while it is on (since
+  2026-10-23): Python, JavaScript & TypeScript, Swift & Xcode, Rust, Go,
+  Java & Kotlin, Dart & Flutter, Ruby, PHP, .NET, Elixir & Erlang, Haskell,
+  Scala, Julia, R, C & C++, Zig, OCaml, Other tools (Terraform, direnv,
+  pre-commit, asdf, mise, SDKMAN!), Simulators, and Containers & virtual
+  machines; each language's version manager sits with it (nvm and Volta with
+  JavaScript, pyenv and uv with Python, rbenv, RVM and ruby-install with
+  Ruby, rustup with Rust, goenv with Go, GHCup with Haskell, juliaup with
+  Julia, FVM with Dart). The switch ticks every group or none, and is on
+  while any is ticked. A ticked group's rules are passed whatever the
+  folder. Each checkbox's help lists what it leaves out. Two groups skip a
+  build folder whose name is too generic for a pattern by a marker file
+  instead, passed as `--exclude-if-present` while the group is ticked and
+  listed in its checkbox's help:
+  Rust's `.rustc_info.json`, which Cargo writes into `target`, and .NET's
+  `project.assets.json`, which NuGet's restore writes into `obj` — so a
+  folder of the user's that is only named target or obj stays, and the
+  marker itself is kept. Cargo's marker sits only in the build folder
+  (cargo's own source; none in `~/.cargo`), so it can take the user's files
+  with it only where `CARGO_TARGET_DIR` or `build.target-dir` points the
+  build into a folder that holds them — a folder restic then empties to the
+  marker alone, exit 0 (0.19.1, probed). A virtualenv goes by its usual
+  names (`.venv`, `venv`), not by its marker: a project made one in place
+  (`python -m venv .`) holds the user's code beside pyvenv.cfg, and restic
+  would leave that out with it (0.19.1, probed); a virtualenv named
+  otherwise is backed up, and a folder named so that is not one is left
+  out. The rules are what the tools download and build again: virtualenvs,
+  a project's `node_modules`, `vendor/bundle` and `renv/library`, the
+  languages' bytecode, type-check, test and language-server caches, the
+  package managers' and toolchains' stores under the home folder, the
+  frameworks' and build tools' output folders (`.next`, DerivedData, Pods,
+  `dist-newstyle`, `cmake-build-*`, `zig-out`), the version managers'
+  installed toolchains, Xcode's per-device symbol dumps — and, the trade
+  the caption says beside the switch, the simulators' devices and the
+  containers' machine disks (CoreSimulator, Docker, OrbStack, Lima, Colima,
+  Podman, Vagrant): whatever was installed inside one is not backed up.
+  Generic names that can hold source not always rebuilt (`vendor`, `build`,
+  `bin`, `dist`, `deps`, `out`) are never patterns, nor RStudio's
+  `.Rproj.user`, which keeps unsaved editor buffers, nor a tool folder
+  that also holds the user's settings or keys (`~/.gem`'s credentials,
+  `~/.stack`'s config, `~/.julia/dev` stay). Every group is ticked for new
+  plans (since 2026-10-21) and none for plans saved before the option.
+  Adopting a backup reads the switches from the excludes it recorded as
+  the load does, a group ticked when most of its rules are there. Until
+  2026-10-23 one switch passed the rules at each run, without the groups;
+  a plan saved then with it on gets every group ticked once, at load.
 - **Skipped backups** — when a plan's folder is missing, restic writes
   nothing (exit 1, "Fatal: all source directories/files do not exist",
   restic 0.19.1). When it is on a drive that is away — a volume under
@@ -571,19 +590,17 @@ the generator after editing it; the PNGs are checked in.
   a folder only where nothing is there yet.
   - *The Change column* compares with the previous backup of the same
     folders from the same Mac — not the row below, which for a plan whose
-    folders changed is a backup of other folders; the header names the open
-    backup and what it is compared with, or that it is the first of its
-    folders. A folder the diff names only inside carries “N inside” (the
-    tree root's equal to the header's count, the kinds in its tooltip), so a
-    collapsed root does not read as unchanged. Under a finished comparison
-    the header names what the previous backup held and this one does not
-    ("Removed: old.txt, sub" — a removed folder once, not its contents), the
-    full paths in its tooltip; each name there and in a Files folder's
-    "Removed:" line links to the previous backup's copy on the Files tab —
-    a plan's backups only: a group's names are words, its page having no
-    Files tab.
-    What this backup's own run could not read is on a "Not read:" line of
-    its own, with the reason in each name's tooltip.
+    folders changed is a backup of other folders — and marks what this
+    backup holds that was added or modified; its title's tooltip names the
+    backup compared with, or that this is the first of its folders. A
+    folder the diff names only inside carries “N inside”, counting only
+    rows it has (the kinds in its tooltip), so a collapsed root does not
+    read as unchanged. The tree shows what the backup holds and nothing
+    else: what was deleted since is *Compare with Previous*, in a backup's
+    right-click menu in the list (below). No line sits above the tree
+    unless the comparison failed — a blank column then means "not known".
+    A Files folder's "Removed:" and "Not read:" lines link each name to the
+    previous backup's copy on the Files tab.
   - *Into the Files view.* *Show Versions*, in an item's right-click menu
     here and on Find Files' results, opens it on the Files tab of the plan
     the backup belongs to, at that backup; on Find Files' index results the
@@ -630,10 +647,11 @@ the generator after editing it; the PNGs are checked in.
   holds it, so a file found in an older backup than its folder's (deleted
   since) restores on its own: beside the folder in a chosen folder, back
   inside it at the original location.
-- **Compare backups** — *Compare with Previous* on a backup run in Activity
-  runs `restic diff` against the previous backup of the same folders from
+- **Compare backups** — *Compare with Previous* on a backup run in Activity,
+  or in a backup's right-click menu in a Backups tab's list (when it has a
+  previous backup of its folders from the same Mac), runs `restic diff` against the previous backup of the same folders from
   the same Mac (any earlier one can be chosen) and lists what was added,
-  removed or modified, filterable by kind and path, with restic's byte
+  deleted or modified, filterable by kind and path, with restic's byte
   totals, under a header naming the repository: "what did last night's
   backup actually pick up?" without restoring anything. A row's right-click
   menu has *Show Versions* (also a double-click), closing the sheet onto its
@@ -1038,7 +1056,7 @@ plan cannot fire mid-capture.
 - `SWIFTRESTIC_CAPTURE` writes a PNG of the front window and quits.
 - `SWIFTRESTIC_CAPTURE_PANE` picks the screen: `plan`, `repository`,
   `restore` (the first repository's newest backup, open on its page's
-  Backups tab), `activity`, `find`, `console`; `files` — the first plan's page
+  Backups tab, `SWIFTRESTIC_CAPTURE_ITEM`'s folder walked open), `activity`, `find`, `console`; `files` — the first plan's page
   on its Files tab, its path open and selected, or the item
   `SWIFTRESTIC_CAPTURE_ITEM` names (an absolute path under it, a
   folder with a trailing `/`) with every folder above it open, and with

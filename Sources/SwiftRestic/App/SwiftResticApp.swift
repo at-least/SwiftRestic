@@ -63,6 +63,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// launched the app is delivered to the delegate set by then. Without
     /// one the click only brings the app forward.
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Tooltips show at once, without AppKit's resting pause (the user's
+        // call, 2026-10-23): the editor's language checkboxes list their
+        // patterns in theirs. 50 ms, not 0: with 0, a pointer gliding onto a
+        // checkbox raised no tooltip at all (0 of 5, macOS 26), where 50 ms
+        // raised them in about 0.09 s. In the registration domain, so a
+        // value the defaults domain holds still wins.
+        UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 50])
         EditMenuTrim.install()
         if AppModel.supportsNotifications {
             UNUserNotificationCenter.current().delegate = self

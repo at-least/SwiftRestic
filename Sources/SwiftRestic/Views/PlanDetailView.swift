@@ -57,13 +57,13 @@ struct PlanDetailView: View {
     private func backUpControl(_ plan: BackupPlan) -> some View {
         let commands = model.planCommands(for: .plan(plan.id))
         if model.isRunning(planID: plan.id) {
-            Button("Stop", systemImage: "stop.fill") {
+            Button("Stop") {
                 model.cancelBackup(planID: plan.id)
             }
             .disabled(!commands.canStop)
             .help("\(commands.stopTitle) (⌘.) — recorded as cancelled")
         } else {
-            Button("Back Up Now", systemImage: "arrow.up.circle.fill") {
+            Button("Back Up Now") {
                 model.runBackup(planID: plan.id)
             }
             .disabled(!commands.canBackUp)
@@ -80,13 +80,12 @@ struct PlanDetailView: View {
     @ViewBuilder
     private func scheduleControl(_ plan: BackupPlan) -> some View {
         if !plan.isScheduleActive(at: now) {
-            Button("Resume", systemImage: "play.circle") {
+            Button("Resume") {
                 model.resumePlanSchedule(id: plan.id)
             }
-            .labelStyle(.titleAndIcon)
             .help(resumeHelp(plan, now: now))
         } else if plan.schedule.frequency != .manual {
-            Menu("Pause", systemImage: "pause.circle") {
+            Menu("Pause") {
                 ForEach(PauseLength.allCases) { length in
                     Button(length.menuTitle) {
                         model.pausePlanSchedule(id: plan.id, for: length)
@@ -95,7 +94,6 @@ struct PlanDetailView: View {
             } primaryAction: {
                 model.pausePlanSchedule(id: plan.id, for: .untilResumed)
             }
-            .labelStyle(.titleAndIcon)
             .help("Stop scheduled runs until you resume — or pick a length from the arrow. Back Up Now still works")
         }
     }
@@ -329,7 +327,6 @@ struct PlanDetailView: View {
             }
         } accessory: {
             backUpControl(plan)
-                .labelStyle(.titleAndIcon)
                 .controlSize(.small)
         }
     }
@@ -363,7 +360,6 @@ struct PlanDetailView: View {
             }
         } accessory: {
             scheduleControl(plan)
-                .labelStyle(.titleAndIcon)
                 .controlSize(.small)
                 .fixedSize()
         }
@@ -463,49 +459,51 @@ struct PlanDetailView: View {
         }
     }
 
-    /// What the plan leaves out, grouped by what kind of thing each rule
-    /// skips, each the app offered labelled with what it is and who puts
-    /// it back: the plan's own patterns as typed, tilde and all, and while
-    /// the developer switch is on the rules it passes restic for this
-    /// folder. The folder itself is the page's subtitle. When is the
-    /// Schedule card's, what it keeps the Backups card's, where the
-    /// sidebar's (the plan sits under its repository); the rest of how it
-    /// runs, its hooks among it, is the editor's, which Plan ▸ Edit Plan
-    /// and the row's Edit open.
+    /// What the plan leaves out, as the editor's Files tab says it: the
+    /// *Skip* switches that are on, each with its rules in its tooltip, and
+    /// the user's own patterns as typed, tilde and all. The folder itself is
+    /// the page's subtitle. When is the Schedule card's, what it keeps the
+    /// Backups card's, where the sidebar's (the plan sits under its
+    /// repository); the rest of how it runs, its hooks among it, is the
+    /// editor's, which Plan ▸ Edit Plan and the row's Edit open — and the
+    /// card's own Edit, on the Files tab, where these rows are changed.
     private func excludingCard(_ plan: BackupPlan) -> some View {
-        let sections = ExcludeRule.sections(
-            stored: plan.excludePatterns,
-            developer: plan.excludeDeveloperFiles ? BackupPlan.developerRules(for: plan.path) : []
-        )
+        let skips = PlanSkips.on(in: plan)
         return Card("Excluding") {
-            VStack(alignment: .leading, spacing: 12) {
-                if sections.isEmpty {
-                    Text("Nothing is left out.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(sections) { section in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(section.category.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .accessibilityAddTraits(.isHeader)
-                        ForEach(section.rows) { row in
-                            Label {
-                                ExcludeRowText(row: row)
-                            } icon: {
-                                // The editor's glyph for the list, holding
-                                // the pattern where the folders' names
-                                // start — secondary, not the folders' tint:
-                                // these are what stays out of the backup.
-                                Image(systemName: "eye.slash")
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityHidden(true)
+            if skips.isEmpty, plan.excludePatterns.isEmpty {
+                Text("Nothing is left out.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                DetailGrid {
+                    if !skips.isEmpty {
+                        DetailRow("Skip") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(skips, id: \.title) { skip in
+                                    Text(skip.title)
+                                        .help(skip.help)
+                                }
+                            }
+                        }
+                    }
+                    if !plan.excludePatterns.isEmpty {
+                        DetailRow("Also skip") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(plan.excludePatterns, id: \.self) { pattern in
+                                    Text(pattern)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .help(pattern)
+                                }
                             }
                         }
                     }
                 }
             }
+        } accessory: {
+            Button("Edit") { router.request(.editPlan(plan.id)) }
+                .controlSize(.small)
+                .help("Change what this plan leaves out")
         }
     }
 }

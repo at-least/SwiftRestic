@@ -60,6 +60,10 @@ final class RunTranscript: @unchecked Sendable {
     static let headByteLimit = 256 * 1024
     static let tailEntryLimit = 200
     static let lineByteLimit = 4096
+    /// The app's own command line, bounded by what it passes — a plan's
+    /// switches alone pass some 150 excludes, past `lineByteLimit` — and
+    /// what the log is read for first, so it keeps its own, wider cap.
+    static let commandByteLimit = 64 * 1024
 
     private let lock = NSLock()
     private var head: [Entry] = []
@@ -71,7 +75,7 @@ final class RunTranscript: @unchecked Sendable {
     private var firstExitCode: Int32?
 
     func command(_ text: String) {
-        append(Entry(time: .now, kind: .command, text: Self.capped(text)))
+        append(Entry(time: .now, kind: .command, text: Self.capped(text, at: Self.commandByteLimit)))
     }
 
     /// One line restic printed. Progress ticks (`status`, `verbose_status`)
@@ -127,13 +131,13 @@ final class RunTranscript: @unchecked Sendable {
         omitted += 1
     }
 
-    /// A line cut at `lineByteLimit` bytes, on a scalar boundary, with the
-    /// length it had — one pathological line must not eat the head alone.
-    private static func capped(_ line: String) -> String {
+    /// A line cut at `limit` bytes, on a scalar boundary, with the length
+    /// it had — one pathological line must not eat the head alone.
+    private static func capped(_ line: String, at limit: Int = lineByteLimit) -> String {
         let length = line.utf8.count
-        guard length > lineByteLimit else { return line }
+        guard length > limit else { return line }
         let scalars = line.unicodeScalars
-        var end = line.utf8.index(line.utf8.startIndex, offsetBy: lineByteLimit)
+        var end = line.utf8.index(line.utf8.startIndex, offsetBy: limit)
         while end.samePosition(in: scalars) == nil {
             end = line.utf8.index(before: end)
         }

@@ -66,7 +66,7 @@ struct ResticIntegrationTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = sourceDirectory.path
-        plan.excludePatterns = []
+        plan.skipNothing()
 
         return Fixture(
             root: root,
@@ -1012,10 +1012,16 @@ struct ResticIntegrationTests {
         // because no exclude reached restic.
         let finderFile = fixture.sourceDirectory.appendingPathComponent("project/.DS_Store")
         try "finder".write(to: finderFile, atomically: true, encoding: .utf8)
-        // The defaults as a plan of this folder gets them. The whole list
-        // would leave nothing to back up: the scratch tree lies under
-        // /private/var/folders, itself one of the startup disk's defaults.
-        fixture.plan.excludePatterns = BackupPlan.defaultExcludes(for: fixture.sourceDirectory.path)
+        // Both defaults switches on, as a new plan has them, over the source
+        // spelled with its symlinks resolved: the scratch tree then lies
+        // under /private/var/folders, itself one of the startup disk's
+        // defaults, and the run must not pass a rule that names the source
+        // or a folder above it, or this backup would hold nothing.
+        fixture.plan.skipsFinderFiles = true
+        fixture.plan.skipsSystemFiles = true
+        let resolved = fixture.sourceDirectory.path.replacingOccurrences(of: "/var/", with: "/private/var/", options: .anchored)
+        fixture.plan.path = resolved
+        #expect(ResticService.pattern("/private/var/folders", covers: resolved))
 
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
         let snapshotID = try #require(outcome.summary?.snapshotID)
@@ -1027,7 +1033,9 @@ struct ResticIntegrationTests {
             destinationDirectory: destination,
             overwrite: .replaceExisting
         )
-        let restored = { (url: URL) in destination.appendingPathComponent(url.path) }
+        let restored = { (url: URL) in
+            destination.appendingPathComponent(resolved + url.path.dropFirst(fixture.sourceDirectory.path.count))
+        }
         #expect(FileManager.default.fileExists(atPath: restored(object).path))
         #expect(FileManager.default.fileExists(atPath: restored(git.appendingPathComponent("HEAD")).path))
         #expect(!FileManager.default.fileExists(atPath: restored(finderFile).path))
@@ -1110,7 +1118,7 @@ struct ResticIntegrationTests {
         #expect(paths.contains(document.path), "the user folder on the volume must stay")
     }
 
-    @Test("the developer switch's rules and marker skip what the tools rebuild, over a stand-in home")
+    @Test("the developer groups' rules and markers skip what the tools rebuild, over a stand-in home")
     func developerExcludesSkipRebuildables() async throws {
         var fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -1118,14 +1126,12 @@ struct ResticIntegrationTests {
 
         // The stand-in home: a folder inside the source, so the anchored
         // rules re-root over it — the service's `home` is what the plan's
-        // tilde paths and the anchored patterns expand against, and the
-        // fitting matches them against the plan's path the same way.
+        // tilde paths and the anchored patterns expand against.
         let home = fixture.sourceDirectory.appendingPathComponent("home")
         fixture.service.home = home.path
-        fixture.plan.excludeDeveloperFiles = true
-        // The switch alone: no row of the plan's own may be what skips a
-        // folder here — node_modules among them, now the switch's.
-        fixture.plan.excludePatterns = []
+        // Every group's rules and markers alone: no other rule may be what
+        // skips a folder here.
+        fixture.plan.developerGroups = ExcludeCategory.developerGroups
 
         // The developers' own layouts: a virtualenv by its name, a Cargo
         // target by its marker, the package stores and toolchains beside
@@ -1164,6 +1170,27 @@ struct ResticIntegrationTests {
         let deviceSupport = try planted("home/Library/Developer/Xcode/iOS DeviceSupport/x", "device symbols")
         let archive = try planted("home/Library/Developer/Xcode/Archives/a.xcarchive/Info.plist", "a shipped build's archive")
         let simulator = try planted("home/Library/Developer/CoreSimulator/Devices/d/data", "what was installed in a simulator")
+        // The groups added on 2026-10-23, each with what it must leave.
+        let bundledGem = try planted("rb/vendor/bundle/ruby/3.3.0/gems/x/lib/x.rb", "a gem Bundler installed")
+        let vendoredCode = try planted("rb/vendor/mylib/lib.rb", "the user's own vendored code")
+        let installedGem = try planted("home/.gem/ruby/3.3.0/gems/y/y.rb", "a gem installed for the user")
+        let gemCredentials = try planted("home/.gem/credentials", "the RubyGems API key")
+        let assetsMarker = try planted("cs/obj/project.assets.json", "NuGet's restore output")
+        let intermediate = try planted("cs/obj/Debug/net8.0/app.dll", "an intermediate build")
+        let userObj = try planted("models/obj/mesh.obj", "a user's folder that is only named obj")
+        let nugetPackage = try planted("home/.nuget/packages/z/1.0.0/z.nupkg", "a NuGet package")
+        let cabalBuild = try planted("hs/dist-newstyle/build/x", "Cabal build output")
+        let juliaPackage = try planted("home/.julia/packages/P/abc/src/P.jl", "a Julia package")
+        let juliaDev = try planted("home/.julia/dev/Mine/src/Mine.jl", "a package under development")
+        let clionBuild = try planted("cpp/cmake-build-debug/app", "CLion's build")
+        let cppSource = try planted("cpp/src/main.cpp", "the user's C++ source")
+        let renvLibrary = try planted("rproj/renv/library/R-4.4/x/DESCRIPTION", "an R package renv installed")
+        let renvLock = try planted("rproj/renv.lock", "the R project's lockfile")
+        let metals = try planted("sc/.metals/metals.mv.db", "Metals' index")
+        let zigOut = try planted("zg/zig-out/bin/app", "Zig build output")
+        let opamSwitch = try planted("ml/_opam/lib/x/META", "a project's opam switch")
+        let uvCache = try planted("home/.cache/uv/wheels/x.whl", "uv's cache")
+        let elixirLS = try planted("ex/.elixir_ls/build/x", "ElixirLS's build")
 
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
         let snapshotID = try #require(outcome.summary?.snapshotID)
@@ -1177,11 +1204,14 @@ struct ResticIntegrationTests {
         let paths = Set(listed.content.keys)
 
         for skipped in [venvConfig, venvModule, namedVenvModule, rustBinary, pycache, nodeModule, terraformState, gradleCache,
-                        cargoRegistry, m2Repository, limaDisk, avdImage, deviceSupport, simulator] {
+                        cargoRegistry, m2Repository, limaDisk, avdImage, deviceSupport, simulator,
+                        bundledGem, installedGem, intermediate, nugetPackage, cabalBuild, juliaPackage, clionBuild,
+                        renvLibrary, metals, zigOut, opamSwitch, uvCache, elixirLS] {
             #expect(!paths.contains(skipped.path), "the rules must skip \(skipped.path); snapshot held \(paths.count) paths")
         }
         for kept in [cargoMarker, userTarget, inPlaceCode, terraformLock, gradleProperties,
-                     cargoBin, m2Settings, limaConfig, adbKey, archive] {
+                     cargoBin, m2Settings, limaConfig, adbKey, archive,
+                     vendoredCode, gemCredentials, assetsMarker, userObj, juliaDev, cppSource, renvLock] {
             #expect(paths.contains(kept.path), "the marker and the user's own files must stay: \(kept.path)")
         }
     }
@@ -1224,7 +1254,7 @@ struct ResticMaintenanceTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = source.path
-        plan.excludePatterns = []
+        plan.skipNothing()
 
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
         let context = RepositoryContext(repository: repository, password: "prune-test")
@@ -1288,7 +1318,7 @@ struct ResticCheckDamageTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = sourceDirectory.path
-        plan.excludePatterns = []
+        plan.skipNothing()
 
         let context = RepositoryContext(repository: repository, password: "check-damage-password")
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
@@ -1368,7 +1398,7 @@ struct ResticDiffTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = source.path
-        plan.excludePatterns = []
+        plan.skipNothing()
 
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
         let context = RepositoryContext(repository: repository, password: "diff-test")
@@ -1439,7 +1469,7 @@ struct ResticFindTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = source.path
-        plan.excludePatterns = []
+        plan.skipNothing()
 
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
         let context = RepositoryContext(repository: repository, password: "find-test")
@@ -1501,7 +1531,7 @@ struct ResticFindTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = source.path
-        plan.excludePatterns = []
+        plan.skipNothing()
 
         let service = ResticService(runner: ResticRunner(), binary: binary.url)
         let context = RepositoryContext(repository: repository, password: "exact-test")

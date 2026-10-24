@@ -35,7 +35,7 @@ struct SnapshotLineageTests {
         #expect(inside["/r/a"] == ChangesInside(counts: [.removed: 1, .modified: 1]))
         #expect(inside["/r/b"] == ChangesInside(counts: [.added: 1]))
         #expect(inside["/r"]?.total == changes.count)
-        #expect(inside["/r"]?.summary == "2 added, 1 removed, 1 modified")
+        #expect(inside["/r"]?.summary == "2 added, 1 deleted, 1 modified")
         // A file has nothing inside; a path the diff names keeps its own
         // word in the column, so its tally is only for its folders.
         #expect(inside["/r/a/x.txt"] == nil)
@@ -322,90 +322,34 @@ struct SnapshotLineageTests {
             + "folders from the same Mac, and this is the first.")
     }
 
-    @Test("the restore header calls what this backup's own run could not read not read, not removed")
-    func restoreHeaderNotRead() throws {
-        let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/src"])
-        let record = try snapshot("abf72899aaaaaaaa", time: "2026-09-26T02:00:00Z", paths: ["/src"])
-        let since = Format.timestamp(baseline.time)
-        let unread = UnreadItems(lines: ["/src/locked.pdf": "/src/locked.pdf: open /src/locked.pdf: permission denied"])
-        func heading(_ removals: [ResticDiffChange]) -> RestoreRecordHeading {
-            RestoreRecordHeading(record: record, label: nil, comparison: .compared(
-                baseline: baseline, changeCount: removals.count, removed: removals
-            ), unread: unread)
-        }
-        let old = ResticDiffChange(path: "/src/old.txt", modifier: "-")
-        let locked = ResticDiffChange(path: "/src/locked.pdf", modifier: "-")
-        let both = heading([locked, old])
-        #expect(both.removed?.names.line == "Removed: old.txt")
-        #expect(both.notRead?.names.line == "Not read: locked.pdf")
-        #expect(both.notRead?.names.items.map(\.reason) == ["permission denied"])
-        #expect(both.removed?.names.items.map(\.reason) == [nil])
-        #expect(both.notRead?.detail
-            == "Not read by this backup — restic could not read them; the backup of \(since) has them:\n/src/locked.pdf")
-        #expect(both.notRead?.baseline == baseline)
-        let onlyLocked = heading([locked])
-        #expect(onlyLocked.removed == nil)
-        #expect(onlyLocked.notRead?.names.line == "Not read: locked.pdf")
-        #expect(heading([old]).notRead == nil)
-    }
-
-    @Test("the restore header names what the backup no longer holds — removals the tree, being this backup's, cannot show")
-    func restoreHeaderRemovals() throws {
-        let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/src"])
-        let record = try snapshot("abf72899aaaaaaaa", time: "2026-09-26T02:00:00Z", paths: ["/src"])
-        let since = Format.timestamp(baseline.time)
+    @Test("the Change column marks only what this backup holds, so a folder's tally counts only rows it has")
+    func changeColumnLeavesOutRemovals() {
         func changeMap(_ lines: [(String, String)]) -> [String: ResticDiffChange] {
             Dictionary(uniqueKeysWithValues: lines.map { (ResticPath.normalized($0.0), ResticDiffChange(path: $0.0, modifier: $0.1)) })
         }
-        func heading(_ changes: [String: ResticDiffChange]) -> RestoreRecordHeading {
-            RestoreRecordHeading(record: record, label: nil, comparison: .compared(
-                baseline: baseline, changeCount: changes.count, removed: ChangeComparison.removals(in: changes)
-            ))
-        }
-
         // restic 0.19.1's diff after a file and a folder were deleted: the
         // folder, then everything it held, each its own "-" line.
         let changes = changeMap([
             ("/src/keep/k.txt", "M"), ("/src/old.txt", "-"), ("/src/sub/", "-"),
-            ("/src/sub/a.txt", "-"), ("/src/sub/deep/", "-"), ("/src/sub/deep/b.txt", "-"),
+            ("/src/sub/a.txt", "-"), ("/src/new.txt", "+"),
         ])
-        #expect(ChangeComparison.removals(in: changes).map(\.path) == ["/src/old.txt", "/src/sub/"])
-        let removedTwo = heading(changes)
-        // The count line is unchanged; the removals get their own.
-        #expect(removedTwo.caption == "6 changes since \(since)")
-        #expect(removedTwo.removed?.line == "Removed: old.txt, sub")
-        #expect(removedTwo.removed?.detail == "Removed since \(since):\n/src/old.txt\n/src/sub and everything in it")
-        // Each name is a route to the copy the backup before holds.
-        #expect(removedTwo.removed?.names.items == [
-            RemovedItem(path: "/src/old.txt", isDirectory: false), RemovedItem(path: "/src/sub", isDirectory: true),
-        ])
-        #expect(removedTwo.removed?.names.items.map(\.name) == ["old.txt", "sub"])
-        #expect(removedTwo.removed?.baseline == baseline)
+        let held = ChangeComparison.heldChanges(changes)
+        #expect(Set(held.keys) == ["/src/keep/k.txt", "/src/new.txt"])
+        let inside = ChangeComparison.changesInside(held)
+        #expect(inside["/src"]?.summary == "1 added, 1 modified")
+        #expect(inside["/src/sub"] == nil)
+    }
 
-        // Past three names, a count; the tooltip lists them all.
-        let five = heading(changeMap(["e", "a", "d", "b", "c"].map { ("/src/\($0).txt", "-") }))
-        #expect(five.removed?.line == "Removed: a.txt, b.txt, c.txt, and 2 more")
-        #expect(five.removed?.names.items.map(\.name) == ["a.txt", "b.txt", "c.txt"])
-        #expect(five.removed?.names.more == 2)
-        #expect(five.removed?.detail.split(separator: "\n").count == 6)
-
-        // Twenty paths at most in the tooltip.
-        let many = heading(changeMap((10 ..< 33).map { ("/src/f\($0).txt", "-") }))
-        #expect(many.removed?.detail.split(separator: "\n").last == "and 3 more")
-        #expect(many.removed?.detail.split(separator: "\n").count == 22)
-
-        // "/src/data2" is not inside the removed "/src/data": a byte-exact
-        // ancestor, as the index compares paths.
-        let siblings = changeMap([("/src/data/", "-"), ("/src/data/x", "-"), ("/src/data2", "-")])
-        #expect(ChangeComparison.removals(in: siblings).map(\.path) == ["/src/data/", "/src/data2"])
-
-        // Nothing removed, or no finished comparison: no line.
-        #expect(heading(changeMap([("/src/keep/k.txt", "M"), ("/src/new.txt", "+")])).removed == nil)
-        let unfinished: [ChangeComparison?] = [nil, .firstBackup, .comparing(baseline: baseline),
-                                               .failed(baseline: baseline, reason: "Fatal: injected")]
-        #expect(unfinished.allSatisfy {
-            let heading = RestoreRecordHeading(record: record, label: nil, comparison: $0)
-            return heading.removed == nil
-        })
+    @Test("the Change column's title says what it compares with, and where deletions are")
+    func changeColumnHelp() throws {
+        let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/src"])
+        let since = Format.timestamp(baseline.time)
+        #expect(RestoreRecordHeading.columnHelp(for: .compared(baseline: baseline, changeCount: 2))
+            == "Added or modified since the backup of \(since), the previous one of these folders from this Mac. "
+            + "To see what was deleted, Control-click this backup in the list and choose Compare with Previous")
+        #expect(RestoreRecordHeading.columnHelp(for: .firstBackup) == "First backup of these folders — nothing to compare with.")
+        #expect(RestoreRecordHeading.columnHelp(for: .comparing(baseline: baseline)) == "Comparing with the backup of \(since)…")
+        #expect(RestoreRecordHeading.columnHelp(for: .failed(baseline: baseline, reason: "Fatal: injected. More."))
+            == "Could not compare with the backup of \(since): Fatal: injected")
     }
 }

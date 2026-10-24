@@ -33,7 +33,8 @@ struct ResticFilesTreeTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = data.path
-        plan.excludePatterns = [".DS_Store"]
+        plan.skipNothing()
+        plan.skipsFinderFiles = true
         plan.schedule.frequency = .manual
 
         var configuration = AppConfiguration()
@@ -143,7 +144,7 @@ struct ResticFilesTreeTests {
             var plan = BackupPlan()
             plan.repositoryID = repository.id
             plan.path = data.path
-            plan.excludePatterns = []
+            plan.skipNothing()
             plan.schedule.frequency = .manual
             for round in 0 ..< 3 {
                 try "a".write(to: data.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)

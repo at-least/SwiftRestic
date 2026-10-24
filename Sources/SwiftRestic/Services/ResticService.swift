@@ -570,28 +570,42 @@ struct ResticService: ResticClient {
 
     // MARK: - Backup
 
+    /// Whether the anchored `pattern` names `source` or a folder above it,
+    /// component by component, `*` within one — as the rules the app offers
+    /// are drawn. Passed, it would leave nothing to back up: the startup
+    /// disk's `/private/var/folders` over a plan inside it, the app caches'
+    /// `~/Library/Caches` over a plan of that folder. Against the path as
+    /// given, as restic matches it (0.19.1, probed: `/private/var/folders`
+    /// empties a backup of `/private/var/folders/…`, not one of
+    /// `/var/folders/…`).
+    static func pattern(_ pattern: String, covers source: String) -> Bool {
+        guard pattern.hasPrefix("/") else { return false }
+        let patternParts = pattern.split(separator: "/")
+        let sourceParts = source.split(separator: "/")
+        return patternParts.count <= sourceParts.count
+            && zip(patternParts, sourceParts).allSatisfy { fnmatch(String($0), String($1), 0) == 0 }
+    }
+
     func backup(
         _ context: RepositoryContext,
         plan: BackupPlan,
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> BackupOutcome {
         var args = context.globalArguments + ["backup", "--json"]
-        args.append(Self.expandTilde(plan.path, home: home))
-        // The plan's own patterns, then the developer switch's rules,
-        // fitted to the path like the defaults are — each once: a plan
-        // saved before **/node_modules became the switch's holds it as its
-        // own row too.
-        let stored = plan.excludePatterns.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        let developer = plan.excludeDeveloperFiles ? BackupPlan.developerExcludes(for: plan.path, home: home) : []
-        for pattern in BackupPlan.withoutDuplicates((stored + developer).map { Self.expandTilde($0, home: home) }) {
+        let source = Self.expandTilde(plan.path, home: home)
+        args.append(source)
+        // The switches' rules and the plan's own patterns
+        // (`BackupPlan.excludesToPass`) — less any that names the source
+        // itself or a folder above it.
+        let stored = plan.excludesToPass.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        for pattern in BackupPlan.withoutDuplicates(stored.map { Self.expandTilde($0, home: home) })
+        where !Self.pattern(pattern, covers: source) {
             args += ["--exclude", pattern]
         }
-        // The Cargo marker: restic leaves out the contents of any folder
-        // holding it and keeps the marker itself.
-        if plan.excludeDeveloperFiles {
-            for marker in BackupPlan.developerMarkers {
-                args += ["--exclude-if-present", marker]
-            }
+        // The ticked developer groups' markers: restic leaves out the
+        // contents of any folder holding one and keeps the marker itself.
+        for marker in BackupPlan.developerMarkers(for: plan.developerGroups) {
+            args += ["--exclude-if-present", marker]
         }
         if plan.excludeCaches { args.append("--exclude-caches") }
         if plan.oneFileSystem { args.append("--one-file-system") }

@@ -43,26 +43,19 @@ extension AppModel {
         draft.repositoryID = repositoryID
         draft.path = path
         // restic records each exclude as it was passed, tilde expanded: a
-        // rule the app offers goes back to the app's own spelling, so it
-        // reads as that rule — labelled, grouped, a default still a default.
+        // rule the app offers goes back to the app's own spelling, so the
+        // switches below read it as theirs.
         let spelled = Dictionary(
             (BackupPlan.defaultExcludes + BackupPlan.developerExcludes).filter { $0.hasPrefix("~") }
                 .map { (ResticService.expandTilde($0), $0) },
             uniquingKeysWith: { first, _ in first }
         )
-        draft.excludePatterns = BackupPlan.withoutDuplicates(prefill.excludes.map { spelled[$0] ?? $0 })
-        // A run with the developer switch on records its rules among the
-        // excludes (the marker is not recorded). Most of the set fitted to
-        // the path means the switch — not all of it, since a later build
-        // may add a rule an older history never passed; a few such rows
-        // are ones the user typed. Set either way, since a new plan starts
-        // with it on.
-        let developerRules = Set(BackupPlan.developerExcludes(for: path))
-        let recorded = developerRules.intersection(draft.excludePatterns)
-        draft.excludeDeveloperFiles = recorded.count * 2 > developerRules.count
-        if draft.excludeDeveloperFiles {
-            draft.excludePatterns.removeAll { developerRules.contains($0) }
-        }
+        let recorded = BackupPlan.withoutDuplicates(prefill.excludes.map { spelled[$0] ?? $0 })
+        // A run records the switches' rules among the excludes (not the
+        // markers): the switches read back from them, and what they do not
+        // pass is the user's own list.
+        draft.readSwitches(fromRecorded: recorded)
+        draft.excludePatterns = draft.withoutSwitchRules(recorded)
         // Plan tags are the group's plumbing; what the user tagged is everything else.
         draft.tags = prefill.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
         // Daily — a new plan's default — only when the prefilled folder is

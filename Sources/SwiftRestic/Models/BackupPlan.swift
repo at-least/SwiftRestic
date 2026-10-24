@@ -293,9 +293,16 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// (`sources`), split into one plan per entry at load
     /// (`AppConfiguration`).
     var path: String = ""
-    /// A new plan starts with the defaults that match anywhere; the editor
-    /// fits them to the path as it is chosen.
-    var excludePatterns: [String] = BackupPlan.defaultExcludes(for: "")
+    /// The patterns the user added, as typed or picked: the editor's
+    /// *Also skip* list. The switches' rules are not among them — a run
+    /// passes those beside them (`excludesToPass`).
+    var excludePatterns: [String] = []
+    /// *Skip › Finder files and the Trash*: the defaults of
+    /// `ExcludeCategory.finderFiles`. On for new plans.
+    var skipsFinderFiles: Bool = true
+    /// *Skip › App caches and system files*: the defaults of
+    /// `ExcludeCategory.systemFiles`. On for new plans.
+    var skipsSystemFiles: Bool = true
     var excludeCaches: Bool = true
     var oneFileSystem: Bool = false
     var tags: [String] = []
@@ -320,14 +327,25 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// restic's `--exclude-cloud-files`. On for new plans; a plan saved
     /// before the option reads it off, so its backups do not change under it.
     var excludeCloudFiles: Bool = true
-    /// Leave out what developer tools rebuild, with restic's `--exclude`
-    /// for the fitting rules (`developerExcludes(for:)`) and
-    /// `--exclude-if-present` for the Cargo marker. On for new plans (the
-    /// user's call); a plan saved without the key reads it off,
-    /// so its backups do not change under a switch it never asked for. The
-    /// rules are read off the folder at each run and are never rows in the
-    /// plan's own list.
-    var excludeDeveloperFiles: Bool = true
+    /// The developer switch's groups that are ticked
+    /// (`ExcludeCategory.developerGroups`), in their order: a run passes
+    /// each ticked group's rules (`developerExcludes(groups:)`) and, for a
+    /// group with a marker, `--exclude-if-present`. Every group for new
+    /// plans (the user's call); a plan saved without the key has none, so
+    /// its backups do not change under a switch it never asked for. Older
+    /// builds stored one switch, `excludeDeveloperFiles`: on, it becomes
+    /// every group once at load (`AppConfiguration`).
+    var developerGroups: [ExcludeCategory] = ExcludeCategory.developerGroups
+
+    /// The switch itself: on while any group is ticked.
+    var excludeDeveloperFiles: Bool { !developerGroups.isEmpty }
+
+    enum CodingKeys: String, CodingKey {
+        case id, repositoryID, path, excludePatterns, excludeCaches, oneFileSystem, tags, schedule, retention
+        case isEnabled, pausedUntil, hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
+        case developerGroups = "skipDeveloperGroups"
+        case skipsFinderFiles, skipsSystemFiles
+    }
 
     init() {}
 
@@ -336,11 +354,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         id = c.value(.id, default: UUID())
         repositoryID = c.optional(.repositoryID)
         path = c.value(.path, default: "")
-        // The string-list editor dedupes its own writes, so a duplicate
-        // here means a hand-edited config — and duplicates would give the
-        // list's rows colliding identities. First occurrence wins, order
-        // preserved.
-        excludePatterns = Self.withoutDuplicates(c.value(.excludePatterns, default: BackupPlan.defaultExcludes))
         excludeCaches = c.value(.excludeCaches, default: true)
         oneFileSystem = c.value(.oneFileSystem, default: false)
         tags = c.value(.tags, default: [])
@@ -353,74 +366,113 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
         excludeCloudFiles = c.value(.excludeCloudFiles, default: false)
-        excludeDeveloperFiles = c.value(.excludeDeveloperFiles, default: false)
-    }
-
-    /// The patterns of the rules a new plan is offered
-    /// (`ExcludeRule.defaults`, where each is said and grouped). A plan
-    /// gets the ones that can match under its path
-    /// (`defaultExcludes(for:)`).
-    static let defaultExcludes = ExcludeRule.defaults.map(\.pattern)
-
-    /// The defaults a plan of `path` gets: those that match anywhere, and
-    /// each one anchored at the root only when it lies inside the path —
-    /// all of them for the home folder, none of the home folder's for
-    /// `~/dotfiles`, where they could never match. One naming the path
-    /// itself or a folder above it would leave nothing to back up, so it is
-    /// not among them; with no path yet, neither is any anchored one.
-    static func defaultExcludes(for path: String) -> [String] {
-        defaultExcludes.filter { patternApplies($0, under: path, home: NSHomeDirectory()) }
-    }
-
-    /// `patterns` without the defaults that cannot match under `path`; a
-    /// pattern that is not a default stays, whatever it matches. The load
-    /// applies it (`AppConfiguration`): a plan's path is fixed, so such a
-    /// default never will match, and dropping it changes no backup.
-    static func withoutInapplicableDefaults(_ patterns: [String], path: String) -> [String] {
-        patterns.filter {
-            !defaultExcludes.contains($0) || patternApplies($0, under: path, home: NSHomeDirectory())
+        // A group a later build added or renamed is dropped, not the list.
+        let groups = Set(c.value(.developerGroups, default: [String]()).compactMap(ExcludeCategory.init(rawValue:)))
+        developerGroups = ExcludeCategory.developerGroups.filter(groups.contains)
+        // The string-list editor dedupes its own writes, so a duplicate
+        // here means a hand-edited config — and duplicates would give the
+        // list's rows colliding identities. First occurrence wins, order
+        // preserved.
+        let stored = Self.withoutDuplicates(c.value(.excludePatterns, default: BackupPlan.defaultExcludes))
+        if c.contains(.skipsFinderFiles) || c.contains(.skipsSystemFiles) {
+            skipsFinderFiles = c.value(.skipsFinderFiles, default: true)
+            skipsSystemFiles = c.value(.skipsSystemFiles, default: true)
+            excludePatterns = stored
+        } else {
+            // Saved before these switches, when their rules were rows of
+            // the list: one is on when any of its rules is there, and the
+            // rules the switches now pass leave the list — the ticked
+            // developer groups' too. A rule of an unticked group stays, the
+            // user's own row.
+            readDefaultSwitches(fromRecorded: stored)
+            excludePatterns = withoutSwitchRules(stored)
         }
     }
 
-    /// For the defaults' and the developer rules' shapes: an anchored
-    /// pattern's components match the path's one for one, `*` within a
-    /// component, as restic matches them — none of them spans components
-    /// with `**`.
-    private static func patternApplies(_ pattern: String, under path: String, home: String) -> Bool {
-        guard pattern.hasPrefix("/") || pattern.hasPrefix("~") else { return true }
-        guard !path.isEmpty else { return false }
-        let patternParts = ResticService.expandTilde(pattern, home: home).split(separator: "/")
-        let pathParts = ResticService.expandTilde(path, home: home).split(separator: "/")
-        return patternParts.count > pathParts.count
-            && zip(patternParts, pathParts).allSatisfy { fnmatch(String($0), String($1), 0) == 0 }
+    /// The patterns of the rules a new plan is offered
+    /// (`ExcludeRule.defaults`, where each is said and grouped).
+    static let defaultExcludes = ExcludeRule.defaults.map(\.pattern)
+
+    /// The defaults of `categories`, in the defaults' order.
+    static func defaultExcludes(in categories: Set<ExcludeCategory>) -> [String] {
+        ExcludeRule.defaults.filter { categories.contains($0.category) }.map(\.pattern)
     }
 
-    /// What developer tools rebuild, passed to restic when a plan's
-    /// developer switch (`excludeDeveloperFiles`) is on: the patterns of
-    /// `ExcludeRule.developer` that fit its path
-    /// (`developerExcludes(for:)`), with the Cargo marker
-    /// (`developerMarkers`) beside them.
+    /// What developer tools rebuild: the patterns of `ExcludeRule.developer`,
+    /// of which each ticked group of the developer switch adds its own to
+    /// a plan's list (`developerExcludes(groups:)`).
     static let developerExcludes = ExcludeRule.developer.map(\.pattern)
 
-    /// The files `--exclude-if-present` is passed (`ExcludeRule.developerMarkers`).
-    static let developerMarkers = ExcludeRule.developerMarkers.map(\.pattern)
-
-    /// The developer rules a plan of `path` gets: those that match
-    /// anywhere, and each anchored one only when it lies inside the path —
-    /// the same rule as the defaults' (`patternApplies`). `home` stands in
-    /// for the real home folder where the rules are re-rooted over a test
-    /// tree.
-    static func developerExcludes(for path: String, home: String = NSHomeDirectory()) -> [String] {
-        developerExcludes.filter { patternApplies($0, under: path, home: home) }
+    /// The files `--exclude-if-present` is passed for `groups`
+    /// (`ExcludeRule.developerMarkers`).
+    static func developerMarkers(for groups: [ExcludeCategory]) -> [String] {
+        ExcludeRule.developerMarkers.filter { groups.contains($0.category) }.map(\.pattern)
     }
 
-    /// What the developer switch leaves out of a plan of `path`, as the
-    /// editor's disclosure and the plan page's Excluding card list it: the
-    /// fitted rules, then the markers. Its count is the number the
-    /// disclosure says.
-    static func developerRules(for path: String) -> [ExcludeRule] {
-        ExcludeRule.developer.filter { patternApplies($0.pattern, under: path, home: NSHomeDirectory()) }
-            + ExcludeRule.developerMarkers
+    /// The developer rules of `groups`, in the list's order.
+    static func developerExcludes(groups: [ExcludeCategory]) -> [String] {
+        ExcludeRule.developer.filter { groups.contains($0.category) }.map(\.pattern)
+    }
+
+    /// One developer group's checkbox.
+    mutating func setSkips(_ group: ExcludeCategory, _ isOn: Bool) {
+        setSkips([group], isOn)
+    }
+
+    /// The switch itself: every group ticked, or none.
+    mutating func setSkipsDeveloperFiles(_ isOn: Bool) {
+        setSkips(ExcludeCategory.developerGroups, isOn)
+    }
+
+    private mutating func setSkips(_ groups: [ExcludeCategory], _ isOn: Bool) {
+        let changed = Set(groups)
+        let kept = Set(developerGroups).subtracting(changed)
+        developerGroups = ExcludeCategory.developerGroups.filter { kept.contains($0) || (isOn && changed.contains($0)) }
+    }
+
+    /// The rules the switches pass: the defaults of the ones on, then the
+    /// ticked developer groups' rules — whatever the path, since a rule
+    /// naming nothing under it matches nothing.
+    var switchExcludes: [String] {
+        var categories = Set<ExcludeCategory>()
+        if skipsFinderFiles { categories.formUnion(ExcludeCategory.finderFiles) }
+        if skipsSystemFiles { categories.formUnion(ExcludeCategory.systemFiles) }
+        return Self.defaultExcludes(in: categories) + Self.developerExcludes(groups: developerGroups)
+    }
+
+    /// Every `--exclude` a run passes: the switches' rules, then the
+    /// user's own patterns, each once.
+    var excludesToPass: [String] {
+        Self.withoutDuplicates(switchExcludes + excludePatterns)
+    }
+
+    /// `patterns` less the rules the switches pass.
+    func withoutSwitchRules(_ patterns: [String]) -> [String] {
+        let passed = Set(switchExcludes)
+        return patterns.filter { !passed.contains($0) }
+    }
+
+    /// The switches as a list of patterns that held their rules sets them —
+    /// a configuration saved before the switches, or a backup restic
+    /// recorded: a defaults switch is on when any of its rules is there, a
+    /// developer group ticked when most of its rules are — not all, since a
+    /// later build may add a rule an older list never held; a few of them
+    /// are rows the user typed, which leave the group unticked.
+    mutating func readSwitches(fromRecorded patterns: [String]) {
+        readDefaultSwitches(fromRecorded: patterns)
+        let present = Set(patterns)
+        developerGroups = ExcludeCategory.developerGroups.filter { group in
+            let rules = Self.developerExcludes(groups: [group])
+            return rules.filter(present.contains).count * 2 > rules.count
+        }
+    }
+
+    /// The two defaults switches alone, as `readSwitches(fromRecorded:)`
+    /// reads them.
+    private mutating func readDefaultSwitches(fromRecorded patterns: [String]) {
+        let present = Set(patterns)
+        skipsFinderFiles = Self.defaultExcludes(in: ExcludeCategory.finderFiles).contains(where: present.contains)
+        skipsSystemFiles = Self.defaultExcludes(in: ExcludeCategory.systemFiles).contains(where: present.contains)
     }
 
     /// First-occurrence-wins deduplication, order preserved.

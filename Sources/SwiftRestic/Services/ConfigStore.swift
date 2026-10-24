@@ -102,28 +102,35 @@ struct AppConfiguration: Codable, Sendable {
 /// its own — and its stamps. The others are new plans with its settings and
 /// its slot (`lastRunAt`), so they wait for it instead of all starting at
 /// launch; no backup carries their ids yet, so they have no last backup.
-/// The plans are saved one path each with the next save. Each plan, split
-/// or not, sheds the default excludes its path cannot hold — saved before
-/// the defaults followed the path — once the path is known
-/// (`BackupPlan.withoutInapplicableDefaults`).
+/// The plans are saved one path each with the next save. A plan saved with
+/// older builds' developer switch on (`excludeDeveloperFiles`, one switch
+/// that passed the rules at each run) gets every group ticked, so its
+/// backups leave out what they did, and what the groups added since leave
+/// out too; its list sheds the rules the groups now pass.
 private struct StoredPlan: Decodable {
     var plan: BackupPlan
     var sources: [String] = []
+    var legacySkipsDeveloperFiles = false
 
     private enum LegacyKeys: String, CodingKey {
         case sources
+        case excludeDeveloperFiles
     }
 
     init(from decoder: any Decoder) throws {
         plan = try BackupPlan(from: decoder)
         let c = try decoder.container(keyedBy: LegacyKeys.self)
         sources = BackupPlan.withoutDuplicates(c.value(.sources, default: []))
+        legacySkipsDeveloperFiles = c.value(.excludeDeveloperFiles, default: false)
     }
 
     var plans: [BackupPlan] {
         split.map { plan in
             var plan = plan
-            plan.excludePatterns = BackupPlan.withoutInapplicableDefaults(plan.excludePatterns, path: plan.path)
+            if legacySkipsDeveloperFiles, !plan.excludeDeveloperFiles {
+                plan.setSkipsDeveloperFiles(true)
+                plan.excludePatterns = plan.withoutSwitchRules(plan.excludePatterns)
+            }
             return plan
         }
     }

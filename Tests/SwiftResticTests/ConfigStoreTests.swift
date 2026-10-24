@@ -288,18 +288,18 @@ struct TolerantDecodingTests {
     @Test("no default exclude reaches into a Git repository, for new plans or ones saved without the key")
     func defaultExcludesSpareGit() throws {
         let decoded = try decode(BackupPlan.self, #"{"name":"Docs"}"#)
-        for patterns in [BackupPlan().excludePatterns, decoded.excludePatterns] {
-            #expect(!patterns.isEmpty, "the defaults must still apply")
-            #expect(!patterns.contains { $0.contains(".git") })
+        for plan in [BackupPlan(), decoded] {
+            #expect(plan.skipsFinderFiles && plan.skipsSystemFiles, "the defaults must still apply")
+            #expect(!plan.excludesToPass.contains { $0.contains(".git") })
         }
     }
 
-    @Test("a plan's default excludes are the ones that can match under its path")
-    func defaultExcludesFollowThePath() {
-        let home = NSHomeDirectory()
-        let anywhere = [".DS_Store"]
-        // Every home-anchored default, in the list's order.
-        let homeDefaults = anywhere + [
+    @Test("every default, pinned in order, and a new plan passes all of them and every developer rule, its own list empty")
+    func defaultExcludesArePinned() {
+        // The whole list, so a pattern typoed here fails this test instead
+        // of only a real backup.
+        #expect(BackupPlan.defaultExcludes == [
+            ".DS_Store",
             "~/Library/Caches",
             "~/Library/Containers/*/Data/Library/Caches",
             "~/.Trash",
@@ -312,224 +312,219 @@ struct TolerantDecodingTests {
             "~/Library/Mail/V*/MailData/Envelope Index*",
             "~/Pictures/*.photoslibrary/database/search",
             "~/Pictures/*.photoslibrary/resources/caches",
-        ]
-        // A folder none of the home-folder defaults is inside.
-        #expect(BackupPlan.defaultExcludes(for: "~/dotfiles") == anywhere)
-        #expect(BackupPlan.defaultExcludes(for: home + "/dotfiles") == anywhere)
-        // The home folder holds all of those; a folder above it — /Users
-        // itself — them and nothing of the drives or the startup disk,
-        // /System included.
-        #expect(BackupPlan.defaultExcludes(for: "~") == homeDefaults)
-        #expect(BackupPlan.defaultExcludes(for: "~/") == homeDefaults)
-        #expect(BackupPlan.defaultExcludes(for: (home as NSString).deletingLastPathComponent) == homeDefaults)
-        // Inside the home folder, the ones anchored inside the path: the
-        // Library subtree carries the Library ones and Mail's index,
-        // Pictures the Photos library's regenerables.
-        #expect(BackupPlan.defaultExcludes(for: "~/Library") == anywhere + [
-            "~/Library/Caches",
-            "~/Library/Containers/*/Data/Library/Caches",
-            "~/Library/Application Support/Steam",
-            "~/Library/Logs",
-            "~/Library/Metadata/CoreSpotlight",
-            "~/Library/Saved Application State",
-            "~/Library/HTTPStorages",
-            "~/Library/Group Containers/*/Library/Caches",
-            "~/Library/Mail/V*/MailData/Envelope Index*",
-        ])
-        #expect(BackupPlan.defaultExcludes(for: home + "/Library/Containers/com.example.app")
-            == anywhere + ["~/Library/Containers/*/Data/Library/Caches"])
-        #expect(BackupPlan.defaultExcludes(for: "~/Library/Mail") == anywhere + ["~/Library/Mail/V*/MailData/Envelope Index*"])
-        #expect(BackupPlan.defaultExcludes(for: "~/Pictures")
-            == anywhere + ["~/Pictures/*.photoslibrary/database/search", "~/Pictures/*.photoslibrary/resources/caches"])
-        // A default naming the path itself, or a folder above it, would
-        // leave nothing to back up.
-        #expect(BackupPlan.defaultExcludes(for: "~/Library/Caches") == anywhere)
-        #expect(BackupPlan.defaultExcludes(for: "~/Library/Caches/com.example") == anywhere)
-        #expect(BackupPlan.defaultExcludes(for: "~/Documents") == anywhere)
-        // A volume's root bookkeeping goes to a plan of the volume — of
-        // /Volumes itself as much as of one volume — not to one of a
-        // folder on it.
-        let volumeGroup = [
             "/Volumes/*/.Spotlight-V100",
             "/Volumes/*/.fseventsd",
             "/Volumes/*/.Trashes",
             "/Volumes/*/.DocumentRevisions-V100",
             "/Volumes/*/.TemporaryItems",
-        ]
-        #expect(BackupPlan.defaultExcludes(for: "/Volumes/T7") == anywhere + volumeGroup)
-        #expect(BackupPlan.defaultExcludes(for: "/Volumes") == anywhere + volumeGroup)
-        #expect(BackupPlan.defaultExcludes(for: "/Volumes/T7/Photos") == anywhere)
-        // The startup disk's own, spelled out: a plan of / holds all of
-        // them and /System alone, while /private, /private/var and
-        // /Library hold the ones lying below them — and the whole list is
-        // pinned to these three groups, so a pattern typoed here fails
-        // this test instead of only a real backup of /.
-        let startupGroup = [
             "/System",
             "/private/var/vm",
             "/private/var/folders",
             "/private/tmp",
             "/Library/Caches",
             "/Library/Logs",
-        ]
-        #expect(BackupPlan.defaultExcludes
-            == anywhere + Array(homeDefaults.dropFirst(anywhere.count)) + volumeGroup + startupGroup)
-        #expect(BackupPlan.defaultExcludes(for: "/") == BackupPlan.defaultExcludes)
-        #expect(BackupPlan.defaultExcludes(for: "/private")
-            == anywhere + ["/private/var/vm", "/private/var/folders", "/private/tmp"])
-        #expect(BackupPlan.defaultExcludes(for: "/private/var")
-            == anywhere + ["/private/var/vm", "/private/var/folders"])
-        #expect(BackupPlan.defaultExcludes(for: "/Library")
-            == anywhere + ["/Library/Caches", "/Library/Logs"])
-        #expect(BackupPlan.defaultExcludes(for: "/System") == anywhere)
-        // No path yet: what matches anywhere — a new plan's start.
-        #expect(BackupPlan.defaultExcludes(for: "") == anywhere)
-        #expect(BackupPlan().excludePatterns == anywhere)
+        ])
+        #expect(BackupPlan.defaultExcludes(in: ExcludeCategory.finderFiles) == [".DS_Store", "~/.Trash"])
+        // The two switches cover every default between them.
+        #expect(BackupPlan.defaultExcludes(in: ExcludeCategory.finderFiles.union(ExcludeCategory.systemFiles))
+            == BackupPlan.defaultExcludes)
+        // Whatever the path: a rule naming nothing under it matches nothing.
+        var plan = BackupPlan()
+        plan.path = "~/dotfiles"
+        #expect(plan.excludePatterns.isEmpty)
+        #expect(plan.excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes)
     }
 
-    @Test("the developer switch is on for new plans, off for ones saved without the key, and round-trips either way")
+    @Test("every developer group is ticked for new plans, none for ones saved without the key, and the ticks round-trip")
     func developerFilesOnForNewPlans() throws {
+        #expect(BackupPlan().developerGroups == ExcludeCategory.developerGroups)
         #expect(BackupPlan().excludeDeveloperFiles)
-        #expect(!(try decode(BackupPlan.self, #"{"name":"Docs"}"#).excludeDeveloperFiles))
+        #expect(try decode(BackupPlan.self, #"{"name":"Docs"}"#).developerGroups.isEmpty)
         // No dates in a fresh plan, so no strategy to match the encoder's.
-        for value in [true, false] {
+        for groups in [ExcludeCategory.developerGroups, [.python, .rust], []] {
             var plan = BackupPlan()
-            plan.excludeDeveloperFiles = value
-            let roundTrip = try JSONDecoder().decode(BackupPlan.self, from: JSONEncoder().encode(plan))
-            #expect(roundTrip.excludeDeveloperFiles == value)
+            plan.developerGroups = groups
+            let data = try JSONEncoder().encode(plan)
+            #expect(try JSONDecoder().decode(BackupPlan.self, from: data).developerGroups == groups)
+            // Under its own key, by name: older builds' key was one switch
+            // that meant rules without rows.
+            let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(object["skipDeveloperGroups"] as? [String] == groups.map(\.rawValue))
+            #expect(object["excludeDeveloperFiles"] == nil)
         }
+        // A group this build does not know is dropped, the rest kept in
+        // the groups' order.
+        let read = try decode(BackupPlan.self, #"{"skipDeveloperGroups":["rust","cobol","python"]}"#)
+        #expect(read.developerGroups == [.python, .rust])
     }
 
-    @Test("the developer rules fit the folder by the defaults' rule")
-    func developerExcludesFollowThePath() {
-        // The whole list, pinned group by group in the list's own order: a
-        // pattern typoed or dropped here fails this test instead of only a
-        // real backup.
-        let python = [
-            "**/.venv", "**/venv", "**/__pycache__", "**/.mypy_cache", "**/.pytest_cache", "**/.ruff_cache", "**/.tox", "**/.nox",
+    @Test("each switch passes its rules while on, beside the plan's own patterns, each once")
+    func switchesMakeTheRun() {
+        var plan = BackupPlan()
+        plan.skipsFinderFiles = false
+        plan.skipsSystemFiles = false
+        plan.developerGroups = []
+        plan.excludePatterns = ["*.iso", "**/.venv"]
+        #expect(plan.excludesToPass == ["*.iso", "**/.venv"])
+
+        plan.skipsFinderFiles = true
+        #expect(plan.excludesToPass == [".DS_Store", "~/.Trash", "*.iso", "**/.venv"])
+        plan.skipsSystemFiles = true
+        #expect(plan.excludesToPass == BackupPlan.defaultExcludes + ["*.iso", "**/.venv"])
+
+        // A group's checkbox: its rules, kept in the groups' order whatever
+        // order they were ticked in; a rule also typed is passed once.
+        plan.skipsSystemFiles = false
+        plan.setSkips(.rust, true)
+        plan.setSkips(.python, true)
+        #expect(plan.developerGroups == [.python, .rust])
+        #expect(plan.excludesToPass == [".DS_Store", "~/.Trash"]
+            + BackupPlan.developerExcludes(groups: [.python, .rust]) + ["*.iso"])
+        // The list itself is the user's, whatever the switches do.
+        #expect(plan.excludePatterns == ["*.iso", "**/.venv"])
+        #expect(plan.withoutSwitchRules(plan.excludePatterns) == ["*.iso"])
+
+        // The developer switch: every group, or none.
+        plan.setSkipsDeveloperFiles(true)
+        #expect(plan.developerGroups == ExcludeCategory.developerGroups)
+        plan.setSkipsDeveloperFiles(false)
+        #expect(!plan.excludeDeveloperFiles)
+        #expect(plan.excludesToPass == [".DS_Store", "~/.Trash", "*.iso", "**/.venv"])
+    }
+
+    @Test("the switches read back from a list that held their rules: any default on, a group by most of its rules")
+    func switchesReadFromRecordedRules() {
+        var plan = BackupPlan()
+        // One Finder rule, no system one; Python whole, JavaScript but two
+        // of its rules, which a user may have typed.
+        plan.readSwitches(fromRecorded: ["~/.Trash", "*.iso"]
+            + BackupPlan.developerExcludes(groups: [.python])
+            + ["**/node_modules", "**/.next"])
+        #expect(plan.skipsFinderFiles)
+        #expect(!plan.skipsSystemFiles)
+        #expect(plan.developerGroups == [.python])
+        // A group missing a rule a later build added still reads as ticked.
+        plan.readSwitches(fromRecorded: Array(BackupPlan.developerExcludes.dropFirst()))
+        #expect(plan.developerGroups == ExcludeCategory.developerGroups)
+        #expect(!plan.skipsFinderFiles && !plan.skipsSystemFiles)
+    }
+
+    @Test("a run leaves out the rules that name its source or a folder above it, and only those")
+    func rulesCoveringTheSourceAreNotPassed() {
+        let home = "/Users/probe"
+        func covers(_ pattern: String, _ source: String) -> Bool {
+            ResticService.pattern(ResticService.expandTilde(pattern, home: home), covers: source)
+        }
+        // The source itself, a folder above it, `*` within a component.
+        #expect(covers("~/Library/Caches", "/Users/probe/Library/Caches"))
+        #expect(covers("~/Library/Caches", "/Users/probe/Library/Caches/com.example"))
+        #expect(covers("/Volumes/*/.Trashes", "/Volumes/T7/.Trashes"))
+        #expect(covers("/System", "/System/Library"))
+        // Below the source, beside it, or unanchored: passed.
+        #expect(!covers("~/Library/Caches", "/Users/probe"))
+        #expect(!covers("~/Library/Caches", "/Users/probe/Library/Logs"))
+        #expect(!covers("/Volumes/*/.Trashes", "/Volumes/T7"))
+        #expect(!covers(".DS_Store", "/Users/probe"))
+        #expect(!covers("**/node_modules", "/Users/probe/web/node_modules"))
+        // The path as given, as restic matches it: /var is a symlink restic
+        // does not resolve.
+        #expect(covers("/private/var/folders", "/private/var/folders/v5/T/src"))
+        #expect(!covers("/private/var/folders", "/var/folders/v5/T/src"))
+    }
+
+    @Test("each developer group's rules, pinned in order")
+    func developerExcludesArePinned() {
+        // The whole list, pinned group by group in the list's own order —
+        // each group's folder patterns, then the home folder's: a pattern
+        // typoed or dropped here fails this test instead of only a real
+        // backup.
+        let groups: [(ExcludeCategory, folders: [String], home: [String])] = [
+            (.python,
+             ["**/.venv", "**/venv", "**/__pycache__", "**/.mypy_cache", "**/.pytest_cache", "**/.ruff_cache", "**/.tox", "**/.nox"],
+             ["~/.cache/uv", "~/.local/share/uv/python", "~/.pyenv/versions",
+              "~/miniconda3/pkgs", "~/miniforge3/pkgs", "~/anaconda3/pkgs"]),
+            (.javascript,
+             ["**/node_modules", "**/.next", "**/.nuxt", "**/.svelte-kit", "**/.parcel-cache", "**/.turbo", "**/.angular/cache"],
+             ["~/.npm", "~/Library/pnpm/store", "~/.bun/install/cache", "~/.yarn/berry/cache", "~/.nvm/versions", "~/.volta/tools/image"]),
+            (.apple,
+             ["**/DerivedData", "**/.build", "**/Pods", "**/Carthage/Build"],
+             ["~/.cocoapods/repos/trunk", "~/.cocoapods/repos/master", "~/Library/Developer/Xcode/*DeviceSupport"]),
+            (.rust, [], ["~/.cargo/registry", "~/.cargo/git", "~/.rustup/toolchains"]),
+            (.go, [], ["~/go/pkg/mod", "~/.goenv/versions"]),
+            (.jvm, [],
+             ["~/.m2/repository", "~/.gradle/caches", "~/.gradle/wrapper", "~/.gradle/jdks", "~/.gradle/daemon",
+              "~/.konan/dependencies", "~/Library/Android/sdk"]),
+            (.dart, ["**/.dart_tool"], ["~/.pub-cache", "~/fvm/versions"]),
+            (.ruby, ["**/vendor/bundle"],
+             ["~/.gem/ruby", "~/.gem/specs", "~/.bundle/cache", "~/.rbenv/versions", "~/.rubies", "~/.rvm/rubies", "~/.rvm/gems"]),
+            (.php, ["**/.phpunit.cache", "**/.phpunit.result.cache", "**/.php-cs-fixer.cache"], ["~/.composer/cache"]),
+            (.dotnet, [], ["~/.nuget/packages"]),
+            (.elixir, ["**/_build", "**/.elixir_ls"], ["~/.hex/packages", "~/.cache/rebar3"]),
+            (.haskell, ["**/.stack-work", "**/dist-newstyle"],
+             ["~/.stack/programs", "~/.stack/snapshots", "~/.stack/pantry", "~/.cabal/packages", "~/.cabal/store",
+              "~/.cache/cabal/packages", "~/.local/state/cabal/store", "~/.ghcup/ghc", "~/.ghcup/cache"]),
+            (.scala, ["**/.bloop", "**/.metals", "**/.bsp"], ["~/.ivy2/cache", "~/.sbt/boot"]),
+            (.julia, [],
+             ["~/.julia/packages", "~/.julia/artifacts", "~/.julia/compiled", "~/.julia/registries", "~/.julia/juliaup"]),
+            (.r, ["**/renv/library", "**/*.Rcheck"], []),
+            (.cpp, ["**/cmake-build-*", "**/.cache/clangd", "**/.ccls-cache", "**/vcpkg_installed"], ["~/.conan2/p", "~/.conan/data"]),
+            (.zig, ["**/.zig-cache", "**/zig-cache", "**/zig-out"], ["~/.cache/zig"]),
+            (.ocaml, ["**/_opam"], ["~/.opam/download-cache"]),
+            (.otherTools, ["**/.terraform", "**/.direnv"],
+             ["~/.cache/pre-commit", "~/.asdf/installs", "~/.local/share/mise/installs", "~/.sdkman/candidates"]),
+            (.simulators, [],
+             ["~/Library/Developer/CoreSimulator/Devices", "~/Library/Developer/CoreSimulator/Caches",
+              "~/Library/Developer/Xcode/UserData/Previews", "~/.android/avd"]),
+            (.machines, [],
+             ["~/Library/Containers/com.docker.docker/Data/vms", "~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data",
+              "~/.lima/*/disk", "~/.lima/*/diffdisk", "~/.lima/*/basedisk",
+              "~/.colima/_lima/*/disk", "~/.colima/_lima/*/diffdisk", "~/.colima/_lima/*/basedisk",
+              "~/.local/share/containers/podman/machine", "~/.vagrant.d/boxes"]),
         ]
-        let jsFolders = ["**/node_modules", "**/.next", "**/.nuxt", "**/.svelte-kit", "**/.parcel-cache", "**/.turbo"]
-        let jsHome = ["~/.npm", "~/Library/pnpm/store", "~/.bun/install/cache", "~/.yarn/berry/cache"]
-        let appleFolders = ["**/DerivedData", "**/.build", "**/Pods", "**/Carthage/Build"]
-        let appleHome = ["~/.cocoapods/repos/trunk", "~/.cocoapods/repos/master", "~/Library/Developer/Xcode/*DeviceSupport"]
-        let toolchainHome = [
-            "~/.cargo/registry", "~/.cargo/git", "~/.rustup/toolchains", "~/go/pkg/mod", "~/.m2/repository",
-            "~/.gradle/caches", "~/.gradle/wrapper", "~/.gradle/jdks", "~/.gradle/daemon",
-        ]
-        let dartFolders = ["**/.dart_tool"]
-        let dartHome = ["~/.pub-cache", "~/Library/Android/sdk"]
-        let buildFolders = ["**/.zig-cache", "**/.terraform", "**/.direnv", "**/.stack-work", "**/_build"]
-        let buildHome = ["~/.cache/pre-commit"]
-        let versionManagers = [
-            "~/.nvm/versions", "~/.pyenv/versions", "~/.rbenv/versions", "~/.asdf/installs",
-            "~/.local/share/mise/installs", "~/.sdkman/candidates",
-        ]
-        let simulators = [
-            "~/Library/Developer/CoreSimulator/Devices", "~/Library/Developer/CoreSimulator/Caches",
-            "~/Library/Developer/Xcode/UserData/Previews", "~/.android/avd",
-        ]
-        let containerDisks = [
-            "~/Library/Containers/com.docker.docker/Data/vms",
-            "~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data",
-            "~/.lima/*/disk", "~/.lima/*/diffdisk", "~/.lima/*/basedisk",
-            "~/.colima/_lima/*/disk", "~/.colima/_lima/*/diffdisk", "~/.colima/_lima/*/basedisk",
-            "~/.local/share/containers/podman/machine", "~/.vagrant.d/boxes",
-        ]
-        // What matches anywhere, in the list's order.
-        let relative = python + jsFolders + appleFolders + dartFolders + buildFolders
-        // Every rule, in the list's order: each tool group's folder
-        // patterns with the home folder's beside them.
-        let all = python + jsFolders + jsHome + appleFolders + appleHome + toolchainHome
-            + dartFolders + dartHome + buildFolders + buildHome + versionManagers + simulators + containerDisks
-        #expect(BackupPlan.developerExcludes == all)
-        #expect(BackupPlan.developerMarkers == [".rustc_info.json"])
-        // The home folder holds every anchored rule.
-        #expect(BackupPlan.developerExcludes(for: "~") == all)
-        // Xcode's and the simulators' own subtree: the folder patterns and
-        // the anchored rules that lie inside it, in the list's order — the
-        // DeviceSupport one with the Apple group's, the simulators' three
-        // with theirs. The Android sdk, the package stores and the
-        // container disks are other subtrees of the home folder, not this
-        // one's.
-        #expect(BackupPlan.developerExcludes(for: "~/Library/Developer")
-            == python + jsFolders + appleFolders + [
-                "~/Library/Developer/Xcode/*DeviceSupport",
-            ] + dartFolders + buildFolders + [
-                "~/Library/Developer/CoreSimulator/Devices", "~/Library/Developer/CoreSimulator/Caches",
-                "~/Library/Developer/Xcode/UserData/Previews",
-            ])
-        // A folder none of the anchored rules lies in; a volume another
-        // disk's rules can never name.
-        #expect(BackupPlan.developerExcludes(for: "~/Documents") == relative)
-        #expect(BackupPlan.developerExcludes(for: "/Volumes/T7") == relative)
-        // No path yet: what matches anywhere — a new plan's start.
-        #expect(BackupPlan.developerExcludes(for: "") == relative)
-        // A rule naming the path itself would leave nothing to back up:
-        // the Devices folder does not exclude itself, and its sibling
-        // Caches, of the same depth, is not inside it either.
-        #expect(BackupPlan.developerExcludes(for: "~/Library/Developer/CoreSimulator/Devices") == relative)
-        // A stand-in home (the real-restic test re-roots the rules over a
-        // scratch tree this way): the anchored ones expand against it, not
-        // the real home.
-        #expect(BackupPlan.developerExcludes(for: "/Users/probe", home: "/Users/probe") == all)
-        #expect(BackupPlan.developerExcludes(for: "/Users/probe/proj", home: "/Users/probe") == relative)
+        // Every group has its checkbox, in the list's order.
+        #expect(groups.map(\.0) == ExcludeCategory.developerGroups)
+        for (group, folders, home) in groups {
+            #expect(BackupPlan.developerExcludes(groups: [group]) == folders + home, "\(group)")
+        }
+        #expect(BackupPlan.developerExcludes == groups.flatMap { $0.folders + $0.home })
+        // Rust's target and .NET's obj go by their markers.
+        #expect(BackupPlan.developerMarkers(for: ExcludeCategory.developerGroups) == [".rustc_info.json", "project.assets.json"])
+        #expect(BackupPlan.developerMarkers(for: [.python, .dotnet]) == ["project.assets.json"])
+        #expect(BackupPlan.developerMarkers(for: []).isEmpty)
     }
 
     @Test("every rule the app offers is labelled, once, and sits in an app category")
     func everyOfferedRuleIsLabelled() {
         let rules = ExcludeRule.defaults + ExcludeRule.developer + ExcludeRule.developerMarkers
-        #expect(rules.map(\.pattern) == BackupPlan.defaultExcludes + BackupPlan.developerExcludes + BackupPlan.developerMarkers)
         #expect(Set(rules.map(\.pattern)).count == rules.count)
         for rule in rules {
             #expect(!rule.what.isEmpty && !rule.why.isEmpty, "\(rule.pattern)")
-            #expect(rule.category != .yours, "\(rule.pattern)")
         }
-        #expect(ExcludeRule.developerMarkers.map(\.line) == ["Folders holding .rustc_info.json"])
-        #expect(BackupPlan.developerRules(for: "~/Documents").map(\.pattern)
-            == BackupPlan.developerExcludes(for: "~/Documents") + [".rustc_info.json"])
+        // The defaults sit outside the developer groups, every developer
+        // rule and marker inside one.
+        #expect(ExcludeRule.defaults.allSatisfy { !ExcludeCategory.developerGroups.contains($0.category) })
+        #expect((ExcludeRule.developer + ExcludeRule.developerMarkers)
+            .allSatisfy { ExcludeCategory.developerGroups.contains($0.category) })
+        #expect(ExcludeRule.developerMarkers.map(\.line)
+            == ["Folders holding .rustc_info.json", "Folders holding project.assets.json"])
     }
 
-    @Test("the Excluding sections follow the categories' order, the user's own first, each row in the order it came")
-    func excludeSectionsGroupByCategory() {
-        let sections = ExcludeRule.sections(
-            stored: ["*.iso", ".DS_Store", "**/node_modules", "~/Movies/Render", "**/.venv"],
-            developer: [ExcludeRule.developer[2], ExcludeRule.developer[0], ExcludeRule.developer[9]]
-                + ExcludeRule.developerMarkers
-        )
-        #expect(sections.map(\.category) == [.yours, .finder, .javascript, .python, .toolchains])
-        #expect(sections.map { $0.rows.map(\.line) } == [
-            ["*.iso", "~/Movies/Render"],
-            [".DS_Store"],
-            ["**/node_modules", "**/.next"],
-            // A stored row the switch also passes is shown once.
-            ["**/.venv", "**/__pycache__"],
-            ["Folders holding .rustc_info.json"],
-        ])
-        #expect(sections[1].rows[0].rule?.label == "Finder’s window settings · Finder writes them again")
-        #expect(sections[0].rows.allSatisfy { $0.rule == nil })
-        // The plan's own rows are the editor's to remove; the switch's are
-        // not — the stored **/.venv stays the stored one.
-        #expect(sections.flatMap(\.rows).filter(\.isStored).map(\.line)
-            == ["*.iso", "~/Movies/Render", ".DS_Store", "**/node_modules", "**/.venv"])
-        #expect(ExcludeRule.sections(stored: []).isEmpty)
-    }
-
-    @Test("at load a plan drops the defaults that cannot match under its path, and keeps every pattern it was given")
-    func inapplicableDefaultsDropAtLoad() async throws {
+    @Test("a plan saved before the Skip switches reads them from its list, which keeps only the user's own patterns")
+    func listsBecomeSwitchesAtLoad() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let home = NSHomeDirectory()
         let defaults = String(decoding: try JSONEncoder().encode(BackupPlan.defaultExcludes), as: UTF8.self)
+        let python = String(decoding: try JSONEncoder().encode(["*.iso"] + BackupPlan.developerExcludes(groups: [.python])), as: UTF8.self)
         let json = """
         {
           "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "kind": "local", "localPath": "/tmp/repo"}],
           "plans": [
             {"id": "5B0E7C2D-0000-4000-8000-000000000001", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "\(home)/dotfiles",
-             "excludePatterns": [".DS_Store", "**/node_modules", "~/Library/Caches", "~/elsewhere/cache", "~/.Trash", "*.log",
-                                 "~/Library/Containers/*/Data/Library/Caches", "~/Library/Application Support/Steam"]},
+             "excludePatterns": [".DS_Store", "**/node_modules", "~/Library/Caches", "~/elsewhere/cache", "*.log"]},
             {"id": "5B0E7C2D-0000-4000-8000-000000000002", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "~", "excludePatterns": \(defaults)},
             {"id": "5B0E7C2D-0000-4000-8000-000000000003", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
@@ -537,7 +532,11 @@ struct TolerantDecodingTests {
             {"id": "5B0E7C2D-0000-4000-8000-000000000004", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "\(home)/Music"},
             {"id": "5B0E7C2D-0000-4000-8000-000000000005", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-             "path": "\(home)/Library", "excludePatterns": []}
+             "path": "\(home)/Library", "excludePatterns": []},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000006", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "~/Code", "excludePatterns": \(python), "skipDeveloperGroups": ["python"]},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000007", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "~/Notes", "excludePatterns": [".DS_Store"], "skipsFinderFiles": false, "skipsSystemFiles": true}
           ],
           "runs": [],
           "settings": {}
@@ -548,29 +547,74 @@ struct TolerantDecodingTests {
         let store = ConfigStore(directory: directory)
         let loaded = try await store.load()
         #expect(loaded.decodeNotes.isEmpty)
-        let anywhere = [".DS_Store"]
-
-        #expect(loaded.configuration.plans.map(\.excludePatterns) == [
-            // The defaults ~/dotfiles cannot hold go; the patterns given
-            // stay, even one anchored elsewhere, in their order — and
-            // **/node_modules, an earlier default, is one of them.
-            anywhere + ["**/node_modules", "~/elsewhere/cache", "*.log"],
-            // The home folder holds the home-anchored ones; the drive and
-            // startup-disk ones, which it cannot hold, go.
-            BackupPlan.defaultExcludes(for: "~"),
-            // A split plan's folders each keep the ones that apply to them.
-            BackupPlan.defaultExcludes(for: "~"),
-            anywhere,
-            // Saved without the key: the defaults, fitted to the path.
-            anywhere,
-            // A list emptied by hand stays empty.
+        let plans = loaded.configuration.plans
+        #expect(plans.map(\.skipsFinderFiles) == [true, true, true, true, true, false, false, false])
+        #expect(plans.map(\.skipsSystemFiles) == [true, true, true, true, true, false, false, true])
+        #expect(plans.map(\.excludePatterns) == [
+            // The defaults leave the list for their switches, whatever the
+            // path; the user's own stay, in their order — **/node_modules,
+            // an earlier default, among them, its group unticked.
+            ["**/node_modules", "~/elsewhere/cache", "*.log"],
             [],
+            // A split plan's folders each.
+            [],
+            [],
+            // Saved without the key: the defaults, so both switches on.
+            [],
+            // A list emptied by hand: both off, nothing left out.
+            [],
+            // A ticked group's rules leave the list too.
+            ["*.iso"],
+            // Saved with the switches: the list as it stands, a typed rule
+            // of a switch that is off included.
+            [".DS_Store"],
         ])
+        #expect(plans[6].developerGroups == [.python])
 
-        // Saved fitted, and a second load changes nothing.
+        // Saved with the switches' keys, and a second load changes nothing.
         try await store.save(loaded.configuration)
-        #expect(try await store.load().configuration.plans.map(\.excludePatterns)
-            == loaded.configuration.plans.map(\.excludePatterns))
+        let object = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let saved = try #require((object["plans"] as? [[String: Any]])?.first)
+        #expect(saved["skipsFinderFiles"] as? Bool == true)
+        #expect(saved["skipsSystemFiles"] as? Bool == true)
+        let reloaded = try await store.load().configuration.plans
+        #expect(reloaded.map(\.excludePatterns) == plans.map(\.excludePatterns))
+        #expect(reloaded.map(\.excludesToPass) == plans.map(\.excludesToPass))
+    }
+
+    @Test("a plan saved with older builds' developer switch on gets every group ticked, the groups' rules leaving its list")
+    func legacyDeveloperSwitchBecomesGroupsAtLoad() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let json = """
+        {
+          "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "kind": "local", "localPath": "/tmp/repo"}],
+          "plans": [
+            {"id": "5B0E7C2D-0000-4000-8000-000000000001", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "~", "excludePatterns": ["*.iso", "**/node_modules"], "excludeDeveloperFiles": true},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000002", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "~/Documents", "excludePatterns": ["*.iso"], "excludeDeveloperFiles": false},
+            {"id": "5B0E7C2D-0000-4000-8000-000000000003", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
+             "path": "~/Documents", "excludePatterns": ["*.iso"]}
+          ],
+          "runs": [],
+          "settings": {}
+        }
+        """
+        try Data(json.utf8).write(to: directory.appendingPathComponent("config.json"))
+        let store = ConfigStore(directory: directory)
+        let loaded = try await store.load().configuration
+        #expect(loaded.plans.map(\.developerGroups) == [ExcludeCategory.developerGroups, [], []])
+        #expect(loaded.plans.map(\.excludePatterns) == [["*.iso"], ["*.iso"], ["*.iso"]])
+        #expect(loaded.plans[0].excludesToPass == BackupPlan.developerExcludes + ["*.iso"])
+
+        // Saved under the new keys, read back as they stand.
+        try await store.save(loaded)
+        let reloaded = try await store.load().configuration
+        #expect(reloaded.plans.map(\.developerGroups) == loaded.plans.map(\.developerGroups))
+        #expect(reloaded.plans.map(\.excludePatterns) == loaded.plans.map(\.excludePatterns))
     }
 
     @Test("a history saved before stretches were stored gets them at load; a stored one stands")

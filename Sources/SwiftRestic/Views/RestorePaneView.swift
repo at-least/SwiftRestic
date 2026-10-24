@@ -138,8 +138,13 @@ struct RestorePaneView: View {
 
     private func browserPane(record: Snapshot?) -> some View {
         VStack(spacing: 0) {
-            toolbar(record: record)
-            Divider()
+            // Only a failed comparison takes a line: a blank Change column
+            // then means "not known", not "unchanged". What the column
+            // compares with otherwise is its title's tooltip.
+            if case .failed = shownComparison(for: record) {
+                toolbar(record: record)
+                Divider()
+            }
             // Its own view, reading the run history itself: a new run
             // record re-renders the strip, never the tree below it.
             IncompleteSnapshotStrip(snapshotID: snapshotID, repositoryID: repositoryID)
@@ -161,21 +166,28 @@ struct RestorePaneView: View {
 
     // MARK: - Toolbar (top)
 
-    /// The open backup's name and what its Change column is compared with —
-    /// nothing else tells a blank Change column's meanings apart: first
-    /// backup, no changes, still comparing, failed. The search is the
-    /// toolbar's field, which searches the open backup on the Backups tab;
-    /// Find Files searches every backup.
+    /// `comparison`, when it is the open record's: between a record switch
+    /// and loadLevel's first line it still belongs to the previous record.
+    private func shownComparison(for record: Snapshot?) -> ChangeComparison? {
+        guard let record, loadedSnapshotID == record.id else { return nil }
+        return comparison
+    }
+
+    /// What the Change column compares with, for its title's tooltip.
+    private var changeColumnHelp: String {
+        RestoreRecordHeading.columnHelp(for: shownComparison(for: record))
+    }
+
+    /// Why the Change column could not be filled, when the comparison
+    /// failed. The search is the toolbar's field, which searches the open
+    /// backup on the Backups tab; Find Files searches every backup.
     private func toolbar(record: Snapshot?) -> some View {
         HStack(alignment: .center, spacing: 12) {
             if let record {
                 RestoreRecordHeader(
                     repositoryID: repositoryID,
                     record: record,
-                    // Between a record switch and loadLevel's first line,
-                    // `comparison` still belongs to the previous record;
-                    // show none rather than that one.
-                    comparison: loadedSnapshotID == record.id ? comparison : nil
+                    comparison: shownComparison(for: record)
                 )
                 .layoutPriority(1)
             }
@@ -228,7 +240,7 @@ struct RestorePaneView: View {
             ContentUnavailableView("Empty folder", systemImage: "folder")
         } else {
             VStack(spacing: 0) {
-                TreeColumnHeader(rowContentWidth: rowContentWidth)
+                TreeColumnHeader(rowContentWidth: rowContentWidth, changeHelp: changeColumnHelp)
                 Divider()
                 treeList
             }
@@ -563,7 +575,7 @@ struct RestorePaneView: View {
     /// formatted once per render, not once per folder with changes.
     private var sinceBaseline: String {
         let baseline: Snapshot? = switch comparison {
-        case let .comparing(baseline), let .compared(baseline, _, _), let .failed(baseline, _): baseline
+        case let .comparing(baseline), let .compared(baseline, _), let .failed(baseline, _): baseline
         case .firstBackup, nil: nil
         }
         return baseline.map { " since \(Format.timestamp($0.time))" } ?? ""
@@ -736,14 +748,11 @@ struct RestorePaneView: View {
             // record's change map into the new one's rows, nor its baseline
             // into the new one's header: both are written after this guard.
             guard !Task.isCancelled else { return }
-            changes = marks.changes
-            changesInside = ChangeComparison.changesInside(marks.changes)
+            let held = ChangeComparison.heldChanges(marks.changes)
+            changes = held
+            changesInside = ChangeComparison.changesInside(held)
             comparison = marks.failure.map { .failed(baseline: predecessor, reason: $0) }
-                ?? .compared(
-                    baseline: predecessor,
-                    changeCount: marks.changes.count,
-                    removed: ChangeComparison.removals(in: marks.changes)
-                )
+                ?? .compared(baseline: predecessor, changeCount: held.count)
         } else {
             changes = [:]
             changesInside = [:]
@@ -910,13 +919,12 @@ struct RestorePaneView: View {
     }
 }
 
-/// The toolbar's leading side: which backup is open, and what its Change
-/// column compares it with. Its own view because it reads the plans and the
+/// The toolbar's leading side, shown while the comparison failed: what the
+/// Change column could not be compared with, and why. Its own view because it reads the plans and the
 /// lineages: a run-record or settings write re-renders this line, never the
 /// tree beside it.
 private struct RestoreRecordHeader: View {
     @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
 
     let repositoryID: UUID
     let record: Snapshot
@@ -926,11 +934,10 @@ private struct RestoreRecordHeader: View {
         let heading = RestoreRecordHeading(
             record: record,
             label: model.recordLabel(of: record, repositoryID: repositoryID),
-            comparison: comparison,
-            unread: model.unreadItems(inBackup: record.id)
+            comparison: comparison
         )
         // The backup's name and moment are the window's title and subtitle;
-        // this line says only what its Change column compares with.
+        // this line says only why its Change column is not filled.
         VStack(alignment: .leading, spacing: 1) {
             if !heading.caption.isEmpty {
                 HStack(spacing: 4) {
@@ -948,30 +955,6 @@ private struct RestoreRecordHeader: View {
                 }
                 .font(.caption)
                 .help(heading.detail)
-            }
-            // Its own tooltip: a `.help` on the stack would cover this
-            // line's too.
-            // Each name opens the item's versions at the backup compared
-            // with, which has it — on its plan's Files tab; a group's
-            // backups have none, and their names are words only.
-            ForEach([heading.removed, heading.notRead].compactMap { $0 }, id: \.names.label) { removals in
-                let page = model.shelves(for: repositoryID).versionsPage(of: removals.baseline)
-                RemovedNamesLine(
-                    names: removals.names,
-                    help: removals.detail,
-                    before: removals.baseline.time,
-                    open: page.map { page in
-                        { item in
-                            router.showVersions(
-                                path: item.path,
-                                isDirectory: item.isDirectory,
-                                in: removals.baseline,
-                                repositoryID: repositoryID,
-                                page: page
-                            )
-                        }
-                    }
-                )
             }
         }
     }
@@ -1120,6 +1103,8 @@ private final class RowContentWidth {
 /// tree.
 private struct TreeColumnHeader: View {
     let rowContentWidth: RowContentWidth
+    /// What the Change column compares with (`RestoreRecordHeading.columnHelp`).
+    let changeHelp: String
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1132,6 +1117,7 @@ private struct TreeColumnHeader: View {
             Spacer(minLength: 12)
             Text("Change")
                 .frame(width: 56, alignment: .leading)
+                .help(changeHelp)
             Text("Last Modified")
                 .frame(width: 140, alignment: .trailing)
             Text("Size")

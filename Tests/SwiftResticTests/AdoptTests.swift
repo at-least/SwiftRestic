@@ -130,6 +130,8 @@ struct AdoptTests {
         #expect(model.label(of: draft) == "Docs")
         #expect(draft.path == "/Data/Docs")
         #expect(draft.excludePatterns == ["node_modules", ".env"])
+        // No switch's rule was recorded: every switch reads off.
+        #expect(!draft.skipsFinderFiles && !draft.skipsSystemFiles && !draft.excludeDeveloperFiles)
         #expect(draft.tags == ["travel"])
         // The editor's own defaults keep what restic does not record.
         #expect(draft.excludeCaches == BackupPlan().excludeCaches)
@@ -139,7 +141,7 @@ struct AdoptTests {
         #expect(draft.lastRunAt == nil && draft.lastSuccessAt == nil)
     }
 
-    @Test("a history made with the developer switch on adopts with the switch on, its rules not copied as rows")
+    @Test("a history made with the developer switch on adopts with the switch on, the list keeping the user's own rows")
     func developerRulesAdoptAsTheSwitch() throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
@@ -148,23 +150,35 @@ struct AdoptTests {
         // restic records each rule as the run passed it, tilde expanded, and
         // not the marker; the plan's own rows come first.
         for path in ["/Data/Docs", NSHomeDirectory()] {
-            let recorded = ["*.iso"] + BackupPlan.developerExcludes(for: path).map { ResticService.expandTilde($0) }
-            let made = try snapshot("on", time: "2026-10-01T10:00:00Z", paths: [path], tags: [tag], excludes: recorded)
+            let recorded = ["*.iso"] + BackupPlan.developerExcludes.map { ResticService.expandTilde($0) }
+            // Each its own ID: the listing keeps a snapshot it already holds.
+            let made = try snapshot("on" + path, time: "2026-10-01T10:00:00Z", paths: [path], tags: [tag], excludes: recorded)
             loadModel(model, repository: repository, listing: [made])
             let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-            #expect(draft.excludeDeveloperFiles, "path \(path)")
+            #expect(draft.developerGroups == ExcludeCategory.developerGroups, "path \(path)")
+            // In the app's spelling, so each reads as its rule.
+            #expect(draft.path == path)
             #expect(draft.excludePatterns == ["*.iso"], "path \(path)")
         }
 
         // A rule added by a later build is missing from an older history:
-        // the switch still reads as on, and the rules it recorded are not
-        // copied as rows.
-        let older = ["*.iso"] + BackupPlan.developerExcludes(for: "/Data/Docs").dropFirst()
+        // the switch still reads as on, and passes it from now on.
+        let all = BackupPlan.developerExcludes
+        let older = ["*.iso"] + all.dropFirst()
         let made1 = try snapshot("older", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: older)
         loadModel(model, repository: repository, listing: [made1])
         let olderDraft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(olderDraft.excludeDeveloperFiles)
+        #expect(olderDraft.developerGroups == ExcludeCategory.developerGroups)
         #expect(olderDraft.excludePatterns == ["*.iso"])
+        #expect(olderDraft.excludesToPass.contains(all[0]))
+
+        // One group's rules recorded: that group alone is ticked.
+        let pythonOnly = ["*.iso"] + BackupPlan.developerExcludes(groups: [.python])
+        let made2 = try snapshot("python", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: pythonOnly)
+        loadModel(model, repository: repository, listing: [made2])
+        let pythonDraft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        #expect(pythonDraft.developerGroups == [.python])
+        #expect(pythonDraft.excludePatterns == ["*.iso"])
 
         // Part of the set is the user's own rows, copied as they were.
         let partial = ["*.iso", "**/.venv", "**/__pycache__"]
@@ -175,7 +189,7 @@ struct AdoptTests {
         #expect(draft.excludePatterns == partial)
     }
 
-    @Test("a default restic recorded with its tilde expanded adopts in the app's spelling, labelled; other rows stay as recorded")
+    @Test("a default restic recorded with its tilde expanded reads as its switch; other rows stay as recorded")
     func expandedDefaultsAdoptInTheirOwnSpelling() throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
@@ -188,9 +202,8 @@ struct AdoptTests {
         )
         loadModel(model, repository: repository, listing: [made])
         let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(draft.excludePatterns == [".DS_Store", "~/Library/Caches", "/Users/someone/elsewhere"])
-        #expect(ExcludeRule.sections(stored: draft.excludePatterns).first { $0.category == .appState }?
-            .rows.map(\.line) == ["~/Library/Caches"])
+        #expect(draft.skipsFinderFiles && draft.skipsSystemFiles)
+        #expect(draft.excludePatterns == ["/Users/someone/elsewhere"])
     }
 
     @Test("the schedule follows the folder: Daily when it is here, Manual otherwise")

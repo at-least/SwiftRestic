@@ -188,7 +188,7 @@ struct SnapshotDiffView: View {
                 }
 
                 if let older, older.lineageKey != newer.lineageKey {
-                    Label("Different folders or Mac — most entries will show as added or removed", systemImage: "info.circle")
+                    Label("Different folders or Mac — most entries will show as added or deleted", systemImage: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -244,13 +244,13 @@ struct SnapshotDiffView: View {
                 value: countText(stats?.added)
             )
             StatTile(
-                title: "Removed",
+                title: "Deleted",
                 value: countText(stats?.removed)
             )
             // restic's `changed_files` counts content changes only; the Modified
             // filter also includes type changes and bitrot, so the tooltip names
             // it precisely while the tile stays short enough not to truncate.
-            // "N files" agrees with the Added/Removed tiles' unit spelling.
+            // "N files" agrees with the Added/Deleted tiles' unit spelling.
             StatTile(
                 title: "Changed",
                 value: stats.map { Format.plural($0.changedFiles, "file") } ?? "—",

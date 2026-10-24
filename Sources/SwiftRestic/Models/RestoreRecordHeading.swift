@@ -10,29 +10,21 @@ enum ChangeComparison: Equatable, Sendable {
     case firstBackup
     /// `restic diff` against the baseline is running.
     case comparing(baseline: Snapshot)
-    /// The diff finished: `changeCount` paths differ, zero meaning none.
-    /// `removed` is what the baseline held and this backup does not, top-most
-    /// first (`removals(in:)`) — the changes no row of this backup's tree can
-    /// carry a mark for.
-    case compared(baseline: Snapshot, changeCount: Int, removed: [ResticDiffChange] = [])
+    /// The diff finished: `changeCount` of the items this backup holds
+    /// changed, zero meaning none.
+    case compared(baseline: Snapshot, changeCount: Int)
     /// The diff stopped short. Marks that streamed before the failure stay —
     /// each is still true — but a blank row no longer means "unchanged".
     case failed(baseline: Snapshot, reason: String)
 }
 
 extension ChangeComparison {
-    /// The removed paths of a diff, each only once: restic lists a removed
-    /// folder and then everything it held, and the folder says it all. A
-    /// path stays when no folder above it is removed too — its ancestors
-    /// walked byte-exact (`ResticPath.parent`), so "/src/data2" is never
-    /// inside "/src/data". Sorted by path, so the header reads the same on
-    /// every visit.
-    static func removals(in changes: [String: ResticDiffChange]) -> [ResticDiffChange] {
-        let removed = changes.filter { $0.value.category == .removed }
-        return removed
-            .filter { key, _ in !ResticPath.ancestors(of: key).contains { removed[$0] != nil } }
-            .map(\.value)
-            .sorted { $0.path < $1.path }
+    /// The changes the Change column marks: the items this backup holds. A
+    /// removal has no row in its tree, and counting one in a folder's tally
+    /// would promise a row the folder does not have; Compare with
+    /// Previous lists them.
+    static func heldChanges(_ changes: [String: ResticDiffChange]) -> [String: ResticDiffChange] {
+        changes.filter { $0.value.category != .removed }
     }
 }
 
@@ -117,9 +109,9 @@ struct UnreadItems: Equatable, Sendable {
     }
 }
 
-/// What a "Removed:" line names — the Restore pane's header and a Files
-/// folder's change summary: the first few gone items, each a route, and how
-/// many more. Enough names to read on one line.
+/// What a "Removed:" line names — a Files folder's change summary: the
+/// first few gone items, each a route, and how many more. Enough names to
+/// read on one line.
 struct RemovedNames: Equatable, Sendable {
     static let shown = 3
 
@@ -142,12 +134,10 @@ struct RemovedNames: Equatable, Sendable {
     }
 }
 
-/// The restore pane's header: which backup is open, and what its Change
-/// column compares it with. A blank column means one of four things — first
-/// backup, nothing changed, still comparing, or a failed diff — and only this
-/// line tells them apart; with the sidebar hidden it is also the only thing
-/// naming the backup at all. Pure, so the wording is pinned by tests; the
-/// pane only lays it out.
+/// What the restore pane says of its Change column: a line above the tree
+/// only when the comparison failed — a blank column then means "not known",
+/// not "unchanged" — and otherwise its title's tooltip (`columnHelp`). Pure,
+/// so the wording is pinned by tests; the pane only lays it out.
 struct RestoreRecordHeading: Equatable, Sendable {
     /// The name of the place the sidebar shows the backup — its plan, or
     /// its group under Other backups — qualified when the name alone is
@@ -164,32 +154,8 @@ struct RestoreRecordHeading: Equatable, Sendable {
     var detail: String
     /// The comparison failed: the view adds a warning glyph.
     var isProblem: Bool
-    /// What the backup before held and this one does not — a removal has no
-    /// row in this backup's tree to wear a mark, so without this line
-    /// "1 change" could point at nothing on screen. Only for a finished
-    /// comparison: a partial one's list would pass for the whole.
-    var removed: Removals?
-    /// What this backup's own run could not read, taken out of `removed`:
-    /// restic left it out, and the disk may still hold it.
-    var notRead: Removals?
 
-    struct Removals: Equatable, Sendable {
-        /// The names the line shows, each a route to its versions at
-        /// `baseline`, which holds it.
-        var names: RemovedNames
-        /// The backup compared with.
-        var baseline: Snapshot
-        /// The paths in full, for the line's tooltip.
-        var detail: String
-
-        /// "Removed: old.txt, sub", by name.
-        var line: String { names.line }
-    }
-
-    /// Enough paths for a tooltip that still fits on screen.
-    private static let removedPaths = 20
-
-    init(record: Snapshot, label: SnapshotLineage.Label?, comparison: ChangeComparison?, unread: UnreadItems = UnreadItems()) {
+    init(record: Snapshot, label: SnapshotLineage.Label?, comparison: ChangeComparison?) {
         name = SnapshotLineage.displayName(of: record, label: label)
         time = Format.timestamp(record.time)
 
@@ -206,7 +172,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
         case let .comparing(baseline):
             about = "Comparing with \(Format.timestamp(baseline.time))…"
             why = Self.comparedWith(record, baseline)
-        case let .compared(baseline, count, _):
+        case let .compared(baseline, count):
             let since = Format.timestamp(baseline.time)
             about = count == 0
                 ? "No changes since \(since)"
@@ -224,32 +190,25 @@ struct RestoreRecordHeading: Equatable, Sendable {
         caption = about ?? ""
         detail = [label?.detail, why].compactMap { $0 }.joined(separator: "\n")
         if case .failed = comparison { isProblem = true } else { isProblem = false }
-
-        if case let .compared(baseline, _, all) = comparison {
-            let isUnread = { (change: ResticDiffChange) in unread.item(holding: change.path) != nil }
-            let since = Format.timestamp(baseline.time)
-            removed = Self.removals(all.filter { !isUnread($0) }, baseline: baseline, unread: unread,
-                                    label: "Removed: ", heading: "Removed since \(since):")
-            notRead = Self.removals(all.filter(isUnread), baseline: baseline, unread: unread,
-                                    label: "Not read: ", heading: "Not read by this backup — restic could not read them; the backup of \(since) has them:")
-        }
     }
 
-    private static func removals(
-        _ changes: [ResticDiffChange], baseline: Snapshot, unread: UnreadItems, label: String, heading: String
-    ) -> Removals? {
-        guard !changes.isEmpty else { return nil }
-        let names = RemovedNames(changes.map { change in
-            let path = ResticPath.normalized(change.path)
-            return RemovedItem(path: path, isDirectory: change.isDirectory, reason: unread.reason(for: path))
-        }, label: label)
-        let paths = changes.prefix(removedPaths).map { change in
-            let path = ResticPath.normalized(change.path)
-            return change.isDirectory ? "\(path) and everything in it" : path
+    /// The Change column title's tooltip: what the marks are measured
+    /// against, and that what this backup no longer holds is not among
+    /// them — its tree has no row for it.
+    static func columnHelp(for comparison: ChangeComparison?) -> String {
+        switch comparison {
+        case nil:
+            "How each item changed since the previous backup of these folders from this Mac."
+        case .firstBackup:
+            "First backup of these folders — nothing to compare with."
+        case let .comparing(baseline):
+            "Comparing with the backup of \(Format.timestamp(baseline.time))…"
+        case let .compared(baseline, _):
+            "Added or modified since the backup of \(Format.timestamp(baseline.time)), the previous one of these folders "
+                + "from this Mac. To see what was deleted, Control-click this backup in the list and choose Compare with Previous"
+        case let .failed(baseline, reason):
+            "Could not compare with the backup of \(Format.timestamp(baseline.time)): \(Format.firstSentence(reason))"
         }
-        let rest = changes.count - paths.count
-        let detail = ([heading] + paths + (rest > 0 ? ["and \(Format.count(rest)) more"] : [])).joined(separator: "\n")
-        return Removals(names: names, baseline: baseline, detail: detail)
     }
 
     private static func comparedWith(_ record: Snapshot, _ baseline: Snapshot) -> String {

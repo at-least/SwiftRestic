@@ -16,3 +16,15 @@ func waitUntilRestoreFinishes(in model: AppModel, within seconds: TimeInterval =
         Issue.record("the restore was still running after \(Int(seconds)) s")
     }
 }
+
+extension BackupPlan {
+    /// A plan that leaves nothing out by pattern: no switch's rules, no
+    /// marker, no pattern of its own — so a fixture's tree is backed up as
+    /// planted.
+    mutating func skipNothing() {
+        excludePatterns = []
+        skipsFinderFiles = false
+        skipsSystemFiles = false
+        developerGroups = []
+    }
+}

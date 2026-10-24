@@ -607,7 +607,7 @@ struct StubResticTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = root.path
-        plan.excludePatterns = []
+        plan.skipNothing()
 
         return Fixture(
             root: root,

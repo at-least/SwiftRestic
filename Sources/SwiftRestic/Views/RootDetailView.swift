@@ -126,14 +126,18 @@ struct RootDetailView: View {
         .onChange(of: model.snapshots) {
             // SWIFTRESTIC_CAPTURE_PANE=restore: the first repository's
             // newest backup, open on its page's Backups tab — the listing
-            // it needs lands after launch, so the selection happens here.
+            // it needs lands after launch, so the selection happens here —
+            // with SWIFTRESTIC_CAPTURE_ITEM's folder walked open.
             guard pendingCaptureRestore,
                   let repository = model.configuration.repositories.first,
                   let latest = model.snapshots(for: repository.id).first,
                   let page = model.page(ofBackup: latest.id, in: repository.id)
             else { return }
             pendingCaptureRestore = false
-            router.showBackup(latest.id, on: page, repositoryID: repository.id)
+            router.showBackup(
+                latest.id, on: page, repositoryID: repository.id,
+                focusPath: ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"]
+            )
         }
         #endif
     }

@@ -89,4 +89,20 @@ struct RunTranscriptTests {
         #expect(stored.utf8.count <= RunTranscript.lineByteLimit + suffix.utf8.count)
         #expect(stored.utf8.count > RunTranscript.lineByteLimit - 8)
     }
+
+    @Test("a backup's command line with every Skip switch on is kept whole; only a giant one is cut")
+    func commandKeepsItsExcludes() throws {
+        let transcript = RunTranscript()
+        var plan = BackupPlan()
+        plan.excludePatterns = ["*.iso"]
+        let excludes = plan.excludesToPass.flatMap { ["--exclude", ResticService.expandTilde($0)] }
+        let command = CommandLineTokenizer.render(["restic", "backup", "--json", "/src"] + excludes)
+        #expect(command.utf8.count > RunTranscript.lineByteLimit)
+        transcript.command(command)
+        #expect(try #require(transcript.contents.entries.first).text == command)
+
+        transcript.command(String(repeating: "x", count: 1_048_576))
+        let giant = try #require(transcript.contents.entries.last).text
+        #expect(giant.utf8.count < RunTranscript.commandByteLimit + 64)
+    }
 }

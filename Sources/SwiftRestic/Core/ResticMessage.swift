@@ -174,7 +174,7 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
         var displayName: String {
             switch self {
             case .added: "Added"
-            case .removed: "Removed"
+            case .removed: "Deleted"
             case .modified: "Modified"
             case .metadataOnly: "Metadata"
             }
