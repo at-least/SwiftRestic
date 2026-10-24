@@ -909,7 +909,7 @@ enum PlanSkips {
             let isAll = plan.developerGroups == ExcludeCategory.developerGroups
             items.append((isAll ? developerFiles : "\(developerFiles): \(Format.list(groups))", groups.joined(separator: "\n")))
         }
-        if plan.excludeCloudFiles { items.append((cloudFiles, "Files kept only in iCloud Drive or OneDrive.")) }
+        if plan.excludeCloudFiles { items.append((cloudFiles, "Files kept only in iCloud Drive or OneDrive")) }
         if plan.oneFileSystem { items.append((otherDisks, otherDisksHelp)) }
         return items
     }

@@ -500,8 +500,9 @@ struct FindFilesView: View {
             }
             hasSearched = true
             // The property, not the local the search snapped: the state the
-            // no-match state reads is what the landed search covered.
-            self.searchedLatestOnly = searchedLatestOnly
+            // no-match state reads is what the landed search covered. The
+            // index engine searches every backup whatever the box says.
+            self.searchedLatestOnly = !ready && searchedLatestOnly
             isSearching = false
             searchTask = nil
         }

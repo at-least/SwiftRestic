@@ -313,13 +313,13 @@ struct SnapshotLineageTests {
 
         // The tooltip names both full IDs, or says why there is no baseline —
         // in the restore surfaces' word: the open record is a backup.
-        #expect(heading(nil).detail == "Backup abf72899aaaaaaaa.")
+        #expect(heading(nil).detail == "Backup abf72899aaaaaaaa")
         #expect(heading(.compared(baseline: baseline, changeCount: 1)).detail
             == "Backup abf72899aaaaaaaa, compared with 73d9b51de71d34eb — the previous backup of these folders "
-            + "from the same Mac. Changes to permissions or timestamps alone are not marked.")
+            + "from the same Mac. Changes to permissions or timestamps alone are not marked")
         #expect(heading(.firstBackup).detail
             == "Backup abf72899aaaaaaaa. The Change column compares a backup with the previous one of the same "
-            + "folders from the same Mac, and this is the first.")
+            + "folders from the same Mac, and this is the first")
     }
 
     @Test("the Change column marks only what this backup holds, so a folder's tally counts only rows it has")

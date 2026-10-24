@@ -318,11 +318,13 @@ struct PlanDetailView: View {
         let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
         return Card("Backups") {
             DetailGrid {
-                DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
                 // The card's title labels this line: a DetailRow here would
-                // read "Backups" twice, stacked.
+                // read "Backups" twice, stacked. First, as the Schedule
+                // card's unlabelled line is: between two labelled rows it
+                // starts at the card's edge, left of their values.
                 snapshotsValue(plan, snapshots: snapshots)
                     .accessibilityLabel("Backups")
+                DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
                 // Applying it now is Plan ▸ Apply Retention Now (and the
                 // sidebar row's menu); what it will keep is the editor's
                 // Retention tab.
@@ -434,7 +436,7 @@ struct PlanDetailView: View {
                     )
                     // When the count was read, in the tooltip with the rest.
                     let updated = model.snapshotsLoadedAt(for: repositoryID)
-                        .map { "Updated \($0.formatted(date: .omitted, time: .shortened))." }
+                        .map { "Updated \($0.formatted(date: .omitted, time: .shortened))" }
                     Text(tile.value)
                         .monospacedDigit()
                         .help([tile.help, updated].compactMap { $0 }.joined(separator: "\n"))

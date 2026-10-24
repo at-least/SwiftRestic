@@ -164,11 +164,11 @@ struct RestoreRecordHeading: Equatable, Sendable {
         switch comparison {
         case nil:
             about = nil
-            why = "Backup \(record.id)."
+            why = "Backup \(record.id)"
         case .firstBackup:
             about = "First backup of this folder — nothing to compare with"
             why = "Backup \(record.id). The Change column compares a backup with the previous one "
-                + "of the same folders from the same Mac, and this is the first."
+                + "of the same folders from the same Mac, and this is the first"
         case let .comparing(baseline):
             about = "Comparing with \(Format.timestamp(baseline.time))…"
             why = Self.comparedWith(record, baseline)
@@ -180,10 +180,10 @@ struct RestoreRecordHeading: Equatable, Sendable {
             // restic diff without --metadata lists no metadata-only (U)
             // changes, so a blank row can still hide a chmod or a touch.
             why = Self.comparedWith(record, baseline)
-                + " Changes to permissions or timestamps alone are not marked."
+                + ". Changes to permissions or timestamps alone are not marked"
         case let .failed(baseline, reason):
             about = "Could not compare with \(Format.timestamp(baseline.time)): \(Format.firstSentence(reason))"
-            why = Self.comparedWith(record, baseline) + " restic diff failed: \(reason)"
+            why = Self.comparedWith(record, baseline) + ". restic diff failed: \(reason)"
         }
         // The backup's ID stays in the tooltip (`why`); the line is only
         // what the Change column is measured against.
@@ -213,6 +213,6 @@ struct RestoreRecordHeading: Equatable, Sendable {
 
     private static func comparedWith(_ record: Snapshot, _ baseline: Snapshot) -> String {
         "Backup \(record.id), compared with \(baseline.id) — the previous backup "
-            + "of these folders from the same Mac."
+            + "of these folders from the same Mac"
     }
 }

@@ -42,8 +42,8 @@ the generator after editing it; the PNGs are checked in.
   2026-10-18 each plan folded open to them here — a third level, and a
   fourth under Other backups. Backups no plan of the repository made — from
   another Mac or the restic console, a deleted plan, a plan that now backs up
-  elsewhere — sit at the plans' level under an *Other backups* caption
-  (*Other backups · 2 backups*), grouped by the plan that made them (its
+  elsewhere — sit at the plans' level under an *Other backups* caption,
+  grouped by the plan that made them (its
   `swiftrestic-plan-` tag, so a deleted plan's history stays one group), or,
   for backups no plan made, by restic's own `host,paths` grouping. Each
   group's caption says which kind — *not set up here*, *now backs up to
@@ -146,7 +146,7 @@ the generator after editing it; the PNGs are checked in.
     as an older one, none of them (with its own date and size), or *Not on
     this Mac* — one `lstat`, compared by size and modification time to
     restic's millisecond, read again when a restore ends. *Restore* — the
-    bottom bar's prominent button, beside *Preview* and *Show in Backups* —
+    bottom bar's prominent button, beside *Preview*, with *Show in Backups* at the bar's left —
     or Return restores the chosen version, confirming "the version modified Sep
     17, 2026 at 9:00 PM, from the backup of Sep 17, 2026 at 11:00 PM"; a row
     drags to Finder. *Preview* shows it in Quick Look: `restic restore` copies
@@ -451,7 +451,7 @@ the generator after editing it; the PNGs are checked in.
   backup was skipped and whose folder is back runs at once — one at a time
   per repository, as *Locking* below says (a disk
   image attached with `-nobrowse` counted); if the drive stays away the
-  quiet-plan alert speaks.
+  quiet-plan notification speaks.
   - *Repeats merge.* A skip that continues the plan's last one — same
     reason, same stored lines, the earlier without a hook's complaint —
     replaces it and its log: one record reading "“Archive SSD” is not
@@ -465,7 +465,7 @@ the generator after editing it; the PNGs are checked in.
     backed up or skipped whole, so no run is one now; such records stay in
     the history with their meaning — the snapshot, the healed failure, the
     Protection card's line, merged runs' snapshots resolving to the record —
-    and a new skip never merges into one. The quiet-plan alert counts from
+    and a new skip never merges into one. The quiet-plan notification counts from
     the plan's last backup.
   - *The repository's side.* A backup to a local repository under /Volumes
     whose volume is not mounted (checked after the before-backup hooks,
@@ -523,7 +523,7 @@ the generator after editing it; the PNGs are checked in.
     with its card, dot and one notification, and *Edit Repository* or
     *Edit Plan* beside it, whichever editor holds that share's password;
     repeats merge into one record as a folder gone's do. Until 2026-10-16 a
-    refusal was Skipped too, silent until the quiet-plan alert. Two runs
+    refusal was Skipped too, silent until the quiet-plan notification. Two runs
     needing one share mount it once. *Check*, *Clean Up Now* and *Apply
     Retention Now* — its preview too — reconnect the repository's share the
     same way, and so does reading the repository: its listing at launch,
@@ -545,7 +545,7 @@ the generator after editing it; the PNGs are checked in.
   scheduler starts nothing (no Failed record, banner or notification per
   slot), the menu bar's menu leads with "restic is missing — backups are on
   hold." and promises no next run, each grey *Back Up* row says "restic is
-  missing.", and the quiet-plan alert still names plans left unprotected.
+  missing.", and the quiet-plan notification still names plans left unprotected.
   *Find Again* in Settings › restic, or a relaunch, lets the due plans run.
 - **Pause** — *Pause Backups* in the menu bar holds every scheduled backup,
   check and prune for an hour, until tomorrow or until resumed; *Pause and
@@ -830,7 +830,7 @@ the generator after editing it; the PNGs are checked in.
   unreachable." (restic's own wait), and a missing rclone the repository
   editor's "rclone is not installed. Install it with brew install
   rclone." — checked against SFTP through rclone 1.75.2 in Docker. Every surface naming a run names its
-  repository too: the log sheet's header, notifications and failure alerts,
+  repository too: the log sheet's header, notifications and webhooks,
   the menu bar, Settings. The history keeps the newest *Items kept in Activity* records
   (Settings › General › History), trimming the oldest with their logs —
   except what a standing problem reads: each plan's newest failed or
@@ -840,7 +840,7 @@ the generator after editing it; the PNGs are checked in.
 - **Banners** — one queue above every page, the Files tab and the console
   included, for what has no other place to be said: a *Back Up Now*, *Check*
   or *Clean Up Now* that was skipped, an ask that waits for a busy repository,
-  a restore's result with *Show in Finder*, an alert that could not be
+  a restore's result with *Show in Finder*, a notification that could not be
   sent, and the app's own trouble (the configuration, the Keychain, the login
   item). How a run went is never one — the sidebar's caption, the plan page's
   problem card, Activity's badge and the menu bar say it — nor is a
@@ -1221,11 +1221,11 @@ the first line of a failing hook's output is kept, stored apart from
 restic's warnings, and never sent to a webhook or chat channel.
 
 `forget` runs inside the backup that triggered it, so the plan's after-backup
-hooks cover it. *Apply Retention Now* runs no hooks and sends no alerts: the
+hooks cover it. *Apply Retention Now* runs no hooks and sends no notifications: the
 plan page and Activity say how it went, and a Healthchecks ping would reset
 the dead-man's switch for a run that backed nothing up.
 
-## Alerts
+## Notifications and webhooks
 
 Webhook (generic JSON), Slack, Discord and Healthchecks.io. Healthchecks is the
 one worth setting up: it is a dead-man's switch, so it catches the failure mode
