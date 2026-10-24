@@ -106,7 +106,8 @@ struct SidebarView: View {
         .safeAreaInset(edge: .bottom) { sidebarFooter }
     }
 
-    /// Arq's bare + in the corner. A missing restic is not repeated here: the
+    /// Arq's bare + in the corner, and restic Console at the other end. A
+    /// missing restic is not repeated here: the
     /// banner above every pane (RootDetailView) already says it, with the
     /// install instruction a cursor-only triangle could not show. The bar
     /// background stays — a long list scrolls under it.
@@ -127,6 +128,13 @@ struct SidebarView: View {
             .help("Add a backup plan or a repository")
 
             Spacer()
+
+            // Text, no icon: buttons wear none (the user's call); the + is
+            // an icon-only control, kept as such.
+            Button("restic Console") { router.request(.showConsole) }
+                .buttonStyle(.borderless)
+                .disabled(!model.repositoryCommands(for: router.selection).canOpenConsole)
+                .help("Run restic commands against a repository")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

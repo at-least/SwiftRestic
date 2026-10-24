@@ -766,7 +766,7 @@ the generator after editing it; the PNGs are checked in.
   stay run-driven.
 - **restic console** — run any restic command against a repository and read its
   own output, for what the UI does not cover (*Repository › restic
-  Console*). A command that may change the backups — the ones it confirms
+  Console*, or the button of that name at the foot of the sidebar). A command that may change the backups — the ones it confirms
   first, plus `tag` and `copy` — re-reads the listing when it ends, so the
   sidebar, Files tabs and counts drop what a `forget` removed at once. A
   check that found errors advises "`restic repair` can recover some

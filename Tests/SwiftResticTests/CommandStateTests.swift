@@ -255,6 +255,7 @@ struct CommandStateTests {
         #expect(!repositoryState.canMaintain)
         #expect(!repositoryState.canFind)
         #expect(!repositoryState.canRefreshAll)
+        #expect(!repositoryState.canOpenConsole)
         #expect(repositoryState.canEdit && repositoryState.canRemove)
     }
 
@@ -318,11 +319,13 @@ struct CommandStateTests {
         let nothing = model.repositoryCommands(for: .activity)
         #expect(nothing.repositoryID == nil)
         #expect(!nothing.canMaintain && !nothing.canEdit && !nothing.canRemove)
-        // Find and Refresh All are about every repository, not the selection.
-        #expect(nothing.canFind && nothing.canRefreshAll)
+        // Find, Refresh All and the console are about every repository,
+        // not the selection.
+        #expect(nothing.canFind && nothing.canRefreshAll && nothing.canOpenConsole)
         model.configuration.repositories = []
         #expect(!model.repositoryCommands(for: nil).canFind)
         #expect(!model.repositoryCommands(for: nil).canRefreshAll)
+        #expect(!model.repositoryCommands(for: nil).canOpenConsole)
     }
 
     @Test("Find Files opens on the selection's repository — on Find Files itself the one it shows — and a handed-over search wins")

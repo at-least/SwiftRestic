@@ -436,10 +436,8 @@ struct SwiftResticApp: App {
             }
             .keyboardShortcut("r", modifiers: .command)
             .disabled(!r.canRefreshAll)
-            // Not selection-bound: the console pane picks its own
-            // repository, so it needs only one to exist and restic to run.
             Button("restic Console") { ask(.showConsole) }
-                .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
+                .disabled(!r.canOpenConsole)
 
             Divider()
 

@@ -45,6 +45,9 @@ struct RepositoryCommandState: Equatable {
     /// selection's.
     var canFind = false
     var canRefreshAll = false
+    /// restic Console, the menu's and the sidebar footer's: the console
+    /// picks its own repository, so it needs only one to exist.
+    var canOpenConsole = false
     /// Check, Clean Up, Unlock, Rebuild Search Index: restic work
     /// that must not collide with a backup or another job on it.
     var canMaintain = false
@@ -121,6 +124,7 @@ extension AppModel {
         var state = RepositoryCommandState()
         state.canFind = !configuration.repositories.isEmpty && isResticAvailable
         state.canRefreshAll = state.canFind
+        state.canOpenConsole = state.canFind
         guard let id = commandRepositoryID(for: selection) else { return state }
         state.repositoryID = id
         state.canMaintain = isResticAvailable && !busyRepositoryIDs.contains(id)
