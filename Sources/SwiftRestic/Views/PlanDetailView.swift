@@ -32,7 +32,7 @@ struct PlanDetailView: View {
         .pageSearch(
             page: .plan(planID),
             roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
-            filesPrompt: "Search this plan's files"
+            filesPrompt: "Search this plan's backups"
         )
         // The toolbar holds the tabs and the search field; the editor is
         // Plan ▸ Edit Plan and the sidebar row's Edit, deleting Plan ▸
