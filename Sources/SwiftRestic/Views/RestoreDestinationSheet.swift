@@ -118,7 +118,7 @@ struct RestoreDestinationSheet: View {
             }
 
             Form {
-                Picker("Restore to:", selection: $kind) {
+                Picker("Restore to", selection: $kind) {
                     Text("Desktop").tag(RestoreDestinationKind.desktop)
                     Text("Other folder").tag(RestoreDestinationKind.otherFolder)
                     Text("Original location").tag(RestoreDestinationKind.originalLocation)
@@ -143,7 +143,7 @@ struct RestoreDestinationSheet: View {
                         .accessibilityHidden(true)
                 }
 
-                Picker("If a file already exists:", selection: $policy) {
+                Picker("If a file already exists", selection: $policy) {
                     Text("Keep the existing file").tag(RestoreOverwritePolicy.keepExisting)
                     Text("Replace it with the backed-up version").tag(RestoreOverwritePolicy.replaceExisting)
                 }

@@ -144,6 +144,15 @@ enum Format {
         date.formatted(dayStyle)
     }
 
+    private static let dayTimeStyle = Date.FormatStyle().month(.abbreviated).day().hour().minute()
+
+    /// A list row's moment whose section header already says the month and
+    /// year — "Oct 24, 2:19 PM". `timestamp`'s full form loses its tail at
+    /// row width, and that tail is the part that tells hourly backups apart.
+    static func dayTime(_ date: Date) -> String {
+        date.formatted(dayTimeStyle)
+    }
+
     /// The span a group's history was made over — "Sep 28 – Oct 2, 2026",
     /// the adopt sheet's header — each end only as specific as it has to be:
     /// one day says itself, a year both ends share is said once.
@@ -267,7 +276,7 @@ enum Format {
             let unreadable = run?.itemErrorCount ?? 0
             return unreadable > 0
                 ? "Incomplete: \(plural(unreadable, "item")) could not be read"
-                : "Incomplete: restic could not read some of the source data"
+                : "Incomplete: some of the source data could not be read"
         case .complete?:
             return "Complete"
         case .unknown?, nil:

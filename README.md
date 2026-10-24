@@ -612,9 +612,9 @@ the generator after editing it; the PNGs are checked in.
     backup, says how many matches only other backups hold, and *Search All
     Backups* carries it on in Find Files; a
     hit drags to Finder as a row does. A file's right-click menu here, in its
-    hits and on Find Files' results has the Files tab's *Preview*, gated by
-    the same size (a hit, which the index keeps no size for, is listed by
-    restic first).
+    hits and on Find Files' results has *Restore* and the Files tab's
+    *Preview*, gated by the same size (a hit, which the index keeps no size
+    for, is listed by restic first).
 - **Find files across backups** — search every backup for a name or glob
   when you do not know which backup still has the file, then restore the
   match (while the index still reads, a word with no glob character is

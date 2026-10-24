@@ -25,7 +25,7 @@ struct BackupsBrowserView: View {
 
     /// The list's width, dragged at its edge — the window's, kept across
     /// pages while it is open, as the Files tab's tree's is.
-    @SceneStorage("BackupsListWidth") private var listWidth: Double = 200
+    @SceneStorage("BackupsListWidth") private var listWidth: Double = 230
     /// The view's own width, which bounds the drag: the pane keeps room for
     /// its tree.
     @State private var width: CGFloat = 0
@@ -82,11 +82,11 @@ struct BackupsBrowserView: View {
                     if let months = DiffCandidateGrouping.landmarks(in: backups, time: \.time) {
                         ForEach(months, id: \.label) { month in
                             Section(month.label) {
-                                rows(month.items)
+                                rows(month.items, sectioned: true)
                             }
                         }
                     } else {
-                        rows(backups)
+                        rows(backups, sectioned: false)
                     }
                 }
                 .listStyle(.inset)
@@ -116,9 +116,9 @@ struct BackupsBrowserView: View {
         }
     }
 
-    private func rows(_ snapshots: [Snapshot]) -> some View {
+    private func rows(_ snapshots: [Snapshot], sectioned: Bool) -> some View {
         ForEach(snapshots) { snapshot in
-            BackupRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id))
+            BackupRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id), isSectioned: sectioned)
                 .tag(snapshot.id)
                 .id(snapshot.id)
         }
@@ -145,18 +145,17 @@ struct BackupsBrowserView: View {
                 // with the identity.
                 .id(page)
         } else {
-            ContentUnavailableView(
-                "No backup open",
-                systemImage: "clock.arrow.circlepath",
-                description: Text("A backup's files show here once the page has one.")
-            )
+            // Blank behind the list's own empty row — "Reading backups…",
+            // its failure, or "No backups yet" — which states the fact
+            // already; a second empty pane said it twice.
+            Color.clear
         }
     }
 
     /// How far the list's edge drags: no narrower than a backup's moment
     /// needs, no wider than leaves the pane its tree.
     private var listBounds: ClosedRange<Double> {
-        let lower = 150.0
+        let lower = 225.0
         return lower...max(lower, min(360, Double(width) - 400))
     }
 }
@@ -168,9 +167,13 @@ private struct BackupRow: View {
     let snapshot: Snapshot
     /// The backup run that wrote it, when the history still holds one.
     let run: RunRecord?
+    /// The list sits under "October 2026" section headers, so the row drops
+    /// the year its header says; a flat single-month list keeps the full
+    /// stamp.
+    let isSectioned: Bool
 
     var body: some View {
-        Text(Format.timestamp(snapshot.time))
+        Text(isSectioned ? Format.dayTime(snapshot.time) : Format.timestamp(snapshot.time))
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
             // State trails identity, the sidebar's rule: the mark sits at

@@ -378,10 +378,10 @@ struct FindFilesView: View {
                 // did not fail, and its rows are what the user is choosing
                 // from.
                 if let failure = previewer.failure {
-                    Label("Preview failed", systemImage: "exclamationmark.triangle")
+                    Label(failure.title, systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .help(failure)
+                        .help(failure.message)
                 }
                 Spacer()
                 let selected = rows.filter { selection.contains($0.id) }

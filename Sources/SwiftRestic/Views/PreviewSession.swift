@@ -11,10 +11,14 @@ import SwiftUI
 final class PreviewSession {
     /// What Quick Look shows; nil closes it.
     var url: URL?
-    /// Why the last preview could not open — the size gate or the copy's
-    /// failure — or that its copy could not be deleted, until the next
-    /// starts.
-    private(set) var failure: String?
+    /// Why the last preview failed, until the next starts — titled for the
+    /// banner and the pane labels that show it: a copy that could not be
+    /// deleted is not a preview that failed, and must not wear that title.
+    struct Failure: Equatable {
+        let title: String
+        let message: String
+    }
+    private(set) var failure: Failure?
     var isCopying: Bool { task != nil }
     /// The copy this session made and has not deleted yet — apart from
     /// `url`, so each copy is deleted exactly once.
@@ -42,7 +46,7 @@ final class PreviewSession {
                 // whatever preview came next.
                 guard !Task.isCancelled else { return }
                 if let reason = VersionPreview.unavailableReason(size: file.size, isReading: false) {
-                    failure = reason
+                    failure = Failure(title: "Could not preview", message: reason)
                     task = nil
                     return
                 }
@@ -55,7 +59,9 @@ final class PreviewSession {
                 self.url = url
             } catch {
                 // A cancelled copy is the pane's own doing, not a failure.
-                if !Task.isCancelled { failure = error.localizedDescription }
+                if !Task.isCancelled {
+                    failure = Failure(title: "Could not preview", message: error.localizedDescription)
+                }
             }
             if !Task.isCancelled { task = nil }
         }
@@ -88,7 +94,10 @@ final class PreviewSession {
         do {
             try AppModel.removePreviewCopy(url)
         } catch {
-            failure = "The preview's copy could not be deleted: \(error.localizedDescription)"
+            failure = Failure(
+                title: "Could not delete the preview's copy",
+                message: "The preview's copy could not be deleted: \(error.localizedDescription)"
+            )
         }
     }
 }

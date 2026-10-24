@@ -167,10 +167,10 @@ struct FileVersionsView: View {
                         .help(detailsError)
                 }
                 if let failure = previewer.failure {
-                    Label("Preview failed", systemImage: "exclamationmark.triangle")
+                    Label(failure.title, systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .help(failure)
+                        .help(failure.message)
                 }
                 Spacer()
                 if previewer.isCopying {

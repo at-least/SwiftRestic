@@ -200,7 +200,7 @@ extension AppModel {
     }
 
     /// The banner a restore of several items posts: how many, where — the
-    /// folder they went into, or each back where it was backed up from —
+    /// folder they went into, or each item where it was backed up from —
     /// and what Keep left as it was, counted as `restoreBanner` counts it.
     /// Reveal in Finder selects every one of them.
     nonisolated static func itemsRestoreBanner(
@@ -211,7 +211,7 @@ extension AppModel {
     ) -> Banner {
         let restored = summaries.reduce(0) { $0 + ($1?.filesRestored ?? 0) }
         let kept = policy == .keepExisting ? summaries.reduce(0) { $0 + ($1?.filesSkipped ?? 0) } : 0
-        let place = directory?.path ?? "Each back in the folder it was backed up from."
+        let place = directory?.path ?? "Each item went back to the folder it was backed up from."
         let reveal = landings.map(\.path)
         if kept > 0, restored == 0 {
             return Banner(
@@ -288,7 +288,7 @@ extension AppModel {
             // success check would say it did.
             post(Banner(
                 title: "A restore is already running",
-                message: "One restore at a time — the current one is still in progress.",
+                message: "Wait for it to finish, or cancel it.",
                 isError: false,
                 symbolName: "clock"
             ))
@@ -397,8 +397,10 @@ extension AppModel {
                     let title = repositoryName.map { "Restore from “\($0)” cancelled" } ?? "Restore cancelled"
                     post(Banner(
                         title: title,
-                        message: ["The restore was cancelled before it finished.", partial]
-                            .compactMap { $0 }.joined(separator: " "),
+                        // Empty with no partial: the title already says
+                        // cancelled once, and BannerView hides an empty
+                        // message.
+                        message: partial ?? "",
                         isError: false,
                         symbolName: RunRecord.Outcome.cancelled.symbolName
                     ))

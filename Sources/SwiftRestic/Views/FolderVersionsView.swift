@@ -153,7 +153,7 @@ struct FolderVersionsView: View {
                 if !notRead.isEmpty {
                     RemovedNamesLine(
                         names: RemovedNames(notRead, label: "Not read: "),
-                        help: "Not read by this backup — restic could not read them, and they may still be on this Mac: "
+                        help: "Not read by this backup — they may still be on this Mac: "
                             + notRead.map(\.name).joined(separator: ", "),
                         before: previous.time
                     ) { openGone($0, at: previous) }

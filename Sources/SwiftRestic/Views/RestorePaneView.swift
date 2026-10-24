@@ -123,7 +123,7 @@ struct RestorePaneView: View {
         // The copy belongs to the backup on screen.
         .onChange(of: snapshotID) { previewer.end() }
         .onChange(of: previewer.failure) { _, failure in
-            if let failure { model.post(Banner(title: "Could not preview", message: failure, isError: true)) }
+            if let failure { model.post(Banner(title: failure.title, message: failure.message, isError: true)) }
         }
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
@@ -223,9 +223,9 @@ struct RestorePaneView: View {
                 ContentUnavailableView {
                     Label("No matches in this backup", systemImage: "magnifyingglass")
                 } description: {
-                    Text(result.note ?? "No other backup matches either, as far as the search index has read.")
+                    Text(result.note ?? "No other backup matches either.")
                 } actions: {
-                    searchAllButton
+                    if result.note != nil { searchAllButton }
                 }
             } else {
                 searchResults(result.inThisBackup)
@@ -234,7 +234,7 @@ struct RestorePaneView: View {
             ContentUnavailableView {
                 Label("Not in this backup", systemImage: "folder.badge.questionmark")
             } description: {
-                Text("This folder does not exist in the selected backup. Pick another backup in the list.")
+                Text("Pick another backup in the list.")
             }
         } else if tree.rows.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
@@ -269,7 +269,16 @@ struct RestorePaneView: View {
                         .lineLimit(1)
                     Spacer()
                     changeBadge(for: row.node.path)
-                    Text(Format.timestamp(row.node.mtime))
+                    // A synthesized top folder has no mtime: blank, not
+                    // "—" — not applicable, where a file's unknown mtime
+                    // keeps the dash, the app's unknown mark.
+                    Group {
+                        if row.node.isDirectory && row.node.mtime == nil {
+                            Text(verbatim: "")
+                        } else {
+                            Text(Format.timestamp(row.node.mtime))
+                        }
+                    }
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .frame(width: 140, alignment: .trailing)
@@ -309,6 +318,7 @@ struct RestorePaneView: View {
             // chevron does, and leaves a file alone. The list also sends
             // Return here — Return is spent in `handleKeyPress` first.
             .contextMenu(forSelectionType: String.self) { ids in
+                restoreContextItem(ids) { ids.compactMap { tree.row(id: $0)?.node } }
                 if ids.count == 1, let id = ids.first, let node = tree.row(id: id)?.node {
                     showVersionsItem(path: node.path, isDirectory: node.isDirectory)
                     if !node.isDirectory {
@@ -327,7 +337,6 @@ struct RestorePaneView: View {
                 // does not follow a selection it did not make itself.
                 handleKeyPress(press) { proxy.scrollTo(FileTree.id(of: $0)) }
             }
-            .help("Drag items to Finder to restore them there.")
             // Initial as well: the routed focus is set while the spinner stands
             // in for this list, so the list meets it on its first appearance.
             .onChange(of: revealPath, initial: true) { _, target in
@@ -391,6 +400,7 @@ struct RestorePaneView: View {
         .listStyle(.inset)
         .focusOnClick($listIsFocused)
         .contextMenu(forSelectionType: String.self) { ids in
+            restoreContextItem(ids) { hits.filter { ids.contains($0.id) }.map(node(for:)) }
             if ids.count == 1, let id = ids.first, let hit = hits.first(where: { $0.id == id }) {
                 showVersionsItem(path: hit.path, isDirectory: hit.isDirectory)
                 if !hit.isDirectory, let record {
@@ -432,6 +442,27 @@ struct RestorePaneView: View {
                     repositoryID: repositoryID,
                     page: page
                 )
+            }
+        }
+    }
+
+    /// Right-click Restore on the clicked rows — the menu's own ids, not
+    /// the ambient selection — as Find Files' rows and the Compare sheet's
+    /// offer it. The request is built exactly as `restoreSelection()`
+    /// builds the selection's.
+    @ViewBuilder
+    private func restoreContextItem(_ ids: Set<String>, nodes: () -> [SnapshotNode]) -> some View {
+        if let record, !ids.isEmpty {
+            let clicked = nodes()
+            if !clicked.isEmpty {
+                Button(clicked.count == 1 ? "Restore" : "Restore \(Format.plural(clicked.count, "Item"))") {
+                    destinationRequest = RestoreDestinationRequest.picked(
+                        clicked.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) },
+                        repositoryID: repositoryID,
+                        model: model
+                    )
+                }
+                .disabled(model.isRestoring)
             }
         }
     }
@@ -1000,8 +1031,8 @@ private struct IncompleteSnapshotStrip: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(unreadable > 0
-                    ? "This backup is incomplete: restic could not read \(Format.plural(unreadable, "item")) when it was made."
-                    : "This backup is incomplete: restic could not read some of the source data when it was made, and did not name it.")
+                    ? "This backup is incomplete: \(Format.plural(unreadable, "item")) could not be read when it was made."
+                    : "This backup is incomplete: some of the source data could not be read when it was made, and was not named.")
                     .font(.callout.weight(.medium))
                     // Not height-pinned, for BannerView's reason: the pane
                     // does not scroll, and a pinned text answers the split
@@ -1113,7 +1144,7 @@ private struct TreeColumnHeader: View {
             Spacer().frame(width: 0)
             Spacer().frame(width: 20)
             Spacer().frame(width: 16)
-            Text("Item")
+            Text("Name")
             Spacer(minLength: 12)
             Text("Change")
                 .frame(width: 56, alignment: .leading)

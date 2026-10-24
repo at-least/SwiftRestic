@@ -52,7 +52,7 @@ struct FormattingTests {
         #expect(Format.plural(2, "match", "matches") == "2 matches")
     }
 
-    @Test("a snapshot's completeness reads as a count of what restic could not read, or not at all")
+    @Test("a snapshot's completeness reads as a count of what could not be read, or not at all")
     func snapshotCompletenessLabels() {
         func backup(exitCode: Int32?, unreadable: Int) -> RunRecord {
             var record = RunRecord(kind: .backup)
@@ -65,7 +65,7 @@ struct FormattingTests {
         #expect(Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 1)) == "Incomplete: 1 item could not be read")
         #expect(
             Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 0))
-                == "Incomplete: restic could not read some of the source data"
+                == "Incomplete: some of the source data could not be read"
         )
         #expect(Format.snapshotCompleteness(backup(exitCode: 0, unreadable: 0)) == "Complete")
         // No exit code and no errors: nothing is known, so nothing is said.
@@ -230,6 +230,18 @@ struct FormattingTests {
         #expect(!value.isEmpty)
         #expect(value != "—")
         #expect(value.rangeOfCharacter(from: .decimalDigits) != nil)
+    }
+
+    @Test("a sectioned list row's stamp keeps its minutes and drops its year")
+    func dayTimeKeepsMinutes() {
+        // Structural on the locale like `timestamp`'s pin, plus the two
+        // guarantees the row needs: the year's digits are gone (the month
+        // section header says them), the minutes are not — a truncated tail
+        // once read 10:19 AM and 10:19 PM as one row.
+        let value = Format.dayTime(Date(timeIntervalSince1970: 1_759_000_000))
+        #expect(!value.isEmpty)
+        #expect(!value.contains("2025"))
+        #expect(value.contains(":"))
     }
 
     @Test("rate refuses to divide by a meaningless duration")
