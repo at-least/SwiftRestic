@@ -61,7 +61,7 @@ struct RestorePaneSearchTests {
 
     @Test("an index still reading places no match and quotes no count")
     func incompleteIndexHedges() {
-        let hedge = "The search index is still reading this repository — some matches may be missing."
+        let hedge = "The index is still reading this repository — some matches may be missing."
         // The open backup not read yet: the index answers nothing about it,
         // and holds its Budget.numbers only under the backups it has read,
         // so the file looks as if only they hold it — the pane must not say so.

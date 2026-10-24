@@ -153,9 +153,10 @@ struct FileVersionsView: View {
         }
     }
 
-    /// The pane's foot: errors of the reads at the left, and at the right
-    /// the chosen version's ways out — Preview, Show in Backups,
-    /// Restore — above them the strip that reports a restore in flight.
+    /// The pane's foot: Show in Backups at the left beside the reads'
+    /// errors — a way to another view of the same moment, not an action on
+    /// the file — and at the right the chosen version's ways out, Preview
+    /// and Restore, above them the strip that reports a restore in flight.
     private var footer: some View {
         VStack(spacing: 10) {
             RestoreProgressStrip()
@@ -172,12 +173,6 @@ struct FileVersionsView: View {
                         .foregroundStyle(.secondary)
                         .help(failure.message)
                 }
-                Spacer()
-                if previewer.isCopying {
-                    ProgressView()
-                        .controlSize(.small)
-                        .help("Copying the chosen version out of the repository for the preview")
-                }
                 Button("Show in Backups") {
                     guard let backup = chosen?.snapshots.first,
                           let page = model.page(ofBackup: backup.id, in: node.repositoryID)
@@ -191,10 +186,16 @@ struct FileVersionsView: View {
                 }
                 .disabled(chosen == nil)
                 .help("Open the chosen version's newest backup at this file's folder on the Backups tab")
+                Spacer()
+                if previewer.isCopying {
+                    ProgressView()
+                        .controlSize(.small)
+                        .help("Copying the chosen version out of the repository for the preview")
+                }
                 let blocked = chosen.flatMap { previewBlock(for: $0) }
                 Button("Preview") { preview() }
                     .disabled(chosen == nil || blocked != nil || previewer.isCopying)
-                    .help(blocked ?? "Look at the chosen version with Quick Look before restoring it — from a temporary copy, deleted when the preview closes")
+                    .help(blocked ?? "Look at the chosen version with Quick Look before restoring it")
                 Button("Restore") { restoreChosen() }
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)
@@ -402,8 +403,8 @@ private struct FileVersionRow: View {
     /// How the index came to cut here — the provenance the row's change
     /// text does not spell.
     private var changeHelp: String {
-        if version.since == .changed { return "restic's diff of this backup with the one before said the file changed" }
-        let uncompared = "No diff compared this backup with the one before, or the file was absent in between"
+        if version.since == .changed { return "Compared with the previous backup, which found the file changed" }
+        let uncompared = "Not compared with the previous backup, or the file was absent in between"
         return change == .mayBeIdentical ? "\(uncompared): its content may be the same" : "\(uncompared); the sizes differ"
     }
 }

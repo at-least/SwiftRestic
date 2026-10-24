@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A folder of the Files view, by version: the backups holding it in a
 /// picker — newest first, from the index — what changed in it since the
-/// backup before (from the index, no restic), and the folder as the chosen
+/// previous backup (from the index, no restic), and the folder as the chosen
 /// backup held it, listed by restic or the browse cache, each item marked
 /// with how it changed. The tree walks the folders; this flips them
 /// through time.
@@ -26,8 +26,8 @@ struct FolderVersionsView: View {
     @State private var selection = Set<SnapshotNode.ID>()
     @State private var isLoading = false
     @State private var loadError: String?
-    /// What changed in the folder since the backup before the chosen one
-    /// that holds it; nil while unread, when there is no backup before, or
+    /// What changed in the folder since the previous backup that holds it;
+    /// nil while unread, when there is none, or
     /// when the index has not read both.
     @State private var changes: FolderChanges?
     @State private var changesError: String?
@@ -39,7 +39,7 @@ struct FolderVersionsView: View {
         versions.first { $0.id == chosenID } ?? versions.first
     }
 
-    /// The backup before the chosen one that holds the folder — what its
+    /// The previous backup that holds the folder — what its
     /// changes count from.
     private var previous: IndexVersion? {
         guard let chosen, let index = versions.firstIndex(of: chosen), index + 1 < versions.count else { return nil }
@@ -128,7 +128,7 @@ struct FolderVersionsView: View {
         }
     }
 
-    /// What changed in the folder itself since the backup before — the gone
+    /// What changed in the folder itself since the previous backup — the gone
     /// items by name, since the listing below is the chosen backup's, and
     /// apart from them what its own run could not read — or, when the index
     /// cannot say, why. Nothing for the oldest backup holding it, nor while
@@ -136,7 +136,7 @@ struct FolderVersionsView: View {
     @ViewBuilder
     private var changeSummary: some View {
         if let changesError {
-            Label("Could not compare with the backup before", systemImage: "exclamationmark.triangle")
+            Label("Could not compare with the previous backup", systemImage: "exclamationmark.triangle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .help(changesError)
@@ -144,9 +144,9 @@ struct FolderVersionsView: View {
             let (changes, notRead) = all.separatingUnread(model.unreadItems(inBackup: chosen.id))
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: changes.summary(since: previous.time, notRead: notRead.count))
-                    .help("Compared with the backup before that holds this folder — what changed inside its folders is theirs to say, and a change of a file's dates or permissions alone is not counted")
-                // Each name opens the item in the tree at the backup
-                // before, which has it.
+                    .help("Compared with the previous backup that holds this folder — what changed inside its folders is theirs to say, and a change of a file's dates or permissions alone is not counted")
+                // Each name opens the item in the tree at the previous
+                // backup, which has it.
                 if let removed = changes.removedNames {
                     RemovedNamesLine(names: RemovedNames(changes.removedItems), help: removed, before: previous.time) { openGone($0, at: previous) }
                 }
@@ -164,7 +164,7 @@ struct FolderVersionsView: View {
         }
     }
 
-    /// Opens a gone item in the tree at the backup before, which has it.
+    /// Opens a gone item in the tree at the previous backup, which has it.
     private func openGone(_ item: RemovedItem, at previous: IndexVersion) {
         onOpen(
             FileNode(repositoryID: node.repositoryID, chainKey: node.chainKey, path: item.path, isDirectory: item.isDirectory),
@@ -283,7 +283,7 @@ struct FolderVersionsView: View {
         return model.dragRestoreProvider(repositoryID: node.repositoryID, snapshotID: chosen.id, node: child)
     }
 
-    /// The folder's changes from the backup before to the chosen one, from
+    /// The folder's changes from the previous backup to the chosen one, from
     /// the index — one read, no restic. The last pair's go as the read
     /// starts, as `fetch` drops the last listing: under the new pair they
     /// would read as its changes.

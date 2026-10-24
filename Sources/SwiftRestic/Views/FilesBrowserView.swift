@@ -205,7 +205,6 @@ struct FilesBrowserView: View {
             Text(verbatim: [
                 absence.detail(fullDiskAccess: model.fullDiskAccess),
                 remedy?.steps,
-                "Its backups are on the Backups tab.",
             ].compactMap { $0 }.joined(separator: " "))
         } actions: {
             HStack {
@@ -316,7 +315,7 @@ struct FilesBrowserView: View {
                     // be eaten as emphasis.
                     Text(verbatim: answer.isComplete
                         ? "No name in these backups has a word starting with “\(query)”."
-                        : FilesSearchAnswer.indexStillReading)
+                        : FilesSearchAnswer.searchStillReading)
                 } actions: {
                     Button("Search All Backups") { onSearchAllBackups(roots.repositoryID, query) }
                         .help("Search every backup in this repository with Find Files, other plans' included")
@@ -325,7 +324,7 @@ struct FilesBrowserView: View {
                 VStack(spacing: 0) {
                     List(selection: selection) {
                         ForEach(entries) { entry in
-                            FilesSearchRow(entry: entry)
+                            FilesSearchRow(entry: entry, folder: folderLine(for: entry.node.path))
                                 .tag(entry.node)
                         }
                     }
@@ -402,6 +401,26 @@ struct FilesBrowserView: View {
         }
     }
 
+    /// A hit's second line: the folder holding it, read from the folder
+    /// that holds the plan's root down — /Users/me/Documents/reports under
+    /// a plan of /Users/me/Documents reads "Documents/reports" — so the
+    /// prefix every hit shares cannot eat the part that tells them apart.
+    /// A hit outside every root keeps the tilde-abbreviated path.
+    private func folderLine(for path: String) -> String {
+        let parent = ResticPath.parent(of: path)
+        let base = rootEntries
+            .filter { ResticPath.holds($0.path, parent) }
+            .map { ResticPath.parent(of: $0.path) }
+            .max { $0.utf8.count < $1.utf8.count }
+        guard let base, parent != base else {
+            return (parent as NSString).abbreviatingWithTildeInPath
+        }
+        // Byte surgery, as ResticPath cuts: `holds` passed, so the prefix
+        // is there whole.
+        let prefix = base == "/" ? "/" : base + "/"
+        return String(decoding: parent.utf8.dropFirst(prefix.utf8.count), as: UTF8.self)
+    }
+
     @ViewBuilder
     private func treeRow(_ row: FilesTree.Row, unread: UnreadItems) -> some View {
         switch row {
@@ -466,11 +485,7 @@ struct FilesBrowserView: View {
                 // opens it anew.
                 .id(FilesPaneIdentity(node: selected, opening: router.filesPaneOpenings))
         } else {
-            ContentUnavailableView(
-                "Select a folder or file",
-                systemImage: "folder",
-                description: Text("A folder shows as any backup held it, a file as each content it had.")
-            )
+            ContentUnavailableView("Select a folder or file", systemImage: "folder")
         }
     }
 
@@ -533,9 +548,6 @@ extension View {
                 .pickerStyle(.segmented)
                 // Each segment as wide as the three's were.
                 .frame(width: 80 * CGFloat(tabs.count))
-                .help(tabs.contains(.files)
-                    ? "The overview; the backups, each one's files beside the list; or the plan's folder as this Mac holds it, each item by version"
-                    : "The overview; or the backups, each one's files beside the list")
             }
         }
     }
@@ -641,6 +653,9 @@ private struct FilesSearchKey: Equatable {
 /// words.
 struct FilesSearchRow: View {
     let entry: FilesTree.Entry
+    /// The folder holding the hit, as the caption line shows it
+    /// (`FilesBrowserView.folderLine`).
+    let folder: String
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -650,7 +665,7 @@ struct FilesSearchRow: View {
                 Text(entry.node.name)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text((ResticPath.parent(of: entry.node.path) as NSString).abbreviatingWithTildeInPath)
+                Text(folder)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

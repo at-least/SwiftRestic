@@ -7,7 +7,11 @@ import Foundation
 /// granted too — macOS checks `open`, not `lstat` (see `FullDiskAccess`).
 enum DiskFile: Equatable {
     case missing
-    /// A folder, a link or anything else that is not a regular file: no
+    /// A folder on disk: nothing to compare a file's versions with.
+    case folder
+    /// A symbolic link, read as itself — the attributes do not follow it.
+    case link
+    /// Anything that is neither a regular file, a folder nor a link: no
     /// file to compare.
     case other
     case file(size: Int64, modified: Date)
@@ -17,11 +21,19 @@ enum DiskFile: Equatable {
     static func at(_ path: String) -> DiskFile {
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: path)
-            guard attributes[.type] as? FileAttributeType == .typeRegular,
-                  let size = attributes[.size] as? NSNumber,
-                  let modified = attributes[.modificationDate] as? Date
-            else { return .other }
-            return .file(size: size.int64Value, modified: modified)
+            switch attributes[.type] as? FileAttributeType {
+            case .typeRegular:
+                guard let size = attributes[.size] as? NSNumber,
+                      let modified = attributes[.modificationDate] as? Date
+                else { return .other }
+                return .file(size: size.int64Value, modified: modified)
+            case .typeDirectory:
+                return .folder
+            case .typeSymbolicLink:
+                return .link
+            default:
+                return .other
+            }
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
             return .missing
         } catch {
@@ -55,6 +67,10 @@ enum DiskFile: Equatable {
         switch self {
         case .missing:
             return "Not on this Mac"
+        case .folder:
+            return "On this Mac it is a folder"
+        case .link:
+            return "On this Mac it is a link"
         case .other:
             return "On this Mac it is not a file"
         case let .unreadable(reason):

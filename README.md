@@ -113,7 +113,7 @@ the generator after editing it; the PNGs are checked in.
     are (past three months both pickers fold each older month into a
     submenu, the newest month staying in reach, while the Backups tab keeps
     a section per month). One line
-    says what changed in the folder itself since the backup before that
+    says what changed in the folder itself since the previous backup that
     holds it (*Since Oct 1, 2026 at 9:15 AM, in this folder: 2 modified*),
     naming what is gone and marking each item *Added*, *Modified* or *May
     have changed* — from the index's record of the diffs, no restic, and
@@ -160,8 +160,8 @@ the generator after editing it; the PNGs are checked in.
     (*until Oct 2*), by one `lstat` per hit — each under its folder. A hit
     selects as a tree row does; Return
     or Esc ends the search on the tree with the hit's folders opened and
-    its row in view. While the index still reads, the search says older
-    backups may be missing, and one with no match offers *Search All
+    its row in view. While the index still reads, the search says some
+    matches may be missing, and one with no match offers *Search All
     Backups*, Find Files over the whole repository.
 - **A group under Other backups is a page** — its row selects like a plan's,
   with Overview | Backups and no Files tab: a plan's lists its folder as
@@ -606,7 +606,7 @@ the generator after editing it; the PNGs are checked in.
   - *Into the Files view.* *Show Versions*, in an item's right-click menu
     here and on Find Files' results, opens it on the Files tab of the plan
     the backup belongs to, at that backup; on Find Files' index results the
-    version count ("of 12 ›") is a button to the same place. A group's
+    version count ("12 ›") is a button to the same place. A group's
     backups under Other backups offer neither: its page has no Files tab.
     The search — the toolbar's field on the Backups tab — covers the open
     backup, says how many matches only other backups hold, and *Search All
@@ -622,9 +622,9 @@ the generator after editing it; the PNGs are checked in.
   with no sidebar row (the toolbar's field is its way in), its query in the toolbar's
   search field and a repository picker above the results; once the
   repository's index has read every backup it searches as you type, and
-  until then restic's walk runs on Return or *Search*. Until 2026-10-18 it
+  until then restic's walk runs on Return. Until 2026-10-18 it
   was a sheet, and its restores stacked a second sheet on it. *Repository ›
-  Find Files in Backups* (⇧⌘F) opens it, the field focused, on the
+  Find Files* (⇧⌘F) opens it, the field focused, on the
   repository in view — the selected repository's or plan's or group's, else
   the first (Activity, the console, nothing); a repository page's own search
   field (*Search all backups*) carries its query there on Return, and a
@@ -635,11 +635,11 @@ the generator after editing it; the PNGs are checked in.
   page's files across every backup (typed on Overview, the page turns to
   Files), on Backups the open backup.
   Each path is one row at the newest backup holding it, with how many
-  backups of that backup's plan or group do ("of 4 ›", Show Versions; a
-  plain "of 4" for a group's) — the count a plan's Files tab lists, so a
+  backups of that backup's plan or group do ("4 ›", Show Versions; a
+  plain "4" for a group's) — the count a plan's Files tab lists, so a
   copy a Home plan holds beside a Documents plan's is that plan's to list —
   whether the index or `restic find`
-  answered; a latest-snapshot-only search says "this one". Before the
+  answered; a latest-snapshot-only search says "—". Before the
   listing lands, rows name their backup by short ID in the Backup column,
   times filled in when it lands without moving the rows. ⌘- or ⇧-click
   selects several, and *Restore Selected* (Return) restores them in one
@@ -848,7 +848,7 @@ the generator after editing it; the PNGs are checked in.
 - **Words** — one term per thing, the HIG's Writing rule ("Create a list of
   common terms, and reference that list to keep your language consistent").
   What a backup run writes is a *backup* — a plan's backups, the Backups
-  tab, *Find Files in Backups*, the Backup column, "Removed 2 backups" —
+  tab, *Find Files*, the Backup column, "Removed 2 backups" —
   which restic calls a snapshot; restic's word stays where restic itself
   speaks: the console and the commands it runs, and the hook variable
   `SWIFTRESTIC_SNAPSHOT_ID`. Help's Terms say so under *Backup*. A run

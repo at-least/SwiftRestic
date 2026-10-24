@@ -52,7 +52,7 @@ struct RestorePaneSearch: Equatable, Sendable {
     /// floors, so no number is quoted.
     var note: String? {
         if !indexIsComplete {
-            return "The search index is still reading this repository — some matches may be missing."
+            return FilesSearchAnswer.searchStillReading
         }
         if isTruncated {
             return "The search stopped at the first \(limit) matches in this repository — narrow it to see more."

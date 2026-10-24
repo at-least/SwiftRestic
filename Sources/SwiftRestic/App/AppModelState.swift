@@ -156,7 +156,7 @@ enum SidebarItem: Hashable {
     case console
     /// Find Files: a page with no row — the toolbar's search field is its
     /// way in, and a row would be a second one — reached
-    /// from Repository ▸ Find Files in Backups (⇧⌘F) off a page with a
+    /// from Repository ▸ Find Files (⇧⌘F) off a page with a
     /// Files tab, a repository page's search field, and Search All
     /// Backups. Not a sheet: its restores would stack a second sheet on it.
     case findFiles

@@ -27,9 +27,9 @@ struct DiskFileTests {
         }
         #expect(size == 6)
         #expect(abs(read.timeIntervalSince(modified)) < 0.000_001)
-        #expect(DiskFile.at(folder.path) == .other)
+        #expect(DiskFile.at(folder.path) == .folder)
         // Not followed: the link itself is no file to compare.
-        #expect(DiskFile.at(link.path) == .other)
+        #expect(DiskFile.at(link.path) == .link)
         #expect(DiskFile.at(folder.appendingPathComponent("gone.txt").path) == .missing)
     }
 
@@ -66,9 +66,11 @@ struct DiskFileTests {
         #expect(DiskFile.localPath(of: "/Users/x/Documents2/a.txt", newestBackup: mine, localHostname: "this-mac") == nil)
     }
 
-    @Test("a missing file, something that is not a file, and an unreadable one each say so, read or not")
+    @Test("a missing file, a folder, a link, something that is not a file, and an unreadable one each say so, read or not")
     func otherStates() {
         #expect(DiskFile.missing.line(versions: [], isReading: true) == "Not on this Mac")
+        #expect(DiskFile.folder.line(versions: [], isReading: false) == "On this Mac it is a folder")
+        #expect(DiskFile.link.line(versions: [], isReading: false) == "On this Mac it is a link")
         #expect(DiskFile.other.line(versions: [], isReading: false) == "On this Mac it is not a file")
         #expect(DiskFile.unreadable("Permission denied. More text.").line(versions: [], isReading: false)
             == "On this Mac it could not be read: \(Format.firstSentence("Permission denied. More text."))")

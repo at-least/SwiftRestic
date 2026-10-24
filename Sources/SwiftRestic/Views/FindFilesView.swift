@@ -14,7 +14,7 @@ import SwiftUI
 /// its backfill, the search runs against the local FTS index — instant, every
 /// backup, no network — as the query is typed. Otherwise the search falls
 /// back to `restic find`, which walks the trees and takes as long as the
-/// history is deep, so it runs on Return or Search, not per keystroke.
+/// history is deep, so it runs on Return, not per keystroke.
 struct FindFilesView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -38,6 +38,10 @@ struct FindFilesView: View {
     @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var hasSearched = false
+    /// Whether the search that last landed covered only the latest backup —
+    /// the checkbox as it stood when that search ran, not as it stands now —
+    /// so a no-match state is true to what was searched.
+    @State private var searchedLatestOnly = false
     @State private var searchTask: Task<Void, Never>?
     /// True when the index search stopped early — at the hit cap, or (not
     /// expected, see `searchViaIndex`) a hit that came without its summary.
@@ -191,15 +195,13 @@ struct FindFilesView: View {
                     fillLateTimes()
                 }
                 Spacer()
-                // restic's walk runs when asked — Return in the field, or
-                // here. Meaningless against the index engine, which answers
-                // as typed and always searches every version — so not
-                // offered until the engine is known.
+                // restic's walk runs when asked — Return in the field.
+                // Meaningless against the index engine, which answers as
+                // typed and always searches every version — so not offered
+                // until the engine is known.
                 if indexComplete == false {
                     Toggle("Latest backup only", isOn: $latestOnly)
                         .toggleStyle(.checkbox)
-                    Button("Search", action: search)
-                        .disabled(!canSearch)
                 }
                 // Occupying their space whether or not a search runs:
                 // appearing here would shift the row at the exact moment of
@@ -221,7 +223,7 @@ struct FindFilesView: View {
                     ? "Searches every backup as you type."
                     : "Press Return to search.",
                 detail: indexComplete == true
-                    ? FilesSearchAnswer.matchRule + " The search runs on this Mac against every backup at once, however deep the history."
+                    ? FilesSearchAnswer.matchRule + " The search runs on this Mac, however deep the history."
                     : "Matching ignores case and takes shell patterns such as *.key. Searching every backup reads each one, so it takes longer the more history the repository holds. “Latest backup only” searches the repository's newest backup — which may not be the newest of every plan."
             )
         }
@@ -240,12 +242,16 @@ struct FindFilesView: View {
             ProgressView("Searching…").frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if rows.isEmpty {
             ContentUnavailableView(
-                hasSearched ? "No matches" : "Search a repository",
+                hasSearched
+                    ? "No matches"
+                    : (repositoryID == nil ? "Search a repository" : "Search every backup"),
                 systemImage: "magnifyingglass",
                 description: Text(
                     hasSearched
-                        ? "Nothing in this repository's backups matches that pattern."
-                        : "Find a file across every backup without knowing which one holds it."
+                        ? (searchedLatestOnly
+                            ? "Nothing in the latest backup matches. Uncheck Latest backup only to search older backups."
+                            : "Nothing in this repository's backups matches.")
+                        : "Find a file without knowing which backup holds it."
                 )
             )
         } else {
@@ -281,7 +287,7 @@ struct FindFilesView: View {
                     if let count = row.versionsCount, let open = showVersions(of: row) {
                         Button(action: open) {
                             HStack(spacing: 4) {
-                                Text("of \(count)")
+                                Text("\(count)")
                                     .monospacedDigit()
                                 Image(systemName: "chevron.forward")
                                     .font(.caption.weight(.semibold))
@@ -291,9 +297,9 @@ struct FindFilesView: View {
                         }
                         .buttonStyle(HoverableButtonStyle())
                         .help("Show every backup that holds this path, on the Files tab")
-                        .accessibilityLabel("Show versions: of \(count)")
+                        .accessibilityLabel("Show \(Format.plural(count, "version"))")
                     } else {
-                        Text(row.versionsCount.map { "of \($0)" } ?? "this one")
+                        Text(row.versionsCount.map(String.init) ?? "—")
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
@@ -353,7 +359,7 @@ struct FindFilesView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         // How many, not "across N snapshots": each row is
                         // its path at the newest backup holding it, so that
-                        // count — 1 beside a row's "of 78" — said nothing.
+                        // count — 1 beside a row's 78 — said nothing.
                         Text(Format.plural(rows.count, "match", "matches"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
@@ -471,8 +477,8 @@ struct FindFilesView: View {
                     let snapshots = model.snapshots(for: searchedRepository)
                     let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
                     // Each backup's page — its plan's or its group's — whose
-                    // backups a row's "of N" counts: the count a plan's
-                    // Files tab lists.
+                    // backups a row's Versions cell counts: the count a
+                    // plan's Files tab lists.
                     let shelves = model.shelves(for: searchedRepository)
                     let pages = Dictionary(uniqueKeysWithValues: snapshots.map {
                         ($0.id, shelves.page(of: $0, repositoryID: searchedRepository))
@@ -493,6 +499,9 @@ struct FindFilesView: View {
                 errorMessage = error.localizedDescription
             }
             hasSearched = true
+            // The property, not the local the search snapped: the state the
+            // no-match state reads is what the landed search covered.
+            self.searchedLatestOnly = searchedLatestOnly
             isSearching = false
             searchTask = nil
         }
@@ -582,6 +591,7 @@ struct FindFilesView: View {
         rows = []
         resultsTruncated = false
         hasSearched = false
+        searchedLatestOnly = false
         errorMessage = nil
         selection = []
     }

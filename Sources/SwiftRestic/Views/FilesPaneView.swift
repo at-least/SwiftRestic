@@ -215,21 +215,38 @@ struct FilesPaneHeader: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 // Where it is, Finder's "Where": the folder holding it, cut
-                // in the middle so both ends stay readable — a click shows
-                // the item in Finder while this Mac holds it.
+                // in the middle so both ends stay readable. While this Mac
+                // holds the item, a click shows it in Finder; once it does
+                // not, the folder is words only — no affordance on a dead
+                // control.
                 let folder = (ResticPath.parent(of: node.path) as NSString).abbreviatingWithTildeInPath
-                Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: node.path)])
-                } label: {
+                if isOnDisk == true {
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: node.path)])
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(folder)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Image(systemName: "chevron.forward")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .buttonStyle(HoverableButtonStyle())
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .help(node.path)
+                    .accessibilityLabel("\(folder), Show in Finder")
+                } else {
                     Text(folder)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .help(node.path)
                 }
-                .buttonStyle(.plain)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .disabled(isOnDisk != true)
-                .help(isOnDisk == true ? "\(node.path)\nClick to show it in Finder." : node.path)
                 if let standing {
                     Text(standing)
                         .font(.callout)

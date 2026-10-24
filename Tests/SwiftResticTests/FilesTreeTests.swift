@@ -491,7 +491,7 @@ struct FilesTreeTests {
     @Test("a search's footer says the ceiling first, then the index still reading, else nothing")
     func searchHitsNote() {
         #expect(FilesSearchAnswer.note(isTruncated: false, isComplete: true) == nil)
-        #expect(FilesSearchAnswer.note(isTruncated: false, isComplete: false) == FilesSearchAnswer.indexStillReading)
+        #expect(FilesSearchAnswer.note(isTruncated: false, isComplete: false) == FilesSearchAnswer.searchStillReading)
         #expect(FilesSearchAnswer.note(isTruncated: true, isComplete: false)
             == "Showing \(AppModel.indexSearchLimit) matches — narrow the search to see the rest.")
     }

@@ -442,7 +442,7 @@ struct SwiftResticApp: App {
     private var repositoryMenu: some Commands {
         CommandMenu("Repository") {
             let r = model.repositoryCommands(for: router.selection)
-            Button("Find Files in Backups") { ask(.showFind) }
+            Button("Find Files") { ask(.showFind) }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(!r.canFind)
             Button("Refresh All Backups") {
