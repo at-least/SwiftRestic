@@ -242,6 +242,26 @@ struct FilesBrowserView: View {
     }
 
     private var tree: some View {
+        VStack(spacing: 0) {
+            treeList
+            Divider()
+            treeFooter
+        }
+    }
+
+    /// The View menu's Show Deleted Items, on screen beside the tree it
+    /// changes. Only under the tree: the search's hits list deleted items
+    /// whatever it says.
+    private var treeFooter: some View {
+        @Bindable var router = router
+        return Toggle("Show Deleted Items", isOn: $router.filesShowsDeletedItems)
+            .toggleStyle(.checkbox)
+            .help("Also list items deleted from this Mac that its backups still hold")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+    }
+
+    private var treeList: some View {
         let rows = filesTree.rows(under: roots, open: router.openFolders, showsDeleted: router.filesShowsDeletedItems)
         let unread = newestUnread
         return ScrollViewReader { proxy in

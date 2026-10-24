@@ -76,7 +76,8 @@ the generator after editing it; the PNGs are checked in.
   hidden item — a dot name, or the hidden flag — is listed only when a
   backup holds it, so the excluded `.DS_Store` is no row in every folder.
   What only the backups hold, deleted since, is left out of the tree unless
-  *View ▸ Show Deleted Items* (off at every launch) lists it after each
+  *Show Deleted Items* — the checkbox under the tree, or *View ▸ Show
+  Deleted Items*, off at every launch — lists it after each
   folder's own items, dimmed with the day it was last backed up (*until Oct
   2*), a deleted folder opening onto what the backups held in it; the
   search finds it either way, and a folder's *As backed up* lists it as the

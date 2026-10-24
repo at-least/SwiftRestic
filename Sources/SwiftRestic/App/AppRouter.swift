@@ -63,8 +63,8 @@ final class AppRouter {
 
     /// Transient, never persisted: whether a plan's Files tree lists, after
     /// each folder's own items, what only its backups hold — items deleted
-    /// from this Mac since. View ▸ Show Deleted Items, off at every launch
-    /// (the user's call).
+    /// from this Mac since. The tree's own checkbox and View ▸ Show Deleted
+    /// Items, off at every launch (the user's call).
     var filesShowsDeletedItems = false
 
     /// A folder a backup's tree should open and select when it next loads
