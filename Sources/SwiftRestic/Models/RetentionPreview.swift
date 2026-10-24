@@ -59,7 +59,7 @@ struct RetentionPreview: Sendable, Equatable {
                 ? "Nothing to remove — this plan's only backup is within its rules."
                 : "Nothing to remove — all \(kept.count) of this plan's backups are within its rules."
         }
-        let stay = "\(kept.count) will stay."
+        let stay = "\(kept.count) would stay."
         if removed.count == 1 {
             return "1 of this plan's \(total) backups would be removed: the one from \(Format.timestamp(newest.time)). \(stay)"
         }
@@ -76,7 +76,7 @@ struct RetentionPreview: Sendable, Equatable {
         if removed.isEmpty {
             return total == 1 ? "The backup would stay." : "All \(Format.plural(total, "backup")) would stay."
         }
-        return "With this policy, \(Format.plural(total, "backup")) would become \(kept.count)."
+        return "With these rules, \(Format.plural(total, "backup")) would become \(kept.count)."
     }
 
     /// The run record's Detail after the real forget: what went, and

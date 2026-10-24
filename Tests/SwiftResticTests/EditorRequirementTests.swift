@@ -122,7 +122,7 @@ struct EditorRequirementTests {
             == "Enter the container and account name to save it.")
         draft.kind = .gcs
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
-            == "Enter the bucket and service account file to save it.")
+            == "Enter the bucket and service account JSON to save it.")
         draft.kind = .rest
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the server URL to save it.")

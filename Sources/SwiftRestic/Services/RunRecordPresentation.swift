@@ -21,7 +21,7 @@ enum RunFix: Equatable {
     /// (`RunRecord.refusedShares`): its editor holds the share's password.
     case editRepositoryShare(UUID)
     /// A network share holding the plan's folder refused to reconnect: the
-    /// plan editor's Files tab holds the share's password.
+    /// plan editor's Excluding tab holds the share's password.
     case editPlanShare(UUID)
     /// The repository's disk filled up during a backup
     /// (`RunRecord.repositoryFull`): a prune frees what the failed run
@@ -51,7 +51,7 @@ enum RunFix: Equatable {
         case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
         case .newPlan: "Back the folder up where it is now, with a new plan"
         case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
-        case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan's Files tab"
+        case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan editor's Excluding tab"
         case .pruneNow: "What the failed backup uploaded stays in the repository until a cleanup frees it"
         case .editPlanRetention: "The repository refuses to delete backups — turn this plan's retention off, or thin it where deletions are allowed"
         }
@@ -278,7 +278,7 @@ enum RunRecordPresentation {
             // stays until the next cleanup."), one short line.
             return run.detailText ?? run.outcome.displayName
         case .check:
-            // The verdict the run recorded — "2 errors — `restic repair` can
+            // The verdict the run recorded — "2 errors — restic repair can
             // recover some damage." or "No errors found." — its first
             // sentence; a record from before the verdict falls to the
             // outcome. The glyph already says the outcome; the count and the
@@ -294,7 +294,7 @@ enum RunRecordPresentation {
     }
 
     /// The Detail column's words for a row that continues a line — the
-    /// Maintenance card's "22 hours ago · 2 errors — `restic repair` can
+    /// Maintenance card's "22 hours ago · 2 errors — restic repair can
     /// recover some damage" — the outcome lowercased when the detail is
     /// only the outcome.
     static func verdictClause(for run: RunRecord) -> String {

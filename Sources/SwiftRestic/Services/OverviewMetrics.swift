@@ -362,7 +362,7 @@ enum OverviewMetrics {
             return ProtectionRow(
                 plan: plan,
                 among: plans,
-                stateText: checking ? "Checking…" : "List of backups not loaded yet",
+                stateText: checking ? "Checking…" : listingIdleText,
                 isKnown: false, isProtected: false, didFail: false
             )
         }
@@ -373,6 +373,10 @@ enum OverviewMetrics {
     static func listingFailureText(_ message: String) -> String {
         "Can't read backups — \(Format.firstSentence(message))"
     }
+
+    /// The listing not read yet, in the sidebar's words — the caveat under a
+    /// card and the repository page's tooltip say it the same way.
+    static let listingIdleText = "List of backups not loaded yet"
 
     /// The repository page's Protection line: how many of the repository's
     /// plans are protected, when its newest backup landed, and, while one is

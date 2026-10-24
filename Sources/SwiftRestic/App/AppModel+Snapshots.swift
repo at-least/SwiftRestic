@@ -115,7 +115,7 @@ extension AppModel {
                 if !statsFailureNoted.contains(repositoryID), configuration.repository(id: repositoryID) != nil {
                     statsFailureNoted.insert(repositoryID)
                     post(Banner(
-                        title: "Could not read “\(label(of: repository))”'s size",
+                        title: "Could not read the size of “\(label(of: repository))”",
                         message: error.localizedDescription,
                         level: .warning
                     ))

@@ -126,9 +126,6 @@ extension AppModel {
             + " from \(madeFrom). Nothing in “\(label(of: repository))” changes."
 
         let name = label(of: draft)
-        let becomes = snapshots.count == 1
-            ? "This backup becomes the plan's history."
-            : "These \(Format.plural(snapshots.count, "backup")) become the plan's history."
 
         return AdoptBriefing(
             historyLine: historyLine,
@@ -140,9 +137,8 @@ extension AppModel {
             needsConfirmation: hasForeignHost || isRecent,
             confirmation: ConfirmationCopy(
                 title: "Adopt “\(name)”?",
-                message: becomes
-                    + " Nothing is written to “\(label(of: repository))”."
-                    + " If another Mac still runs this plan, both Macs share one history and one retention policy"
+                message: "Nothing is written to “\(label(of: repository))”."
+                    + " If another Mac still runs this plan, both Macs share one history and the same retention settings"
                     + " — adopt only backups no other Mac is still making."
             )
         )

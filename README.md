@@ -248,7 +248,7 @@ the generator after editing it; the PNGs are checked in.
   checks and prunes on one repository. A name an earlier build stored is
   dropped at the next save; a check's or prune's record keeps what it was
   called then.
-  The editor's *Type* menu groups the kinds by where they are — on this Mac, on another machine, in the
+  The editor's *Type* menu groups the kinds by where they are — on this Mac, on another computer, in the
   cloud, through a gateway — and groups the kinds that way. Creating one runs
   `restic init`; a repository that cannot be reached is not saved. *Test
   Connection* on a path with no repository says what Save will do: create
@@ -329,11 +329,11 @@ the generator after editing it; the PNGs are checked in.
   *Backups* (last backup, count, retention) with *Back Up Now* — *Stop*
   while it runs; *Schedule* (and when it runs next) with *Pause* (*Pause
   Schedule* in the menus), its arrow offering the lengths, or *Resume*
-  (*Resume Schedule*) — none for a manual plan; *Excluding*, what it leaves out as the editor's Files tab says
+  (*Resume Schedule*) — none for a manual plan; *Excluding*, what it leaves out as the editor's Excluding tab says
   it — *Skip*, the switches that are on, each with its rules in its
   tooltip (*Developer files* naming its groups when not all are ticked),
   then *Also skip*, the user's own patterns as typed — with *Edit*, which
-  opens the editor on its Files tab, where these are changed (the rest of
+  opens the editor on its Excluding tab, where these are changed (the rest of
   how it runs, its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,
@@ -345,7 +345,7 @@ the generator after editing it; the PNGs are checked in.
   *Reveal in Finder* and *Exclude from “Documents”* menu, then "… and N
   more in Activity"; *Show in Activity* opens the run. The editor
   preselects the repository only when there is just one, and opens on
-  its Files tab: a *Skip* group of switches, then *Also skip*, the patterns
+  its Excluding tab: a *Skip* group of switches, then *Also skip*, the patterns
   the user added. *Finder files and the Trash* (`.DS_Store`, `~/.Trash`)
   and *App caches and system files* — the home folder's regenerable state
   (`~/Library/Caches`, `~/Library/Application Support/Steam`,
@@ -505,7 +505,7 @@ the generator after editing it; the PNGs are checked in.
     and the plans whose newest backup was skipped run again, as on a mount.
   - *Network shares.* A repository's folder or a plan's folder on a
     mounted network share (SMB) show which share in the repository editor,
-    under *Folder*, and on the plan editor's Files tab — "On the network
+    under *Folder*, and on the plan editor's Excluding tab — "On the network
     share smb://me@nas.local/NAS", read from the mounted volume — with a
     *Share password* field; the password is kept in the Keychain, and
     Settings › General lists the saved shares, *Remove* forgetting one.
@@ -688,7 +688,7 @@ the generator after editing it; the PNGs are checked in.
   `restic forget --dry-run --no-lock`, then asks). The repository page's
   *Last check* and *Last prune* read the newest such run in Activity and say
   how it ended when it did not succeed ("3 days ago · failed", "·
-  cancelled", or a check's own verdict, "· 2 errors — `restic repair` can
+  cancelled", or a check's own verdict, "· 2 errors — restic repair can
   recover some damage" — the words Activity's Detail column and the Recent
   problems row show, derived once from the record); the row leads to the run,
   whose drawer holds the log, Copy Details and, for a failed check or prune
@@ -798,7 +798,7 @@ the generator after editing it; the PNGs are checked in.
   Console*, or the sidebar's last row). A command that may change the backups — the ones it confirms
   first, plus `tag` and `copy` — re-reads the listing when it ends, so the
   sidebar, Files tabs and counts drop what a `forget` removed at once. A
-  check that found errors advises "`restic repair` can recover some
+  check that found errors advises "restic repair can recover some
   damage."; its Activity drawer and the Maintenance card offer *Open in
   Console*, opening the console on that repository with its password and
   typing nothing: `repair` stays a command the user writes, confirmed first.
@@ -828,8 +828,8 @@ the generator after editing it; the PNGs are checked in.
   server gone all read as that last line alone; a remote that never answers
   reads "rclone did not answer within a minute — its remote may be
   unreachable." (restic's own wait), and a missing rclone the repository
-  editor's "rclone is not installed. Install it with `brew install
-  rclone`." — checked against SFTP through rclone 1.75.2 in Docker. Every surface naming a run names its
+  editor's "rclone is not installed. Install it with brew install
+  rclone." — checked against SFTP through rclone 1.75.2 in Docker. Every surface naming a run names its
   repository too: the log sheet's header, notifications and failure alerts,
   the menu bar, Settings. The history keeps the newest *Items kept in Activity* records
   (Settings › General › History), trimming the oldest with their logs —
@@ -861,7 +861,7 @@ the generator after editing it; the PNGs are checked in.
   (restic's exit 3), a failing after-hook, retention skipped, a check that
   found errors — *completed with warnings* wherever it is named, beside the
   orange triangle;
-  a check's own count stays restic's ("2 errors — `restic repair` can
+  a check's own count stays restic's ("2 errors — restic repair can
   recover some damage"). Until 2026-10-18 that outcome had three spellings
   (*Completed with errors*, *Errors*, *finished with warnings*) and the two
   nouns were mixed.

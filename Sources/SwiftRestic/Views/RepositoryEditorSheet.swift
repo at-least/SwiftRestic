@@ -238,8 +238,6 @@ struct RepositoryEditorSheet: View {
         ) {
             Button("Discard Changes", role: .destructive) { dismiss() }
             Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The repository has unsaved changes.")
         }
     }
 
@@ -288,13 +286,13 @@ struct RepositoryEditorSheet: View {
                 // with its location (`locationFields`).
                 if isNew {
                     kindPicker
+                    Text(draft.kind.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     LabeledContent("Type") { Text(draft.kind.displayName) }
                 }
-                Text(draft.kind.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Location") { locationFields }
@@ -304,36 +302,37 @@ struct RepositoryEditorSheet: View {
                 // empty one needs its prompt to be seen at all.
                 SecureField("Repository password", text: $password, prompt: Text(passwordPrompt))
                 if isNew {
-                    SecureField("Confirm password", text: $confirmPassword, prompt: Text("Re-enter password"))
+                    SecureField("Confirm password", text: $confirmPassword, prompt: Text("Required"))
                 }
-                Text(encryptionHint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                if let hint = encryptionHint {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if !isNew {
                     changePasswordGroup
                 }
             }
 
-            if let label = draft.secretFieldLabel {
+            if draft.secretFieldLabel != nil || draft.kind == .sftp {
                 Section("Credentials") {
                     if draft.kind == .sftp {
-                        Text(label)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
                         Text(
-                            "restic runs without a terminal, so it can't ask for a key's passphrase or use ssh-agent: use a key without one, set in ~/.ssh/config. "
+                            "SSH is authenticated with your keys, and restic runs without a terminal, so it can't ask for a key's passphrase or use ssh-agent: use a key without one, set in ~/.ssh/config. "
                                 + "It can't accept a new server's key either — \(firstContact)"
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    } else if draft.kind == .rest {
-                        // A server without logins leaves both blank.
-                        TextField("User", text: $draft.restUser, prompt: Text("Optional"))
-                        SecureField(label, text: $providerSecret, prompt: Text("Optional"))
-                    } else {
-                        SecureField(label, text: $providerSecret)
+                    } else if let label = draft.secretFieldLabel {
+                        if draft.kind == .rest {
+                            // A server without logins leaves both blank.
+                            TextField("User", text: $draft.restUser, prompt: Text("Optional"))
+                            SecureField(label, text: $providerSecret, prompt: Text("Optional"))
+                        } else {
+                            SecureField(label, text: $providerSecret)
+                        }
                     }
                 }
             }
@@ -341,14 +340,14 @@ struct RepositoryEditorSheet: View {
             Section("Bandwidth") {
                 limitField("Upload limit (KiB/s)", $draft.uploadLimitKiBps)
                 limitField("Download limit (KiB/s)", $draft.downloadLimitKiBps)
-                Text("Backups upload; restores and checks that read data download — on a drive attached to this Mac too.")
+                Text("Backups upload; restores and checks that read data download. The limits apply to a drive attached to this Mac too.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Maintenance") {
-                Toggle("Check integrity periodically", isOn: $draft.maintenance.checkEnabled)
+                Toggle("Check periodically", isOn: $draft.maintenance.checkEnabled)
                 Stepper(value: $draft.maintenance.checkIntervalDays, in: 1 ... 365) {
                     LabeledContent("Every", value: Format.plural(draft.maintenance.checkIntervalDays, "day"))
                 }
@@ -410,7 +409,7 @@ struct RepositoryEditorSheet: View {
                 Button("Change Password") { isConfirmingPasswordChange = true }
                     .disabled(passwordChangeBlock != nil || isWorking)
             }
-            Text("There is no recovery if you lose the new password either — store it in your password manager.")
+            Text("There is no recovery if you lose the new password — store it in your password manager.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -465,7 +464,7 @@ struct RepositoryEditorSheet: View {
             Section("On this Mac") {
                 Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
             }
-            Section("On another machine") {
+            Section("On another computer") {
                 Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
                 Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
             }
@@ -603,13 +602,13 @@ struct RepositoryEditorSheet: View {
                     .menuStyle(.borderedButton)
                     .controlSize(.small)
                     .fixedSize()
-                    .help("Remotes configured with `rclone config` on this Mac")
+                    .help("Configured with rclone config on this Mac")
                 }
             }
             TextField("Path", text: $draft.rclonePath, prompt: Text("backups/mac"))
             ExpandableCaption(
                 summary: "rclone has to be installed and its remote already configured.",
-                detail: "restic launches the rclone binary itself: install it (`brew install rclone`) and set the remote up with `rclone config`."
+                detail: "restic launches the rclone binary itself: install it with brew install rclone and set the remote up with rclone config."
             )
         }
     }
@@ -631,13 +630,14 @@ struct RepositoryEditorSheet: View {
         )
     }
 
-    /// The Encryption section's caption. For an existing repository the
+    /// The Encryption section's caption, nil when the field's prompt already
+    /// says what a blank field means. For an existing repository the
     /// blank field means "unchanged" only while a password is stored; when
     /// none is — a configuration carried to another Mac, a Keychain item
     /// removed — the caption says so in the words every run and the
     /// listing already use (`ResticError.passwordMissing`), and the footer
     /// asks for the password before Save.
-    private var encryptionHint: String {
+    private var encryptionHint: String? {
         if isNew {
             return "Everything is encrypted with it, and it can't be recovered — keep it in your password manager."
         }
@@ -648,7 +648,7 @@ struct RepositoryEditorSheet: View {
             return ResticError.passwordMissing(repositoryName: draftLabel).localizedDescription
                 + " Enter it here to read it and back up to it."
         }
-        return "Leave blank to keep the one saved in your Keychain."
+        return nil
     }
 
     /// The password field's prompt: what an empty field means.
@@ -842,7 +842,7 @@ struct RepositoryEditorSheet: View {
             } catch {
                 model.post(Banner(
                     title: "Could not save the password for “\(share.volumeName)”",
-                    message: "“\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
+                    message: "The repository “\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
                     isError: true
                 ))
             }

@@ -617,7 +617,7 @@ enum MaintenanceRunEngine {
                 // card; restic's prune advice stays a second sentence.
                 record.detailText = errors == 0
                     ? "No errors found."
-                    : "\(Format.plural(errors, "error")) — `restic repair` can recover some damage."
+                    : "\(Format.plural(errors, "error")) — restic repair can recover some damage."
                 if summary?.suggestPrune == true {
                     record.detailText? += " A cleanup is suggested."
                 }

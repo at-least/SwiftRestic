@@ -167,7 +167,7 @@ struct ResticErrorTests {
         // No rclone to run: the repository editor's own words.
         let missing = "Fatal: unable to open repository at rclone:sftp:backups/restic: exec: \"rclone\": executable file not found in $PATH"
         #expect(ResticError.commandFailed(exitCode: 1, message: missing).errorDescription == ResticError.rcloneMissing)
-        #expect(ResticError.rcloneMissing == "rclone is not installed. Install it with `brew install rclone`.")
+        #expect(ResticError.rcloneMissing == "rclone is not installed. Install it with brew install rclone.")
 
         // Any other fatal error keeps its wording.
         #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription

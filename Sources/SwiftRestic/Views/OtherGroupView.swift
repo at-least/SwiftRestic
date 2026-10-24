@@ -107,7 +107,7 @@ struct OtherGroupView: View {
                 // same verb.
                 Button("Adopt as a Backup Plan") { onAdopt(planID) }
                     .controlSize(.small)
-                    .help("Rebuild a plan around these backups — their history becomes its own, and nothing is written to the repository")
+                    .help("Turn these backups into a plan — nothing is written to the repository")
             }
         }
         .padding(Theme.Space.cardPadding)

@@ -509,7 +509,7 @@ struct ResticIntegrationTests {
         let preview = try await model.previewRetention(plan: draft)
         #expect(preview.kept.count == 1)
         #expect(preview.removed.count == 1)
-        #expect(preview.adoptionLine == "With this policy, 2 backups would become 1.")
+        #expect(preview.adoptionLine == "With these rules, 2 backups would become 1.")
         // A dry run over an unsaved plan removed nothing.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 2)
     }

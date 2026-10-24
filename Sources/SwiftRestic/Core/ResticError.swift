@@ -58,7 +58,7 @@ enum ResticError: Error, LocalizedError, Equatable {
         switch self {
         case let .binaryNotFound(searched):
             return "Could not find the restic executable. Looked in: \(searched.joined(separator: ", ")). "
-                + "Install it with `brew install restic`, or set the path in Settings."
+                + "Install it with brew install restic, or set the path in Settings."
         case let .binaryNotExecutable(path):
             return "The file at \(path) is not executable."
         case let .commandFailed(code, message):
@@ -139,7 +139,7 @@ enum ResticError: Error, LocalizedError, Equatable {
         guard message.contains("Host key verification failed") else { return nil }
         if message.contains("has changed") {
             return "This server's SSH key has changed since this Mac last connected, and SSH refuses it: "
-                + "the server was reinstalled, or another machine is answering. If you expect the change, "
+                + "the server was reinstalled, or another computer is answering. If you expect the change, "
                 + "remove the old key with ssh-keygen -R and the server's name in Terminal, then connect once with ssh."
         }
         return "SSH does not know this server's key yet, and restic runs SSH without a terminal to confirm it. "
@@ -168,7 +168,7 @@ enum ResticError: Error, LocalizedError, Equatable {
 
     /// What a missing rclone is called everywhere: the repository editor's
     /// check before restic runs, and a run's failure after.
-    static let rcloneMissing = "rclone is not installed. Install it with `brew install rclone`."
+    static let rcloneMissing = "rclone is not installed. Install it with brew install rclone."
 
     /// Exit 10's cause and fix, the failure's message and its button's
     /// tooltip alike. A repository's location is fixed, so where it is now

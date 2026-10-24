@@ -141,14 +141,14 @@ struct HookEditor: View {
                             RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
                                 .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
                         )
-                    Text(verbatim: "Runs through /bin/sh with the app's own privileges, which are not sandboxed. Details of the run arrive as SWIFTRESTIC_* environment variables.")
+                    Text(verbatim: "Runs through /bin/sh with the app's own privileges, which are not sandboxed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Stepper(value: $hooks[index].timeoutSeconds, in: 1 ... 3600, step: 10) {
-                    LabeledContent("Timeout", value: "\(hooks[index].timeoutSeconds)s")
+                    LabeledContent("Timeout", value: Format.duration(Double(hooks[index].timeoutSeconds)))
                 }
 
                 if hooks[index].event.canAbort {
@@ -163,7 +163,7 @@ struct HookEditor: View {
                     LabeledContent("If it fails", value: "Recorded in Activity")
                 }
 
-                DisclosureGroup("Available variables") {
+                DisclosureGroup("Environment variables") {
                     Text(variableReference)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)

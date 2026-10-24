@@ -807,8 +807,8 @@ struct MaintenanceSchedulingTests {
         // A check that found damage says what it found, in its record's
         // own words — the Detail column's — not a second spelling.
         var withVerdict = check(.completedWithErrors, at: "2026-09-09 12:00:00")
-        withVerdict.detailText = "2 errors — `restic repair` can recover some damage. A cleanup is suggested."
-        #expect(last([withVerdict]) == "\(ago) · 2 errors — `restic repair` can recover some damage")
+        withVerdict.detailText = "2 errors — restic repair can recover some damage. A cleanup is suggested."
+        #expect(last([withVerdict]) == "\(ago) · 2 errors — restic repair can recover some damage")
         // A record from before the verdict was stored: the outcome itself.
         #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · completed with warnings")
         #expect(last([check(.cancelled, at: "2026-09-09 12:00:00")]) == "\(ago) · cancelled")

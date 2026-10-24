@@ -146,7 +146,7 @@ struct RepositoryDetailView: View {
         case let .failed(message):
             Text("—").help(message)
         case .idle:
-            Text("—").help("The list of backups has not finished loading.")
+            Text("—").help(OverviewMetrics.listingIdleText)
         }
     }
 
@@ -163,6 +163,7 @@ struct RepositoryDetailView: View {
                 Divider()
                 ProgressView(value: capacity.usedFraction)
                     .tint(Theme.tint)
+                    .accessibilityLabel(Text("Space on this disk"))
                 Text("\(Format.bytes(capacity.freeBytes)) free of \(Format.bytes(capacity.totalBytes)) on this disk")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -204,9 +205,6 @@ struct RepositoryDetailView: View {
                                 .textSelection(.enabled)
                                 .help(last)
                         }
-                        Text("You can keep working while it runs.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
 

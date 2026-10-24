@@ -478,6 +478,7 @@ struct OperationProgressView: View {
 
             ProgressView(value: progress.fraction)
                 .progressViewStyle(.linear)
+                .accessibilityLabel(Text(title))
 
             // The numbers once restic has reported any: before that — a
             // plan's before-backup hooks, restic starting up — they read
@@ -575,7 +576,7 @@ struct SnapshotListingCaveat: View {
             }
             .font(.caption)
         case .idle:
-            Label("The list of backups has not finished loading.", systemImage: "clock.arrow.circlepath")
+            Label(OverviewMetrics.listingIdleText, systemImage: "clock.arrow.circlepath")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .loaded:

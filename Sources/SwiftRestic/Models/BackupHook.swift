@@ -42,7 +42,7 @@ struct BackupHook: Identifiable, Codable, Sendable, Hashable {
             case .afterWarning: "After warnings"
             case .afterFailure: "After failure"
             case .afterAny: "After every backup"
-            case .beforeMaintenance: "Before check or cleanup"
+            case .beforeMaintenance: "Before a check or cleanup"
             case .afterMaintenanceSuccess: "After a successful check or cleanup"
             case .afterMaintenanceFailure: "After a failed check or cleanup"
             case .afterAnyMaintenance: "After every check or cleanup"

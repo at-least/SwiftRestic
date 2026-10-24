@@ -466,14 +466,14 @@ struct PlanDetailView: View {
         }
     }
 
-    /// What the plan leaves out, as the editor's Files tab says it: the
+    /// What the plan leaves out, as the editor's Excluding tab says it: the
     /// *Skip* switches that are on, each with its rules in its tooltip, and
     /// the user's own patterns as typed, tilde and all. The folder itself is
     /// the page's subtitle. When is the Schedule card's, what it keeps the
     /// Backups card's, where the sidebar's (the plan sits under its
     /// repository); the rest of how it runs, its hooks among it, is the
     /// editor's, which Plan ▸ Edit Plan and the row's Edit open — and the
-    /// card's own Edit, on the Files tab, where these rows are changed.
+    /// card's own Edit, on the Excluding tab, where these rows are changed.
     private func excludingCard(_ plan: BackupPlan) -> some View {
         let skips = PlanSkips.on(in: plan)
         return Card("Excluding") {

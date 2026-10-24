@@ -128,7 +128,7 @@ enum EditorRequirements {
         case .azure:
             if draft.azureContainer.isEmpty || draft.azureAccountName.isEmpty { return "Enter the container and account name to save it." }
         case .gcs:
-            if draft.gcsBucket.isEmpty || draft.gcsCredentialsPath.isEmpty { return "Enter the bucket and service account file to save it." }
+            if draft.gcsBucket.isEmpty || draft.gcsCredentialsPath.isEmpty { return "Enter the bucket and service account JSON to save it." }
         case .rest:
             if draft.restURL.isEmpty { return "Enter the server URL to save it." }
         case .rclone:

@@ -362,7 +362,7 @@ struct RootView: View {
         // destination-before-kind picker only exists before a repository exists.
         case "newRepository": editingRepository = Repository()
         // Same for the *new*-plan sheet: its first-run footer caption and
-        // the path and repository header over the Files tab are what a
+        // the path and repository header over the Excluding tab are what a
         // fresh creator sees, not an existing plan.
         case "newPlan": editingPlan = BackupPlan()
         case "planRetention": editingPlan = model.configuration.plans.first
@@ -396,7 +396,7 @@ struct RootView: View {
         applyCaptureTab()
         guard case let .plan(planID) = target.id else { return }
         // The adopt sheet over the page it adopts: `adopt` opens it on the
-        // Files tab, `adoptRetention` on the Retention tab, where the dry-run
+        // Excluding tab, `adoptRetention` on the Retention tab, where the dry-run
         // preview and the anchored count live.
         let sheet = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"]
         if pane == .adoptable, sheet == "adopt" || sheet == "adoptRetention" {

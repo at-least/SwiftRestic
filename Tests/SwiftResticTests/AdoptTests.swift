@@ -297,8 +297,8 @@ struct AdoptTests {
         #expect(briefing.needsConfirmation)
         #expect(briefing.confirmation.title == "Adopt “Movies”?")
         #expect(briefing.confirmation.message
-            == "This backup becomes the plan's history. Nothing is written to “Home Disk”."
-                + " If another Mac still runs this plan, both Macs share one history and one retention policy"
+            == "Nothing is written to “Home Disk”."
+                + " If another Mac still runs this plan, both Macs share one history and the same retention settings"
                 + " — adopt only backups no other Mac is still making.")
     }
 
@@ -566,9 +566,9 @@ struct AdoptionPreviewLineTests {
     @Test("a thinning policy says what the history becomes; a keeping one says it all stays")
     func lineShapes() {
         #expect(RetentionPreview(kept: [snapshot("b")], removed: [snapshot("a")]).adoptionLine
-            == "With this policy, 2 backups would become 1.")
+            == "With these rules, 2 backups would become 1.")
         #expect(RetentionPreview(kept: [snapshot("c"), snapshot("b")], removed: [snapshot("a")]).adoptionLine
-            == "With this policy, 3 backups would become 2.")
+            == "With these rules, 3 backups would become 2.")
         #expect(RetentionPreview(kept: [snapshot("b"), snapshot("a")], removed: []).adoptionLine
             == "All 2 backups would stay.")
         #expect(RetentionPreview(kept: [snapshot("a")], removed: []).adoptionLine

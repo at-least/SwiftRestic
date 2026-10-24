@@ -164,11 +164,10 @@ struct OtherBackupsCard: View {
                 }
             }
             .buttonStyle(HoverableButtonStyle())
-            .accessibilityLabel(([label.title] + [label.caption?.text].compactMap { $0 }).joined(separator: ": ") + ". Show group page")
+            .accessibilityLabel(([label.title] + [label.caption?.text].compactMap { $0 }).joined(separator: ": ") + ". Show these backups")
             Button("Adopt as a Backup Plan") { onAdoptGroup(repositoryID, planID) }
                 .controlSize(.small)
-                // The group page's own words for the verb it opens.
-                .help("Rebuild a plan around these backups — their history becomes its own, and nothing is written to the repository")
+                .help("Turn these backups into a plan — nothing is written to the repository")
                 .accessibilityLabel("Adopt \(label.title) as a backup plan")
             DashboardRowChevron()
         }

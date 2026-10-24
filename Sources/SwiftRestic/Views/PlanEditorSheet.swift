@@ -11,7 +11,7 @@ struct PlanEditorSheet: View {
     /// a reflex must not silently throw away ten pasted exclude patterns.
     @State private var initial: BackupPlan?
     @State private var isConfirmingDiscard = false
-    /// Files first: the header above the tabs already holds the path and
+    /// Excluding first: the header above the tabs already holds the path and
     /// the repository, and what to leave out is the next question.
     @State private var tab: Tab = .files
     @FocusState private var isPathFocused: Bool
@@ -109,7 +109,7 @@ struct PlanEditorSheet: View {
             identityHeader(briefing)
             SheetTabs(selection: $tab, tabs: Tab.allCases, title: { tab in
                 switch tab {
-                case .files: "Files"
+                case .files: "Excluding"
                 case .schedule: "Schedule"
                 case .retention: "Retention"
                 case .hooks: "Hooks"
@@ -201,7 +201,7 @@ struct PlanEditorSheet: View {
             draft.repositoryID = EditorRequirements.initialRepositoryID(
                 draft.repositoryID, among: model.configuration.repositories
             )
-            // A new plan starts with its path; the Files tab below waits.
+            // A new plan starts with its path; the Excluding tab below waits.
             if mode == .new { isPathFocused = true }
             // Snapshot after the defaulting above, so an untouched sheet is
             // not born dirty.
@@ -214,8 +214,6 @@ struct PlanEditorSheet: View {
         ) {
             Button("Discard Changes", role: .destructive) { dismiss() }
             Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The plan has unsaved changes.")
         }
         // Only armed when the briefing's facts ask for it — a group that is
         // entirely this Mac's and older than two days adopts in one click,
@@ -383,6 +381,7 @@ struct PlanEditorSheet: View {
                     HStack {
                         TextField("Folder or file", text: $draft.path, prompt: Text("/Users/you/Documents"))
                             .labelsHidden()
+                            .accessibilityLabel("Folder or file")
                             .focused($isPathFocused)
                         Button("Choose") {
                             if let url = FilePicker.chooseFolderOrFile(message: "Choose the folder or file this plan backs up") {
@@ -409,6 +408,7 @@ struct PlanEditorSheet: View {
                     }
                     .labelsHidden()
                     .fixedSize()
+                    .accessibilityLabel("Repository")
                 case .adopt, .editing:
                     // The briefing's own words. While the group is gone —
                     // its page revalidating away — the bare name still says
@@ -523,7 +523,7 @@ struct PlanEditorSheet: View {
             } header: {
                 Text("Also skip")
             } footer: {
-                Text("Patterns follow restic’s rules: * matches within a name, ** across folders.")
+                Text("In a pattern, * matches within a name and ** across folders.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -581,7 +581,7 @@ struct PlanEditorSheet: View {
     /// `--exclude-cloud-files` to macOS.
     private var cloudFilesCaption: String {
         if let version = ResticVersion(parsing: model.resticVersion), !version.excludesCloudFilesOnMac {
-            return "Needs restic 0.19 or later."
+            return "Files kept only in iCloud Drive or OneDrive aren't downloaded or backed up. Needs restic 0.19 or later."
         }
         return "Files kept only in iCloud Drive or OneDrive aren't downloaded or backed up."
     }
@@ -602,7 +602,7 @@ struct PlanEditorSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Picker("Run", selection: $draft.schedule.frequency) {
+            Picker("How often", selection: $draft.schedule.frequency) {
                 ForEach(Schedule.Frequency.allCases) { frequency in
                     Text(frequency.displayName).tag(frequency)
                 }
@@ -752,11 +752,13 @@ struct PlanEditorSheet: View {
             }
 
             Section {
-                LabeledContent("Summary", value: draft.retention.summary)
-                if draft.retention.isEnabled, let projection {
+                Text(draft.retention.summary)
+                if mode != .adopt, draft.retention.isEnabled, let projection {
                     // Retention is where users decide what gets deleted; the
                     // bucket arithmetic is impossible to eyeball, so project
-                    // the outcome instead of restating the rules.
+                    // the outcome instead of restating the rules. Not in
+                    // adopt mode: the dry run below answers from the real
+                    // history, where this simulation can disagree with it.
                     Label(
                         "≈ \(Format.plural(projection.keptSnapshots, "backup")) would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule.",
                         systemImage: "chart.bar.doc.horizontal"
@@ -768,12 +770,14 @@ struct PlanEditorSheet: View {
                 if mode == .adopt, draft.retention.isEnabled, draft.retention.isSafeToRun {
                     AdoptRetentionPreview(draft: draft)
                 }
-                // Anchor the projection to the snapshot count that exists
-                // today, so "≈ 41 would survive" can be read against a real
-                // number rather than floating free. Keyed on what the draft's
-                // plan tag already holds here — an adopt draft's group counts,
-                // the one history it is about to own.
-                if let repositoryID = draft.repositoryID,
+                // Says the count only where no line on the tab already has
+                // it: under the projection it anchors "≈ 41 would survive",
+                // an adopting safe policy the dry run's answer counts, and
+                // otherwise this is the tab's only count. Keyed on what the
+                // draft's plan tag already holds here — an adopt draft's
+                // group counts, the one history it is about to own.
+                if mode != .adopt || !draft.retention.isEnabled || !draft.retention.isSafeToRun,
+                   let repositoryID = draft.repositoryID,
                    case .loaded = model.snapshotListingOutcome(for: repositoryID)
                 {
                     let count = model.snapshots(for: repositoryID, planID: draft.id).count
@@ -846,7 +850,7 @@ struct PlanEditorSheet: View {
 }
 
 /// The adopt sheet's dry run over the draft itself: restic's own answer, not
-/// the synthetic projection above it, because the question here is about
+/// RetentionProjection's simulation, because the question here is about
 /// backups that already exist — what the rules the user just turned on would
 /// leave of the history being adopted. `previewRetention(planID:)` cannot
 /// serve this sheet (the plan is not saved yet), so the draft travels to

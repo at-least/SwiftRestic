@@ -984,9 +984,9 @@ struct MaintenanceRunEngineTests {
         // One sentence for the verdict, so the Detail column carries it
         // whole; restic's advice is the second.
         #expect(sink.deliveredRecords[0].detailText
-            == "2 errors — `restic repair` can recover some damage. A cleanup is suggested.")
+            == "2 errors — restic repair can recover some damage. A cleanup is suggested.")
         #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0])
-            == "2 errors — `restic repair` can recover some damage")
+            == "2 errors — restic repair can recover some damage")
     }
 
     @Test("a missing password records nothing and stamps nothing")

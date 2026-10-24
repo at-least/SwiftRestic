@@ -399,11 +399,11 @@ struct RunRecordPresentationTests {
             record.detailText = verdict
             return record
         }
-        let damaged = check(.completedWithErrors, "2 errors — `restic repair` can recover some damage. A cleanup is suggested.")
-        #expect(RunRecordPresentation.detail(for: damaged) == "2 errors — `restic repair` can recover some damage")
-        #expect(RunRecordPresentation.verdictClause(for: damaged) == "2 errors — `restic repair` can recover some damage")
+        let damaged = check(.completedWithErrors, "2 errors — restic repair can recover some damage. A cleanup is suggested.")
+        #expect(RunRecordPresentation.detail(for: damaged) == "2 errors — restic repair can recover some damage")
+        #expect(RunRecordPresentation.verdictClause(for: damaged) == "2 errors — restic repair can recover some damage")
         #expect(RunRecordPresentation.problemRowCaption(for: damaged)
-            == "Completed with warnings · 2 errors — `restic repair` can recover some damage")
+            == "Completed with warnings · 2 errors — restic repair can recover some damage")
         // A verdict stored before 2026-10-09 put a period before the
         // command, which the sentence cut leaves alone: shown whole, its
         // own final period dropped like every entry's.

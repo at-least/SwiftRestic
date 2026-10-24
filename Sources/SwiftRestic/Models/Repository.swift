@@ -287,8 +287,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// backend needs no second credential).
     var secretFieldLabel: String? {
         switch kind {
-        case .local, .gcs, .rclone: nil
-        case .sftp: "SSH is authenticated with your keys — see the note below"
+        case .local, .gcs, .rclone, .sftp: nil
         case .rest: "Server password"
         case .s3: "Secret access key"
         case .b2: "Application key"

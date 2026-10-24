@@ -191,7 +191,7 @@ enum Scheduler {
         // the data verified.
         case .succeeded: return newest.checkRead.map { "\(ago) · \($0)" } ?? ago
         // The record's own verdict, the Detail column's words — "2 errors —
-        // `restic repair` can recover some damage" — so the page spells the
+        // restic repair can recover some damage" — so the page spells the
         // fact once.
         case .completedWithErrors: return "\(ago) · \(RunRecordPresentation.verdictClause(for: newest))"
         case .failed, .cancelled, .skipped: return "\(ago) · \(newest.outcome.displayName.lowercased())"
