@@ -93,6 +93,10 @@ enum NotificationPoster {
                 return "HTTP \(http.statusCode)"
             }
             return nil
+        } catch let error as URLError where error.code == .cancelled {
+            // URLSession's bare "cancelled" names no actor and collides with
+            // the app's word for a cancelled run.
+            return "The request was cancelled"
         } catch {
             return error.localizedDescription
         }

@@ -1312,7 +1312,11 @@ struct LoginItemTests {
     func stateDescriptions() {
         #expect(LoginItem.description(of: .enabled) == "SwiftRestic will start at login.")
         #expect(LoginItem.description(of: .notFound).hasPrefix("macOS could not find this copy"))
-        #expect(LoginItem.description(of: .needsApproval).hasPrefix("Waiting for approval"))
+        // The pane's short form sits above its own Open Login Items button;
+        // the banner's full form has no button and spells the pane out.
+        #expect(LoginItem.needsApprovalShort == "Waiting for approval.")
+        #expect(LoginItem.description(of: .needsApproval)
+            == "Waiting for approval in System Settings › General › Login Items.")
         #expect(LoginItemAdvice.enabledConfirmation == LoginItem.description(of: .enabled))
     }
 

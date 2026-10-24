@@ -56,7 +56,7 @@ enum LoginItemAdvice {
         case .startAtLogin:
             "Scheduled backups run only while SwiftRestic is open, and it won't reopen after a restart or logout."
         case .awaitingApproval:
-            "SwiftRestic starts at login once you allow it in System Settings › General › Login Items. Until then, scheduled backups stop after a restart or logout."
+            "SwiftRestic starts at login once you allow it in Login Items. Until then, scheduled backups stop after a restart or logout."
         case .moveToApplications:
             "Scheduled backups run only while SwiftRestic is open. It can start at login once it is in your Applications folder."
         }

@@ -79,7 +79,6 @@ struct RootView: View {
     private var detail: some View {
         RootDetailView(
             pendingCaptureRestore: $pendingCaptureRestore,
-            onAddRepository: { editingRepository = Repository() },
             onAddPlan: startNewPlan(in:),
             onAdoptGroup: adoptGroup,
             onRevalidateSelection: revalidateSelection,

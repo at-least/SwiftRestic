@@ -107,6 +107,9 @@ struct BannerView: View {
     @Environment(AppModel.self) private var model
     let banner: Banner
     var isDismissible = true
+    /// The fix's own button where the banner's words would only say where
+    /// it is — the restic-missing banner's "Open Settings".
+    var settingsAction: (() -> Void)? = nil
 
     /// The status palette's glyph and hue for the banner's level, so a
     /// colour means one thing app-wide: a failure's red octagon and a
@@ -178,6 +181,10 @@ struct BannerView: View {
                 // where it is.
                 if let link = banner.link {
                     Button(link.title) { NSWorkspace.shared.open(link.url) }
+                        .controlSize(.small)
+                }
+                if let settingsAction {
+                    Button("Open Settings", action: settingsAction)
                         .controlSize(.small)
                 }
             }
@@ -1076,7 +1083,6 @@ struct FullDiskAccessButton: View {
 
     var body: some View {
         Button("Open Full Disk Access Settings") { model.openFullDiskAccessSettings() }
-            .help("System Settings › Privacy & Security › Full Disk Access")
     }
 }
 

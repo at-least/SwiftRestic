@@ -84,7 +84,7 @@ struct ServerProbeTests {
 /// A TCP socket listening on a free loopback port. The kernel completes a
 /// connection's handshake into the accept queue, so it answers without an
 /// accept loop.
-private enum LocalPort {
+enum LocalPort {
     struct Error: Swift.Error { var call: String }
 
     static func listening() throws -> (socket: Int32, port: UInt16) {

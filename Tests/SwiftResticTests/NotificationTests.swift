@@ -355,6 +355,41 @@ struct NotificationSafetyTests {
     }
 }
 
+/// The poster's own failure words, reported verbatim beside Settings' Send
+/// Test Notification button and in the channels' banners.
+@Suite("NotificationPoster")
+struct NotificationPosterTests {
+    @Test("a cancelled send reads as the app's sentence, not URLSession's bare word")
+    func cancelledSend() async throws {
+        // A listener that completes the handshake and never answers parks the
+        // request mid-flight: accept() returning proves URLSession is
+        // connected and waiting, so the cancel hits the running request —
+        // the state a stalled endpoint puts the test button in. A cancel
+        // that landed before the request started would not take URLSession's
+        // own cancellation path, which is the branch this pins.
+        let listening = try LocalPort.listening()
+        _ = fcntl(listening.socket, F_SETFL, fcntl(listening.socket, F_GETFL) | O_NONBLOCK)
+        defer { close(listening.socket) }
+
+        let payload = NotificationPayload.Request(
+            url: URL(string: "http://127.0.0.1:\(listening.port)/ping")!,
+            body: Data("test".utf8),
+            contentType: "text/plain"
+        )
+        let send = Task { await NotificationPoster.send(payload) }
+        var connection: Int32 = -1
+        for _ in 0 ..< 500 where connection < 0 {
+            connection = accept(listening.socket, nil, nil)
+            if connection < 0 { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try #require(connection >= 0, "the request never connected")
+        close(connection)
+
+        send.cancel()
+        #expect(await send.value == "The request was cancelled")
+    }
+}
+
 /// The chat-facing summary must count every warning restic reported, not the
 /// five-item sample the event carries for excerpts.
 @Suite("warning counts")

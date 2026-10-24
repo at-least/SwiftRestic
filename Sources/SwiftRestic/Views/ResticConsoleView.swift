@@ -47,7 +47,7 @@ struct ResticConsoleView: View {
                 ContentUnavailableView(
                     "No history yet",
                     systemImage: "clock.arrow.circlepath",
-                    description: Text("Commands you run are kept here, and in future sessions unless they carry a secret.")
+                    description: Text("Commands you run are kept here for future sessions, unless they carry a secret.")
                 )
             } else {
                 List {
@@ -80,52 +80,64 @@ struct ResticConsoleView: View {
     private var controls: some View {
         @Bindable var console = model.console
         return VStack(alignment: .leading, spacing: 10) {
-            Picker("Repository", selection: $console.repositoryID) {
-                Text("Choose").tag(UUID?.none)
-                ForEach(model.configuration.repositories) { repository in
-                    Text(model.label(of: repository)).tag(UUID?.some(repository.id))
+            // One label column, one value column: the popup and the field
+            // start at the same x, as the editors' grids do.
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 10) {
+                GridRow {
+                    Text("Repository")
+                        .gridColumnAlignment(.trailing)
+                    Picker("Repository", selection: $console.repositoryID) {
+                        Text("Choose").tag(UUID?.none)
+                        ForEach(model.configuration.repositories) { repository in
+                            Text(model.label(of: repository)).tag(UUID?.some(repository.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .accessibilityLabel("Repository")
                 }
-            }
-
-            HStack(spacing: 6) {
-                Text("restic")
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                TextField("snapshots --compact", text: $console.commandText)
-                    .font(.system(.body, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { console.run() }
-                    // Terminal reflexes: ↑ walks into the history, ↓ walks
-                    // back out to what was being typed. The model owns the
-                    // walk; an .ignored lets the field keep its own handling.
-                    .onKeyPress(.upArrow) {
-                        if let entry = console.recallPrevious(current: console.commandText) {
-                            console.commandText = entry
-                            return .handled
-                        }
-                        return .ignored
+                GridRow {
+                    Text("restic")
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        TextField("Command", text: $console.commandText, prompt: Text("snapshots --compact"))
+                            .font(.system(.body, design: .monospaced))
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { console.run() }
+                            // Terminal reflexes: ↑ walks into the history, ↓ walks
+                            // back out to what was being typed. The model owns the
+                            // walk; an .ignored lets the field keep its own handling.
+                            .onKeyPress(.upArrow) {
+                                if let entry = console.recallPrevious(current: console.commandText) {
+                                    console.commandText = entry
+                                    return .handled
+                                }
+                                return .ignored
+                            }
+                            .onKeyPress(.downArrow) {
+                                if let entry = console.recallNext() {
+                                    console.commandText = entry
+                                    return .handled
+                                }
+                                return .ignored
+                            }
+                        Button("Run") { console.run() }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!console.canRun)
+                        // Always occupying their space, only visible while running:
+                        // appearing here would shift the row at the exact moment of
+                        // a click.
+                        Button("Stop") { console.cancelRunningCommand() }
+                            .disabled(!console.isRunning)
+                            .opacity(console.isRunning ? 1 : 0)
+                            .accessibilityHidden(!console.isRunning)
+                        ProgressView()
+                            .controlSize(.small)
+                            .opacity(console.isRunning ? 1 : 0)
+                            .accessibilityHidden(!console.isRunning)
                     }
-                    .onKeyPress(.downArrow) {
-                        if let entry = console.recallNext() {
-                            console.commandText = entry
-                            return .handled
-                        }
-                        return .ignored
-                    }
-                Button("Run") { console.run() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!console.canRun)
-                // Always occupying their space, only visible while running:
-                // appearing here would shift the row at the exact moment of
-                // a click.
-                Button("Stop") { console.cancelRunningCommand() }
-                    .disabled(!console.isRunning)
-                    .opacity(console.isRunning ? 1 : 0)
-                    .accessibilityHidden(!console.isRunning)
-                ProgressView()
-                    .controlSize(.small)
-                    .opacity(console.isRunning ? 1 : 0)
-                    .accessibilityHidden(!console.isRunning)
+                }
             }
 
             ExpandableCaption(

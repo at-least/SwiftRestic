@@ -12,6 +12,7 @@ import SwiftUI
 struct RootDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    @Environment(\.openSettings) private var openSettings
 
     /// Debug-capture state: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record
     /// rows the pane needs land with the first listing, so the selection
@@ -20,7 +21,6 @@ struct RootDetailView: View {
     /// call site free of `#if` argument-list gymnastics.
     @Binding var pendingCaptureRestore: Bool
 
-    let onAddRepository: () -> Void
     /// Opens the plan editor, with the repository preset when one is given.
     let onAddPlan: (_ repositoryID: UUID?) -> Void
     /// Opens the adopt sheet for an Other backups group — its page or the
@@ -56,7 +56,8 @@ struct RootDetailView: View {
                         message: problem,
                         isError: true
                     ),
-                    isDismissible: false
+                    isDismissible: false,
+                    settingsAction: { openSettings() }
                 )
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
@@ -111,7 +112,6 @@ struct RootDetailView: View {
                     ActivityView()
                 case .none:
                     WelcomeView(
-                        onAddRepository: onAddRepository,
                         onAddPlan: { onAddPlan(nil) }
                     )
                 }
@@ -169,7 +169,6 @@ private struct BannerQueue: View {
 
 struct WelcomeView: View {
     @Environment(AppModel.self) private var model
-    let onAddRepository: () -> Void
     let onAddPlan: () -> Void
 
     var body: some View {
@@ -178,7 +177,7 @@ struct WelcomeView: View {
 
             // The app's own mark — the same construction the tray wears — at
             // hero scale, bare: a welcome screen's job is the mark and the
-            // two buttons, and a macOS welcome wears no plate behind its mark.
+            // button, and a macOS welcome wears no plate behind its mark.
             Image(nsImage: MenuBarLogo.heroImage)
                 .resizable()
                 .foregroundStyle(Theme.tint)
@@ -190,15 +189,12 @@ struct WelcomeView: View {
                 .font(.largeTitle.weight(.bold))
 
             VStack(spacing: 8) {
-                HStack(spacing: 10) {
-                    Button("Add Repository", action: onAddRepository)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                    // With no repository yet it starts there and carries
-                    // on to the plan (`RootView.startNewPlan`).
-                    Button("New Backup Plan", action: onAddPlan)
-                        .controlSize(.large)
-                }
+                // The one prominent step. With no repository yet it starts
+                // there and carries on to the plan (`RootView.startNewPlan`),
+                // so "Add Repository" would be its own first half.
+                Button("New Backup Plan", action: onAddPlan)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 if model.configuration.repositories.isEmpty {
                     Text("A backup plan backs up to a repository — New Backup Plan sets one up first.")
                         .font(.caption)

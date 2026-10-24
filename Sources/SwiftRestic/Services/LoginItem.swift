@@ -25,12 +25,18 @@ enum LoginItem {
         }
     }
 
+    /// The stem both needs-approval strings share: the Settings pane's short
+    /// form sits above its own "Open Login Items" button, the banner's full
+    /// form has no button and spells the pane out.
+    private static let awaitingApproval = "Waiting for approval"
+    static let needsApprovalShort = awaitingApproval + "."
+
     /// What to tell the user about a state.
     static func description(of state: LoginItemState) -> String {
         switch state {
         case .enabled: "SwiftRestic will start at login."
         case .off: "SwiftRestic will not start at login, so scheduled backups only run while it is open."
-        case .needsApproval: "Waiting for approval in System Settings › General › Login Items."
+        case .needsApproval: awaitingApproval + " in System Settings › General › Login Items."
         case .notFound: "macOS could not find this copy of SwiftRestic. Move it to your Applications folder and try again."
         }
     }

@@ -77,14 +77,7 @@ struct SettingsView: View {
                 LabeledContent("Status") {
                     FullDiskAccessStatusLabel(status: model.fullDiskAccess)
                 }
-                if model.fullDiskAccess == .granted {
-                    // Only what the grant controls: a file the account can't
-                    // read stays unreadable, and the run's hint says so.
-                    Text("Full Disk Access is on for SwiftRestic.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
+                if model.fullDiskAccess != .granted {
                     // Unknown is treated as missing, as the run hints do:
                     // nothing observable says the grant is there.
                     Text("Without it, Mail, Messages, Safari and other apps' data can't be read, and backups that include them end with warnings.")
@@ -129,9 +122,14 @@ struct SettingsView: View {
                 ))
                 .disabled(!model.loginItemInstallable && !model.startsAtLogin)
                 // The model's copies of the daemon's answer: a read here
-                // would be an XPC round trip on every render.
+                // would be an XPC round trip on every render. The
+                // needsApproval state keeps its short form — the button
+                // below opens the pane, and the banner's full form has no
+                // button to point with.
                 Text(model.loginItemInstallable
-                    ? LoginItem.description(of: model.loginItemState)
+                    ? (model.loginItemNeedsApproval
+                        ? LoginItem.needsApprovalShort
+                        : LoginItem.description(of: model.loginItemState))
                     : LoginItem.notInstalledMessage)
                     .font(.caption)
                     .foregroundStyle(model.loginItemNeedsApproval ? Theme.warning : .secondary)
@@ -142,7 +140,7 @@ struct SettingsView: View {
 
                 Toggle("Pause scheduled backups on battery power", isOn: $model.configuration.settings.pauseOnBattery)
                 Toggle("Pause scheduled backups on a metered network", isOn: $model.configuration.settings.pauseOnMeteredNetwork)
-                    .help("A network macOS reports as expensive, such as cellular, or as constrained. Back Up Now still runs.")
+                    .help("macOS counts cellular and Low Data Mode as metered. Back Up Now still runs")
                 // Held, the next run is whenever the hold lifts — say why
                 // instead of a date the scheduler will not keep.
                 if let hold = model.scheduleHold {
@@ -225,14 +223,13 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                // The relationship between the two toggle layers, stated
-                // where both are visible: these gate this Mac's notification
-                // centre; the Webhooks tab's channels carry their own
-                // per-event switches, and neither gates the other.
-                ExpandableCaption(
-                    summary: "These switches control this Mac's notifications.",
-                    detail: "Webhooks have their own per-event switches and don't follow them."
-                )
+                // The one fact the visible switches cannot say: the Webhooks
+                // tab's channels carry their own per-event switches, and
+                // neither layer gates the other.
+                Text("Webhooks have their own per-event switches; these don't control them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .formStyle(.grouped)
@@ -246,7 +243,7 @@ struct SettingsView: View {
                     TextField(
                         "Path",
                         text: $model.configuration.settings.resticPathOverride,
-                        prompt: Text(model.binary?.url.path ?? (model.binaryProblem == nil ? "Searching the usual locations" : ""))
+                        prompt: Text(model.binary?.url.path ?? (model.binaryProblem == nil ? "Searching the usual locations…" : ""))
                     )
                     Button("Choose") {
                         if let url = FilePicker.chooseExecutable() {
@@ -263,8 +260,10 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.warning)
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
+                    // Beside its cause: the healthy pane has nothing to find
+                    // again, so it ends at the Version row.
+                    Button("Find Again") { Task { await model.resolveBinary() } }
                 }
-                Button("Find Again") { Task { await model.resolveBinary() } }
             }
 
             // restic keeps one cache folder per repository it has opened
@@ -453,7 +452,7 @@ struct NotificationChannelsTab: View {
                 testOutcome = nil
             }
         } message: {
-            Text("The webhook URL is removed from SwiftRestic. The destination itself — the Slack channel, the Healthchecks check — is not touched.")
+            Text("The destination itself — the Slack channel, the Healthchecks check — is not touched.")
         }
         .onChange(of: selection) { _, _ in
             // A test result belongs to the channel it was sent from; showing
@@ -539,7 +538,7 @@ struct NotificationChannelsTab: View {
                     switch testOutcome {
                     case .failed(let failure):
                         Label {
-                            Text(failure)
+                            Text("Could not send the test: " + failure)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                         } icon: {
@@ -554,10 +553,6 @@ struct NotificationChannelsTab: View {
                     case nil:
                         EmptyView()
                     }
-                    ExpandableCaption(
-                        summary: "A failed notification is reported here but never changes what Activity says happened.",
-                        detail: "The backup either ran or it did not."
-                    )
                 }
             }
             .formStyle(.grouped)
@@ -566,7 +561,7 @@ struct NotificationChannelsTab: View {
             // selection.
             ContentUnavailableView(
                 "No webhook selected",
-                systemImage: "bell",
+                systemImage: "point.3.connected.trianglepath.dotted",
                 description: Text("Select a webhook in the list to change it.")
             )
         }
