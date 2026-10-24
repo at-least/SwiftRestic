@@ -546,7 +546,7 @@ struct PlanEditorSheet: View {
     /// One checkbox per developer group, under the switch while it is on;
     /// its help lists what it leaves out.
     private var developerGroupBoxes: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)), count: 3), alignment: .leading, spacing: 6) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .topLeading), count: 3), alignment: .leading, spacing: 6) {
             ForEach(ExcludeCategory.developerGroups, id: \.self) { group in
                 Toggle(group.title, isOn: Binding(
                     get: { draft.developerGroups.contains(group) },

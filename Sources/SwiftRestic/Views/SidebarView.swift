@@ -636,9 +636,10 @@ private struct PlanSidebarRow: View {
     }
 }
 
-/// What a page's Backups tab says while it lists no backup. "No backups
-/// yet" only once a listing has succeeded: before that it is still being
-/// read, and after a failure it says why. A plan's page offers its verb
+/// What a page's Backups tab says while it lists no backup, once a
+/// listing has succeeded: "No backups yet", or — a plan's page whose
+/// repository holds others — PlanStatus.noneFromThisPlanFact. Before that
+/// it is still being read, and after a failure it says why. A plan's page offers its verb
 /// under the words — the pane would otherwise hold nothing to do; a
 /// group's page has no plan to run, so the words stand alone.
 struct BackupsStatusRow: View {

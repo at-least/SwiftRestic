@@ -71,7 +71,7 @@ struct BackupsBrowserView: View {
     @ViewBuilder
     private var list: some View {
         if backups.isEmpty {
-            // "No backups yet" only once the listing says so; before that
+            // The empty words only once the listing says so; before that
             // it is being read, and after a failure the row says why.
             BackupsStatusRow(repositoryID: repositoryID, planID: statusRowPlanID)
                 .padding(12)
@@ -152,7 +152,7 @@ struct BackupsBrowserView: View {
                 .id(page)
         } else {
             // Blank behind the list's own empty row — "Reading backups…",
-            // its failure, or "No backups yet" — which states the fact
+            // its failure, or the empty words — which state the fact
             // already; a second empty pane said it twice.
             Color.clear
         }

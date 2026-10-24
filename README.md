@@ -579,7 +579,7 @@ the generator after editing it; the PNGs are checked in.
   *Show Backups* (a group's menu) and *Show in Backups* (the Files tab) opens
   the one browser at that backup, on its page's Backups tab beside the list:
   its folders as a tree with a Change column and search. Restore by dragging to Finder,
-  or by the bar's *Restore* (or Return) on a selection;
+  or by the bar's *Restore* on a selection;
   per-node restores land in the chosen folder with no path rebuilt above
   them. A file alone is restored into a hidden folder beside its landing,
   with the dates, permissions and extended attributes restic recorded, and
@@ -715,7 +715,7 @@ the generator after editing it; the PNGs are checked in.
   30 days starting 30 days after it is added, since retention runs after
   every backup and only a prune frees the space; one saved before keeps its
   setting. With cleanup off the Maintenance card says "Cleanup — Off — space
-  from removed backups isn't freed" rather than hiding its rows. A prune is
+  from removed backups isn’t freed" rather than hiding its rows. A prune is
   a *cleanup* wherever the app names it (*Clean Up Now*, *Last cleanup*,
   *Clean up periodically*, the retention tab's *Also clean up*), and
   restic's `unlock` is *Unlock* — restic's words stay in the console.

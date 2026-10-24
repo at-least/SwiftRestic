@@ -1036,7 +1036,7 @@ final class SnapshotIndex: @unchecked Sendable {
         for (node, held) in latest {
             // The counts row above proved this snapshot, in this read.
             guard let hash = try String.fetchOne(newest, arguments: [node, held.chain, held.time]) else {
-                throw DatabaseError(message: "node \(node)'s newest snapshot in chain \(held.chain) vanished inside one read")
+                throw DatabaseError(message: "node \(node)’s newest snapshot in chain \(held.chain) vanished inside one read")
             }
             result[node] = VersionSummary(count: held.count, newest: IndexVersion(id: hash, time: date(micros: held.time)))
         }
