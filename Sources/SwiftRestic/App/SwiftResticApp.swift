@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// launched the app is delivered to the delegate set by then. Without
     /// one the click only brings the app forward.
     func applicationWillFinishLaunching(_ notification: Notification) {
+        EditMenuTrim.install()
         if AppModel.supportsNotifications {
             UNUserNotificationCenter.current().delegate = self
         }

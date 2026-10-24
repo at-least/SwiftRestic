@@ -854,7 +854,9 @@ the generator after editing it; the PNGs are checked in.
   up a folder, get a file back, read a failed run, keep the history tidy
   and adopt backups from elsewhere, then six terms (task-first since
   2026-10-21, a glossary of restic's words before) — where macOS's item had
-  said "Help isn't available for SwiftRestic." While a sheet is up, a command that
+  said "Help isn't available for SwiftRestic." *Edit* has none of the
+  items macOS adds — Writing Tools, AutoFill, Start Dictation, Emoji &
+  Symbols. While a sheet is up, a command that
   opens a sheet or the console, or acts on the selected plan or repository,
   beeps and does nothing; *Back Up All Plans Now*, *Pause Backups*, *Resume
   Backups*, *Pause and Stop Running Backups* and *Refresh All Backups*
