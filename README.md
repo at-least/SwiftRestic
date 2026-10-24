@@ -100,9 +100,11 @@ the generator after editing it; the PNGs are checked in.
   *Reveal in Finder*. A subfolder that refuses SwiftRestic says so in the
   tree, its fix in place of *Try Again*. A folder
   lists at most 200 items in the tree, then a row that opens it in the pane,
-  which lists it as a backup held it. Each page keeps its tab, open backup,
-  open folders and selection while the app runs, and opens on Overview
-  after a launch.
+  which lists it as a backup held it. The Overview | Backups | Files choice
+  is one for every page: switching plans keeps it, and a group's page under
+  Other backups, which has no Files, shows Backups while Files is chosen.
+  Each page keeps its open backup, open folders and selection while the app
+  runs; every page opens on Overview after a launch.
   - *A folder* lists as a backup held it, each file with its size. *As
     backed up* picks which backup, newest first, grouped by month once they
     span more than one — as the Compare sheet's picker and the Backups tab

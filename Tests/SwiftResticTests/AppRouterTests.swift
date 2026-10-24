@@ -109,25 +109,30 @@ struct AppRouterTests {
         #expect(router.takeFilesVersionHint() == nil)
     }
 
-    @Test("a page opens on its overview and keeps the view it was left on; each page its own, a trip to another page's backup and back included")
-    func pageTabsArePerPage() {
+    @Test("every page opens on its overview, and the view chosen on one page is every page's; a group's page shows Backups for Files")
+    func pageTabIsGlobal() {
         let router = AppRouter()
         let plan = SidebarItem.plan(UUID())
         let other = SidebarItem.plan(UUID())
+        let group = SidebarItem.otherGroup(repositoryID: UUID(), id: .plan(UUID()))
         #expect(router.tab(of: plan) == .overview)
+        #expect(router.tab(of: group) == .overview)
 
         router.tabBinding(for: plan).wrappedValue = .files
         #expect(router.tab(of: plan) == .files)
-        #expect(router.tab(of: other) == .overview)
+        #expect(router.tab(of: other) == .files)
+        // The group has no Files; the choice stays Files for the plans.
+        #expect(router.tab(of: group) == .backups)
+        #expect(router.tab(of: other) == .files)
 
-        router.selection = plan
         router.showBackup("s1", on: other, repositoryID: UUID())
-        #expect(router.tab(of: other) == .backups)
-        router.selection = plan
-        #expect(router.tab(of: plan) == .files)
+        #expect(router.tab(of: plan) == .backups)
 
-        router.setTab(.overview, of: plan)
+        router.tabBinding(for: group).wrappedValue = .overview
         #expect(router.tab(of: plan) == .overview)
+
+        // A page with no tabs reads as its overview.
+        #expect(router.tab(of: .activity) == .overview)
     }
 
     @Test("a plan's page offers Overview, Backups and Files; a group's, either kind, Overview and Backups; every other page none")

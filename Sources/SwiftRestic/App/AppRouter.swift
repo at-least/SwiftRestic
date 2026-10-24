@@ -80,12 +80,12 @@ final class AppRouter {
     /// never steer an unrelated load; the pane spends it on its next load.
     private(set) var restoreFocus: RestoreFocus?
 
-    /// The view each page shows, by the page's selection — the toolbar's
-    /// Overview | Backups | Files. Transient: a page keeps the view it was
-    /// left on for the session, so a trip to Activity and back finds it
-    /// there, and every page opens on its overview after a launch, where "is
-    /// it backing up" is answered.
-    private(set) var pageTabs: [SidebarItem: PageTab] = [:]
+    /// The toolbar's Overview | Backups | Files, one choice for every page
+    /// (the user's call, 2026-10-24): switching plans keeps the view. Read
+    /// through `tab(of:)`, never directly — a page without the chosen view
+    /// shows another. Transient: every page opens on its overview after a
+    /// launch, where "is it backing up" is answered.
+    private(set) var pageTab: PageTab = .overview
 
     /// The backup each page's Backups tab has open, by the page. Transient,
     /// as the tabs are: a page keeps its pick for the session, and its tab
@@ -174,16 +174,21 @@ final class AppRouter {
     /// Transient; the tab spends it (`FilesTree.reveal`).
     var filesRevealRequest: FileNode?
 
+    /// The chosen view where `page` offers it. A group's page has no Files:
+    /// there Files shows Backups (the user's call), and the choice stays
+    /// Files for the next plan's page.
     func tab(of page: SidebarItem) -> PageTab {
-        pageTabs[page] ?? .overview
+        if page.pageTabs.contains(pageTab) { return pageTab }
+        if pageTab == .files, page.pageTabs.contains(.backups) { return .backups }
+        return .overview
     }
 
-    /// Only a tab the page offers (`SidebarItem.pageTabs`): a group's page
-    /// set to Files would show its overview under a Files segment no one
-    /// can see, so a route that asks for one is a bug to hear about.
+    /// Sets the view for every page. Only a tab `page` offers
+    /// (`SidebarItem.pageTabs`): a route that asks a group's page for Files
+    /// is a bug to hear about.
     func setTab(_ tab: PageTab, of page: SidebarItem) {
         precondition(page.pageTabs.contains(tab), "\(page) has no \(tab.menuTitle) tab")
-        pageTabs[page] = tab
+        pageTab = tab
     }
 
     /// An item by version, from a backup that holds it — the Restore pane's
