@@ -34,14 +34,23 @@ struct MenuBarStatusTests {
         return value
     }
 
-    @Test("the menu carries each repository's Protection line in the card's words, only once its listing has loaded")
+    @Test("each repository's group carries its Protection line in the card's words, only once its listing has loaded")
     func protectionLines() {
         let nas = repository(named: "Home NAS")
         let ssd = repository(named: "Travel SSD")
+        var onNAS = plan(name: "Code")
+        onNAS.repositoryID = nas.id
+        var onSSD = plan(name: "Photos")
+        onSSD.repositoryID = ssd.id
         let summary = ProtectionSummary(text: "2 of 2 plans protected · Last backup 1 hour ago", showsResume: false)
-        let lines = MenuBarStatus.protectionLines(repositories: [nas, ssd]) { id in id == nas.id ? summary : nil }
-        #expect(lines == ["Home NAS — 2 of 2 plans protected · Last backup 1 hour ago"])
-        #expect(MenuBarStatus.protectionLines(repositories: []) { _ in summary }.isEmpty)
+        let groups = MenuBarStatus.planGroups(
+            plans: [onNAS, onSSD], repositories: [nas, ssd], activity: [:], isResticAvailable: true,
+            protection: { id in id == nas.id ? summary : nil }
+        )
+        // In a submenu the title already names the repository.
+        #expect(groups.map(\.protection) == ["2 of 2 plans protected · Last backup 1 hour ago", nil])
+        #expect(groups[0].labeledProtection == "Home NAS — 2 of 2 plans protected · Last backup 1 hour ago")
+        #expect(groups[1].labeledProtection == nil)
     }
 
     @Test("idle with nothing configured says there is no schedule")
@@ -189,7 +198,7 @@ struct MenuBarStatusTests {
         #expect(lines.map(\.id) == [first.id.uuidString, second.id.uuidString])
     }
 
-    @Test("restores, upkeep and console work read as running and get their own lines")
+    @Test("restores and upkeep get their own running lines")
     func nonPlanWorkIsVisible() {
         var progress = OperationProgress()
         progress.fraction = 0.25
@@ -215,22 +224,14 @@ struct MenuBarStatusTests {
             maintenance: [repository.id: MaintenanceActivity(task: .check)]
         )
         #expect(busy.map(\.text) == ["\(repository.label(among: [repository])) — check running"])
-
-        let console = MenuBarStatus.consoleLine(isRunning: true)
-        #expect(console?.id == "console")
-        #expect(MenuBarStatus.consoleLine(isRunning: false) == nil)
     }
 
-    @Test("upkeep, restores and console work hold the idle headline back, like a backup does")
+    @Test("upkeep and restores hold the idle headline back, like a backup does")
     func nonPlanWorkHoldsTheHeadline() {
         let next = Date.now.addingTimeInterval(3600)
         #expect(MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (plan(name: "Nightly"), next)) != nil)
         #expect(
             MenuBarStatus.headline(activity: [:], isRestoring: true, plans: [], repositories: [], nextRun: (plan(name: "Nightly"), next))
-                == nil
-        )
-        #expect(
-            MenuBarStatus.headline(activity: [:], isConsoleRunning: true, plans: [], repositories: [], nextRun: (plan(name: "Nightly"), next))
                 == nil
         )
         #expect(
@@ -781,7 +782,7 @@ struct MenuBarStatusTests {
         #expect(stopping.first == MenuBarStatus.PlanRow(planID: nightly.id, title: "Stopping “Nightly”…", action: .none, isEnabled: false))
     }
 
-    @Test("plan rows group under one submenu per repository, in configuration order")
+    @Test("plan rows group by repository, in configuration order, and only two or more groups are submenus")
     func planRowsGroupByRepository() {
         let home = repository(named: "Home Disk")
         let offsite = repository(named: "Offsite")
@@ -806,8 +807,9 @@ struct MenuBarStatusTests {
         #expect(groups[0].rows.map(\.planID) == [archive.id])
         #expect(groups[1].rows.map(\.planID) == [photos.id, documents.id])
         #expect(groups[1].rows.map(\.title) == ["Back Up “Photos” Now", "Back Up “Documents” Now"])
+        #expect(MenuBarStatus.showsGroupsAsSubmenus(groups))
 
-        // A running plan's Stop row stays inside its repository's submenu.
+        // A running plan's Stop row stays inside its repository's group.
         let running = MenuBarStatus.planGroups(
             plans: [documents],
             repositories: [home],
@@ -817,8 +819,7 @@ struct MenuBarStatusTests {
         #expect(running.map(\.title) == ["Home Disk"])
         #expect(running[0].rows.map(\.title) == ["Stop “Documents” Backup"])
 
-        // A single repository still gets its submenu — the shape never
-        // changes when a second arrives.
+        // A single repository's rows sit in the menu itself.
         let single = MenuBarStatus.planGroups(
             plans: [documents],
             repositories: [home],
@@ -826,13 +827,14 @@ struct MenuBarStatusTests {
             isResticAvailable: true
         )
         #expect(single.map(\.title) == ["Home Disk"])
+        #expect(!MenuBarStatus.showsGroupsAsSubmenus(single))
 
-        // A repository with no plans gets no submenu.
+        // A repository with no plans gets no group, so it does not make one
+        // repository's rows a submenu.
         let empty = repository(named: "Empty")
-        #expect(
-            MenuBarStatus.planGroups(plans: [documents], repositories: [home, empty], activity: [:], isResticAvailable: true)
-                .map(\.title) == ["Home Disk"]
-        )
+        let withEmpty = MenuBarStatus.planGroups(plans: [documents], repositories: [home, empty], activity: [:], isResticAvailable: true)
+        #expect(withEmpty.map(\.title) == ["Home Disk"])
+        #expect(!MenuBarStatus.showsGroupsAsSubmenus(withEmpty))
     }
 
     @Test("the icon dims for a hold only while nothing runs, and says why")

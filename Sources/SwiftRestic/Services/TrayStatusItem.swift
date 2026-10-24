@@ -164,13 +164,23 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             item.toolTip = "Show this run in Activity"
             menu.addItem(item)
         }
-        // Each repository's Protection line, the page's own words: the
-        // fact the menu never carried. Absent while a listing has not
-        // loaded, as the card is.
-        for line in MenuBarStatus.protectionLines(
+        var problems: [UUID: RunRecord] = [:]
+        for plan in model.configuration.plans {
+            problems[plan.id] = model.currentProblem(for: plan.id)
+        }
+        let groups = MenuBarStatus.planGroups(
+            plans: model.configuration.plans,
             repositories: model.configuration.repositories,
-            summary: { model.protectionSummary(repositoryID: $0, now: .now) }
-        ) {
+            activity: model.activity,
+            isResticAvailable: model.isResticAvailable,
+            lockedRepositories: model.lockedRepositories,
+            problem: { problems[$0] },
+            protection: { model.protectionSummary(repositoryID: $0, now: .now) }
+        )
+        let showsSubmenus = MenuBarStatus.showsGroupsAsSubmenus(groups)
+        // With no submenu to carry it, the one Protection line joins the
+        // status lines, named.
+        if !showsSubmenus, let line = groups.first?.labeledProtection {
             menu.addItem(disabledItem(line))
         }
         var lines = MenuBarStatus.runningLines(
@@ -186,14 +196,10 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         if let restore = MenuBarStatus.restoreLine(progress: model.restoreActivity) {
             lines.append(restore)
         }
-        if let console = MenuBarStatus.consoleLine(isRunning: model.console.isRunning) {
-            lines.append(console)
-        }
         if let headline = MenuBarStatus.headline(
             activity: model.activity,
             maintenance: model.maintenance,
             isRestoring: model.isRestoring,
-            isConsoleRunning: model.console.isRunning,
             hasNoRepositories: hasNoRepositories,
             hold: hold,
             isResticAvailable: model.isResticAvailable,
@@ -220,45 +226,18 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             )
             add.target = self
             menu.addItem(add)
-        } else {
+        } else if showsSubmenus {
             // One submenu per repository, in configuration order, so the
             // tray names each plan's repository. App-wide items stay
             // outside: they act on every repository at once.
-            var problems: [UUID: RunRecord] = [:]
-            for plan in model.configuration.plans {
-                problems[plan.id] = model.currentProblem(for: plan.id)
-            }
-            for group in MenuBarStatus.planGroups(
-                plans: model.configuration.plans,
-                repositories: model.configuration.repositories,
-                activity: model.activity,
-                isResticAvailable: model.isResticAvailable,
-                lockedRepositories: model.lockedRepositories,
-                problem: { problems[$0] }
-            ) {
+            for group in groups {
                 let submenu = NSMenu(title: group.title)
                 submenu.autoenablesItems = false
-                for row in group.rows {
-                    let action: Selector? = switch row.action {
-                    case .backUp: #selector(backUpNow(_:))
-                    case .stop: #selector(stopBackup(_:))
-                    case .none: nil
-                    }
-                    let item = NSMenuItem(title: row.title, action: action, keyEquivalent: "")
-                    item.target = self
-                    // Explicit, not auto-enabled: see `autoenablesItems`
-                    // above.
-                    item.isEnabled = row.isEnabled
-                    item.toolTip = row.disabledReason
-                    item.representedObject = row.planID.uuidString
-                    submenu.addItem(item)
-                }
-                if !group.newsLines.isEmpty {
+                if let protection = group.protection {
+                    submenu.addItem(disabledItem(protection))
                     submenu.addItem(.separator())
-                    for line in group.newsLines {
-                        submenu.addItem(disabledItem(line))
-                    }
                 }
+                addRowsAndNews(of: group, to: submenu)
                 let item = NSMenuItem(title: group.title, action: nil, keyEquivalent: "")
                 item.submenu = submenu
                 // Enabled even with every row disabled, like the pause
@@ -266,6 +245,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 item.isEnabled = true
                 menu.addItem(item)
             }
+        } else if let group = groups.first {
+            addRowsAndNews(of: group, to: menu)
         }
 
         menu.addItem(.separator())
@@ -301,6 +282,30 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         )
         quit.target = self
         menu.addItem(quit)
+    }
+
+    private func addRowsAndNews(of group: MenuBarStatus.PlanGroup, to menu: NSMenu) {
+        for row in group.rows {
+            let action: Selector? = switch row.action {
+            case .backUp: #selector(backUpNow(_:))
+            case .stop: #selector(stopBackup(_:))
+            case .none: nil
+            }
+            let item = NSMenuItem(title: row.title, action: action, keyEquivalent: "")
+            item.target = self
+            // Explicit, not auto-enabled: every menu here sets
+            // `autoenablesItems = false`.
+            item.isEnabled = row.isEnabled
+            item.toolTip = row.disabledReason
+            item.representedObject = row.planID.uuidString
+            menu.addItem(item)
+        }
+        if !group.newsLines.isEmpty {
+            menu.addItem(.separator())
+            for line in group.newsLines {
+                menu.addItem(disabledItem(line))
+            }
+        }
     }
 
     private func disabledItem(_ title: String) -> NSMenuItem {

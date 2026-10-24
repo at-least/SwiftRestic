@@ -95,18 +95,6 @@ enum MenuBarStatus {
             .max { $0.finishedAt < $1.finishedAt }
     }
 
-    /// One disabled line per repository whose listing has loaded, in the
-    /// Protection line's exact words — "Home NAS — 3 of 3 plans protected ·
-    /// Last backup 3 hours ago" — so the menu answers "did my backups run?"
-    /// with the window closed, where before only the absence of a problem
-    /// line said so. A summary, not per-plan noise: a quiet plan still says
-    /// nothing in its submenu.
-    static func protectionLines(repositories: [Repository], summary: (UUID) -> ProtectionSummary?) -> [String] {
-        repositories.compactMap { repository in
-            summary(repository.id).map { "\(repository.label(among: repositories)) — \($0.text)" }
-        }
-    }
-
     /// The newest problem in the run history that still stands, as one
     /// sentence, or `nil` while there is none. From `OverviewMetrics.problems`'s
     /// week it drops the backup failures a later successful backup of the same
@@ -161,7 +149,8 @@ enum MenuBarStatus {
 
     /// The single line above the plan buttons. `nil` while anything runs —
     /// restores and repository upkeep included: the running lines replace it
-    /// rather than sitting underneath. `nil` under a hold too: the hold's own
+    /// rather than sitting underneath. Console work has no running line, so
+    /// it does not hold the headline back. `nil` under a hold too: the hold's own
     /// line leads the menu, and a next-run headline would announce a run the
     /// scheduler will not fire — and while restic is missing, for the same
     /// reason. `hasNoRepositories` answers the
@@ -173,7 +162,6 @@ enum MenuBarStatus {
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity] = [:],
         isRestoring: Bool = false,
-        isConsoleRunning: Bool = false,
         hasNoRepositories: Bool = false,
         hold: ScheduleHold? = nil,
         isResticAvailable: Bool = true,
@@ -181,7 +169,7 @@ enum MenuBarStatus {
         repositories: [Repository],
         nextRun: (plan: BackupPlan, date: Date)?
     ) -> String? {
-        guard activity.isEmpty, maintenance.isEmpty, !isRestoring, !isConsoleRunning else { return nil }
+        guard activity.isEmpty, maintenance.isEmpty, !isRestoring else { return nil }
         guard hold == nil, isResticAvailable else { return nil }
         if hasNoRepositories { return "No repository set up yet" }
         guard let nextRun else { return "No backups scheduled" }
@@ -254,20 +242,35 @@ enum MenuBarStatus {
         phase == .applyingRetention
     }
 
-    /// One tray submenu per repository, its plans' rows under the
+    /// One group per repository with plans, its plans' rows under the
     /// repository's own name, repositories in configuration order and plans
-    /// in theirs — the flat list could not tell two repositories' same-named
-    /// plans apart. A single repository still gets its submenu, so the shape
-    /// never changes when a second arrives. Removing a repository removes its
-    /// plans, so no plan is left without a group.
+    /// in theirs — a flat list of two repositories could not tell their
+    /// same-named plans apart. Removing a repository removes its plans, so
+    /// no plan is left without a group.
     struct PlanGroup: Equatable {
         var repositoryID: UUID
         var title: String
+        /// The repository page's Protection line ("3 of 3 plans protected ·
+        /// Last backup 3 hours ago"), so the tray answers "did my backups
+        /// run?" with the window closed. Nil until the listing has loaded.
+        var protection: String?
         var rows: [PlanRow]
         /// The plans' news under the verbs: with the window closed the tray
         /// is the only surface, and one plan's failure must not hide
         /// another's, nor a paused plan go unsaid.
         var newsLines: [String] = []
+
+        /// The Protection line where no submenu title names the repository.
+        var labeledProtection: String? {
+            protection.map { "\(title) — \($0)" }
+        }
+    }
+
+    /// One submenu per group only when there are two or more: a single
+    /// repository's rows sit in the menu itself, a hover closer (the user's
+    /// call, 2026-10-24).
+    static func showsGroupsAsSubmenus(_ groups: [PlanGroup]) -> Bool {
+        groups.count > 1
     }
 
     /// A plan's lines in its repository's submenu: news only — a standing
@@ -307,6 +310,7 @@ enum MenuBarStatus {
         isResticAvailable: Bool,
         lockedRepositories: [UUID: String] = [:],
         problem: (UUID) -> RunRecord? = { _ in nil },
+        protection: (UUID) -> ProtectionSummary? = { _ in nil },
         now: Date = .now,
         relative: (Date) -> String = { Format.relative($0) }
     ) -> [PlanGroup] {
@@ -322,7 +326,11 @@ enum MenuBarStatus {
                 newsLines(for: plan, among: members, activity: activity[plan.id], problem: problem(plan.id), now: now, relative: relative)
             }
             return rows.isEmpty ? nil : PlanGroup(
-                repositoryID: repository.id, title: repository.label(among: repositories), rows: rows, newsLines: news
+                repositoryID: repository.id,
+                title: repository.label(among: repositories),
+                protection: protection(repository.id)?.text,
+                rows: rows,
+                newsLines: news
             )
         }
     }
@@ -373,14 +381,6 @@ enum MenuBarStatus {
         guard let progress else { return nil }
         let percent = progress.fraction.formatted(.percent.precision(.fractionLength(0)))
         return RunningLine(id: "restore", text: "Restoring — \(percent)")
-    }
-
-    /// A console command in flight: short commands never render it long
-    /// enough to matter, but a long `prune` typed there deserves the same
-    /// visibility as any other restic work.
-    static func consoleLine(isRunning: Bool) -> RunningLine? {
-        guard isRunning else { return nil }
-        return RunningLine(id: "console", text: "restic Console — command running")
     }
 
     /// Progress as the menu bar shows it: a percentage once restic is

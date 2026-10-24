@@ -263,6 +263,7 @@ struct SwiftResticApp: App {
             // toolbar button had been the one way back (the HIG's Split
             // views: "Provide multiple ways to reveal hidden panes").
             SidebarCommands()
+            appMenu
             viewMenu
             planMenu
             repositoryMenu
@@ -309,26 +310,6 @@ struct SwiftResticApp: App {
             }
             .keyboardShortcut(".", modifiers: .command)
             .disabled(!p.canStop)
-            Button("Back Up All Plans Now") { model.backUpAllPlans() }
-            .keyboardShortcut("b", modifiers: [.command, .shift])
-            .disabled(!p.canBackUpAll)
-
-            Divider()
-
-            // The tray's app-wide pause, here too: the menu bar item can be
-            // hidden. Direct calls, as the tray's: no editor holds a draft
-            // of these settings.
-            if p.backupsPaused {
-                Button("Resume Backups") { model.resumeBackups() }
-            } else {
-                lengthsMenu("Pause Backups", isEnabled: p.canPauseBackups) { length in
-                    model.pauseBackups(for: length)
-                }
-            }
-            // Never the default: a stopped backup starts over.
-            lengthsMenu("Pause and Stop Running Backups", isEnabled: p.canPauseAndStopBackups) { length in
-                model.pauseBackups(for: length, stoppingRunningBackups: true)
-            }
 
             Divider()
 
@@ -358,6 +339,32 @@ struct SwiftResticApp: App {
                 if let id = p.planID { ask(.confirm(.deletePlan(id))) }
             }
             .disabled(!p.canDelete)
+        }
+    }
+
+    /// The SwiftRestic menu's backup items, under Settings: they act on
+    /// every plan, not the sidebar's selection, so they stay out of the Plan
+    /// menu. The tray's app-wide pause, here too: the menu bar item can be
+    /// hidden. Direct calls, as the tray's: no editor holds a draft of these
+    /// settings.
+    private var appMenu: some Commands {
+        CommandGroup(after: .appSettings) {
+            let p = model.planCommands(for: router.selection)
+            Divider()
+            Button("Back Up All Plans Now") { model.backUpAllPlans() }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
+                .disabled(!p.canBackUpAll)
+            if p.backupsPaused {
+                Button("Resume Backups") { model.resumeBackups() }
+            } else {
+                lengthsMenu("Pause Backups", isEnabled: p.canPauseBackups) { length in
+                    model.pauseBackups(for: length)
+                }
+            }
+            // Never the default: a stopped backup starts over.
+            lengthsMenu("Pause and Stop Running Backups", isEnabled: p.canPauseAndStopBackups) { length in
+                model.pauseBackups(for: length, stoppingRunningBackups: true)
+            }
         }
     }
 
@@ -449,14 +456,17 @@ struct SwiftResticApp: App {
                 if let id = r.repositoryID { ask(.confirm(.prune(id))) }
             }
             .disabled(!r.canMaintain)
-            Button("Unlock") {
-                if let id = r.repositoryID { ask(.confirm(.unlock(id))) }
+            // The repairs, rarely needed, apart from the routine upkeep. A
+            // disabled Menu keeps its own row enabled (see `lengthsMenu`).
+            if r.canMaintain, let id = r.repositoryID {
+                Menu("Repair") {
+                    Button("Unlock") { ask(.confirm(.unlock(id))) }
+                    Button("Rebuild Search Index") { ask(.confirm(.rebuildIndex(id))) }
+                }
+            } else {
+                Button("Repair") {}
+                    .disabled(true)
             }
-            .disabled(!r.canMaintain)
-            Button("Rebuild Search Index") {
-                if let id = r.repositoryID { ask(.confirm(.rebuildIndex(id))) }
-            }
-            .disabled(!r.canMaintain)
 
             Divider()
 

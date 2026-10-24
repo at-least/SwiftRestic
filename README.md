@@ -48,9 +48,10 @@ the generator after editing it; the PNGs are checked in.
   “Offsite”*, *outside SwiftRestic* — and names the Mac its newest backup came
   from when that isn't this one. A plan's row wears a folder, as in Arq's
   tree, and gives its last backup (*“Last backup 1 hour ago”*); its page, the tray and Settings say when it runs next,
-  and the tray's menu carries each repository's Protection line (*“Home NAS —
-  3 of 3 plans protected · Last backup 3 hours ago”*), so the window need not
-  open. A repository wears a warning, its tooltip naming the plan, while a
+  and the tray's menu carries each repository's Protection line (*“3 of 3
+  plans protected · Last backup 3 hours ago”* atop its repository's submenu,
+  or *“Home NAS — …”* among the status lines when one repository has plans
+  and its rows sit in the menu itself), so the window need not open. A repository wears a warning, its tooltip naming the plan, while a
   plan is not protected — backups unreadable, none yet, or the last one
   failed: the red octagon the failed plan's own row wears when one did,
   else the orange triangle (until 2026-10-19 the triangle beside a failure
@@ -839,9 +840,11 @@ the generator after editing it; the PNGs are checked in.
 - **Menus** — *Plan* and *Repository* act on the sidebar's selection: a
   plan, a repository, or the repository a selected plan or Other-backups
   group belongs to; items with nothing to act on are grey.
-  ⌘B backs up the selected plan, ⌘. stops it, ⇧⌘B backs up every plan, ⇧⌘F
-  finds files, ⌘R re-reads every repository's backups; *Pause Backups* is
-  there as well as in the menu bar. *View* has what the toolbar switches,
+  ⌘B backs up the selected plan, ⌘. stops it, ⇧⌘F finds files, ⌘R re-reads
+  every repository's backups; *Repository ▸ Repair* holds *Unlock* and
+  *Rebuild Search Index*. What acts on every plan sits in the *SwiftRestic*
+  menu under Settings: *Back Up All Plans Now* (⇧⌘B), and *Pause Backups* and
+  *Pause and Stop Running Backups* as in the menu bar. *View* has what the toolbar switches,
   as the HIG asks of every toolbar item: *Show/Hide Sidebar* (⌃⌘S) — with
   the sidebar hidden, the toolbar's button had been the one way back — a
   page's *Overview*, *Backups* and *Files* (⌘1–⌘3, Finder's keys for its

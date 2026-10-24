@@ -27,9 +27,10 @@ struct PlanCommandState: Equatable {
     /// Why Apply Retention Now is disabled, for its help and the sheet.
     var retentionBlocker: String?
     var canDelete = false
-    /// Back Up All Plans Now: not about the selection.
+    /// Back Up All Plans Now, in the SwiftRestic menu: not about the
+    /// selection.
     var canBackUpAll = false
-    /// The app-wide pause, by the tray's rules: Resume Backups while
+    /// The app-wide pause, in the SwiftRestic menu, by the tray's rules: Resume Backups while
     /// paused, else Pause Backups once a repository exists, and Pause and
     /// Stop only while a backup runs.
     var backupsPaused = false
