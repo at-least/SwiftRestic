@@ -93,7 +93,7 @@ enum PlanStatus {
             facts.append(retentionSkippedFact)
         }
         if !run.hookMessages.isEmpty {
-            facts.append(Format.plural(run.hookMessages.count, "hook issue"))
+            facts.append(Format.plural(run.hookMessages.count, "failed hook"))
         }
         return facts
     }

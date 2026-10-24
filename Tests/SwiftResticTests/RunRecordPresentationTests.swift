@@ -454,7 +454,7 @@ struct RunRecordPresentationTests {
         #expect(detail(backup {
             $0.outcome = .completedWithErrors
             $0.hookMessages = ["Hook “notify” exited 1"]
-        }) == "1 hook issue")
+        }) == "1 failed hook")
 
         #expect(detail(backup {
             $0.filesNew = 2
@@ -480,7 +480,7 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.exitCode = 3
             $0.hookMessages = ["Hook “notify” exited 1"]
-        }) == "Some source data could not be read · 1 hook issue")
+        }) == "Some source data could not be read · 1 failed hook")
 
         // A reporting gap alone: nothing was unreadable, and the line itself
         // is the explanation.

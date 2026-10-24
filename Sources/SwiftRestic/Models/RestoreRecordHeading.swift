@@ -38,7 +38,7 @@ struct ChangesInside: Equatable, Sendable {
 
     var total: Int { counts.values.reduce(0, +) }
 
-    /// "2 modified, 1 removed" — the kinds present, in the diff's own order.
+    /// "2 modified, 1 deleted" — the kinds present, in the diff's own order.
     var summary: String {
         ResticDiffChange.Category.allCases
             .compactMap { category in counts[category].map { "\(Format.count($0)) \(category.displayName.lowercased())" } }
@@ -68,7 +68,7 @@ extension ChangeComparison {
 }
 
 /// An item a backup no longer holds that the one before it did: a
-/// "Removed:" line's route to that copy's versions.
+/// "Deleted:" line's route to that copy's versions.
 struct RemovedItem: Hashable, Sendable {
     var path: String
     var isDirectory: Bool
@@ -109,7 +109,7 @@ struct UnreadItems: Equatable, Sendable {
     }
 }
 
-/// What a "Removed:" line names — a Files folder's change summary: the
+/// What a "Deleted:" line names — a Files folder's change summary: the
 /// first few gone items, each a route, and how many more. Enough names to
 /// read on one line.
 struct RemovedNames: Equatable, Sendable {
@@ -117,17 +117,17 @@ struct RemovedNames: Equatable, Sendable {
 
     var items: [RemovedItem]
     var more: Int
-    /// "Removed: ", or "Not read: " for what the backup's own run could
+    /// "Deleted: ", or "Not read: " for what the backup's own run could
     /// not read (`AppModel.unreadItems(inBackup:)`).
     var label: String
 
-    init(_ all: [RemovedItem], label: String = "Removed: ") {
+    init(_ all: [RemovedItem], label: String = "Deleted: ") {
         items = Array(all.prefix(Self.shown))
         more = all.count - items.count
         self.label = label
     }
 
-    /// "Removed: old.txt, sub, and 2 more" — the line as one string, for
+    /// "Deleted: old.txt, sub, and 2 more" — the line as one string, for
     /// VoiceOver and the tests.
     var line: String {
         label + (items.map(\.name) + (more > 0 ? ["and \(Format.count(more)) more"] : [])).joined(separator: ", ")

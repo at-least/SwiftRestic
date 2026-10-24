@@ -84,7 +84,7 @@ struct SkippedRunTests {
         let details = RunRecordPresentation.detailsText(
             for: third, repositoryName: "Home NAS", versionsNow: RunLogVersions.current(resticVersion: "")
         )
-        #expect(details.contains("Failing since: \(since) (3 runs)"))
+        #expect(details.contains("Failing since: \(since) (3 times)"))
         #expect(!details.contains("Skipped since"))
         let roundTrip = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(third))
         #expect(roundTrip.missingSources == ["/Users/me/Projects"])
@@ -253,7 +253,7 @@ struct SkippedRunTests {
         let details = RunRecordPresentation.detailsText(
             for: third, repositoryName: "Home NAS", versionsNow: RunLogVersions.current(resticVersion: "")
         )
-        #expect(details.contains("Skipped: “Archive SSD” is not connected.\nSkipped since: \(since) (3 runs)"))
+        #expect(details.contains("Skipped: “Archive SSD” is not connected.\nSkipped since: \(since) (3 times)"))
 
         // Older records carry neither field.
         let older = try JSONDecoder().decode(RunRecord.self, from: Data(#"{"outcome":"skipped"}"#.utf8))

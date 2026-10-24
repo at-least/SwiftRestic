@@ -500,7 +500,7 @@ struct PlanStatusTests {
         aborted.hookMessages = ["mount-nas.sh exited with status 1"]
         let abortSummary = PlanStatus.summary(of: aborted)
         #expect(abortSummary.message == aborted.failureMessage)
-        #expect(abortSummary.facts == ["1 hook issue"])
+        #expect(abortSummary.facts == ["1 failed hook"])
     }
 
     @Test("restic's count, not the stored lines, is the unreadable count")
@@ -565,7 +565,7 @@ struct PlanStatusTests {
         hooked.hookMessages = ["notify.sh exited with status 1"]
         let hookSummary = PlanStatus.summary(of: hooked)
         #expect(hookSummary.message == "notify.sh exited with status 1")
-        #expect(hookSummary.facts == ["1 hook issue"])
+        #expect(hookSummary.facts == ["1 failed hook"])
         #expect(hookSummary.items.isEmpty)
 
         // restic exited 3 and named nothing: the row must not be a bare
@@ -598,7 +598,7 @@ struct PlanStatusTests {
         withHook.itemErrors = partial.itemErrors
         withHook.hookMessages = ["Hook “notify” exited 1"]
         let hookSummary = PlanStatus.summary(of: withHook)
-        #expect(hookSummary.facts == ["Retention skipped", "1 hook issue"])
+        #expect(hookSummary.facts == ["Retention skipped", "1 failed hook"])
         #expect(RunRecordPresentation.detail(for: withHook) == hookSummary.facts.joined(separator: " · "))
     }
 

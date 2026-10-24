@@ -36,7 +36,7 @@ struct ActivityView: View {
                 ContentUnavailableView(
                     "No activity yet",
                     systemImage: "list.bullet.rectangle",
-                    description: Text("Backups, checks and restores show here when they finish.")
+                    description: Text("Backups, retention, checks, cleanups and restores show here when they finish.")
                 )
             } else if runs.isEmpty {
                 ContentUnavailableView(
@@ -154,7 +154,19 @@ struct ActivityView: View {
                 .focusOnClick($tableIsFocused)
                 // Wiping the history is rare and final, so it is not chrome:
                 // a right-click on the list, behind the same confirmation.
-                .contextMenu(forSelectionType: RunRecord.ID.self) { _ in
+                // Beside it, the drawer's Compare reaches a clicked backup
+                // run directly, as backup rows elsewhere teach.
+                .contextMenu(forSelectionType: RunRecord.ID.self) { ids in
+                    if ids.count == 1, let id = ids.first,
+                       let run = runs.first(where: { $0.id == id }),
+                       run.kind == .backup,
+                       let repositoryID = run.repositoryID,
+                       case let .available(snapshot)? = model.snapshotLink(for: run) {
+                        Button("Compare with Previous") {
+                            comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
+                        }
+                        Divider()
+                    }
                     Button("Clear History", role: .destructive) {
                         isConfirmingClear = true
                     }
@@ -194,7 +206,7 @@ struct ActivityView: View {
                 model.clearRunHistory()
             }
         } message: {
-            Text("This permanently removes the \(Format.plural(model.configuration.runs.count, "item")) in Activity, with their logs. The backups in your repositories are not affected.")
+            Text("This permanently removes the \(Format.plural(model.configuration.runs.count, "item")) and their logs. The backups in your repositories are not affected.")
         }
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target)

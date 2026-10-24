@@ -210,7 +210,7 @@ struct ResticErrorTests {
         )
         #expect(
             ResticError.timedOut(seconds: 90).errorDescription?
-                .contains("90") == true
+                .contains("1m 30s") == true
         )
         let notFound = ResticError.binaryNotFound(searched: ["/opt/homebrew/bin", "/usr/bin"])
         #expect(notFound.errorDescription?.contains("/opt/homebrew/bin, /usr/bin") == true)

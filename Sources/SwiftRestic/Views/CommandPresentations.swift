@@ -118,6 +118,10 @@ private struct CheckSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(copy.title)
                 .font(.headline)
+            Text(copy.message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Picker("Data to read", selection: $readDataPercent) {
                 Text("Structure only").tag(0)
                 Text("5% of the data").tag(5)
@@ -125,10 +129,6 @@ private struct CheckSheet: View {
             }
             .fixedSize()
             .help("Reading data back finds damage the structure check misses, and takes longer.")
-            Text(copy.message)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }

@@ -78,11 +78,11 @@ struct RunDetailPanel: View {
             }
             // Why there was nothing to back up — the Detail column's words.
             if run.outcome == .skipped, let reason = run.detailText {
-                DetailRow("Skipped", reason)
+                DetailRow("Reason", reason)
             }
             // A standing skip: one record for every run the drive was away.
             if let since = run.skippedSince, let count = run.skipCount {
-                DetailRow(run.outcome == .failed ? "Failing since" : "Skipped since", "\(Format.timestamp(since)) · \(Format.plural(count, "run"))")
+                DetailRow(run.outcome == .failed ? "Failing since" : "Skipped since", "\(Format.timestamp(since)) · \(Format.plural(count, "time"))")
             }
             if RunRecordPresentation.hasBackupNumbers(run) {
                 DetailRow(
@@ -182,11 +182,14 @@ struct RunDetailPanel: View {
     // MARK: - Messages
 
     private var hasMessages: Bool {
-        run.failureMessage != nil || (run.kind == .prune && run.detailText != nil)
+        (run.failureMessage != nil && run.failureMessage != run.outcome.displayName)
+            || (run.kind == .prune && run.detailText != nil)
             || !run.itemErrors.isEmpty || !run.hookMessages.isEmpty
     }
 
-    /// What the run left in words: the failure in red, prune's
+    /// What the run left in words: the failure — red for a failed run,
+    /// plain for a cancelled run's note, which the header beside it already
+    /// calls by its verdict — prune's
     /// output tail, what to do about the unreadable items, restic's item
     /// lines, and the hooks' own lines — which stay here, on this Mac, and
     /// never reach Copy Details. The unreadable items come under restic's
@@ -197,9 +200,9 @@ struct RunDetailPanel: View {
         let (unreadable, unlisted) = run.unreadableItemListing()
         if hasMessages {
             VStack(alignment: .leading, spacing: 6) {
-                if let failure = run.failureMessage {
+                if let failure = run.failureMessage, failure != run.outcome.displayName {
                     Text(failure)
-                        .foregroundStyle(Theme.danger)
+                        .foregroundStyle(run.outcome == .failed ? Theme.danger : .primary)
                         .textSelection(.enabled)
                 }
                 if run.kind == .prune, let detail = run.detailText {
@@ -277,11 +280,7 @@ struct RunDetailPanel: View {
             Spacer(minLength: 0)
             Button("Show Log") { onShowLog(run) }
                 .disabled(!run.hasLog)
-                .help(
-                    run.hasLog
-                        ? "Show what restic printed during this run"
-                        : "No log was saved for this run — runs recorded before SwiftRestic kept logs have none."
-                )
+                .modifier(TileHelp(help: run.hasLog ? nil : "No log was saved for this run"))
             Button("Copy Details") {
                 let text = RunRecordPresentation.detailsText(
                     for: run,
@@ -291,7 +290,6 @@ struct RunDetailPanel: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
             }
-            .help("Copy this run's details as plain text")
         }
         .controlSize(.small)
     }
@@ -335,7 +333,7 @@ struct ConsoleRouteButton: View {
         }
         // The Repository menu's console item's own rule.
         .disabled(!model.isResticAvailable)
-        .help("Open the restic console on this repository — `restic repair` runs there with its password supplied")
+        .help("The console runs restic repair with the repository's password")
     }
 }
 
@@ -419,7 +417,6 @@ private struct RunSnapshotRow: View {
                 router.showBackup(snapshotID, on: page, repositoryID: repositoryID)
             }
         }
-        .help("Show this backup's files on its page's Backups tab")
     }
 }
 
@@ -445,7 +442,7 @@ private struct RevealRow: View {
             }
             .controlSize(.small)
             .disabled(exists != true)
-            .help(exists == false ? "Nothing is at this path any more." : "Show the restored item in Finder")
+            .modifier(TileHelp(help: exists == false ? "Nothing is at this path any more" : nil))
         }
         .task(id: runID) {
             exists = nil

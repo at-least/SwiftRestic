@@ -216,7 +216,7 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
     var explanation: String {
         var parts: [String] = []
         if modifier.contains("+") { parts.append("added") }
-        if modifier.contains("-") { parts.append("removed") }
+        if modifier.contains("-") { parts.append("deleted") }
         if modifier.contains("M") { parts.append("content changed") }
         if modifier.contains("T") { parts.append("type changed") }
         if modifier.contains("U") { parts.append("metadata changed") }

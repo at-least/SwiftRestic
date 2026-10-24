@@ -601,7 +601,7 @@ the generator after editing it; the PNGs are checked in.
     else: what was deleted since is *Compare with Previous*, in a backup's
     right-click menu in the list (below). No line sits above the tree
     unless the comparison failed — a blank column then means "not known".
-    A Files folder's "Removed:" and "Not read:" lines link each name to the
+    A Files folder's "Deleted:" and "Not read:" lines link each name to the
     previous backup's copy on the Files tab.
   - *Into the Files view.* *Show Versions*, in an item's right-click menu
     here and on Find Files' results, opens it on the Files tab of the plan
@@ -1124,7 +1124,7 @@ locked, a region capture (`-R`) failed, and this capture was not tried
   that answers and then stalls holds the first tick up to the ceiling —
   until 2026-10-17 a stopped server held it the full 300 s. A command
   stopped at its ceiling says what restic was retrying, "Timed out after
-  300s and was stopped — restic kept retrying: connection refused.", the
+  5m and was stopped — restic kept retrying: connection refused.", the
   cause restic printed from its first second.
 - The password is passed to the child process through `RESTIC_PASSWORD`, so it is
   visible to another process running as the same user via `ps -E`. Acceptable on

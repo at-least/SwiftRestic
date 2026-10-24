@@ -265,7 +265,7 @@ struct HoverableButtonStyle: ButtonStyle {
 
 // MARK: - Removed names
 
-/// A "Removed:" line — or "Not read:", for what the backup's own run could
+/// A "Deleted:" line — or "Not read:", for what the backup's own run could
 /// not read — whose names are routes: each opens the item's versions at
 /// the backup before, which still holds it — the incomplete strip's
 /// grammar, inline. The names wear the accent, as a link does; the words
@@ -289,7 +289,7 @@ struct RemovedNamesLine: View {
             ForEach(Array(names.items.enumerated()), id: \.element) { index, item in
                 let standing = item.reason.map {
                     "Not read by this backup — \($0); it may still be on this Mac. The backup of \(Format.timestamp(before)) has it."
-                } ?? "Not in this backup — the backup of \(Format.timestamp(before)) has it."
+                } ?? "The backup of \(Format.timestamp(before)) has it."
                 if let open {
                     Button { open(item) } label: {
                         Text(verbatim: item.name)
@@ -1188,7 +1188,7 @@ struct UnreadableItemLine: View {
                 Button("Exclude") { model.exclude(path: path, fromPlan: plan.id) }
             }
         } message: {
-            Text("Its next backups skip \(path ?? "") — backups already made keep it. Edit Plan lists it under Also skip, where − takes it out again.")
+            Text("The plan's next backups skip \(path ?? "") — backups already made keep it. The plan editor lists it under Also skip, where − takes it out again.")
         }
         .task(id: path) {
             guard let path else { return }

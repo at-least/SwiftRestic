@@ -16,8 +16,8 @@ struct FolderChangeSummaryTests {
             added: ["/d/new"], removed: ["/d/a", "/d/b"], modified: ["/d/m"], uncertain: ["/d/u"]
         )
         #expect(changes.summary(since: previous)
-            == "Since \(since), in this folder: 1 added, 1 modified, 2 removed, 1 may have changed")
-        #expect(FolderChanges(removed: ["/d/a"]).summary(since: previous) == "Since \(since), in this folder: 1 removed")
+            == "Since \(since), in this folder: 1 added, 1 modified, 2 deleted, 1 may have changed")
+        #expect(FolderChanges(removed: ["/d/a"]).summary(since: previous) == "Since \(since), in this folder: 1 deleted")
     }
 
     @Test("what the chosen backup's own run could not read is not read, not removed")
@@ -28,9 +28,9 @@ struct FolderChangeSummaryTests {
         let (shown, notRead) = changes.separatingUnread(unread)
         #expect(notRead == [RemovedItem(path: "/d/locked.pdf", isDirectory: false, reason: "permission denied")])
         #expect(shown.removed == ["/d/gone"])
-        #expect(shown.summary(since: previous, notRead: notRead.count) == "Since \(since), in this folder: 1 removed, 1 not read")
+        #expect(shown.summary(since: previous, notRead: notRead.count) == "Since \(since), in this folder: 1 deleted, 1 not read")
         #expect(RemovedNames(notRead, label: "Not read: ").line == "Not read: locked.pdf")
-        // Only what it could not read: the line says so, and no "Removed:".
+        // Only what it could not read: the line says so, and no "Deleted:".
         let (onlyUnread, one) = FolderChanges(removed: ["/d/locked.pdf"]).separatingUnread(unread)
         #expect(onlyUnread.removedNames == nil)
         #expect(onlyUnread.summary(since: previous, notRead: one.count) == "Since \(since), in this folder: 1 not read")
@@ -77,7 +77,7 @@ struct FolderChangeSummaryTests {
     @Test("what is gone is named, and each listed child wears its mark by its path's bytes")
     func removedAndMarks() {
         let changes = FolderChanges(added: ["/d/new"], removed: ["/d/a", "/d/b"], modified: ["/d/caf\u{E9}"], uncertain: ["/d/u"])
-        #expect(changes.removedNames == "Removed: a, b")
+        #expect(changes.removedNames == "a, b")
         #expect(FolderChanges(added: ["/d/x"]).removedNames == nil)
         // The first three, each with its kind, are the line's routes.
         var many = FolderChanges(removed: ["/d/a", "/d/b", "/d/c", "/d/d"])
@@ -88,8 +88,8 @@ struct FolderChangeSummaryTests {
             RemovedItem(path: "/d/c", isDirectory: false),
         ])
         #expect(names.more == 1)
-        #expect(names.line == "Removed: a, b, c, and 1 more")
-        #expect(RemovedNames(changes.removedItems).line == "Removed: a, b")
+        #expect(names.line == "Deleted: a, b, c, and 1 more")
+        #expect(RemovedNames(changes.removedItems).line == "Deleted: a, b")
         #expect(changes.marks == [
             PathKey("/d/new"): "Added", PathKey("/d/caf\u{E9}"): "Modified", PathKey("/d/u"): "May have changed",
         ])

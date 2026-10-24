@@ -106,12 +106,13 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .processLaunchFailed(reason):
             return "Could not start restic: \(reason)"
         case let .timedOut(seconds, cause):
-            let stopped = "Timed out after \(Int(seconds))s and was stopped"
-            return cause.isEmpty ? "\(stopped)." : "\(stopped) — restic kept retrying: \(cause)."
+            return cause.isEmpty
+                ? "Timed out after \(Format.duration(seconds)) and was stopped."
+                : "Timed out after \(Format.duration(seconds)) and was stopped — restic kept retrying: \(cause)."
         case let .idleStalled(seconds):
-            return "Stopped reporting any progress for \(Int(seconds))s and was stopped as hung — check the repository's connection and try again."
+            return "Stopped reporting any progress for \(Format.duration(seconds)) and was stopped — check the repository's connection and try again."
         case let .malformedOutput(detail):
-            return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output — none of its numbers were guessed at."
+            return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output."
         case let .stagedFileMoveFailed(path, reason):
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
         case let .keepNeedsNewerRestic(path):

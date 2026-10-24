@@ -248,13 +248,14 @@ struct SnapshotDiffView: View {
                 value: countText(stats?.removed)
             )
             // restic's `changed_files` counts content changes only; the Modified
-            // filter also includes type changes and bitrot, so the tooltip names
-            // it precisely while the tile stays short enough not to truncate.
+            // filter also includes type changes and bitrot, so the tooltip
+            // says what the tile counts while the tile stays short enough
+            // not to truncate.
             // "N files" agrees with the Added/Deleted tiles' unit spelling.
             StatTile(
                 title: "Changed",
                 value: stats.map { Format.plural($0.changedFiles, "file") } ?? "—",
-                help: "Files whose content changed — metadata-only edits are listed under Show › Metadata"
+                help: "Files whose content changed, not permission, owner or timestamp edits"
             )
             // The byte pair is this sheet's headline answer — "what did the
             // backup actually pick up?" — so it leaves the count tiles' row
@@ -280,12 +281,11 @@ struct SnapshotDiffView: View {
                         .font(.system(.callout, design: .monospaced).weight(.semibold))
                 }
                 .foregroundStyle(StatusPalette.status(.failed))
-                .accessibilityLabel("\(Format.bytes(stats?.removed.bytes)) removed")
+                .accessibilityLabel("\(Format.bytes(stats?.removed.bytes)) deleted")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Theme.Space.cardPadding)
             .cardSurface()
-            .help("Data this backup holds that the backup it is compared with does not, and data that one holds that this backup does not")
         }
         .padding(12)
     }
@@ -378,9 +378,9 @@ struct SnapshotDiffView: View {
                     showVersions(of: change)?()
                 }
                 // A group's backups have no Files tab to show versions on.
-                .help(model.shelves(for: target.repositoryID).versionsPage(of: newer) == nil
-                    ? "Return or right-click restores the selection, each item from the backup that has it"
-                    : "Double-click shows an item's versions; Return or right-click restores the selection, each item from the backup that has it")
+                .modifier(TileHelp(help: model.shelves(for: target.repositoryID).versionsPage(of: newer) == nil
+                    ? nil
+                    : "Double-click shows an item's versions; Return restores the selection"))
             }
         } else {
             // The filter pass for these inputs is still in flight — a blank
@@ -403,7 +403,7 @@ struct SnapshotDiffView: View {
                 Spacer()
                 // A restore keeps running with the sheet gone, as Find
                 // Files' does.
-                Button(model.isRestoring ? "Hide" : "Close") { dismiss() }
+                Button("Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 // Find Files' grammar: Return restores the selection, each
                 // row from the backup that has it, through the destination

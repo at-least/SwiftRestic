@@ -11,7 +11,7 @@ extension FolderChanges {
         added.isEmpty && removed.isEmpty && modified.isEmpty && uncertain.isEmpty
     }
 
-    /// "Since Oct 3, 2026 at 2:05 PM, in this folder: 1 added, 2 removed" —
+    /// "Since Oct 3, 2026 at 2:05 PM, in this folder: 1 added, 2 deleted" —
     /// or that nothing in it changed since then. Its subfolders' contents
     /// are theirs to say, so the line says where it looked. `notRead`
     /// counts what `separatingUnread(_:)` took out of the removals.
@@ -21,7 +21,7 @@ extension FolderChanges {
         let counts = [
             (added.count, "added"),
             (modified.count, "modified"),
-            (removed.count, "removed"),
+            (removed.count, "deleted"),
             (notRead, "not read"),
             (uncertain.count, "may have changed"),
         ]
@@ -45,14 +45,14 @@ extension FolderChanges {
     }
 
     /// What is gone since the backup before, by name, in the order the
-    /// index lists them — the "Removed:" line's tooltip, every name; nil
+    /// index lists them — the "Deleted:" line's tooltip, every name; nil
     /// when nothing is.
     var removedNames: String? {
-        removed.isEmpty ? nil : "Removed: " + removed.map(ResticPath.basename(of:)).joined(separator: ", ")
+        removed.isEmpty ? nil : removed.map(ResticPath.basename(of:)).joined(separator: ", ")
     }
 
     /// What is gone, each with its kind, in the order the index lists
-    /// them — the "Removed:" line's routes.
+    /// them — the "Deleted:" line's routes.
     var removedItems: [RemovedItem] {
         removed.map { RemovedItem(path: $0, isDirectory: removedFolders.contains(PathKey($0))) }
     }

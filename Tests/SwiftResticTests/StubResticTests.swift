@@ -761,8 +761,8 @@ struct StubResticTests {
             #expect(cause == "connection refused")
         }
         #expect(ResticError.timedOut(seconds: 300, cause: "connection refused").errorDescription
-            == "Timed out after 300s and was stopped — restic kept retrying: connection refused.")
-        #expect(ResticError.timedOut(seconds: 300, cause: "").errorDescription == "Timed out after 300s and was stopped.")
+            == "Timed out after 5m and was stopped — restic kept retrying: connection refused.")
+        #expect(ResticError.timedOut(seconds: 300, cause: "").errorDescription == "Timed out after 5m and was stopped.")
     }
 
     @Test("a child that ignores SIGTERM is killed after the grace and still reported")

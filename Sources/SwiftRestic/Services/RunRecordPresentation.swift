@@ -420,7 +420,7 @@ enum RunRecordPresentation {
             if run.outcome == .skipped, let reason = run.detailText { lines.append("Skipped: \(reason)") }
             if let since = run.skippedSince, let count = run.skipCount {
                 let label = run.outcome == .failed ? "Failing since" : "Skipped since"
-                lines.append("\(label): \(Format.timestamp(since)) (\(count) runs)")
+                lines.append("\(label): \(Format.timestamp(since)) (\(Format.plural(count, "time")))")
             }
             if hasBackupNumbers(run) {
                 lines.append(

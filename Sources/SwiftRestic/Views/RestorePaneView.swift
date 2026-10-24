@@ -597,7 +597,7 @@ struct RestorePaneView: View {
     }
 
     /// "3 changes inside this folder since Oct 7, 2026 at 11:00 PM: 2
-    /// modified, 1 removed" — the header's baseline, the tally's kinds.
+    /// modified, 1 deleted" — the header's baseline, the tally's kinds.
     private func insideHelp(_ inside: ChangesInside) -> String {
         "\(Format.plural(inside.total, "change")) inside this folder\(sinceBaseline): \(inside.summary)"
     }
