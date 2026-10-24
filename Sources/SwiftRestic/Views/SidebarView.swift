@@ -129,12 +129,14 @@ struct SidebarView: View {
 
             Spacer()
 
-            // Text, no icon: buttons wear none (the user's call); the + is
-            // an icon-only control, kept as such.
-            Button("restic Console") { router.request(.showConsole) }
-                .buttonStyle(.borderless)
-                .disabled(!model.repositoryCommands(for: router.selection).canOpenConsole)
-                .help("Run restic commands against a repository")
+            // Icon-only like the + (the user's call); the tooltip names it.
+            Button { router.request(.showConsole) } label: {
+                Label("restic Console", systemImage: "terminal")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!model.repositoryCommands(for: router.selection).canOpenConsole)
+            .help("restic Console: run restic commands against a repository")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
