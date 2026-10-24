@@ -311,14 +311,12 @@ struct FilesBrowserView: View {
                 ContentUnavailableView {
                     Label("No matches", systemImage: "magnifyingglass")
                 } description: {
-                    // Verbatim: a query is no Markdown — its asterisks would
-                    // be eaten as emphasis.
-                    Text(verbatim: answer.isComplete
-                        ? "No name in these backups has a word starting with “\(query)”."
+                    Text(answer.isComplete
+                        ? "Nothing in this plan’s backups matches. Each word you type matches the start of a word in a name."
                         : FilesSearchAnswer.searchStillReading)
                 } actions: {
                     Button("Search All Backups") { onSearchAllBackups(roots.repositoryID, query) }
-                        .help("Search every backup in this repository with Find Files, other plans’ included")
+                        .help("Open Find Files with this search; other plans’ backups included")
                 }
             case let .hits(entries):
                 VStack(spacing: 0) {
@@ -752,7 +750,6 @@ struct FilesTreeRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(isExpanded ? "Hide this folder’s contents" : "Show this folder’s contents")
                 .accessibilityLabel("Contents of “\(title)”")
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             } else {

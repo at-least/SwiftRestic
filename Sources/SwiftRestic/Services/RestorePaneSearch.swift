@@ -59,7 +59,7 @@ struct RestorePaneSearch: Equatable, Sendable {
         }
         guard elsewhereCount > 0 else { return nil }
         return elsewhereCount == 1
-            ? "1 matching item is only in other backups."
-            : "\(Format.count(elsewhereCount)) matching items are only in other backups."
+            ? "1 match is only in other backups."
+            : "\(Format.count(elsewhereCount)) matches are only in other backups."
     }
 }

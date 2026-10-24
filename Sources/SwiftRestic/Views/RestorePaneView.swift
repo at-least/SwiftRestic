@@ -368,7 +368,6 @@ struct RestorePaneView: View {
         .buttonStyle(.plain)
         .padding(.vertical, -2)
         .onDrag { dragProvider(for: row.node) }
-        .help(row.expanded ? "Collapse" : "Expand")
         .accessibilityLabel(row.expanded ? "Collapse \(row.node.name)" : "Expand \(row.node.name)")
     }
 
@@ -530,7 +529,7 @@ struct RestorePaneView: View {
             onSearchAllBackups(repositoryID, searchText.trimmingCharacters(in: .whitespaces))
         }
         .disabled(!model.isResticAvailable)
-        .help("Open Find Files with this search, across every backup in this repository")
+        .help("Open Find Files with this search; other plans’ backups included")
     }
 
     // MARK: - Rows

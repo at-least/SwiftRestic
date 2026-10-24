@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 /// The Restore pane's search: the hits the open backup holds, and how many
-/// matching items only other backups hold — the count that turns "No
+/// matches only other backups hold — the count that turns "No
 /// matches in this backup" from a dead end into a way on.
 @Suite("Restore pane search")
 struct RestorePaneSearchTests {
@@ -25,7 +25,7 @@ struct RestorePaneSearchTests {
         // hits the open backup lacks are the ones elsewhere.
         #expect(result.elsewhereCount == 2)
         #expect(result.isTruncated == false)
-        #expect(result.note == "2 matching items are only in other backups.")
+        #expect(result.note == "2 matches are only in other backups.")
     }
 
     @Test("one elsewhere hit reads in the singular; nothing anywhere adds no note")
@@ -38,7 +38,7 @@ struct RestorePaneSearchTests {
         )
         #expect(one.inThisBackup.isEmpty)
         #expect(one.elsewhereCount == 1)
-        #expect(one.note == "1 matching item is only in other backups.")
+        #expect(one.note == "1 match is only in other backups.")
 
         let none = RestorePaneSearch(hits: [], inRecord: [:], limit: 200, indexIsComplete: true)
         #expect(none.elsewhereCount == 0)

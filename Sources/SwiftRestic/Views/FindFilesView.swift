@@ -244,15 +244,15 @@ struct FindFilesView: View {
             ContentUnavailableView(
                 hasSearched
                     ? "No matches"
-                    : (repositoryID == nil ? "Search a repository" : "Search every backup"),
+                    : (repositoryID == nil
+                        ? "Search a repository"
+                        : "Find a file without knowing which backup holds it"),
                 systemImage: "magnifyingglass",
-                description: Text(
-                    hasSearched
-                        ? (searchedLatestOnly
-                            ? "Nothing in the latest backup matches. Uncheck Latest backup only to search older backups."
-                            : "Nothing in this repository’s backups matches.")
-                        : "Find a file without knowing which backup holds it."
-                )
+                description: hasSearched
+                    ? Text(searchedLatestOnly
+                        ? "Nothing in the latest backup matches. Uncheck Latest backup only to search older backups."
+                        : "Nothing in this repository’s backups matches.")
+                    : (repositoryID == nil ? Text("Find a file without knowing which backup holds it.") : nil)
             )
         } else {
             Table(rows, selection: $selection) {
@@ -305,12 +305,6 @@ struct FindFilesView: View {
                     }
                 }
                 .width(min: 60, ideal: 70)
-
-                TableColumn("Size") { row in
-                    Text(row.match.isDirectory ? "—" : Format.bytes(row.match.size))
-                        .monospacedDigit()
-                }
-                .width(min: 70, ideal: 84)
             }
             .focusOnClick($resultsAreFocused)
             // An explicit right-click route to the restore the footer button
