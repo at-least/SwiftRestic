@@ -261,7 +261,7 @@ struct RunRecordPresentationTests {
         #expect(RunFix.addRepository.title == "Add Repository")
         #expect(RunFix.removeStaleLocks(repository).title == "Unlock")
         // Each says the cause it fixes.
-        #expect(RunFix.editRepository(repository).help == "The password doesn't open this repository — check it in the repository settings")
+        #expect(RunFix.editRepository(repository).help == "The password doesn’t open this repository — check it in the repository settings")
         #expect(RunFix.addRepository.help == "No repository is at its location — put it back, or add it where it is now as a new repository")
     }
 
@@ -315,7 +315,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == nil)
         #expect(RunFix.editPlanRetention(plan).title == "Edit Plan")
         #expect(RunFix.editPlanRetention(plan).help
-            == "The repository refuses to delete backups — turn this plan's retention off, or thin it where deletions are allowed")
+            == "The repository refuses to delete backups — turn this plan’s retention off, or thin it where deletions are allowed")
     }
 
     @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now; a write anywhere else keeps restic's")
@@ -334,7 +334,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecord.repositoryFullMessage(
             resticMessage: "Fatal: unable to save snapshot: write /Users/me/Backups/repo/data/aa/aa11-tmp-1: no space left on device",
             repository: onThisMac
-        ) == "This Mac's disk \(words)")
+        ) == "This Mac’s disk \(words)")
         // Written elsewhere — restic's cache on this Mac, a folder beside the
         // repository's — or another error, or a remote repository: restic's
         // words stand.
@@ -542,7 +542,7 @@ struct RunRecordPresentationTests {
         // A top folder restic skipped is named where it lives.
         #expect(words("/Volumes/Data/Projects does not exist, skipping", "/Volumes/Data/Projects")
             == UnreadableItemWords(name: "Projects", location: "/Volumes/Data", reason: "not on this Mac"))
-        #expect(words("/Volumes/Data/Projects cannot be accessed, skipping", "/Volumes/Data/Projects")?.reason == "can't be accessed")
+        #expect(words("/Volumes/Data/Projects cannot be accessed, skipping", "/Volumes/Data/Projects")?.reason == "can’t be accessed")
         // Any other cause in restic's words, after the item's own name.
         let odd = "/Volumes/Data/Documents/odd.bin"
         #expect(words("\(odd): read \(odd): input/output error", odd)?.reason == "read \(odd): input/output error")

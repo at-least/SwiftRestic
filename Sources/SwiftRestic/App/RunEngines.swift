@@ -338,7 +338,7 @@ enum BackupRunEngine {
                     // backup's, live, and the next backup's retention runs
                     // again by itself.
                     let reason = if case ResticError.commandFailed(exitCode: 11, _) = error {
-                        "another backup or job held the repository's lock — retention runs again after the next backup."
+                        "another backup or job held the repository’s lock — retention runs again after the next backup."
                     } else {
                         error.localizedDescription
                     }

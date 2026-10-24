@@ -468,11 +468,11 @@ struct CommandStateTests {
         let unset = makePlan("Unset", on: nil)
         model.configuration.plans = [unset]
         #expect(model.planCommands(for: .plan(unset.id)).retentionBlocker
-            == "This plan needs a repository and a folder or file to back up.")
+            == "This plan needs a repository and a folder or file to back up")
         // Back Up Now says the same, where it said nothing.
         #expect(!model.planCommands(for: .plan(unset.id)).canBackUp)
         #expect(model.planCommands(for: .plan(unset.id)).backUpDisabledReason
-            == "This plan needs a repository and a folder or file to back up.")
+            == "This plan needs a repository and a folder or file to back up")
     }
 
     @Test("the app-wide pause items follow the tray's rules")

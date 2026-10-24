@@ -23,7 +23,7 @@ struct ResticErrorTests {
             exitCode: 12,
             message: "Fatal: wrong password"
         ).errorDescription ?? ""
-        #expect(wrongPassword.contains("doesn't open this repository"))
+        #expect(wrongPassword.contains("doesn’t open this repository"))
         #expect(wrongPassword.contains("check it in the repository settings"))
         #expect(wrongPassword.contains("Fatal: wrong password"))
         #expect(
@@ -110,11 +110,11 @@ struct ResticErrorTests {
         #expect(result([]).failureMessage == fatal)
 
         let unknownText = ResticError.commandFailed(exitCode: 1, message: unknown.failureMessage).errorDescription ?? ""
-        #expect(unknownText.hasPrefix("SSH does not know this server's key yet"))
+        #expect(unknownText.hasPrefix("SSH does not know this server’s key yet"))
         #expect(unknownText.contains("Connect to it once in Terminal with ssh"))
         #expect(unknownText.hasSuffix("restic reported: \(fatal)"))
         let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
-        #expect(changedText.hasPrefix("This server's SSH key has changed since this Mac last connected"))
+        #expect(changedText.hasPrefix("This server’s SSH key has changed since this Mac last connected"))
         #expect(changedText.contains("ssh-keygen -R"))
         // Any other fatal error keeps its wording.
         #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription

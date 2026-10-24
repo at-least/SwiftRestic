@@ -68,7 +68,7 @@ enum ResticError: Error, LocalizedError, Equatable {
                 // never succeed here. restic's words stay for the discriminating
                 // detail (wrong password vs no matching key vs a damaged key
                 // file), first sentence only — stderr can run multi-line.
-                let base = "The password doesn't open this repository — check it in the repository settings."
+                let base = "The password doesn’t open this repository — check it in the repository settings."
                 let restic = Format.firstSentence(message)
                 return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
             }
@@ -110,7 +110,7 @@ enum ResticError: Error, LocalizedError, Equatable {
                 ? "Timed out after \(Format.duration(seconds)) and was stopped."
                 : "Timed out after \(Format.duration(seconds)) and was stopped — restic kept retrying: \(cause)."
         case let .idleStalled(seconds):
-            return "Stopped reporting any progress for \(Format.duration(seconds)) and was stopped — check the repository's connection and try again."
+            return "Stopped reporting any progress for \(Format.duration(seconds)) and was stopped — check the repository’s connection and try again."
         case let .malformedOutput(detail):
             return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output."
         case let .stagedFileMoveFailed(path, reason):
@@ -138,11 +138,11 @@ enum ResticError: Error, LocalizedError, Equatable {
     static func sshHostKeyAdvice(_ message: String) -> String? {
         guard message.contains("Host key verification failed") else { return nil }
         if message.contains("has changed") {
-            return "This server's SSH key has changed since this Mac last connected, and SSH refuses it: "
+            return "This server’s SSH key has changed since this Mac last connected, and SSH refuses it: "
                 + "the server was reinstalled, or another computer is answering. If you expect the change, "
-                + "remove the old key with ssh-keygen -R and the server's name in Terminal, then connect once with ssh."
+                + "remove the old key with ssh-keygen -R and the server’s name in Terminal, then connect once with ssh."
         }
-        return "SSH does not know this server's key yet, and restic runs SSH without a terminal to confirm it. "
+        return "SSH does not know this server’s key yet, and restic runs SSH without a terminal to confirm it. "
             + "Connect to it once in Terminal with ssh and accept the key, then try again."
     }
 

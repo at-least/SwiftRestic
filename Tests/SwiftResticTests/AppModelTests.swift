@@ -1832,7 +1832,7 @@ struct KeychainFailureHonestyTests {
         model.deleteRepository(id: repository.id)
         await model.tasks.drain()
 
-        #expect(model.banners.contains { $0.title == "The removed repository's secrets are still in your Keychain" && $0.isError })
+        #expect(model.banners.contains { $0.title == "The removed repository’s secrets are still in your Keychain" && $0.isError })
     }
 }
 

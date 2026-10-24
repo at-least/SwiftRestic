@@ -185,7 +185,7 @@ struct FileVersionsView: View {
                     )
                 }
                 .disabled(chosen == nil)
-                .help("Open the chosen version's newest backup at this file's folder on the Backups tab")
+                .help("Open the chosen version’s newest backup at this file’s folder on the Backups tab")
                 Spacer()
                 if previewer.isCopying {
                     ProgressView()

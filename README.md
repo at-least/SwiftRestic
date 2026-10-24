@@ -96,7 +96,7 @@ the generator after editing it; the PNGs are checked in.
   why and what to do, with *Show Backups*: *“TinyDisk” is not connected*
   (connect it to see the folder), *“Documents” is not on this Mac* (moved,
   renamed or deleted: put it back, or back it up where it is now with a new
-  plan — a failed backup's words), or *SwiftRestic can't read “Documents”*
+  plan — a failed backup's words), or *SwiftRestic can’t read “Documents”*
   — and for a refusal, a fix to press besides: macOS's block,
   while SwiftRestic lacks Full Disk Access, says to turn it on and quit and
   reopen SwiftRestic, with *Open Full Disk Access Settings* (with the grant
@@ -477,7 +477,7 @@ the generator after editing it; the PNGs are checked in.
     the volume here and the folder gone the run fails, fixed by *Edit
     Repository*. The listing follows the same check: with the volume away
     restic is not asked, no banner posts, and the sidebar row reads "“Travel
-    SSD” is not connected." and the caveat "Can't read backups — “Travel
+    SSD” is not connected." and the caveat "Can’t read backups — “Travel
     SSD” is not connected.", earlier rows staying. A skipped run shows on the
     listing at once, and a mount re-reads the listings of the repositories
     on it, paused or not.
@@ -544,8 +544,8 @@ the generator after editing it; the PNGs are checked in.
   window missed asleep runs on waking. While restic cannot be found the
   scheduler starts nothing (no Failed record, banner or notification per
   slot), the menu bar's menu leads with "restic is missing — backups are on
-  hold." and promises no next run, each grey *Back Up* row says "restic is
-  missing.", and the quiet-plan notification still names plans left unprotected.
+  hold" and promises no next run, each grey *Back Up* row says "restic is
+  missing", and the quiet-plan notification still names plans left unprotected.
   *Find Again* in Settings › restic, or a relaunch, lets the due plans run.
 - **Pause** — *Pause Backups* in the menu bar holds every scheduled backup,
   check and prune for an hour, until tomorrow or until resumed; *Pause and
@@ -807,7 +807,7 @@ the generator after editing it; the PNGs are checked in.
   Copy Details); the drawer opens its plan or repository, and restores
   record which backup, which item and where it went. A failure the drawer
   offers a fix for says the fix in its own words, so the plan page's problem
-  card and the notification do too — exit 12 "The password doesn't open this repository
+  card and the notification do too — exit 12 "The password doesn’t open this repository
   — check it in the repository settings.", exit 10 "No repository is at its
   location — put it back, or add it where it is now as a new repository."
   (*Add Repository*), exit 11 "The repository is locked — if no other Mac is
@@ -1172,7 +1172,7 @@ restic's locks shape most of the scheduling. `backup` takes a shared lock;
   together, one's retention lost the lock to the other's.
 - *Back Up All Plans Now* and a mount's catch-up keep that rule: a plan
   whose repository another plan's run holds waits its turn — its sidebar
-  row reads *Waiting for another backup* — and starts when that run ends;
+  row reads *Waiting for another backup…* — and starts when that run ends;
   *Back Up Now* on it starts it at once, and *Pause and Stop* drops the
   ones waiting. Until 2026-10-19 they started every plan together, and on a
   repository with two plans the first to finish skipped its retention.

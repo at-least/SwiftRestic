@@ -91,8 +91,8 @@ struct AdoptTests {
         let page = try #require(shelves.otherGroupPage(.plan(planID), repositories: [repository], localHost: model.localHostname))
         #expect(!page.isAdoptable)
         #expect(page.explanation
-            == "From a plan that isn't set up here — deleted, or still running on another Mac."
-                + " It holds several folders and a plan backs up one, so it can't be adopted.")
+            == "From a plan that isn’t set up here — deleted, or still running on another Mac."
+                + " It holds several folders and a plan backs up one, so it can’t be adopted.")
 
         // A newer backup of one folder is the history a plan continues.
         let one = try snapshot("one", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag])
@@ -284,7 +284,7 @@ struct AdoptTests {
         let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
 
         let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
-        #expect(briefing.historyLine == "This backup becomes this plan's history.")
+        #expect(briefing.historyLine == "This backup becomes this plan’s history.")
         #expect(briefing.madeLine
             == "Made \(Format.historySpan(oldest: newest.time, newest: newest.time)) from other-mac."
                 + " Nothing in “Home Disk” changes.")
@@ -324,7 +324,7 @@ struct AdoptTests {
         loadModel(model, repository: repository, listing: [local])
         let localDraft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(model.adoptBriefing(for: localDraft, now: date("2026-10-03T12:00:00Z"))?.warnings
-            == ["This folder isn't on this Mac."])
+            == ["This folder isn’t on this Mac."])
     }
 
     @Test("a clean old local group adopts in one click, once its folders are here")
@@ -343,7 +343,7 @@ struct AdoptTests {
         let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.warnings.isEmpty)
         #expect(!briefing.needsConfirmation)
-        #expect(briefing.historyLine == "This backup becomes this plan's history.")
+        #expect(briefing.historyLine == "This backup becomes this plan’s history.")
     }
 
     @Test("a fresh backup this Mac itself made still asks once")
@@ -409,7 +409,7 @@ struct AdoptTests {
         let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
 
         let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
-        #expect(briefing.warnings.last == "1 backup also carries another plan's tag and stays with that plan.")
+        #expect(briefing.warnings.last == "1 backup also carries another plan’s tag and stays with that plan.")
     }
 
     // MARK: - The write

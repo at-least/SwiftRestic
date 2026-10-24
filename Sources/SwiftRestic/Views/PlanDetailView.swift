@@ -32,7 +32,7 @@ struct PlanDetailView: View {
         .pageSearch(
             page: .plan(planID),
             roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
-            filesPrompt: "Search this plan's backups"
+            filesPrompt: "Search this plan’s backups"
         )
         // The toolbar holds the tabs and the search field; the editor is
         // Plan ▸ Edit Plan and the sidebar row's Edit, deleting Plan ▸
@@ -410,7 +410,7 @@ struct PlanDetailView: View {
                 }
             }
             .buttonStyle(HoverableButtonStyle())
-            .help("Show this backup's run in Activity")
+            .help("Show this backup’s run in Activity")
             .accessibilityLabel("Last backup \(text). Show its run in Activity")
         } else {
             Text(text)

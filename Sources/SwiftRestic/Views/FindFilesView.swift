@@ -224,7 +224,7 @@ struct FindFilesView: View {
                     : "Press Return to search.",
                 detail: indexComplete == true
                     ? FilesSearchAnswer.matchRule + " The search runs on this Mac, however deep the history."
-                    : "Matching ignores case and takes shell patterns such as *.key. Searching every backup reads each one, so it takes longer the more history the repository holds. “Latest backup only” searches the repository's newest backup — which may not be the newest of every plan."
+                    : "Matching ignores case and takes shell patterns such as *.key. Searching every backup reads each one, so it takes longer the more history the repository holds. “Latest backup only” searches the repository’s newest backup — which may not be the newest of every plan."
             )
         }
         .padding(12)
@@ -250,7 +250,7 @@ struct FindFilesView: View {
                     hasSearched
                         ? (searchedLatestOnly
                             ? "Nothing in the latest backup matches. Uncheck Latest backup only to search older backups."
-                            : "Nothing in this repository's backups matches.")
+                            : "Nothing in this repository’s backups matches.")
                         : "Find a file without knowing which backup holds it."
                 )
             )

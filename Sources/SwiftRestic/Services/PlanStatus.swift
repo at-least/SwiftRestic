@@ -248,7 +248,7 @@ enum PlanStatus {
         ).first?.date else {
             return TileFace(
                 value: "Not scheduled",
-                help: "This plan isn't scheduled because its setup is incomplete. To finish it, choose Edit Plan"
+                help: "This plan isn’t scheduled because its setup is incomplete. To finish it, choose Edit Plan"
             )
         }
         // Nothing stamps the slot until the run ends, so "Running now"
@@ -360,7 +360,7 @@ enum PlanStatus {
             return PlanCaption(text: activity.phase.displayName)
         }
         if isQueued {
-            return PlanCaption(text: "Waiting for another backup")
+            return PlanCaption(text: "Waiting for another backup…")
         }
         let pause = pauseCaption(for: plan, now: now, calendar: calendar)
         if let problem {

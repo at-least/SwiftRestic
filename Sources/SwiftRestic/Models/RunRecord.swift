@@ -425,7 +425,7 @@ extension RunRecord {
         while root.count > 1, root.hasSuffix("/") { root.removeLast() }
         // restic names the file it was writing: "write <repository>/data/…".
         guard resticMessage.contains("write \(root)/") else { return nil }
-        let disk = VolumePresence.volumeName(of: root).map { "“\($0)”" } ?? "This Mac's disk"
+        let disk = VolumePresence.volumeName(of: root).map { "“\($0)”" } ?? "This Mac’s disk"
         return "\(disk) is full — the backup needed more room than it has free. "
             + "What it uploaded before it stopped stays in the repository until a cleanup frees it."
     }

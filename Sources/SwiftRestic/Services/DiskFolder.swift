@@ -156,7 +156,7 @@ enum FolderAbsence: Error, Equatable, Sendable {
         case let .volumeAway(volume): "“\(volume)” is not connected"
         case let .missing(name): "“\(name)” is not on this Mac"
         case let .blockedByMacOS(name), let .deniedByFilePermissions(name), let .unreadable(name, _):
-            "SwiftRestic can't read “\(name)”"
+            "SwiftRestic can’t read “\(name)”"
         }
     }
 
@@ -172,7 +172,7 @@ enum FolderAbsence: Error, Equatable, Sendable {
             fullDiskAccess == .granted
                 ? "macOS blocked it even with Full Disk Access on — it is likely protected by macOS itself."
                 : "macOS blocked it: SwiftRestic needs Full Disk Access."
-        case .deniedByFilePermissions: "It can't be read with your account's file permissions."
+        case .deniedByFilePermissions: "It can’t be read with your account’s file permissions."
         case let .unreadable(_, reason): reason
         }
     }
@@ -216,7 +216,7 @@ enum FolderAbsence: Error, Equatable, Sendable {
             )
         case .deniedByFilePermissions:
             Remedy(
-                steps: "Full Disk Access doesn't change that: select it in Finder, choose File › Get Info, and give your account Read access under Sharing & Permissions.",
+                steps: "Full Disk Access doesn’t change that: select it in Finder, choose File › Get Info, and give your account Read access under Sharing & Permissions.",
                 fix: .revealInFinder
             )
         case .blockedByMacOS, .unreadable: nil

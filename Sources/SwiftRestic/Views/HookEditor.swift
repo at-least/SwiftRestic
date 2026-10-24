@@ -55,10 +55,10 @@ struct HookEditor: View {
                 isEmpty: hooks.isEmpty,
                 emptyTitle: "No hooks",
                 emptyHint: isForMaintenance
-                    ? "Click + to run a script before or after this repository's checks and cleanups."
-                    : "Click + to run a script before or after this plan's backups.",
-                addTitle: "Add Hook",
-                removeTitle: "Remove Hook",
+                    ? "Click + to run a script before or after this repository’s checks and cleanups."
+                    : "Click + to run a script before or after this plan’s backups.",
+                addTitle: "Add hook",
+                removeTitle: "Remove hook",
                 canRemove: selection != nil,
                 onAdd: addHook,
                 onRemove: { isConfirmingRemove = true }
@@ -106,7 +106,7 @@ struct HookEditor: View {
 
     private func addHook() {
         var hook = BackupHook()
-        hook.name = "New hook"
+        hook.name = "New Hook"
         // The most likely reason to script a repository is to hear about a
         // failed check; a plan's is to act on a good backup.
         hook.event = isForMaintenance ? .afterMaintenanceFailure : .afterSuccess
@@ -141,7 +141,7 @@ struct HookEditor: View {
                             RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
                                 .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
                         )
-                    Text(verbatim: "Runs through /bin/sh with the app's own privileges, which are not sandboxed.")
+                    Text(verbatim: "Runs through /bin/sh with the app’s own privileges, which are not sandboxed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

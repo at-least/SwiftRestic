@@ -115,7 +115,7 @@ struct ActivityView: View {
                                 .help(name)
                         } else {
                             Text("—")
-                                .help("The repository isn't known. It may have been removed")
+                                .help("The repository isn’t known. It may have been removed")
                         }
                     }
                     .width(min: 96, ideal: 104, max: 140)

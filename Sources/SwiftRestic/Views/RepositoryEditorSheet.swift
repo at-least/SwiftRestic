@@ -319,8 +319,8 @@ struct RepositoryEditorSheet: View {
                 Section("Credentials") {
                     if draft.kind == .sftp {
                         Text(
-                            "SSH is authenticated with your keys, and restic runs without a terminal, so it can't ask for a key's passphrase or use ssh-agent: use a key without one, set in ~/.ssh/config. "
-                                + "It can't accept a new server's key either — \(firstContact)"
+                            "SSH is authenticated with your keys, and restic runs without a terminal, so it can’t ask for a key’s passphrase or use ssh-agent: use a key without one, set in ~/.ssh/config. "
+                                + "It can’t accept a new server’s key either — \(firstContact)"
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -532,7 +532,7 @@ struct RepositoryEditorSheet: View {
                 }
             }
             ExpandableCaption(
-                summary: "The key file's path is stored in your configuration, not the Keychain.",
+                summary: "The key file’s path is stored in your configuration, not the Keychain.",
                 detail: "restic reads the key file from disk itself. Keep the file readable only by you."
             )
         case .sftp, .azure, .rest, .rclone:
@@ -639,7 +639,7 @@ struct RepositoryEditorSheet: View {
     /// asks for the password before Save.
     private var encryptionHint: String? {
         if isNew {
-            return "Everything is encrypted with it, and it can't be recovered — keep it in your password manager."
+            return "Everything is encrypted with it, and it can’t be recovered — keep it in your password manager."
         }
         if secretsReadFailed {
             return "The Keychain could not be read. Leave this blank to keep whatever password it holds, or enter the password to replace it."
@@ -678,7 +678,7 @@ struct RepositoryEditorSheet: View {
             // Prefill failed — say so. Blank fields would read as "no
             // password stored" and a save would silently keep whatever the
             // Keychain actually holds, hiding the failure either way.
-            status = .failure("Couldn't read the password from your Keychain: \(error.localizedDescription)")
+            status = .failure("Couldn’t read the password from your Keychain: \(error.localizedDescription)")
             secretsReadFailed = true
         }
     }
@@ -870,7 +870,7 @@ extension Repository.Kind {
         case .b2: "Backblaze B2 cloud storage."
         case .azure: "Microsoft Azure Blob Storage."
         case .gcs: "Google Cloud Storage."
-        case .rclone: "Any of rclone's many backends, through a remote you configure once."
+        case .rclone: "Any of rclone’s many backends, through a remote you configure once."
         }
     }
 }

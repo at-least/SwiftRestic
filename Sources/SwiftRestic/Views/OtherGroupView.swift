@@ -101,7 +101,7 @@ struct OtherGroupView: View {
                     router.selection = .plan(plan.id)
                 }
                 .controlSize(.small)
-                .help("Show this plan's page, where it backs up now")
+                .help("Show this plan’s page, where it backs up now")
             } else if summary.isAdoptable, case let .plan(planID) = groupID {
                 // The flow's main entry; the group's context menu carries the
                 // same verb.

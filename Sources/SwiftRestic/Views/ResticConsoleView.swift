@@ -142,7 +142,7 @@ struct ResticConsoleView: View {
 
             ExpandableCaption(
                 summary: "The repository and its credentials are supplied for you.",
-                detail: "Output is restic's own — nothing here is parsed by the app."
+                detail: "Output is restic’s own — nothing here is parsed by the app."
             )
         }
         .padding(12)

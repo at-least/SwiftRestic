@@ -156,7 +156,7 @@ extension AppModel {
                 if let problem = error as? NotificationProblem, problem == .permissionDenied {
                     post(Banner(
                         title: "Could not send a notification",
-                        message: "macOS notification permission is off for SwiftRestic, so its notifications don't appear.",
+                        message: "macOS notification permission is off for SwiftRestic, so its notifications don’t appear.",
                         level: .warning,
                         link: Banner.Link(title: "Open Notification Settings", url: Self.notificationSettingsURL)
                     ))

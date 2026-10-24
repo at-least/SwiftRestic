@@ -151,7 +151,7 @@ struct RestoreDestinationSheet: View {
 
                 LabeledContent {
                     // True in both modes: restore never runs with --delete.
-                    Text("Files that aren't in the backup are never removed.")
+                    Text("Files that aren’t in the backup are never removed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } label: {
@@ -402,7 +402,7 @@ struct RestoreDestinationSheet: View {
             let landing = Self.abbreviated(existing[0])
             if isDirectory {
                 alert.messageText = "Replace files in “\(name)”?"
-                alert.informativeText = "“\(landing)” already exists. Files in it that differ from the backup\(backupOf) will be replaced with the backed-up versions. Files that aren't in the backup stay as they are."
+                alert.informativeText = "“\(landing)” already exists. Files in it that differ from the backup\(backupOf) will be replaced with the backed-up versions. Files that aren’t in the backup stay as they are."
             } else {
                 alert.messageText = "Replace “\(name)”?"
                 let version = request.backupTime.map { "the version from \(Format.timestamp($0))" } ?? "the backed-up version"
@@ -413,7 +413,7 @@ struct RestoreDestinationSheet: View {
             // which of the selected items Replace is about to touch.
             let names = existing.map { "“\($0.lastPathComponent)”" }
             alert.messageText = existing.count == 1 ? "Replace \(names[0])?" : "Replace \(Format.count(existing.count)) existing items?"
-            alert.informativeText = "\(names.joined(separator: ", ")) \(existing.count == 1 ? "is" : "are") already where \(existing.count == 1 ? "it" : "they") would be restored. Files that differ from the backup\(backupOf) will be replaced with the backed-up versions; files that aren't in the backup stay as they are."
+            alert.informativeText = "\(names.joined(separator: ", ")) \(existing.count == 1 ? "is" : "are") already where \(existing.count == 1 ? "it" : "they") would be restored. Files that differ from the backup\(backupOf) will be replaced with the backed-up versions; files that aren’t in the backup stay as they are."
         }
         alert.addButton(withTitle: "Replace")
         alert.addButton(withTitle: "Cancel")

@@ -12,9 +12,9 @@ struct VersionPreviewTests {
         #expect(VersionPreview.unavailableReason(size: 46, isReading: false) == nil)
         #expect(VersionPreview.unavailableReason(size: VersionPreview.sizeLimit, isReading: false) == nil)
         #expect(VersionPreview.unavailableReason(size: nil, isReading: true)
-            == "Preview waits for the version's size, still being read")
+            == "Preview waits for the version’s size, still being read")
         #expect(VersionPreview.unavailableReason(size: nil, isReading: false)
-            == "Preview needs the version's size, which could not be read")
+            == "Preview needs the version’s size, which could not be read")
         let big = VersionPreview.sizeLimit + 1
         #expect(VersionPreview.unavailableReason(size: big, isReading: false)
             == "Too large to preview (\(Format.bytes(big))) — restore it to open it")

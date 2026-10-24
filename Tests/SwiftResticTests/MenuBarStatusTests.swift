@@ -175,7 +175,7 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0.418)) == "42%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 1)) == "100%")
         // Retention and notification phases are named, never shown as a percent.
-        #expect(MenuBarStatus.progressText(activity: activity(phase: .applyingRetention), progress: progress(fraction: 1)) == "Applying retention")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .applyingRetention), progress: progress(fraction: 1)) == "Applying retention…")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .cancelling), progress: nil) == "Cancelling…")
     }
 
@@ -194,7 +194,7 @@ struct MenuBarStatusTests {
             ],
             progress: [second.id: progress(fraction: 0.5)]
         )
-        #expect(lines.map(\.text) == ["First — Applying retention", "Second — 50%"])
+        #expect(lines.map(\.text) == ["First — Applying retention…", "Second — 50%"])
         #expect(lines.map(\.id) == [first.id.uuidString, second.id.uuidString])
     }
 
@@ -411,7 +411,7 @@ struct MenuBarStatusTests {
         plan.repositoryID = UUID()
         plan.path = "/Users/someone/Documents"
         let next = Date(timeIntervalSince1970: 1_800_000_000)
-        #expect(MenuBarStatus.resticMissingLine(isResticAvailable: false) == "restic is missing — backups are on hold.")
+        #expect(MenuBarStatus.resticMissingLine(isResticAvailable: false) == "restic is missing — backups are on hold")
         #expect(MenuBarStatus.resticMissingLine(isResticAvailable: true) == nil)
         #expect(MenuBarStatus.headline(
             activity: [:], isResticAvailable: false, plans: [], repositories: [], nextRun: (plan, next)
@@ -424,7 +424,7 @@ struct MenuBarStatusTests {
         )
         #expect(rows.first?.isEnabled == false)
         // The cause no wait cures leads.
-        #expect(rows.first?.disabledReason == "restic is missing.")
+        #expect(rows.first?.disabledReason == "restic is missing")
     }
 
     @Test("a recent failure and a recent warning both lead, newest first")
@@ -737,7 +737,7 @@ struct MenuBarStatusTests {
         )
         #expect(ScheduleHold.paused(until: nil).summary(now: now, calendar: calendar) == "Backups paused until you resume")
         #expect(ScheduleHold.onBattery.summary(now: now, calendar: calendar) == "Backups wait for power — this Mac is on battery")
-        #expect(ScheduleHold.onMeteredNetwork.summary(now: now, calendar: calendar) == "Backups wait — this Mac's network is metered")
+        #expect(ScheduleHold.onMeteredNetwork.summary(now: now, calendar: calendar) == "Backups wait — this Mac’s network is metered")
         #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
     }
 

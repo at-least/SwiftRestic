@@ -18,19 +18,19 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Get a file back",
-            text: "Select the file on the plan's Files tab and click Restore to put it back. Repository ▸ Find Files finds a file by name in every backup. To bring back everything from one moment, open the backup on the Backups tab, select its top folder, and click Restore."
+            text: "Select the file on the plan’s Files tab and click Restore to put it back. Repository ▸ Find Files finds a file by name in every backup. To bring back everything from one moment, open the backup on the Backups tab, select its top folder, and click Restore."
         ),
         Topic(
             title: "When a backup fails",
-            text: "Activity lists every backup, retention, check, cleanup and restore. Select one to see what happened, with Show Log and Copy Details below it — and a button for the fix, when there is one. A backup that couldn't read some files still saves the rest and is marked Completed with warnings."
+            text: "Activity lists every backup, retention, check, cleanup and restore. Select one to see what happened, with Show Log and Copy Details below it — and a button for the fix, when there is one. A backup that couldn’t read some files still saves the rest and is marked Completed with warnings."
         ),
         Topic(
             title: "Keep the history tidy",
-            text: "Retention, on the plan editor's Retention tab, removes old backups after each one. The space they held is freed by a cleanup: Repository ▸ Clean Up Now, or the repository's periodic cleanup. Repository ▸ Check verifies that nothing is damaged."
+            text: "Retention, on the plan editor’s Retention tab, removes old backups after each one. The space they held is freed by a cleanup: Repository ▸ Clean Up Now, or the repository’s periodic cleanup. Repository ▸ Check verifies that nothing is damaged."
         ),
         Topic(
             title: "Backups from elsewhere",
-            text: "Backups no plan here made — another Mac's, or a deleted plan's — appear under Other backups in the sidebar. One made by a SwiftRestic plan can be adopted, to continue its history on this Mac."
+            text: "Backups no plan here made — another Mac’s, or a deleted plan’s — appear under Other backups in the sidebar. One made by a SwiftRestic plan can be adopted, to continue its history on this Mac."
         ),
     ]
 

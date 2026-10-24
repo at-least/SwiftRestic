@@ -95,8 +95,8 @@ final class PreviewSession {
             try AppModel.removePreviewCopy(url)
         } catch {
             failure = Failure(
-                title: "Could not delete the preview's copy",
-                message: "The preview's copy could not be deleted: \(error.localizedDescription)"
+                title: "Could not delete the preview’s copy",
+                message: "The preview’s copy could not be deleted: \(error.localizedDescription)"
             )
         }
     }

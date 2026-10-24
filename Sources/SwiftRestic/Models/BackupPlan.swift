@@ -486,7 +486,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     }
 
     /// Why a plan that is not `isConfigurationComplete` cannot run.
-    static let incompleteConfigurationReason = "This plan needs a repository and a folder or file to back up."
+    static let incompleteConfigurationReason = "This plan needs a repository and a folder or file to back up"
 
     /// What every surface calls the plan — it has no name of its own: the
     /// last component of its path, the folder's or file's name. When

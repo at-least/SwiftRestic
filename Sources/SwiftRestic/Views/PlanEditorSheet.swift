@@ -460,7 +460,7 @@ struct PlanEditorSheet: View {
             {
                 Section {
                     Label {
-                        Text("Without Full Disk Access, parts of “\((draft.path as NSString).abbreviatingWithTildeInPath)” can't be read, and its backups end with warnings.")
+                        Text("Without Full Disk Access, parts of “\((draft.path as NSString).abbreviatingWithTildeInPath)” can’t be read, and its backups end with warnings.")
                             .fixedSize(horizontal: false, vertical: true)
                     } icon: {
                         // Orange on the glyph only; the sentence says it all.
@@ -574,16 +574,16 @@ struct PlanEditorSheet: View {
     /// names are the tools' own, what they download again — the contents
     /// of the simulators and the machines are the part nobody rebuilds.
     private var developerFilesCaption: String {
-        "Leaves out what the ticked languages' tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn't backed up."
+        "Leaves out what the ticked languages’ tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn’t backed up."
     }
 
     /// What the cloud-files switch does with this restic: 0.19 brought
     /// `--exclude-cloud-files` to macOS.
     private var cloudFilesCaption: String {
         if let version = ResticVersion(parsing: model.resticVersion), !version.excludesCloudFilesOnMac {
-            return "Files kept only in iCloud Drive or OneDrive aren't downloaded or backed up. Needs restic 0.19 or later."
+            return "Files kept only in iCloud Drive or OneDrive aren’t downloaded or backed up. Needs restic 0.19 or later."
         }
-        return "Files kept only in iCloud Drive or OneDrive aren't downloaded or backed up."
+        return "Files kept only in iCloud Drive or OneDrive aren’t downloaded or backed up."
     }
 
     private var scheduleTab: some View {
@@ -727,7 +727,7 @@ struct PlanEditorSheet: View {
             // with every Mac that ever ran it, so its rules reach each Mac's
             // backups of it at the next run.
             if mode == .adopt {
-                Text("Turning retention on applies to every Mac's backups of this plan at the next run.")
+                Text("Turning retention on applies to every Mac’s backups of this plan at the next run.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

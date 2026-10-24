@@ -56,14 +56,14 @@ struct RetentionPreview: Sendable, Equatable {
         guard total > 0 else { return "This plan has no backups in the repository yet." }
         guard let newest = removed.first, let oldest = removed.last else {
             return kept.count == 1
-                ? "Nothing to remove — this plan's only backup is within its rules."
-                : "Nothing to remove — all \(kept.count) of this plan's backups are within its rules."
+                ? "Nothing to remove — this plan’s only backup is within its rules."
+                : "Nothing to remove — all \(kept.count) of this plan’s backups are within its rules."
         }
         let stay = "\(kept.count) would stay."
         if removed.count == 1 {
-            return "1 of this plan's \(total) backups would be removed: the one from \(Format.timestamp(newest.time)). \(stay)"
+            return "1 of this plan’s \(total) backups would be removed: the one from \(Format.timestamp(newest.time)). \(stay)"
         }
-        return "\(removed.count) of this plan's \(total) backups would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(newest.time)). \(stay)"
+        return "\(removed.count) of this plan’s \(total) backups would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(newest.time)). \(stay)"
     }
 
     /// The adopt sheet's one line: what the rules the user just turned on

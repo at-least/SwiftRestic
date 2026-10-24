@@ -318,7 +318,7 @@ struct FilesBrowserView: View {
                         : FilesSearchAnswer.searchStillReading)
                 } actions: {
                     Button("Search All Backups") { onSearchAllBackups(roots.repositoryID, query) }
-                        .help("Search every backup in this repository with Find Files, other plans' included")
+                        .help("Search every backup in this repository with Find Files, other plans’ included")
                 }
             case let .hits(entries):
                 VStack(spacing: 0) {
@@ -752,7 +752,7 @@ struct FilesTreeRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(isExpanded ? "Hide this folder's contents" : "Show this folder's contents")
+                .help(isExpanded ? "Hide this folder’s contents" : "Show this folder’s contents")
                 .accessibilityLabel("Contents of “\(title)”")
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             } else {

@@ -357,8 +357,8 @@ struct NetworkSharePasswordRows: View {
                 .labelsHidden()
         }
         Text(isSaved
-            ? "SwiftRestic reconnects the share when it needs it and the share isn't mounted. Type a password to replace the saved one."
-            : "SwiftRestic reconnects the share when it needs it and the share isn't mounted.")
+            ? "SwiftRestic reconnects the share when it needs it and the share isn’t mounted. Type a password to replace the saved one."
+            : "SwiftRestic reconnects the share when it needs it and the share isn’t mounted.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -760,7 +760,7 @@ struct PathListEditor: View {
     let title: String
     @Binding var paths: [String]
     var placeholder = "Add a pattern"
-    /// Choose Items's panel: what it asks for and its button.
+    /// Choose items's panel: what it asks for and its button.
     var browseMessage = "Choose folders and files to leave out of backups"
     var browsePrompt = "Add"
     /// Excludes: an item chosen in the panel or dropped from Finder is
@@ -812,7 +812,7 @@ struct PathListEditor: View {
             // + chooses items in a panel, as Time Machine's exclusions do;
             // a pattern is typed into the bar's field beside it.
             HStack(spacing: 0) {
-                ListBarButton(symbol: "plus", title: "Choose Items") { browse() }
+                ListBarButton(symbol: "plus", title: "Choose items") { browse() }
                 Divider()
                     .frame(height: 14)
                 ListBarButton(symbol: "minus", title: "Remove") {
@@ -927,7 +927,7 @@ struct EditableListFrame<Content: View>: View {
     let emptyTitle: String
     /// The next step, naming the + it starts from.
     let emptyHint: String
-    /// The buttons' names, for their tooltips and VoiceOver: "Add Hook".
+    /// The buttons' names, for their tooltips and VoiceOver: "Add hook".
     let addTitle: String
     let removeTitle: String
     let canRemove: Bool
@@ -1197,7 +1197,7 @@ struct UnreadableItemLine: View {
                 Button("Exclude") { model.exclude(path: path, fromPlan: plan.id) }
             }
         } message: {
-            Text("The plan's next backups skip \(path ?? "") — backups already made keep it. The plan editor lists it under Also skip, where − takes it out again.")
+            Text("The plan’s next backups skip \(path ?? "") — backups already made keep it. The plan editor lists it under Also skip, where − takes it out again.")
         }
         .task(id: path) {
             guard let path else { return }

@@ -161,7 +161,7 @@ struct AppModelStubTests {
             for: held, activity: model.activity[held.id], isQueued: model.isQueued(held.id),
             problem: nil, existingRepositoryIDs: [harness.repository.id]
         )
-        #expect(caption.text == "Waiting for another backup")
+        #expect(caption.text == "Waiting for another backup…")
 
         // The first's run is over, its retention included, and the second's
         // has begun.
@@ -2220,7 +2220,7 @@ struct AppModelStubTests {
             )
             return
         }
-        #expect(message.contains("doesn't open this repository"))
+        #expect(message.contains("doesn’t open this repository"))
         #expect(message.contains("check it in the repository settings"))
 
         await harness.model.shutdown()

@@ -46,14 +46,14 @@ enum RunFix: Equatable {
     /// The button's tooltip: the cause it fixes.
     var help: String {
         switch self {
-        case .editRepository: "The password doesn't open this repository — check it in the repository settings"
+        case .editRepository: "The password doesn’t open this repository — check it in the repository settings"
         case .addRepository: ResticError.noRepositoryAtLocation
         case .removeStaleLocks: "A lock no run here holds is in the way — remove it after making sure no other Mac is using this repository"
         case .newPlan: "Back the folder up where it is now, with a new plan"
         case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository settings"
-        case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan editor's Excluding tab"
+        case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan editor’s Excluding tab"
         case .pruneNow: "What the failed backup uploaded stays in the repository until a cleanup frees it"
-        case .editPlanRetention: "The repository refuses to delete backups — turn this plan's retention off, or thin it where deletions are allowed"
+        case .editPlanRetention: "The repository refuses to delete backups — turn this plan’s retention off, or thin it where deletions are allowed"
         }
     }
 }
@@ -337,7 +337,7 @@ enum RunRecordPresentation {
             if line.hasSuffix(" does not exist, skipping") {
                 "not on this Mac"
             } else if line.hasSuffix(" cannot be accessed, skipping") {
-                "can't be accessed"
+                "can’t be accessed"
             } else if line.hasPrefix(path + ": ") {
                 String(line.dropFirst(path.count + 2))
             } else {

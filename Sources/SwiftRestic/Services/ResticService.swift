@@ -172,7 +172,7 @@ struct ResticService: ResticClient {
             invocation: ResticInvocation(arguments: ["cache"], timeout: 120, retainFullOutput: true)
         )
         guard let report = ResticCacheReport.parse(result.stdout) else {
-            throw ResticError.malformedOutput(detail: "restic cache's table could not be read: \(result.stdout.prefix(200))")
+            throw ResticError.malformedOutput(detail: "restic cache’s table could not be read: \(result.stdout.prefix(200))")
         }
         return report
     }
@@ -634,9 +634,9 @@ struct ResticService: ResticClient {
         // A run that ends without its summary is the same gap: its numbers
         // and snapshot are unknown, not zero.
         let decodingWarning: String? = if result.malformedCount > 0 {
-            "\(result.malformedCount) restic \(result.malformedCount == 1 ? "message" : "messages") could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete."
+            "\(result.malformedCount) restic \(result.malformedCount == 1 ? "message" : "messages") could not be decoded — a restic update may have changed its output; the run’s numbers may be incomplete."
         } else if result.summary == nil {
-            "restic reported no summary — a restic update may have changed its output; the run's numbers are unknown."
+            "restic reported no summary — a restic update may have changed its output; the run’s numbers are unknown."
         } else {
             nil
         }
@@ -787,7 +787,7 @@ struct ResticService: ResticClient {
               let groups = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else {
             throw ResticError.malformedOutput(
-                                detail: "could not read the removal count from restic's answer"
+                                detail: "could not read the removal count from restic’s answer"
             )
         }
         return groups.reduce(0) { total, group in

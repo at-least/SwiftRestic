@@ -283,7 +283,7 @@ struct FormattingTests {
         )
         #expect(
             Format.firstSentence(wrongPassword.localizedDescription)
-                == "The password doesn't open this repository — check it in the repository settings",
+                == "The password doesn’t open this repository — check it in the repository settings",
             "a sentence that starts with restic is still a sentence"
         )
         #expect(Format.firstSentence("first\nsecond") == "first", "a newline is a boundary")

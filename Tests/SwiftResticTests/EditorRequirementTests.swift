@@ -77,7 +77,7 @@ struct EditorRequirementTests {
     @Test("Change Password names what stops the change: nothing typed, two that differ, spaces restic would drop")
     func newPasswordRequirement() {
         #expect(EditorRequirements.newPassword("", confirm: "") == "Type the new password twice to change it.")
-        #expect(EditorRequirements.newPassword("correct horse", confirm: "correct hose") == "The new passwords don't match.")
+        #expect(EditorRequirements.newPassword("correct horse", confirm: "correct hose") == "The new passwords don’t match.")
         // restic 0.19.1 trims a password read from --new-password-file:
         // the key would be "pw" while the Keychain stored " pw ".
         #expect(EditorRequirements.newPassword(" pw ", confirm: " pw ")
@@ -249,7 +249,7 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Set a repository password to save it.")
         #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "no", isNew: true, hasStoredPassword: nil, among: [])
-            == "The passwords don't match.")
+            == "The passwords don’t match.")
         #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "secret", isNew: true, hasStoredPassword: nil, among: [])
             == nil)
         // An existing repository keeps its Keychain password; blank fields are

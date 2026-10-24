@@ -73,7 +73,7 @@ enum EditorRequirements {
     /// its ends would leave the key and the Keychain disagreeing.
     static func newPassword(_ password: String, confirm: String) -> String? {
         if password.isEmpty { return "Type the new password twice to change it." }
-        if password != confirm { return "The new passwords don't match." }
+        if password != confirm { return "The new passwords don’t match." }
         if password != password.trimmingCharacters(in: .whitespacesAndNewlines) {
             return "restic drops spaces at the ends of a new password — remove them."
         }
@@ -149,7 +149,7 @@ enum EditorRequirements {
                 return "Set a repository password to save it."
             }
             if password != confirmPassword {
-                return "The passwords don't match."
+                return "The passwords don’t match."
             }
         } else if hasStoredPassword == false, password.isEmpty {
             return "Enter the repository password to save it."

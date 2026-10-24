@@ -380,7 +380,7 @@ struct SnapshotDiffView: View {
                 // A group's backups have no Files tab to show versions on.
                 .modifier(TileHelp(help: model.shelves(for: target.repositoryID).versionsPage(of: newer) == nil
                     ? nil
-                    : "Double-click shows an item's versions; Return restores the selection"))
+                    : "Double-click shows an item’s versions; Return restores the selection"))
             }
         } else {
             // The filter pass for these inputs is still in flight — a blank

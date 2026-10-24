@@ -273,7 +273,7 @@ struct RunDetailPanel: View {
                     Button("Back Up Now") { model.runBackup(planID: planID) }
                         .disabled(!model.planCommands(for: .plan(planID)).canBackUp)
                         .modifier(TileHelp(help: model.isRunning(planID: planID)
-                            ? "This plan's backup is already running"
+                            ? "This plan’s backup is already running"
                             : model.planCommands(for: .plan(planID)).backUpDisabledReason))
                 }
             }
@@ -333,7 +333,7 @@ struct ConsoleRouteButton: View {
         }
         // The Repository menu's console item's own rule.
         .disabled(!model.isResticAvailable)
-        .help("The console runs restic repair with the repository's password")
+        .help("The console runs restic repair with the repository’s password")
     }
 }
 
@@ -372,7 +372,7 @@ private struct RunSnapshotRow: View {
                     .textSelection(.enabled)
                     .help("Removed after this run — by retention or another app")
             case .unavailable?:
-                let help = "This repository's list of backups isn't loaded right now"
+                let help = "This repository’s list of backups isn’t loaded right now"
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
                 completenessMark(for: snapshotID)
                 Button("Browse") {}

@@ -95,7 +95,7 @@ struct OverviewMetricsTests {
         // The protected line is relative-spelled and locale-owned, so it is
         // pinned by prefix below, not by literal.
         #expect(Array(rows.map(\.stateText).prefix(5)) == [
-            "Can't read backups — Repository /nas is not reachable",
+            "Can’t read backups — Repository /nas is not reachable",
             "No repository set",
             "No backups yet",
             "The repository has backups, but none from this plan yet.",
@@ -267,7 +267,7 @@ struct OverviewMetricsTests {
         #expect(rows.map(\.planName) == ["Waiting", "First", "Fine"])
         let running = rows.first { $0.planName == "First" }
         // The sidebar caption's words for the same activity.
-        #expect(running?.stateText == "Backing up")
+        #expect(running?.stateText == "Backing up…")
         #expect(running?.isRunning == true)
         // The listing still decides the count: no snapshot yet is not
         // protected, and a run in flight is no alarm either.
@@ -362,7 +362,7 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { _ in failed }
         )
-        #expect(rows.map(\.stateText) == ["Can't read backups — Repository /nas is not reachable"])
+        #expect(rows.map(\.stateText) == ["Can’t read backups — Repository /nas is not reachable"])
         #expect(rows.first?.didFail == true)
         // The line is the listing's, so the mark is too: the warning
         // triangle the page's caveat wears, not the hidden failure's octagon.
@@ -549,27 +549,27 @@ struct OverviewMetricsTests {
         // A first backup in flight is news, not an alarm: the line says the
         // run in the sidebar's words, and names no exposed plan.
         let photos = ProtectionRow(
-            plan: plan("Photos", repository: repository), among: [], stateText: "Backing up",
+            plan: plan("Photos", repository: repository), among: [], stateText: "Backing up…",
             isKnown: true, isProtected: false, didFail: false, isRunning: true
         )
         let running = OverviewMetrics.protectionSummary(
             rows: [photos], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(running?.text == "0 of 1 plan protected · Photos — Backing up")
+        #expect(running?.text == "0 of 1 plan protected · Photos — Backing up…")
         #expect(running?.attentionLines == [])
         // Beside a last backup, the run comes before it.
         let both = OverviewMetrics.protectionSummary(
             rows: [photos, documents], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(both?.text == "1 of 2 plans protected · Photos — Backing up · Last backup 1 hour ago")
+        #expect(both?.text == "1 of 2 plans protected · Photos — Backing up… · Last backup 1 hour ago")
     }
 
     @Test("an unreadable listing is said in one sentence by the rows and the caveat alike")
     func listingFailureHasOneSentence() {
         #expect(OverviewMetrics.listingFailureText("Repository /nas is not reachable. More detail.")
-            == "Can't read backups — Repository /nas is not reachable")
+            == "Can’t read backups — Repository /nas is not reachable")
     }
 
     @Test("the Protection line waits for a succeeded listing")

@@ -54,7 +54,7 @@ enum LoginItemAdvice {
     static func caption(for offer: Offer) -> String {
         switch offer {
         case .startAtLogin:
-            "Scheduled backups run only while SwiftRestic is open, and it won't reopen after a restart or logout."
+            "Scheduled backups run only while SwiftRestic is open, and it won’t reopen after a restart or logout."
         case .awaitingApproval:
             "SwiftRestic starts at login once you allow it in Login Items. Until then, scheduled backups stop after a restart or logout."
         case .moveToApplications:

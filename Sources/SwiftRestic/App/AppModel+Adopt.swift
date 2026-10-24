@@ -5,7 +5,7 @@ import Foundation
 /// again. Derived once here, so the offering page, the sheet and the tests
 /// that pin them cannot disagree.
 struct AdoptBriefing: Equatable {
-    /// "These 2 backups become this plan's history."
+    /// "These 2 backups become this plan’s history."
     var historyLine: String
     /// "Made Sep 28 – Oct 2, 2026 from this Mac. Nothing in “Home Disk” changes."
     var madeLine: String
@@ -21,7 +21,7 @@ struct AdoptBriefing: Equatable {
 
     /// Always, as the sheet's footer: what adopting does not do, and the one
     /// situation it must not be used in.
-    static let footer = "Don't adopt a plan another Mac still runs — the two Macs would share one history."
+    static let footer = "Don’t adopt a plan another Mac still runs — the two Macs would share one history."
 }
 
 extension AppModel {
@@ -114,14 +114,14 @@ extension AppModel {
             $0.tags.filter { $0.hasPrefix(ResticService.planTagPrefix) }.count > 1
         }.count
         if dualTagged == 1 {
-            warnings.append("1 backup also carries another plan's tag and stays with that plan.")
+            warnings.append("1 backup also carries another plan’s tag and stays with that plan.")
         } else if dualTagged > 1 {
-            warnings.append("\(Format.plural(dualTagged, "backup")) also carry another plan's tag and stay with that plan.")
+            warnings.append("\(Format.plural(dualTagged, "backup")) also carry another plan’s tag and stay with that plan.")
         }
 
         let historyLine = snapshots.count == 1
-            ? "This backup becomes this plan's history."
-            : "These \(Format.plural(snapshots.count, "backup")) become this plan's history."
+            ? "This backup becomes this plan’s history."
+            : "These \(Format.plural(snapshots.count, "backup")) become this plan’s history."
         let madeLine = "Made \(Format.historySpan(oldest: snapshots[snapshots.count - 1].time, newest: newest.time))"
             + " from \(madeFrom). Nothing in “\(label(of: repository))” changes."
 
@@ -173,7 +173,7 @@ extension AppModel {
 
     /// The missing-folder warning, said by the adopt sheet's footer and
     /// beside the plan editor's path.
-    static let missingSourcesWarning = "This folder isn't on this Mac."
+    static let missingSourcesWarning = "This folder isn’t on this Mac."
 
     /// Whether a plan's folder (or file) is on this Mac now, tilde
     /// expanded — the fact behind both the schedule's default and the

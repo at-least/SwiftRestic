@@ -513,9 +513,9 @@ struct RepeatedProblemNotificationTests {
         timedOutBefore.hookMessages = ["After-success hook exited with status 28: curl: (28) Operation timed out after 1007 milliseconds with 0 bytes received"]
         #expect(timedOut.isSameProblem(as: timedOutBefore))
         var gap = warned(60)
-        gap.itemErrors.append("3 restic messages could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete.")
+        gap.itemErrors.append("3 restic messages could not be decoded — a restic update may have changed its output; the run’s numbers may be incomplete.")
         var gapBefore = warned(0)
-        gapBefore.itemErrors.append("5 restic messages could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete.")
+        gapBefore.itemErrors.append("5 restic messages could not be decoded — a restic update may have changed its output; the run’s numbers may be incomplete.")
         #expect(gap.isSameProblem(as: gapBefore))
         #expect(!warned(60, items: ["/a/IMG_0002.jpg: open /a/IMG_0002.jpg: permission denied"])
             .isSameProblem(as: warned(0, items: ["/a/IMG_0001.jpg: open /a/IMG_0001.jpg: permission denied"])))

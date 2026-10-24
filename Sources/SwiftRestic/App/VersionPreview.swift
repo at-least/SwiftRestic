@@ -13,8 +13,8 @@ enum VersionPreview {
     static func unavailableReason(size: Int64?, isReading: Bool) -> String? {
         guard let size else {
             return isReading
-                ? "Preview waits for the version's size, still being read"
-                : "Preview needs the version's size, which could not be read"
+                ? "Preview waits for the version’s size, still being read"
+                : "Preview needs the version’s size, which could not be read"
         }
         return size > sizeLimit ? "Too large to preview (\(Format.bytes(size))) — restore it to open it" : nil
     }

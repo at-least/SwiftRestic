@@ -112,7 +112,7 @@ enum RestoreDestinationRules {
         isWritable: (String) -> Bool
     ) -> OriginalLocation {
         let badPath = OriginalLocation.unavailable(
-            reason: "This item's recorded path can't be used as a location on this Mac."
+            reason: "This item’s recorded path can’t be used as a location on this Mac."
         )
         let components = path.unicodeScalars
             .split(separator: "/", omittingEmptySubsequences: false)
@@ -126,10 +126,10 @@ enum RestoreDestinationRules {
         guard ResticService.sanitizedRestoreName(name) == last else { return badPath }
         let parent = components.count == 2 ? "/" : components.dropLast().joined(separator: "/")
         guard directoryExists(parent) else {
-            return .unavailable(reason: "“\(parent)” isn't on this Mac.")
+            return .unavailable(reason: "“\(parent)” isn’t on this Mac.")
         }
         guard isWritable(parent) else {
-            return .unavailable(reason: "SwiftRestic can't write to “\(parent)”.")
+            return .unavailable(reason: "SwiftRestic can’t write to “\(parent)”.")
         }
         let directory = URL(fileURLWithPath: parent, isDirectory: true)
         return .available(directories: [directory], landings: [ResticService.restoredItemURL(named: name, in: directory)])

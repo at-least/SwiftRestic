@@ -18,7 +18,7 @@ struct RestoreDestinationTests {
         )
     }
 
-    private static let badPath = "This item's recorded path can't be used as a location on this Mac."
+    private static let badPath = "This item’s recorded path can’t be used as a location on this Mac."
 
     @Test("original location resolves only to exactly the recorded path on this Mac")
     func originalLocationGate() {
@@ -33,8 +33,8 @@ struct RestoreDestinationTests {
         // to the parent, gives back the recorded path.
         #expect(RestoreDestinationRules.landings(for: project, into: directories) == landings)
 
-        #expect(original(project, existing: []) == .unavailable(reason: "“/Users/x/Documents” isn't on this Mac."))
-        #expect(original(project, writable: []) == .unavailable(reason: "SwiftRestic can't write to “/Users/x/Documents”."))
+        #expect(original(project, existing: []) == .unavailable(reason: "“/Users/x/Documents” isn’t on this Mac."))
+        #expect(original(project, writable: []) == .unavailable(reason: "SwiftRestic can’t write to “/Users/x/Documents”."))
 
         // Paths that would land somewhere other than where they claim to be,
         // or nowhere at all.
@@ -89,7 +89,7 @@ struct RestoreDestinationTests {
         ))
         // One that cannot go back stops them all, and is named.
         #expect(original(items, existing: both, writable: ["/Users/x/Documents"])
-            == .unavailable(reason: "“Trip”: SwiftRestic can't write to “/Users/x/Pictures”."))
+            == .unavailable(reason: "“Trip”: SwiftRestic can’t write to “/Users/x/Pictures”."))
         #expect(items.directoryCount == 2)
         #expect(RestoreSubject.item(name: "a", path: "/a", isDirectory: false).directoryCount == 1)
     }

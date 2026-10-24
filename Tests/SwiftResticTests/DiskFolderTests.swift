@@ -136,7 +136,7 @@ struct DiskFolderTests {
         // macOS's block: the grant, while SwiftRestic lacks it — or the
         // probe found nothing to say it has it.
         let blocked = FolderAbsence.blockedByMacOS(name: "Documents")
-        #expect(blocked.title == "SwiftRestic can't read “Documents”")
+        #expect(blocked.title == "SwiftRestic can’t read “Documents”")
         let grant = FolderAbsence.Remedy(
             steps: "Turn SwiftRestic on in System Settings › Privacy & Security › Full Disk Access, then quit and reopen SwiftRestic.",
             fix: .openFullDiskAccessSettings
@@ -152,11 +152,11 @@ struct DiskFolderTests {
 
         // The file permissions: Finder's Get Info, whatever the grant.
         let denied = FolderAbsence.deniedByFilePermissions(name: "Documents")
-        #expect(denied.title == "SwiftRestic can't read “Documents”")
+        #expect(denied.title == "SwiftRestic can’t read “Documents”")
         for access: FullDiskAccessStatus in [.granted, .notGranted, .unknown] {
-            #expect(denied.detail(fullDiskAccess: access) == "It can't be read with your account's file permissions.")
+            #expect(denied.detail(fullDiskAccess: access) == "It can’t be read with your account’s file permissions.")
             #expect(denied.remedy(fullDiskAccess: access) == FolderAbsence.Remedy(
-                steps: "Full Disk Access doesn't change that: select it in Finder, choose File › Get Info, and give your account Read access under Sharing & Permissions.",
+                steps: "Full Disk Access doesn’t change that: select it in Finder, choose File › Get Info, and give your account Read access under Sharing & Permissions.",
                 fix: .revealInFinder
             ))
         }

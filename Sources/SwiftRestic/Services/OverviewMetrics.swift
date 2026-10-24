@@ -371,7 +371,7 @@ enum OverviewMetrics {
     /// An unreadable snapshot listing in one sentence — the rows behind the
     /// sidebar's warning and the caveat under a card say it alike.
     static func listingFailureText(_ message: String) -> String {
-        "Can't read backups — \(Format.firstSentence(message))"
+        "Can’t read backups — \(Format.firstSentence(message))"
     }
 
     /// The listing not read yet, in the sidebar's words — the caveat under a

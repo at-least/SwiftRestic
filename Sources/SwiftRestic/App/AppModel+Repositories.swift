@@ -47,8 +47,8 @@ extension AppModel {
             post(Banner(
                 title: one ? "Ignored environment variable" : "Ignored environment variables",
                 message: one
-                    ? "\(overridden[0]) is set by SwiftRestic itself, so its entry in the extra environment for “\(label(of: repository))” has no effect. Remove it from SwiftRestic's configuration file."
-                    : "\(Format.list(overridden)) are set by SwiftRestic itself, so their entries in the extra environment for “\(label(of: repository))” have no effect. Remove them from SwiftRestic's configuration file.",
+                    ? "\(overridden[0]) is set by SwiftRestic itself, so its entry in the extra environment for “\(label(of: repository))” has no effect. Remove it from SwiftRestic’s configuration file."
+                    : "\(Format.list(overridden)) are set by SwiftRestic itself, so their entries in the extra environment for “\(label(of: repository))” have no effect. Remove them from SwiftRestic’s configuration file.",
                 level: .warning
             ))
         }
@@ -161,7 +161,7 @@ extension AppModel {
                 try await secrets.remove(id)
             } catch {
                 self?.post(Banner(
-                    title: "The removed repository's secrets are still in your Keychain",
+                    title: "The removed repository’s secrets are still in your Keychain",
                     message: error.localizedDescription
                         + " In Keychain Access they are named “\(KeychainStore.service)”, with accounts that start \(id.uuidString).",
                     isError: true

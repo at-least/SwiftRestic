@@ -144,7 +144,7 @@ enum MenuBarStatus {
     /// The line that leads the menu while restic is missing, as a hold's
     /// does: the scheduler starts nothing without it.
     static func resticMissingLine(isResticAvailable: Bool) -> String? {
-        isResticAvailable ? nil : "restic is missing — backups are on hold."
+        isResticAvailable ? nil : "restic is missing — backups are on hold"
     }
 
     /// The single line above the plan buttons. `nil` while anything runs —
@@ -219,7 +219,7 @@ enum MenuBarStatus {
                     isEnabled: plan.isConfigurationComplete && isResticAvailable && lockReason == nil,
                     // The Plan menu's own words for each reason.
                     disabledReason: !plan.isConfigurationComplete ? BackupPlan.incompleteConfigurationReason
-                        : !isResticAvailable ? "restic is missing."
+                        : !isResticAvailable ? "restic is missing"
                         : lockReason
                 )
             case .cancelling?:

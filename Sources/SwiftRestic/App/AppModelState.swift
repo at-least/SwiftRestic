@@ -20,10 +20,10 @@ struct PlanActivity: Sendable, Equatable {
         var displayName: String {
             switch self {
             case .starting: "Starting…"
-            case .backingUp: "Backing up"
-            case .applyingRetention: "Applying retention"
-            case .runningHooks: "Running hooks"
-            case .notifying: "Sending notifications"
+            case .backingUp: "Backing up…"
+            case .applyingRetention: "Applying retention…"
+            case .runningHooks: "Running hooks…"
+            case .notifying: "Sending notifications…"
             case .cancelling: "Cancelling…"
             }
         }

@@ -18,7 +18,7 @@ struct ItemErrorDiagnosisTests {
         // The words anywhere but at the end are a path, not an errno.
         #expect(ItemErrorDiagnosis.kind(of: "/x/permission denied/y: open /x/permission denied/y: no such file or directory") == .other)
         #expect(ItemErrorDiagnosis.kind(of: RunRecord.retentionSkippedPrefix + "repository is already locked by PID 4242 on demo-mac") == .other)
-        #expect(ItemErrorDiagnosis.kind(of: "1 restic message could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete.") == .other)
+        #expect(ItemErrorDiagnosis.kind(of: "1 restic message could not be decoded — a restic update may have changed its output; the run’s numbers may be incomplete.") == .other)
         #expect(ItemErrorDiagnosis.kind(of: "/src/gone does not exist, skipping") == .other)
         // A parent folder's extended-attribute failure: restic ends this
         // message with a newline, which the classifier reads past.
@@ -85,18 +85,18 @@ struct ItemErrorDiagnosisTests {
     @Test("each hint's words, in the drawer and in the short surfaces")
     func hintWords() {
         #expect(ItemErrorDiagnosis.detail(.grantFullDiskAccess(1))
-            == "macOS blocked 1 item because SwiftRestic doesn't have Full Disk Access.")
+            == "macOS blocked 1 item because SwiftRestic doesn’t have Full Disk Access.")
         #expect(ItemErrorDiagnosis.detail(.retryNowGranted(2))
-            == "macOS blocked 2 items because SwiftRestic didn't have Full Disk Access at the time. It has it now — back up again to include them.")
+            == "macOS blocked 2 items because SwiftRestic didn’t have Full Disk Access at the time. It has it now — back up again to include them.")
         #expect(ItemErrorDiagnosis.detail(.protectedEvenWithAccess(1))
             == "macOS blocked 1 item even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself. Exclude them if this keeps happening.")
         #expect(ItemErrorDiagnosis.detail(.filePermissions(1))
-            == "1 item can't be read with your account's file permissions. Full Disk Access doesn't change that — fix them with Finder › Get Info, or exclude them.")
+            == "1 item can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info, or exclude them.")
 
         #expect(ItemErrorDiagnosis.headline(.grantFullDiskAccess(1)) == "macOS blocked 1 item: SwiftRestic needs Full Disk Access.")
         #expect(ItemErrorDiagnosis.headline(.retryNowGranted(3)) == "macOS blocked 3 items while SwiftRestic lacked Full Disk Access.")
         #expect(ItemErrorDiagnosis.headline(.protectedEvenWithAccess(1)) == "macOS blocked 1 item even with Full Disk Access on.")
-        #expect(ItemErrorDiagnosis.headline(.filePermissions(2)) == "2 items can't be read with your account's file permissions.")
+        #expect(ItemErrorDiagnosis.headline(.filePermissions(2)) == "2 items can’t be read with your account’s file permissions.")
     }
 
     @Test("sources that reach macOS-protected data are recognised, measured paths only")

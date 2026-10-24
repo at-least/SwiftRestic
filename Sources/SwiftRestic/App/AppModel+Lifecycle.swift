@@ -84,7 +84,7 @@ extension AppModel {
             next.plan, plans: configuration.plans, repositories: configuration.repositories
         )
         return "\(held)\(name) \(when). Scheduled backups run only while SwiftRestic is open, "
-            + "and it isn't set to start at login — nothing will run until you open it again."
+            + "and it isn’t set to start at login — nothing will run until you open it again."
     }
 
     /// The quit alert's words, or `nil` when quitting needs no question.

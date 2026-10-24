@@ -46,7 +46,7 @@ struct RunLogSheet: View {
                     ContentUnavailableView(
                         "Log file not found",
                         systemImage: "doc.questionmark",
-                        description: Text("It may have been deleted. The run's summary stays in Activity.")
+                        description: Text("It may have been deleted. The run’s summary stays in Activity.")
                     )
                 } else {
                     ProgressView()

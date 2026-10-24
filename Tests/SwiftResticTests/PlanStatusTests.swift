@@ -110,7 +110,7 @@ struct PlanStatusTests {
         // setup is finished.
         #expect(
             PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).help
-                == "This plan isn't scheduled because its setup is incomplete. To finish it, choose Edit Plan"
+                == "This plan isn’t scheduled because its setup is incomplete. To finish it, choose Edit Plan"
         )
 
         // A repository ID the configuration no longer holds is the same skip.
@@ -160,7 +160,7 @@ struct PlanStatusTests {
 
         let metered = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], hold: .onMeteredNetwork, now: now)
         #expect(metered.value == "Waiting")
-        #expect(metered.help == "Backups wait — this Mac's network is metered. This plan is due and runs once this Mac is on another network")
+        #expect(metered.help == "Backups wait — this Mac’s network is metered. This plan is due and runs once this Mac is on another network")
     }
 
     @Test("a due plan whose backup is running reads Running now, never Due now")
@@ -313,13 +313,13 @@ struct PlanStatusTests {
             for: plan, activity: nil, isQueued: true, problem: run(.failed),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
-        #expect(waiting.text == "Waiting for another backup")
+        #expect(waiting.text == "Waiting for another backup…")
         #expect(waiting.outcome == nil)
         let running = PlanStatus.sidebarCaption(
             for: plan, activity: PlanActivity(phase: .backingUp), isQueued: true, problem: run(.failed),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
-        #expect(running.text == "Backing up")
+        #expect(running.text == "Backing up…")
     }
 
     @Test("a completed-with-errors caption has a short spelling for a narrow column; other outcomes none")
@@ -468,7 +468,7 @@ struct PlanStatusTests {
             for: pausedRunning, activity: activity, problem: run(.failed),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
-        #expect(running == PlanCaption(text: "Backing up", outcome: nil, pauseNote: nil))
+        #expect(running == PlanCaption(text: "Backing up…", outcome: nil, pauseNote: nil))
     }
 
     // MARK: - Status row
@@ -605,7 +605,7 @@ struct PlanStatusTests {
     @Test("a decoding gap leads only when nothing unreadable was named, and is never counted")
     func decodingLineIsNotAnUnreadableItem() {
         var gap = run(.completedWithErrors)
-        gap.itemErrors = ["1 restic message could not be decoded — a restic update may have changed its output; the run's numbers may be incomplete."]
+        gap.itemErrors = ["1 restic message could not be decoded — a restic update may have changed its output; the run’s numbers may be incomplete."]
         gap.itemErrorCount = 0
         let summary = PlanStatus.summary(of: gap)
         #expect(summary.message == gap.itemErrors[0])

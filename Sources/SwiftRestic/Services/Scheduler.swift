@@ -30,7 +30,7 @@ enum ScheduleHold: Equatable, Sendable {
         case .onBattery:
             "Backups wait for power — this Mac is on battery"
         case .onMeteredNetwork:
-            "Backups wait — this Mac's network is metered"
+            "Backups wait — this Mac’s network is metered"
         }
     }
 }
@@ -158,7 +158,7 @@ enum Scheduler {
     /// The Maintenance card's Cleanup row while cleanup is off: stated, not
     /// hidden — retention runs after every backup, and only a prune frees
     /// what it removed.
-    static let pruneOffText = "Off — space from removed backups isn't freed"
+    static let pruneOffText = "Off — space from removed backups isn’t freed"
 
     /// A repository page's Last check or Last cleanup: the newest such run
     /// of the repository, how long ago it started and — when it did not

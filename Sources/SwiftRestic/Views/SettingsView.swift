@@ -60,7 +60,7 @@ struct SettingsView: View {
                 }
             }
         } message: { share in
-            Text("Its saved password is deleted too. A backup that needs \(share.url) is skipped while it is not mounted, until its password is entered again in the repository's or plan's editor.")
+            Text("Its saved password is deleted too. A backup that needs \(share.url) is skipped while it is not mounted, until its password is entered again in the repository’s or plan’s editor.")
         }
         .task {
             await model.refreshFullDiskAccess()
@@ -80,14 +80,14 @@ struct SettingsView: View {
                 if model.fullDiskAccess != .granted {
                     // Unknown is treated as missing, as the run hints do:
                     // nothing observable says the grant is there.
-                    Text("Without it, Mail, Messages, Safari and other apps' data can't be read, and backups that include them end with warnings.")
+                    Text("Without it, Mail, Messages, Safari and other apps’ data can’t be read, and backups that include them end with warnings.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     FullDiskAccessButton()
                     ExpandableCaption(
                         summary: "Turn on SwiftRestic in the list. macOS asks for an administrator password.",
-                        detail: "If SwiftRestic is not in the list, click + and choose it from your Applications folder. If it is already on and this still says Not granted, turn it off and on again: a rebuilt or updated copy of SwiftRestic may not inherit the permission. If that doesn't help, quit and reopen SwiftRestic."
+                        detail: "If SwiftRestic is not in the list, click + and choose it from your Applications folder. If it is already on and this still says Not granted, turn it off and on again: a rebuilt or updated copy of SwiftRestic may not inherit the permission. If that doesn’t help, quit and reopen SwiftRestic."
                     )
                 }
             }
@@ -107,7 +107,7 @@ struct SettingsView: View {
                     )
                 )
                 ExpandableCaption(
-                    summary: "Shows what's running, and opens SwiftRestic after its window is closed.",
+                    summary: "Shows what’s running, and opens SwiftRestic after its window is closed.",
                     detail: "The icon pulses while work is in progress (held still with Reduce Motion), dims while backups are paused or waiting for power, and wears a warning mark while a run from the last seven days failed or completed with warnings."
                 )
             }
@@ -226,7 +226,7 @@ struct SettingsView: View {
                 // The one fact the visible switches cannot say: the Webhooks
                 // tab's channels carry their own per-event switches, and
                 // neither layer gates the other.
-                Text("Webhooks have their own per-event switches; these don't control them.")
+                Text("Webhooks have their own per-event switches; these don’t control them.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -386,8 +386,8 @@ struct NotificationChannelsTab: View {
                 isEmpty: channels.isEmpty,
                 emptyTitle: "No webhooks",
                 emptyHint: "Click + to add a webhook, a Slack or Discord channel, or a Healthchecks.io ping URL.",
-                addTitle: "Add Webhook",
-                removeTitle: "Remove Webhook",
+                addTitle: "Add webhook",
+                removeTitle: "Remove webhook",
                 canRemove: selection != nil,
                 onAdd: {
                     var channel = NotificationChannel()
@@ -414,7 +414,7 @@ struct NotificationChannelsTab: View {
                             if !channel.isUsable, channel.isEnabled {
                                 Image(systemName: "exclamationmark.triangle")
                                     .foregroundStyle(Theme.warning)
-                                    .help("Enter a URL that starts with http:// or https://.")
+                                    .help("Enter a URL that starts with http:// or https://")
                             }
                         }
                         .tag(channel.id)
@@ -485,7 +485,7 @@ struct NotificationChannelsTab: View {
                 // The row's warning triangle has a reason; it is repeated here
                 // where the user edits, not only on hover.
                 if !channel.isUsable, channel.isEnabled {
-                    Label("This webhook can't send until its URL starts with http:// or https://.", systemImage: "exclamationmark.triangle")
+                    Label("This webhook can’t send until its URL starts with http:// or https://.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Theme.warning)
                         .font(.callout)
                 }
