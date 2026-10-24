@@ -65,7 +65,9 @@ the generator after editing it; the PNGs are checked in.
   newest first, a section per month once they span more than one, beside
   the open one's files (its tree, as *Browsing and restore* below says); the
   list's edge drags, and the window's subtitle is the open backup's moment.
-  An empty list says *No backups yet*, with *Back Up Now* under it on a
+  An empty list says *No backups yet* — on a plan's page whose repository
+  holds other backups, *None from this plan yet — the repository holds
+  others*, the Overview card's words — with *Back Up Now* under it on a
   plan's page.
   Files is a tree on the left (drag its edge to widen
   it) of the plan's folder as this Mac holds it now, and the picked item on
@@ -330,10 +332,11 @@ the generator after editing it; the PNGs are checked in.
   while it runs; *Schedule* (and when it runs next) with *Pause* (*Pause
   Schedule* in the menus), its arrow offering the lengths, or *Resume*
   (*Resume Schedule*) — none for a manual plan; *Excluding*, what it leaves out as the editor's Excluding tab says
-  it — *Skip*, the switches that are on, each with its rules in its
-  tooltip (*Developer files* naming its groups when not all are ticked),
-  then *Also skip*, the user's own patterns as typed — with *Edit*, which
-  opens the editor on its Excluding tab, where these are changed (the rest of
+  it — *Skip*, the switches that are on, each with its tooltip where the
+  title is not the whole story (*Developer files* lists its ticked groups
+  in its tooltip when all are ticked, and names them in its title when only
+  some are), then *Also skip*, the user's own patterns as typed — with
+  *Edit Plan*, which opens the editor on its Excluding tab, where these are changed (the rest of
   how it runs, its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,

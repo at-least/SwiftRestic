@@ -895,7 +895,6 @@ enum PlanSkips {
     static let otherDisks = "Other disks mounted inside"
 
     static let cachesHelp = "Folders holding a CACHEDIR.TAG file"
-    static let otherDisksHelp = "Folders on another disk mounted inside this one"
 
     /// The rules a defaults switch passes, one a line, for its tooltip.
     static func rulesHelp(_ categories: Set<ExcludeCategory>) -> String {
@@ -905,20 +904,21 @@ enum PlanSkips {
             .joined(separator: "\n")
     }
 
-    /// The switches `plan` has on, in the editor's order, each with its
-    /// tooltip. Developer files names its ticked groups when not all are.
-    static func on(in plan: BackupPlan) -> [(title: String, help: String)] {
-        var items: [(title: String, help: String)] = []
+    /// The switches `plan` has on, in the editor's order. Help is nil where
+    /// the title itself says it: a partly-ticked Developer files names its
+    /// groups in its title, and Other disks repeats its switch's name.
+    static func on(in plan: BackupPlan) -> [(title: String, help: String?)] {
+        var items: [(title: String, help: String?)] = []
         if plan.skipsFinderFiles { items.append((finderFiles, rulesHelp(ExcludeCategory.finderFiles))) }
         if plan.skipsSystemFiles { items.append((systemFiles, rulesHelp(ExcludeCategory.systemFiles))) }
         if plan.excludeCaches { items.append((caches, cachesHelp)) }
         if plan.excludeDeveloperFiles {
             let groups = plan.developerGroups.map(\.title)
             let isAll = plan.developerGroups == ExcludeCategory.developerGroups
-            items.append((isAll ? developerFiles : "\(developerFiles): \(Format.list(groups))", groups.joined(separator: "\n")))
+            items.append((isAll ? developerFiles : "\(developerFiles): \(Format.list(groups))", isAll ? groups.joined(separator: "\n") : nil))
         }
         if plan.excludeCloudFiles { items.append((cloudFiles, "Files kept only in iCloud Drive or OneDrive")) }
-        if plan.oneFileSystem { items.append((otherDisks, otherDisksHelp)) }
+        if plan.oneFileSystem { items.append((otherDisks, nil)) }
         return items
     }
 }

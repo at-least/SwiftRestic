@@ -47,6 +47,10 @@ struct PlanCaption: Equatable, Sendable {
 enum PlanStatus {
     private static let retentionSkippedFact = "Retention skipped"
     static let unnamedUnreadFact = "Some source data could not be read"
+    /// The plan page's empty fact when the repository holds other backups —
+    /// the Overview card's count line and the Backups tab's empty state in
+    /// the same words.
+    static let noneFromThisPlanFact = "None from this plan yet — the repository holds others"
     /// How many unreadable items the plan page's card lists; the drawer
     /// holds the rest. Five: the usual run names one or two, and a home
     /// folder macOS blocked in bulk is a diagnosis, not a list.
@@ -263,7 +267,7 @@ enum PlanStatus {
             case .onBattery: "once this Mac is on power again"
             case .onMeteredNetwork: "once this Mac is on another network"
             }
-            return TileFace(value: "Waiting", help: "\(hold.summary(now: now)). This plan is due and runs \(when)")
+            return TileFace(value: "Waiting", help: "This plan is due and runs \(when)")
         }
         let pauseEnd = plan.activePauseEnd(at: now)
         var namesHold = hold != nil

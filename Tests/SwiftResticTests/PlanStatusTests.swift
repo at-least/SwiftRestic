@@ -152,15 +152,15 @@ struct PlanStatusTests {
             for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: nil), now: now
         )
         #expect(paused.value == "Waiting")
-        #expect(paused.help?.contains("Backups paused until you resume") == true, "help was \(String(describing: paused.help))")
+        #expect(paused.help == "This plan is due and runs once backups resume", "help was \(String(describing: paused.help))")
 
         let battery = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], hold: .onBattery, now: now)
         #expect(battery.value == "Waiting")
-        #expect(battery.help?.contains("battery") == true, "help was \(String(describing: battery.help))")
+        #expect(battery.help == "This plan is due and runs once this Mac is on power again", "help was \(String(describing: battery.help))")
 
         let metered = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], hold: .onMeteredNetwork, now: now)
         #expect(metered.value == "Waiting")
-        #expect(metered.help == "Backups wait — this Mac’s network is metered. This plan is due and runs once this Mac is on another network")
+        #expect(metered.help == "This plan is due and runs once this Mac is on another network")
     }
 
     @Test("a due plan whose backup is running reads Running now, never Due now")

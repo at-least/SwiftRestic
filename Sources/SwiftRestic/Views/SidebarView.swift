@@ -677,9 +677,16 @@ struct BackupsStatusRow: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                Text("No backups yet")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                // A plan's page says which kind of empty this is, as the
+                // Overview card's count line does; a group's page, or a
+                // repository with nothing of anyone's, the plain fact.
+                Text(
+                    planID != nil && !model.snapshots(for: repositoryID).isEmpty
+                        ? PlanStatus.noneFromThisPlanFact
+                        : "No backups yet"
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 if let planID {
                     Button("Back Up Now") { model.runBackup(planID: planID) }
                         // The rule every Back Up Now follows.

@@ -35,7 +35,7 @@ struct PlanDetailView: View {
             filesPrompt: "Search this plan’s backups"
         )
         // The toolbar holds the tabs and the search field; the editor is
-        // Plan ▸ Edit Plan and the sidebar row's Edit, deleting Plan ▸
+        // Plan ▸ Edit Plan and the sidebar row's Edit Plan, deleting Plan ▸
         // Delete Plan and the row's menu —
         // the HIG's macOS toolbars: "it doesn't make sense to provide a
         // toolbar item for every menu item".
@@ -84,7 +84,7 @@ struct PlanDetailView: View {
             Button("Resume") {
                 model.resumePlanSchedule(id: plan.id)
             }
-            .help(resumeHelp(plan, now: now))
+            .help(resumeHelp(plan))
         } else if plan.schedule.frequency != .manual {
             Menu("Pause") {
                 ForEach(PauseLength.allCases) { length in
@@ -102,10 +102,7 @@ struct PlanDetailView: View {
     /// A manual plan switched off — the editor's "Run on schedule" switch —
     /// has no schedule for Resume to bring back, as its Next backup value
     /// says; the help must not promise one.
-    private func resumeHelp(_ plan: BackupPlan, now: Date) -> String {
-        if let end = plan.activePauseEnd(at: now) {
-            return "Paused until \(Format.pauseEnd(end)) — run this plan on its schedule again"
-        }
+    private func resumeHelp(_ plan: BackupPlan) -> String {
         if plan.schedule.frequency == .manual {
             return "Switch “Run on schedule” back on — this plan has no schedule, so it still runs only when you click Back Up Now"
         }
@@ -320,7 +317,6 @@ struct PlanDetailView: View {
                 // card's unlabelled line is: between two labelled rows it
                 // starts at the card's edge, left of their values.
                 snapshotsValue(plan, snapshots: snapshots)
-                    .accessibilityLabel("Backups")
                 DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
                 // Applying it now is Plan ▸ Apply Retention Now (and the
                 // sidebar row's menu); what it will keep is the editor's
@@ -441,7 +437,7 @@ struct PlanDetailView: View {
                     Text(
                         model.snapshots(for: repositoryID).isEmpty
                             ? "None yet — they appear after the first backup"
-                            : "None from this plan yet — the repository holds others"
+                            : PlanStatus.noneFromThisPlanFact
                     )
                     .foregroundStyle(.secondary)
                 case .failed:
@@ -466,13 +462,13 @@ struct PlanDetailView: View {
     }
 
     /// What the plan leaves out, as the editor's Excluding tab says it: the
-    /// *Skip* switches that are on, each with its rules in its tooltip, and
-    /// the user's own patterns as typed, tilde and all. The folder itself is
-    /// the page's subtitle. When is the Schedule card's, what it keeps the
-    /// Backups card's, where the sidebar's (the plan sits under its
-    /// repository); the rest of how it runs, its hooks among it, is the
-    /// editor's, which Plan ▸ Edit Plan and the row's Edit open — and the
-    /// card's own Edit, on the Excluding tab, where these rows are changed.
+    /// *Skip* switches that are on and the user's own patterns as typed,
+    /// tilde and all. The folder itself is the page's subtitle. When is the
+    /// Schedule card's, what it keeps the Backups card's, where the
+    /// sidebar's (the plan sits under its repository); the rest of how it
+    /// runs, its hooks among it, is the editor's, which Plan ▸ Edit Plan and
+    /// the row's Edit Plan open — and the card's own Edit Plan, on the
+    /// Excluding tab, where these rows are changed.
     private func excludingCard(_ plan: BackupPlan) -> some View {
         let skips = PlanSkips.on(in: plan)
         return Card("Excluding") {
@@ -487,7 +483,7 @@ struct PlanDetailView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(skips, id: \.title) { skip in
                                     Text(skip.title)
-                                        .help(skip.help)
+                                        .modifier(TileHelp(help: skip.help))
                                 }
                             }
                         }
@@ -507,7 +503,7 @@ struct PlanDetailView: View {
                 }
             }
         } accessory: {
-            Button("Edit") { router.request(.editPlan(plan.id)) }
+            Button("Edit Plan") { router.request(.editPlan(plan.id)) }
                 .controlSize(.small)
                 .help("Change what this plan leaves out")
         }

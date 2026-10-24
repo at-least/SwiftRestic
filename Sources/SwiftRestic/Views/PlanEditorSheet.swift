@@ -506,7 +506,6 @@ struct PlanEditorSheet: View {
                 }
                 // restic's --one-file-system, said as what it skips.
                 Toggle(PlanSkips.otherDisks, isOn: $draft.oneFileSystem)
-                    .help(PlanSkips.otherDisksHelp)
             } header: {
                 Text("Skip")
             }
