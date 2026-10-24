@@ -63,7 +63,7 @@ struct ApplyRetentionSheet: View {
                 .font(.headline)
                 .lineLimit(2)
                 .truncationMode(.middle)
-            Text("Rules: \(plan.retention.summary)")
+            Text(plan.retention.summary)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

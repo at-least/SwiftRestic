@@ -476,7 +476,6 @@ struct PlanEditorSheet: View {
             Section {
                 Toggle(isOn: $draft.skipsFinderFiles) {
                     Text(PlanSkips.finderFiles)
-                    Text("Finder’s .DS_Store files and what’s already in the Trash.")
                 }
                 .help(PlanSkips.rulesHelp(ExcludeCategory.finderFiles))
                 Toggle(isOn: $draft.skipsSystemFiles) {
@@ -547,7 +546,7 @@ struct PlanEditorSheet: View {
     /// One checkbox per developer group, under the switch while it is on;
     /// its help lists what it leaves out.
     private var developerGroupBoxes: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 3), alignment: .leading, spacing: 6) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)), count: 3), alignment: .leading, spacing: 6) {
             ForEach(ExcludeCategory.developerGroups, id: \.self) { group in
                 Toggle(group.title, isOn: Binding(
                     get: { draft.developerGroups.contains(group) },
@@ -573,7 +572,7 @@ struct PlanEditorSheet: View {
     /// names are the tools' own, what they download again — the contents
     /// of the simulators and the machines are the part nobody rebuilds.
     private var developerFilesCaption: String {
-        "Leaves out what the ticked languages’ tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn’t backed up."
+        "Leaves out what developer tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn’t backed up."
     }
 
     /// What the cloud-files switch does with this restic: 0.19 brought
@@ -759,7 +758,7 @@ struct PlanEditorSheet: View {
                     // adopt mode: the dry run below answers from the real
                     // history, where this simulation can disagree with it.
                     Label(
-                        "≈ \(Format.plural(projection.keptSnapshots, "backup")) would survive, reaching back about \(Format.plural(projection.historyDays, "day")) at this schedule.",
+                        "≈ \(Format.plural(projection.keptSnapshots, "backup")) would survive, reaching back about \(Format.plural(projection.historyDays, "day")) on this schedule.",
                         systemImage: "chart.bar.doc.horizontal"
                     )
                     .foregroundStyle(.secondary)
