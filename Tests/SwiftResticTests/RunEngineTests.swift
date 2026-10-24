@@ -219,7 +219,7 @@ struct BackupRunEngineTests {
         #expect(!here.log.contains { $0.hasPrefix("reconnect") }, "log was \(here.log)")
     }
 
-    @Test("a backup that fills its repository's disk fails in plain words, marked for Clean Up Now…")
+    @Test("a backup that fills its repository's disk fails in plain words, marked for Clean Up Now")
     func repositoryDiskFull() async throws {
         let sink = RecordingSink()
         var repository = Repository()
@@ -1044,7 +1044,7 @@ struct MaintenanceRunEngineTests {
     }
 }
 
-/// Apply Retention Now…'s run: a forget recorded under the plan, with no
+/// Apply Retention Now's run: a forget recorded under the plan, with no
 /// hooks, no run stamp and no alert beyond what the sink delivers.
 @MainActor
 @Suite("retention run engine")

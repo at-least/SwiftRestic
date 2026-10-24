@@ -31,7 +31,7 @@ struct PlanActivity: Sendable, Equatable {
 
     var phase: Phase = .starting
     var startedAt: Date = .now
-    /// False for Apply Retention Now…'s forget, which runs in the plan's
+    /// False for Apply Retention Now's forget, which runs in the plan's
     /// slot but is no backup: however it ends — a quit's cancel included —
     /// it stamps no slot as run.
     var isBackup = true
@@ -133,7 +133,7 @@ struct Banner: Identifiable, Equatable {
 }
 
 /// Which pane the detail column is showing — the sidebar's selection, or the
-/// console, which has no row and arrives from Repository ▸ restic Console….
+/// console, which has no row and arrives from Repository ▸ restic Console.
 /// Lives beside the model because menu-bar commands must read it: a Plan
 /// menu "Back Up Now" that stays enabled over a non-plan selection is a menu
 /// that lies.
@@ -155,9 +155,9 @@ enum SidebarItem: Hashable {
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     case console
     /// Find Files: a page with no row, as the console has none — reached
-    /// from Repository ▸ Find Files in Backups… (⇧⌘F) off a page with a
+    /// from Repository ▸ Find Files in Backups (⇧⌘F) off a page with a
     /// Files tab, a repository page's search field, and Search All
-    /// Backups…. Not a sheet: its restores would stack a second sheet on it.
+    /// Backups. Not a sheet: its restores would stack a second sheet on it.
     case findFiles
     case activity
 }

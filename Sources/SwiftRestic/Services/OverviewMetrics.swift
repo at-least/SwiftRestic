@@ -181,7 +181,7 @@ enum OverviewMetrics {
     /// same plan finished after it — the next run fixed it. A run skipped
     /// for an away drive that still wrote a snapshot of the rest counts. Backups only: a
     /// failed check, prune, forget or restore is not fixed by a backup going
-    /// through, and Apply Retention Now… records its forget under the plan's
+    /// through, and Apply Retention Now records its forget under the plan's
     /// ID, so its success heals nothing. The sidebar's standing problem and
     /// the menu bar's face both go by this.
     static func isHealed(_ problem: RunRecord, in runs: [RunRecord]) -> Bool {

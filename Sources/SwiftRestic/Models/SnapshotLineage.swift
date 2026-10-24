@@ -309,7 +309,7 @@ extension OtherBackupsGroup {
             } else {
                 caption.kind = ["outside SwiftRestic"]
                 detail += "\nThese backups carry no plan ID, so they can't be adopted. "
-                    + "restic's `tag` command (Repository ▸ restic Console…) can give them one, "
+                    + "restic's `tag` command (Repository ▸ restic Console) can give them one, "
                     + "but it rewrites every backup's ID."
             }
             labels[group.id] = SnapshotLineage.Label(

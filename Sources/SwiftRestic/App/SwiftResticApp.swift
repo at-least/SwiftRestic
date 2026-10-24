@@ -230,10 +230,10 @@ struct SwiftResticApp: App {
             CommandGroup(replacing: .newItem) {
                 // With no repository yet, through adding one
                 // (`RootView.startNewPlan`).
-                Button("New Backup Plan…") { ask(.newPlan) }
+                Button("New Backup Plan") { ask(.newPlan) }
                     .keyboardShortcut("n", modifiers: .command)
 
-                Button("Add Repository…") {
+                Button("Add Repository") {
                     // Through the router's pending intent: the ask survives
                     // the window being closed, and a menu command that
                     // visibly does nothing is a dead key.
@@ -331,7 +331,7 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Edit Plan…") {
+            Button("Edit Plan") {
                 if let id = p.planID { ask(.editPlan(id)) }
             }
             .disabled(!p.canEdit)
@@ -346,14 +346,14 @@ struct SwiftResticApp: App {
                 }
                 .disabled(!p.canToggleSchedule)
             }
-            Button("Apply Retention Now…") {
+            Button("Apply Retention Now") {
                 if let id = p.planID { ask(.applyRetention(id)) }
             }
             .disabled(!p.canApplyRetention)
 
             Divider()
 
-            Button("Delete Plan…") {
+            Button("Delete Plan") {
                 if let id = p.planID { ask(.confirm(.deletePlan(id))) }
             }
             .disabled(!p.canDelete)
@@ -427,7 +427,7 @@ struct SwiftResticApp: App {
     private var repositoryMenu: some Commands {
         CommandMenu("Repository") {
             let r = model.repositoryCommands(for: router.selection)
-            Button("Find Files in Backups…") { ask(.showFind) }
+            Button("Find Files in Backups") { ask(.showFind) }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(!r.canFind)
             Button("Refresh All Backups") {
@@ -437,35 +437,35 @@ struct SwiftResticApp: App {
             .disabled(!r.canRefreshAll)
             // Not selection-bound: the console pane picks its own
             // repository, so it needs only one to exist and restic to run.
-            Button("restic Console…") { ask(.showConsole) }
+            Button("restic Console") { ask(.showConsole) }
                 .disabled(model.configuration.repositories.isEmpty || !model.isResticAvailable)
 
             Divider()
 
-            Button("Check…") {
+            Button("Check") {
                 if let id = r.repositoryID { ask(.confirm(.check(id))) }
             }
             .disabled(!r.canMaintain)
-            Button("Clean Up Now…") {
+            Button("Clean Up Now") {
                 if let id = r.repositoryID { ask(.confirm(.prune(id))) }
             }
             .disabled(!r.canMaintain)
-            Button("Unlock…") {
+            Button("Unlock") {
                 if let id = r.repositoryID { ask(.confirm(.unlock(id))) }
             }
             .disabled(!r.canMaintain)
-            Button("Rebuild Search Index…") {
+            Button("Rebuild Search Index") {
                 if let id = r.repositoryID { ask(.confirm(.rebuildIndex(id))) }
             }
             .disabled(!r.canMaintain)
 
             Divider()
 
-            Button("Edit Repository…") {
+            Button("Edit Repository") {
                 if let id = r.repositoryID { ask(.editRepository(id)) }
             }
             .disabled(!r.canEdit)
-            Button("Remove from SwiftRestic…") {
+            Button("Remove from SwiftRestic") {
                 if let id = r.repositoryID { ask(.confirm(.removeRepository(id))) }
             }
             .disabled(!r.canRemove)

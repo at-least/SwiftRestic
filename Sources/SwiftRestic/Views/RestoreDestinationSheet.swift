@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// One restore waiting for its destination: what, from which backup, and
-/// what to run once the sheet has an answer. Every Restore… in the app
+/// what to run once the sheet has an answer. Every Restore in the app
 /// builds one — the Restore pane's two, Find Files and the Files view's — so
 /// the destination and the keep/replace choice are asked in one place.
 struct RestoreDestinationRequest: Identifiable {
@@ -136,7 +136,7 @@ struct RestoreDestinationSheet: View {
                         // Beside the Other folder line only: the other lines
                         // are paths and sentences that need the width.
                         if kind == .otherFolder {
-                            Button("Choose…") { chooseFolder() }
+                            Button("Choose") { chooseFolder() }
                                 .controlSize(.small)
                                 .help("Pick the folder to restore into")
                         }

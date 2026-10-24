@@ -21,7 +21,7 @@ final class AppRouter {
         case newPlanIn(UUID)
         case newRepository
         case showFind
-        /// Repository ▸ restic Console…: a pane switch, not a sheet, but it
+        /// Repository ▸ restic Console: a pane switch, not a sheet, but it
         /// waits out an open sheet like every other menu ask.
         case showConsole
         case runSelectedPlan
@@ -133,13 +133,13 @@ final class AppRouter {
     /// The repository Find Files searches. Transient.
     var findRepositoryID: UUID?
 
-    /// A search Find Files runs as it arrives — Search All Backups…'s and a
+    /// A search Find Files runs as it arrives — Search All Backups's and a
     /// repository page's Return, which asked for it — whichever engine
     /// answers. Find Files spends it.
     var findRunsOnArrival = false
 
     /// Find Files, the pane: on `repositoryID`, with `query` in its field
-    /// when one is handed over (Search All Backups…, a repository page's
+    /// when one is handed over (Search All Backups, a repository page's
     /// Return) and run as it arrives when `run` says so — the field
     /// focused, its "area dedicated to discovery", as the HIG puts it.
     func openFind(repositoryID: UUID?, query: String? = nil, run: Bool = false) {

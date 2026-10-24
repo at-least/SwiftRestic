@@ -74,10 +74,10 @@ enum ResticError: Error, LocalizedError, Equatable {
             }
             if code == 10 || code == 11 {
                 // Exit 12's grammar: the fix leads, restic's first sentence
-                // keeps the detail. Exit 10's are the Add Repository…
+                // keeps the detail. Exit 10's are the Add Repository
                 // button's own words, so the banner and the notification say
                 // what the drawer's button does. Exit 11's leave out the
-                // Unlock… tooltip's "no run here holds it",
+                // Unlock tooltip's "no run here holds it",
                 // checked when the button is offered: the stored message
                 // outlives that moment.
                 let base = code == 10

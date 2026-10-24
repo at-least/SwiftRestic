@@ -474,7 +474,7 @@ struct ResticService: ResticClient {
     /// the rest still answer (restic 0.19.1).
     ///
     /// `--no-lock`, as `listDirectory`, `diff`, `snapshots` and `stats`:
-    /// what a click in a Files tab or on Compare with Previous… and a
+    /// what a click in a Files tab or on Compare with Previous and a
     /// refresh run. Locked, each would pay restic's 200 ms lock wait, fail
     /// at once with exit 11 while retention's `forget` or a `prune` held
     /// the exclusive lock, and lock a starting `forget` out the same way.
@@ -744,7 +744,7 @@ struct ResticService: ResticClient {
     }
 
     /// What the plan's retention would remove right now, without removing
-    /// it or locking the repository — Apply Retention Now…'s preview, safe
+    /// it or locking the repository — Apply Retention Now's preview, safe
     /// to run beside a backup. The same refusal as `forget`: a policy with
     /// no rule previews nothing rather than "everything".
     func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview {

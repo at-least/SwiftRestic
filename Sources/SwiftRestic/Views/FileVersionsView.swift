@@ -155,7 +155,7 @@ struct FileVersionsView: View {
 
     /// The pane's foot: errors of the reads at the left, and at the right
     /// the chosen version's ways out — Preview, Show in Backups,
-    /// Restore… — above them the strip that reports a restore in flight.
+    /// Restore — above them the strip that reports a restore in flight.
     private var footer: some View {
         VStack(spacing: 10) {
             RestoreProgressStrip()
@@ -195,7 +195,7 @@ struct FileVersionsView: View {
                 Button("Preview") { preview() }
                     .disabled(chosen == nil || blocked != nil || previewer.isCopying)
                     .help(blocked ?? "Look at the chosen version with Quick Look before restoring it — from a temporary copy, deleted when the preview closes")
-                Button("Restore…") { restoreChosen() }
+                Button("Restore") { restoreChosen() }
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)
                     .help("Restore the chosen version of this file (Return)")
@@ -204,11 +204,11 @@ struct FileVersionsView: View {
         .padding(12)
     }
 
-    /// What the pane restores, for File ▸ Restore…: the chosen version —
+    /// What the pane restores, for File ▸ Restore: the chosen version —
     /// the bottom bar's button's restore. Return is the list's own.
     private var restore: RestoreCommand {
         RestoreCommand(
-            title: "Restore…",
+            title: "Restore",
             isEnabled: chosen != nil && !model.isRestoring,
             run: restoreChosen
         )
@@ -241,7 +241,7 @@ struct FileVersionsView: View {
     /// node when it has answered, else the bare path as a file — a drag's
     /// guess until then. A drag lands in a fresh folder, where restic's file
     /// route brings a folder through as well: only the promised type can be
-    /// wrong. Restore… does not guess (`restoreChosen`).
+    /// wrong. Restore does not guess (`restoreChosen`).
     private func restorable(_ version: ContentVersion) -> (backup: IndexVersion, node: SnapshotNode)? {
         guard let backup = version.snapshots.first else { return nil }
         let node = details[backup.id] ?? SnapshotNode(name: self.node.name, type: .file, path: self.node.path)

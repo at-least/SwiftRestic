@@ -28,7 +28,7 @@ extension AppModel {
     /// Stamps the restic version and writes the run's log, before the
     /// record joins the history: the two land together, and `hasLog` says
     /// only what the write actually did (a full disk leaves it false, and
-    /// Show Log… says why). Rendering and writing both run detached — a
+    /// Show Log says why). Rendering and writing both run detached — a
     /// log can be hundreds of kilobytes — while the names are read here.
     func seal(_ record: inout RunRecord, transcript: RunTranscript.Contents) async {
         let versions = RunLogVersions.current(resticVersion: resticVersion)

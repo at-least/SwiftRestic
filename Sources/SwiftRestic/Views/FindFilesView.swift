@@ -32,7 +32,7 @@ struct FindFilesView: View {
     /// Whether the repository's index has finished its backfill. nil = not
     /// known yet for the selected repository.
     @State private var indexComplete: Bool?
-    /// Several at a time, as in a backup's tree: Restore Selected…
+    /// Several at a time, as in a backup's tree: Restore Selected
     /// (Return) restores them together, each from its row's backup.
     @State private var selection = Set<String>()
     @State private var isSearching = false
@@ -49,7 +49,7 @@ struct FindFilesView: View {
     @FocusState private var searchIsFocused: Bool
     /// Taken by a click in the results (`focusOnClick`): left in the
     /// field, Return would search again — clearing the selection — instead
-    /// of reaching Restore Selected….
+    /// of reaching Restore Selected.
     @FocusState private var resultsAreFocused: Bool
     /// The restore waiting in the destination sheet — over the window, the
     /// one sheet up.
@@ -173,7 +173,7 @@ struct FindFilesView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Picker("Repository", selection: $router.findRepositoryID) {
-                    Text("Choose…").tag(UUID?.none)
+                    Text("Choose").tag(UUID?.none)
                     ForEach(model.configuration.repositories) { repository in
                         Text(model.label(of: repository)).tag(UUID?.some(repository.id))
                     }
@@ -315,7 +315,7 @@ struct FindFilesView: View {
                 // unselected row must not depend on selection state.
                 let picked = rows.filter { ids.contains($0.id) }
                 if picked.count == 1, let row = picked.first {
-                    Button("Restore “\(row.match.name)”…") {
+                    Button("Restore “\(row.match.name)”") {
                         restoreSelection(picked)
                     }
                     .disabled(model.isRestoring)
@@ -335,7 +335,7 @@ struct FindFilesView: View {
                         .disabled(!model.isResticAvailable || previewer.isCopying)
                     }
                 } else if picked.count > 1 {
-                    Button("Restore \(Format.plural(picked.count, "Item"))…") {
+                    Button("Restore \(Format.plural(picked.count, "Item"))") {
                         restoreSelection(picked)
                     }
                     .disabled(model.isRestoring)
@@ -385,7 +385,7 @@ struct FindFilesView: View {
                 }
                 Spacer()
                 let selected = rows.filter { selection.contains($0.id) }
-                Button("Restore Selected…") { restoreSelection(selected) }
+                Button("Restore Selected") { restoreSelection(selected) }
                     .buttonStyle(.borderedProminent)
                     // Same grammar as the Restore pane: Return offers the
                     // restore, always through the destination sheet, where
@@ -586,14 +586,14 @@ struct FindFilesView: View {
         selection = []
     }
 
-    /// What the page restores, for File ▸ Restore…: the selected rows —
+    /// What the page restores, for File ▸ Restore: the selected rows —
     /// the bottom bar's button's restore. Same grammar as a backup's tree:
     /// Return offers the restore, always through the destination sheet,
     /// where the keep/replace choice lives.
     private var restore: RestoreCommand {
         let selected = rows.filter { selection.contains($0.id) }
         return RestoreCommand(
-            title: "Restore Selected…",
+            title: "Restore Selected",
             isEnabled: !selected.isEmpty && !model.isRestoring,
             run: { restoreSelection(selected) }
         )

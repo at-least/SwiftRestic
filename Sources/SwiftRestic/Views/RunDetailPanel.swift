@@ -1,14 +1,14 @@
 import SwiftUI
 
 /// Activity's drawer: what the selected run did and where to go from it —
-/// the snapshot it wrote or read (Browse, Compare with Previous…), its
+/// the snapshot it wrote or read (Browse, Compare with Previous), its
 /// numbers, restic's exit code, the messages it left, and the log. Shown
 /// for every selected run, clean ones included: the plan page's Last backup
 /// value lands on exactly such a run, and an empty pane under the selection
 /// reads as "nothing to see".
 ///
 /// A fixed height, scrolling inside, buttons pinned under the scroll view
-/// so Show Log… stays in reach whatever the messages list: 220 pt for a run
+/// so Show Log stays in reach whatever the messages list: 220 pt for a run
 /// with nothing to say, 320 for one with messages, so a failure's diagnosis
 /// does not push the facts under the fold. A constant per selected run,
 /// never a measurement, also answers Activity's non-scrolling host: its
@@ -129,7 +129,7 @@ struct RunDetailPanel: View {
             exitRow
         default:
             repositoryRow
-            // A check's verdict, or what Apply Retention Now… removed —
+            // A check's verdict, or what Apply Retention Now removed —
             // Copy Details' Result line.
             if run.kind == .check || run.kind == .forget, let result = run.detailText {
                 DetailRow("Result") {
@@ -277,7 +277,7 @@ struct RunDetailPanel: View {
                 }
             }
             Spacer(minLength: 0)
-            Button("Show Log…") { onShowLog(run) }
+            Button("Show Log") { onShowLog(run) }
                 .disabled(!run.hasLog)
                 .help(
                     run.hasLog
@@ -344,7 +344,7 @@ struct ConsoleRouteButton: View {
 /// The drawer's Backup row, in its own view so the listing lookup behind
 /// it reruns only when the run or the repository's listing changes — not on
 /// every write the drawer's other rows observe. Browse opens the backup
-/// on its page's Backups tab; Compare with Previous… is the diff's one
+/// on its page's Backups tab; Compare with Previous is the diff's one
 /// way in.
 private struct RunSnapshotRow: View {
     @Environment(AppModel.self) private var model
@@ -363,7 +363,7 @@ private struct RunSnapshotRow: View {
                 completenessMark(for: snapshot.id)
                 browseButton(snapshot.id)
                 if run.kind == .backup {
-                    Button("Compare with Previous…") {
+                    Button("Compare with Previous") {
                         if let repositoryID = run.repositoryID {
                             onCompare(SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot))
                         }
@@ -383,7 +383,7 @@ private struct RunSnapshotRow: View {
                     .disabled(true)
                     .help(help)
                 if run.kind == .backup {
-                    Button("Compare with Previous…") {}
+                    Button("Compare with Previous") {}
                         .disabled(true)
                         .help(help)
                 }

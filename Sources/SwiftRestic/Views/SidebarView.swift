@@ -6,7 +6,7 @@ import SwiftUI
 /// split view interface that includes a content list between the sidebar
 /// items and detail view"). The repository's row opens its page, which is
 /// its overview, and never collapses; beneath it sit its plans, "New Backup
-/// Plan…" while it has none, and — under an Other backups caption while the
+/// Plan" while it has none, and — under an Other backups caption while the
 /// repository holds backups none of its plans made (`BackupShelves`) — their
 /// groups, by the plan that made them when a plan tag says which, by folders
 /// and Mac otherwise. A plan's or a group's row is a page whose Backups tab
@@ -17,7 +17,7 @@ import SwiftUI
 /// Every row is a top-level List row, and a repository's children are
 /// leading indentation (`Indent`). Only places carry a tag — a repository,
 /// a plan, a group under Other backups — so selection stays unique; the
-/// Other backups caption is text, and "New Backup Plan…" is an action.
+/// Other backups caption is text, and "New Backup Plan" is an action.
 ///
 /// The sidebar's list is its own view so it type-checks on its own: the
 /// root's modifier chain sits at the compiler's type-check budget. The
@@ -76,7 +76,7 @@ struct SidebarView: View {
 
             // Header-less: one row needs no title above it. The restic
             // console has no row — it is a power tool, reached from
-            // Repository ▸ restic Console….
+            // Repository ▸ restic Console.
             Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
                     // The window's unread badge: the week's problems, as a
@@ -115,8 +115,8 @@ struct SidebarView: View {
             Menu {
                 // Into the repository on screen, as ⌘N does — with none
                 // yet, through adding one.
-                Button("New Backup Plan…") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
-                Button("Add Repository…") { onNewRepository() }
+                Button("New Backup Plan") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
+                Button("Add Repository") { onNewRepository() }
             } label: {
                 Label("Add", systemImage: "plus")
                     .labelStyle(.iconOnly)
@@ -141,7 +141,7 @@ struct SidebarView: View {
             // enabled only for a complete, idle plan with restic to run it —
             // an error banner is not a substitute for a disabled item.
             .disabled(!commands.canBackUp)
-        Button("Edit…") { onEditPlan(plan) }
+        Button("Edit") { onEditPlan(plan) }
         // The Schedule card's pair, word for word. The row's caption says the
         // pause while the schedule is held; manual runs stay possible either
         // way, and a manual plan has no schedule to pause.
@@ -159,28 +159,28 @@ struct SidebarView: View {
                 }
             }
         }
-        Button("Apply Retention Now…") { router.request(.applyRetention(plan.id)) }
+        Button("Apply Retention Now") { router.request(.applyRetention(plan.id)) }
             .disabled(!commands.canApplyRetention)
         Divider()
-        Button("Delete Plan…", role: .destructive) { onDeletePlan(plan) }
+        Button("Delete Plan", role: .destructive) { onDeletePlan(plan) }
     }
 
     @ViewBuilder
     private func repositoryContextMenu(_ repository: Repository) -> some View {
         let commands = model.repositoryCommands(for: .repository(repository.id))
-        Button("New Backup Plan…") { onNewPlan(repository.id) }
+        Button("New Backup Plan") { onNewPlan(repository.id) }
         Divider()
-        Button("Edit…") { onEditRepository(repository) }
+        Button("Edit") { onEditRepository(repository) }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
         Divider()
         // The two of the Repository menu's a row most often wants; the
         // shared confirmations ask first.
-        Button("Check…") { router.request(.confirm(.check(repository.id))) }
+        Button("Check") { router.request(.confirm(.check(repository.id))) }
             .disabled(!commands.canMaintain)
-        Button("Clean Up Now…") { router.request(.confirm(.prune(repository.id))) }
+        Button("Clean Up Now") { router.request(.confirm(.prune(repository.id))) }
             .disabled(!commands.canMaintain)
         Divider()
-        Button("Remove from SwiftRestic…", role: .destructive) {
+        Button("Remove from SwiftRestic", role: .destructive) {
             onRemoveRepository(repository)
         }
     }
@@ -292,17 +292,20 @@ struct SidebarView: View {
     }
 
     /// The way to a repository's first plan, where its plans would be. An
-    /// action, not a place: no tag — its plus fills the icon column, so its
-    /// title starts where plan names do. It leaves once a plan exists; the
-    /// footer's + and the row's menu keep offering the next one.
+    /// action, not a place: no tag, its title tinted, no icon — buttons
+    /// wear none (the user's call). The hidden symbol
+    /// holds the icon column, so its title starts where plan names do. It
+    /// leaves once a plan exists; the footer's + and the row's menu keep
+    /// offering the next one.
     private func addPlanRow(_ repository: Repository) -> some View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
                 Label {
-                    Text("New Backup Plan…")
+                    Text("New Backup Plan")
+                        .foregroundStyle(Theme.tint)
                 } icon: {
                     Image(systemName: "plus.circle")
-                        .foregroundStyle(Theme.tint)
+                        .hidden()
                         .accessibilityHidden(true)
                 }
                 Spacer(minLength: 0)
@@ -313,7 +316,7 @@ struct SidebarView: View {
         .padding(.leading, Indent.child)
         .help("Create a backup plan that backs up to “\(model.label(of: repository))”")
         // Every repository without a plan has one: the name tells them apart.
-        .accessibilityLabel("New Backup Plan for “\(model.label(of: repository))”…")
+        .accessibilityLabel("New Backup Plan for “\(model.label(of: repository))”")
     }
 
     // MARK: - Plans
@@ -441,7 +444,7 @@ struct SidebarView: View {
         isAdoptable: Bool
     ) -> some View {
         if isAdoptable {
-            Button("Adopt as a Backup Plan…") {
+            Button("Adopt as a Backup Plan") {
                 onAdoptGroup(repository.id, planID)
             }
         }
@@ -465,7 +468,7 @@ struct SidebarView: View {
 }
 
 /// A repository's children, as the leading indentation of top-level List
-/// rows: plans, "New Backup Plan…", the Other backups caption and its
+/// rows: plans, "New Backup Plan", the Other backups caption and its
 /// groups all start one step in, their icons under the repository's icon
 /// and their titles where its title starts.
 private enum Indent {

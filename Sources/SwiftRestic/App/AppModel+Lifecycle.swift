@@ -16,7 +16,7 @@ extension AppModel {
     /// phrasing stay testable at the model level.
     var quitInterruptions: [String] {
         var reasons: [String] = []
-        // Apply Retention Now… runs in a plan's slot too, and is not a backup.
+        // Apply Retention Now runs in a plan's slot too, and is not a backup.
         let backups = activity.values.filter(\.isBackup).count
         if backups > 0 {
             reasons.append(backups == 1 ? "A backup is running" : "\(backups) backups are running")
@@ -44,7 +44,7 @@ extension AppModel {
     /// the cancel stamps its slot as run (`markPlanRun`, at the run's
     /// start), so the plan's next slot is. Pause and Stop's runs keep their
     /// slot due — that stamp skips them — and so does Apply Retention
-    /// Now…'s forget, which stamps nothing however it ends.
+    /// Now's forget, which stamps nothing however it ends.
     func quitScheduleNotice(now: Date = .now) -> String? {
         guard !startsAtLogin else { return nil }
         let hold = Scheduler.hold(

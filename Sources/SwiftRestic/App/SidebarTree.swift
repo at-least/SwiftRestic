@@ -13,7 +13,7 @@ import Foundation
 enum SidebarChild: Hashable {
     /// A plan.
     case plan(UUID)
-    /// "New Backup Plan…", only while the repository has no plan: the place
+    /// "New Backup Plan", only while the repository has no plan: the place
     /// its plans would be names the way to its first one.
     case addPlan(repositoryID: UUID)
     /// The caption over the groups of the repository's backups no plan of

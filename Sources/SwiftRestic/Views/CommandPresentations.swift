@@ -1,19 +1,19 @@
 import SwiftUI
 
-/// Identifies Apply Retention Now…'s sheet by the plan it previews.
+/// Identifies Apply Retention Now's sheet by the plan it previews.
 struct RetentionTarget: Identifiable, Equatable {
     let planID: UUID
     var id: UUID { planID }
 }
 
-/// Identifies Check…'s sheet by the repository it checks.
+/// Identifies Check's sheet by the repository it checks.
 private struct CheckTarget: Identifiable {
     let repositoryID: UUID
     var id: UUID { repositoryID }
 }
 
-/// Every command's confirmation, once — the dialogs, Check…'s sheet and
-/// Apply Retention Now…'s sheet — wherever they are asked from: the Plan and
+/// Every command's confirmation, once — the dialogs, Check's sheet and
+/// Apply Retention Now's sheet — wherever they are asked from: the Plan and
 /// Repository menus, the panes' toolbars, the sidebar's menus. One dialog with the model's words
 /// (`AppModel.confirmationCopy(for:)`), so no two surfaces can word one
 /// action two ways, and none adds a dialog of its own. A modifier of its
@@ -106,7 +106,7 @@ struct CommandPresentations: ViewModifier {
     }
 }
 
-/// Check…: the confirmation's title and sentence, and how much of the
+/// Check: the confirmation's title and sentence, and how much of the
 /// backed-up data to read back — none checks the structure alone.
 private struct CheckSheet: View {
     @Environment(\.dismiss) private var dismiss

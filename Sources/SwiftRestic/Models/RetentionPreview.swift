@@ -4,7 +4,7 @@ import Foundation
 /// `restic forget --dry-run` would remove and the ones it would keep, read
 /// from restic's own answer rather than projected, so the confirmation shows
 /// exactly the snapshots the real forget will evaluate (Apply Retention
-/// Now…).
+/// Now).
 struct RetentionPreview: Sendable, Equatable {
     var kept: [Snapshot]
     /// Newest first, like every other snapshot list.

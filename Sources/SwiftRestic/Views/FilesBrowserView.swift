@@ -318,7 +318,7 @@ struct FilesBrowserView: View {
                         ? "No name in these backups has a word starting with “\(query)”."
                         : FilesSearchAnswer.indexStillReading)
                 } actions: {
-                    Button("Search All Backups…") { onSearchAllBackups(roots.repositoryID, query) }
+                    Button("Search All Backups") { onSearchAllBackups(roots.repositoryID, query) }
                         .help("Search every backup in this repository with Find Files, other plans' included")
                 }
             case let .hits(entries):

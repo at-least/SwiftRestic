@@ -65,7 +65,7 @@ extension AppModel {
     }
 
     /// Backups only: a plan's health is whether its backups work. Apply
-    /// Retention Now… records its forget under the plan's ID, and without
+    /// Retention Now records its forget under the plan's ID, and without
     /// the kind a failed forget became the plan's problem (`isHealed` keeps
     /// a successful one from healing a backup failure). Such runs still
     /// count in Activity and the 7-day problem count, as check and prune do.

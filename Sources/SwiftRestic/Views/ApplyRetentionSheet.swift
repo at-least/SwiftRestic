@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Apply Retention Now…: restic's own dry run of the plan's rules first —
+/// Apply Retention Now: restic's own dry run of the plan's rules first —
 /// which snapshots would go, by date — then the real forget, only on a
 /// deliberate click. The preview reads without a lock
 /// (`forget --dry-run --no-lock`), so it works beside a backup; applying
@@ -101,7 +101,7 @@ struct ApplyRetentionSheet: View {
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 if let preview, !preview.removed.isEmpty {
-                    // What Apply Retention Now… was chosen for, so not marked
+                    // What Apply Retention Now was chosen for, so not marked
                     // destructive — the HIG's Empty Trash case — but no
                     // Return either: removing backups cannot be undone, and
                     // the HIG's way to make people read first is no default.

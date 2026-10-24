@@ -37,7 +37,7 @@ extension AppModel {
 
     /// Retires a plan's run — its registry slot, run token, Pause-and-Stop
     /// mark and strip. The unwind of every run in the plan's slot (backup
-    /// and Apply Retention Now… alike) calls this, so the copies cannot
+    /// and Apply Retention Now alike) calls this, so the copies cannot
     /// drift. Call only from the run's own task: `clear` while a cancelled
     /// run is still unwinding would remove its slot, and quit's
     /// `tasks.drain()` would no longer wait for its record.
@@ -92,7 +92,7 @@ extension AppModel {
         backupQueue.values.contains { $0.contains { $0.planID == planID } }
     }
 
-    /// Whether a plan's run — a backup, or Apply Retention Now…'s forget —
+    /// Whether a plan's run — a backup, or Apply Retention Now's forget —
     /// is in flight on the repository.
     private func planRunHolds(_ repositoryID: UUID) -> Bool {
         activity.keys.contains { plan(id: $0)?.repositoryID == repositoryID }

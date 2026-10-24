@@ -248,7 +248,7 @@ struct SettingsView: View {
                         text: $model.configuration.settings.resticPathOverride,
                         prompt: Text(model.binary?.url.path ?? (model.binaryProblem == nil ? "Searching the usual locations" : ""))
                     )
-                    Button("Choose…") {
+                    Button("Choose") {
                         if let url = FilePicker.chooseExecutable() {
                             model.configuration.settings.resticPathOverride = url.path
                         }
@@ -295,7 +295,7 @@ struct SettingsView: View {
                 Button("Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: report.directory)])
                 }
-                Button("Remove Caches Unused for \(ResticCacheReport.oldAfterDays) Days…") { isConfirmingCacheCleanup = true }
+                Button("Remove Caches Unused for \(ResticCacheReport.oldAfterDays) Days") { isConfirmingCacheCleanup = true }
                     .disabled(report.oldCount == 0 || model.isWorkingOnResticCache)
                 if model.isWorkingOnResticCache { ProgressView().controlSize(.small) }
                 if let note = model.resticCacheNote {

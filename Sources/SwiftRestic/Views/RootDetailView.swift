@@ -28,7 +28,7 @@ struct RootDetailView: View {
     /// every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
-    /// "Search All Backups…" — the Restore pane's, and a Files tab's with no
+    /// "Search All Backups" — the Restore pane's, and a Files tab's with no
     /// match: Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
@@ -187,16 +187,16 @@ struct WelcomeView: View {
 
             VStack(spacing: 8) {
                 HStack(spacing: 10) {
-                    Button("Add Repository…", action: onAddRepository)
+                    Button("Add Repository", action: onAddRepository)
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                     // With no repository yet it starts there and carries
                     // on to the plan (`RootView.startNewPlan`).
-                    Button("New Backup Plan…", action: onAddPlan)
+                    Button("New Backup Plan", action: onAddPlan)
                         .controlSize(.large)
                 }
                 if model.configuration.repositories.isEmpty {
-                    Text("A backup plan backs up to a repository — New Backup Plan… sets one up first.")
+                    Text("A backup plan backs up to a repository — New Backup Plan sets one up first.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

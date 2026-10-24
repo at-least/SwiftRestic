@@ -752,7 +752,7 @@ struct PathListEditor: View {
     var systemImage = "folder.badge.gearshape"
     @Binding var paths: [String]
     var placeholder = "Add a pattern"
-    /// Choose Items…'s panel: what it asks for and its button.
+    /// Choose Items's panel: what it asks for and its button.
     var browseMessage = "Choose folders and files to leave out of backups"
     var browsePrompt = "Add"
     /// Excludes: an item chosen in the panel or dropped from Finder is
@@ -818,7 +818,7 @@ struct PathListEditor: View {
                 // + chooses items in a panel, as Time Machine's exclusions
                 // do; a pattern is typed in the field below.
                 HStack(spacing: 0) {
-                    ListBarButton(symbol: "plus", title: "Choose Items…") { browse() }
+                    ListBarButton(symbol: "plus", title: "Choose Items") { browse() }
                     Divider()
                         .frame(height: 14)
                     ListBarButton(symbol: "minus", title: "Remove") {
@@ -1199,7 +1199,7 @@ struct UnreadableItemLine: View {
                 Button("Exclude") { model.exclude(path: path, fromPlan: plan.id) }
             }
         } message: {
-            Text("Its next backups skip \(path ?? "") — backups already made keep it. The plan's exclude patterns list it, and Edit Plan… takes it out again.")
+            Text("Its next backups skip \(path ?? "") — backups already made keep it. The plan's exclude patterns list it, and Edit Plan takes it out again.")
         }
         .task(id: path) {
             guard let path else { return }
@@ -1219,7 +1219,7 @@ struct UnreadableItemLine: View {
         }
         .disabled(exists != true)
         if let plan {
-            Button("Exclude from “\(model.label(of: plan))”…") { isConfirmingExclude = true }
+            Button("Exclude from “\(model.label(of: plan))”") { isConfirmingExclude = true }
                 .disabled(plan.excludePatterns.contains(ResticService.globEscaped(path)))
         }
     }

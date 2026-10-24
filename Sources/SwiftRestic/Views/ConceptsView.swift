@@ -14,19 +14,19 @@ struct ConceptsView: View {
     private let tasks: [Topic] = [
         Topic(
             title: "Back up a folder",
-            text: "Choose File ▸ New Backup Plan…, pick the folder and a repository, and click Create Plan. Its first backup starts within a minute; after that it runs on its schedule while SwiftRestic is open."
+            text: "Choose File ▸ New Backup Plan, pick the folder and a repository, and click Create Plan. Its first backup starts within a minute; after that it runs on its schedule while SwiftRestic is open."
         ),
         Topic(
             title: "Get a file back",
-            text: "Select the file on the plan's Files tab and click Restore… to put it back. Repository ▸ Find Files in Backups… finds a file by name in every backup, and Restore Entire Backup…, on the Backups tab, brings back everything from one moment."
+            text: "Select the file on the plan's Files tab and click Restore to put it back. Repository ▸ Find Files in Backups finds a file by name in every backup, and Restore Entire Backup, on the Backups tab, brings back everything from one moment."
         ),
         Topic(
             title: "When a backup fails",
-            text: "Activity lists every backup, check and restore. Select one to see what happened, with Show Log… and Copy Details below it — and a button for the fix, when there is one. A backup that couldn't read some files still saves the rest and is marked Completed with warnings."
+            text: "Activity lists every backup, check and restore. Select one to see what happened, with Show Log and Copy Details below it — and a button for the fix, when there is one. A backup that couldn't read some files still saves the rest and is marked Completed with warnings."
         ),
         Topic(
             title: "Keep the history tidy",
-            text: "Retention, on the plan editor's Retention tab, removes old backups after each one. The space they held is freed by a cleanup: Repository ▸ Clean Up Now…, or the repository's periodic cleanup. Repository ▸ Check… verifies that nothing is damaged."
+            text: "Retention, on the plan editor's Retention tab, removes old backups after each one. The space they held is freed by a cleanup: Repository ▸ Clean Up Now, or the repository's periodic cleanup. Repository ▸ Check verifies that nothing is damaged."
         ),
         Topic(
             title: "Backups from elsewhere",

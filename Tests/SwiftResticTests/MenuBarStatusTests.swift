@@ -541,7 +541,7 @@ struct MenuBarStatusTests {
         let planID = UUID()
         let failed = run(.failed, minutesAgo: 60, planID: planID)
         // Another plan's success, a success that came before the failure, a
-        // cancelled run, and a successful forget (Apply Retention Now…
+        // cancelled run, and a successful forget (Apply Retention Now
         // records it under the plan's ID) — the sidebar's rule exactly.
         let leaves: [RunRecord] = [
             run(.succeeded, minutesAgo: 10, planID: UUID()),

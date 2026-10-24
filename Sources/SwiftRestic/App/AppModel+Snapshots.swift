@@ -293,7 +293,7 @@ extension AppModel {
     /// Searches a repository's snapshots for a path pattern. restic matches a
     /// pattern against whole names, so a pattern with no glob character is
     /// wrapped in `*…*` — a bare word would find only an item named exactly
-    /// that. A bare word is what a Files tab's "Search All Backups…" hands
+    /// that. A bare word is what a Files tab's "Search All Backups" hands
     /// over; the index's own search takes words.
     func findFiles(
         repositoryID: UUID,

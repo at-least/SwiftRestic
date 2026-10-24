@@ -32,7 +32,7 @@ the generator after editing it; the PNGs are checked in.
 ## What it does
 
 - **Repositories in the sidebar** — each repository is a row with its plans
-  always in view beneath it (or *New Backup Plan…* while it has none): two
+  always in view beneath it (or *New Backup Plan* while it has none): two
   levels, the most Apple's guidelines give a sidebar ("When a data hierarchy
   is deeper than two levels, consider using a split view interface that
   includes a content list between the sidebar items and detail view"). A
@@ -117,7 +117,7 @@ the generator after editing it; the PNGs are checked in.
     not removed: restic left it out, and the disk may still have it. Items
     select several at a time and restore together, drag to Finder, or open
     in the tree with a double-click, keeping the chosen time where they
-    existed then; with nothing selected, *Restore Folder…* restores the
+    existed then; with nothing selected, *Restore Folder* restores the
     whole folder. *Show in Backups* sits in the pane's bottom bar, at its
     left.
   - *A file* lists its versions, from the index: a version starts where
@@ -137,7 +137,7 @@ the generator after editing it; the PNGs are checked in.
     says what the copy here is: *the same as the newest version*, the same
     as an older one, none of them (with its own date and size), or *Not on
     this Mac* — one `lstat`, compared by size and modification time to
-    restic's millisecond, read again when a restore ends. *Restore…* — the
+    restic's millisecond, read again when a restore ends. *Restore* — the
     bottom bar's prominent button, beside *Preview* and *Show in Backups* —
     or Return restores the chosen version, confirming "the version modified Sep
     17, 2026 at 9:00 PM, from the backup of Sep 17, 2026 at 11:00 PM"; a row
@@ -157,7 +157,7 @@ the generator after editing it; the PNGs are checked in.
     or Esc ends the search on the tree with the hit's folders opened and
     its row in view. While the index still reads, the search says older
     backups may be missing, and one with no match offers *Search All
-    Backups…*, Find Files over the whole repository.
+    Backups*, Find Files over the whole repository.
 - **A group under Other backups is a page** — its row selects like a plan's,
   with Overview | Backups and no Files tab: a plan's lists its folder as
   this Mac holds it, and a group's backups name none of this Mac's to list
@@ -172,7 +172,7 @@ the generator after editing it; the PNGs are checked in.
   the open backup on either tab (typed on Overview, the page turns to
   Backups), and ⇧⌘F opens Find Files, as it does off a plan's page.
 - **Adopting** — a group whose ID no plan anywhere carries can be adopted:
-  *Adopt as a Backup Plan…* (the page's explanation card, the group's
+  *Adopt as a Backup Plan* (the page's explanation card, the group's
   context menu, or the repository page's *Other backups* card, listing each
   adoptable group while there is one) opens the plan editor with, from the
   newest backup this Mac made — or the newest of all when another Mac made
@@ -202,17 +202,17 @@ the generator after editing it; the PNGs are checked in.
   scheduled" for an incomplete setup — with a pause glyph in the sidebar's
   words ("Photos: Paused — Sunday at 3:00 AM"), so "2 of 2 plans protected"
   cannot hide a stopped plan (a manual plan gets no line). The card carries
-  *New Backup Plan…* while the repository has no plan; after that a plan
+  *New Backup Plan* while the repository has no plan; after that a plan
   starts from the sidebar's + or ⌘N (into the repository on screen) or the
-  repository row's menu. With no repository yet, *New Backup Plan…* — the
+  repository row's menu. With no repository yet, *New Backup Plan* — the
   welcome screen's, ⌘N, the sidebar's + — adds one first, then opens the
   plan editor in it. Then the *Other backups* card; the week's problems
   — a repeating cause (one unreadable file every run) is one row with its
   count ("7 times · 19 hours ago") opening the newest, and past five rows a
   last "… and N more in Activity" row opens Activity's Problems; then
   location, size and maintenance. Its toolbar holds the search field alone:
-  *Edit Repository…* is the Repository menu's and the repository row's
-  (*Edit…*), *Refresh* the row's and the menu's *Refresh All Backups* (⌘R),
+  *Edit Repository* is the Repository menu's and the repository row's
+  (*Edit*), *Refresh* the row's and the menu's *Refresh All Backups* (⌘R),
   as the HIG has it on the Mac: "it doesn't make sense to provide a toolbar
   item for every menu item" (until 2026-10-19 *Refresh* and *Edit* sat at
   the toolbar's right). The *Backups* row
@@ -246,7 +246,7 @@ the generator after editing it; the PNGs are checked in.
   would fail until one is created". Only a new repository chooses its kind
   and location; a saved one shows them as text, as a saved plan shows its
   path — another place is another repository, so exit 10 offers *Add
-  Repository…*.
+  Repository*.
   The answer shows above the buttons on either tab, a new repository's empty
   location as information, not the red of a failure. An edit's *Save* that
   changes what reaches restic — a credential, the extra environment, the
@@ -261,7 +261,7 @@ the generator after editing it; the PNGs are checked in.
   `RESTIC_REST_USERNAME`/`RESTIC_REST_PASSWORD`, so the stored and shown URL
   holds no password; a pasted URL sheds its login into those fields, and one
   saved with it keeps working, since restic prefers a URL's own credentials.
-  *Change Password…* runs `restic key passwd` with the stored password, the
+  *Change Password* runs `restic key passwd` with the stored password, the
   new one in a file only this user can read, deleted when restic ends; only
   then does the Keychain take it. It asks first — the old password stops
   working everywhere — and waits while a backup or maintenance job holds the
@@ -314,12 +314,12 @@ the generator after editing it; the PNGs are checked in.
   only ever touch its own. A plan's page
   is three cards, the first two each with its verb in its corner, both also
   in the Plan menu and the row's menu, which open the editor too (*Edit
-  Plan…*, *Edit…* on the row; until 2026-10-19 also *Edit* at the toolbar's
+  Plan*, *Edit* on the row; until 2026-10-19 also *Edit* at the toolbar's
   right):
   *Backups* (last backup, count, retention) with *Back Up Now* — *Stop*
-  while it runs; *Schedule* (and when it runs next) with *Pause Schedule*,
-  its arrow offering the lengths, or *Resume Schedule* (none for a manual
-  plan); *Excluding*, everything it leaves out, grouped by kind — first
+  while it runs; *Schedule* (and when it runs next) with *Pause* (*Pause
+  Schedule* in the menus), its arrow offering the lengths, or *Resume*
+  (*Resume Schedule*) — none for a manual plan; *Excluding*, everything it leaves out, grouped by kind — first
   *Added by you*, then Finder & Trash, apps' caches & state, search indexes,
   a drive's or the startup disk's own, each developer language and tool —
   every rule the app offers labelled with what it is and who puts it back
@@ -332,7 +332,7 @@ the generator after editing it; the PNGs are checked in.
   run so the history cap cannot shorten it; the repository page's Recent
   problems counts the week), restic's message, the facts, the
   drawer's diagnosis, and up to five unreadable items with the drawer's
-  *Reveal in Finder* and *Exclude from “Documents”…* menu, then "… and N
+  *Reveal in Finder* and *Exclude from “Documents”* menu, then "… and N
   more in Activity"; *Show in Activity* opens the run. The editor
   preselects the repository only when there is just one, starts a new
   plan's excludes with the defaults its folder can hold — `.DS_Store`
@@ -409,7 +409,7 @@ the generator after editing it; the PNGs are checked in.
   folder missing from this Mac — its startup disk, or a drive that is here —
   comes back with no mount, so that run fails: "“Projects” is not on this
   Mac — it was moved, renamed or deleted. Put it back, or back it up where
-  it is now with a new plan.", with *New Backup Plan…* (in the plan's
+  it is now with a new plan.", with *New Backup Plan* (in the plan's
   repository) beside it in the drawer and on the plan page, a plan's path
   being fixed; the plan counts as unprotected, and a failure for the same folder merges
   into the last one as a standing skip does ("… Failed 5 times since …", a
@@ -446,7 +446,7 @@ the generator after editing it; the PNGs are checked in.
     not exist: unable to open config file" (restic 0.19.1) — so a folder
     under /Volumes counts only while it is the root of a mounted volume; with
     the volume here and the folder gone the run fails, fixed by *Edit
-    Repository…*. The listing follows the same check: with the volume away
+    Repository*. The listing follows the same check: with the volume away
     restic is not asked, no banner posts, and the sidebar row reads "“Travel
     SSD” is not connected." and the caveat "Can't read backups — “Travel
     SSD” is not connected.", earlier rows staying. A skipped run shows on the
@@ -491,12 +491,12 @@ the generator after editing it; the PNGs are checked in.
     from the Keychain — comes back only when the user acts, so the run
     fails in the same words without asking restic ("… failed: the share did
     not accept the user name and password."): a problem like any failure,
-    with its card, dot and one notification, and *Edit Repository…* or
-    *Edit Plan…* beside it, whichever editor holds that share's password;
+    with its card, dot and one notification, and *Edit Repository* or
+    *Edit Plan* beside it, whichever editor holds that share's password;
     repeats merge into one record as a folder gone's do. Until 2026-10-16 a
     refusal was Skipped too, silent until the quiet-plan alert. Two runs
-    needing one share mount it once. *Check…*, *Clean Up Now…* and *Apply
-    Retention Now…* — its preview too — reconnect the repository's share the
+    needing one share mount it once. *Check*, *Clean Up Now* and *Apply
+    Retention Now* — its preview too — reconnect the repository's share the
     same way, and so does reading the repository: its listing at launch,
     *Refresh* and *Try Again*, the Files tab, Find Files, a restore, the
     console. A saved share therefore mounts when SwiftRestic starts; until
@@ -505,9 +505,9 @@ the generator after editing it; the PNGs are checked in.
     away, the listing says why in the run's words — a skipped backup's own,
     without a second try — and a read fails in them. Out of reach, a check or prune waits for it as for a drive that
     is away (see *Maintenance*); a share that refused, or one still away
-    when *Apply Retention Now…* runs, fails the run in those words rather
+    when *Apply Retention Now* runs, fails the run in those words rather
     than restic's "repository does not exist", a refusal with *Edit
-    Repository…*. A share mounted with no user name offers no
+    Repository*. A share mounted with no user name offers no
     password, and each reconnect adds the server to macOS's Recent Servers,
     as Finder's do. Tried against Samba 4.23.8 on 2026-10-16, the password
     both injected and kept in the Keychain.
@@ -532,9 +532,9 @@ the generator after editing it; the PNGs are checked in.
   off idle sleep (`pmset -g assertions` lists "SwiftRestic is running a
   backup"); the display may still sleep, and a closed lid sleeps the Mac.
 - **Browsing and restore** — a page's restore is its pane's bottom bar's
-  *Restore…*, prominent at the bar's trailing corner, and *File ▸ Restore…*
+  *Restore*, prominent at the bar's trailing corner, and *File ▸ Restore*
   runs the same restore from the menu bar; on a backup's tree the bar leads
-  with *Restore Entire Backup…* for the whole backup. The restore sat in
+  with *Restore Entire Backup* for the whole backup. The restore sat in
   the window toolbar from 2026-10-19 to 2026-10-21 — the HIG's "Only
   specify one primary action, and put it on the trailing side of the
   toolbar" — until the user asked for the bottom bar back, which the HIG
@@ -543,8 +543,8 @@ the generator after editing it; the PNGs are checked in.
   *Show Backups* (a group's menu) and *Show in Backups* (the Files tab) opens
   the one browser at that backup, on its page's Backups tab beside the list:
   its folders as a tree with a Change column and search. Restore by dragging to Finder,
-  or by the bar's *Restore…* (or Return) on a selection — *Restore Entire
-  Backup…* with nothing selected, which recreates the full original paths
+  or by the bar's *Restore* (or Return) on a selection — *Restore Entire
+  Backup* with nothing selected, which recreates the full original paths
   inside the chosen folder;
   per-node restores land in the chosen folder with no path rebuilt above
   them. A file alone is restored into a hidden folder beside its landing,
@@ -587,7 +587,7 @@ the generator after editing it; the PNGs are checked in.
     backups under Other backups offer neither: its page has no Files tab.
     The search — the toolbar's field on the Backups tab — covers the open
     backup, says how many matches only other backups hold, and *Search All
-    Backups…* carries it on in Find Files; a
+    Backups* carries it on in Find Files; a
     hit drags to Finder as a row does. A file's right-click menu here, in its
     hits and on Find Files' results has the Files tab's *Preview*, gated by
     the same size (a hit, which the index keeps no size for, is listed by
@@ -601,11 +601,11 @@ the generator after editing it; the PNGs are checked in.
   repository's index has read every backup it searches as you type, and
   until then restic's walk runs on Return or *Search*. Until 2026-10-18 it
   was a sheet, and its restores stacked a second sheet on it. *Repository ›
-  Find Files in Backups…* (⇧⌘F) opens it, the field focused, on the
+  Find Files in Backups* (⇧⌘F) opens it, the field focused, on the
   repository in view — the selected repository's or plan's or group's, else
   the first (Activity, the console, nothing); a repository page's own search
   field (*Search all backups*) carries its query there on Return, and a
-  *Search All Backups…* (a backup's tree's, or a Files tab's with no match)
+  *Search All Backups* (a backup's tree's, or a Files tab's with no match)
   carries its query and repository and runs it. On a plan's page
   ⇧⌘F instead turns the page to Files and focuses the toolbar's search
   field, whose scope follows the page's tab: on Overview and Files the
@@ -619,21 +619,21 @@ the generator after editing it; the PNGs are checked in.
   answered; a latest-snapshot-only search says "this one". Before the
   listing lands, rows name their backup by short ID in the Backup column,
   times filled in when it lands without moving the rows. ⌘- or ⇧-click
-  selects several, and *Restore Selected…* (Return) restores them in one
+  selects several, and *Restore Selected* (Return) restores them in one
   destination sheet, each from its own row's backup ("from 2 backups, each
   item from the one it was found in"), an item inside a selected folder of
   the same backup left to the folder. A folder comes back as its own backup
   holds it, so a file found in an older backup than its folder's (deleted
   since) restores on its own: beside the folder in a chosen folder, back
   inside it at the original location.
-- **Compare backups** — *Compare with Previous…* on a backup run in Activity
+- **Compare backups** — *Compare with Previous* on a backup run in Activity
   runs `restic diff` against the previous backup of the same folders from
   the same Mac (any earlier one can be chosen) and lists what was added,
   removed or modified, filterable by kind and path, with restic's byte
   totals, under a header naming the repository: "what did last night's
   backup actually pick up?" without restoring anything. A row's right-click
   menu has *Show Versions* (also a double-click), closing the sheet onto its
-  plan's Files tab (not for a group's backups), and *Restore “…”…* — both
+  plan's Files tab (not for a group's backups), and *Restore “…”* — both
   from whichever of the two backups
   holds the item (the newer for added or changed, the older for removed);
   an item the newer backup's own run could not read is marked *!*, not
@@ -641,7 +641,7 @@ the generator after editing it; the PNGs are checked in.
   the restore reads the item's kind in that backup first — the index's,
   or restic's listing where the index has not read it — since a diff names
   only a path and a kind. Several rows restore together as in Find Files:
-  *Restore Selected…* (Return) or the right-click *Restore N Items…*, one
+  *Restore Selected* (Return) or the right-click *Restore N Items*, one
   destination and one run ("from 2 backups, each item from the one it was
   found in"), a row inside a selected folder of the same backup coming with
   the folder (the destination says so), while a file the newer backup
@@ -655,7 +655,7 @@ the generator after editing it; the PNGs are checked in.
   can register itself as a login item and sit in the menu bar.
 - **Maintenance** — scheduled `check` and `prune` per repository, on a day
   interval, plus manual runs, unlocking (restic's stale lock removal), repository stats, and a
-  plan's retention on demand (*Plan › Apply Retention Now…* previews with
+  plan's retention on demand (*Plan › Apply Retention Now* previews with
   `restic forget --dry-run --no-lock`, then asks). The repository page's
   *Last check* and *Last prune* read the newest such run in Activity and say
   how it ended when it did not succeed ("3 days ago · failed", "·
@@ -663,7 +663,7 @@ the generator after editing it; the PNGs are checked in.
   recover some damage" — the words Activity's Detail column and the Recent
   problems row show, derived once from the record); the row leads to the run,
   whose drawer holds the log, Copy Details and, for a failed check or prune
-  or a check that found errors, *Check Again…* or *Clean Up Again…* — the
+  or a check that found errors, *Check Again* or *Clean Up Again* — the
   Repository menu's command, same confirmation, grey while the repository is
   busy. The scheduler's own stamp, written for every attempt so a failing
   check is not retried every minute, is read only when the history holds no
@@ -672,20 +672,20 @@ the generator after editing it; the PNGs are checked in.
   whose "repository does not exist" cannot tell it from a moved folder —
   until 2026-10-16 it ran, failed with "No repository is at its saved path —
   point it at the folder that holds the repository." and *Edit
-  Repository…*, and stamped the next check a whole interval ahead. It is
+  Repository*, and stamped the next check a whole interval ahead. It is
   *Skipped* in a backup's words, "“Archive SSD” is not connected.", and
   unstamped, so the task stays due: *Next check* reads "When “Archive SSD” is
   connected", *Last check* passes over the skip, the scheduler leaves the
   repository alone while the drive is still away, and the task runs within
-  a minute of its return. Only *Check…* or *Clean Up Now…* asked by hand gets a
+  a minute of its return. Only *Check* or *Clean Up Now* asked by hand gets a
   passing banner. A repository added from 2026-10-09 on prunes by default, every
   30 days starting 30 days after it is added, since retention runs after
   every backup and only a prune frees the space; one saved before keeps its
   setting. With cleanup off the Maintenance card says "Cleanup — Off — space
   from removed backups isn't freed" rather than hiding its rows. A prune is
-  a *cleanup* wherever the app names it (*Clean Up Now…*, *Last cleanup*,
+  a *cleanup* wherever the app names it (*Clean Up Now*, *Last cleanup*,
   *Clean up periodically*, the retention tab's *Also clean up*), and
-  restic's `unlock` is *Unlock…* — restic's words stay in the console.
+  restic's `unlock` is *Unlock* — restic's words stay in the console.
   A check verifies the repository's structure and reads back as much of
   the backed-up data as its *Data to read* says. Until 2026-10-17 every scheduled
   check read the structure alone, which passes a damaged pack: with one
@@ -710,21 +710,21 @@ the generator after editing it; the PNGs are checked in.
   snapshot/…" line per snapshot it kept, and exit 3, "failed to remove one
   or more snapshots" (restic 0.19.1, its `--prune` then skipped). Until
   2026-10-17 that read as success: a backup's retention logged "Retention
-  removed 1 snapshot" and *Apply Retention Now…* "Removed 1 snapshot." (the
+  removed 1 snapshot" and *Apply Retention Now* "Removed 1 snapshot." (the
   app's words then) while
   the server kept them all. The snapshots restic names now count as
   refused, the rest as removed: "The repository refused to delete 1
   snapshot (403 Forbidden) — it may be append-only or locked. Thin it where
   deletions are allowed, or turn retention off." — a warning after a backup,
-  whose snapshot stands, a failure for *Apply Retention Now…*, each with
-  *Edit Plan…* opening the plan editor on its Retention tab. The Go stack
+  whose snapshot stands, a failure for *Apply Retention Now*, each with
+  *Edit Plan* opening the plan editor on its Retention tab. The Go stack
   trace restic appends to that error's message stays in the run's log.
 - **restic's cache** — restic keeps a cache folder per repository it has
   opened here (`~/Library/Caches/restic`), keeps it after the repository is
   removed, and never cleans up: past 30 days unused it only prints, at the
   start of a command nobody sees, that `restic cache --cleanup` would remove
   it. Settings › restic measures it (`restic cache`: size, folder count, how
-  many unused) and offers *Remove Caches Unused for 30 Days…*, behind a
+  many unused) and offers *Remove Caches Unused for 30 Days*, behind a
   confirmation stating the cost: a repository still set up here that went
   unused that long loses its cache too, rebuilt when restic next opens it —
   over the network for a remote one. Nothing inside a repository is
@@ -766,7 +766,7 @@ the generator after editing it; the PNGs are checked in.
   stay run-driven.
 - **restic console** — run any restic command against a repository and read its
   own output, for what the UI does not cover (*Repository › restic
-  Console…*). A command that may change the backups — the ones it confirms
+  Console*). A command that may change the backups — the ones it confirms
   first, plus `tag` and `copy` — re-reads the listing when it ends, so the
   sidebar, Files tabs and counts drop what a `forget` removed at once. A
   check that found errors advises "`restic repair` can recover some
@@ -774,21 +774,21 @@ the generator after editing it; the PNGs are checked in.
   Console*, opening the console on that repository with its password and
   typing nothing: `repair` stays a command the user writes, confirmed first.
 - **Activity** — every run with its outcome, repository, duration, bytes
-  added, the files restic could not read, and a plain-text log (Show Log…,
+  added, the files restic could not read, and a plain-text log (Show Log,
   Copy Details); the drawer opens its plan or repository, and restores
   record which backup, which item and where it went. A failure the drawer
   offers a fix for says the fix in its own words, so the plan page's problem
   card and the notification do too — exit 12 "The password doesn't open this repository
   — check it in the repository settings.", exit 10 "No repository is at its
   location — put it back, or add it where it is now as a new repository."
-  (*Add Repository…*), exit 11 "The repository is locked — if no other Mac is
-  using it, unlock it." (*Unlock…*) — each followed
+  (*Add Repository*), exit 11 "The repository is locked — if no other Mac is
+  using it, unlock it." (*Unlock*) — each followed
   by restic's first sentence. A backup that fills its local repository's
   disk says so instead of restic's line, which names a pack file by its
   hash and stays in the log: "“TinyDisk” is full — the backup needed more
   room than it has free. What it uploaded before it stopped stays in the
   repository until a cleanup frees it." (this Mac's disk for a repository on
-  it), with *Clean Up Now…* — checked on 2026-10-16 with a 40 MB disk image: a
+  it), with *Clean Up Now* — checked on 2026-10-16 with a 40 MB disk image: a
   57 MB backup failed with 35 MB of it left behind, which `restic prune`
   freed. A full disk anywhere else — restic's cache on this Mac — keeps
   restic's words. An rclone repository's failure leads with rclone's own
@@ -809,8 +809,8 @@ the generator after editing it; the PNGs are checked in.
   read it however old), and any other run's problem for the week the Recent
   problems card, the Activity badge and the menu bar count.
 - **Banners** — one queue above every page, the Files tab and the console
-  included, for what has no other place to be said: a *Back Up Now*, *Check…*
-  or *Clean Up Now…* that was skipped, an ask that waits for a busy repository,
+  included, for what has no other place to be said: a *Back Up Now*, *Check*
+  or *Clean Up Now* that was skipped, an ask that waits for a busy repository,
   a restore's result with *Reveal in Finder*, an alert that could not be
   sent, and the app's own trouble (the configuration, the Keychain, the login
   item). How a run went is never one — the sidebar's caption, the plan page's
@@ -824,7 +824,7 @@ the generator after editing it; the PNGs are checked in.
 - **Words** — one term per thing, the HIG's Writing rule ("Create a list of
   common terms, and reference that list to keep your language consistent").
   What a backup run writes is a *backup* — a plan's backups, the Backups
-  tab, *Find Files in Backups…*, the Backup column, "Removed 2 backups" —
+  tab, *Find Files in Backups*, the Backup column, "Removed 2 backups" —
   which restic calls a snapshot; restic's word stays where restic itself
   speaks: the console and the commands it runs, and the hook variable
   `SWIFTRESTIC_SNAPSHOT_ID`. Help's Terms say so under *Backup*. A run
@@ -848,8 +848,8 @@ the generator after editing it; the PNGs are checked in.
   views; *Files* grey on a group's page, all three off a plan's or group's
   page), *Show Deleted Items* for a plan's Files tab, and *Show Problems
   Only* for
-  Activity. *File ▸ Restore…* is the pane's Restore… of the page in view
-  (*Restore Entire Backup…*, *Restore Folder…* by what it would restore), and
+  Activity. *File ▸ Restore* is the pane's Restore of the page in view
+  (*Restore Entire Backup*, *Restore Folder* by what it would restore), and
   *Help ▸ SwiftRestic Help* (⌘?) opens a window of its own — how to back
   up a folder, get a file back, read a failed run, keep the history tidy
   and adopt backups from elsewhere, then six terms (task-first since
@@ -937,7 +937,7 @@ A few seams worth knowing by name:
   its content changed; a neighbour read in full instead is marked as a step
   that may have changed anything. Its failure never fails a refresh or
   backup: an unusable file is deleted and read again (*Rebuild Search
-  Index…* does so on request), and until every snapshot is read Find Files
+  Index* does so on request), and until every snapshot is read Find Files
   searches through restic. Only the `SnapshotIndex*.swift` files touch GRDB.
   At launch, after a clean configuration load, index files of repositories
   no longer configured are deleted — only inside `index/`; the
@@ -1118,7 +1118,7 @@ locked, a region capture (`-R`) failed, and this capture was not tried
 - The snapshot index, `index/<repository UUID>.sqlite` beside `config.json`,
   holds the path of every file in every backup it has read, unencrypted — names
   restic itself keeps encrypted in the repository. It is deleted with its
-  repository, and *Rebuild Search Index…* deletes and re-reads it; the
+  repository, and *Rebuild Search Index* deletes and re-reads it; the
   repository never depends on it.
 - Each run's log is kept beside `config.json` in `Logs/<run-id>.log` and deleted
   with its run record. It holds the restic command lines (which name your source
@@ -1188,7 +1188,7 @@ the first line of a failing hook's output is kept, stored apart from
 restic's warnings, and never sent to a webhook or chat channel.
 
 `forget` runs inside the backup that triggered it, so the plan's after-backup
-hooks cover it. *Apply Retention Now…* runs no hooks and sends no alerts: the
+hooks cover it. *Apply Retention Now* runs no hooks and sends no alerts: the
 plan page and Activity say how it went, and a Healthchecks ping would reset
 the dead-man's switch for a run that backed nothing up.
 

@@ -19,7 +19,7 @@ struct BackupsBrowserView: View {
     let repositoryID: UUID
     /// The page's backups, newest first.
     let backups: [Snapshot]
-    /// "Search All Backups…": the host opens Find Files on this repository
+    /// "Search All Backups": the host opens Find Files on this repository
     /// with the query filled in.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 

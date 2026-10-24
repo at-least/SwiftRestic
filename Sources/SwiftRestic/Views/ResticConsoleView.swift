@@ -81,7 +81,7 @@ struct ResticConsoleView: View {
         @Bindable var console = model.console
         return VStack(alignment: .leading, spacing: 10) {
             Picker("Repository", selection: $console.repositoryID) {
-                Text("Choose…").tag(UUID?.none)
+                Text("Choose").tag(UUID?.none)
                 ForEach(model.configuration.repositories) { repository in
                     Text(model.label(of: repository)).tag(UUID?.some(repository.id))
                 }

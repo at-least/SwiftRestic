@@ -45,7 +45,7 @@ enum EditorRequirements {
     static func noRepositoryYet(isNew: Bool) -> String {
         isNew
             ? "No repository at that location yet. Saving will create one."
-            : "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository…."
+            : "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository."
     }
 
     /// Whether an edit's Save asks restic first: when it changes what
@@ -88,7 +88,7 @@ enum EditorRequirements {
     }
 
     /// The repository a plan editor opens on: the plan's own, else the
-    /// only one there is. With two or more the picker says Choose… and the
+    /// only one there is. With two or more the picker says Choose and the
     /// footer asks — a silent first pick lands the plan wherever the first
     /// row points.
     static func initialRepositoryID(_ current: UUID?, among repositories: [Repository]) -> UUID? {

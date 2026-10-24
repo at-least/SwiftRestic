@@ -227,7 +227,7 @@ struct CommandStateTests {
         #expect(trayRow()?.title == "Stop “Docs” Backup")
         #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Backup")
 
-        // Apply Retention Now…'s forget, or a backup's own retention step
+        // Apply Retention Now's forget, or a backup's own retention step
         // (its snapshot is already written): Stop ends the forget, and both
         // surfaces say so.
         model.activity[plan.id]?.phase = .applyingRetention
@@ -358,7 +358,7 @@ struct CommandStateTests {
         // What Find Files shows speaks for Find Files alone.
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .activity, shown: second.id) == first.id)
 
-        // The Restore pane's "Search All Backups…" hand-off wins over
+        // The Restore pane's "Search All Backups" hand-off wins over
         // whatever the window has selected.
         #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: .repository(second.id), shown: nil) == first.id)
         #expect(model.findFilesRepositoryID(prefillRepositoryID: second.id, selection: nil, shown: nil) == second.id)
@@ -525,7 +525,7 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
         #expect(model.confirmationCopy(for: .removeRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))
-        // Apply Retention Now… is no backup.
+        // Apply Retention Now is no backup.
         model.activity[plan.id]?.isBackup = false
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             .hasPrefix("Applying retention will be stopped and recorded as cancelled.") == true)

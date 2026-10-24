@@ -7,7 +7,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 
         /// The operation's word in titles and rows: "Backup", "Check", …
         /// A forget is "Retention", the word every other surface uses for it
-        /// (the plan page's row, Apply Retention Now…, "Retention skipped");
+        /// (the plan page's row, Apply Retention Now, "Retention skipped");
         /// a prune is the maintenance task's own word.
         var displayName: String {
             switch self {
@@ -129,7 +129,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// A plain-text result: the tail of what `prune` printed (it has no JSON
     /// output, so this is the only record of what it did; the drawer shows
     /// it among the run's messages), a check's verdict, or what Apply
-    /// Retention Now… removed — the Result row of a check or a forget in
+    /// Retention Now removed — the Result row of a check or a forget in
     /// the drawer and Copy Details (a check's in its log too), and a
     /// forget's Activity Detail and banner.
     var detailText: String?
@@ -137,7 +137,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// the log header. Nil on records from before it was kept.
     var resticVersion: String?
     /// Whether `Logs/<id>.log` was written for this run. False on records
-    /// from before logs existed and when the write failed, so Show Log…
+    /// from before logs existed and when the write failed, so Show Log
     /// can say so without a file check on the render path.
     var hasLog: Bool = false
 

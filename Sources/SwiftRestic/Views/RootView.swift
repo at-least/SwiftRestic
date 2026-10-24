@@ -20,14 +20,14 @@ struct RootView: View {
     /// retention's fix. Back to Files when the sheet goes.
     @State private var editingPlanTab: PlanEditorSheet.Tab = .files
     @State private var editingRepository: Repository?
-    /// "New Backup Plan…" asked with no repository yet: the repository
+    /// "New Backup Plan" asked with no repository yet: the repository
     /// editor is up for it, and once it has saved one the plan editor
     /// follows, in it (`startNewPlan`, `continuePlanAfterRepository`).
     @State private var planAfterRepository: PlanAfterRepository?
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
-    /// Apply Retention Now…'s sheet, for the plan it previews.
+    /// Apply Retention Now's sheet, for the plan it previews.
     @State private var retentionTarget: RetentionTarget?
     /// The Files views' levels, read once and shared by every page's Files
     /// tab: a level read for one is read for the next.
@@ -101,7 +101,7 @@ struct RootView: View {
         }
         .sheet(item: $editingRepository, onDismiss: continuePlanAfterRepository) { repository in
             // A new repository lands on its own page, where "New Backup
-            // Plan…" is the first thing it offers — the next step after
+            // Plan" is the first thing it offers — the next step after
             // adding one, taken for the user when that was what they asked.
             RepositoryEditorSheet(repository: repository, onCreated: { id in
                 router.selection = .repository(id)
@@ -226,7 +226,7 @@ struct RootView: View {
         case created(UUID)
     }
 
-    /// "New Backup Plan…", from whichever control: the plan editor — or,
+    /// "New Backup Plan", from whichever control: the plan editor — or,
     /// with no repository to back up to yet, the repository editor first,
     /// as Arq asks where before what. Adding one is the plan's first step,
     /// not a reason to sit disabled.
@@ -280,7 +280,7 @@ struct RootView: View {
         case "activity": router.selection = .activity
         case "find":
             // SWIFTRESTIC_CAPTURE_FIND: a search to run on arrival in the
-            // first repository, as Search All Backups… hands one over.
+            // first repository, as Search All Backups hands one over.
             let pattern = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_FIND"]
             router.openFind(repositoryID: model.configuration.repositories.first?.id, query: pattern, run: pattern != nil)
         // Find Files over a non-first repository, by ⇧⌘F's own route from
@@ -435,7 +435,7 @@ struct RootView: View {
     /// present at once, and because the main menu stays live under a sheet:
     /// a Pause Schedule under the plan editor would be undone by its save
     /// (`merging(draft:)` keeps the draft's `isEnabled`), a Remove from
-    /// SwiftRestic… would leave the editor saving against a repository
+    /// SwiftRestic would leave the editor saving against a repository
     /// that is gone. The panes' own sheets (Compare, a restore's
     /// destination) are invisible from here, so AppKit is asked: SwiftUI
     /// presents every sheet as the window's attached sheet. Each ask is

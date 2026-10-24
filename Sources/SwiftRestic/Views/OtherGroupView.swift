@@ -20,7 +20,7 @@ struct OtherGroupView: View {
     /// Opens the adopt sheet for a plan-UUID group — the root owns the
     /// presenting state, as it does for every sheet a pane raises.
     let onAdopt: (_ planID: UUID) -> Void
-    /// The Backups tab's "Search All Backups…": Find Files, prefilled.
+    /// The Backups tab's "Search All Backups": Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     private var summary: OtherGroupPageSummary? {
@@ -104,7 +104,7 @@ struct OtherGroupView: View {
             } else if summary.isAdoptable, case let .plan(planID) = groupID {
                 // The flow's main entry; the group's context menu carries the
                 // same verb.
-                Button("Adopt as a Backup Plan…") { onAdopt(planID) }
+                Button("Adopt as a Backup Plan") { onAdopt(planID) }
                     .controlSize(.small)
                     .help("Rebuild a plan around these backups — their history becomes its own, and nothing is written to the repository")
             }

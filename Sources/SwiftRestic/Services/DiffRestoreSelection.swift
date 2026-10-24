@@ -5,7 +5,7 @@ import Foundation
 /// with no node — a diff names a path and a kind, never a node, so the
 /// restore finds it in that backup (`RestoreSource.node`). A row whose
 /// backup is no longer listed (`holder` nil) is left out, as its own
-/// Restore… is grey.
+/// Restore is grey.
 enum DiffRestoreSelection {
     static func sources(
         _ changes: [ResticDiffChange],

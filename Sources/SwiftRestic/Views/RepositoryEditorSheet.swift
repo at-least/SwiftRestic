@@ -396,7 +396,7 @@ struct RepositoryEditorSheet: View {
     /// (`AppModel.changeRepositoryPassword`). Not the field above, which
     /// only corrects what the Keychain holds.
     private var changePasswordGroup: some View {
-        DisclosureGroup("Change Password…", isExpanded: $isChangingPassword) {
+        DisclosureGroup("Change Password", isExpanded: $isChangingPassword) {
             SecureField("New password", text: $newPassword)
             SecureField("Confirm new password", text: $confirmNewPassword)
             HStack {
@@ -484,7 +484,7 @@ struct RepositoryEditorSheet: View {
     /// Where the repository is, chosen only while it is new. A saved one is
     /// that place — its label, its index and its history are all of it —
     /// so its location reads as text, as a saved plan's path does, and
-    /// another place is another repository (Add Repository…, exit 10's
+    /// another place is another repository (Add Repository, exit 10's
     /// fix). Fixed are the parts restic's repository string is made of and
     /// Azure's account, which holds the container; what reaches the place
     /// without being it — a key's ID, a project, a share's password —
@@ -526,7 +526,7 @@ struct RepositoryEditorSheet: View {
                     text: $draft.gcsCredentialsPath,
                     prompt: Text("~/.config/gcloud/key.json")
                 )
-                Button("Choose…") {
+                Button("Choose") {
                     if let url = FilePicker.chooseFile(message: "Choose the service account JSON file") {
                         draft.gcsCredentialsPath = url.path
                     }
@@ -549,7 +549,7 @@ struct RepositoryEditorSheet: View {
         case .local:
             HStack {
                 TextField("Folder", text: $draft.localPath, prompt: Text("/Volumes/Backup/restic"))
-                Button("Choose…") {
+                Button("Choose") {
                     if let url = FilePicker.chooseDirectory(message: "Choose the repository folder") {
                         draft.localPath = url.path
                     }
@@ -598,7 +598,7 @@ struct RepositoryEditorSheet: View {
                             Button(remote.menuTitle) { draft.rcloneRemote = remote.name }
                         }
                     } label: {
-                        Label("Remotes", systemImage: "chevron.up.chevron.down")
+                        Text("Remotes")
                     }
                     .menuStyle(.borderedButton)
                     .controlSize(.small)

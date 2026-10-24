@@ -277,7 +277,7 @@ struct RepositoryDetailView: View {
 
 /// The Last check / Last cleanup value: the words alone after a run that
 /// succeeded, else the same words as a route to the run in Activity — its
-/// drawer holds Check Again… or Clean Up Again…, the log and Copy
+/// drawer holds Check Again or Clean Up Again, the log and Copy
 /// Details, so the page gains no maintenance control, and the route
 /// outlives the Recent problems card's week.
 private struct MaintenanceRunValue: View {

@@ -20,7 +20,7 @@ struct RestorePaneView: View {
     let snapshotID: String
     /// The open backup's search, as typed in the page's toolbar field.
     @Binding var searchText: String
-    /// "Search All Backups…": the host opens Find Files on this repository
+    /// "Search All Backups": the host opens Find Files on this repository
     /// with the query filled in.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
@@ -38,7 +38,7 @@ struct RestorePaneView: View {
     @State private var searchResult: RestorePaneSearch?
     /// The selected rows' ids — paths in the tree, `SearchHit.id` among
     /// search results. Several at once, as in Finder (⌘- or ⇧-click):
-    /// Restore… restores them together.
+    /// Restore restores them together.
     @State private var selection: Set<String> = []
     /// The tree's or the search results' keyboard focus, whichever is on
     /// screen — taken by a click in it (`focusOnClick`).
@@ -424,20 +424,20 @@ struct RestorePaneView: View {
         }
     }
 
-    /// What the pane restores, for File ▸ Restore…: the selected items, or
+    /// What the pane restores, for File ▸ Restore: the selected items, or
     /// with nothing selected the whole backup — the same restores the
     /// bottom bar's two buttons offer, the menu naming whichever applies.
     private func restore(record: Snapshot?) -> RestoreCommand {
         let nodes = selectedNodes
         return RestoreCommand(
-            title: nodes.isEmpty ? "Restore Entire Backup…" : "Restore…",
+            title: nodes.isEmpty ? "Restore Entire Backup" : "Restore",
             isEnabled: !model.isRestoring && record != nil,
             run: { nodes.isEmpty ? restoreWholeRecord() : restoreSelection() }
         )
     }
 
     /// The pane's three ways out of a record, in one row: the whole backup
-    /// on the left, the primary Restore… for the selection on the right,
+    /// on the left, the primary Restore for the selection on the right,
     /// and the drag named in between. The hint shows over a list whose
     /// rows drag — the tree, or a search's hits; while a search lists hits
     /// and other backups hold more, the middle says so and offers the way
@@ -446,7 +446,7 @@ struct RestorePaneView: View {
     private func footer(record: Snapshot?) -> some View {
         HStack(spacing: 12) {
             // Titles stay whole; the note beside them is what gives way.
-            Button("Restore Entire Backup…") { restoreWholeRecord() }
+            Button("Restore Entire Backup") { restoreWholeRecord() }
                 .disabled(model.isRestoring || record == nil)
                 .help("Restore everything in this backup — each folder is recreated under its full original path inside the folder you choose")
                 .fixedSize()
@@ -467,7 +467,7 @@ struct RestorePaneView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Button("Restore…") { restoreSelection() }
+            Button("Restore") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(selectedNodes.isEmpty || model.isRestoring || record == nil)
@@ -488,7 +488,7 @@ struct RestorePaneView: View {
     /// One title, help and guard wherever the pane offers it: Find Files
     /// needs restic, as the Repository menu's item does.
     private var searchAllButton: some View {
-        Button("Search All Backups…") {
+        Button("Search All Backups") {
             onSearchAllBackups(repositoryID, searchText.trimmingCharacters(in: .whitespaces))
         }
         .disabled(!model.isResticAvailable)
@@ -633,7 +633,7 @@ struct RestorePaneView: View {
             // Spent either way, as the native outline spends it.
             return .handled
         }
-        // Return on a file, or on several rows, is the footer's Restore…:
+        // Return on a file, or on several rows, is the footer's Restore:
         // left unhandled, the list hands Return to its double-click action
         // and the default button never sees it. The same gate as the
         // button.
@@ -887,7 +887,7 @@ struct RestorePaneView: View {
             }
             guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
             // The pane lists what the open backup holds; the rest is counted,
-            // not dropped — it is where "Search All Backups…" leads.
+            // not dropped — it is where "Search All Backups" leads.
             searchResult = RestorePaneSearch(
                 hits: found.hits,
                 inRecord: found.inSnapshot,

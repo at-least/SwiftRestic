@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// The Compare sheet's Restore Selected…: which rows restore, from which of
+/// The Compare sheet's Restore Selected: which rows restore, from which of
 /// the two backups, and what the destination sheet says about the rest.
 @Suite("Compare sheet selection restore")
 struct DiffRestoreSelectionTests {

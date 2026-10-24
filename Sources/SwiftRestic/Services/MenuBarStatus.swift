@@ -247,7 +247,7 @@ enum MenuBarStatus {
     }
 
     /// Whether Stop, in this phase of a plan's run, ends a forget rather
-    /// than a backup: Apply Retention Now…'s run, or a backup's own
+    /// than a backup: Apply Retention Now's run, or a backup's own
     /// retention step, whose snapshot is already written. The one rule the
     /// tray's row and the Plan menu's Stop item both word themselves by.
     static func stopsRetention(_ phase: PlanActivity.Phase?) -> Bool {

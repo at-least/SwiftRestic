@@ -63,7 +63,7 @@ struct ProtectionCard: View {
                 // repository can't be read: a plan for a drive that isn't
                 // here is not the next step, reaching it is.
                 if plans.isEmpty, case .loaded = model.snapshotListingOutcome(for: repositoryID) {
-                    Button("New Backup Plan…", action: onAddPlan)
+                    Button("New Backup Plan", action: onAddPlan)
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -87,7 +87,7 @@ struct ProtectionCard: View {
 
 /// The repository page's Other backups card — the adopt flow's landing place,
 /// for a repository added with history already in it: one row per adoptable
-/// plan-UUID group, with the group's own Adopt as a Backup Plan… beside it. An
+/// plan-UUID group, with the group's own Adopt as a Backup Plan beside it. An
 /// exception to "the sidebar lists them": the rows carry a verb, the card
 /// exists only while something can be adopted, and the groups it leaves out — a
 /// moved plan's, an untagged lineage's — stay visible in the sidebar beside it,
@@ -141,7 +141,7 @@ struct OtherBackupsCard: View {
     }
 
     /// One adoptable group. The row opens the group's page — the in-page
-    /// row grammar, hover and trailing chevron — and Adopt as a Backup Plan…
+    /// row grammar, hover and trailing chevron — and Adopt as a Backup Plan
     /// sits before the chevron as its own control, Retry's grammar: never a
     /// button inside a button.
     private func row(planID: UUID, label: SnapshotLineage.Label) -> some View {
@@ -165,7 +165,7 @@ struct OtherBackupsCard: View {
             }
             .buttonStyle(HoverableButtonStyle())
             .accessibilityLabel(([label.title] + [label.caption?.text].compactMap { $0 }).joined(separator: ": ") + ". Show group page")
-            Button("Adopt as a Backup Plan…") { onAdoptGroup(repositoryID, planID) }
+            Button("Adopt as a Backup Plan") { onAdoptGroup(repositoryID, planID) }
                 .controlSize(.small)
                 // The group page's own words for the verb it opens.
                 .help("Rebuild a plan around these backups — their history becomes its own, and nothing is written to the repository")

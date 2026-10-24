@@ -214,7 +214,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             // The icon's `unconfigured` face sent the user here; the menu it
             // opens must answer, not just say "nothing scheduled".
             let add = NSMenuItem(
-                title: "Add Repository…",
+                title: "Add Repository",
                 action: #selector(addRepository),
                 keyEquivalent: ""
             )

@@ -285,7 +285,7 @@ struct ResticFilesTreeTests {
     }
 
     /// Find Files' restic engine — what runs while the index still reads,
-    /// and what a Files tab's "Search All Backups…" hands a bare word to.
+    /// and what a Files tab's "Search All Backups" hands a bare word to.
     @MainActor
     @Test("Find Files' restic search finds a bare word inside names, and a pattern as typed")
     func findFilesBareWord() async throws {

@@ -395,7 +395,7 @@ struct PlanEditorSheet: View {
                         TextField("Folder or file", text: $draft.path, prompt: Text("/Users/you/Documents"))
                             .labelsHidden()
                             .focused($isPathFocused)
-                        Button("Choose…") {
+                        Button("Choose") {
                             if let url = FilePicker.chooseFolderOrFile(message: "Choose the folder or file this plan backs up") {
                                 draft.path = url.path
                             }
@@ -413,7 +413,7 @@ struct PlanEditorSheet: View {
                 switch mode {
                 case .new:
                     Picker("Repository", selection: $draft.repositoryID) {
-                        Text("Choose…").tag(UUID?.none)
+                        Text("Choose").tag(UUID?.none)
                         ForEach(model.configuration.repositories) { repository in
                             Text(model.label(of: repository)).tag(UUID?.some(repository.id))
                         }

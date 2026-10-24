@@ -174,7 +174,7 @@ struct AppRouterTests {
         #expect(router.findQuery == "older")
         #expect(!router.findRunsOnArrival)
 
-        // Search All Backups… hands its query over and asks for the run.
+        // Search All Backups hands its query over and asks for the run.
         router.openFind(repositoryID: repository, query: "invoice", run: true)
         #expect(router.findQuery == "invoice")
         #expect(router.findRunsOnArrival)

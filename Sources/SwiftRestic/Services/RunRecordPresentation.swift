@@ -34,12 +34,12 @@ enum RunFix: Equatable {
 
     var title: String {
         switch self {
-        case .editRepository, .editRepositoryShare: "Edit Repository…"
-        case .addRepository: "Add Repository…"
-        case .removeStaleLocks: "Unlock…"
-        case .newPlan: "New Backup Plan…"
-        case .editPlanShare, .editPlanRetention: "Edit Plan…"
-        case .pruneNow: "Clean Up Now…"
+        case .editRepository, .editRepositoryShare: "Edit Repository"
+        case .addRepository: "Add Repository"
+        case .removeStaleLocks: "Unlock"
+        case .newPlan: "New Backup Plan"
+        case .editPlanShare, .editPlanRetention: "Edit Plan"
+        case .pruneNow: "Clean Up Now"
         }
     }
 
@@ -74,8 +74,8 @@ enum MaintenanceRetry: Equatable {
 
     var title: String {
         switch self {
-        case .check: "Check Again…"
-        case .prune: "Clean Up Again…"
+        case .check: "Check Again"
+        case .prune: "Clean Up Again"
         }
     }
 
@@ -114,7 +114,7 @@ enum RunRecordPresentation {
     }
 
     /// The fix for a failed run, or nil when its cause has none the app can
-    /// perform. Only while the repository is still set up; Unlock…
+    /// perform. Only while the repository is still set up; Unlock
     /// only while no run here holds a lock on it, so "stale" means
     /// nobody here is using it.
     static func fix(
@@ -274,7 +274,7 @@ enum RunRecordPresentation {
         case .restore:
             return restoreDetail(run) ?? run.outcome.displayName
         case .forget:
-            // Apply Retention Now…'s count ("Removed 2 backups. Their data
+            // Apply Retention Now's count ("Removed 2 backups. Their data
             // stays until the next cleanup."), one short line.
             return run.detailText ?? run.outcome.displayName
         case .check:
@@ -444,7 +444,7 @@ enum RunRecordPresentation {
                 lines.append("Files: \(restoreFiles(run))")
             }
         case .check, .forget:
-            // A check's verdict, or what Apply Retention Now… removed.
+            // A check's verdict, or what Apply Retention Now removed.
             if let result = run.detailText { lines.append("Result: \(result)") }
         default:
             break

@@ -379,7 +379,7 @@ enum BackupRunEngine {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
             // The repository's disk full: said plainly, with what the run left
             // behind — restic's line, naming a pack file by its hash, stays in
-            // the log — and Clean Up Now… as its fix (`repositoryFull`).
+            // the log — and Clean Up Now as its fix (`repositoryFull`).
             if case let ResticError.commandFailed(_, message) = error,
                let full = RunRecord.repositoryFullMessage(resticMessage: message, repository: repository)
             {
@@ -701,7 +701,7 @@ enum MaintenanceRunEngine {
     }
 }
 
-/// Apply Retention Now…'s run: the plan's `forget`, outside a backup. It
+/// Apply Retention Now's run: the plan's `forget`, outside a backup. It
 /// runs in the plan's own slot — so Stop, the sidebar's spinner, quitting
 /// and the busy repository all work as for a backup — but it is not one:
 /// no hooks (README: `forget` has none of its own), no run stamp, and

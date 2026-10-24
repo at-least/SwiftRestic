@@ -6,7 +6,7 @@ struct PlanDetailView: View {
     /// The window's minute clock: Last backup and Next backup are as of it.
     @Environment(\.now) private var now
     let planID: UUID
-    /// The Files tab's "Search All Backups…": Find Files, prefilled.
+    /// The Files tab's "Search All Backups": Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     private var plan: BackupPlan? { model.plan(id: planID) }
@@ -35,8 +35,8 @@ struct PlanDetailView: View {
             filesPrompt: "Search this plan's files"
         )
         // The toolbar holds the tabs and the search field; the editor is
-        // Plan ▸ Edit Plan… and the sidebar row's Edit…, deleting Plan ▸
-        // Delete Plan… and the row's menu —
+        // Plan ▸ Edit Plan and the sidebar row's Edit, deleting Plan ▸
+        // Delete Plan and the row's menu —
         // the HIG's macOS toolbars: "it doesn't make sense to provide a
         // toolbar item for every menu item".
         // Opening the page marks the plan's problem seen — honestly, since
@@ -71,20 +71,22 @@ struct PlanDetailView: View {
         }
     }
 
-    /// Pause Schedule and Resume Schedule, the Schedule card's verb. A
-    /// click on Pause keeps its one-click open-ended pause; the arrow offers
-    /// the timed lengths. A manual plan has no schedule to pause and shows
-    /// none: its Schedule row already says "Manually".
+    /// Pause and Resume, the Schedule card's verb — bare, the card names
+    /// what they act on; the menus keep Pause Schedule and Resume Schedule
+    /// (the user's call). A click on Pause keeps its one-click open-ended
+    /// pause; the arrow offers the timed lengths. A manual plan has no
+    /// schedule to pause and shows none: its Schedule row already says
+    /// "Manually".
     @ViewBuilder
     private func scheduleControl(_ plan: BackupPlan) -> some View {
         if !plan.isScheduleActive(at: now) {
-            Button("Resume Schedule", systemImage: "play.circle") {
+            Button("Resume", systemImage: "play.circle") {
                 model.resumePlanSchedule(id: plan.id)
             }
             .labelStyle(.titleAndIcon)
             .help(resumeHelp(plan, now: now))
         } else if plan.schedule.frequency != .manual {
-            Menu("Pause Schedule", systemImage: "pause.circle") {
+            Menu("Pause", systemImage: "pause.circle") {
                 ForEach(PauseLength.allCases) { length in
                     Button(length.menuTitle) {
                         model.pausePlanSchedule(id: plan.id, for: length)
@@ -290,7 +292,7 @@ struct PlanDetailView: View {
         } description: {
             Text("Choose a repository for this plan to back up to.")
         } actions: {
-            Button("Edit Plan…") { router.request(.editPlan(planID)) }
+            Button("Edit Plan") { router.request(.editPlan(planID)) }
         }
     }
 
@@ -320,7 +322,7 @@ struct PlanDetailView: View {
             DetailGrid {
                 DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
                 DetailRow("Backups") { snapshotsValue(plan, snapshots: snapshots) }
-                // Applying it now is Plan ▸ Apply Retention Now… (and the
+                // Applying it now is Plan ▸ Apply Retention Now (and the
                 // sidebar row's menu); what it will keep is the editor's
                 // Retention tab.
                 DetailRow("Retention", plan.retention.summary)
@@ -468,8 +470,8 @@ struct PlanDetailView: View {
     /// folder. The folder itself is the page's subtitle. When is the
     /// Schedule card's, what it keeps the Backups card's, where the
     /// sidebar's (the plan sits under its repository); the rest of how it
-    /// runs, its hooks among it, is the editor's, which Plan ▸ Edit Plan…
-    /// and the row's Edit… open.
+    /// runs, its hooks among it, is the editor's, which Plan ▸ Edit Plan
+    /// and the row's Edit open.
     private func excludingCard(_ plan: BackupPlan) -> some View {
         let sections = ExcludeRule.sections(
             stored: plan.excludePatterns,

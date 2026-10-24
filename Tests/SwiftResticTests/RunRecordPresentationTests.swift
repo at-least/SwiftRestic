@@ -210,7 +210,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Completed with warnings · 2 unreadable items")
     }
 
-    @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path, or Unlock… while nobody here holds the lock")
+    @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path, or Unlock while nobody here holds the lock")
     func failureFixes() {
         let repository = UUID()
         var wrongPassword = backup {
@@ -257,9 +257,9 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: other, repositoryExists: true, repositoryBusy: false) == nil)
         wrongPassword.repositoryID = nil
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == nil)
-        #expect(RunFix.editRepository(repository).title == "Edit Repository…")
-        #expect(RunFix.addRepository.title == "Add Repository…")
-        #expect(RunFix.removeStaleLocks(repository).title == "Unlock…")
+        #expect(RunFix.editRepository(repository).title == "Edit Repository")
+        #expect(RunFix.addRepository.title == "Add Repository")
+        #expect(RunFix.removeStaleLocks(repository).title == "Unlock")
         // Each says the cause it fixes.
         #expect(RunFix.editRepository(repository).help == "The password doesn't open this repository — check it in the repository settings")
         #expect(RunFix.addRepository.help == "No repository is at its location — put it back, or add it where it is now as a new repository")
@@ -285,8 +285,8 @@ struct RunRecordPresentationTests {
         refused.planID = nil
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: "NAS")
             == .editRepositoryShare(repository))
-        #expect(RunFix.editRepositoryShare(repository).title == "Edit Repository…")
-        #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
+        #expect(RunFix.editRepositoryShare(repository).title == "Edit Repository")
+        #expect(RunFix.editPlanShare(plan).title == "Edit Plan")
     }
 
     @Test("a retention the repository refused offers the plan's editor on its Retention tab, a warning's as a failure's")
@@ -304,7 +304,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == .editPlanRetention(plan))
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, planExists: false) == nil)
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: false, repositoryBusy: false) == nil)
-        // Apply Retention Now…'s own run, failed for it.
+        // Apply Retention Now's own run, failed for it.
         refused.kind = .forget
         refused.outcome = .failed
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == .editPlanRetention(plan))
@@ -313,12 +313,12 @@ struct RunRecordPresentationTests {
         refused.kind = .backup
         refused.outcome = .completedWithErrors
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == nil)
-        #expect(RunFix.editPlanRetention(plan).title == "Edit Plan…")
+        #expect(RunFix.editPlanRetention(plan).title == "Edit Plan")
         #expect(RunFix.editPlanRetention(plan).help
             == "The repository refuses to delete backups — turn this plan's retention off, or thin it where deletions are allowed")
     }
 
-    @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now…; a write anywhere else keeps restic's")
+    @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now; a write anywhere else keeps restic's")
     func repositoryFull() {
         let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the repository until a cleanup frees it."
         var onDrive = Repository()
@@ -358,7 +358,7 @@ struct RunRecordPresentationTests {
         }
         #expect(RunRecordPresentation.fix(for: full, repositoryExists: true, repositoryBusy: false) == .pruneNow(repository))
         #expect(RunRecordPresentation.fix(for: full, repositoryExists: false, repositoryBusy: false) == nil)
-        #expect(RunFix.pruneNow(repository).title == "Clean Up Now…")
+        #expect(RunFix.pruneNow(repository).title == "Clean Up Now")
     }
 
     @Test("a check or prune that did not end clean offers itself again; nothing else does")
@@ -373,8 +373,8 @@ struct RunRecordPresentationTests {
         // A check that found damage: its verdict, not a crash, is the news.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .completedWithErrors), repositoryExists: true) == .check(repository))
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .failed), repositoryExists: true) == .prune(repository))
-        #expect(MaintenanceRetry.check(repository).title == "Check Again…")
-        #expect(MaintenanceRetry.prune(repository).title == "Clean Up Again…")
+        #expect(MaintenanceRetry.check(repository).title == "Check Again")
+        #expect(MaintenanceRetry.prune(repository).title == "Clean Up Again")
         // A clean or cancelled one, another kind, a repository gone: nothing.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .succeeded), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .cancelled), repositoryExists: true) == nil)

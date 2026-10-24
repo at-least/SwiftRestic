@@ -8,7 +8,7 @@ struct ActivityView: View {
     /// runs rather than the sidebar out of Activity.
     @FocusState private var tableIsFocused: Bool
     @State private var isConfirmingClear = false
-    /// The drawer's Compare with Previous… and Show Log… sheets.
+    /// The drawer's Compare with Previous and Show Log sheets.
     @State private var comparing: SnapshotDiffTarget?
     @State private var loggedRun: RunRecord?
     // Newest first by default: the "what happened" surface is scanned by
@@ -155,7 +155,7 @@ struct ActivityView: View {
                 // Wiping the history is rare and final, so it is not chrome:
                 // a right-click on the list, behind the same confirmation.
                 .contextMenu(forSelectionType: RunRecord.ID.self) { _ in
-                    Button("Clear History…", role: .destructive) {
+                    Button("Clear History", role: .destructive) {
                         isConfirmingClear = true
                     }
                 }
@@ -234,7 +234,7 @@ struct ActivityView: View {
 
     #if DEBUG
     /// Debug-only: `SWIFTRESTIC_CAPTURE_SHEET=diff` opens the drawer's
-    /// Compare with Previous… on the newest backup run that wrote a
+    /// Compare with Previous on the newest backup run that wrote a
     /// snapshot, once the listing holds that snapshot — this pane is the
     /// compare sheet's home. When the listing never does, nothing opens.
     private func applyCaptureSheetOverride() {

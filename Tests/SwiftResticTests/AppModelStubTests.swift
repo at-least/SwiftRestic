@@ -1485,7 +1485,7 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
-    @Test("Check… while the repository's drive is away answers in a passing banner, in the skip's words, and stamps nothing")
+    @Test("Check while the repository's drive is away answers in a passing banner, in the skip's words, and stamps nothing")
     func askedCheckWithTheDriveAway() async throws {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -1808,7 +1808,7 @@ struct AppModelStubTests {
         // The history is the record of what ran; removal does not rewrite it.
         #expect(harness.model.configuration.runs == runsBefore)
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
-        // The same bookkeeping as Delete Plan…, so the two ways a plan goes
+        // The same bookkeeping as Delete Plan, so the two ways a plan goes
         // cannot drift apart.
         #expect(harness.model.problemsSeenAt[removed] == nil)
         #expect(!harness.model.pauseStoppedPlanIDs.contains(removed))
@@ -1999,7 +1999,7 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("quitting during Apply Retention Now… names the slot the plan still owes")
+    @Test("quitting during Apply Retention Now names the slot the plan still owes")
     func quitDuringRetentionRunKeepsTheSlotDue() async throws {
         let harness = try await makeHarness(mode: "hang-forget")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -2030,7 +2030,7 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("Apply Retention Now… on a busy repository says so and starts nothing")
+    @Test("Apply Retention Now on a busy repository says so and starts nothing")
     func applyingRetentionOnABusyRepositoryStartsNothing() async throws {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -2666,7 +2666,7 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.kind == .backup)
         #expect(record.outcome == .succeeded)
-        // Show Log… reads this: a true here would offer a log that is not there.
+        // Show Log reads this: a true here would offer a log that is not there.
         #expect(record.hasLog == false)
         var isDirectory: ObjCBool = false
         #expect(FileManager.default.fileExists(atPath: logs.path, isDirectory: &isDirectory) && !isDirectory.boolValue)

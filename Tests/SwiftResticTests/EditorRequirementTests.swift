@@ -67,7 +67,7 @@ struct EditorRequirementTests {
         let one = Repository()
         let two = Repository()
         #expect(EditorRequirements.initialRepositoryID(nil, among: [one]) == one.id)
-        // Two or more: the picker says Choose…, and the footer asks.
+        // Two or more: the picker says Choose, and the footer asks.
         #expect(EditorRequirements.initialRepositoryID(nil, among: [one, two]) == nil)
         #expect(EditorRequirements.initialRepositoryID(nil, among: []) == nil)
         // A plan that has one keeps it.
@@ -298,6 +298,6 @@ struct EditorRequirementTests {
             == "No repository at that location yet. Saving will create one.")
         // An edit's Save creates nothing: its plans would fail against it.
         #expect(EditorRequirements.noRepositoryYet(isNew: false)
-            == "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository….")
+            == "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository.")
     }
 }

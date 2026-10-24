@@ -74,7 +74,7 @@ struct PlanStatusTests {
         let tile = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], now: now)
 
         #expect(tile.value == "Paused")
-        #expect(tile.help?.contains("Resume Schedule") == true, "help was \(String(describing: tile.help))")
+        #expect(tile.help?.contains("Click Resume") == true, "help was \(String(describing: tile.help))")
         #expect(tile.help?.contains(plan.schedule.summary) == true, "help was \(String(describing: tile.help))")
     }
 
@@ -106,11 +106,11 @@ struct PlanStatusTests {
             PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).value
                 == "Not scheduled"
         )
-        // The plan page has no Configuration card; Edit Plan… is where the
+        // The plan page has no Configuration card; Edit Plan is where the
         // setup is finished.
         #expect(
             PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).help
-                == "The scheduler skips this plan until its setup is complete. To finish it, choose Edit Plan…."
+                == "The scheduler skips this plan until its setup is complete. To finish it, choose Edit Plan."
         )
 
         // A repository ID the configuration no longer holds is the same skip.

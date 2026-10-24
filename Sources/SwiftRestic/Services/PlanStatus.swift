@@ -225,7 +225,7 @@ enum PlanStatus {
             }
             return TileFace(
                 value: "Paused",
-                help: "Scheduled runs are paused (\(plan.schedule.summary)). Resume Schedule to run on it again — Back Up Now still works."
+                help: "Scheduled runs are paused (\(plan.schedule.summary)). Click Resume to run on it again — Back Up Now still works."
             )
         }
         guard plan.schedule.frequency != .manual else {
@@ -241,7 +241,7 @@ enum PlanStatus {
         ).first?.date else {
             return TileFace(
                 value: "Not scheduled",
-                help: "The scheduler skips this plan until its setup is complete. To finish it, choose Edit Plan…."
+                help: "The scheduler skips this plan until its setup is complete. To finish it, choose Edit Plan."
             )
         }
         // Nothing stamps the slot until the run ends, so "Running now"

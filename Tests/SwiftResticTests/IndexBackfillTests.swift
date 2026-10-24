@@ -1233,7 +1233,7 @@ struct IndexCoordinatorConcurrencyTests {
         let relaunched = IndexCoordinator(directory: scene.root)
         #expect(try await relaunched.isComplete(repositoryID: repositoryID))
 
-        // Rebuild Search Index…: the reset has returned, the rebuild's
+        // Rebuild Search Index: the reset has returned, the rebuild's
         // reconcile has not landed yet.
         await coordinator.resetRepository(repositoryID: repositoryID)
         let afterReset = try await coordinator.isComplete(repositoryID: repositoryID)

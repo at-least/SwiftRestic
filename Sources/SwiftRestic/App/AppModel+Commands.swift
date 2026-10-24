@@ -24,7 +24,7 @@ struct PlanCommandState: Equatable {
     /// Resume always; Pause only where there is a schedule to pause.
     var canToggleSchedule = false
     var canApplyRetention = false
-    /// Why Apply Retention Now… is disabled, for its help and the sheet.
+    /// Why Apply Retention Now is disabled, for its help and the sheet.
     var retentionBlocker: String?
     var canDelete = false
     /// Back Up All Plans Now: not about the selection.
@@ -147,7 +147,7 @@ extension AppModel {
         return repository(id: id)?.id
     }
 
-    /// The repository Find Files opens on: a "Search All Backups…" hand-off's
+    /// The repository Find Files opens on: a "Search All Backups" hand-off's
     /// wins; otherwise the window's selection by the Repository menu's own
     /// rule — on Find Files itself, the repository it shows (`shown`), so
     /// ⇧⌘F there keeps it and its results — and the first repository only

@@ -136,7 +136,7 @@ struct ProblemDotTests {
     @Test("a retention run carries the plan's ID but does not heal its backup failure")
     func aRetentionRunDoesNotHealABackupFailure() {
         let model = makeModel()
-        // Apply Retention Now… records a forget under the plan: it removed
+        // Apply Retention Now records a forget under the plan: it removed
         // snapshots, it did not back anything up, so the failure stands.
         model.configuration.runs = [
             record(.succeeded, finishedAt: hour2, kind: .forget),
