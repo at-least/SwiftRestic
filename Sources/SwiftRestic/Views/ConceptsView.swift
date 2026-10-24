@@ -26,7 +26,7 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Keep the history tidy",
-            text: "Retention, on the plan editor’s Retention tab, removes old backups after each one. The space they held is freed by a cleanup: Repository ▸ Clean Up Now, or the repository’s periodic cleanup. Repository ▸ Check verifies that nothing is damaged."
+            text: "Retention, on the plan editor’s Retention tab, removes old backups after each one. The space they held is freed by a cleanup: Repository ▸ Clean Up Now, or the repository’s periodic cleanup. Repository ▸ Check Now verifies that nothing is damaged."
         ),
         Topic(
             title: "Backups from elsewhere",

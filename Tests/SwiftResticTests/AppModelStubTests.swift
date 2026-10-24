@@ -1419,8 +1419,8 @@ struct AppModelStubTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         harness.model.unlockRepository(id: harness.repository.id)
-        let banner = await bannerTitled("Unlock failed", in: harness.model)
-        #expect(banner?.title.contains("Unlock failed") == true, "banner was: \(banner?.title ?? "none")")
+        let banner = await bannerTitled("Could not unlock", in: harness.model)
+        #expect(banner?.title.contains("Could not unlock") == true, "banner was: \(banner?.title ?? "none")")
         #expect(banner?.isError == true)
 
         await harness.model.shutdown()

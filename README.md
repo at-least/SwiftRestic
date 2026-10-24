@@ -255,8 +255,8 @@ the generator after editing it; the PNGs are checked in.
   cloud, through a gateway — and groups the kinds that way. Creating one runs
   `restic init`; a repository that cannot be reached is not saved. *Test
   Connection* on a path with no repository says what Save will do: create
-  one for a new repository; for an existing one nothing — "backups to it
-  would fail until one is created". Only a new repository chooses its kind
+  one for a new repository; for an existing one nothing — "No repository is
+  at this location, so its backups would fail." Only a new repository chooses its kind
   and location; a saved one shows them as text, as a saved plan shows its
   path — another place is another repository, so exit 10 offers *Add
   Repository*.
@@ -528,7 +528,7 @@ the generator after editing it; the PNGs are checked in.
     *Edit Plan* beside it, whichever editor holds that share's password;
     repeats merge into one record as a folder gone's do. Until 2026-10-16 a
     refusal was Skipped too, silent until the quiet-plan notification. Two runs
-    needing one share mount it once. *Check*, *Clean Up Now* and *Apply
+    needing one share mount it once. *Check Now*, *Clean Up Now* and *Apply
     Retention Now* — its preview too — reconnect the repository's share the
     same way, and so does reading the repository: its listing at launch,
     *Refresh* and *Try Again*, the Files tab, Find Files, a restore, the
@@ -710,7 +710,7 @@ the generator after editing it; the PNGs are checked in.
   unstamped, so the task stays due: *Next check* reads "When “Archive SSD” is
   connected", *Last check* passes over the skip, the scheduler leaves the
   repository alone while the drive is still away, and the task runs within
-  a minute of its return. Only *Check* or *Clean Up Now* asked by hand gets a
+  a minute of its return. Only *Check Now* or *Clean Up Now* asked by hand gets a
   passing banner. A repository added from 2026-10-09 on prunes by default, every
   30 days starting 30 days after it is added, since retention runs after
   every backup and only a prune frees the space; one saved before keeps its
@@ -842,12 +842,13 @@ the generator after editing it; the PNGs are checked in.
   read it however old), and any other run's problem for the week the Recent
   problems card, the Activity badge and the menu bar count.
 - **Banners** — one queue above every page, the Files tab and the console
-  included, for what has no other place to be said: a *Back Up Now*, *Check*
-  or *Clean Up Now* that was skipped, an ask that waits for a busy repository,
-  a restore's result with *Show in Finder*, a notification that could not be
-  sent, and the app's own trouble (the configuration, the Keychain, the login
-  item). How a run went is never one — the sidebar's caption, the plan page's
-  problem card, Activity's badge and the menu bar say it — nor is a
+  included, for what has no other place to be said: a *Back Up Now*,
+  *Check Now* or *Clean Up Now* that was skipped, an ask that waits for a
+  busy repository, a restore's result with *Show in Finder*, a notification
+  that could not be sent, and the app's own trouble (the configuration, the
+  Keychain, the login item). How a run went is never one — the sidebar's
+  caption, the plan page's problem card, Activity's badge and the menu bar
+  say it — nor is a
   repository that cannot be read, which its sidebar row and its pages say for
   as long as it lasts. (Until 2026-10-18 every finished backup posted one, and
   Back Up All filled the queue on every page.) A banner wears the status

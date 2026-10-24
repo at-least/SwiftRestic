@@ -189,7 +189,7 @@ struct SidebarView: View {
         Divider()
         // The two of the Repository menu's a row most often wants; the
         // shared confirmations ask first.
-        Button("Check") { router.request(.confirm(.check(repository.id))) }
+        Button("Check Now") { router.request(.confirm(.check(repository.id))) }
             .disabled(!commands.canMaintain)
         Button("Clean Up Now") { router.request(.confirm(.prune(repository.id))) }
             .disabled(!commands.canMaintain)

@@ -315,7 +315,7 @@ struct RepositoryEditorSheet: View {
                 }
             }
 
-            if draft.secretFieldLabel != nil || draft.kind == .sftp {
+            if draft.secretFieldLabel != nil || draft.kind == .sftp || draft.kind == .gcs {
                 Section("Credentials") {
                     if draft.kind == .sftp {
                         Text(
@@ -325,11 +325,34 @@ struct RepositoryEditorSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    } else if draft.kind == .gcs {
+                        HStack {
+                            TextField(
+                                "Service account JSON",
+                                text: $draft.gcsCredentialsPath,
+                                prompt: Text("~/.config/gcloud/key.json")
+                            )
+                            Button("Choose") {
+                                if let url = FilePicker.chooseFile(message: "Choose the service account JSON file") {
+                                    draft.gcsCredentialsPath = url.path
+                                }
+                            }
+                        }
+                        ExpandableCaption(
+                            summary: "The key file’s path is stored in your configuration, not the Keychain.",
+                            detail: "restic reads the key file from disk itself. Keep the file readable only by you."
+                        )
                     } else if let label = draft.secretFieldLabel {
                         if draft.kind == .rest {
                             // A server without logins leaves both blank.
                             TextField("User", text: $draft.restUser, prompt: Text("Optional"))
                             SecureField(label, text: $providerSecret, prompt: Text("Optional"))
+                        } else if draft.kind == .s3 {
+                            TextField("Access key ID", text: $draft.s3AccessKeyID)
+                            SecureField(label, text: $providerSecret)
+                        } else if draft.kind == .b2 {
+                            TextField("Account ID / key ID", text: $draft.b2AccountID)
+                            SecureField(label, text: $providerSecret)
                         } else {
                             SecureField(label, text: $providerSecret)
                         }
@@ -380,7 +403,7 @@ struct RepositoryEditorSheet: View {
                 .disabled(!draft.maintenance.pruneEnabled)
                 ExpandableCaption(
                     summary: "A cleanup frees the space of backups retention removed.",
-                    detail: "It rewrites pack files, takes an exclusive lock and can run for a long time, so backups to this repository wait for it."
+                    detail: "It takes an exclusive lock and can run for a long time, so backups to this repository wait for it."
                 )
             }
 
@@ -501,47 +524,17 @@ struct RepositoryEditorSheet: View {
             if draft.kind == .azure {
                 LabeledContent("Account name") { Text(draft.azureAccountName) }
             }
+            if draft.kind == .gcs {
+                TextField("Project ID (optional)", text: $draft.gcsProjectID)
+            }
         }
-        accessFields
-    }
-
-    /// The fields that reach the repository without being where it is.
-    @ViewBuilder
-    private var accessFields: some View {
-        switch draft.kind {
-        case .local:
-            if let folderShare {
-                NetworkSharePasswordRows(url: folderShare.share.url, isSaved: folderShare.isSaved, password: $sharePassword)
-            }
-        case .s3:
-            TextField("Access key ID", text: $draft.s3AccessKeyID)
-        case .b2:
-            TextField("Account ID / key ID", text: $draft.b2AccountID)
-        case .gcs:
-            TextField("Project ID (optional)", text: $draft.gcsProjectID)
-            HStack {
-                TextField(
-                    "Service account JSON",
-                    text: $draft.gcsCredentialsPath,
-                    prompt: Text("~/.config/gcloud/key.json")
-                )
-                Button("Choose") {
-                    if let url = FilePicker.chooseFile(message: "Choose the service account JSON file") {
-                        draft.gcsCredentialsPath = url.path
-                    }
-                }
-            }
-            ExpandableCaption(
-                summary: "The key file’s path is stored in your configuration, not the Keychain.",
-                detail: "restic reads the key file from disk itself. Keep the file readable only by you."
-            )
-        case .sftp, .azure, .rest, .rclone:
-            EmptyView()
+        if draft.kind == .local, let folderShare {
+            NetworkSharePasswordRows(url: folderShare.share.url, isSaved: folderShare.isSaved, password: $sharePassword)
         }
     }
 
     /// Where a new repository is: the parts restic's repository string is
-    /// made of, and Azure's account.
+    /// made of, Azure's account, and GCS's project.
     @ViewBuilder
     private var whereFields: some View {
         switch draft.kind {
@@ -573,6 +566,7 @@ struct RepositoryEditorSheet: View {
         case .gcs:
             TextField("Bucket", text: $draft.gcsBucket)
             TextField("Prefix (optional)", text: $draft.gcsPrefix)
+            TextField("Project ID (optional)", text: $draft.gcsProjectID)
         case .rest:
             TextField("URL", text: $draft.restURL, prompt: Text("https://host:8000/"))
                 // A URL pasted with its login sheds it into User and the
@@ -678,7 +672,7 @@ struct RepositoryEditorSheet: View {
             // Prefill failed — say so. Blank fields would read as "no
             // password stored" and a save would silently keep whatever the
             // Keychain actually holds, hiding the failure either way.
-            status = .failure("Couldn’t read the password from your Keychain: \(error.localizedDescription)")
+            status = .failure("Could not read the password from your Keychain: \(error.localizedDescription)")
             secretsReadFailed = true
         }
     }

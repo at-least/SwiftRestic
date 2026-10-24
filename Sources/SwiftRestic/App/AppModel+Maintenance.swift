@@ -134,8 +134,8 @@ extension AppModel {
                 // stayed, as the success banner names the one it cleaned.
                 self.post(
                     Banner(
-                        title: "Unlock failed",
-                        message: "Could not unlock “\(label(of: repository))”: \(error.localizedDescription)",
+                        title: "Could not unlock “\(label(of: repository))”",
+                        message: error.localizedDescription,
                         isError: true
                     )
                 )

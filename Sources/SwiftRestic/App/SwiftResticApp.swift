@@ -455,7 +455,7 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Check") {
+            Button("Check Now") {
                 if let id = r.repositoryID { ask(.confirm(.check(id))) }
             }
             .disabled(!r.canMaintain)
