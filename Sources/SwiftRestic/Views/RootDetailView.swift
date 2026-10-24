@@ -185,9 +185,6 @@ struct WelcomeView: View {
                 .frame(width: 84, height: 84)
                 .accessibilityHidden(true)
 
-            Text("SwiftRestic")
-                .font(.largeTitle.weight(.bold))
-
             VStack(spacing: 8) {
                 // The one prominent step. With no repository yet it starts
                 // there and carries on to the plan (`RootView.startNewPlan`),
@@ -196,7 +193,7 @@ struct WelcomeView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 if model.configuration.repositories.isEmpty {
-                    Text("A backup plan backs up to a repository — New Backup Plan sets one up first.")
+                    Text("A backup plan backs up to a repository — you set one up first.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

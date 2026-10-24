@@ -52,7 +52,7 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
     var isUsable: Bool { isEnabled && hasUsableURL }
 
     /// Whether the URL is one the app posts to — http or https, never a
-    /// file or custom scheme. Send Test Notification needs only this: a
+    /// file or custom scheme. Send Test needs only this: a
     /// webhook is tested before it is switched on.
     var hasUsableURL: Bool {
         URL(string: url.trimmingCharacters(in: .whitespaces))?.scheme?.hasPrefix("http") == true

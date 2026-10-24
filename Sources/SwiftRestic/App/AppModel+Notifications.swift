@@ -15,7 +15,7 @@ extension AppModel {
     /// up — switched on or not: the switch decides what runs send, and the
     /// test is how the user learns it works before turning it on.
     func sendTestNotification(_ channel: NotificationChannel) async -> TestNotificationOutcome {
-        precondition(channel.hasUsableURL, "Send Test Notification is disabled for an unusable URL")
+        precondition(channel.hasUsableURL, "Send Test is disabled for an unusable URL")
         var channel = channel
         channel.isEnabled = true
         let event = NotificationEvent(

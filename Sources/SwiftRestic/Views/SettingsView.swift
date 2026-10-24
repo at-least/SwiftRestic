@@ -2,6 +2,9 @@ import SwiftUI
 
 struct SettingsView: View {
     private static let width: CGFloat = 560
+    /// The pane the window reopens on. UserDefaults, not
+    /// `configuration.settings`: it is window state, not a preference.
+    @AppStorage("lastSettingsPane") private var lastSettingsPane = 0
     @State private var isConfirmingCacheCleanup = false
     @Environment(AppModel.self) private var model
     /// Arms the "you can strand the app" confirmation: menu bar item off and
@@ -14,19 +17,23 @@ struct SettingsView: View {
         // Each pane at its own height, the window following it (the
         // Settings scene's `.contentSize`): the HIG's "a settings window
         // accommodates the size of the current pane", no pane scrolling.
-        TabView {
+        TabView(selection: $lastSettingsPane) {
             generalTab(model: model)
                 .frame(width: Self.width, height: 670)
+                .tag(0)
                 .tabItem { Label("General", systemImage: "gearshape") }
             notificationsTab(model: model)
                 .frame(width: Self.width, height: 290)
+                .tag(1)
                 .tabItem { Label("Notifications", systemImage: "bell") }
             NotificationChannelsTab()
                 .environment(model)
                 .frame(width: Self.width, height: 460)
+                .tag(2)
                 .tabItem { Label("Webhooks", systemImage: "point.3.connected.trianglepath.dotted") }
             resticTab(model: model)
                 .frame(width: Self.width, height: 380)
+                .tag(3)
                 .tabItem { Label("restic", systemImage: "terminal") }
         }
         .confirmationDialog(
@@ -513,7 +520,7 @@ struct NotificationChannelsTab: View {
 
                 Section {
                     HStack {
-                    Button("Send Test Notification") {
+                    Button("Send Test") {
                         guard let channelID = selection else { return }
                         testOutcome = nil
                         isTesting = true

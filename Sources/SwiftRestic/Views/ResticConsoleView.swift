@@ -35,7 +35,7 @@ struct ResticConsoleView: View {
             }
             Button("Cancel", role: .cancel) { model.console.cancelPending() }
         } message: {
-            Text("`restic \(CommandLineTokenizer.render(model.console.pendingDestructive?.arguments ?? []))` can change or delete data in this repository. Add --dry-run first if you are unsure.")
+            Text("`restic \(CommandLineTokenizer.render(model.console.pendingDestructive?.arguments ?? []))` can change or delete data. Add --dry-run first if you are unsure.")
         }
     }
 
