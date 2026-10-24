@@ -88,7 +88,7 @@ struct Banner: Identifiable, Equatable {
     var title: String
     var message: String
     var level: Level
-    /// When set, the banner offers a Reveal-in-Finder button, which selects
+    /// When set, the banner offers a Show-in-Finder button, which selects
     /// them all — a restore that ends with "here is the path" reads finished
     /// only half-way.
     var revealPaths: [String] = []

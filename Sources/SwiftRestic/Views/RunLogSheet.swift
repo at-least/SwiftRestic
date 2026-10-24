@@ -54,7 +54,7 @@ struct RunLogSheet: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
-            // The file's path is Reveal in Finder's, and the whole log copies
+            // The file's path is Show in Finder's, and the whole log copies
             // with ⌘A ⌘C in the selectable text above.
             HStack(spacing: 10) {
                 Spacer(minLength: 0)
@@ -62,7 +62,7 @@ struct RunLogSheet: View {
                     .keyboardShortcut("f")
                     .disabled(text == nil)
                     .help("Search the log (⌘F)")
-                Button("Reveal in Finder") {
+                Button("Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([logURL])
                 }
                 .disabled(text == nil)

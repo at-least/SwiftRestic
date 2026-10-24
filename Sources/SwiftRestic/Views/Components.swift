@@ -151,7 +151,7 @@ struct BannerView: View {
                 .foregroundStyle(hue)
                 .accessibilityLabel(symbolLabel ?? "")
                 .accessibilityHidden(symbolLabel == nil)
-            // Title and message read as one utterance; the Reveal action and
+            // Title and message read as one utterance; the Show in Finder action and
             // the dismiss button stay their own elements beside them.
             VStack(alignment: .leading, spacing: 4) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -172,7 +172,7 @@ struct BannerView: View {
                 }
                 .accessibilityElement(children: .combine)
                 if !banner.revealPaths.isEmpty {
-                    Button("Reveal in Finder") {
+                    Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting(banner.revealPaths.map { URL(fileURLWithPath: $0) })
                     }
                     .controlSize(.small)
@@ -295,8 +295,8 @@ struct RemovedNamesLine: View {
                 .help(help)
             ForEach(Array(names.items.enumerated()), id: \.element) { index, item in
                 let standing = item.reason.map {
-                    "Not read by this backup — \($0); it may still be on this Mac. The backup of \(Format.timestamp(before)) has it."
-                } ?? "The backup of \(Format.timestamp(before)) has it."
+                    "Not read by this backup — \($0); it may still be on this Mac. The backup of \(Format.timestamp(before)) has it"
+                } ?? "The backup of \(Format.timestamp(before)) has it"
                 if let open {
                     Button { open(item) } label: {
                         Text(verbatim: item.name)
@@ -305,7 +305,7 @@ struct RemovedNamesLine: View {
                             .foregroundStyle(.tint)
                     }
                     .buttonStyle(HoverableButtonStyle())
-                    .help(standing + " Show its versions.")
+                    .help(standing + ". Show its versions")
                 } else {
                     Text(verbatim: item.name)
                         .lineLimit(1)
@@ -385,7 +385,9 @@ struct DetailRow<Value: View>: View {
         GridRow(alignment: .firstTextBaseline) {
             Text(label)
                 .foregroundStyle(.secondary)
-                .gridColumnAlignment(.trailing)
+                // One label-column width app-wide, so stacked cards' values
+                // line up; a longer label widens the column, never truncates.
+                .frame(minWidth: 110, alignment: .trailing)
             value()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -884,8 +886,8 @@ enum PlanSkips {
     static let cloudFiles = "Online-only files"
     static let otherDisks = "Other disks mounted inside"
 
-    static let cachesHelp = "Folders holding a CACHEDIR.TAG file."
-    static let otherDisksHelp = "Folders on another disk mounted inside this one."
+    static let cachesHelp = "Folders holding a CACHEDIR.TAG file"
+    static let otherDisksHelp = "Folders on another disk mounted inside this one"
 
     /// The rules a defaults switch passes, one a line, for its tooltip.
     static func rulesHelp(_ categories: Set<ExcludeCategory>) -> String {
@@ -1130,7 +1132,7 @@ struct ItemErrorHintsView: View {
 
 /// One unreadable item's line — in Activity's drawer and on the plan
 /// page's problem card — with the two fixes the diagnosis above it names,
-/// Reveal in Finder and Exclude from the plan, in a menu at its end and in
+/// Show in Finder and Exclude from the plan, in a menu at its end and in
 /// its context menu. Only where restic named the
 /// item's path and the run stored it (`RunRecord.unreadableItemPaths`); older
 /// records' lines stay plain text. Exclude asks first: it changes what the
@@ -1139,7 +1141,7 @@ struct UnreadableItemLine: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord
     let line: String
-    /// Nil until the check lands; Reveal waits disabled until then.
+    /// Nil until the check lands; Show in Finder waits disabled until then.
     @State private var exists: Bool?
     @State private var isConfirmingExclude = false
 
@@ -1181,7 +1183,7 @@ struct UnreadableItemLine: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("Reveal this item in Finder, or exclude it from the plan")
+                .help("Show this item in Finder, or exclude it from the plan")
             }
         }
         .contextMenu {
@@ -1210,7 +1212,7 @@ struct UnreadableItemLine: View {
 
     @ViewBuilder
     private func actions(path: String, plan: BackupPlan?) -> some View {
-        Button("Reveal in Finder") {
+        Button("Show in Finder") {
             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
         }
         .disabled(exists != true)

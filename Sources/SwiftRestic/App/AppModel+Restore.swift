@@ -169,7 +169,7 @@ extension AppModel {
     }
 
     /// The banner a finished restore posts: where it landed — the item
-    /// itself, which Reveal in Finder selects — and, under Keep, what
+    /// itself, which Show in Finder selects — and, under Keep, what
     /// restic left as it was. restic's
     /// files_restored counts directories too, so only files_skipped means
     /// kept. Under Replace a skipped file already matched the backup, which
@@ -202,7 +202,7 @@ extension AppModel {
     /// The banner a restore of several items posts: how many, where — the
     /// folder they went into, or each item where it was backed up from —
     /// and what Keep left as it was, counted as `restoreBanner` counts it.
-    /// Reveal in Finder selects every one of them.
+    /// Show in Finder selects every one of them.
     nonisolated static func itemsRestoreBanner(
         landings: [URL],
         directory: URL?,

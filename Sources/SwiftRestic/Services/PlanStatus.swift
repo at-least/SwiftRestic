@@ -105,7 +105,7 @@ enum PlanStatus {
     /// unreadable file), else a hook's complaint, else the banner's words
     /// for a bare exit 3.
     static func summary(of run: RunRecord) -> PlanProblemSummary {
-        // The card lists the unreadable items (each with Reveal and
+        // The card lists the unreadable items (each with Show in Finder and
         // Exclude, as the drawer's lines), so the message never repeats
         // the first of them: it explains the warning past the items — a
         // decoding gap, a skipped retention step — or a hook's complaint.
@@ -227,12 +227,12 @@ enum PlanStatus {
             if plan.schedule.frequency == .manual {
                 return TileFace(
                     value: "Paused",
-                    help: "This plan has no schedule to resume — it runs only when you click Back Up Now."
+                    help: "This plan has no schedule to resume — it runs only when you click Back Up Now"
                 )
             }
             return TileFace(
                 value: "Paused",
-                help: "Scheduled runs are paused (\(plan.schedule.summary)). Click Resume to start them again — Back Up Now still works."
+                help: "Scheduled runs are paused (\(plan.schedule.summary)). Click Resume to start them again — Back Up Now still works"
             )
         }
         guard plan.schedule.frequency != .manual else {
@@ -248,7 +248,7 @@ enum PlanStatus {
         ).first?.date else {
             return TileFace(
                 value: "Not scheduled",
-                help: "This plan isn't scheduled because its setup is incomplete. To finish it, choose Edit Plan."
+                help: "This plan isn't scheduled because its setup is incomplete. To finish it, choose Edit Plan"
             )
         }
         // Nothing stamps the slot until the run ends, so "Running now"
@@ -263,7 +263,7 @@ enum PlanStatus {
             case .onBattery: "once this Mac is on power again"
             case .onMeteredNetwork: "once this Mac is on another network"
             }
-            return TileFace(value: "Waiting", help: "\(hold.summary(now: now)). This plan is due and runs \(when).")
+            return TileFace(value: "Waiting", help: "\(hold.summary(now: now)). This plan is due and runs \(when)")
         }
         let pauseEnd = plan.activePauseEnd(at: now)
         var namesHold = hold != nil
@@ -279,7 +279,7 @@ enum PlanStatus {
         }
         var help = Format.timestamp(next)
         if namesHold, let hold {
-            help += ". \(hold.summary(now: now))."
+            help += ". \(hold.summary(now: now))"
         }
         return TileFace(value: Format.tileTimestamp(next, now: now), help: help)
     }

@@ -672,7 +672,7 @@ struct ResticService: ResticClient {
     /// The path each of `unreadableItems`' lines names, keyed by the line:
     /// an event's item, or the source a skip line names. A line naming
     /// none — an event without an item — is absent. Stored on the run so
-    /// the fixes that act on an item (Reveal in Finder, Exclude) never
+    /// the fixes that act on an item (Show in Finder, Exclude) never
     /// parse restic's free text.
     static func unreadableItemPaths(errors: [ResticErrorMessage], stderr: String) -> [String: String] {
         var paths: [String: String] = [:]
@@ -1105,7 +1105,7 @@ struct ResticService: ResticClient {
 
     /// Where a restored item lands inside the directory it was restored
     /// into — the one landing rule, shared by both restore branches, the
-    /// drag path and the run record's destination, so Reveal in Finder
+    /// drag path and the run record's destination, so Show in Finder
     /// selects exactly what the restore wrote.
     static func restoredItemURL(named name: String, in directory: URL) -> URL {
         directory.appendingPathComponent(sanitizedRestoreName(name))

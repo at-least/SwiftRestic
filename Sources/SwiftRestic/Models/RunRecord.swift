@@ -153,7 +153,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// backup — all from one folder of it (`RestoreBatch.Group`). Nil for
     /// one item or a whole backup.
     var sourcePaths: [String]?
-    /// Where it landed: the restored item itself (what Reveal in Finder
+    /// Where it landed: the restored item itself (what Show in Finder
     /// selects), or for a whole backup or several items, the folder they
     /// were restored into.
     var destinationPath: String?

@@ -98,7 +98,7 @@ struct FilesBrowserView: View {
         return nil
     }
 
-    /// The plan's folder, as its path names it — what Reveal in Finder
+    /// The plan's folder, as its path names it — what Show in Finder
     /// selects when the folder refuses SwiftRestic.
     private var planPath: String? {
         guard case let .plan(id) = page, let plan = model.plan(id: id) else { return nil }
@@ -894,7 +894,7 @@ struct FolderFixButton: View {
         case .openFullDiskAccessSettings:
             FullDiskAccessButton()
         case .revealInFinder:
-            Button("Reveal in Finder") {
+            Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
             .help("Select it in Finder, where File › Get Info shows its permissions")

@@ -370,9 +370,9 @@ private struct RunSnapshotRow: View {
                 Text("\(short) — no longer in the repository")
                     .monospaced()
                     .textSelection(.enabled)
-                    .help("Removed after this run — by retention or another app.")
+                    .help("Removed after this run — by retention or another app")
             case .unavailable?:
-                let help = "This repository's list of backups isn't loaded right now."
+                let help = "This repository's list of backups isn't loaded right now"
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
                 completenessMark(for: snapshotID)
                 Button("Browse") {}
@@ -385,7 +385,7 @@ private struct RunSnapshotRow: View {
                 }
             case .repositoryGone?, nil:
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
-                    .help("This repository is no longer set up in SwiftRestic.")
+                    .help("This repository is no longer set up in SwiftRestic")
             }
         }
         .controlSize(.small)
@@ -420,7 +420,7 @@ private struct RunSnapshotRow: View {
     }
 }
 
-/// A restore's landing path with Reveal in Finder. Whether anything is still
+/// A restore's landing path with Show in Finder. Whether anything is still
 /// there is asked off the main actor when the run is shown — a destination
 /// on an unreachable network volume can stall `fileExists`, and the render
 /// path must never wait on that.
@@ -437,7 +437,7 @@ private struct RevealRow: View {
                 .truncationMode(.middle)
                 .textSelection(.enabled)
                 .help(path)
-            Button("Reveal in Finder") {
+            Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
             .controlSize(.small)

@@ -214,7 +214,7 @@ struct FolderVersionsView: View {
                 restoreSelection()
                 return .handled
             }
-            .help("Drag items to Finder to restore them there.")
+            .help("Drag items to Finder to restore them there")
         }
     }
 

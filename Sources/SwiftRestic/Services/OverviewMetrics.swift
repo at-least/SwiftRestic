@@ -472,7 +472,7 @@ enum OverviewMetrics {
                 total: total, otherBackups: otherBackups, repositoryHasPlans: repositoryHasPlans,
                 since: oldest, noun: noun
             ),
-            help: oldest.map { "The oldest backup \(subject) is from \(Format.timestamp($0))." }
+            help: oldest.map { "The oldest backup \(subject) is from \(Format.timestamp($0))" }
         )
     }
 

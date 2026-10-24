@@ -494,7 +494,6 @@ struct RestorePaneView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                    .help(note)
                 searchAllButton
                     .controlSize(.small)
                     .fixedSize()
@@ -1067,7 +1066,7 @@ private struct IncompleteSnapshotStrip: View {
                             .foregroundStyle(.secondary)
                         }
                         .buttonStyle(HoverableButtonStyle())
-                        .help("\(line)\nNot read by this backup — the backup of \(Format.timestamp(baseline.time)) has it. Show its versions.")
+                        .help("\(line)\nNot read by this backup — the backup of \(Format.timestamp(baseline.time)) has it. Show its versions")
                     } else {
                         Text(words(for: line, in: run))
                             .font(.caption)

@@ -110,7 +110,7 @@ struct PlanStatusTests {
         // setup is finished.
         #expect(
             PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).help
-                == "This plan isn't scheduled because its setup is incomplete. To finish it, choose Edit Plan."
+                == "This plan isn't scheduled because its setup is incomplete. To finish it, choose Edit Plan"
         )
 
         // A repository ID the configuration no longer holds is the same skip.
@@ -160,7 +160,7 @@ struct PlanStatusTests {
 
         let metered = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], hold: .onMeteredNetwork, now: now)
         #expect(metered.value == "Waiting")
-        #expect(metered.help == "Backups wait — this Mac's network is metered. This plan is due and runs once this Mac is on another network.")
+        #expect(metered.help == "Backups wait — this Mac's network is metered. This plan is due and runs once this Mac is on another network")
     }
 
     @Test("a due plan whose backup is running reads Running now, never Due now")
@@ -267,7 +267,7 @@ struct PlanStatusTests {
             for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: later), now: now
         )
         #expect(appWide.value == Format.tileTimestamp(later, now: now))
-        #expect(appWide.help == "\(Format.timestamp(later)). \(ScheduleHold.paused(until: later).summary(now: now)).")
+        #expect(appWide.help == "\(Format.timestamp(later)). \(ScheduleHold.paused(until: later).summary(now: now))")
 
         // The battery names no end, and says something else: both stay.
         let battery = PlanStatus.nextBackupTile(
@@ -275,7 +275,7 @@ struct PlanStatusTests {
         )
         #expect(
             battery.help
-                == "\(Format.timestamp(sooner)). \(ScheduleHold.onBattery.summary(now: now))."
+                == "\(Format.timestamp(sooner)). \(ScheduleHold.onBattery.summary(now: now))"
         )
     }
 

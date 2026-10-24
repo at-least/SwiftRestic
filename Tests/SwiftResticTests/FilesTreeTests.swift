@@ -470,11 +470,11 @@ struct FilesTreeTests {
 
         let unsaved = entry(node("/Docs/new.txt", folder: false), .notBackedUp)
         #expect(unsaved.tag == "Not backed up")
-        #expect(unsaved.help(notRead: nil) == "Not backed up. No backup of this plan holds it.")
-        #expect(unsaved.help(notRead: "permission denied") == "Not backed up. The newest backup could not read it (permission denied).")
+        #expect(unsaved.help(notRead: nil) == "Not backed up. No backup of this plan holds it")
+        #expect(unsaved.help(notRead: "permission denied") == "Not backed up. The newest backup could not read it (permission denied)")
         #expect(unsaved.spokenStanding(notRead: nil) == "not backed up")
         #expect(unsaved.spokenStanding(notRead: "permission denied") == "not backed up, the newest backup could not read it, permission denied")
-        #expect(FilesTree.Entry.notBackedUpReason(notRead: nil) == "No backup of this plan holds it.")
+        #expect(FilesTree.Entry.notBackedUpReason(notRead: nil) == "No backup of this plan holds it")
 
         let gone = entry(node("/Docs/old.txt", folder: false), .deleted(lastBackedUp: IndexVersion(id: "s1", time: when)))
         #expect(gone.tag == Format.until(when))

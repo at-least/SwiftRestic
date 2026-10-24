@@ -198,9 +198,9 @@ struct RestoreRecordHeading: Equatable, Sendable {
     static func columnHelp(for comparison: ChangeComparison?) -> String {
         switch comparison {
         case nil:
-            "How each item changed since the previous backup of these folders from this Mac."
+            "How each item changed since the previous backup of these folders from this Mac"
         case .firstBackup:
-            "First backup of these folders — nothing to compare with."
+            "First backup of these folders — nothing to compare with"
         case let .comparing(baseline):
             "Comparing with the backup of \(Format.timestamp(baseline.time))…"
         case let .compared(baseline, _):

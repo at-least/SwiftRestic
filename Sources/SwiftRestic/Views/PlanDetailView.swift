@@ -189,7 +189,7 @@ struct PlanDetailView: View {
                     // its button stays a control of its own.
                     ItemErrorHintsView(run: run)
                     // The items the diagnosis is about, each with its
-                    // Reveal in Finder and Exclude — the drawer's own line
+                    // Show in Finder and Exclude — the drawer's own line
                     // — and what the cap leaves to Activity.
                     if !summary.items.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {

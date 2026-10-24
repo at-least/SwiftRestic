@@ -499,9 +499,11 @@ extension FilesTree.Entry {
 
     /// Why an item on this Mac is not backed up: the newest backup's own
     /// run could not read it (`UnreadItems.reason`), or no backup of the
-    /// plan holds it — the pane's words under its "Not backed up".
+    /// plan holds it — the pane's words under its "Not backed up", which
+    /// add the sentence's period; the tooltip, like every tooltip, ends
+    /// without one.
     static func notBackedUpReason(notRead: String?) -> String {
-        notRead.map { "The newest backup could not read it (\($0))." } ?? "No backup of this plan holds it."
+        notRead.map { "The newest backup could not read it (\($0))" } ?? "No backup of this plan holds it"
     }
 
     /// For an item only the backups hold: when it was last backed up.

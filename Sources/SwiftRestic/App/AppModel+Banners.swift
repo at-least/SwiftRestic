@@ -6,7 +6,7 @@ extension AppModel {
     /// Shows a transient message. Successes and news dismiss themselves
     /// after a few seconds — success that outlives its moment reads as
     /// stale — while errors and warnings stay until the user dismisses
-    /// them. Banners carrying a Reveal action stay too: a restore finishing
+    /// them. Banners carrying a Show in Finder action stay too: a restore finishing
     /// behind an open sheet would otherwise expire its button before anyone
     /// could click it. The cap keeps a pathological stream from stacking
     /// banners without end.

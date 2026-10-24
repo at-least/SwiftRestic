@@ -128,7 +128,7 @@ private struct CheckSheet: View {
                 Text("All of the data").tag(100)
             }
             .fixedSize()
-            .help("Reading data back finds damage the structure check misses, and takes longer.")
+            .help("Reading data back finds damage the structure check misses, and takes longer")
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }

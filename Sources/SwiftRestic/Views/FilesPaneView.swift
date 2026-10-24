@@ -111,7 +111,7 @@ struct FilesPaneView: View {
             ContentUnavailableView(
                 "Not backed up",
                 systemImage: "clock.arrow.circlepath",
-                description: Text(verbatim: FilesTree.Entry.notBackedUpReason(notRead: notRead))
+                description: Text(verbatim: FilesTree.Entry.notBackedUpReason(notRead: notRead) + ".")
             )
         } else if node.isDirectory {
             FolderVersionsView(node: node, versions: versions, chosenID: choice, onOpen: onOpen)

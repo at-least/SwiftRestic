@@ -78,7 +78,7 @@ the generator after editing it; the PNGs are checked in.
   newer than the last backup, or left out — is dimmed with *Not backed up*
   where the whole name fits beside it, the tooltip saying why when the newest
   backup's own run could not read it (*The newest backup could not read it
-  (permission denied).*); while the index still reads, nothing is marked. A
+  (permission denied)*); while the index still reads, nothing is marked. A
   hidden item — a dot name, or the hidden flag — is listed only when a
   backup holds it, so the excluded `.DS_Store` is no row in every folder.
   What only the backups hold, deleted since, is left out of the tree unless
@@ -102,7 +102,7 @@ the generator after editing it; the PNGs are checked in.
   reopen SwiftRestic, with *Open Full Disk Access Settings* (with the grant
   on, that macOS protects the folder itself); the file permissions, that
   Full Disk Access doesn't change them and how Finder's Get Info does, with
-  *Reveal in Finder*. A subfolder that refuses SwiftRestic says so in the
+  *Show in Finder*. A subfolder that refuses SwiftRestic says so in the
   tree, its fix in place of *Try Again*. A folder
   lists at most 200 items in the tree, then a row that opens it in the pane,
   which lists it as a backup held it. The Overview | Backups | Files choice
@@ -342,7 +342,7 @@ the generator after editing it; the PNGs are checked in.
   run so the history cap cannot shorten it; the repository page's Recent
   problems counts the week), restic's message, the facts, the
   drawer's diagnosis, and up to five unreadable items with the drawer's
-  *Reveal in Finder* and *Exclude from “Documents”* menu, then "… and N
+  *Show in Finder* and *Exclude from “Documents”* menu, then "… and N
   more in Activity"; *Show in Activity* opens the run. The editor
   preselects the repository only when there is just one, and opens on
   its Excluding tab: a *Skip* group of switches, then *Also skip*, the patterns
@@ -840,7 +840,7 @@ the generator after editing it; the PNGs are checked in.
 - **Banners** — one queue above every page, the Files tab and the console
   included, for what has no other place to be said: a *Back Up Now*, *Check*
   or *Clean Up Now* that was skipped, an ask that waits for a busy repository,
-  a restore's result with *Reveal in Finder*, an alert that could not be
+  a restore's result with *Show in Finder*, an alert that could not be
   sent, and the app's own trouble (the configuration, the Keychain, the login
   item). How a run went is never one — the sidebar's caption, the plan page's
   problem card, Activity's badge and the menu bar say it — nor is a

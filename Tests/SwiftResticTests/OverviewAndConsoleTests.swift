@@ -651,7 +651,7 @@ struct OverviewMetricsTests {
         ]
         let tile = OverviewMetrics.snapshotsTile(total: 3, otherBackups: 0, repositoryHasPlans: true, snapshots: listing, subject: "of this plan")
         #expect(tile.value == "3 · since \(Format.day(oldest))")
-        #expect(tile.help == "The oldest backup of this plan is from \(Format.timestamp(oldest)).")
+        #expect(tile.help == "The oldest backup of this plan is from \(Format.timestamp(oldest))")
         // Nothing listed: no moment to name.
         let empty = OverviewMetrics.snapshotsTile(total: 0, otherBackups: 0, repositoryHasPlans: true, snapshots: [], subject: "here")
         #expect(empty.value == "0")
