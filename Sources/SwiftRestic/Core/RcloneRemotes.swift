@@ -62,9 +62,10 @@ struct RcloneRemoteLister: Sendable {
             if result.stderr.contains("Enter configuration password") {
                 return .unreadable(RcloneSetup.passwordProtected)
             }
-            let lastLine = result.stderr.split(whereSeparator: \.isNewline).last.map(String.init) ?? ""
-            let words = ResticRunResult.rcloneComplaint(Substring("rclone: " + lastLine)).map { String($0.dropFirst("rclone: ".count)) }
-                ?? lastLine
+            guard let lastLine = result.stderr.split(whereSeparator: \.isNewline).last else {
+                return .unreadable("rclone could not list its remotes.")
+            }
+            let words = ResticRunResult.rcloneErrorWords(lastLine) ?? lastLine
             return .unreadable("rclone could not list its remotes: \(words)")
         }
         return .remotes(Self.parse(result.stdout))

@@ -75,5 +75,8 @@ struct RcloneRemotesTests {
         // An encrypted config, as rclone 1.75.2 answers it with no stdin.
         let encrypted = try stubRclone(#"printf 'Enter configuration password:\npassword:' >&2; echo '2026/10/25 18:07:29 CRITICAL: Failed to read line: EOF' >&2; exit 1"#)
         #expect(await lister.list(binary: encrypted) == .unreadable(RcloneSetup.passwordProtected))
+        // A failure with nothing on stderr must not end the sentence on a colon.
+        let silent = try stubRclone("exit 1")
+        #expect(await lister.list(binary: silent) == .unreadable("rclone could not list its remotes."))
     }
 }

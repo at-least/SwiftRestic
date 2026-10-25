@@ -242,7 +242,7 @@ struct RepositoryEditorSheet: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            if draft.kind == .rclone { rcloneReadCount += 1 }
+            if isNew, draft.kind == .rclone { rcloneReadCount += 1 }
         }
         .confirmationDialog(
             "Discard changes?",
@@ -599,7 +599,7 @@ struct RepositoryEditorSheet: View {
     /// Only the remotes rclone already has: setting one up is rclone's job,
     /// so a remote that is not there yet sends the user to rclone config.
     /// Not a text field: a `:backend:` connection string can be saved as a
-    /// named remote instead (the user's call, 2026-10-26).
+    /// named remote instead (the user's call).
     @ViewBuilder
     private var rcloneFields: some View {
         switch rcloneSetup {

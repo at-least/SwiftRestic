@@ -112,9 +112,15 @@ struct ResticRunResult: Sendable {
     /// or "… ERROR : …" — without the date and the level; nil for any other
     /// line, rclone's notices among them.
     static func rcloneComplaint(_ line: Substring) -> String? {
-        guard line.hasPrefix("rclone: ") else { return nil }
+        guard line.hasPrefix("rclone: "), let words = rcloneErrorWords(line) else { return nil }
+        return "rclone: " + words
+    }
+
+    /// The words of one of rclone's own stderr lines at CRITICAL or ERROR
+    /// level, without the date and the level; nil for any other line.
+    static func rcloneErrorWords(_ line: Substring) -> Substring? {
         for level in [" CRITICAL: ", " ERROR : "] {
-            if let range = line.range(of: level) { return "rclone: " + line[range.upperBound...] }
+            if let range = line.range(of: level) { return line[range.upperBound...] }
         }
         return nil
     }
