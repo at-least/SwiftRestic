@@ -145,7 +145,7 @@ struct EditorRequirementTests {
             == "Enter the server URL to save it.")
         draft.kind = .rclone
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
-            == "Enter the rclone remote to save it.")
+            == "Choose an rclone remote to save it.")
     }
 
     @Test("a location already added cannot be added again — the two would be one repository under two rows; twins an older configuration holds still save their edits")

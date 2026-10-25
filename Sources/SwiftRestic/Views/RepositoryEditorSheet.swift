@@ -40,10 +40,12 @@ struct RepositoryEditorSheet: View {
     /// Whether the user picked a check depth: until then a new
     /// repository's depth follows its kind (`MaintenancePolicy.defaultCheckDepth`).
     @State private var depthChosen = false
-    /// Remotes reported by the user's own rclone — empty when it could not
-    /// list them, the Remote field then a plain text field — or `nil` until
-    /// they are read, and for any kind but rclone.
-    @State private var rcloneRemotes: [RcloneRemote]?
+    /// What the user's own rclone offers, or `nil` until it is read, and
+    /// for any kind but rclone.
+    @State private var rcloneSetup: RcloneSetup?
+    /// Bumped when the app becomes active, so remotes set up in Terminal
+    /// meanwhile appear without leaving the sheet.
+    @State private var rcloneReadCount = 0
     /// The local folder's network share while it is mounted
     /// (`VolumePresence.mountedShare`), read off the main actor.
     @State private var mountedShare: MountedShare?
@@ -57,6 +59,10 @@ struct RepositoryEditorSheet: View {
     private let onCreated: (UUID) -> Void
 
     private enum Tab: CaseIterable { case repository, hooks }
+    private struct RcloneRead: Equatable {
+        var kind: Repository.Kind
+        var count: Int
+    }
 
     private struct Edit: Equatable {
         var draft: Repository
@@ -219,17 +225,24 @@ struct RepositoryEditorSheet: View {
             guard !Task.isCancelled else { return }
             mountedShare = share
         }
-        .task(id: draft.kind) {
+        .task(id: RcloneRead(kind: draft.kind, count: rcloneReadCount)) {
             // Requeried on every return to the rclone kind: remotes are edited
             // outside the app, so a list from a previous visit may be stale.
-            guard draft.kind == .rclone else {
-                rcloneRemotes = nil
+            guard draft.kind == .rclone, isNew else {
+                rcloneSetup = nil
                 return
             }
-            let remotes = await loadRcloneRemotes()
+            let setup = await loadRcloneSetup()
             // A cancelled query must not write over its successor's fresher list.
             guard !Task.isCancelled else { return }
-            rcloneRemotes = remotes
+            rcloneSetup = setup
+            // A remote removed in Terminal meanwhile is no longer a choice.
+            if case let .remotes(remotes) = setup, !remotes.contains(where: { $0.name == draft.rcloneRemote }) {
+                draft.rcloneRemote = ""
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if draft.kind == .rclone { rcloneReadCount += 1 }
         }
         .confirmationDialog(
             "Discard changes?",
@@ -579,31 +592,36 @@ struct RepositoryEditorSheet: View {
                     if let password = split.password { providerSecret = password }
                 }
         case .rclone:
-            HStack {
-                TextField("Remote", text: $draft.rcloneRemote, prompt: Text("mydrive"))
-                // Recognition over recall: the names rclone already knows, as
-                // suggestions — never a replacement for the field, since
-                // `:backend:` connection strings and env-defined remotes are
-                // typed, not picked.
-                if let rcloneRemotes, !rcloneRemotes.isEmpty {
-                    Menu {
-                        ForEach(rcloneRemotes, id: \.name) { remote in
-                            Button(remote.menuTitle) { draft.rcloneRemote = remote.name }
-                        }
-                    } label: {
-                        Text("Remotes")
-                    }
-                    .menuStyle(.borderedButton)
-                    .controlSize(.small)
-                    .fixedSize()
-                    .help("Configured with rclone config on this Mac")
+            rcloneFields
+        }
+    }
+
+    /// Only the remotes rclone already has: setting one up is rclone's job,
+    /// so a remote that is not there yet sends the user to rclone config.
+    /// Not a text field: a `:backend:` connection string can be saved as a
+    /// named remote instead (the user's call, 2026-10-26).
+    @ViewBuilder
+    private var rcloneFields: some View {
+        switch rcloneSetup {
+        case nil:
+            LabeledContent("Remote") { ProgressView().controlSize(.small) }
+        case .notInstalled:
+            Text(ResticError.rcloneMissing).foregroundStyle(.secondary)
+        case let .unreadable(message):
+            Text(message).foregroundStyle(.secondary)
+        case let .remotes(remotes) where remotes.isEmpty:
+            Text(RcloneSetup.noRemotes).foregroundStyle(.secondary)
+        case let .remotes(remotes):
+            Picker("Remote", selection: $draft.rcloneRemote) {
+                if draft.rcloneRemote.isEmpty { Text("Choose a Remote").tag("") }
+                ForEach(remotes, id: \.name) { remote in
+                    Text(remote.menuTitle).tag(remote.name)
                 }
             }
             TextField("Path", text: $draft.rclonePath, prompt: Text("backups/mac"))
-            ExpandableCaption(
-                summary: "rclone has to be installed and its remote already configured.",
-                detail: "restic launches the rclone binary itself: install it with brew install rclone and set the remote up with rclone config."
-            )
+            Text("To set up another remote, use rclone config in Terminal.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -677,14 +695,11 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// Asks the user's rclone what it has configured. Empty on any failure —
-    /// without rclone the field is simply free text, and the save-time probe
-    /// already explains a missing binary.
-    private func loadRcloneRemotes() async -> [RcloneRemote] {
+    private func loadRcloneSetup() async -> RcloneSetup {
         // The helper lookup stats the PATH — off the main actor, the same
         // rule resolveBinary's own probe follows.
         guard let rclone = await Task.detached(operation: { ResticBinary.locateHelper(named: "rclone") }).value
-        else { return [] }
+        else { return .notInstalled }
         return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
     }
 

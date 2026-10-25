@@ -1316,9 +1316,14 @@ opens SwiftRestic's entry in System Settings › Notifications.
 - **`prune` has no JSON output** in restic 0.19.1, so its plain-text report is
   captured verbatim onto the run record rather than parsed.
 - **rclone repositories need the `rclone` binary** (`brew install rclone`) and a
-  remote already configured with `rclone config`; SwiftRestic checks for it when
-  you test the connection rather than letting the failure surface from inside
-  restic.
+  remote already configured with `rclone config`. A new repository's *Remote*
+  is picked from `rclone listremotes --long`, read again whenever the app
+  becomes active; there is no field to type one, so a `:backend:` connection
+  string has to be saved as a named remote first. Without rclone, without
+  remotes, or with a configuration rclone cannot read — one with a password
+  among them, since rclone gets no terminal to ask for it — the editor says
+  so in place of the picker. A leading slash in *Path* is kept: it is
+  rclone's absolute path.
 
 ## Known limits
 

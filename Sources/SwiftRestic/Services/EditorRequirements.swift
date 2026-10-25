@@ -132,7 +132,7 @@ enum EditorRequirements {
         case .rest:
             if draft.restURL.isEmpty { return "Enter the server URL to save it." }
         case .rclone:
-            if draft.rcloneRemote.isEmpty { return "Enter the rclone remote to save it." }
+            if draft.rcloneRemote.isEmpty { return "Choose an rclone remote to save it." }
         }
         // Without a name of their own, two entries for one place would be
         // two identical rows — and two schedulers' checks and prunes on one

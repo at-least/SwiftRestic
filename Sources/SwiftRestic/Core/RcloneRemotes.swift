@@ -11,6 +11,18 @@ struct RcloneRemote: Sendable, Hashable {
     var menuTitle: String { type.isEmpty ? name : "\(name) — \(type)" }
 }
 
+/// What the repository editor offers for a new rclone repository's Remote:
+/// only remotes rclone already has, so setting one up stays rclone's job.
+enum RcloneSetup: Equatable {
+    case notInstalled
+    case unreadable(String)
+    case remotes([RcloneRemote])
+
+    static let passwordProtected = "rclone’s configuration is password-protected, and SwiftRestic can’t unlock it. "
+        + "To use rclone here, remove the password in Terminal with rclone config."
+    static let noRemotes = "No rclone remotes yet. Set one up in Terminal with rclone config, then come back here."
+}
+
 /// Lists the remotes configured in the user's rclone installation.
 ///
 /// Asks `rclone listremotes --long` instead of reading the config file: the file's
@@ -26,20 +38,36 @@ struct RcloneRemoteLister: Sendable {
     /// 1.75.2.
     static let arguments = ["listremotes", "--long"]
 
-    /// Empty on any failure — a missing or misbehaving rclone degrades the
-    /// editor to a plain text field, never to an error the user must dismiss.
-    func list(binary: URL) async -> [RcloneRemote] {
-        guard let result = try? await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: Self.arguments,
-                // rclone reads its config up front, but a backend that dials out
-                // on startup must not pin the editor open.
-                timeout: 5,
-                retainMessages: false
+    func list(binary: URL) async -> RcloneSetup {
+        let result: ResticRunResult
+        do {
+            result = try await runner.run(
+                binary: binary,
+                invocation: ResticInvocation(
+                    arguments: Self.arguments,
+                    allowedExitCodes: nil,
+                    // rclone reads its config up front, but a backend that dials out
+                    // on startup must not pin the editor open.
+                    timeout: 5,
+                    retainMessages: false
+                )
             )
-        ) else { return [] }
-        return Self.parse(result.stdout)
+        } catch {
+            return .unreadable("rclone could not list its remotes: \(error.localizedDescription)")
+        }
+        guard result.exitCode == 0 else {
+            // An encrypted config asks for its password on the terminal, and
+            // the runner gives rclone none: 1.75.2 prompts on stderr, then says only "Failed to
+            // read line: EOF".
+            if result.stderr.contains("Enter configuration password") {
+                return .unreadable(RcloneSetup.passwordProtected)
+            }
+            let lastLine = result.stderr.split(whereSeparator: \.isNewline).last.map(String.init) ?? ""
+            let words = ResticRunResult.rcloneComplaint(Substring("rclone: " + lastLine)).map { String($0.dropFirst("rclone: ".count)) }
+                ?? lastLine
+            return .unreadable("rclone could not list its remotes: \(words)")
+        }
+        return .remotes(Self.parse(result.stdout))
     }
 
     /// `--long` prints one `name: type` per line — rclone 1.75.2 adds the
