@@ -181,6 +181,9 @@ struct ActivityView: View {
             }
         }
         .navigationTitle("Activity")
+        // Being open is the read: on arrival, and for a problem that lands
+        // while the table already shows it.
+        .onChange(of: model.configuration.runs, initial: true) { model.markActivitySeen() }
         .toolbar {
             ToolbarItemGroup {
                 // Two states: what went wrong, or everything. Full

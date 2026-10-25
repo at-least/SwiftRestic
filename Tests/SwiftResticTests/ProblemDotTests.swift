@@ -200,4 +200,42 @@ struct ProblemDotTests {
 
         #expect(model.problemsSeenAt[planID] == nil)
     }
+
+    @Test("opening Activity clears its badge; the history keeps the run; a later problem badges again")
+    func activityBadgeClearsOnOpen() {
+        let model = makeModel()
+        // Stamps are "now": the first problem predates the mark, the second
+        // lands after it, as real runs do.
+        model.configuration.runs = [
+            record(.succeeded, finishedAt: .now.addingTimeInterval(-1_800)),
+            record(.failed, finishedAt: .now.addingTimeInterval(-3_600)),
+        ]
+        #expect(model.activityBadgeCount(now: .now) == 1)
+
+        model.markActivitySeen()
+        #expect(model.activityBadgeCount(now: .now) == 0)
+        #expect(OverviewMetrics.problemCount(
+            runs: model.configuration.runs,
+            since: OverviewMetrics.problemWindowStart(from: .now)
+        ) == 1)
+
+        model.configuration.runs.insert(record(.completedWithErrors, finishedAt: .now.addingTimeInterval(1)), at: 0)
+        #expect(model.activityBadgeCount(now: .now) == 1)
+    }
+
+    @Test("the Activity stamp survives a relaunch")
+    func activityStampPersists() {
+        let model = makeModel()
+        model.configuration.runs = [record(.failed, finishedAt: .now.addingTimeInterval(-60))]
+        model.markActivitySeen()
+
+        let relaunched = AppModel(
+            store: ConfigStore(directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("ProblemDotTests-\(UUID().uuidString)")),
+            secrets: .inMemory(),
+            defaults: UserDefaults(suiteName: suiteName)!
+        )
+        relaunched.configuration.runs = model.configuration.runs
+        #expect(relaunched.activityBadgeCount(now: .now) == 0)
+    }
 }

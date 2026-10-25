@@ -51,25 +51,19 @@ struct SidebarView: View {
             get: { router.selection },
             set: { router.selection = $0 }
         )) {
-            // The week's problem count, the Recent problems card's set;
-            // computed once per body so the badge and that card agree.
-            let problemCount = OverviewMetrics.problemCount(
-                runs: model.configuration.runs,
-                since: OverviewMetrics.problemWindowStart(from: now)
-            )
+            let problemCount = model.activityBadgeCount(now: now)
             // First, above the repositories: its badge is every
             // repository's news and must not scroll away under a long tree.
             Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
-                    // The window's unread badge: the week's problems, as a
-                    // repository page's Recent problems lists them — a
+                    // The window's unread badge: the week's problems since
+                    // Activity was last open (`activityBadgeCount`) — a
                     // backup failure its plan's next backup healed included,
                     // which the tray dot and the menu's problem line drop
-                    // (`OverviewMetrics.isHealed`), in the same 7-day
-                    // window. It also yields to the unconfigured state like
-                    // the tray's problem face does — a removed repository's
-                    // old failures must not summon setup-bound attention —
-                    // and stays silent when clean.
+                    // (`OverviewMetrics.isHealed`). It also yields to the
+                    // unconfigured state like the tray's problem face does —
+                    // a removed repository's old failures must not summon
+                    // setup-bound attention — and stays silent when clean.
                     .badge(
                         problemCount > 0 && !model.configuration.repositories.isEmpty
                             ? Text(verbatim: "\(problemCount)")

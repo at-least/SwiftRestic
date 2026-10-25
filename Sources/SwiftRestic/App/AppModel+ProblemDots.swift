@@ -64,6 +64,26 @@ extension AppModel {
         ProblemDotsStore.save(problemsSeenAt, to: viewDefaults)
     }
 
+    /// The sidebar's Activity badge: the week's problems
+    /// (`OverviewMetrics.problems`, healed ones too) that finished after
+    /// Activity was last open. Opening Activity is the Mail "read" for all of
+    /// them at once; the rows stay in the history and on the Recent problems
+    /// card (the user's pick, 2026-10-25).
+    func activityBadgeCount(now: Date) -> Int {
+        let seenAt = activitySeenAt ?? .distantPast
+        return OverviewMetrics.problems(in: configuration.runs, since: OverviewMetrics.problemWindowStart(from: now))
+            .filter { $0.finishedAt > seenAt }
+            .count
+    }
+
+    /// A no-op while the badge is clear, so a history that changes under an
+    /// open Activity writes a stamp only when a problem landed.
+    func markActivitySeen() {
+        guard activityBadgeCount(now: .now) > 0 else { return }
+        activitySeenAt = .now
+        ProblemDotsStore.saveActivitySeenAt(activitySeenAt!, to: viewDefaults)
+    }
+
     /// Backups only: a plan's health is whether its backups work. Apply
     /// Retention Now records its forget under the plan's ID, and without
     /// the kind a failed forget became the plan's problem (`isHealed` keeps
@@ -84,6 +104,15 @@ extension AppModel {
 /// configuration is rewritten whole on every edit.
 enum ProblemDotsStore {
     private static let key = "unseenProblemSeenAt"
+    private static let activityKey = "activitySeenAt"
+
+    static func loadActivitySeenAt(from defaults: UserDefaults) -> Date? {
+        defaults.object(forKey: activityKey) as? Date
+    }
+
+    static func saveActivitySeenAt(_ stamp: Date, to defaults: UserDefaults) {
+        defaults.set(stamp, forKey: activityKey)
+    }
 
     static func load(from defaults: UserDefaults) -> [UUID: Date] {
         guard let data = defaults.data(forKey: key) else { return [:] }

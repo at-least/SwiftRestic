@@ -1304,8 +1304,9 @@ opens SwiftRestic's entry in System Settings › Notifications.
   template image — and a line naming it in the menu; the plan's next
   successful backup clears both, and its failure row. A failed check, prune,
   retention run or restore keeps the mark seven days, since a backup fixes
-  none of them. Activity's badge and Recent problems keep the week either
-  way.
+  none of them. Recent problems keeps the week either way; Activity's badge
+  counts the week's problems that came in since Activity was last open, and
+  opening Activity clears it.
 - **A newly added repository is not checked immediately.** Maintenance counts
   from when the repository was added, so adding one does not kick off a long
   prune straight away.

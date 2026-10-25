@@ -197,6 +197,10 @@ final class AppModel {
     /// whether a failure has been looked at is this device's reading progress,
     /// not a setting. See `AppModel+ProblemDots.swift`.
     var problemsSeenAt: [UUID: Date]
+    /// When Activity was last open with a problem it had not shown — the
+    /// stamp behind the sidebar's Activity badge. View state in UserDefaults,
+    /// as `problemsSeenAt`. See `AppModel+ProblemDots.swift`.
+    var activitySeenAt: Date?
 
     /// Progress of a picker-started restore, of which there is at most one
     /// (drag restores track no progress — their feedback is the drop itself).
@@ -335,6 +339,7 @@ final class AppModel {
         self.stagingDirectory = Self.stagingDirectory(for: store.directory)
         self.viewDefaults = defaults
         self.problemsSeenAt = ProblemDotsStore.load(from: defaults)
+        self.activitySeenAt = ProblemDotsStore.loadActivitySeenAt(from: defaults)
         #if DEBUG
         // Live checks run from a build folder, where only the move-to-
         // Applications advice can show. This makes the advice treat the copy
