@@ -145,18 +145,18 @@ func drawIcon(size: CGFloat, into context: CGContext) {
         )
     }
     context.addPath(path)
-    context.setFillColor(color(0x0F7488))
+    context.setFillColor(color(0x000000))
     context.fillPath()
     context.restoreGState()
 
-    // Background: one restrained two-stop teal gradient, lighter at the top. No
+    // Background: near-black, a faint two-stop gradient lighter at the top. No
     // gloss band and no diagonal — the depth comes from the gradient alone.
     context.saveGState()
     context.addPath(path)
     context.clip()
     let gradient = CGGradient(
         colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [color(0x48C9BD), color(0x0F7488)] as CFArray,
+        colors: [color(0x1C1C1E), color(0x000000)] as CFArray,
         locations: [0, 1]
     )!
     context.drawLinearGradient(
