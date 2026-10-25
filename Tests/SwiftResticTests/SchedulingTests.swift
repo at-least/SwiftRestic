@@ -1208,11 +1208,16 @@ struct AdditionalBackendTests {
         var rclone = Repository()
         rclone.kind = .rclone
         rclone.rcloneRemote = "mydrive"
-        rclone.rclonePath = "/backups/mac/"
+        rclone.rclonePath = "backups/mac/"
         #expect(rclone.resticRepositoryString == "rclone:mydrive:backups/mac")
         // A remote typed with rclone's own trailing colon must not double up.
         rclone.rcloneRemote = "mydrive:"
         #expect(rclone.resticRepositoryString == "rclone:mydrive:backups/mac")
+        // The leading slash is rclone's absolute path: on sftp and local
+        // remotes "/srv/x" and "srv/x" (from the login's home, or the
+        // current folder) are different places.
+        rclone.rclonePath = "/srv/backups/"
+        #expect(rclone.resticRepositoryString == "rclone:mydrive:/srv/backups")
     }
 
     @Test("credentials map to each backend's environment variables")

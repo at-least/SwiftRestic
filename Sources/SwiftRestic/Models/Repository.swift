@@ -178,7 +178,8 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             return restURL.hasPrefix("rest:") ? restURL : "rest:\(restURL)"
         case .rclone:
             let remote = rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
-            return "rclone:\(remote):\(Self.trimSlashes(rclonePath))"
+            // not trimSlashes: a leading slash is rclone's absolute path.
+            return "rclone:\(remote):\(rclonePath.replacing(/\/+$/, with: ""))"
         }
     }
 
