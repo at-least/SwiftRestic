@@ -774,31 +774,22 @@ struct RestorePaneView: View {
         // The field's own changes reach `searchChanged` as they are typed.
         if !searchText.isEmpty { searchChanged(searchText) }
 
-        // Changes against the previous backup — one restic diff, streamed —
-        // beside the listing, not before it: the tree shows while the
-        // comparison runs, and the Change column fills once it is whole.
-        changes = [:]
-        changesInside = [:]
-        comparison = predecessor.map { .comparing(baseline: $0) } ?? .firstBackup
-        async let marks = changeMarks(against: predecessor, newerID: record.id)
-
-        await openSpine(spine, focus: focus, record: record)
-
-        guard let predecessor, let marks = await marks else { return }
-        // A record switch during the diff must not install the old
-        // record's change map into the new one's rows, nor its baseline
-        // into the new one's header: both are written after this guard.
-        guard !Task.isCancelled else { return }
-        let held = ChangeComparison.heldChanges(marks.changes)
-        changes = held
-        changesInside = ChangeComparison.changesInside(held)
-        comparison = marks.failure.map { .failed(baseline: predecessor, reason: $0) }
-            ?? .compared(baseline: predecessor, changeCount: held.count)
-    }
-
-    private func changeMarks(against predecessor: Snapshot?, newerID: String) async -> ChangeMarks? {
-        guard let predecessor else { return nil }
-        return await model.snapshotChanges(repositoryID: repositoryID, olderID: predecessor.id, newerID: newerID)
+        // Changes against the previous backup — one restic diff, streamed.
+        // A record switch during the diff must not install the old record's
+        // change map into the new one's rows, nor its baseline into the new
+        // one's header: `run` drops the marks of a cancelled load.
+        await RestorePaneLoad.run(
+            baseline: predecessor,
+            compare: { baseline in
+                await model.snapshotChanges(repositoryID: repositoryID, olderID: baseline.id, newerID: record.id)
+            },
+            listTree: { await openSpine(spine, focus: focus, record: record) },
+            show: { marks in
+                changes = marks.changes
+                changesInside = marks.changesInside
+                comparison = marks.comparison
+            }
+        )
     }
 
     private func openSpine(_ spine: [String], focus: String?, record: Snapshot) async {
