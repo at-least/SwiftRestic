@@ -204,9 +204,7 @@ extension AppModel {
             // repository, whose plans would then read as orphans. Before
             // the refresh and the scheduler, which would otherwise see
             // them; the configuration's own save writes the deletion back.
-            for plan in configuration.plans where plan.repositoryID.map(configured.contains) != true {
-                deletePlan(id: plan.id)
-            }
+            deletePlansWithoutRepository()
         }
         let loginItem = await Task.detached { LoginItem.state }.value
         startsAtLogin = loginItem == .enabled
@@ -238,6 +236,15 @@ extension AppModel {
         #else
         startScheduler()
         #endif
+    }
+
+    /// A plan belongs to its repository, and one pointing nowhere could
+    /// never run again.
+    func deletePlansWithoutRepository() {
+        let configured = Set(configuration.repositories.map(\.id))
+        for plan in configuration.plans where plan.repositoryID.map(configured.contains) != true {
+            deletePlan(id: plan.id)
+        }
     }
 
     func shutdown() async {

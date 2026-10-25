@@ -41,6 +41,11 @@ final class AppRouter {
         case editRepository(UUID)
         case applyRetention(UUID)
         case confirm(CommandConfirmation)
+        /// File ▸ Export Settings and Import Settings: their panels wait
+        /// out an open sheet too — an import would replace what its editor
+        /// is about to save.
+        case exportSettings
+        case importSettings
     }
 
     /// The pane the sidebar is showing.
@@ -326,6 +331,7 @@ enum CommandConfirmation: Hashable, Identifiable {
     case prune(UUID)
     case unlock(UUID)
     case rebuildIndex(UUID)
+    case importSettings(SettingsFile)
 
     var id: Self { self }
 }

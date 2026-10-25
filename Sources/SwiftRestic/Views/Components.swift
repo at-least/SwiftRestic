@@ -1067,6 +1067,28 @@ enum FilePicker {
         panel.message = "Choose the restic executable"
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
+
+    /// Export Settings' file.
+    @MainActor
+    static func chooseSettingsDestination() -> URL? {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "SwiftRestic Settings.json"
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    /// Import Settings' file.
+    @MainActor
+    static func chooseSettingsFile() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+        panel.prompt = "Import"
+        return panel.runModal() == .OK ? panel.urls.first : nil
+    }
 }
 
 // MARK: - Pane container

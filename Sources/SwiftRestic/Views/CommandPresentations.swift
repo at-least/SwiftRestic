@@ -86,6 +86,12 @@ struct CommandPresentations: ViewModifier {
             Button("Unlock", role: .destructive) { model.unlockRepository(id: id) }
         case let .rebuildIndex(id):
             Button("Rebuild") { model.rebuildIndex(repositoryID: id) }
+        case let .importSettings(file):
+            Button("Replace") {
+                model.importSettings(file)
+                // Where a launch with these settings would open.
+                router.selection = SidebarTree.landingSelection(repositories: model.configuration.repositories)
+            }
         }
     }
 

@@ -507,6 +507,16 @@ struct RootView: View {
             if model.confirmationCopy(for: confirmation) != nil {
                 pendingConfirmation = confirmation
             }
+        case .exportSettings:
+            if model.canTransferSettings, let url = FilePicker.chooseSettingsDestination() {
+                model.exportSettings(to: url)
+            }
+        case .importSettings:
+            if model.canTransferSettings, let url = FilePicker.chooseSettingsFile(),
+               let file = model.settingsFile(at: url)
+            {
+                pendingConfirmation = .importSettings(file)
+            }
         }
     }
 

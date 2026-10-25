@@ -175,7 +175,7 @@ extension AppModel {
     /// its removal path remembers. UUIDs are never reused, so an entry
     /// missed here is never cleared again. (`loadingSnapshots` is not here:
     /// it is cleared by the in-flight refresh's own `defer`.)
-    private func clearRuntimeState(repositoryID id: UUID) {
+    func clearRuntimeState(repositoryID id: UUID) {
         maintenance[id] = nil
         maintenanceRunTokens[id] = nil
         snapshots[id] = nil

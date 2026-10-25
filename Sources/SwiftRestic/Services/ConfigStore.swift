@@ -253,12 +253,17 @@ actor ConfigStore {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         // Encode before anything on disk moves: an encode failure (or a crash
         // anywhere below) must find the live file exactly where it was.
+        let data = try Self.encoded(configuration)
+        rotateBackups()
+        try data.write(to: fileURL, options: [.atomic])
+    }
+
+    /// The document as `config.json` and an exported settings file hold it.
+    static func encoded(_ configuration: AppConfiguration) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(configuration)
-        rotateBackups()
-        try data.write(to: fileURL, options: [.atomic])
+        return try encoder.encode(configuration)
     }
 
     /// Best effort: insurance must never keep the live write from happening.
@@ -299,19 +304,23 @@ actor ConfigStore {
     /// Decodes one generation, collecting what tolerant decoding substituted
     /// along the way.
     private static func read(from url: URL) throws -> (AppConfiguration, [String]) {
-        let data = try Data(contentsOf: url)
+        let (configuration, notes) = try decoded(Data(contentsOf: url))
+        return (configuration, notes.notes)
+    }
+
+    static func decoded(_ data: Data) throws -> (AppConfiguration, DecodeNoteBox) {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let notes = DecodeNoteBox()
         let configuration = try DecodeNotes.$current.withValue(notes) {
             try decoder.decode(AppConfiguration.self, from: data)
         }
-        return (configuration, notes.notes)
+        return (configuration, notes)
     }
 
     /// One short line about why a generation could not be decoded — enough to
     /// name the field, never the whole dumped context.
-    private static func briefDecodingFailure(_ error: Error) -> String {
+    static func briefDecodingFailure(_ error: Error) -> String {
         guard let decoding = error as? DecodingError else {
             return String(describing: type(of: error))
         }

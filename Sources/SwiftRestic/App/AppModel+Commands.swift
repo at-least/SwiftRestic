@@ -236,6 +236,8 @@ extension AppModel {
                 title: "Rebuild the search index for “\(label(of: repository))”?",
                 message: "The index is read again from the repository. Searches are slower until it finishes."
             )
+        case let .importSettings(file):
+            return importConfirmationCopy(for: file)
         }
     }
 }

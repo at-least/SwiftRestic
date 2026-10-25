@@ -44,7 +44,7 @@ struct Schedule: Codable, Sendable, Hashable {
     private static func clamped(_ value: Int, _ range: ClosedRange<Int>, _ field: String) -> Int {
         guard !range.contains(value) else { return value }
         let nearest = value < range.lowerBound ? range.lowerBound : range.upperBound
-        DecodeNotes.current?.add("“\(field)” \(value) is out of range — read as \(nearest)")
+        DecodeNotes.current?.add(field: field, "\(value) is out of range — read as \(nearest)")
         return nearest
     }
 

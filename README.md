@@ -282,8 +282,9 @@ the generator after editing it; the PNGs are checked in.
   0.19.1). A refused change (exit 12: the stored password does not open it)
   stores nothing; a new password with spaces at its ends is refused, since
   restic trims them from a file and the Keychain would disagree. A
-  repository this Mac holds no password for — a configuration carried to
-  another Mac (secrets never live in it), a Keychain item removed — says so
+  repository this Mac holds no password for — settings imported on
+  another Mac (*Import Settings*; passwords never travel in them), a
+  Keychain item removed — says so
   in the editor's Encryption caption: "No password is stored for the
   repository “nas.local”. Enter it here to read it and back up to it."; *Save*
   and *Test Connection* wait, the reason beside them, as the listing and the
@@ -849,6 +850,27 @@ the generator after editing it; the PNGs are checked in.
   completed-with-errors backup until a later success (its caption and dot
   read it however old), and any other run's problem for the week the Recent
   problems card, the Activity badge and the menu bar count.
+- **Export and import settings** — *File ▸ Export Settings* writes
+  `SwiftRestic Settings.json` wherever the user saves it: the document
+  `config.json` holds, without what stays with the Mac — the run history,
+  the console's commands, a *Pause Backups* hold. Passwords stay in the
+  Keychain. *File ▸ Import Settings* reads such a file, or a `config.json`,
+  with the same decoder, and refuses one that is not a settings file (it
+  must hold `repositories` and `plans`: tolerant decoding reads any JSON
+  object as an empty configuration) or holds a setting that does not read,
+  rather than put a default in its place. After one confirmation — what the
+  file holds, and the work in flight, which it stops — the file's
+  repositories, plans and settings replace this Mac's. One already
+  here (the same id) keeps this Mac's stamps, by the editors' save rule
+  (`merging(draft:)`); a plan without its repository goes, as at launch; a
+  repository the file does not hold takes its index files along. No
+  password is deleted, unlike a removal: the Keychain may hold a
+  repository's only copy, and importing a file that holds the repository
+  again finds it. A repository with no password on this Mac waits for one
+  in its editor (*Repositories*). Both items are grey until the
+  configuration has loaded, and over one that could not be read, and like
+  the commands that open a sheet they beep while one is up — an import
+  would replace what the editor is about to save.
 - **Banners** — one queue above every page, the Files tab and the console
   included, for what has no other place to be said: a *Back Up Now*,
   *Check Now* or *Clean Up Now* that was skipped, an ask that waits for a
@@ -1135,6 +1157,9 @@ locked, a region capture (`-R`) failed, and this capture was not tried
 - `config.json` is rewritten whole on every edit, so the two previous
   generations are kept next to it (`config.json.1`, `config.json.2`) — a bad
   write or an edit gone wrong is never more than two saves deep.
+- An exported settings file (*File ▸ Export Settings*) holds no password,
+  but it holds what `config.json` holds as typed: webhook addresses, a
+  repository's extra environment variables, hook commands.
 - Snapshots and repository stats are refreshed with a five-minute ceiling,
   all repositories concurrently, and the scheduler arms after the launch's
   listing: a network repository's server out of reach answers within ten

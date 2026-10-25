@@ -58,7 +58,7 @@ extension KeyedDecodingContainer {
     /// Silent without a box — models decoded bare record nothing.
     private func note(_ key: Key, _ reason: String) {
         guard let box = DecodeNotes.current else { return }
-        box.add("“\(Self.fieldName(in: codingPath, key: key))” \(reason)")
+        box.add(field: Self.fieldName(in: codingPath, key: key), reason)
     }
 
     /// `repositories[0].kind` — indices bracketed, names dot-separated.
@@ -86,17 +86,27 @@ enum DecodeNotes {
 
 final class DecodeNoteBox: @unchecked Sendable {
     private let lock = NSLock()
-    private var storage: [String] = []
+    private var storage: [(field: String, detail: String)] = []
 
-    func add(_ note: String) {
+    /// `field` as `repositories[0].kind`; `detail` says what was read in
+    /// its place.
+    func add(field: String, _ detail: String) {
         lock.lock()
         defer { lock.unlock() }
-        storage.append(note)
+        storage.append((field, detail))
     }
 
     var notes: [String] {
         lock.lock()
         defer { lock.unlock() }
-        return storage
+        return storage.map { "“\($0.field)” \($0.detail)" }
+    }
+
+    /// The fields alone, for a reader that keeps nothing it decoded
+    /// (`SettingsFile.read`): no detail's "read as …" holds there.
+    var fields: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage.map(\.field)
     }
 }
