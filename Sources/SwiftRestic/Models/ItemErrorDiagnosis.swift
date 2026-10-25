@@ -126,6 +126,31 @@ enum ItemErrorDiagnosis {
         )
     }
 
+    /// The items a hint's Exclude takes out of the plan, as the run stored
+    /// them (`RunRecord.unreadableItemPaths`), in its order: only for the
+    /// two causes the grant does not fix, and only when they are every item
+    /// the hint counts. The count runs past the stored lines' cap, and a
+    /// line can lack its path; an Exclude that left some out would bring
+    /// the same hint back. None otherwise.
+    static func excludablePaths(for hint: Hint, in record: RunRecord) -> [String] {
+        let excluded: Kind
+        let count: Int
+        switch hint {
+        case .protectedEvenWithAccess(let blocked):
+            excluded = .blockedByMacOS
+            count = blocked
+        case .filePermissions(let denied):
+            excluded = .deniedByFilePermissions
+            count = denied
+        case .grantFullDiskAccess, .retryNowGranted:
+            return []
+        }
+        let paths = record.unreadableItems
+            .filter { kind(of: $0) == excluded }
+            .compactMap { record.unreadableItemPaths?[$0] }
+        return paths.count == count ? paths : []
+    }
+
     /// The sentence a finished run's announcements carry — the banner, the
     /// notification, the channels — or nil when there is nothing to advise.
     /// They go out as the run ends, so the state stamped on it is the state
@@ -134,17 +159,23 @@ enum ItemErrorDiagnosis {
         hints(for: record, accessNow: record.fullDiskAccessAtRun ?? .unknown).first.map(headline)
     }
 
-    /// The drawer's sentence.
-    static func detail(_ hint: Hint) -> String {
+    /// The drawer's and the plan page's sentence. `offersExclude`: Exclude
+    /// These Items stands under it, so the sentence leaves the exclusion to
+    /// the button.
+    static func detail(_ hint: Hint, offersExclude: Bool) -> String {
         switch hint {
         case .grantFullDiskAccess(let count):
             "macOS blocked \(Format.plural(count, "item")) because SwiftRestic doesn’t have Full Disk Access."
         case .retryNowGranted(let count):
             "macOS blocked \(Format.plural(count, "item")) because SwiftRestic didn’t have Full Disk Access at the time. It has it now — back up again to include them."
         case .protectedEvenWithAccess(let count):
-            "macOS blocked \(Format.plural(count, "item")) even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself. Exclude them if this keeps happening."
+            offersExclude
+                ? "macOS blocked \(Format.plural(count, "item")) even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself."
+                : "macOS blocked \(Format.plural(count, "item")) even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself. Exclude them if this keeps happening."
         case .filePermissions(let count):
-            "\(Format.plural(count, "item")) can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info, or exclude them."
+            offersExclude
+                ? "\(Format.plural(count, "item")) can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info."
+                : "\(Format.plural(count, "item")) can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info, or exclude them."
         }
     }
 

@@ -217,8 +217,11 @@ struct ExcludeRule: Hashable, Sendable {
         ExcludeRule("~/.nvm/versions", .javascript, "Node versions (nvm)", "nvm installs them again"),
         ExcludeRule("~/.volta/tools/image", .javascript, "Node versions (Volta)", "Volta installs them again"),
         // Apple: Xcode's per-project build folders, SwiftPM's, the
-        // dependency managers' checkouts, and the per-device symbol dumps
-        // Xcode re-extracts from a connected device.
+        // dependency managers' checkouts, the per-device symbol dumps
+        // Xcode re-extracts from a connected device, and that device's own
+        // files, which CoreDevice mounts into the home folder (`mount`:
+        // devicefs, fskit) and restic fails to read (invalid argument,
+        // xattr file too large) — seen on macOS 27 with an iPhone attached.
         ExcludeRule("**/DerivedData", .apple, "Xcode’s build products", "Xcode builds them again"),
         ExcludeRule("**/.build", .apple, "Swift package build output", "swift build makes it again"),
         ExcludeRule("**/Pods", .apple, "CocoaPods checkouts", "pod install fetches them again"),
@@ -226,6 +229,7 @@ struct ExcludeRule: Hashable, Sendable {
         ExcludeRule("~/.cocoapods/repos/trunk", .apple, "CocoaPods’ spec index", "pod repo update fetches it again"),
         ExcludeRule("~/.cocoapods/repos/master", .apple, "CocoaPods’ spec index", "pod repo update fetches it again"),
         ExcludeRule("~/Library/Developer/Xcode/*DeviceSupport", .apple, "Device symbol files", "Xcode copies them from the device again"),
+        ExcludeRule("~/Library/Developer/CoreDevice/DeviceFS", .apple, "Connected devices’ files", "they stay on the device"),
         // Rust: the downloaded crates and toolchains; a target folder goes
         // by its marker (`developerMarkers`).
         ExcludeRule("~/.cargo/registry", .rust, "Rust crates", "cargo downloads them again"),

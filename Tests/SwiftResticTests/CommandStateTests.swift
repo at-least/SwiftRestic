@@ -101,7 +101,7 @@ struct CommandStateTests {
         #expect(!model.isQueued(documents.id))
     }
 
-    @Test("excluding an unreadable item adds its exact path to the plan once, glob characters escaped")
+    @Test("excluding unreadable items adds each exact path to the plan once, glob characters escaped")
     func excludeItemAddsItsPath() {
         let model = makeModel()
         let repository = makeRepository()
@@ -110,11 +110,16 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
 
-        model.exclude(path: "/Users/u/Taxes/a[1].pdf", fromPlan: plan.id)
+        model.exclude(paths: ["/Users/u/Taxes/a[1].pdf"], fromPlan: plan.id)
         #expect(model.plan(id: plan.id)?.excludePatterns == [".DS_Store", "/Users/u/Taxes/a\\[1].pdf"])
         // Twice is once.
-        model.exclude(path: "/Users/u/Taxes/a[1].pdf", fromPlan: plan.id)
+        model.exclude(paths: ["/Users/u/Taxes/a[1].pdf"], fromPlan: plan.id)
         #expect(model.plan(id: plan.id)?.excludePatterns.count == 2)
+        // A diagnosis's items at once: the one already there is not added
+        // again, a path named twice is added once, the order is kept.
+        model.exclude(paths: ["/Users/u/b?.txt", "/Users/u/Taxes/a[1].pdf", "/Users/u/c", "/Users/u/b?.txt"], fromPlan: plan.id)
+        #expect(model.plan(id: plan.id)?.excludePatterns
+            == [".DS_Store", "/Users/u/Taxes/a\\[1].pdf", "/Users/u/b\\?.txt", "/Users/u/c"])
         // Nothing else of the plan moves.
         #expect(model.plan(id: plan.id)?.path == plan.path)
     }

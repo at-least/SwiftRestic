@@ -1170,6 +1170,10 @@ struct ResticIntegrationTests {
         let deviceSupport = try planted("home/Library/Developer/Xcode/iOS DeviceSupport/x", "device symbols")
         let archive = try planted("home/Library/Developer/Xcode/Archives/a.xcarchive/Info.plist", "a shipped build's archive")
         let simulator = try planted("home/Library/Developer/CoreSimulator/Devices/d/data", "what was installed in a simulator")
+        let deviceFile = try planted(
+            "home/Library/Developer/CoreDevice/DeviceFS/device-x.localized/AppDataContainers/app/Library/a.ktx",
+            "a connected iPhone's file"
+        )
         // The groups added on 2026-10-23, each with what it must leave.
         let bundledGem = try planted("rb/vendor/bundle/ruby/3.3.0/gems/x/lib/x.rb", "a gem Bundler installed")
         let vendoredCode = try planted("rb/vendor/mylib/lib.rb", "the user's own vendored code")
@@ -1204,7 +1208,7 @@ struct ResticIntegrationTests {
         let paths = Set(listed.content.keys)
 
         for skipped in [venvConfig, venvModule, namedVenvModule, rustBinary, pycache, nodeModule, terraformState, gradleCache,
-                        cargoRegistry, m2Repository, limaDisk, avdImage, deviceSupport, simulator,
+                        cargoRegistry, m2Repository, limaDisk, avdImage, deviceSupport, simulator, deviceFile,
                         bundledGem, installedGem, intermediate, nugetPackage, cabalBuild, juliaPackage, clionBuild,
                         renvLibrary, metals, zigOut, opamSwitch, uvCache, elixirLS] {
             #expect(!paths.contains(skipped.path), "the rules must skip \(skipped.path); snapshot held \(paths.count) paths")

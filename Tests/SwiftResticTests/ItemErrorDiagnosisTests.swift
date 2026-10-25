@@ -84,19 +84,69 @@ struct ItemErrorDiagnosisTests {
 
     @Test("each hint's words, in the drawer and in the short surfaces")
     func hintWords() {
-        #expect(ItemErrorDiagnosis.detail(.grantFullDiskAccess(1))
+        #expect(ItemErrorDiagnosis.detail(.grantFullDiskAccess(1), offersExclude: false)
             == "macOS blocked 1 item because SwiftRestic doesn’t have Full Disk Access.")
-        #expect(ItemErrorDiagnosis.detail(.retryNowGranted(2))
+        #expect(ItemErrorDiagnosis.detail(.retryNowGranted(2), offersExclude: false)
             == "macOS blocked 2 items because SwiftRestic didn’t have Full Disk Access at the time. It has it now — back up again to include them.")
-        #expect(ItemErrorDiagnosis.detail(.protectedEvenWithAccess(1))
+        #expect(ItemErrorDiagnosis.detail(.protectedEvenWithAccess(1), offersExclude: false)
             == "macOS blocked 1 item even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself. Exclude them if this keeps happening.")
-        #expect(ItemErrorDiagnosis.detail(.filePermissions(1))
+        #expect(ItemErrorDiagnosis.detail(.filePermissions(1), offersExclude: false)
             == "1 item can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info, or exclude them.")
+        // Exclude These Items under the sentence: it says the exclusion, the
+        // sentence no longer does.
+        #expect(ItemErrorDiagnosis.detail(.protectedEvenWithAccess(2), offersExclude: true)
+            == "macOS blocked 2 items even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself.")
+        #expect(ItemErrorDiagnosis.detail(.filePermissions(2), offersExclude: true)
+            == "2 items can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info.")
 
         #expect(ItemErrorDiagnosis.headline(.grantFullDiskAccess(1)) == "macOS blocked 1 item: SwiftRestic needs Full Disk Access.")
         #expect(ItemErrorDiagnosis.headline(.retryNowGranted(3)) == "macOS blocked 3 items while SwiftRestic lacked Full Disk Access.")
         #expect(ItemErrorDiagnosis.headline(.protectedEvenWithAccess(1)) == "macOS blocked 1 item even with Full Disk Access on.")
         #expect(ItemErrorDiagnosis.headline(.filePermissions(2)) == "2 items can’t be read with your account’s file permissions.")
+    }
+
+    @Test("a hint's Exclude covers its own cause's stored paths, all the hint counts or none, and none where the grant is the fix")
+    func excludablePathsFollowTheHint() {
+        // The shapes of a home-folder backup with the grant on, 2026-10-24:
+        // two files macOS protects, one the account cannot open, one item
+        // that fails otherwise.
+        let speech = "/Users/u/Library/Group Containers/group.com.apple.CoreSpeech/Caches/a.bnnsir"
+        let speechLine = "\(speech): open \(speech): operation not permitted"
+        let speech2 = "/Users/u/Library/Group Containers/group.com.apple.CoreSpeech/Caches/b.bnnsir"
+        let speech2Line = "\(speech2): open \(speech2): operation not permitted"
+        let tombstone = "/Users/u/Library/Application Support/FileProvider/X/wharf/tombstone/a"
+        let tombstoneLine = "\(tombstone): open \(tombstone): permission denied"
+        let device = "/Users/u/Library/Developer/CoreDevice/DeviceFS/d/x.ktx"
+        let deviceLine = "\(device): failed to save \(device): read \(device): invalid argument"
+
+        var record = RunRecord(kind: .backup, planName: "u")
+        record.outcome = .completedWithErrors
+        // The last line lies past the item count: stored after the items,
+        // never one of them, whatever it ends with.
+        record.itemErrors = [speechLine, tombstoneLine, deviceLine, speech2Line, mailLine]
+        record.itemErrorCount = 4
+        record.unreadableItemPaths = [
+            speechLine: speech, tombstoneLine: tombstone, deviceLine: device, speech2Line: speech2,
+            mailLine: "/Users/u/Library/Mail",
+        ]
+
+        let paths = ItemErrorDiagnosis.excludablePaths(for:in:)
+        #expect(paths(.protectedEvenWithAccess(2), record) == [speech, speech2])
+        #expect(paths(.filePermissions(1), record) == [tombstone])
+        // The grant, or a backup with it, is what fixes these.
+        #expect(paths(.grantFullDiskAccess(2), record).isEmpty)
+        #expect(paths(.retryNowGranted(2), record).isEmpty)
+
+        // A count past the stored lines (the tally runs over every item,
+        // the record keeps `storedItemErrorLimit`): no partial Exclude.
+        #expect(paths(.protectedEvenWithAccess(60), record).isEmpty)
+        // A stored line without its path: the same.
+        record.unreadableItemPaths?[speech2Line] = nil
+        #expect(paths(.protectedEvenWithAccess(2), record).isEmpty)
+        #expect(paths(.filePermissions(1), record) == [tombstone])
+        // A record stored before items had paths offers nothing to exclude.
+        record.unreadableItemPaths = nil
+        #expect(paths(.filePermissions(1), record).isEmpty)
     }
 
     @Test("sources that reach macOS-protected data are recognised, measured paths only")

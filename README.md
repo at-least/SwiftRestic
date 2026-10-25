@@ -347,7 +347,13 @@ the generator after editing it; the PNGs are checked in.
   problems counts the week), restic's message, the facts, the
   drawer's diagnosis, and up to five unreadable items with the drawer's
   *Show in Finder* and *Exclude from “Documents”* menu, then "… and N
-  more in Activity"; *Show in Activity* opens the run. The editor
+  more in Activity"; *Show in Activity* opens the run. The two causes
+  Full Disk Access cannot fix — macOS blocking items with the grant on,
+  and the files' own permissions — each carry *Exclude These Items*, here
+  and in the drawer: after one confirmation, every item that sentence
+  counts goes to the plan's *Also skip*. It shows only when the run's
+  record holds all of them (it keeps 50 lines, and a line can lack its
+  path); otherwise the sentence still says to exclude them. The editor
   preselects the repository only when there is just one, and opens on
   its Excluding tab: a *Skip* group of switches, then *Also skip*, the patterns
   the user added. *Finder files and the Trash* (`.DS_Store`, `~/.Trash`)
@@ -417,7 +423,9 @@ the generator after editing it; the PNGs are checked in.
   package managers' and toolchains' stores under the home folder, the
   frameworks' and build tools' output folders (`.next`, DerivedData, Pods,
   `dist-newstyle`, `cmake-build-*`, `zig-out`), the version managers'
-  installed toolchains, Xcode's per-device symbol dumps — and, the trade
+  installed toolchains, Xcode's per-device symbol dumps and a connected
+  device's own files, which CoreDevice mounts at
+  `~/Library/Developer/CoreDevice/DeviceFS` and restic cannot read — and, the trade
   the caption says beside the switch, the simulators' devices and the
   containers' machine disks (CoreSimulator, Docker, OrbStack, Lima, Colima,
   Podman, Vagrant): whatever was installed inside one is not backed up.

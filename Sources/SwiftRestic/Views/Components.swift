@@ -1103,22 +1103,31 @@ struct FullDiskAccessButton: View {
 /// items say neither. The words are `ItemErrorDiagnosis`'s, the same the
 /// banner, the notification and the channels carry; the hints take the
 /// current access state, so a fresh grant turns "grant it" into "back up
-/// again".
+/// again". The two the grant does not fix carry Exclude These Items when it
+/// covers every item they count (`ItemErrorDiagnosis.excludablePaths`),
+/// asked first as a line's Exclude is. No Back Up Now on "back up again":
+/// the plan page's Backups card and the drawer's footer hold it wherever
+/// the plan can back up.
 struct ItemErrorHintsView: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord
+    /// The paths the confirmation names, fixed at the click.
+    @State private var excluding: [String] = []
+    @State private var isConfirmingExclude = false
 
     var body: some View {
         let hints = ItemErrorDiagnosis.hints(for: run, accessNow: model.fullDiskAccess)
+        let plan = run.planID.flatMap { model.plan(id: $0) }
         if !hints.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(hints.enumerated()), id: \.offset) { _, hint in
+                    let paths = plan == nil ? [] : ItemErrorDiagnosis.excludablePaths(for: hint, in: run)
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         // Decoration beside a sentence that says it all.
                         Image(systemName: Self.symbolName(for: hint))
                             .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
-                        Text(ItemErrorDiagnosis.detail(hint))
+                        Text(ItemErrorDiagnosis.detail(hint, offersExclude: !paths.isEmpty))
                             .textSelection(.enabled)
                     }
                     .font(.callout)
@@ -1126,8 +1135,49 @@ struct ItemErrorHintsView: View {
                         FullDiskAccessButton()
                             .controlSize(.small)
                     }
+                    if let plan, !paths.isEmpty {
+                        excludeButton(hint: hint, paths: paths, plan: plan)
+                    }
                 }
             }
+            .confirmationDialog(
+                "Exclude \(Format.plural(excluding.count, "item")) from “\(plan.map { model.label(of: $0) } ?? "")”?",
+                isPresented: $isConfirmingExclude,
+                titleVisibility: .visible
+            ) {
+                if let plan {
+                    Button("Exclude") { model.exclude(paths: excluding, fromPlan: plan.id) }
+                }
+            } message: {
+                Text(excluding.count == 1
+                    ? "The plan’s next backups skip it — backups already made keep it. The plan editor lists it under Also skip, where − takes it out again."
+                    : "The plan’s next backups skip them — backups already made keep them. The plan editor lists them under Also skip, where − takes each out again.")
+            }
+        }
+    }
+
+    /// Disabled once the plan skips every one of them, as a line's Exclude
+    /// is. Two can share a card, so VoiceOver hears each by its cause;
+    /// Voice Control still answers to the title on screen.
+    private func excludeButton(hint: ItemErrorDiagnosis.Hint, paths: [String], plan: BackupPlan) -> some View {
+        let pending = paths.filter { !plan.excludePatterns.contains(ResticService.globEscaped($0)) }
+        let title = "Exclude These Items"
+        let label = Self.excludeLabel(for: hint)
+        return Button(title) {
+            excluding = pending
+            isConfirmingExclude = true
+        }
+        .controlSize(.small)
+        .disabled(pending.isEmpty)
+        .modifier(TileHelp(help: pending.isEmpty ? "“\(model.label(of: plan))” already skips these items" : nil))
+        .accessibilityLabel(label)
+        .accessibilityInputLabels([title, label])
+    }
+
+    private static func excludeLabel(for hint: ItemErrorDiagnosis.Hint) -> String {
+        switch hint {
+        case .grantFullDiskAccess, .retryNowGranted, .protectedEvenWithAccess: "Exclude the items macOS blocked"
+        case .filePermissions: "Exclude the items your account can’t read"
         }
     }
 
@@ -1204,7 +1254,7 @@ struct UnreadableItemLine: View {
             titleVisibility: .visible
         ) {
             if let path, let plan {
-                Button("Exclude") { model.exclude(path: path, fromPlan: plan.id) }
+                Button("Exclude") { model.exclude(paths: [path], fromPlan: plan.id) }
             }
         } message: {
             Text("The plan’s next backups skip \(path ?? "") — backups already made keep it. The plan editor lists it under Also skip, where − takes it out again.")

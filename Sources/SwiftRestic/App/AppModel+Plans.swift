@@ -68,15 +68,19 @@ extension AppModel {
         )
     }
 
-    /// Exclude, from an unreadable item's line: the item's exact path, its
-    /// glob characters escaped so it matches itself alone, added to the
-    /// plan's patterns once. Mutates only that list, as the pause does —
-    /// a whole-plan upsert from a captured copy could undo a run's stamps.
-    func exclude(path: String, fromPlan planID: UUID) {
+    /// Exclude, from an unreadable item's line or a diagnosis's items: each
+    /// item's exact path, its glob characters escaped so it matches itself
+    /// alone, added to the plan's patterns once. Mutates only that list, as
+    /// the pause does — a whole-plan upsert from a captured copy could undo
+    /// a run's stamps.
+    func exclude(paths: [String], fromPlan planID: UUID) {
         guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
-        let pattern = ResticService.globEscaped(path)
-        guard !configuration.plans[index].excludePatterns.contains(pattern) else { return }
-        configuration.plans[index].excludePatterns.append(pattern)
+        var patterns = configuration.plans[index].excludePatterns
+        for pattern in paths.map(ResticService.globEscaped) where !patterns.contains(pattern) {
+            patterns.append(pattern)
+        }
+        // One assignment: each write to `configuration` runs its didSet.
+        configuration.plans[index].excludePatterns = patterns
     }
 
     /// What every surface calls `plan` (`BackupPlan.label(among:)`), read
