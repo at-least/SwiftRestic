@@ -620,8 +620,11 @@ the generator after editing it; the PNGs are checked in.
     rows it has (the kinds in its tooltip), so a collapsed root does not
     read as unchanged. The tree shows what the backup holds and nothing
     else: what was deleted since is *Compare with Previous*, in a backup's
-    right-click menu in the list (below). No line sits above the tree
-    unless the comparison failed — a blank column then means "not known".
+    right-click menu in the list (below). The tree does not wait for the
+    comparison: it lists at once, a spinner beside the column's title says
+    the comparison is still running, and the marks fill in together when
+    it ends. No line sits above the tree unless the comparison failed — a
+    blank column then means "not known".
     A Files folder's "Deleted:" and "Not read:" lines link each name to the
     previous backup's copy on the Files tab.
   - *Into the Files view.* *Show Versions*, in an item's right-click menu
