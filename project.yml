@@ -61,8 +61,8 @@ targets:
       - path: Sources/SwiftRestic/Core
       - path: Sources/SwiftRestic/Models
       - path: Sources/SwiftRestic/Services
-      # The model layer only — the app entry point (and any view) stays out,
-      # so the tests never pull in the UI. New AppModel domain files under
+      # The model layer only — the app entry point (and every view but the one
+      # below) stays out, so the tests never pull in the UI. New AppModel domain files under
       # App/ are picked up automatically; add deliberate exceptions to
       # `excludes` below.
       - path: Sources/SwiftRestic/App
@@ -71,6 +71,9 @@ targets:
           # its AppDelegate — neither belongs in the test bundle.
           - SwiftResticApp.swift
           - CaptureSupport.swift
+      # One view, deliberately: the row edit field's scrolling and focus
+      # hand-back are AppKit behavior that only a hosted-window test checks.
+      - path: Sources/SwiftRestic/Views/RowEditField.swift
     dependencies:
       - package: GRDB
     settings:

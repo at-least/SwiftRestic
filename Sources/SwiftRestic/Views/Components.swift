@@ -786,7 +786,6 @@ struct PathListEditor: View {
     @State private var editing: Int?
     @State private var editDraft = ""
     @State private var editOriginal = ""
-    @FocusState private var editFieldIsFocused: Bool
 
     /// About six one-line rows: the list scrolls past them rather than
     /// pushing the switches off the sheet.
@@ -799,22 +798,20 @@ struct PathListEditor: View {
                 // keystroke, and a new identity would drop the field's focus.
                 ForEach(Array(paths.enumerated()), id: \.offset) { index, path in
                     if editing == index {
-                        TextField(text: Binding(
-                            get: { editDraft },
-                            set: {
+                        RowEditField(
+                            text: editDraft,
+                            accessibilityLabel: title,
+                            onChange: {
                                 editDraft = $0
                                 paths = PathListEntry.typing($0, at: index, original: editOriginal, in: paths)
                                 // The row's tag is its value: keep it selected.
                                 selection = [paths[index]]
-                            }
-                        )) { Text(title) }
-                            .labelsHidden()
-                            .textFieldStyle(.plain)
-                            .focused($editFieldIsFocused)
-                            .onSubmit(commitEdit)
-                            .onExitCommand(perform: cancelEdit)
-                            .onAppear { editFieldIsFocused = true }
-                            .tag(path)
+                            },
+                            onSubmit: commitEdit,
+                            onCancel: cancelEdit,
+                            onEnd: commitEdit
+                        )
+                        .tag(path)
                     } else {
                         Text(path)
                             .lineLimit(1)
@@ -833,11 +830,6 @@ struct PathListEditor: View {
             } primaryAction: { items in
                 guard items.count == 1, let path = items.first else { return }
                 startEditing(path)
-            }
-            // A click away keeps the edit, as in Finder. After Escape
-            // `editing` is already nil, so this finds nothing to finish.
-            .onChange(of: editFieldIsFocused) {
-                if !editFieldIsFocused { commitEdit() }
             }
             .listStyle(.plain)
             .alternatingRowBackgrounds()
