@@ -173,6 +173,10 @@ struct RestorePaneView: View {
         return comparison
     }
 
+    private var isComparing: Bool {
+        if case .comparing = shownComparison(for: record) { true } else { false }
+    }
+
     /// What the Change column compares with, for its title's tooltip —
     /// nil when the comparison failed, the line above the tree saying so.
     private var changeColumnHelp: String? {
@@ -241,7 +245,11 @@ struct RestorePaneView: View {
             ContentUnavailableView("Empty folder", systemImage: "folder")
         } else {
             VStack(spacing: 0) {
-                TreeColumnHeader(rowContentWidth: rowContentWidth, changeHelp: changeColumnHelp)
+                TreeColumnHeader(
+                    rowContentWidth: rowContentWidth,
+                    changeHelp: changeColumnHelp,
+                    isComparing: isComparing
+                )
                 Divider()
                 treeList
             }
@@ -766,29 +774,34 @@ struct RestorePaneView: View {
         // The field's own changes reach `searchChanged` as they are typed.
         if !searchText.isEmpty { searchChanged(searchText) }
 
-        // Changes against the previous backup — one restic diff, streamed.
-        if let predecessor {
-            comparison = .comparing(baseline: predecessor)
-            let marks = await model.snapshotChanges(
-                repositoryID: repositoryID,
-                olderID: predecessor.id,
-                newerID: record.id
-            )
-            // A record switch during the diff must not install the old
-            // record's change map into the new one's rows, nor its baseline
-            // into the new one's header: both are written after this guard.
-            guard !Task.isCancelled else { return }
-            let held = ChangeComparison.heldChanges(marks.changes)
-            changes = held
-            changesInside = ChangeComparison.changesInside(held)
-            comparison = marks.failure.map { .failed(baseline: predecessor, reason: $0) }
-                ?? .compared(baseline: predecessor, changeCount: held.count)
-        } else {
-            changes = [:]
-            changesInside = [:]
-            comparison = .firstBackup
-        }
+        // Changes against the previous backup — one restic diff, streamed —
+        // beside the listing, not before it: the tree shows while the
+        // comparison runs, and the Change column fills once it is whole.
+        changes = [:]
+        changesInside = [:]
+        comparison = predecessor.map { .comparing(baseline: $0) } ?? .firstBackup
+        async let marks = changeMarks(against: predecessor, newerID: record.id)
 
+        await openSpine(spine, focus: focus, record: record)
+
+        guard let predecessor, let marks = await marks else { return }
+        // A record switch during the diff must not install the old
+        // record's change map into the new one's rows, nor its baseline
+        // into the new one's header: both are written after this guard.
+        guard !Task.isCancelled else { return }
+        let held = ChangeComparison.heldChanges(marks.changes)
+        changes = held
+        changesInside = ChangeComparison.changesInside(held)
+        comparison = marks.failure.map { .failed(baseline: predecessor, reason: $0) }
+            ?? .compared(baseline: predecessor, changeCount: held.count)
+    }
+
+    private func changeMarks(against predecessor: Snapshot?, newerID: String) async -> ChangeMarks? {
+        guard let predecessor else { return nil }
+        return await model.snapshotChanges(repositoryID: repositoryID, olderID: predecessor.id, newerID: newerID)
+    }
+
+    private func openSpine(_ spine: [String], focus: String?, record: Snapshot) async {
         // Re-open the folder the user was in. The first missing ancestor
         // stops the walk: a listing that answers without it is as much an
         // answer as a failed fetch, and the pane must say so rather than
@@ -1135,6 +1148,9 @@ private struct TreeColumnHeader: View {
     let rowContentWidth: RowContentWidth
     /// What the Change column compares with (`RestoreRecordHeading.columnHelp`).
     let changeHelp: String?
+    /// The tree shows before its diff is in: until then a blank Change
+    /// cell means "not compared yet", which the spinner says.
+    let isComparing: Bool
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1145,8 +1161,11 @@ private struct TreeColumnHeader: View {
             Spacer().frame(width: 16)
             Text("Name")
             Spacer(minLength: 12)
-            Text("Change")
-                .frame(width: 56, alignment: .leading)
+            HStack(spacing: 3) {
+                Text("Change")
+                if isComparing { ProgressView().controlSize(.mini) }
+            }
+            .frame(width: 56, alignment: .leading)
                 .modifier(TileHelp(help: changeHelp))
             Text("Date Modified")
                 .frame(width: 140, alignment: .trailing)
