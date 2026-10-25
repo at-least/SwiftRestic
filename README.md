@@ -377,7 +377,10 @@ the generator after editing it; the PNGs are checked in.
   pass leave the list. A run passes no rule naming the plan's folder itself or a folder
   above it (a plan inside `/private/var/folders`, of `~/Library/Caches`),
   which would leave nothing to back up. The *Also skip* list shows only the
-  user's own patterns, one line each, scrolling past about six. The editor
+  user's own patterns, one line each, scrolling past about six; a row is
+  edited in place (double-click, Return or *Edit* in its menu; Return or
+  a click away keeps it, Escape puts it back, and Save keeps an edit still
+  open). The editor
   also says when a folder is not on this Mac, takes excludes chosen in a panel (the + in the bar beneath the list, − removing, a pattern typed into the field beside them) or dropped from Finder
   as their own paths (glob characters escaped), and shows *Next backup* for
   the schedule being chosen, as Save would store it. A daily or weekly

@@ -16,4 +16,37 @@ enum PathListEntry {
         let path = expandsTildeInPath ? (trimmed as NSString).expandingTildeInPath : trimmed
         return escapesGlobs ? ResticService.globEscaped(path) : path
     }
+
+    /// The list after a keystroke in row `index`'s in-place edit: written
+    /// at once, so Save mid-edit saves what the field shows (Save takes no
+    /// focus, so it never ends the edit). Taken as a pattern and never
+    /// escaped: a picked item's escapes are already in the text. While the
+    /// text is blank or another row's value, the row holds `original`, its
+    /// value before the edit.
+    static func typing(_ raw: String, at index: Int, original: String, in paths: [String]) -> [String] {
+        var edited = paths
+        if let value = value(for: raw, expandsTildeInPath: false, escapesGlobs: false),
+           !holdsElsewhere(value, index, paths) {
+            edited[index] = value
+        } else {
+            edited[index] = original
+        }
+        return edited
+    }
+
+    /// The list when the in-place edit ends on `raw`: a value another row
+    /// already holds drops the edited row rather than listing it twice.
+    /// Anything else `typing` already wrote.
+    static func finishing(_ raw: String, at index: Int, in paths: [String]) -> [String] {
+        guard let value = value(for: raw, expandsTildeInPath: false, escapesGlobs: false),
+              holdsElsewhere(value, index, paths)
+        else { return paths }
+        var edited = paths
+        edited.remove(at: index)
+        return edited
+    }
+
+    private static func holdsElsewhere(_ value: String, _ index: Int, _ paths: [String]) -> Bool {
+        paths.enumerated().contains { $0.offset != index && $0.element == value }
+    }
 }

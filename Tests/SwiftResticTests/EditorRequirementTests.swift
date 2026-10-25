@@ -97,6 +97,23 @@ struct EditorRequirementTests {
             == NSHomeDirectory() + "/Documents")
     }
 
+    @Test("an exclude edited in place is written as typed; blank or another row's value holds the row's value from before; finishing on a duplicate drops the row")
+    func excludeEdits() {
+        let paths = ["**/*.iso", #"/Users/me/a\[1].txt"#, "~/Downloads"]
+        // Each keystroke lands, so Save mid-edit saves what the field shows.
+        #expect(PathListEntry.typing(" **/*.dmg ", at: 0, original: "**/*.iso", in: paths)
+            == ["**/*.dmg", #"/Users/me/a\[1].txt"#, "~/Downloads"])
+        // Erased down to nothing after a partial value: the original, not the fragment.
+        let partial = ["*", #"/Users/me/a\[1].txt"#, "~/Downloads"]
+        #expect(PathListEntry.typing("  ", at: 0, original: "**/*.iso", in: partial) == paths)
+        #expect(PathListEntry.typing("~/Downloads", at: 0, original: "**/*.iso", in: partial) == paths)
+        // Finished on another row's value: the edited row goes.
+        #expect(PathListEntry.finishing("~/Downloads", at: 0, in: paths)
+            == [#"/Users/me/a\[1].txt"#, "~/Downloads"])
+        #expect(PathListEntry.finishing("**/*.iso", at: 0, in: paths) == paths)
+        #expect(PathListEntry.finishing("", at: 0, in: paths) == paths)
+    }
+
     @Test("the repository editor names the first unmet requirement per kind")
     func repositoryRequirementPerKind() {
         var draft = Repository()

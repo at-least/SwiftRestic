@@ -759,7 +759,9 @@ struct SnapshotNodeRow: View {
 
 // MARK: - Path list editor
 
-/// A list of paths with add/remove buttons: a plan's exclude patterns.
+/// A list of paths with add/remove buttons: a plan's exclude patterns. A row
+/// is edited in place, as Finder renames: double-click or Return on it, or
+/// Edit in its menu; Return or a click away keeps the edit, Escape drops it.
 ///
 /// Typing, pasting and dropping are first-class: the audience keeps paths on
 /// the clipboard, and an NSOpenPanel per entry is the app's biggest
@@ -779,6 +781,12 @@ struct PathListEditor: View {
     @State private var selection: Set<String> = []
     @State private var draft = ""
     @State private var isDropTargeted = false
+    /// The row being edited in place, its text so far, and its value
+    /// before the edit, which Escape puts back.
+    @State private var editing: Int?
+    @State private var editDraft = ""
+    @State private var editOriginal = ""
+    @FocusState private var editFieldIsFocused: Bool
 
     /// About six one-line rows: the list scrolls past them rather than
     /// pushing the switches off the sheet.
@@ -787,13 +795,49 @@ struct PathListEditor: View {
     var body: some View {
         VStack(spacing: 0) {
             List(selection: $selection) {
-                ForEach(paths, id: \.self) { path in
-                    Text(path)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(path)
-                        .tag(path)
+                // By position, not value: the edited row's value changes per
+                // keystroke, and a new identity would drop the field's focus.
+                ForEach(Array(paths.enumerated()), id: \.offset) { index, path in
+                    if editing == index {
+                        TextField(text: Binding(
+                            get: { editDraft },
+                            set: {
+                                editDraft = $0
+                                paths = PathListEntry.typing($0, at: index, original: editOriginal, in: paths)
+                                // The row's tag is its value: keep it selected.
+                                selection = [paths[index]]
+                            }
+                        )) { Text(title) }
+                            .labelsHidden()
+                            .textFieldStyle(.plain)
+                            .focused($editFieldIsFocused)
+                            .onSubmit(commitEdit)
+                            .onExitCommand(perform: cancelEdit)
+                            .onAppear { editFieldIsFocused = true }
+                            .tag(path)
+                    } else {
+                        Text(path)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(path)
+                            .tag(path)
+                    }
                 }
+            }
+            // primaryAction: a double-click or Return on a row.
+            .contextMenu(forSelectionType: String.self) { items in
+                if items.count == 1, let path = items.first {
+                    Button("Edit") { startEditing(path) }
+                }
+                Button("Remove") { remove(items) }
+            } primaryAction: { items in
+                guard items.count == 1, let path = items.first else { return }
+                startEditing(path)
+            }
+            // A click away keeps the edit, as in Finder. After Escape
+            // `editing` is already nil, so this finds nothing to finish.
+            .onChange(of: editFieldIsFocused) {
+                if !editFieldIsFocused { commitEdit() }
             }
             .listStyle(.plain)
             .alternatingRowBackgrounds()
@@ -824,10 +868,7 @@ struct PathListEditor: View {
                 ListBarButton(symbol: "plus", title: "Choose items") { browse() }
                 Divider()
                     .frame(height: 14)
-                ListBarButton(symbol: "minus", title: "Remove") {
-                    paths.removeAll { selection.contains($0) }
-                    selection.removeAll()
-                }
+                ListBarButton(symbol: "minus", title: "Remove") { remove(selection) }
                 .disabled(selection.isEmpty)
                 Divider()
                     .frame(height: 14)
@@ -860,6 +901,36 @@ struct PathListEditor: View {
 
     private func addDraft() {
         addPaths([draft], picked: false)
+    }
+
+    private func remove(_ items: Set<String>) {
+        // − takes no focus, so the edit is still open; its row's position
+        // is about to move.
+        commitEdit()
+        paths.removeAll { items.contains($0) }
+        selection.subtract(items)
+    }
+
+    private func startEditing(_ path: String) {
+        guard let index = paths.firstIndex(of: path) else { return }
+        editDraft = path
+        editOriginal = path
+        editing = index
+    }
+
+    private func commitEdit() {
+        guard let index = editing else { return }
+        editing = nil
+        let finished = PathListEntry.value(for: editDraft, expandsTildeInPath: false, escapesGlobs: false)
+        paths = PathListEntry.finishing(editDraft, at: index, in: paths)
+        selection = [finished ?? editOriginal]
+    }
+
+    private func cancelEdit() {
+        guard let index = editing else { return }
+        editing = nil
+        paths[index] = editOriginal
+        selection = [editOriginal]
     }
 
     /// `picked`: the paths came from the panel or a drop, not the field.
