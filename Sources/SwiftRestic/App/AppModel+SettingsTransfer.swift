@@ -79,7 +79,6 @@ extension AppModel {
         }
         let incomingRepositoryIDs = Set(incoming.repositories.map(\.id))
         let leaving = configuration.repositories.map(\.id).filter { !incomingRepositoryIDs.contains($0) }
-        let resticPathChanged = incoming.settings.resticPathOverride != configuration.settings.resticPathOverride
         configuration = configuration.importing(incoming)
         deletePlansWithoutRepository()
         for id in leaving {
@@ -87,10 +86,7 @@ extension AppModel {
                 await indexCoordinator.dropRepository(repositoryID: id)
             })
         }
-        Task {
-            if resticPathChanged { await resolveBinary() }
-            await refreshAllSnapshots()
-        }
+        Task { await refreshAllSnapshots() }
         post(Banner(title: "Imported “\(file.name)”", message: "", isError: false))
     }
 }

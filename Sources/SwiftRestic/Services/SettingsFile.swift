@@ -31,16 +31,24 @@ struct SettingsFile: Hashable, Identifiable, Sendable {
     }
 
     /// Through `config.json`'s own decoder, so a file an older build wrote
-    /// reads as its launch would. A setting tolerant decoding would replace
-    /// with its default refuses the whole file: an import that quietly set
-    /// something the file did not say would replace the user's with neither.
+    /// reads as its launch would: a setting the file lacks takes its
+    /// default. A setting present but unreadable refuses the whole file: an
+    /// import that quietly set something the file did not say would replace
+    /// the user's with neither.
     static func read(from url: URL) throws -> SettingsFile {
         let data = try Data(contentsOf: url)
+        let object: Any
+        do {
+            // Fragments allowed: `3` is sound JSON, just not settings.
+            object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        } catch {
+            // Not `notSettings`: an export cut off partway is one.
+            throw ReadError.unreadable(detail: "the file is corrupt")
+        }
         // Tolerant decoding reads any JSON object as an empty configuration,
         // which would replace everything with nothing: every configuration
         // writes these two keys, arrays even when empty.
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object["repositories"] != nil, object["plans"] != nil
+        guard let keys = object as? [String: Any], keys["repositories"] != nil, keys["plans"] != nil
         else { throw ReadError.notSettings }
         let configuration: AppConfiguration
         let notes: DecodeNoteBox
@@ -81,12 +89,13 @@ extension AppConfiguration {
     }
 
     /// What stays with the Mac when settings move: its run history, the
-    /// console's commands, and the Pause Backups hold — a hold carried to
+    /// console's commands, the Pause Backups hold — a hold carried to
     /// another Mac would stop its backups with nobody there having paused
-    /// them.
+    /// them — and the restic path, a file on the Mac that set it.
     private mutating func keepMachineState(of mac: AppConfiguration) {
         runs = mac.runs
         settings.consoleHistory = mac.settings.consoleHistory
         settings.schedulePause = mac.settings.schedulePause
+        settings.resticPathOverride = mac.settings.resticPathOverride
     }
 }

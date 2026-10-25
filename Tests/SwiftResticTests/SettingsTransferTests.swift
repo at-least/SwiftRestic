@@ -47,7 +47,7 @@ struct SettingsTransferTests {
         return url
     }
 
-    @Test("an export holds the repositories, plans and settings, and leaves out the run history, the console's commands and the Pause Backups hold")
+    @Test("an export holds the repositories, plans and settings, and leaves out the run history, the console's commands, the Pause Backups hold and the restic path")
     func exportLeavesTheMachineState() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -65,6 +65,7 @@ struct SettingsTransferTests {
         model.configuration.settings.networkShares = [NetworkShare(volumeName: "NAS", url: "smb://me@nas.local/NAS")]
         model.configuration.settings.consoleHistory = ["snapshots --json"]
         model.configuration.settings.schedulePause = SchedulePause(until: nil)
+        model.configuration.settings.resticPathOverride = "/Users/someone/bin/restic"
 
         let url = directory.appendingPathComponent("SwiftRestic Settings.json")
         model.exportSettings(to: url)
@@ -74,6 +75,7 @@ struct SettingsTransferTests {
         let settings = try #require(saved["settings"] as? [String: Any])
         #expect((settings["consoleHistory"] as? [Any])?.isEmpty == true)
         #expect(settings["schedulePause"] == nil)
+        #expect(settings["resticPathOverride"] as? String == "")
 
         let read = try SettingsFile.read(from: url)
         #expect(read.name == "SwiftRestic Settings.json")
@@ -103,7 +105,7 @@ struct SettingsTransferTests {
         #expect(banner.isError)
     }
 
-    @Test("an import takes the file's repositories, plans and settings, keeps this Mac's history, console commands and hold, and one already here keeps this Mac's stamps")
+    @Test("an import takes the file's repositories, plans and settings, keeps this Mac's history, console commands, hold and restic path, and one already here keeps this Mac's stamps")
     func importingKeepsTheMachineState() {
         let lastCheck = stamp.addingTimeInterval(86_400)
         let lastRun = stamp.addingTimeInterval(3_600)
@@ -117,6 +119,7 @@ struct SettingsTransferTests {
         mac.runs = [RunRecord(planID: herePlan.id, planName: "Documents")]
         mac.settings.consoleHistory = ["check"]
         mac.settings.schedulePause = SchedulePause(until: stamp)
+        mac.settings.resticPathOverride = "/opt/restic/restic"
 
         var file = AppConfiguration()
         var moved = here
@@ -134,6 +137,9 @@ struct SettingsTransferTests {
         file.runs = [RunRecord(planID: addedPlan.id, planName: "Photos")]
         file.settings.consoleHistory = ["forget"]
         file.settings.staleAlertDays = 9
+        // The path of the Mac that wrote the file: carried here, restic
+        // goes missing and every backup stops.
+        file.settings.resticPathOverride = "/Users/alice/bin/restic"
 
         let imported = mac.importing(file)
 
@@ -146,6 +152,7 @@ struct SettingsTransferTests {
         #expect(imported.runs == mac.runs)
         #expect(imported.settings.consoleHistory == ["check"])
         #expect(imported.settings.schedulePause == mac.settings.schedulePause)
+        #expect(imported.settings.resticPathOverride == "/opt/restic/restic")
         #expect(imported.settings.staleAlertDays == 9)
     }
 
@@ -155,15 +162,24 @@ struct SettingsTransferTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         // Tolerant decoding would read each of these as an empty
         // configuration.
-        for text in ["{}", "[]", "not json", #"{"name": "package", "version": "1.0.0"}"#] {
+        for text in ["{}", "[]", "3", #"{"name": "package", "version": "1.0.0"}"#] {
             #expect(throws: SettingsFile.ReadError.notSettings, "\(text)") {
                 try SettingsFile.read(from: write(text, to: directory))
             }
         }
         #expect(SettingsFile.ReadError.notSettings.localizedDescription == "It isn’t a SwiftRestic settings file.")
+        // Not "isn’t a settings file": an export cut off partway is one.
+        for text in ["not json", #"{"repositories": [], "plans": [],"#] {
+            #expect(throws: SettingsFile.ReadError.unreadable(detail: "the file is corrupt"), "\(text)") {
+                try SettingsFile.read(from: write(text, to: directory))
+            }
+        }
+        #expect(SettingsFile.ReadError.unreadable(detail: "the file is corrupt").localizedDescription
+            == "It can’t be read (the file is corrupt).")
 
         let empty = try SettingsFile.read(from: write(#"{"repositories": [], "plans": []}"#, to: directory))
         #expect(empty.configuration.repositories.isEmpty)
+        #expect(empty.configuration.settings == AppSettings())
 
         let damaged = try write(#"{"repositories": [], "plans": [], "settings": {"staleAlertDays": "seven"}}"#, to: directory)
         do {
@@ -176,6 +192,17 @@ struct SettingsTransferTests {
             #expect(SettingsFile.ReadError.unreadableSettings(fields).localizedDescription
                 == "Some of its settings can’t be read: “settings.staleAlertDays”.")
         }
+    }
+
+    @Test("a setting the file lacks reads as its default, as a config.json an older build wrote reads at launch")
+    func missingSettingsReadAsDefaults() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = try write(#"{"repositories": [], "plans": [], "settings": {"staleAlertDays": 3}}"#, to: directory)
+
+        var expected = AppSettings()
+        expected.staleAlertDays = 3
+        #expect(try SettingsFile.read(from: url).configuration.settings == expected)
     }
 
     @Test("a file that does not read posts why, under its name")

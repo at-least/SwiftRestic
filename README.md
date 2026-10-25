@@ -853,12 +853,15 @@ the generator after editing it; the PNGs are checked in.
 - **Export and import settings** — *File ▸ Export Settings* writes
   `SwiftRestic Settings.json` wherever the user saves it: the document
   `config.json` holds, without what stays with the Mac — the run history,
-  the console's commands, a *Pause Backups* hold. Passwords stay in the
+  the console's commands, a *Pause Backups* hold, the restic path (a file on
+  that Mac; carried, restic goes missing). Passwords stay in the
   Keychain. *File ▸ Import Settings* reads such a file, or a `config.json`,
-  with the same decoder, and refuses one that is not a settings file (it
+  with the same decoder, and refuses one that is damaged ("the file is
+  corrupt"), is not a settings file (it
   must hold `repositories` and `plans`: tolerant decoding reads any JSON
   object as an empty configuration) or holds a setting that does not read,
-  rather than put a default in its place. After one confirmation — what the
+  rather than put a default in its place; a setting the file lacks takes
+  its default, as at launch. After one confirmation — what the
   file holds, and the work in flight, which it stops — the file's
   repositories, plans and settings replace this Mac's. One already
   here (the same id) keeps this Mac's stamps, by the editors' save rule
@@ -1158,8 +1161,8 @@ locked, a region capture (`-R`) failed, and this capture was not tried
   generations are kept next to it (`config.json.1`, `config.json.2`) — a bad
   write or an edit gone wrong is never more than two saves deep.
 - An exported settings file (*File ▸ Export Settings*) holds no password,
-  but it holds what `config.json` holds as typed: webhook addresses, a
-  repository's extra environment variables, hook commands.
+  but it holds webhook addresses, a repository's extra environment
+  variables and hook commands as typed.
 - Snapshots and repository stats are refreshed with a five-minute ceiling,
   all repositories concurrently, and the scheduler arms after the launch's
   listing: a network repository's server out of reach answers within ten
