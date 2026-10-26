@@ -369,11 +369,11 @@ struct SnapshotDiffView: View {
                         if let open = showVersions(of: change) {
                             Button("Show Versions", action: open)
                         }
-                        Button("Restore “\(change.name)”") { restoreSelection([change]) }
+                        Button("Restore “\(change.name)”…") { restoreSelection([change]) }
                             .disabled(model.isRestoring || holder(of: change) == nil)
                     } else if ids.count > 1 {
                         let picked = rows.filter { ids.contains($0.id) }
-                        Button("Restore \(Format.plural(picked.count, "Item"))") { restoreSelection(picked) }
+                        Button("Restore \(Format.plural(picked.count, "Item"))…") { restoreSelection(picked) }
                             .disabled(model.isRestoring || picked.allSatisfy { holder(of: $0) == nil })
                     }
                 } primaryAction: { ids in
@@ -413,7 +413,7 @@ struct SnapshotDiffView: View {
                 // row from the backup that has it, through the destination
                 // sheet.
                 let selected = (changeRows ?? []).filter { selection.contains($0.id) }
-                Button("Restore Selected") { restoreSelection(selected) }
+                Button("Restore Selected…") { restoreSelection(selected) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(model.isRestoring || selected.allSatisfy { holder(of: $0) == nil })

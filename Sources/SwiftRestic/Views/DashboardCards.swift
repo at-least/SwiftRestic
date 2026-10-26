@@ -63,7 +63,7 @@ struct ProtectionCard: View {
                 // repository can't be read: a plan for a drive that isn't
                 // here is not the next step, reaching it is.
                 if plans.isEmpty, case .loaded = model.snapshotListingOutcome(for: repositoryID) {
-                    Button("New Backup Plan", action: onAddPlan)
+                    Button("New Backup Plan…", action: onAddPlan)
                         .buttonStyle(.borderedProminent)
                 }
             }

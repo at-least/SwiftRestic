@@ -257,8 +257,8 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: other, repositoryExists: true, repositoryBusy: false) == nil)
         wrongPassword.repositoryID = nil
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == nil)
-        #expect(RunFix.editRepository(repository).title == "Edit Repository")
-        #expect(RunFix.addRepository.title == "Add Repository")
+        #expect(RunFix.editRepository(repository).title == "Edit Repository…")
+        #expect(RunFix.addRepository.title == "Add Repository…")
         #expect(RunFix.removeStaleLocks(repository).title == "Unlock")
         // The failure message beside the button already says the cause.
         #expect(RunFix.editRepository(repository).help == nil)
@@ -288,8 +288,8 @@ struct RunRecordPresentationTests {
         refused.planID = nil
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: "NAS")
             == .editRepositoryShare(repository))
-        #expect(RunFix.editRepositoryShare(repository).title == "Edit Repository")
-        #expect(RunFix.editPlanShare(plan).title == "Edit Plan")
+        #expect(RunFix.editRepositoryShare(repository).title == "Edit Repository…")
+        #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
     }
 
     @Test("a retention the repository refused offers the plan's editor on its Retention tab, a warning's as a failure's")
@@ -316,7 +316,7 @@ struct RunRecordPresentationTests {
         refused.kind = .backup
         refused.outcome = .completedWithErrors
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == nil)
-        #expect(RunFix.editPlanRetention(plan).title == "Edit Plan")
+        #expect(RunFix.editPlanRetention(plan).title == "Edit Plan…")
         #expect(RunFix.editPlanRetention(plan).help == nil)
     }
 
@@ -375,7 +375,7 @@ struct RunRecordPresentationTests {
         // A check that found damage: its verdict, not a crash, is the news.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .completedWithErrors), repositoryExists: true) == .check(repository))
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .failed), repositoryExists: true) == .prune(repository))
-        #expect(MaintenanceRetry.check(repository).title == "Check Again")
+        #expect(MaintenanceRetry.check(repository).title == "Check Again…")
         #expect(MaintenanceRetry.prune(repository).title == "Clean Up Again")
         // A clean or cancelled one, another kind, a repository gone: nothing.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .succeeded), repositoryExists: true) == nil)

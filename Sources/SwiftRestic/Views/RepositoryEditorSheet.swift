@@ -345,7 +345,7 @@ struct RepositoryEditorSheet: View {
                                 text: $draft.gcsCredentialsPath,
                                 prompt: Text("~/.config/gcloud/key.json")
                             )
-                            Button("Choose") {
+                            Button("Choose…") {
                                 if let url = FilePicker.chooseFile(message: "Choose the service account JSON file") {
                                     draft.gcsCredentialsPath = url.path
                                 }
@@ -554,7 +554,7 @@ struct RepositoryEditorSheet: View {
         case .local:
             HStack {
                 TextField("Folder", text: $draft.localPath, prompt: Text("/Volumes/Backup/restic"))
-                Button("Choose") {
+                Button("Choose…") {
                     if let url = FilePicker.chooseDirectory(message: "Choose the repository folder") {
                         draft.localPath = url.path
                     }

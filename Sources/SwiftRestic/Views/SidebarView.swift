@@ -117,8 +117,8 @@ struct SidebarView: View {
             Menu {
                 // Into the repository on screen, as ⌘N does — with none
                 // yet, through adding one.
-                Button("New Backup Plan") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
-                Button("Add Repository") { onNewRepository() }
+                Button("New Backup Plan…") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
+                Button("Add Repository…") { onNewRepository() }
             } label: {
                 Label("Add", systemImage: "plus")
                     .labelStyle(.iconOnly)
@@ -150,7 +150,7 @@ struct SidebarView: View {
                 // an error banner is not a substitute for a disabled item.
                 .disabled(!commands.canBackUp)
         }
-        Button("Edit Plan") { onEditPlan(plan) }
+        Button("Edit Plan…") { onEditPlan(plan) }
         // The Schedule card's pair, word for word. The row's caption says the
         // pause while the schedule is held; manual runs stay possible either
         // way, and a manual plan has no schedule to pause — no item either,
@@ -176,14 +176,14 @@ struct SidebarView: View {
     @ViewBuilder
     private func repositoryContextMenu(_ repository: Repository) -> some View {
         let commands = model.repositoryCommands(for: .repository(repository.id))
-        Button("New Backup Plan") { onNewPlan(repository.id) }
+        Button("New Backup Plan…") { onNewPlan(repository.id) }
         Divider()
-        Button("Edit Repository") { onEditRepository(repository) }
+        Button("Edit Repository…") { onEditRepository(repository) }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
         Divider()
         // The two of the Repository menu's a row most often wants; the
         // shared confirmations ask first.
-        Button("Check Now") { router.request(.confirm(.check(repository.id))) }
+        Button("Check Now…") { router.request(.confirm(.check(repository.id))) }
             .disabled(!commands.canMaintain)
         Button("Clean Up Now") { router.request(.confirm(.prune(repository.id))) }
             .disabled(!commands.canMaintain)
@@ -309,7 +309,7 @@ struct SidebarView: View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
                 Label {
-                    Text("New Backup Plan")
+                    Text("New Backup Plan…")
                         .foregroundStyle(Theme.tint)
                 } icon: {
                     Image(systemName: "plus.circle")

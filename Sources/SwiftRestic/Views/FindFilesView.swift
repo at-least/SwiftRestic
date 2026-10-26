@@ -315,7 +315,7 @@ struct FindFilesView: View {
                 // unselected row must not depend on selection state.
                 let picked = rows.filter { ids.contains($0.id) }
                 if picked.count == 1, let row = picked.first {
-                    Button("Restore “\(row.match.name)”") {
+                    Button("Restore “\(row.match.name)”…") {
                         restoreSelection(picked)
                     }
                     .disabled(model.isRestoring)
@@ -335,7 +335,7 @@ struct FindFilesView: View {
                         .disabled(!model.isResticAvailable || previewer.isCopying)
                     }
                 } else if picked.count > 1 {
-                    Button("Restore \(Format.plural(picked.count, "Item"))") {
+                    Button("Restore \(Format.plural(picked.count, "Item"))…") {
                         restoreSelection(picked)
                     }
                     .disabled(model.isRestoring)
@@ -383,7 +383,7 @@ struct FindFilesView: View {
                 }
                 Spacer()
                 let selected = rows.filter { selection.contains($0.id) }
-                Button("Restore Selected") { restoreSelection(selected) }
+                Button("Restore Selected…") { restoreSelection(selected) }
                     .buttonStyle(.borderedProminent)
                     // Same grammar as the Restore pane: Return offers the
                     // restore, always through the destination sheet, where
@@ -593,7 +593,7 @@ struct FindFilesView: View {
     private var restore: RestoreCommand {
         let selected = rows.filter { selection.contains($0.id) }
         return RestoreCommand(
-            title: "Restore Selected",
+            title: "Restore Selected…",
             isEnabled: !selected.isEmpty && !model.isRestoring,
             run: { restoreSelection(selected) }
         )

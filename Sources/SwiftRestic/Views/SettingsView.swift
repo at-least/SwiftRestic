@@ -252,7 +252,7 @@ struct SettingsView: View {
                         text: $model.configuration.settings.resticPathOverride,
                         prompt: Text(model.binary?.url.path ?? (model.binaryProblem == nil ? "Searching the usual locations…" : ""))
                     )
-                    Button("Choose") {
+                    Button("Choose…") {
                         if let url = FilePicker.chooseExecutable() {
                             model.configuration.settings.resticPathOverride = url.path
                         }

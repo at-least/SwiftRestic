@@ -379,7 +379,7 @@ struct PlanEditorSheet: View {
                             .labelsHidden()
                             .accessibilityLabel("Folder or file")
                             .focused($isPathFocused)
-                        Button("Choose") {
+                        Button("Choose…") {
                             if let url = FilePicker.chooseFolderOrFile(message: "Choose the folder or file this plan backs up") {
                                 draft.path = url.path
                             }

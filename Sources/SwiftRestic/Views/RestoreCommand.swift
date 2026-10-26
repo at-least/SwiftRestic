@@ -7,9 +7,9 @@ import SwiftUI
 /// toolbar's trailing side, the HIG's place for a page's primary action:
 /// the user chose the bottom bar.
 struct RestoreCommand {
-    /// What it restores, in the pane's words: "Restore" for a selection,
-    /// "Restore Folder" for the whole of what is open, "Restore Selected"
-    /// for Find Files' rows.
+    /// What it restores, in the pane's words: "Restore…" for a selection,
+    /// "Restore Folder…" for the whole of what is open, "Restore Selected…"
+    /// for Find Files' rows. The ellipsis: each opens the destination sheet.
     let title: String
     let isEnabled: Bool
     let run: () -> Void
@@ -35,7 +35,7 @@ struct RestoreCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Divider()
-            Button(command?.title ?? "Restore") { command?.run() }
+            Button(command?.title ?? "Restore…") { command?.run() }
                 .disabled(command?.isEnabled != true)
         }
     }

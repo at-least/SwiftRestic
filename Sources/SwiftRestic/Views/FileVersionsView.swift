@@ -195,7 +195,7 @@ struct FileVersionsView: View {
                 Button("Preview") { preview() }
                     .disabled(chosen == nil || blocked != nil || previewer.isCopying)
                     .help(blocked ?? "Look at the chosen version with Quick Look before restoring it")
-                Button("Restore") { restoreChosen() }
+                Button("Restore…") { restoreChosen() }
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)
                     .help("Restore the chosen version of this file (Return)")
@@ -208,7 +208,7 @@ struct FileVersionsView: View {
     /// the bottom bar's button's restore. Return is the list's own.
     private var restore: RestoreCommand {
         RestoreCommand(
-            title: "Restore",
+            title: "Restore…",
             isEnabled: chosen != nil && !model.isRestoring,
             run: restoreChosen
         )

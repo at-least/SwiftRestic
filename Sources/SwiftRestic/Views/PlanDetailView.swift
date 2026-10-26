@@ -284,7 +284,7 @@ struct PlanDetailView: View {
         } description: {
             Text("Choose a repository for this plan to back up to.")
         } actions: {
-            Button("Edit Plan") { router.request(.editPlan(planID)) }
+            Button("Edit Plan…") { router.request(.editPlan(planID)) }
         }
     }
 
@@ -503,7 +503,7 @@ struct PlanDetailView: View {
                 }
             }
         } accessory: {
-            Button("Edit Plan") { router.request(.editPlan(plan.id)) }
+            Button("Edit Plan…") { router.request(.editPlan(plan.id)) }
                 .controlSize(.small)
                 .help("Change what this plan leaves out")
         }

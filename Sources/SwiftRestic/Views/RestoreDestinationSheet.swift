@@ -132,7 +132,7 @@ struct RestoreDestinationSheet: View {
                         // Beside the Other folder line only: the other lines
                         // are paths and sentences that need the width.
                         if kind == .otherFolder {
-                            Button("Choose") { chooseFolder() }
+                            Button("Choose…") { chooseFolder() }
                                 .controlSize(.small)
                                 .help("Pick the folder to restore into")
                         }

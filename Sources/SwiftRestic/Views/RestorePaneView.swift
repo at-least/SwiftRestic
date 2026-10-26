@@ -463,7 +463,7 @@ struct RestorePaneView: View {
         if let record, !ids.isEmpty {
             let clicked = nodes()
             if !clicked.isEmpty {
-                Button(clicked.count == 1 ? "Restore" : "Restore \(Format.plural(clicked.count, "Item"))") {
+                Button(clicked.count == 1 ? "Restore…" : "Restore \(Format.plural(clicked.count, "Item"))…") {
                     destinationRequest = RestoreDestinationRequest.picked(
                         clicked.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) },
                         repositoryID: repositoryID,
@@ -481,7 +481,7 @@ struct RestorePaneView: View {
     /// selecting them restores everything, Original location included.
     private func restore(record: Snapshot?) -> RestoreCommand {
         RestoreCommand(
-            title: "Restore",
+            title: "Restore…",
             isEnabled: !selectedNodes.isEmpty && !model.isRestoring && record != nil,
             run: { restoreSelection() }
         )
@@ -512,7 +512,7 @@ struct RestorePaneView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 12)
-            Button("Restore") { restoreSelection() }
+            Button("Restore…") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(selectedNodes.isEmpty || model.isRestoring || record == nil)

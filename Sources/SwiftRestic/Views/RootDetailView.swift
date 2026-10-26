@@ -189,7 +189,7 @@ struct WelcomeView: View {
                 // The one prominent step. With no repository yet it starts
                 // there and carries on to the plan (`RootView.startNewPlan`),
                 // so "Add Repository" would be its own first half.
-                Button("New Backup Plan", action: onAddPlan)
+                Button("New Backup Plan…", action: onAddPlan)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 if model.configuration.repositories.isEmpty {

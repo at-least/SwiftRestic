@@ -236,7 +236,7 @@ struct FolderVersionsView: View {
                 // By the rows selected in this listing, not the ids kept
                 // across a flip: while a backup's listing is read, or after
                 // its read failed, none are, and the button is the folder's.
-                Button(selectedNodes.isEmpty ? "Restore Folder" : "Restore") { restoreSelection() }
+                Button(selectedNodes.isEmpty ? "Restore Folder…" : "Restore…") { restoreSelection() }
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)
                     .help(selectedNodes.isEmpty
@@ -255,7 +255,7 @@ struct FolderVersionsView: View {
     private var restore: RestoreCommand {
         let nodes = selectedNodes
         return RestoreCommand(
-            title: nodes.isEmpty ? "Restore Folder" : "Restore",
+            title: nodes.isEmpty ? "Restore Folder…" : "Restore…",
             isEnabled: chosen != nil && !model.isRestoring,
             run: restoreSelection
         )

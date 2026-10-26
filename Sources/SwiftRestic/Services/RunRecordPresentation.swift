@@ -34,11 +34,11 @@ enum RunFix: Equatable {
 
     var title: String {
         switch self {
-        case .editRepository, .editRepositoryShare: "Edit Repository"
-        case .addRepository: "Add Repository"
+        case .editRepository, .editRepositoryShare: "Edit Repository…"
+        case .addRepository: "Add Repository…"
         case .removeStaleLocks: "Unlock"
-        case .newPlan: "New Backup Plan"
-        case .editPlanShare, .editPlanRetention: "Edit Plan"
+        case .newPlan: "New Backup Plan…"
+        case .editPlanShare, .editPlanRetention: "Edit Plan…"
         case .pruneNow: "Clean Up Now"
         }
     }
@@ -71,7 +71,7 @@ enum MaintenanceRetry: Equatable {
 
     var title: String {
         switch self {
-        case .check: "Check Again"
+        case .check: "Check Again…"
         case .prune: "Clean Up Again"
         }
     }

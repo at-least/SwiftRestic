@@ -58,7 +58,7 @@ struct RunLogSheet: View {
             // with ⌘A ⌘C in the selectable text above.
             HStack(spacing: 10) {
                 Spacer(minLength: 0)
-                Button("Find") { finder.showFindBar() }
+                Button("Find…") { finder.showFindBar() }
                     .keyboardShortcut("f")
                     .disabled(text == nil)
                     .help("Search the log (⌘F)")

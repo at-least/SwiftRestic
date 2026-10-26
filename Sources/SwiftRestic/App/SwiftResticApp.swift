@@ -238,10 +238,10 @@ struct SwiftResticApp: App {
             CommandGroup(replacing: .newItem) {
                 // With no repository yet, through adding one
                 // (`RootView.startNewPlan`).
-                Button("New Backup Plan") { ask(.newPlan) }
+                Button("New Backup Plan…") { ask(.newPlan) }
                     .keyboardShortcut("n", modifiers: .command)
 
-                Button("Add Repository") {
+                Button("Add Repository…") {
                     // Through the router's pending intent: the ask survives
                     // the window being closed, and a menu command that
                     // visibly does nothing is a dead key.
@@ -267,9 +267,9 @@ struct SwiftResticApp: App {
             }
             RestoreCommands()
             CommandGroup(replacing: .importExport) {
-                Button("Export Settings") { ask(.exportSettings) }
+                Button("Export Settings…") { ask(.exportSettings) }
                     .disabled(!model.canTransferSettings)
-                Button("Import Settings") { ask(.importSettings) }
+                Button("Import Settings…") { ask(.importSettings) }
                     .disabled(!model.canTransferSettings)
             }
             // View ▸ Show/Hide Sidebar (⌃⌘S): with the sidebar hidden, its
@@ -326,7 +326,7 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Edit Plan") {
+            Button("Edit Plan…") {
                 if let id = p.planID { ask(.editPlan(id)) }
             }
             .disabled(!p.canEdit)
@@ -448,7 +448,7 @@ struct SwiftResticApp: App {
     private var repositoryMenu: some Commands {
         CommandMenu("Repository") {
             let r = model.repositoryCommands(for: router.selection)
-            Button("Find Files") { ask(.showFind) }
+            Button("Find Files…") { ask(.showFind) }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(!r.canFind)
             Button("Refresh All Backups") {
@@ -461,7 +461,7 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Check Now") {
+            Button("Check Now…") {
                 if let id = r.repositoryID { ask(.confirm(.check(id))) }
             }
             .disabled(!r.canMaintain)
@@ -483,7 +483,7 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Edit Repository") {
+            Button("Edit Repository…") {
                 if let id = r.repositoryID { ask(.editRepository(id)) }
             }
             .disabled(!r.canEdit)
