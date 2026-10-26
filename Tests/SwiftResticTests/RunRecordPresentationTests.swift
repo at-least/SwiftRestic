@@ -587,13 +587,11 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.detail(for: record) == PlanStatus.facts(for: record).joined(separator: " · "))
     }
 
-    @Test("exit codes are explained only where the meaning is command-independent")
+    @Test("exit codes show bare: the failure text says what they mean")
     func exitCodeText() {
-        #expect(RunRecordPresentation.exitCodeText(3) == "3 — Finished, but some data could not be read")
-        #expect(RunRecordPresentation.exitCodeText(10) == "10 — The repository does not exist")
-        #expect(RunRecordPresentation.exitCodeText(11) == "11 — The repository is already locked by another process")
-        #expect(RunRecordPresentation.exitCodeText(12) == "12 — Wrong repository password or no matching key")
-        // check exits 1 when it finds damage; "a fatal error" would mislabel it.
+        // forget's 3 is a refused deletion, not unread data.
+        #expect(RunRecordPresentation.exitCodeText(3) == "3")
+        #expect(RunRecordPresentation.exitCodeText(12) == "12")
         #expect(RunRecordPresentation.exitCodeText(1) == "1")
         #expect(RunRecordPresentation.exitCodeText(130) == "130")
         #expect(RunRecordPresentation.exitCodeText(0) == nil)
@@ -623,7 +621,7 @@ struct RunRecordPresentationTests {
         #expect(lines.first == "Backup of “Documents” — Completed with warnings")
         #expect(lines.contains("Repository: Home NAS"))
         #expect(lines.contains("Backup: \(snapshotID)"))
-        #expect(lines.contains("restic exit: 3 — Finished, but some data could not be read"))
+        #expect(lines.contains("restic exit: 3"))
         #expect(lines.contains("Unreadable items (1):"))
         #expect(lines.contains("  open /Users/me/Documents/Taxes/2025/locked.pdf: permission denied"))
         #expect(lines.contains("Hooks: 1 failed"))

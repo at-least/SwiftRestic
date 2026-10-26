@@ -211,12 +211,12 @@ enum FolderAbsence: Error, Equatable, Sendable {
             Remedy(steps: RunRecord.folderGoneAdvice, fix: nil)
         case .blockedByMacOS where fullDiskAccess != .granted:
             Remedy(
-                steps: "Turn SwiftRestic on in System Settings › Privacy & Security › Full Disk Access, then quit and reopen SwiftRestic.",
+                steps: "Turn SwiftRestic on in System Settings ▸ Privacy & Security ▸ Full Disk Access, then quit and reopen SwiftRestic.",
                 fix: .openFullDiskAccessSettings
             )
         case .deniedByFilePermissions:
             Remedy(
-                steps: "Full Disk Access doesn’t change that: select it in Finder, choose File › Get Info, and give your account Read access under Sharing & Permissions.",
+                steps: "Full Disk Access doesn’t change that: select it in Finder, choose File ▸ Get Info, and give your account Read access under Sharing & Permissions.",
                 fix: .revealInFinder
             )
         case .blockedByMacOS, .unreadable: nil

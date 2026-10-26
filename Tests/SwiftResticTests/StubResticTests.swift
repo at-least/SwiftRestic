@@ -848,7 +848,7 @@ struct StubResticTests {
         // That the line still reaches the run record is pinned in
         // BackupRunEngineTests.completeSnapshotsStayCompleteThroughWarnings.
         #expect(
-            outcome.decodingWarning?.contains("could not be decoded") == true && outcome.itemErrors.isEmpty,
+            outcome.decodingWarning?.contains("of restic’s messages") == true && outcome.itemErrors.isEmpty,
             "the outcome's warning was \(outcome.decodingWarning ?? "nil"), its items \(outcome.itemErrors)"
         )
     }

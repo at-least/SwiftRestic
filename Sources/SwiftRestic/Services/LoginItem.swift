@@ -36,7 +36,7 @@ enum LoginItem {
         switch state {
         case .enabled: "SwiftRestic will start at login."
         case .off: "SwiftRestic will not start at login, so scheduled backups only run while it is open."
-        case .needsApproval: awaitingApproval + " in System Settings › General › Login Items."
+        case .needsApproval: awaitingApproval + " in System Settings ▸ General ▸ Login Items."
         case .notFound: "macOS could not find this copy of SwiftRestic. Move it to your Applications folder and try again."
         }
     }

@@ -632,7 +632,7 @@ struct ResticService: ResticClient {
         // A run that ends without its summary is the same gap: its numbers
         // and snapshot are unknown, not zero.
         let decodingWarning: String? = if result.malformedCount > 0 {
-            "\(result.malformedCount) restic \(result.malformedCount == 1 ? "message" : "messages") could not be decoded — a restic update may have changed its output; the run’s numbers may be incomplete."
+            "SwiftRestic couldn’t read \(result.malformedCount) of restic’s messages, so this backup’s numbers may be incomplete. A restic update may have changed them."
         } else if result.summary == nil {
             "restic reported no summary — a restic update may have changed its output; the run’s numbers are unknown."
         } else {

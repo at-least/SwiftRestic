@@ -37,7 +37,7 @@ struct ConsoleModelTests {
         app.configuration.repositories.append(other)
         app.consoleDidAppear()
         #expect(console.repositoryID == app.configuration.repositories.first?.id)
-        // A check's Open in Console on the second repository: the picker
+        // A check's Show restic Console on the second repository: the picker
         // switches, and the pane appearing again keeps it.
         app.pointConsole(at: other.id)
         app.consoleDidAppear()

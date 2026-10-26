@@ -156,7 +156,7 @@ extension AppModel {
                 if let problem = error as? NotificationProblem, problem == .permissionDenied {
                     post(Banner(
                         title: "Could not send a notification",
-                        message: "macOS notification permission is off for SwiftRestic, so its notifications don’t appear.",
+                        message: "Notifications are turned off for SwiftRestic.",
                         level: .warning,
                         link: Banner.Link(title: "Open Notification Settings", url: Self.notificationSettingsURL)
                     ))
@@ -200,7 +200,7 @@ extension AppModel {
             let detail = RunRecordPresentation.detail(for: record)
             return "Completed with warnings: \(detail)\(detail.hasSuffix(".") ? "" : ".")"
         case .failed:
-            return record.failureMessage.map(Format.firstSentence) ?? "The backup failed."
+            return record.failureMessage.map { "Failed: \(Format.firstSentence($0))" } ?? "Failed."
         case .cancelled:
             return "Cancelled."
         case .skipped:

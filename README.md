@@ -818,8 +818,8 @@ the generator after editing it; the PNGs are checked in.
   first, plus `tag` and `copy` — re-reads the listing when it ends, so the
   sidebar, Files tabs and counts drop what a `forget` removed at once. A
   check that found errors advises "restic repair can recover some
-  damage."; its Activity drawer and the Maintenance card offer *Open in
-  Console*, opening the console on that repository with its password and
+  damage."; its Activity drawer and the Maintenance card offer *Show
+  restic Console*, opening the console on that repository with its password and
   typing nothing: `repair` stays a command the user writes, confirmed first.
 - **Activity** — every run with its outcome, repository, duration, bytes
   added, the files restic could not read, and a plain-text log (Show Log,

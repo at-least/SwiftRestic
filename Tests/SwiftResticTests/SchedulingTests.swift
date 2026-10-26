@@ -1326,7 +1326,7 @@ struct LoginItemTests {
         // the banner's full form has no button and spells the pane out.
         #expect(LoginItem.needsApprovalShort == "Waiting for approval.")
         #expect(LoginItem.description(of: .needsApproval)
-            == "Waiting for approval in System Settings › General › Login Items.")
+            == "Waiting for approval in System Settings ▸ General ▸ Login Items.")
         #expect(LoginItemAdvice.enabledConfirmation == LoginItem.description(of: .enabled))
     }
 

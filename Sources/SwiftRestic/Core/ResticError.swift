@@ -92,6 +92,9 @@ enum ResticError: Error, LocalizedError, Equatable {
             if let words = Self.rcloneWords(message) { return words }
             let known = ResticError.knownExitCodeDescription(code)
             if message.isEmpty { return known ?? "restic exited with code \(code)." }
+            // Exit 1 is restic's every fatal error, and its message starts
+            // "Fatal:" already; a prefix only delayed the reason.
+            if code == 1 { return message }
             return known.map { "\($0) — \(message)" } ?? message
         case .cancelled:
             return "The operation was cancelled."
@@ -110,7 +113,7 @@ enum ResticError: Error, LocalizedError, Equatable {
                 ? "Timed out after \(Format.duration(seconds)) and was stopped."
                 : "Timed out after \(Format.duration(seconds)) and was stopped — restic kept retrying: \(cause)."
         case let .idleStalled(seconds):
-            return "Stopped reporting any progress for \(Format.duration(seconds)) and was stopped — check the repository’s connection and try again."
+            return "restic reported no progress for \(Format.duration(seconds)), so it was stopped. Check the repository’s connection and try again."
         case let .malformedOutput(detail):
             return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output."
         case let .stagedFileMoveFailed(path, reason):
@@ -178,7 +181,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     static func knownExitCodeDescription(_ code: Int32) -> String? {
         switch code {
         case 1: "restic reported a fatal error"
-        case 2: "Go runtime error"
+        case 2: "restic stopped unexpectedly"
         case 3: "Finished, but some data could not be read"
         case repositoryMissingCode: "The repository does not exist"
         case repositoryLockedCode: "The repository is already locked by another process"

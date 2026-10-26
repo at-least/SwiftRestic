@@ -116,9 +116,8 @@ struct ResticErrorTests {
         let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
         #expect(changedText.hasPrefix("This server’s SSH key has changed since this Mac last connected"))
         #expect(changedText.contains("ssh-keygen -R"))
-        // Any other fatal error keeps its wording.
-        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription
-            == "restic reported a fatal error — \(fatal)")
+        // Any other fatal error is restic's words alone.
+        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == fatal)
     }
 
     @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic could not get from it")
@@ -169,9 +168,8 @@ struct ResticErrorTests {
         #expect(ResticError.commandFailed(exitCode: 1, message: missing).errorDescription == ResticError.rcloneMissing)
         #expect(ResticError.rcloneMissing == "rclone is not installed. Install it with brew install rclone.")
 
-        // Any other fatal error keeps its wording.
-        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription
-            == "restic reported a fatal error — \(fatal)")
+        // Any other fatal error is restic's words alone.
+        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == fatal)
     }
 
     @Test("restic's Go stack trace never reaches a message; a second line of restic's own stays")

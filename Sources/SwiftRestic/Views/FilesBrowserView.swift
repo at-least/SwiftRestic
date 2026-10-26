@@ -894,7 +894,7 @@ struct FolderFixButton: View {
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
-            .help("Select it in Finder, where File › Get Info shows its permissions")
+            .help("Select it in Finder, where File ▸ Get Info shows its permissions")
         }
     }
 }

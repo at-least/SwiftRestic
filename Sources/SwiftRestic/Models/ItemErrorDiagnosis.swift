@@ -170,12 +170,12 @@ enum ItemErrorDiagnosis {
             "macOS blocked \(Format.plural(count, "item")) because SwiftRestic didn’t have Full Disk Access at the time. It has it now — back up again to include them."
         case .protectedEvenWithAccess(let count):
             offersExclude
-                ? "macOS blocked \(Format.plural(count, "item")) even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself."
-                : "macOS blocked \(Format.plural(count, "item")) even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself. Exclude them if this keeps happening."
+                ? "macOS blocked \(Format.plural(count, "item")) even though SwiftRestic had Full Disk Access — \(count == 1 ? "it is" : "they are") likely protected by macOS itself."
+                : "macOS blocked \(Format.plural(count, "item")) even though SwiftRestic had Full Disk Access — \(count == 1 ? "it is" : "they are") likely protected by macOS itself. Exclude \(count == 1 ? "it" : "them") if this keeps happening."
         case .filePermissions(let count):
             offersExclude
-                ? "\(Format.plural(count, "item")) can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info."
-                : "\(Format.plural(count, "item")) can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info, or exclude them."
+                ? "\(Format.plural(count, "item")) can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix \(count == 1 ? "it" : "them") in Finder with File ▸ Get Info."
+                : "\(Format.plural(count, "item")) can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix \(count == 1 ? "it" : "them") in Finder with File ▸ Get Info, or exclude \(count == 1 ? "it" : "them")."
         }
     }
 

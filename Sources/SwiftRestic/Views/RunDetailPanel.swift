@@ -327,13 +327,13 @@ struct ConsoleRouteButton: View {
     let repositoryID: UUID
 
     var body: some View {
-        Button("Open in Console") {
+        Button("Show restic Console") {
             model.pointConsole(at: repositoryID)
             router.request(.showConsole)
         }
         // The Repository menu's console item's own rule.
         .disabled(!model.isResticAvailable)
-        .help("The console runs restic repair with the repository’s password")
+        .help("Type restic repair there — the repository’s password is supplied")
     }
 }
 

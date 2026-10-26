@@ -89,15 +89,15 @@ struct ItemErrorDiagnosisTests {
         #expect(ItemErrorDiagnosis.detail(.retryNowGranted(2), offersExclude: false)
             == "macOS blocked 2 items because SwiftRestic didn’t have Full Disk Access at the time. It has it now — back up again to include them.")
         #expect(ItemErrorDiagnosis.detail(.protectedEvenWithAccess(1), offersExclude: false)
-            == "macOS blocked 1 item even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself. Exclude them if this keeps happening.")
+            == "macOS blocked 1 item even though SwiftRestic had Full Disk Access — it is likely protected by macOS itself. Exclude it if this keeps happening.")
         #expect(ItemErrorDiagnosis.detail(.filePermissions(1), offersExclude: false)
-            == "1 item can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info, or exclude them.")
+            == "1 item can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix it in Finder with File ▸ Get Info, or exclude it.")
         // Exclude These Items under the sentence: it says the exclusion, the
         // sentence no longer does.
         #expect(ItemErrorDiagnosis.detail(.protectedEvenWithAccess(2), offersExclude: true)
             == "macOS blocked 2 items even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself.")
         #expect(ItemErrorDiagnosis.detail(.filePermissions(2), offersExclude: true)
-            == "2 items can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them with Finder › Get Info.")
+            == "2 items can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix them in Finder with File ▸ Get Info.")
 
         #expect(ItemErrorDiagnosis.headline(.grantFullDiskAccess(1)) == "macOS blocked 1 item: SwiftRestic needs Full Disk Access.")
         #expect(ItemErrorDiagnosis.headline(.retryNowGranted(3)) == "macOS blocked 3 items while SwiftRestic lacked Full Disk Access.")

@@ -205,7 +205,7 @@ struct ActivityView: View {
                 model.clearRunHistory()
             }
         } message: {
-            Text("This permanently removes the \(Format.plural(model.configuration.runs.count, "item")) and their logs. The backups in your repositories are not affected.")
+            Text("This permanently removes the history and its logs. The backups in your repositories aren’t affected.")
         }
         .sheet(item: $comparing) { target in
             SnapshotDiffView(target: target)

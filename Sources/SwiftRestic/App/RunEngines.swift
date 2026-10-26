@@ -176,7 +176,7 @@ enum BackupRunEngine {
                 if result.shouldAbort {
                     record.outcome = .failed
                     record.failureMessage =
-                        "A before-backup hook failed and is set to cancel the backup."
+                        "The backup didn’t run because a hook that runs before it failed."
                     sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
                     await finish(
                         record: &record, plan: plan, hooks: hooks, context: hookContext,
@@ -527,7 +527,7 @@ enum MaintenanceRunEngine {
                 if result.shouldAbort {
                     record.outcome = .failed
                     record.failureMessage =
-                        "A before-maintenance hook failed and is set to cancel the \(task.displayName.lowercased())."
+                        "The \(task.displayName.lowercased()) didn’t run because a hook that runs before it failed."
                     // Stamped like any other failure: a hook that always says no
                     // must not have the scheduler asking again every minute.
                     sink.stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)

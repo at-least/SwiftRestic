@@ -1098,7 +1098,7 @@ struct AppModelTests {
         #expect(record.hookMessages.contains { $0.contains("gatekeeper") && $0.contains("disk is busy") })
         #expect(record.itemErrors.isEmpty)
         // The after-failure hook still fires, with the reason.
-        #expect(try String(contentsOfFile: markerPath, encoding: .utf8).contains("cancel the check"))
+        #expect(try String(contentsOfFile: markerPath, encoding: .utf8).contains("check didn’t run because a hook"))
         // A hook that always refuses must not turn into a retry every minute.
         #expect(model.repository(id: repository.id)?.maintenance.lastCheckAt != nil)
 

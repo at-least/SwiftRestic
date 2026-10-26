@@ -49,8 +49,8 @@ enum RunFix: Equatable {
         switch self {
         case .editRepository, .addRepository, .newPlan, .pruneNow, .editPlanRetention: nil
         case .removeStaleLocks: "A lock no run here holds is in the way"
-        case .editRepositoryShare: "The network share did not take its saved password or refused — check the share and its password in the repository editor"
-        case .editPlanShare: "The network share did not take its saved password or refused — check the share and its password on the plan editor’s Excluding tab"
+        case .editRepositoryShare: "The share’s saved password is in the repository editor"
+        case .editPlanShare: "The share’s saved password is on the plan editor’s Excluding tab"
         }
     }
 }
@@ -362,20 +362,13 @@ enum RunRecordPresentation {
         count == 1 ? "kept as it was" : "kept as they were"
     }
 
-    /// restic's exit code for the drawer and Copy Details, explained only
-    /// where the meaning is the same for every command (`restic backup
-    /// --help`). `check` exits 1 when it finds damage, so "restic reported a
-    /// fatal error" would mislabel a damaged-repository verdict; 1 and the
-    /// rest show bare. Nil for 0, which says nothing worth a row.
+    /// restic's exit code for the drawer and Copy Details, bare: the
+    /// failure text above it already says what went wrong, and a gloss
+    /// would be wrong for some commands (`forget`'s 3 is a refused
+    /// deletion, `check`'s 1 a damaged-repository verdict). Nil for 0,
+    /// which says nothing worth a row.
     static func exitCodeText(_ code: Int32) -> String? {
-        guard code != 0 else { return nil }
-        switch code {
-        case ResticError.backupPartialSuccessCode, ResticError.repositoryMissingCode,
-             ResticError.repositoryLockedCode, ResticError.wrongPasswordCode:
-            return ResticError.knownExitCodeDescription(code).map { "\(code) — \($0)" } ?? String(code)
-        default:
-            return String(code)
-        }
+        code == 0 ? nil : String(code)
     }
 
     /// Whether a backup record's file and byte numbers mean anything: a run
