@@ -151,9 +151,9 @@ struct FilesPaneView: View {
             // the user was reading one level up (or Show Versions named),
             // when this item existed then — walking down keeps the era —
             // else the backup this item was last left at.
-            let hint = router.takeFilesVersionHint()
             if !didOpen {
                 didOpen = true
+                let hint = router.takeFilesVersionHint()
                 let remembered = router.filesChosenVersion[node]
                 let opening = node.isDirectory
                     ? loaded.preferredVersion(previousID: hint, rememberedID: remembered)?.id

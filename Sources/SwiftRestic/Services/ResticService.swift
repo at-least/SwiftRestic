@@ -380,13 +380,13 @@ struct ResticService: ResticClient {
         // The browse cache keeps a listing for good: a lost line must not
         // become a missing item.
         try Self.requireWhole(result, item: "node")
-        let normalized = ResticPath.normalized(path)
+        let normalized = PathKey(ResticPath.normalized(path))
         var nodes: [SnapshotNode] = []
         for message in result.messages {
             guard case let .node(node) = message else { continue }
             let nodePath = ResticPath.normalized(node.path)
-            guard nodePath != normalized else { continue }
-            guard ResticPath.parent(of: nodePath) == normalized else { continue }
+            guard PathKey(nodePath) != normalized else { continue }
+            guard PathKey(ResticPath.parent(of: nodePath)) == normalized else { continue }
             nodes.append(node)
         }
         return Self.sortedForBrowser(nodes)

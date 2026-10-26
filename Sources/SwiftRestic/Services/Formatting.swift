@@ -307,14 +307,10 @@ enum Format {
     /// back on screen. Empty outside every root.
     static func pathChain(of path: String, roots: [String]) -> [String] {
         guard let root = containingRoot(of: path, in: roots) else { return [] }
-        var chain = [root]
-        let remainder = root == "/" ? path.dropFirst() : path.dropFirst(root.count + 1)
-        var walked = root
-        for segment in remainder.split(separator: "/") {
-            walked = walked == "/" ? "/\(segment)" : walked + "/\(segment)"
-            chain.append(walked)
-        }
-        return chain
+        // Byte steps, as `holds` matched the root: a Character walk drops a
+        // combining mark that joins a segment's first scalar to its slash.
+        let below = ResticPath.ancestors(of: path).filter { ResticPath.holds(root, $0) }
+        return below.reversed() + [path]
     }
 
 }

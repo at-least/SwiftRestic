@@ -312,6 +312,18 @@ struct FormattingTests {
         #expect(Format.pathChain(of: "/Caf\u{0065}\u{0301}/f", roots: ["/Caf\u{00E9}"]).isEmpty)
     }
 
+    @Test("pathChain steps by bytes where a grapheme cluster swallows a separator")
+    func pathChainStepsByBytes() {
+        // The root holds the path byte for byte (ResticPath.holds); the walk
+        // below the root must cut on the same bytes, or a combining mark on
+        // the first segment's first scalar ("/\u{301}" is one Character) is
+        // dropped and the chain names a path no backup holds.
+        #expect(Format.pathChain(of: "/a/\u{301}x", roots: ["/a"]) == ["/a", "/a/\u{301}x"])
+        // A Prepend character ending the root joins the slash after it into
+        // one Character, so a Character count of the root falls one short.
+        #expect(Format.pathChain(of: "/new\u{0600}/f", roots: ["/new\u{0600}"]) == ["/new\u{0600}", "/new\u{0600}/f"])
+    }
+
     @Test("a whole-disk root chains every absolute path")
     func rootSlashMatchesEverything() {
         // "/" contains every absolute path: the naive prefix check
