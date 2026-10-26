@@ -140,22 +140,21 @@ struct SidebarView: View {
         let commands = model.planCommands(for: .plan(plan.id))
         // The plan card's swap, worded as the Plan menu's: a running plan's
         // row offers the Stop that matters now, not a second backup.
+        // A context menu leaves out what can't run (HIG: "Hide unavailable
+        // menu items, don't dim them"); the Plan menu keeps its dimmed
+        // items, a regular menu's place to say why.
         if model.isRunning(planID: plan.id) {
-            Button(commands.stopTitle) { model.cancelBackup(planID: plan.id) }
-                .disabled(!commands.canStop)
-        } else {
+            if commands.canStop {
+                Button(commands.stopTitle) { model.cancelBackup(planID: plan.id) }
+            }
+        } else if commands.canBackUp {
             Button("Back Up Now") { model.runBackup(planID: plan.id) }
-                // The rule every Back Up Now follows, the menu bar's included:
-                // enabled only for a complete, idle plan with restic to run it —
-                // an error banner is not a substitute for a disabled item.
-                .disabled(!commands.canBackUp)
         }
         Button("Edit Plan…") { onEditPlan(plan) }
         // The Schedule card's pair, word for word. The row's caption says the
         // pause while the schedule is held; manual runs stay possible either
         // way, and a manual plan has no schedule to pause — no item either,
-        // as the card has no control (the menu bar's Plan menu keeps its
-        // dimmed item, a regular menu's place to say why).
+        // as the card has no control.
         if !plan.isScheduleActive(at: .now) {
             Button("Resume Schedule") { model.resumePlanSchedule(id: plan.id) }
         } else if plan.schedule.frequency != .manual {
@@ -167,8 +166,9 @@ struct SidebarView: View {
                 }
             }
         }
-        Button("Apply Retention Now") { router.request(.applyRetention(plan.id)) }
-            .disabled(!commands.canApplyRetention)
+        if commands.canApplyRetention {
+            Button("Apply Retention Now") { router.request(.applyRetention(plan.id)) }
+        }
         Divider()
         Button("Remove Plan", role: .destructive) { onDeletePlan(plan) }
     }
@@ -180,13 +180,14 @@ struct SidebarView: View {
         Divider()
         Button("Edit Repository…") { onEditRepository(repository) }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
-        Divider()
         // The two of the Repository menu's a row most often wants; the
-        // shared confirmations ask first.
-        Button("Check Now…") { router.request(.confirm(.check(repository.id))) }
-            .disabled(!commands.canMaintain)
-        Button("Clean Up Now") { router.request(.confirm(.prune(repository.id))) }
-            .disabled(!commands.canMaintain)
+        // shared confirmations ask first. Left out, not dimmed, while they
+        // can't run, as the plan row's commands.
+        if commands.canMaintain {
+            Divider()
+            Button("Check Now…") { router.request(.confirm(.check(repository.id))) }
+            Button("Clean Up Now") { router.request(.confirm(.prune(repository.id))) }
+        }
         Divider()
         Button("Remove from SwiftRestic", role: .destructive) {
             onRemoveRepository(repository)

@@ -77,8 +77,8 @@ struct OtherGroupPageSummary: Equatable {
             // one way in, named here because the row's tooltip is only the
             // identity line.
             explanation = snapshots.count == 1
-                ? "Made outside SwiftRestic, so it can’t become a plan. Repository ▸ restic Console can tag it into one; tagging rewrites every backup’s ID."
-                : "Made outside SwiftRestic, so they can’t become a plan. Repository ▸ restic Console can tag them into one; tagging rewrites every backup’s ID."
+                ? "Made outside SwiftRestic, so it can’t be continued. Repository ▸ restic Console can give it a plan’s tag; tagging rewrites every backup’s ID."
+                : "Made outside SwiftRestic, so they can’t be continued. Repository ▸ restic Console can give them a plan’s tag; tagging rewrites every backup’s ID."
         } else if let formerPlan {
             let name = formerPlan.label(among: allPlans)
             // Where it went: the destination the sidebar's caption names,

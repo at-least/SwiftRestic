@@ -98,7 +98,7 @@ struct OverviewMetricsTests {
             "Can’t read backups — Repository /nas is not reachable",
             "No repository set",
             "No backups yet",
-            "The repository has backups, but none from this plan yet.",
+            "None from this plan yet — the repository holds others",
             "Checking…",
         ])
         #expect(rows.last?.stateText.hasPrefix("Last backup ") == true)

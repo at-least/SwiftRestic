@@ -187,7 +187,7 @@ struct RepositoryDetailView: View {
                             // and "14 min" is what separates working from hung.
                             TimelineView(.periodic(from: .now, by: 1)) { context in
                                 Text(
-                                    "\(activity.task.displayName) running — \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
+                                    "\(activity.task.inFlightTitle) \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
                                 )
                                 .monospacedDigit()
                             }

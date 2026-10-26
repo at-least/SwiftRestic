@@ -344,7 +344,7 @@ enum OverviewMetrics {
                 // the same distinction the plan page's Snapshots row draws;
                 // a bare "No snapshots yet" would be false about a
                 // repository adopted with snapshots already in it.
-                line = "The repository has backups, but none from this plan yet."
+                line = PlanStatus.noneFromThisPlanFact
             }
             return ProtectionRow(
                 plan: plan, among: plans, stateText: line, isKnown: true,

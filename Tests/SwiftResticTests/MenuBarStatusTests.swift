@@ -223,7 +223,7 @@ struct MenuBarStatusTests {
             repositories: [repository],
             maintenance: [repository.id: MaintenanceActivity(task: .check)]
         )
-        #expect(busy.map(\.text) == ["\(repository.label(among: [repository])) — check running"])
+        #expect(busy.map(\.text) == ["\(repository.label(among: [repository])) — Checking…"])
     }
 
     @Test("upkeep and restores hold the idle headline back, like a backup does")

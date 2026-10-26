@@ -147,7 +147,7 @@ struct OtherGroupView: View {
                     }
                 }
                 if !summary.excludes.isEmpty {
-                    DetailRow("Excludes") {
+                    DetailRow("Excluding") {
                         Text(summary.excludes.joined(separator: ", "))
                     }
                 }

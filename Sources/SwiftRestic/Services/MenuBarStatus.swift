@@ -376,10 +376,9 @@ enum MenuBarStatus {
     ) -> [RunningLine] {
         repositories.compactMap { repository in
             guard let work = maintenance[repository.id] else { return nil }
-            let task = work.task.displayName.lowercased()
             return RunningLine(
                 id: "maintenance-\(repository.id.uuidString)",
-                text: "\(repository.label(among: repositories)) — \(task) running"
+                text: "\(repository.label(among: repositories)) — \(work.task.inFlightTitle)"
             )
         }
     }

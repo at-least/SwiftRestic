@@ -62,7 +62,7 @@ struct PlanDetailView: View {
                 model.cancelBackup(planID: plan.id)
             }
             .disabled(!commands.canStop)
-            .help("\(commands.stopTitle) (⌘.) — recorded as cancelled")
+            .help("Activity records it as cancelled (⌘.)")
         } else {
             Button("Back Up Now") {
                 model.runBackup(planID: plan.id)
@@ -104,7 +104,7 @@ struct PlanDetailView: View {
     /// says; the help must not promise one.
     private func resumeHelp(_ plan: BackupPlan) -> String {
         if plan.schedule.frequency == .manual {
-            return "Switch “Run on schedule” back on — this plan has no schedule, so it still runs only when you click Back Up Now"
+            return "Turn “Run on schedule” back on"
         }
         return "Run this plan on its schedule again"
     }
@@ -282,9 +282,11 @@ struct PlanDetailView: View {
         ContentUnavailableView {
             Label("No repository set", systemImage: "questionmark.folder")
         } description: {
-            Text("Choose a repository for this plan to back up to.")
+            Text("Its repository is no longer in SwiftRestic.")
         } actions: {
-            Button("Edit Plan…") { router.request(.editPlan(planID)) }
+            // Not Edit Plan…: the editor shows a saved plan's repository
+            // without a picker and refuses to save one without a repository.
+            Button("Remove Plan") { router.request(.confirm(.deletePlan(planID))) }
         }
     }
 
@@ -436,7 +438,7 @@ struct PlanDetailView: View {
                 case .loaded:
                     Text(
                         model.snapshots(for: repositoryID).isEmpty
-                            ? "None yet — they appear after the first backup"
+                            ? "No backups yet"
                             : PlanStatus.noneFromThisPlanFact
                     )
                     .foregroundStyle(.secondary)

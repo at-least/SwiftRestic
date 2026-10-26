@@ -156,4 +156,12 @@ enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {
         case .check: "Check"
         }
     }
+
+    /// The status line while it runs.
+    var inFlightTitle: String {
+        switch self {
+        case .prune: "Cleaning up…"
+        case .check: "Checking…"
+        }
+    }
 }

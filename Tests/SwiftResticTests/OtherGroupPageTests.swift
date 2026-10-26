@@ -153,7 +153,7 @@ struct OtherGroupPageTests {
 
         #expect(page.title == "Music")
         #expect(page.explanation
-            == "Made outside SwiftRestic, so they can’t become a plan. Repository ▸ restic Console can tag them into one; tagging rewrites every backup’s ID.")
+            == "Made outside SwiftRestic, so they can’t be continued. Repository ▸ restic Console can give them a plan’s tag; tagging rewrites every backup’s ID.")
         #expect(page.formerPlan == nil)
         #expect(page.planTag == nil)
         #expect(page.newestSnapshotID == "l2")
@@ -163,7 +163,7 @@ struct OtherGroupPageTests {
 
         let single = BackupShelves(listing: [l1], plans: [], allPlans: [])
         #expect(single.otherGroupPage(.lineage(key), repositories: [], localHost: "mac")?.explanation
-            == "Made outside SwiftRestic, so it can’t become a plan. Repository ▸ restic Console can tag it into one; tagging rewrites every backup’s ID.")
+            == "Made outside SwiftRestic, so it can’t be continued. Repository ▸ restic Console can give it a plan’s tag; tagging rewrites every backup’s ID.")
         // Gone once no backup of it is left.
         let empty = BackupShelves(listing: [], plans: [], allPlans: [])
         #expect(empty.lineageGroup(key) == nil)
