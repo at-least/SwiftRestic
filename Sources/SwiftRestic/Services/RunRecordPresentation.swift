@@ -189,13 +189,17 @@ enum RunRecordPresentation {
         case .backup, .forget, .restore:
             // The plan as it is called now. A restore carries no planID, so
             // its step label is the stored name — the label is its subject.
-            let planName = run.planID.flatMap { id in plans.first { $0.id == id }?.label(among: plans) } ?? run.planName
-            return planWithRepository(planName, repositoryName: repositoryName)
+            return planWithRepository(currentPlanName(of: run, plans: plans), repositoryName: repositoryName)
         case .check, .prune:
             // The repository is the subject; the stored planName already
             // holds it when the repository is gone.
             return repositoryName ?? run.planName
         }
+    }
+
+    /// The run's plan as it is called now, else the name the run stored.
+    private static func currentPlanName(of run: RunRecord, plans: [BackupPlan]) -> String {
+        run.planID.flatMap { id in plans.first { $0.id == id }?.label(among: plans) } ?? run.planName
     }
 
     /// A repository page's Recent problems row title: the plan as it is
@@ -205,7 +209,7 @@ enum RunRecordPresentation {
     static func problemRowTitle(for run: RunRecord, plans: [BackupPlan]) -> String {
         switch run.kind {
         case .backup, .forget, .restore:
-            let name = run.planID.flatMap { id in plans.first { $0.id == id }?.label(among: plans) } ?? run.planName
+            let name = currentPlanName(of: run, plans: plans)
             return name.isEmpty ? run.kind.displayName : name
         case .check, .prune:
             return run.kind.displayName
@@ -264,7 +268,7 @@ enum RunRecordPresentation {
         switch run.kind {
         case .backup:
             // A reporting gap, alone: the line explains itself.
-            if run.outcome == .completedWithErrors, let line = run.itemErrors.dropFirst(run.unreadableItems.count).first {
+            if run.outcome == .completedWithErrors, let line = run.trailingItemErrors.first {
                 return line
             }
             return "\(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed"
@@ -450,7 +454,7 @@ enum RunRecordPresentation {
             if unlisted > 0 { lines.append("  … and \(Format.count(unlisted)) more") }
         }
         // The decoding gap and the retention skip explain themselves.
-        lines += run.itemErrors.dropFirst(run.unreadableItems.count)
+        lines += run.trailingItemErrors
         if !run.hookMessages.isEmpty {
             lines.append("Hooks: \(Format.count(run.hookMessages.count)) failed")
         }

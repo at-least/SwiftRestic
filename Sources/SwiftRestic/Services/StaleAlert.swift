@@ -26,13 +26,7 @@ enum StaleAlert {
     /// run.
     static func window(thresholdDays: Int, schedule: Schedule) -> TimeInterval {
         let day: TimeInterval = 86400
-        let interval: TimeInterval = switch schedule.frequency {
-        case .manual: 0
-        case .hourly: TimeInterval(max(1, schedule.intervalHours)) * 3600
-        case .daily: day
-        case .weekly: 7 * day
-        }
-        return max(TimeInterval(thresholdDays) * day, interval + day)
+        return max(TimeInterval(thresholdDays) * day, (schedule.interval ?? 0) + day)
     }
 
     /// The plans to name now. Only plans the scheduler would start by
@@ -51,8 +45,7 @@ enum StaleAlert {
     ) -> [StalePlanAlert] {
         guard thresholdDays > 0 else { return [] }
         return plans.compactMap { plan in
-            guard plan.isScheduleActive(at: now), plan.schedule.frequency != .manual,
-                  plan.isConfigurationComplete, !running.contains(plan.id),
+            guard plan.runsOnSchedule(at: now), !running.contains(plan.id),
                   let last = PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshotTimes[plan.id]),
                   plan.staleAlertedFor != last
             else { return nil }

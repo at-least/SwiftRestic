@@ -56,17 +56,7 @@ enum RetentionProjection {
         calendar: Calendar = .current
     ) -> Outcome? {
         guard policy.isSafeToRun else { return nil }
-        let step: TimeInterval
-        switch schedule.frequency {
-        case .manual:
-            return nil
-        case .hourly:
-            step = TimeInterval(max(1, schedule.intervalHours) * 3600)
-        case .daily:
-            step = 86_400
-        case .weekly:
-            step = 7 * 86_400
-        }
+        guard let step = schedule.interval else { return nil }
 
         // The furthest back any rule can reach. A rule with count C on period
         // P spans C buckets; at cadence `step` the snapshots covering that

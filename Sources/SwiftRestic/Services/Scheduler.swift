@@ -56,7 +56,7 @@ enum Scheduler {
     ) -> [UUID] {
         plans
             .filter {
-                $0.isScheduleActive(at: now) && $0.schedule.frequency != .manual && $0.isConfigurationComplete
+                $0.runsOnSchedule(at: now)
                     && !running.contains($0.id) && newestBackupOutcome[$0.id] == .skipped && sourcesExist($0)
                     && repositoryReachable($0)
             }
@@ -111,24 +111,18 @@ enum Scheduler {
     ) -> [BackupPlan] {
         var startingRepositoryIDs = Set<UUID>()
         return plans
-            .filter { plan in
-                guard plan.isScheduleActive(at: now), plan.isConfigurationComplete else { return false }
-                guard let repositoryID = plan.repositoryID,
-                      existingRepositoryIDs.contains(repositoryID)
-                else { return false }
-                guard !busyPlanIDs.contains(plan.id) else { return false }
-                if busyRepositoryIDs.contains(repositoryID) { return false }
-                guard plan.schedule.frequency != .manual else { return false }
-                guard let due = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now, calendar: calendar) else { return false }
-                return due <= now
+            .compactMap { plan -> (plan: BackupPlan, repositoryID: UUID, due: Date)? in
+                guard plan.runsOnSchedule(at: now),
+                      let repositoryID = plan.repositoryID, existingRepositoryIDs.contains(repositoryID),
+                      !busyPlanIDs.contains(plan.id), !busyRepositoryIDs.contains(repositoryID),
+                      let due = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now, calendar: calendar),
+                      due <= now
+                else { return nil }
+                return (plan, repositoryID, due)
             }
-            .sorted { lhs, rhs in
-                let lhsDue = lhs.schedule.nextRunDate(after: lhs.lastRunAt, now: now, calendar: calendar) ?? now
-                let rhsDue = rhs.schedule.nextRunDate(after: rhs.lastRunAt, now: now, calendar: calendar) ?? now
-                return lhsDue < rhsDue
-            }
-            // The first filter kept only plans with a repository.
-            .filter { startingRepositoryIDs.insert($0.repositoryID!).inserted }
+            .sorted { $0.due < $1.due }
+            .filter { startingRepositoryIDs.insert($0.repositoryID).inserted }
+            .map(\.plan)
     }
 
     /// Repository upkeep that has fallen due.

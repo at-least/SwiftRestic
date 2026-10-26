@@ -181,11 +181,12 @@ enum MenuBarStatus {
         guard hold == nil, isResticAvailable else { return nil }
         if hasNoRepositories { return "No repository set" }
         guard let nextRun else { return "No backups scheduled" }
-        let name = RunRecordPresentation.planWithRepository(nextRun.plan, plans: plans, repositories: repositories)
         // The plan page's Next backup tile spells the same moment in these
         // words; the scheduler clamps the date to now, so a due run reads
         // "Due now".
-        return "Next: \(name) — \(Format.tileTimestamp(nextRun.date))"
+        return "Next: " + RunRecordPresentation.nextRunLine(
+            plan: nextRun.plan, date: nextRun.date, plans: plans, repositories: repositories
+        )
     }
 
     /// One tray row per plan, in configuration order: Back Up Now while the

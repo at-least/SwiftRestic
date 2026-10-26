@@ -34,14 +34,18 @@ enum KeychainStore {
         "\(ownerID.uuidString).\(slot.rawValue)"
     }
 
-    static func read(ownerID: UUID, slot: Slot) throws -> String? {
-        let query: [String: Any] = [
+    private static func query(ownerID: UUID, slot: Slot) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account(for: ownerID, slot: slot),
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+    }
+
+    static func read(ownerID: UUID, slot: Slot) throws -> String? {
+        var query = query(ownerID: ownerID, slot: slot)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         switch status {
@@ -61,17 +65,12 @@ enum KeychainStore {
 
     /// Writes a secret, or removes it when `value` is `nil` or empty.
     static func write(_ value: String?, ownerID: UUID, slot: Slot) throws {
-        let account = account(for: ownerID, slot: slot)
         guard let value, !value.isEmpty else {
             try delete(ownerID: ownerID, slot: slot)
             return
         }
 
-        let base: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
+        let base = query(ownerID: ownerID, slot: slot)
         let data = Data(value.utf8)
 
         let updateStatus = SecItemUpdate(
@@ -93,12 +92,7 @@ enum KeychainStore {
     }
 
     static func delete(ownerID: UUID, slot: Slot) throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account(for: ownerID, slot: slot),
-        ]
-        let status = SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query(ownerID: ownerID, slot: slot) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(status)
         }

@@ -152,6 +152,20 @@ struct ResticService: ResticClient {
         return String(decoding: name.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }()
 
+    /// Every repository command: the repository's global flags lead
+    /// `invocation`'s arguments, and its environment is the run's.
+    private func run(
+        _ context: RepositoryContext,
+        _ invocation: ResticInvocation,
+        onMessage: (@Sendable (ResticMessage) -> Void)? = nil,
+        onRawLine: (@Sendable (String) -> Void)? = nil
+    ) async throws -> ResticRunResult {
+        var invocation = invocation
+        invocation.arguments = context.globalArguments + invocation.arguments
+        invocation.environment = context.environment
+        return try await runner.run(binary: binary, invocation: invocation, onMessage: onMessage, onRawLine: onRawLine)
+    }
+
     // MARK: - Repository lifecycle
 
     func version() async throws -> String {
@@ -191,13 +205,7 @@ struct ResticService: ResticClient {
     /// Creates a new repository. Fails if one already exists at the location.
     @discardableResult
     func initializeRepository(_ context: RepositoryContext) async throws -> String? {
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["init", "--json"],
-                environment: context.environment
-            )
-        )
+        let result = try await run(context, ResticInvocation(arguments: ["init", "--json"]))
         for message in result.messages {
             if case let .initialized(info) = message { return info.id }
         }
@@ -208,11 +216,10 @@ struct ResticService: ResticClient {
     /// Returns `false` when the repository does not exist yet (exit code 10).
     func repositoryExists(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> Bool {
         do {
-            _ = try await runner.run(
-                binary: binary,
-                invocation: ResticInvocation(
-                    arguments: context.globalArguments + ["cat", "config", "--json"],
-                    environment: context.environment,
+            _ = try await run(
+                context,
+                ResticInvocation(
+                    arguments: ["cat", "config", "--json"],
                     timeout: timeout,
                     retainFullOutput: true
                 )
@@ -242,32 +249,19 @@ struct ResticService: ResticClient {
         ) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: file.path])
         }
-        _ = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["key", "passwd", "--json", "--new-password-file", file.path],
-                environment: context.environment
-            )
-        )
+        _ = try await run(context, ResticInvocation(arguments: ["key", "passwd", "--json", "--new-password-file", file.path]))
     }
 
     func unlock(_ context: RepositoryContext) async throws {
-        _ = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["unlock", "--json"],
-                environment: context.environment
-            )
-        )
+        _ = try await run(context, ResticInvocation(arguments: ["unlock", "--json"]))
     }
 
     /// Lock-free, for `find`'s reasons.
     func stats(_ context: RepositoryContext, timeout: TimeInterval? = nil) async throws -> RepositoryStats {
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["stats", "--json", "--mode", "raw-data", "--no-lock"],
-                environment: context.environment,
+        let result = try await run(
+            context,
+            ResticInvocation(
+                arguments: ["stats", "--json", "--mode", "raw-data", "--no-lock"],
                 timeout: timeout,
                 retainFullOutput: true
             )
@@ -276,15 +270,14 @@ struct ResticService: ResticClient {
     }
 
     func check(_ context: RepositoryContext, readDataSubset: CheckDataSubset?) async throws -> ResticSummary? {
-        var args = context.globalArguments + ["check", "--json"]
+        var args = ["check", "--json"]
         if let readDataSubset {
             args += ["--read-data-subset=\(readDataSubset.argument)"]
         }
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
+        let result = try await run(
+            context,
+            ResticInvocation(
                 arguments: args,
-                environment: context.environment,
                 // restic exits 1 when a check finds damage — that is the check
                 // doing its job, not the command failing. The verdict still
                 // has to name the damage: an exit 1 without an error count is
@@ -314,12 +307,11 @@ struct ResticService: ResticClient {
         _ context: RepositoryContext,
         onRawLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
-        let args = context.globalArguments + ["prune"]
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
+        let args = ["prune"]
+        let result = try await run(
+            context,
+            ResticInvocation(
                 arguments: args,
-                environment: context.environment,
                 retainFullOutput: true
             ),
             onRawLine: onRawLine
@@ -333,11 +325,10 @@ struct ResticService: ResticClient {
     /// Any exit code is returned rather than thrown: the console shows whatever
     /// restic said, including its complaints.
     func runRaw(_ context: RepositoryContext, arguments: [String]) async throws -> String {
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + arguments,
-                environment: context.environment,
+        let result = try await run(
+            context,
+            ResticInvocation(
+                arguments: arguments,
                 allowedExitCodes: nil,
                 retainFullOutput: true
             )
@@ -362,13 +353,12 @@ struct ResticService: ResticClient {
         planID: UUID? = nil,
         timeout: TimeInterval? = nil
     ) async throws -> [Snapshot] {
-        var args = context.globalArguments + ["snapshots", "--json", "--no-lock"]
+        var args = ["snapshots", "--json", "--no-lock"]
         if let planID { args += ["--tag", Self.planTag(planID)] }
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
+        let result = try await run(
+            context,
+            ResticInvocation(
                 arguments: args,
-                environment: context.environment,
                 timeout: timeout,
                 retainFullOutput: true
             )
@@ -386,13 +376,7 @@ struct ResticService: ResticClient {
         snapshotID: String,
         path: String
     ) async throws -> [SnapshotNode] {
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["ls", "--json", "--no-lock", snapshotID, path],
-                environment: context.environment
-            )
-        )
+        let result = try await run(context, ResticInvocation(arguments: ["ls", "--json", "--no-lock", snapshotID, path]))
         // The browse cache keeps a listing for good: a lost line must not
         // become a missing item.
         try Self.requireWhole(result, item: "node")
@@ -429,11 +413,10 @@ struct ResticService: ResticClient {
         snapshotID: String,
         onNode: @Sendable @escaping (SnapshotNode) -> Void
     ) async throws {
-        let outcome = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["ls", "--json", "--no-lock", snapshotID],
-                environment: context.environment,
+        let outcome = try await run(
+            context,
+            ResticInvocation(
+                arguments: ["ls", "--json", "--no-lock", snapshotID],
                 idleTimeout: Self.streamingIdleTimeout,
                 retainMessages: false
             ),
@@ -482,16 +465,15 @@ struct ResticService: ResticClient {
         ignoreCase: Bool = true,
         snapshotIDs: [String] = []
     ) async throws -> [FindResult] {
-        var args = context.globalArguments + ["find", "--json", "--no-lock"]
+        var args = ["find", "--json", "--no-lock"]
         if ignoreCase { args.append("--ignore-case") }
         for id in snapshotIDs { args += ["--snapshot", id] }
         args += patterns
 
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
+        let result = try await run(
+            context,
+            ResticInvocation(
                 arguments: args,
-                environment: context.environment,
                 retainFullOutput: true
             )
         )
@@ -509,16 +491,15 @@ struct ResticService: ResticClient {
         newerID: String,
         includeMetadata: Bool = false
     ) async throws -> SnapshotDiff {
-        var args = context.globalArguments + ["diff", "--json", "--no-lock"]
+        var args = ["diff", "--json", "--no-lock"]
         if includeMetadata { args.append("--metadata") }
         args += [olderID, newerID]
 
         let collector = DiffCollector(limit: SnapshotDiff.changeLimit)
-        let outcome = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
+        let outcome = try await run(
+            context,
+            ResticInvocation(
                 arguments: args,
-                environment: context.environment,
                 retainMessages: false
             ),
             onMessage: { message in collector.consume(message) }
@@ -539,11 +520,10 @@ struct ResticService: ResticClient {
         newerID: String,
         onChange: @Sendable @escaping (ResticDiffChange) -> Void
     ) async throws {
-        let outcome = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["diff", "--json", "--no-lock", olderID, newerID],
-                environment: context.environment,
+        let outcome = try await run(
+            context,
+            ResticInvocation(
+                arguments: ["diff", "--json", "--no-lock", olderID, newerID],
                 idleTimeout: Self.streamingIdleTimeout,
                 retainMessages: false
             ),
@@ -589,7 +569,7 @@ struct ResticService: ResticClient {
         plan: BackupPlan,
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> BackupOutcome {
-        var args = context.globalArguments + ["backup", "--json"]
+        var args = ["backup", "--json"]
         let source = Self.expandTilde(plan.path, home: home)
         args.append(source)
         // The switches' rules and the plan's own patterns
@@ -613,11 +593,10 @@ struct ResticService: ResticClient {
             args += ["--tag", tag]
         }
 
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
+        let result = try await run(
+            context,
+            ResticInvocation(
                 arguments: args,
-                environment: context.environment,
                 // 3 = finished, but some source files were unreadable.
                 allowedExitCodes: [0, ResticError.backupPartialSuccessCode],
                 idleTimeout: Self.streamingIdleTimeout
@@ -719,13 +698,12 @@ struct ResticService: ResticClient {
     @discardableResult
     func forget(_ context: RepositoryContext, plan: BackupPlan) async throws -> Int {
         guard plan.retention.isSafeToRun else { return 0 }
-        let args = context.globalArguments + Self.forgetArguments(plan: plan, dryRun: false)
+        let args = Self.forgetArguments(plan: plan, dryRun: false)
 
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
+        let result = try await run(
+            context,
+            ResticInvocation(
                 arguments: args,
-                environment: context.environment,
                 // 3 is forget's "failed to remove one or more snapshots", read
                 // below — never a success.
                 allowedExitCodes: [0, 3],
@@ -761,11 +739,10 @@ struct ResticService: ResticClient {
     /// no rule previews nothing rather than "everything".
     func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview {
         guard plan.retention.isSafeToRun else { return RetentionPreview(kept: [], removed: []) }
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + Self.forgetArguments(plan: plan, dryRun: true),
-                environment: context.environment,
+        let result = try await run(
+            context,
+            ResticInvocation(
+                arguments: Self.forgetArguments(plan: plan, dryRun: true),
                 retainFullOutput: true
             )
         )
@@ -910,7 +887,7 @@ struct ResticService: ResticClient {
         let summary = try await restoreItems(
             context,
             snapshotID: snapshotID,
-            parent: RestoreBatch.parentPath(of: node.path),
+            parent: ResticPath.parent(of: node.path),
             nodes: [node],
             destinationDirectory: staging,
             overwrite: overwrite,
@@ -1035,11 +1012,10 @@ struct ResticService: ResticClient {
         arguments: [String],
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> ResticSummary? {
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments + ["restore", "--json"] + arguments,
-                environment: context.environment,
+        let result = try await run(
+            context,
+            ResticInvocation(
+                arguments: ["restore", "--json"] + arguments,
                 idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
             ),
             onMessage: Self.progressHandler(onProgress)

@@ -114,7 +114,7 @@ enum PlanStatus {
         // the first of them: it explains the warning past the items — a
         // decoding gap, a skipped retention step — or a hook's complaint.
         let (listedItems, unlisted) = run.unreadableItemListing(limit: listedItemLimit)
-        let explanation = trailingLines(of: run).first
+        let explanation = run.trailingItemErrors.first
             ?? run.hookMessages.first
         let message: String? = if run.outcome == .failed {
             run.failureMessage ?? explanation
@@ -203,9 +203,7 @@ enum PlanStatus {
         now: Date = .now
     ) -> TileFace? {
         let plan = stored?.merging(draft: draft) ?? draft
-        guard plan.isEnabled, plan.schedule.frequency != .manual,
-              plan.activePauseEnd(at: now) == nil, plan.isConfigurationComplete
-        else { return nil }
+        guard plan.runsOnSchedule(at: now) else { return nil }
         return nextBackupTile(
             for: plan, existingRepositoryIDs: existingRepositoryIDs, hold: hold, isBackingUp: isBackingUp, now: now
         )
@@ -392,15 +390,9 @@ enum PlanStatus {
         return PlanCaption(text: plan.schedule.summary)
     }
 
-    /// The lines stored after the unreadable items: the decoding-gap warning,
-    /// then the retention line (`RunRecord.itemErrors`' order).
-    private static func trailingLines(of run: RunRecord) -> ArraySlice<String> {
-        run.itemErrors.dropFirst(run.unreadableItems.count)
-    }
-
     /// Searched among the trailing lines only, so an unreadable item's own
     /// text can never pass for it.
     private static func retentionLine(of run: RunRecord) -> String? {
-        trailingLines(of: run).first { $0.hasPrefix(RunRecord.retentionSkippedPrefix) }
+        run.trailingItemErrors.first { $0.hasPrefix(RunRecord.retentionSkippedPrefix) }
     }
 }

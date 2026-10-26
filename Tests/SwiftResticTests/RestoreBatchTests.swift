@@ -132,8 +132,8 @@ struct RestoreBatchTests {
 
     @Test("the folder holding a path, '/' above a top-level item")
     func parentPath() {
-        #expect(RestoreBatch.parentPath(of: "/Data/Docs/a.txt") == "/Data/Docs")
-        #expect(RestoreBatch.parentPath(of: "/Volumes") == "/")
-        #expect(RestoreBatch.parentPath(of: "/Data/\u{0301}x") == "/Data")
+        #expect(ResticPath.parent(of: "/Data/Docs/a.txt") == "/Data/Docs")
+        #expect(ResticPath.parent(of: "/Volumes") == "/")
+        #expect(ResticPath.parent(of: "/Data/\u{0301}x") == "/Data")
     }
 }

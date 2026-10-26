@@ -367,6 +367,12 @@ extension RunRecord {
         itemErrors.prefix(min(itemErrorCount, Self.storedItemErrorLimit))
     }
 
+    /// The lines stored after the unreadable items: the decoding-gap warning,
+    /// then the retention line (`itemErrors`' order).
+    var trailingItemErrors: ArraySlice<String> {
+        itemErrors.dropFirst(unreadableItems.count)
+    }
+
     /// The backup run that wrote each snapshot, keyed by full snapshot ID —
     /// not by repository: two repository entries pointing at one restic
     /// repository list the same snapshot, which the same run wrote. Backup

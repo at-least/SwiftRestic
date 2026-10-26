@@ -85,6 +85,16 @@ struct Schedule: Codable, Sendable, Hashable {
         return gregorian.date(from: DateComponents(year: 2001, month: 1, day: 1, hour: hour, minute: minute))!
     }
 
+    /// The time between runs; nil for manual plans.
+    var interval: TimeInterval? {
+        switch frequency {
+        case .manual: nil
+        case .hourly: TimeInterval(max(1, intervalHours) * 3600)
+        case .daily: 86_400
+        case .weekly: 7 * 86_400
+        }
+    }
+
     /// The next moment this schedule is due, given when it last ran.
     /// Returns `nil` for manual plans.
     func nextRunDate(after lastRun: Date?, now: Date = .now, calendar: Calendar = .current) -> Date? {
@@ -92,9 +102,8 @@ struct Schedule: Codable, Sendable, Hashable {
         case .manual:
             return nil
         case .hourly:
-            let step = TimeInterval(max(1, intervalHours) * 3600)
             guard let lastRun else { return now }
-            return lastRun.addingTimeInterval(step)
+            return lastRun.addingTimeInterval(interval!)
         case .daily:
             return nextWallClock(after: lastRun, now: now, calendar: calendar, matchingWeekday: nil)
         case .weekly:
@@ -525,6 +534,12 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// is a pause everywhere.
     func isScheduleActive(at now: Date) -> Bool {
         isEnabled && activePauseEnd(at: now) == nil
+    }
+
+    /// Whether the scheduler starts this plan by itself at `now`: active,
+    /// on a schedule, and set up.
+    func runsOnSchedule(at now: Date) -> Bool {
+        isScheduleActive(at: now) && schedule.frequency != .manual && isConfigurationComplete
     }
 
     /// The stored plan wins over the editor's draft for the model-written

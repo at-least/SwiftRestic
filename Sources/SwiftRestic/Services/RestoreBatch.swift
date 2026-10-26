@@ -167,7 +167,7 @@ enum RestoreBatch {
         var order: [Key] = []
         var members: [Key: (parent: String, directory: URL, nodes: [SnapshotNode])] = [:]
         for (node, directory) in items {
-            let parent = parentPath(of: node.path)
+            let parent = ResticPath.parent(of: node.path)
             let key = Key(parent: PathKey(parent), directory: directory.path)
             if members[key] == nil {
                 order.append(key)
@@ -179,15 +179,6 @@ enum RestoreBatch {
             let group = members[key]!
             return Group(parent: group.parent, directory: group.directory, nodes: group.nodes)
         }
-    }
-
-    /// The folder holding `path` in the backup: "/" above a top-level item.
-    static func parentPath(of path: String) -> String {
-        let scalars = Array(path.unicodeScalars)
-        guard let slash = scalars.lastIndex(of: "/"), slash > 0 else { return "/" }
-        var parent = String.UnicodeScalarView()
-        parent.append(contentsOf: scalars[..<slash])
-        return String(parent)
     }
 
     /// The `--include` that restores one item of its group: anchored at the
