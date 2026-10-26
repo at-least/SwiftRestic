@@ -298,16 +298,8 @@ enum Format {
     /// The root that contains an absolute path, longest match first: a
     /// whole-disk root (`/`) contains every absolute path, and where it
     /// coexists with narrower roots the narrower one is the honest answer.
-    /// The naive prefix check (`path.hasPrefix(root + "/")`) can never match
-    /// `/` — it would ask for a leading `//`.
     static func containingRoot(of path: String, in roots: [String]) -> String? {
-        roots
-            .filter { root in
-                root == "/"
-                    ? path.hasPrefix("/")
-                    : (path == root || path.hasPrefix(root + "/"))
-            }
-            .max { $0.count < $1.count }
+        roots.filter { ResticPath.holds($0, path) }.max { $0.count < $1.count }
     }
 
     /// The ancestor chain of a path from its containing root down to itself,

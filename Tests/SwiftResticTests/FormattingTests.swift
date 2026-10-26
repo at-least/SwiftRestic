@@ -307,6 +307,9 @@ struct FormattingTests {
 
         // A root that is a prefix of another root's name must not match it.
         #expect(Format.pathChain(of: "/other/file", roots: ["/other Extended", "/other"]) == ["/other", "/other/file"])
+        // Byte for byte, as restic and the index compare: a root spelt in
+        // NFC does not hold the same name spelt in NFD.
+        #expect(Format.pathChain(of: "/Caf\u{0065}\u{0301}/f", roots: ["/Caf\u{00E9}"]).isEmpty)
     }
 
     @Test("a whole-disk root chains every absolute path")

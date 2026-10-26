@@ -705,55 +705,6 @@ extension SnapshotNode {
     }
 }
 
-/// The keyboard grammar the browsers' lists speak, and the parent step their
-/// go-up buttons take.
-enum BrowserListGrammar {
-    /// The ⌫ key as `onKeyPress` delivers it: U+007F, what AppKit's Delete
-    /// key types. SwiftUI's `KeyEquivalent.delete` is U+0008, which ⌫ never
-    /// produces, so only this constant matches the key.
-    static let deleteKey = KeyEquivalent("\u{7F}")
-
-    /// The lists' keyboard grammar. Everything unrecognised returns
-    /// `.ignored` so the List keeps its own arrow-key selection movement.
-    /// Return opens the selected directory through `open`; ⌫ and ⌘↑ ascend
-    /// through `goUp` when a parent exists (`hasParent`) — Finder's own
-    /// grammar.
-    static func keyPress(
-        _ press: KeyPress,
-        selected: SnapshotNode?,
-        hasParent: Bool,
-        open: (SnapshotNode) -> Void,
-        goUp: () -> Void
-    ) -> KeyPress.Result {
-        switch press.key {
-        case .return:
-            if let node = selected, node.isDirectory {
-                open(node)
-                return .handled
-            }
-            return .ignored
-        case deleteKey:
-            guard hasParent else { return .ignored }
-            goUp()
-            return .handled
-        case .upArrow where press.modifiers.contains(.command):
-            guard hasParent else { return .ignored }
-            goUp()
-            return .handled
-        default:
-            return .ignored
-        }
-    }
-
-    /// The parent of an absolute path for browser ascent: both the empty
-    /// parent and "/" mean "above the top", which the caller renders as its
-    /// pseudo-root.
-    static func parent(of path: String) -> String? {
-        let parent = (path as NSString).deletingLastPathComponent
-        return parent.isEmpty || parent == "/" ? nil : parent
-    }
-}
-
 /// The row a Files-view folder lists for one node: icon, name, its change
 /// mark and a file's size. (The restore pane's change-annotated row is
 /// its own shape.)
