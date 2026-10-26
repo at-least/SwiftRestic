@@ -95,7 +95,7 @@ struct OtherGroupPageSummary: Equatable {
             // Neither cause is knowable from the repository (another Mac's
             // living plan and a deleted plan leave the same tag behind), so
             // the sentence offers both without choosing.
-            explanation = "From a plan that isn’t set up here — deleted, or still running on another Mac."
+            explanation = "From a plan that isn’t set up here — removed, or still running on another Mac."
             // A history of several folders, from builds that let a plan
             // hold a list: a plan is one path now, so there is no plan to
             // adopt it into.

@@ -91,7 +91,7 @@ struct AdoptTests {
         let page = try #require(shelves.otherGroupPage(.plan(planID), repositories: [repository], localHost: model.localHostname))
         #expect(!page.isAdoptable)
         #expect(page.explanation
-            == "From a plan that isn’t set up here — deleted, or still running on another Mac."
+            == "From a plan that isn’t set up here — removed, or still running on another Mac."
                 + " It holds several folders and a plan backs up one, so it can’t be continued.")
 
         // A newer backup of one folder is the history a plan continues.
@@ -441,7 +441,7 @@ struct AdoptTests {
         #expect(shelves.byPlan[planID]?.map(\.id) == ["g2", "g1"])
         #expect(shelves.others.isEmpty)
         // The banner says what happened, in the count's own number.
-        #expect(model.banners.first?.title == "“Projects” backups continue on this Mac")
+        #expect(model.banners.first?.title == "Continuing “Projects”")
         #expect(model.banners.first?.message == "Its 2 existing backups are now its history.")
         #expect(model.banners.first?.isError == false)
     }

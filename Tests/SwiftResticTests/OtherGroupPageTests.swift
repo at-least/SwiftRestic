@@ -43,7 +43,7 @@ struct OtherGroupPageTests {
         let page = try #require(shelves.otherGroupPage(.plan(deleted), repositories: [], localHost: "mac"))
 
         #expect(page.title == "Projects")
-        #expect(page.explanation == "From a plan that isn’t set up here — deleted, or still running on another Mac.")
+        #expect(page.explanation == "From a plan that isn’t set up here — removed, or still running on another Mac.")
         #expect(page.formerPlan == nil)
         #expect(page.newestSnapshotID == "g2")
         #expect(page.newestAt == g2.time)

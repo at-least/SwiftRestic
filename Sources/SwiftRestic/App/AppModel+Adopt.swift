@@ -161,7 +161,7 @@ extension AppModel {
         // A group exists only around backups, so count zero means the group
         // left while the sheet was open — the banner says that, not a count.
         post(Banner(
-            title: "“\(label(of: draft))” backups continue on this Mac",
+            title: "Continuing “\(label(of: draft))”",
             message: count == 0
                 ? "Its backups are no longer in the repository."
                 : count == 1
