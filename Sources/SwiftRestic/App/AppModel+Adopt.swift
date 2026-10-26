@@ -21,7 +21,7 @@ struct AdoptBriefing: Equatable {
 
     /// Always, as the sheet's footer: what adopting does not do, and the one
     /// situation it must not be used in.
-    static let footer = "Don’t adopt a plan another Mac still runs — the two Macs would share one history."
+    static let footer = "Don’t continue backups another Mac still makes — the two Macs would share one history."
 }
 
 extension AppModel {
@@ -136,10 +136,10 @@ extension AppModel {
             // gets the confirmation too.
             needsConfirmation: hasForeignHost || isRecent,
             confirmation: ConfirmationCopy(
-                title: "Adopt “\(name)”?",
+                title: "Continue “\(name)” on this Mac?",
                 message: "Nothing is written to “\(label(of: repository))”."
                     + " If another Mac still runs this plan, both Macs share one history and the same retention settings"
-                    + " — adopt only backups no other Mac is still making."
+                    + " — continue only backups no other Mac is still making."
             )
         )
     }
@@ -161,7 +161,7 @@ extension AppModel {
         // A group exists only around backups, so count zero means the group
         // left while the sheet was open — the banner says that, not a count.
         post(Banner(
-            title: "Adopted “\(label(of: draft))”",
+            title: "“\(label(of: draft))” backups continue on this Mac",
             message: count == 0
                 ? "Its backups are no longer in the repository."
                 : count == 1

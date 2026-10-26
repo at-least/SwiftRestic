@@ -154,7 +154,7 @@ struct PlanEditorSheet: View {
                         // The group left while the sheet was open — its page
                         // is revalidating away behind the sheet. Say it here
                         // rather than letting the button grey without a why.
-                        Text("These backups are no longer in the repository — there is nothing to adopt.")
+                        Text("These backups are no longer in the repository — there is nothing to continue.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -168,7 +168,7 @@ struct PlanEditorSheet: View {
                 Spacer(minLength: 20)
                 Button("Cancel") { cancel() }
                     .keyboardShortcut(.cancelAction)
-                Button(mode == .adopt ? "Adopt" : (isNew ? "Create Plan" : "Save")) {
+                Button(mode == .adopt ? "Continue Backups" : (isNew ? "Create Plan" : "Save")) {
                     guard mode == .adopt else {
                         // As restic will read it: trimmed, a typed tilde
                         // expanded (restic sees no shell).
@@ -223,7 +223,7 @@ struct PlanEditorSheet: View {
             isPresented: $isConfirmingAdopt,
             titleVisibility: .visible
         ) {
-            Button("Adopt") { performAdopt() }
+            Button("Continue Backups") { performAdopt() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(armedAdoptConfirmation?.message ?? "")
@@ -662,7 +662,7 @@ struct PlanEditorSheet: View {
             Section {
                 if startsFirstBackupOnCreate {
                     Text(mode == .adopt
-                        ? "Its first backup starts within a minute of adopting it."
+                        ? "Its next backup starts within a minute."
                         : "Its first backup starts within a minute of creating it."
                     )
                     .font(.caption)

@@ -101,8 +101,8 @@ struct OtherGroupPageSummary: Equatable {
             // adopt it into.
             if !isAdoptable {
                 explanation += snapshots.count == 1
-                    ? " It holds several folders and a plan backs up one, so it can’t be adopted."
-                    : " They hold several folders and a plan backs up one, so they can’t be adopted."
+                    ? " It holds several folders and a plan backs up one, so it can’t be continued."
+                    : " They hold several folders and a plan backs up one, so they can’t be continued."
             }
         }
 

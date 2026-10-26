@@ -104,9 +104,9 @@ struct OtherGroupView: View {
             } else if summary.isAdoptable, case let .plan(planID) = groupID {
                 // The flow's main entry; the group's context menu carries the
                 // same verb.
-                Button("Adopt as a Backup Plan") { onAdopt(planID) }
+                Button("Continue Backups…") { onAdopt(planID) }
                     .controlSize(.small)
-                    .help("Turn these backups into a plan — nothing is written to the repository")
+                    .help("Keep backing up this folder from this Mac, with these backups as its history")
             }
         }
         .padding(Theme.Space.cardPadding)

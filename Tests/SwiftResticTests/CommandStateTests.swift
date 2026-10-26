@@ -518,7 +518,7 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
 
-        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Delete “Docs”?")
+        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Docs”?")
         #expect(model.confirmationCopy(for: .prune(repository.id))?.title == "Clean up “NAS” now?")
         #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Check “NAS”?")
         #expect(model.confirmationCopy(for: .removeRepository(repository.id))?.title
@@ -550,7 +550,7 @@ struct CommandStateTests {
         var pathless = plan
         pathless.path = ""
         model.configuration.plans = [pathless]
-        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Delete “Untitled Plan”?")
+        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Untitled Plan”?")
 
         #expect(model.confirmationCopy(for: .deletePlan(UUID())) == nil)
         #expect(model.confirmationCopy(for: .prune(UUID())) == nil)

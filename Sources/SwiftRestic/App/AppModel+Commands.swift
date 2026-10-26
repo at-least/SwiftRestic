@@ -183,7 +183,7 @@ extension AppModel {
             guard let plan = plan(id: id) else { return nil }
             let name = label(of: plan)
             // Where the snapshots land, said when there are some. Deleting is
-            // the main source of adoptable groups — re-adoption restores this
+            // the main source of adoptable groups — Continue Backups… restores this
             // same UUID.
             let landing: String
             if let repositoryID = plan.repositoryID,
@@ -191,16 +191,16 @@ extension AppModel {
                let left = backupsLeftBehind(planID: id, in: repositoryID)
             {
                 landing = "Its \(Format.plural(left, "backup")) \(left == 1 ? "stays" : "stay")"
-                    + " in “\(label(of: repository))” and can be adopted again."
+                    + " in “\(label(of: repository))”, and you can continue \(left == 1 ? "it" : "them") later."
             } else {
                 landing = "Backups already written to the repository are not deleted."
             }
             let message = switch activity[id]?.isBackup {
             case true?: "The running backup will be stopped and recorded as cancelled. \(landing)"
             case false?: "Applying retention will be stopped and recorded as cancelled. \(landing)"
-            case nil: "The plan and its schedule are removed. \(landing)"
+            case nil: "This Mac stops backing up “\(name)”. \(landing)"
             }
-            return ConfirmationCopy(title: "Delete “\(name)”?", message: message)
+            return ConfirmationCopy(title: "Remove “\(name)”?", message: message)
         case let .removeRepository(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(

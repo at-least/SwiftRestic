@@ -92,7 +92,7 @@ struct AdoptTests {
         #expect(!page.isAdoptable)
         #expect(page.explanation
             == "From a plan that isn’t set up here — deleted, or still running on another Mac."
-                + " It holds several folders and a plan backs up one, so it can’t be adopted.")
+                + " It holds several folders and a plan backs up one, so it can’t be continued.")
 
         // A newer backup of one folder is the history a plan continues.
         let one = try snapshot("one", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag])
@@ -295,11 +295,11 @@ struct AdoptTests {
             "These backups are recent — a plan on another Mac may still be writing them.",
         ])
         #expect(briefing.needsConfirmation)
-        #expect(briefing.confirmation.title == "Adopt “Movies”?")
+        #expect(briefing.confirmation.title == "Continue “Movies” on this Mac?")
         #expect(briefing.confirmation.message
             == "Nothing is written to “Home Disk”."
                 + " If another Mac still runs this plan, both Macs share one history and the same retention settings"
-                + " — adopt only backups no other Mac is still making.")
+                + " — continue only backups no other Mac is still making.")
     }
 
     @Test("the folder warning says where the folder came from, or that it isn't on this Mac")
@@ -441,7 +441,7 @@ struct AdoptTests {
         #expect(shelves.byPlan[planID]?.map(\.id) == ["g2", "g1"])
         #expect(shelves.others.isEmpty)
         // The banner says what happened, in the count's own number.
-        #expect(model.banners.first?.title == "Adopted “Projects”")
+        #expect(model.banners.first?.title == "“Projects” backups continue on this Mac")
         #expect(model.banners.first?.message == "Its 2 existing backups are now its history.")
         #expect(model.banners.first?.isError == false)
     }
@@ -495,7 +495,7 @@ struct AdoptTests {
 
         // Nothing backed up: today's sentence.
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Backups already written to the repository are not deleted.")
+            == "This Mac stops backing up “Untitled Plan”. Backups already written to the repository are not deleted.")
 
         // Two backups under it: the repository they stay in is named, with
         // the way back.
@@ -505,19 +505,19 @@ struct AdoptTests {
         ]
         model.snapshots[repository.id] = listing
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Its 2 backups stay in “Home Disk” and can be adopted again.")
+            == "This Mac stops backing up “Untitled Plan”. Its 2 backups stay in “Home Disk”, and you can continue them later.")
 
         // The running variant keeps its own first sentence.
         model.activity[plan.id] = PlanActivity()
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             == "The running backup will be stopped and recorded as cancelled."
-                + " Its 2 backups stay in “Home Disk” and can be adopted again.")
+                + " Its 2 backups stay in “Home Disk”, and you can continue them later.")
 
         // One backup agrees in number.
         model.activity[plan.id] = nil
         model.snapshots[repository.id] = [listing[0]]
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The plan and its schedule are removed. Its 1 backup stays in “Home Disk” and can be adopted again.")
+            == "This Mac stops backing up “Untitled Plan”. Its 1 backup stays in “Home Disk”, and you can continue it later.")
     }
 }
 

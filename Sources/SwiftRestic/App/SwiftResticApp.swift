@@ -348,7 +348,7 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Delete Plan") {
+            Button("Remove Plan") {
                 if let id = p.planID { ask(.confirm(.deletePlan(id))) }
             }
             .disabled(!p.canDelete)

@@ -69,7 +69,7 @@ struct CommandPresentations: ViewModifier {
     private func actions(for confirmation: CommandConfirmation) -> some View {
         switch confirmation {
         case let .deletePlan(id):
-            Button("Delete Plan") { model.deletePlan(id: id) }
+            Button("Remove Plan") { model.deletePlan(id: id) }
         case let .removeRepository(id):
             Button("Remove") { model.deleteRepository(id: id) }
         case .check:

@@ -170,7 +170,7 @@ struct SidebarView: View {
         Button("Apply Retention Now") { router.request(.applyRetention(plan.id)) }
             .disabled(!commands.canApplyRetention)
         Divider()
-        Button("Delete Plan", role: .destructive) { onDeletePlan(plan) }
+        Button("Remove Plan", role: .destructive) { onDeletePlan(plan) }
     }
 
     @ViewBuilder
@@ -453,7 +453,7 @@ struct SidebarView: View {
         isAdoptable: Bool
     ) -> some View {
         if isAdoptable {
-            Button("Adopt as a Backup Plan") {
+            Button("Continue Backups…") {
                 onAdoptGroup(repository.id, planID)
             }
         }

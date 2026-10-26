@@ -35,8 +35,8 @@ struct PlanDetailView: View {
             filesPrompt: "Search this plan’s backups"
         )
         // The toolbar holds the tabs and the search field; the editor is
-        // Plan ▸ Edit Plan and the sidebar row's Edit Plan, deleting Plan ▸
-        // Delete Plan and the row's menu —
+        // Plan ▸ Edit Plan and the sidebar row's Edit Plan, removing Plan ▸
+        // Remove Plan and the row's menu —
         // the HIG's macOS toolbars: "it doesn't make sense to provide a
         // toolbar item for every menu item".
         // Opening the page marks the plan's problem seen — honestly, since

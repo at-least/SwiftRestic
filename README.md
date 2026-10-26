@@ -184,8 +184,8 @@ the generator after editing it; the PNGs are checked in.
   the Backups tab on the newest backup. The toolbar's search field searches
   the open backup on either tab (typed on Overview, the page turns to
   Backups), and ⇧⌘F opens Find Files, as it does off a plan's page.
-- **Adopting** — a group whose ID no plan anywhere carries can be adopted:
-  *Adopt as a Backup Plan* (the page's explanation card, the group's
+- **Continue Backups…** — a group whose ID no plan anywhere carries can be
+  continued on this Mac: *Continue Backups…* (the page's explanation card, the group's
   context menu, or the repository page's *Other backups* card, listing each
   adoptable group while there is one) opens the plan editor with, from the
   newest backup this Mac made — or the newest of all when another Mac made
@@ -201,8 +201,8 @@ the generator after editing it; the PNGs are checked in.
   writes one plan whose ID is the group's UUID and nothing else: no snapshot
   retagged, nothing written to the repository; the records move under the
   plan by themselves. A group with a backup from another Mac, or one less
-  than 48 hours old, is asked once more. Deleting a plan says its snapshots
-  stay under Other backups and can be adopted back. A plan does not move
+  than 48 hours old, is asked once more. *Remove Plan* says its snapshots
+  stay under Other backups and can be continued later. A plan does not move
   between repositories; a group a move by an earlier build left behind
   offers its plan instead.
 - **A repository's page is its overview.** A *Protection* line (“2 of 2

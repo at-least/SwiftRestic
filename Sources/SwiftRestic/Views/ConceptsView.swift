@@ -30,7 +30,7 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Backups from elsewhere",
-            text: "Backups no plan here made — another Mac’s, or a deleted plan’s — appear under Other backups in the sidebar. One made by a SwiftRestic plan can be adopted, to continue its history on this Mac."
+            text: "Backups no plan here made — another Mac’s, or a deleted plan’s — appear under Other backups in the sidebar. Those a SwiftRestic plan made can continue on this Mac with Continue Backups…, keeping their history."
         ),
     ]
 
