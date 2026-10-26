@@ -33,6 +33,15 @@ enum RestorePaneLoad {
         show(compared(marks, baseline: baseline))
     }
 
+    /// The folders the load opens, in order: every root (the user's call:
+    /// roots open by default), then the walk to the folder the user was in.
+    /// A root on that walk is left to the walk — opening is a toggle, so a
+    /// second open would close it — and the walk goes last so its end is
+    /// the deepest folder opened.
+    static func foldersToOpen(roots: [String], spine: [String]) -> [String] {
+        roots.filter { !spine.contains($0) } + spine
+    }
+
     @MainActor
     private static func comparing(
         _ baseline: Snapshot?,

@@ -761,7 +761,10 @@ struct RestorePaneView: View {
             currentPath = focus
         }
         loadedSnapshotID = record.id
-        let spine = currentPath.map { Format.pathChain(of: $0, roots: record.paths) } ?? []
+        let spine = RestorePaneLoad.foldersToOpen(
+            roots: record.paths,
+            spine: currentPath.map { Format.pathChain(of: $0, roots: record.paths) } ?? []
+        )
         tree.reset(to: record.paths.map(SnapshotNode.directory))
 
         isLoadingTree = true

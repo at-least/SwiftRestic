@@ -146,6 +146,14 @@ struct RestorePaneLoadTests {
         #expect(Set(shown.changes.keys) == ["/src/a/k.txt"])
     }
 
+    @Test("every root opens, a root on the walk once, the walk last")
+    func foldersToOpen() {
+        #expect(RestorePaneLoad.foldersToOpen(roots: ["/src"], spine: []) == ["/src"])
+        #expect(RestorePaneLoad.foldersToOpen(roots: ["/a", "/b"], spine: []) == ["/a", "/b"])
+        #expect(RestorePaneLoad.foldersToOpen(roots: ["/a", "/b"], spine: ["/a", "/a/x"]) == ["/b", "/a", "/a/x"])
+        #expect(RestorePaneLoad.foldersToOpen(roots: ["/a", "/b"], spine: ["/a"]) == ["/b", "/a"])
+    }
+
     @Test("a first backup lists its tree and runs no comparison")
     func firstBackup() async {
         let recorder = Recorder()
