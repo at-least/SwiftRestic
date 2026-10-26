@@ -1630,11 +1630,11 @@ struct StartAtLoginSurfaceTests {
         model.configuration.plans[0].lastRunAt = now
         let battery = try #require(model.quitScheduleNotice(now: now))
         #expect(battery.hasPrefix(
-            "Backups wait for power — this Mac is on battery. Documents (NAS) is next due \(Format.relative(next))."
+            "Backups paused on battery power. Documents (NAS) is next due \(Format.relative(next))."
         ))
         model.configuration.plans[0].lastRunAt = nil
         let batteryDue = try #require(model.quitScheduleNotice(now: now))
-        #expect(batteryDue.hasPrefix("Backups wait for power — this Mac is on battery. Documents (NAS) is waiting to run."))
+        #expect(batteryDue.hasPrefix("Backups paused on battery power. Documents (NAS) is waiting to run."))
 
         // Only a hold in force at `now` counts.
         model.isOnBattery = false

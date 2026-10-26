@@ -1139,12 +1139,12 @@ struct AppModelStubTests {
         #expect(harness.model.quitInterruptions.isEmpty)
         harness.model.runBackup(planID: harness.plan.id)
         #expect(harness.model.isRunning(planID: harness.plan.id))
-        #expect(harness.model.quitInterruptions == ["A backup is running"])
+        #expect(harness.model.quitInterruptions == ["A backup is running."])
         // Work in flight asks on every quit path, a logout's too.
         let inFlight = harness.model.quitConfirmation(userChoseQuit: false)
         #expect(inFlight?.interruptsWork == true)
         #expect(inFlight?.message
-            == "A backup is running\nQuitting stops the work in progress; Activity records the interruption.")
+            == "A backup is running.\nQuitting stops the work in progress; Activity records the interruption.")
 
         harness.model.cancelBackup(planID: harness.plan.id)
         await harness.model.waitForRun(planID: harness.plan.id)
@@ -1174,7 +1174,7 @@ struct AppModelStubTests {
 
         let message = try #require(harness.model.quitConfirmation(userChoseQuit: true)?.message)
         #expect(message.hasPrefix(
-            "A backup is running\nQuitting stops the work in progress; Activity records the interruption.\n"
+            "A backup is running.\nQuitting stops the work in progress; Activity records the interruption.\n"
         ))
         #expect(message.contains("Stub Plan (Stub Repo) is next due "))
         #expect(!message.contains("is due now"))
@@ -2061,9 +2061,9 @@ struct AppModelStubTests {
         harness.model.applyRetention(planID: planID)
         #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
         // What quitting and removing the repository would interrupt: retention, not a backup.
-        #expect(harness.model.quitInterruptions == ["Retention is being applied"])
+        #expect(harness.model.quitInterruptions == ["Retention is being applied."])
         #expect(harness.model.removalConsequences(for: harness.repository.id)
-            .contains("Retention is being applied to \(harness.model.label(of: harness.plan)) and will be cancelled."))
+            .contains("Retention is being applied to “\(harness.model.label(of: harness.plan))” and will be cancelled."))
         harness.model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
         await harness.model.waitForRun(planID: planID)
 

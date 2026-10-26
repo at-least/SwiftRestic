@@ -171,12 +171,12 @@ struct RunRecordPresentationTests {
 
         #expect(
             RunRecordPresentation.nextRunLine(plan: documents, date: date, plans: [documents], repositories: [home])
-                == "Documents (Home Disk) — \(Format.timestamp(date))"
+                == "Documents (Home Disk) — \(Format.tileTimestamp(date))"
         )
         // A repository the list does not resolve leaves the plan's name alone.
         #expect(
             RunRecordPresentation.nextRunLine(plan: documents, date: date, plans: [documents], repositories: [])
-                == "Documents — \(Format.timestamp(date))"
+                == "Documents — \(Format.tileTimestamp(date))"
         )
     }
 

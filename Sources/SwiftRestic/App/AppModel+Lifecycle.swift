@@ -19,12 +19,12 @@ extension AppModel {
         // Apply Retention Now runs in a plan's slot too, and is not a backup.
         let backups = activity.values.filter(\.isBackup).count
         if backups > 0 {
-            reasons.append(backups == 1 ? "A backup is running" : "\(backups) backups are running")
+            reasons.append(backups == 1 ? "A backup is running." : "\(backups) backups are running.")
         }
-        if activity.values.contains(where: { !$0.isBackup }) { reasons.append("Retention is being applied") }
-        if !maintenance.isEmpty { reasons.append("Repository maintenance is running") }
-        if isRestoring { reasons.append("A restore is running") }
-        if console.isRunning { reasons.append("A restic console command is running") }
+        if activity.values.contains(where: { !$0.isBackup }) { reasons.append("Retention is being applied.") }
+        if !maintenance.isEmpty { reasons.append("Repository maintenance is running.") }
+        if isRestoring { reasons.append("A restore is running.") }
+        if console.isRunning { reasons.append("A console command is running.") }
         return reasons
     }
 

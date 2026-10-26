@@ -235,7 +235,7 @@ enum RunRecordPresentation {
     /// headline's words: the plan with its repository, then when.
     static func nextRunLine(plan: BackupPlan, date: Date, plans: [BackupPlan], repositories: [Repository]) -> String {
         let name = planWithRepository(plan, plans: plans, repositories: repositories)
-        return "\(name) — \(Format.timestamp(date))"
+        return "\(name) — \(Format.tileTimestamp(date))"
     }
 
     /// The Activity Detail column: why a run failed, else its problems as

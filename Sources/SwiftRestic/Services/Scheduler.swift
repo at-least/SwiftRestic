@@ -28,9 +28,9 @@ enum ScheduleHold: Equatable, Sendable {
         case .paused(until: nil):
             "Backups paused until you resume"
         case .onBattery:
-            "Backups wait for power — this Mac is on battery"
+            "Backups paused on battery power"
         case .onMeteredNetwork:
-            "Backups wait — this Mac’s network is metered"
+            "Backups paused on a metered network"
         }
     }
 }

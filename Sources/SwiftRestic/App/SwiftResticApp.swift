@@ -405,10 +405,11 @@ struct SwiftResticApp: App {
             }
             Divider()
             // A plan's Files tab only, where the tree it changes is.
-            Toggle("Show Deleted Items", isOn: Binding(
-                get: { router.filesShowsDeletedItems },
-                set: { router.filesShowsDeletedItems = $0 }
-            ))
+            // A show/hide pair, not a checkmark: the HIG's View menu items
+            // name the state they change to ("Show Toolbar"/"Hide Toolbar").
+            Button(router.filesShowsDeletedItems ? "Hide Deleted Items" : "Show Deleted Items") {
+                router.filesShowsDeletedItems.toggle()
+            }
             .disabled(!(page.map { $0.pageTabs.contains(.files) && router.tab(of: $0) == .files } ?? false))
             Toggle("Show Problems Only", isOn: Binding(
                 get: { router.activityShowsProblemsOnly },

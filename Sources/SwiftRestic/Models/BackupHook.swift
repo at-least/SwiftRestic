@@ -89,7 +89,7 @@ struct BackupHook: Identifiable, Codable, Sendable, Hashable {
     }
 
     var displayName: String {
-        name.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled hook" : name
+        name.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled Hook" : name
     }
 
     init() {}

@@ -85,7 +85,7 @@ the generator after editing it; the PNGs are checked in.
   backup holds it, so the excluded `.DS_Store` is no row in every folder.
   What only the backups hold, deleted since, is left out of the tree unless
   *Show Deleted Items* — the checkbox under the tree, or *View ▸ Show
-  Deleted Items*, off at every launch — lists it after each
+  Deleted Items* (*Hide Deleted Items* while they show), off at every launch — lists it after each
   folder's own items, dimmed with the day it was last backed up (*until Oct
   2*), a deleted folder opening onto what the backups held in it; the
   search finds it either way, and a folder's *As backed up* lists it as the
@@ -568,7 +568,7 @@ the generator after editing it; the PNGs are checked in.
   Stop Running Backups* also stops backups in flight, which start over when
   the pause ends (restic cannot resume one). A plan's *Pause Schedule* takes
   the same lengths. With *Pause scheduled backups on battery power* on, the
-  menu bar, repository pages and Settings say backups wait for power rather
+  menu bar, repository pages and Settings say backups are paused on battery power rather
   than announce runs that will not start. *Pause scheduled backups on a
   metered network* (off by default) does the same while `NWPathMonitor`
   reports the network expensive (macOS's documentation names cellular) or
@@ -921,7 +921,7 @@ the generator after editing it; the PNGs are checked in.
   the sidebar hidden, the toolbar's button had been the one way back — a
   page's *Overview*, *Backups* and *Files* (⌘1–⌘3, Finder's keys for its
   views; *Files* grey on a group's page, all three off a plan's or group's
-  page), *Show Deleted Items* for a plan's Files tab, and *Show Problems
+  page), *Show Deleted Items* (or *Hide Deleted Items*) for a plan's Files tab, and *Show Problems
   Only* for
   Activity. *File ▸ Restore…* is the pane's Restore of the page in view
   (*Restore Folder…* on a Files tab's folder with nothing selected), and

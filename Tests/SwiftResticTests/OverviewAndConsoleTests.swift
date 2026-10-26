@@ -422,7 +422,7 @@ struct OverviewMetricsTests {
             willNotRun: { _ in nil }, hold: .onBattery, now: utcDate("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
-        #expect(onBattery?.text == "1 of 2 plans protected · Last backup 1 hour ago · Backups wait for power — this Mac is on battery")
+        #expect(onBattery?.text == "1 of 2 plans protected · Last backup 1 hour ago · Backups paused on battery power")
         #expect(onBattery?.showsResume == false)
 
         // One plan spells its own noun; no plan with a backup yet omits the

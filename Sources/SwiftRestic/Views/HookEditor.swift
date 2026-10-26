@@ -35,7 +35,7 @@ struct HookEditor: View {
             if selection == nil { selection = hooks.first?.id }
         }
         .confirmationDialog(
-            "Remove this hook?",
+            "Remove “\(hooks.first { $0.id == selection }?.displayName ?? "")”?",
             isPresented: $isConfirmingRemove,
             titleVisibility: .visible
         ) {
@@ -192,9 +192,9 @@ struct HookEditor: View {
 
     private static let backupVariableReference = """
     SWIFTRESTIC_EVENT             beforeBackup | afterSuccess | …
-    SWIFTRESTIC_PLAN_NAME         plan name
+    SWIFTRESTIC_PLAN_NAME         plan’s folder name
     SWIFTRESTIC_PLAN_ID           plan UUID
-    SWIFTRESTIC_REPO_NAME         repository name
+    SWIFTRESTIC_REPO_NAME         repository’s drive, folder, host, bucket or remote
     SWIFTRESTIC_REPO_ID           repository UUID
     SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed | skipped
     SWIFTRESTIC_SNAPSHOT_ID       set once the backup is written
@@ -211,7 +211,7 @@ struct HookEditor: View {
     SWIFTRESTIC_TASK              check | prune
     SWIFTRESTIC_PLAN_NAME         empty — repository hooks have no plan
     SWIFTRESTIC_PLAN_ID           empty — repository hooks have no plan
-    SWIFTRESTIC_REPO_NAME         repository name
+    SWIFTRESTIC_REPO_NAME         repository’s drive, folder, host, bucket or remote
     SWIFTRESTIC_REPO_ID           repository UUID
     SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed | skipped
     SWIFTRESTIC_FILES_NEW         0 — no backup ran

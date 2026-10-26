@@ -1117,6 +1117,7 @@ enum FilePicker {
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
         panel.message = message
+        panel.prompt = "Choose"
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
 
@@ -1128,6 +1129,7 @@ enum FilePicker {
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true
         panel.message = "Choose the restic executable"
+        panel.prompt = "Choose"
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
 
@@ -1138,6 +1140,7 @@ enum FilePicker {
         panel.nameFieldStringValue = "SwiftRestic Settings.json"
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
+        panel.prompt = "Export"
         return panel.runModal() == .OK ? panel.url : nil
     }
 

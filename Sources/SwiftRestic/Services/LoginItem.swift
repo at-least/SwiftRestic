@@ -59,8 +59,7 @@ enum LoginItem {
     }
 
     static let notInstalledMessage =
-        "Move SwiftRestic to your Applications folder first. A login item registered "
-            + "from a build folder points at a copy that will not be there next time."
+        "SwiftRestic can start at login once it is in your Applications folder."
 
     static func setEnabled(_ enabled: Bool) throws {
         if enabled {

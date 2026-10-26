@@ -101,10 +101,13 @@ extension AppModel {
             consequences += " A restore from this repository is running and will be cancelled."
         }
         if !runningBackupNames.isEmpty {
-            consequences += " A backup (\(runningBackupNames.joined(separator: ", "))) is running and will be cancelled."
+            let names = runningBackupNames.map { "“\($0)”" }
+            consequences += names.count == 1
+                ? " A backup of \(names[0]) is running and will be cancelled."
+                : " Backups of \(Format.list(names)) are running and will be cancelled."
         }
         if !applyingRetentionNames.isEmpty {
-            consequences += " Retention is being applied to \(applyingRetentionNames.joined(separator: ", ")) and will be cancelled."
+            consequences += " Retention is being applied to \(Format.list(applyingRetentionNames.map { "“\($0)”" })) and will be cancelled."
         }
         if isMaintaining {
             consequences += " Repository maintenance is running and will be cancelled."

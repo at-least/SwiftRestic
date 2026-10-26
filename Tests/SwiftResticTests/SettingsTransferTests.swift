@@ -241,7 +241,7 @@ struct SettingsTransferTests {
         model.configuration.plans = [running]
         model.activity[running.id] = PlanActivity()
         #expect(model.confirmationCopy(for: .importSettings(settings))?.message == idle
-            + "\n\nA backup is running\nImporting stops the work in progress.")
+            + "\n\nA backup is running.\nImporting stops the work in progress.")
     }
 
     @Test("an import replaces this Mac's repositories and plans, keeps its history, and deletes no password")

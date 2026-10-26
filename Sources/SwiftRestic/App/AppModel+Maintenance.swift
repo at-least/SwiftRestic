@@ -122,7 +122,7 @@ extension AppModel {
             do {
                 let service = try self.service()
                 try await service.unlock(self.context(for: repository))
-                self.post(Banner(title: "Unlocked", message: label(of: repository), isError: false))
+                self.post(Banner(title: "Unlocked “\(label(of: repository))”", message: "", isError: false))
             } catch {
                 self.noteAuthFailure(error, repositoryID: repositoryID)
                 // The queue is global: name the repository whose locks

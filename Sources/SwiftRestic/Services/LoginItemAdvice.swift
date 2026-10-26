@@ -14,8 +14,7 @@ enum LoginItemAdvice {
         case moveToApplications
     }
 
-    /// The confirmation after the editor's Start at Login — the same words
-    /// the Settings caption uses for the same state.
+    /// The confirmation after the editor's Start at Login.
     static let enabledConfirmation = LoginItem.description(of: .enabled)
 
     /// Nil once the app starts at login. Otherwise approval comes before

@@ -13,6 +13,21 @@ struct SettingsView: View {
     /// The network share whose Remove asks first.
     @State private var removingShare: NetworkShare?
 
+    /// The login switch's caption: what it means while off, in the plan
+    /// editor's words. The model's copies of the daemon's answer: a read
+    /// here would be an XPC round trip on every render. The needsApproval
+    /// state keeps its short form — the button below opens the pane, and
+    /// the banner's full form has no button to point with.
+    private var loginCaption: String? {
+        guard model.loginItemInstallable else { return LoginItem.notInstalledMessage }
+        if model.loginItemNeedsApproval { return LoginItem.needsApprovalShort }
+        switch model.loginItemState {
+        case .enabled: return nil
+        case .off: return LoginItemAdvice.caption(for: .startAtLogin)
+        case .needsApproval, .notFound: return LoginItem.description(of: model.loginItemState)
+        }
+    }
+
     var body: some View {
         // Each pane at its own height, the window following it (the
         // Settings scene's `.contentSize`): the HIG's "a settings window
@@ -48,7 +63,7 @@ struct SettingsView: View {
             Text("Backups keep running with the window closed, and SwiftRestic opens again only when you launch it.")
         }
         .confirmationDialog(
-            "Remove \(removingShare?.url ?? "this share") from SwiftRestic?",
+            "Remove “\(removingShare?.url ?? "")” from SwiftRestic?",
             isPresented: Binding(get: { removingShare != nil }, set: { if !$0 { removingShare = nil } }),
             titleVisibility: .visible,
             presenting: removingShare
@@ -59,7 +74,7 @@ struct SettingsView: View {
                         try await model.removeNetworkShare(share)
                     } catch {
                         model.post(Banner(
-                            title: "The password for \(share.url) could not be removed",
+                            title: "Could not remove the password for “\(share.url)”",
                             message: error.localizedDescription,
                             isError: true
                         ))
@@ -115,7 +130,7 @@ struct SettingsView: View {
                 )
                 ExpandableCaption(
                     summary: "Shows what’s running, and opens SwiftRestic after its window is closed.",
-                    detail: "The icon pulses while work is in progress (held still with Reduce Motion), dims while backups are paused or waiting for power, and wears a warning mark while a run from the last seven days failed or completed with warnings."
+                    detail: "The icon pulses while work is in progress (held still with Reduce Motion), dims while backups are paused, and wears a warning mark until a failed or warned run is resolved."
                 )
             }
 
@@ -128,19 +143,13 @@ struct SettingsView: View {
                     set: { value in model.requestStartsAtLogin(value) }
                 ))
                 .disabled(!model.loginItemInstallable && !model.startsAtLogin)
-                // The model's copies of the daemon's answer: a read here
-                // would be an XPC round trip on every render. The
-                // needsApproval state keeps its short form — the button
-                // below opens the pane, and the banner's full form has no
-                // button to point with.
-                Text(model.loginItemInstallable
-                    ? (model.loginItemNeedsApproval
-                        ? LoginItem.needsApprovalShort
-                        : LoginItem.description(of: model.loginItemState))
-                    : LoginItem.notInstalledMessage)
-                    .font(.caption)
-                    .foregroundStyle(model.loginItemNeedsApproval ? Theme.warning : .secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Nothing while it starts at login: the switch says so.
+                if let caption = loginCaption {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(model.loginItemNeedsApproval ? Theme.warning : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if model.loginItemNeedsApproval {
                     Button("Open Login Items") { LoginItem.openLoginItemsSettings() }
                 }
@@ -165,7 +174,7 @@ struct SettingsView: View {
                         )
                     )
                 } else {
-                    LabeledContent("Next backup", value: "Nothing scheduled")
+                    LabeledContent("Next backup", value: "No backups scheduled")
                 }
             }
 
@@ -446,7 +455,7 @@ struct NotificationChannelsTab: View {
             if selection == nil { selection = channels.first?.id }
         }
         .confirmationDialog(
-            "Remove this webhook?",
+            "Remove “\(channels.first { $0.id == selection }?.displayName ?? "")”?",
             isPresented: $isConfirmingRemove,
             titleVisibility: .visible
         ) {
