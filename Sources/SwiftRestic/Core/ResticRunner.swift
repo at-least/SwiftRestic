@@ -425,8 +425,7 @@ actor ResticRunner {
     }
 
     static func tail(of text: String, limit: Int) -> String {
-        guard text.count > limit else { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
-        return String(text.suffix(limit)).trimmingCharacters(in: .whitespacesAndNewlines)
+        String(text.suffix(limit)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

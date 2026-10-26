@@ -406,12 +406,7 @@ extension RunRecord {
     /// each drive of `sources` whose share failed, in the order they name
     /// them; empty when none did.
     private static func reconnectClauses(_ failures: [String: String], sources: [String]) -> String {
-        var volumes: [String] = []
-        for source in sources {
-            if let volume = VolumePresence.volumeName(of: (source as NSString).expandingTildeInPath), !volumes.contains(volume) {
-                volumes.append(volume)
-            }
-        }
+        let volumes = BackupPlan.withoutDuplicates(volumeNames(sources).compactMap { $0 })
         return volumes.compactMap { volume in failures[volume].map { " Reconnecting “\(volume)” failed: \($0)." } }.joined()
     }
 
@@ -451,17 +446,12 @@ extension RunRecord {
     /// folder was deleted, or whose share's password changed, is one row and
     /// one notification, not one an hour. Nil when it does not continue it.
     func continuingStandingFailure(of previous: RunRecord) -> RunRecord? {
-        guard kind == .backup, previous.kind == .backup,
-              let planID, previous.planID == planID, previous.repositoryID == repositoryID,
+        guard continuesPlanBackup(previous),
               outcome == .failed, previous.outcome == .failed,
               missingSources != nil || refusedShares != nil,
-              missingSources == previous.missingSources, refusedShares == previous.refusedShares,
-              previous.hookMessages.isEmpty
+              missingSources == previous.missingSources, refusedShares == previous.refusedShares
         else { return nil }
-        var merged = self
-        merged.skipCount = (previous.skipCount ?? 1) + 1
-        merged.skippedSince = previous.skippedSince ?? previous.startedAt
-        return merged
+        return merged(after: previous)
     }
 
     /// A backup that went around an away drive's folders and wrote a
@@ -477,14 +467,29 @@ extension RunRecord {
     /// "“Archive SSD” is not connected", naming each drive once, or nil
     /// when a source is not on a volume under /Volumes.
     static func notConnected(_ sources: [String]) -> String? {
-        var volumes: [String] = []
-        for source in sources {
-            guard let volume = VolumePresence.volumeName(of: (source as NSString).expandingTildeInPath) else { return nil }
-            if !volumes.contains(volume) { volumes.append(volume) }
-        }
-        guard !volumes.isEmpty else { return nil }
-        let names = volumes.map { "“\($0)”" }
+        let found = volumeNames(sources)
+        guard !found.isEmpty, !found.contains(nil) else { return nil }
+        let names = BackupPlan.withoutDuplicates(found.compactMap { $0 }).map { "“\($0)”" }
         return "\(Format.list(names)) \(names.count == 1 ? "is" : "are") not connected"
+    }
+
+    private static func volumeNames(_ sources: [String]) -> [String?] {
+        sources.map { VolumePresence.volumeName(of: ($0 as NSString).expandingTildeInPath) }
+    }
+
+    /// Both backups of one plan into one repository, `previous` carrying no
+    /// hook's complaint — what either continuation requires first.
+    private func continuesPlanBackup(_ previous: RunRecord) -> Bool {
+        kind == .backup && previous.kind == .backup
+            && planID != nil && previous.planID == planID && previous.repositoryID == repositoryID
+            && previous.hookMessages.isEmpty
+    }
+
+    private func merged(after previous: RunRecord) -> RunRecord {
+        var merged = self
+        merged.skipCount = (previous.skipCount ?? 1) + 1
+        merged.skippedSince = previous.skippedSince ?? previous.startedAt
+        return merged
     }
 
     /// This skipped backup as the continuation of `previous` — the plan's
@@ -498,16 +503,12 @@ extension RunRecord {
     /// record, keeping that snapshot's run. Nil when it does not continue
     /// it.
     func continuingSkip(of previous: RunRecord) -> RunRecord? {
-        guard kind == .backup, previous.kind == .backup,
-              let planID, previous.planID == planID, previous.repositoryID == repositoryID,
+        guard continuesPlanBackup(previous),
               outcome == .skipped, previous.outcome == .skipped,
               (snapshotID == nil) == (previous.snapshotID == nil),
-              detailText == previous.detailText, itemErrors == previous.itemErrors, previous.hookMessages.isEmpty
+              detailText == previous.detailText, itemErrors == previous.itemErrors
         else { return nil }
-        var merged = self
-        merged.skipCount = (previous.skipCount ?? 1) + 1
-        merged.skippedSince = previous.skippedSince ?? previous.startedAt
-        return merged
+        return merged(after: previous)
     }
 
     /// Maps a thrown error onto the outcome fields: task cancellation — Swift's

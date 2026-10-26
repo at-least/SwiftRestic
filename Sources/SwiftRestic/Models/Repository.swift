@@ -163,7 +163,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             return "sftp://\(user)\(sftpHost):\(port)/\(Self.percentEncoded(sftpPath, .urlPathAllowed))"
         case .s3:
             let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
-            let suffix = s3Prefix.isEmpty ? "" : "/\(s3Prefix.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+            let suffix = s3Prefix.isEmpty ? "" : "/\(Self.trimSlashes(s3Prefix))"
             return "s3:\(endpoint)/\(s3Bucket)\(suffix)"
         case .b2:
             let suffix = b2Prefix.isEmpty ? "" : ":\(b2Prefix)"
@@ -200,9 +200,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         return port
     }
 
-    /// The local path with `~` expanded — the form every file-system
-    /// consumer (restic, the volume read) needs; `localPath` keeps the form
-    /// the user typed.
     /// The REST server's URL, without restic's `rest:` scheme prefix.
     var restServerURL: String {
         restURL.hasPrefix("rest:") ? String(restURL.dropFirst("rest:".count)) : restURL
@@ -224,9 +221,11 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         kind == .local ? VolumePresence.volumeName(of: resolvedLocalPath) : nil
     }
 
+    /// The local path with `~` expanded — the form every file-system
+    /// consumer (restic, the volume read) needs; `localPath` keeps the form
+    /// the user typed.
     var resolvedLocalPath: String {
-        guard localPath.hasPrefix("~") else { return localPath }
-        return (localPath as NSString).expandingTildeInPath
+        ResticService.expandTilde(localPath)
     }
 
     /// Whether the required non-secret fields are filled in.

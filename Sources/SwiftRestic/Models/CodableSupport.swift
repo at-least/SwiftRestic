@@ -19,26 +19,23 @@ import Foundation
 extension KeyedDecodingContainer {
     func value<T: Decodable>(_ key: Key, default fallback: T) -> T {
         guard contains(key) else { return fallback }
-        do {
-            if let decoded = try decodeIfPresent(T.self, forKey: key) { return decoded }
-            note(key, "is null — the default (\(fallback)) is used")
-            return fallback
-        } catch {
-            note(key, "could not be read (\(Self.briefFailure(error))) — the default (\(fallback)) is used")
-            return fallback
-        }
+        return read(key, substitute: "the default (\(fallback)) is used") ?? fallback
     }
 
     func optional<T: Decodable>(_ key: Key) -> T? {
         guard contains(key) else { return nil }
+        return read(key, substitute: "read as absent")
+    }
+
+    /// The present key's value, or nil with a note ending in `substitute`.
+    private func read<T: Decodable>(_ key: Key, substitute: @autoclosure () -> String) -> T? {
         do {
             if let decoded = try decodeIfPresent(T.self, forKey: key) { return decoded }
-            note(key, "is null — read as absent")
-            return nil
+            note(key, "is null — \(substitute())")
         } catch {
-            note(key, "could not be read (\(Self.briefFailure(error))) — read as absent")
-            return nil
+            note(key, "could not be read (\(Self.briefFailure(error))) — \(substitute())")
         }
+        return nil
     }
 
     private static func briefFailure(_ error: Error) -> String {

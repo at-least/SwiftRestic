@@ -34,19 +34,15 @@ struct ResticBinary: Sendable {
             return ResticBinary(url: url)
         }
 
-        var searched: [String] = []
-        for candidate in searchPaths {
-            searched.append(candidate)
-            if Self.isExecutableFile(atPath: candidate) {
-                return ResticBinary(url: URL(fileURLWithPath: candidate))
-            }
+        if let candidate = searchPaths.first(where: { Self.isExecutableFile(atPath: $0) }) {
+            return ResticBinary(url: URL(fileURLWithPath: candidate))
         }
 
         // Last resort: whatever PATH we did inherit.
         if let fromPath = Self.onInheritedPath("restic") {
             return ResticBinary(url: URL(fileURLWithPath: fromPath))
         }
-        throw ResticError.binaryNotFound(searched: searched)
+        throw ResticError.binaryNotFound(searched: searchPaths)
     }
 
     /// An executable *file*. `FileManager.isExecutableFile` alone also accepts

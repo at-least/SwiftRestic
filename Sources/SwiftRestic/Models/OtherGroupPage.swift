@@ -114,13 +114,7 @@ struct OtherGroupPageSummary: Equatable {
         // Dedup on the line itself, first-seen (= newest set) first: two
         // hosts that backed up the same folders are two lineages but one
         // indistinguishable string, and the rows key on the string.
-        var folderSets: [String] = []
-        for snapshot in snapshots {
-            let list = snapshot.lineageKey.folderList
-            guard !folderSets.contains(list) else { continue }
-            folderSets.append(list)
-        }
-        folders = folderSets
+        folders = BackupPlan.withoutDuplicates(snapshots.map(\.lineageKey.folderList))
         pathCount = Set(snapshots.flatMap(\.paths)).count
 
         excludes = BackupPlan.withoutDuplicates(snapshots.flatMap(\.excludes))

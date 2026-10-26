@@ -210,11 +210,6 @@ extension Snapshot {
     /// derivation, so the group page's "Made on" row and the adopt
     /// sheet's header cannot count the Macs differently.
     static func distinctHosts(of snapshots: [Snapshot]) -> [String] {
-        var hosts: [String] = []
-        for snapshot in snapshots {
-            let host = snapshot.hostname ?? "Unknown Mac"
-            if !hosts.contains(host) { hosts.append(host) }
-        }
-        return hosts
+        BackupPlan.withoutDuplicates(snapshots.map { $0.hostname ?? "Unknown Mac" })
     }
 }

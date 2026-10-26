@@ -712,14 +712,8 @@ final class SnapshotIndex: @unchecked Sendable {
     /// same microsecond tie arbitrarily for `newest`.
     func children(ofPath path: String, inChain chainKey: String) async throws -> [IndexChild] {
         try await pool.read { db in
-            let parent: Int64
-            if path == "/" {
-                parent = Self.rootID
-            } else {
-                var lookup = try NodeLookup(db)
-                guard let node = try lookup.node(for: path) else { return [] }
-                parent = node
-            }
+            var lookup = try NodeLookup(db)
+            guard let parent = try lookup.folder(for: path) else { return [] }
             guard let newestSeq = try Int64.fetchOne(
                 db.cachedStatement(sql: SQL.chainNewestIndexed), arguments: [chainKey]
             ) else { return [] }
@@ -834,14 +828,8 @@ final class SnapshotIndex: @unchecked Sendable {
             guard let older = try Target.fetch(db, olderID), let newer = try Target.fetch(db, newerID),
                   [older, newer].allSatisfy({ $0.chainID == chainID && $0.state == State.indexed })
             else { return nil }
-            let parent: Int64
-            if path == "/" {
-                parent = Self.rootID
-            } else {
-                var lookup = try NodeLookup(db)
-                guard let node = try lookup.node(for: path) else { return nil }
-                parent = node
-            }
+            var lookup = try NodeLookup(db)
+            guard let parent = try lookup.folder(for: path) else { return nil }
             /// Each child the snapshot at `seq` holds: the run claiming it
             /// there, and its kind. Keyed by the name's bytes: two names that
             /// differ only in Unicode normalization are two children.
@@ -1309,6 +1297,12 @@ final class SnapshotIndex: @unchecked Sendable {
                 try Int64.fetchOne(lookup, arguments: [parent, name]).map { (id: $0, created: false) }
             }?.last?.id
             return node == SnapshotIndex.rootID ? nil : node
+        }
+
+        /// `node(for:)`, except `/` answers the root: the folder whose
+        /// children a listing reads.
+        mutating func folder(for path: String) throws -> Int64? {
+            path == "/" ? SnapshotIndex.rootID : try node(for: path)
         }
 
         /// The node of each resolvable path, mapped back to the spelling

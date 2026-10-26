@@ -62,17 +62,16 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .binaryNotExecutable(path):
             return "The file at \(path) is not executable."
         case let .commandFailed(code, message):
-            if code == Self.wrongPasswordCode {
+            let base: String?
+            switch code {
+            case Self.wrongPasswordCode:
                 // The trust-critical failure carries its fix: restic's own
                 // diagnosis leaves Retry as the only next step, and Retry can
                 // never succeed here. restic's words stay for the discriminating
                 // detail (wrong password vs no matching key vs a damaged key
                 // file), first sentence only — stderr can run multi-line.
-                let base = "The password doesn’t open this repository — check it in the repository editor."
-                let restic = Format.firstSentence(message)
-                return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
-            }
-            if code == Self.repositoryMissingCode || code == Self.repositoryLockedCode {
+                base = "The password doesn’t open this repository — check it in the repository editor."
+            case Self.repositoryMissingCode, Self.repositoryLockedCode:
                 // Exit 12's grammar: the fix leads, restic's first sentence
                 // keeps the detail. Exit 10's are the Add Repository
                 // button's own words, so the banner and the notification say
@@ -80,9 +79,13 @@ enum ResticError: Error, LocalizedError, Equatable {
                 // Unlock tooltip's "no run here holds it",
                 // checked when the button is offered: the stored message
                 // outlives that moment.
-                let base = code == Self.repositoryMissingCode
+                base = code == Self.repositoryMissingCode
                     ? Self.noRepositoryAtLocation + "."
                     : "The repository is locked — if no other Mac is using it, unlock it."
+            default:
+                base = nil
+            }
+            if let base {
                 let restic = Format.firstSentence(message)
                 return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
             }
