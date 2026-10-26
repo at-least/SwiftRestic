@@ -168,7 +168,9 @@ enum BackupRunEngine {
         // volume name, for the skip's words.
         var reconnectFailures: [String: String] = [:]
 
-        do {
+        // Every exit but a missing password leaves through the tail below
+        // (`break run`), so the after-hooks and delivery run once.
+        run: do {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
 
@@ -187,11 +189,7 @@ enum BackupRunEngine {
                     record.failureMessage =
                         "The backup didn’t run because a hook that runs before it failed."
                     sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
-                    await finish(
-                        record: &record, plan: plan, hooks: hooks, context: hookContext,
-                        transcript: transcript, sink: sink
-                    )
-                    return
+                    break run
                 }
             }
 
@@ -224,11 +222,7 @@ enum BackupRunEngine {
                     reconnectFailures: refused.reasonsByVolume
                 )
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
-                await finish(
-                    record: &record, plan: plan, hooks: hooks, context: hookContext,
-                    transcript: transcript, sink: sink
-                )
-                return
+                break run
             }
 
             // The repository's drive away (after the hooks, which may mount
@@ -244,11 +238,7 @@ enum BackupRunEngine {
                 // The listing learns it now, not at the next launch, and
                 // why: a refresh would reconnect the share again.
                 sink.noteRepositoryAway(repositoryID: repository.id, reason: reason)
-                await finish(
-                    record: &record, plan: plan, hooks: hooks, context: hookContext,
-                    transcript: transcript, sink: sink
-                )
-                return
+                break run
             }
 
             // A network repository's server out of reach (after the hooks,
@@ -261,11 +251,7 @@ enum BackupRunEngine {
                 record.detailText = reason
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
                 sink.noteRepositoryAway(repositoryID: repository.id, reason: reason)
-                await finish(
-                    record: &record, plan: plan, hooks: hooks, context: hookContext,
-                    transcript: transcript, sink: sink
-                )
-                return
+                break run
             }
 
             // Healthchecks measures the run against this ping, so it has to go out
@@ -500,7 +486,9 @@ enum MaintenanceRunEngine {
             outcome: "starting"
         )
 
-        do {
+        // A failure leaves through the tail below (`break run`), which
+        // stamps it; a drive or server that is away returns unstamped.
+        run: do {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
 
@@ -520,14 +508,10 @@ enum MaintenanceRunEngine {
                     record.outcome = .failed
                     record.failureMessage =
                         "The \(task.displayName.lowercased()) didn’t run because a hook that runs before it failed."
-                    // Stamped like any other failure: a hook that always says no
-                    // must not have the scheduler asking again every minute.
-                    sink.stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
-                    await finish(
-                        record: &record, repository: repository, hooks: hooks, context: hookContext,
-                        transcript: transcript, sink: sink
-                    )
-                    return
+                    // Stamped at the tail like any other failure: a hook that
+                    // always says no must not have the scheduler asking again
+                    // every minute.
+                    break run
                 }
             }
 
@@ -551,12 +535,7 @@ enum MaintenanceRunEngine {
                     record.failureMessage = RunRecord.skippedReason(
                         sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
                     )
-                    sink.stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
-                    await finish(
-                        record: &record, repository: repository, hooks: hooks, context: hookContext,
-                        transcript: transcript, sink: sink
-                    )
-                    return
+                    break run
                 }
                 if repository.isDriveAway {
                     record.outcome = .skipped
