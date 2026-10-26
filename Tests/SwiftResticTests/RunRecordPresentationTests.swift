@@ -542,6 +542,11 @@ struct RunRecordPresentationTests {
         #expect(words("\(odd): read \(odd): input/output error", odd)?.reason == "read \(odd): input/output error")
         // Outside the plan's folders, where it is on disk.
         #expect(words("/Volumes/Other/x.txt: open /Volumes/Other/x.txt: permission denied", "/Volumes/Other/x.txt")?.location == "/Volumes/Other")
+        // Byte for byte, as the index compares (ResticPath.holds): a folder
+        // spelt in NFC does not hold the same name spelt in NFD.
+        #expect(RunRecordPresentation.unreadableItemWords(line: "x", path: "/Caf\u{0065}\u{0301}/x.txt", sources: ["/Caf\u{00E9}"])?.location == "/Caf\u{0065}\u{0301}")
+        // A whole-disk plan's "/" names no folder: its items read as on disk.
+        #expect(RunRecordPresentation.unreadableItemWords(line: "x", path: NSHomeDirectory() + "/Library/Mail", sources: ["/"])?.location == "~/Library")
         // A plan folder written with a tilde holds what is under it.
         let home = NSHomeDirectory() + "/Notes/a.md"
         #expect(RunRecordPresentation.unreadableItemWords(line: "\(home): open \(home): permission denied", path: home, sources: ["~/Notes"])?.location == "Notes")

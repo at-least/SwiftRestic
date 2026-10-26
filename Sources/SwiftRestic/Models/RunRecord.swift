@@ -422,8 +422,7 @@ extension RunRecord {
     /// run left behind; nil for any other failure, restic's words standing.
     static func repositoryFullMessage(resticMessage: String, repository: Repository) -> String? {
         guard repository.kind == .local, resticMessage.contains("no space left on device") else { return nil }
-        var root = repository.resolvedLocalPath
-        while root.count > 1, root.hasSuffix("/") { root.removeLast() }
+        let root = ResticPath.normalized(repository.resolvedLocalPath)
         // restic names the file it was writing: "write <repository>/data/…".
         guard resticMessage.contains("write \(root)/") else { return nil }
         let disk = VolumePresence.volumeName(of: root).map { "“\($0)”" } ?? "This Mac’s disk"

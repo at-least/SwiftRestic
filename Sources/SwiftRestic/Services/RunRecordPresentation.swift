@@ -311,13 +311,11 @@ enum RunRecordPresentation {
     static func unreadableItemWords(line: String, path: String?, sources: [String]) -> UnreadableItemWords? {
         guard let path else { return nil }
         let parent = (path as NSString).deletingLastPathComponent
-        let tops = sources.map { source in
-            var top = ResticService.expandTilde(source)
-            while top.count > 1, top.hasSuffix("/") { top.removeLast() }
-            return top
-        }
-        let location = if let top = tops.first(where: { parent == $0 || parent.hasPrefix($0 + "/") }) {
-            (top as NSString).lastPathComponent + parent.dropFirst(top.count)
+        let tops = sources.map { ResticPath.normalized(ResticService.expandTilde($0)) }
+        // Not a whole-disk plan's "/": its name says nothing of where the
+        // item is, so the item reads as on disk, tilde and all.
+        let location = if let top = tops.first(where: { $0 != "/" && ResticPath.holds($0, parent) }) {
+            (top as NSString).lastPathComponent + String(parent.unicodeScalars.dropFirst(top.unicodeScalars.count))
         } else {
             (parent as NSString).abbreviatingWithTildeInPath
         }

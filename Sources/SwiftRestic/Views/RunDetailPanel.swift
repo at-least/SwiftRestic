@@ -227,7 +227,7 @@ struct RunDetailPanel: View {
                         .foregroundStyle(.secondary)
                 }
                 // The decoding gap and the retention skip explain themselves.
-                ForEach(Array(run.itemErrors.dropFirst(unreadable.count).enumerated()), id: \.offset) { _, message in
+                ForEach(Array(run.trailingItemErrors.enumerated()), id: \.offset) { _, message in
                     Text(message)
                         .font(.callout)
                         .foregroundStyle(.secondary)

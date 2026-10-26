@@ -33,8 +33,7 @@ enum EditorRequirements {
     /// A path as restic will read it, for comparing two spellings of one:
     /// trimmed, a tilde expanded, a trailing slash dropped.
     private static func comparable(_ path: String) -> String {
-        let expanded = PathListEntry.value(for: path, expandsTildeInPath: true, escapesGlobs: false) ?? ""
-        return expanded.count > 1 && expanded.hasSuffix("/") ? String(expanded.dropLast()) : expanded
+        ResticPath.normalized(PathListEntry.value(for: path, expandsTildeInPath: true, escapesGlobs: false) ?? "")
     }
 
     /// Test Connection's answer when no repository is at the location: a
@@ -83,8 +82,7 @@ enum EditorRequirements {
     /// A repository's location as restic reads it, for comparing two
     /// spellings of one: a trailing slash dropped.
     private static func comparableLocation(_ repository: Repository) -> String {
-        let location = repository.resticRepositoryString
-        return location.count > 1 && location.hasSuffix("/") ? String(location.dropLast()) : location
+        ResticPath.normalized(repository.resticRepositoryString)
     }
 
     /// The repository a plan editor opens on: the plan's own, else the

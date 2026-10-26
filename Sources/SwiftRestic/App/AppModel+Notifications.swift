@@ -65,12 +65,12 @@ extension AppModel {
             now: now
         )
         for alert in alerts {
-            guard let index = configuration.plans.firstIndex(where: { $0.id == alert.planID }) else { continue }
-            configuration.plans[index].staleAlertedFor = alert.lastBackupAt
+            guard let plan = plan(id: alert.planID) else { continue }
+            updatePlan(plan.id) { $0.staleAlertedFor = alert.lastBackupAt }
             guard Self.supportsNotifications else { continue }
             let text = StaleAlert.notification(
                 planTitle: RunRecordPresentation.planWithRepository(
-                    configuration.plans[index], plans: configuration.plans, repositories: configuration.repositories
+                    plan, plans: configuration.plans, repositories: configuration.repositories
                 ),
                 alert: alert
             )

@@ -164,10 +164,10 @@ extension AppModel: MaintenanceRunEngine.Sink {
     }
 
     func advanceCheckDataSlice(repositoryID: UUID) {
-        guard let index = configuration.repositories.firstIndex(where: { $0.id == repositoryID }) else { return }
-        let maintenance = configuration.repositories[index].maintenance
-        guard maintenance.checkDataSlices > 0 else { return }
-        configuration.repositories[index].maintenance.nextCheckDataSlice = maintenance.nextCheckDataSlice % maintenance.checkDataSlices + 1
+        guard let slices = repository(id: repositoryID)?.maintenance.checkDataSlices, slices > 0 else { return }
+        updateRepository(repositoryID) { repository in
+            repository.maintenance.nextCheckDataSlice = repository.maintenance.nextCheckDataSlice % slices + 1
+        }
     }
 
     func markDriveAway(repositoryID: UUID) {

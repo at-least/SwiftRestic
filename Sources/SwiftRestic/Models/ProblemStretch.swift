@@ -42,9 +42,8 @@ extension RunRecord {
             let sentence = failureMessage.map(Format.firstSentence) ?? ""
             return "\(exitCode.map(String.init) ?? "-") " + withoutDigits(sentence)
         }
-        let items = unreadableItems
-        let rest = (itemErrors.dropFirst(items.count) + hookMessages).map(withoutDigits)
-        return (Array(items) + rest).joined(separator: "\n")
+        let rest = (trailingItemErrors + hookMessages).map(withoutDigits)
+        return (Array(unreadableItems) + rest).joined(separator: "\n")
     }
 
     /// This backup's stretch, `previous` being its plan's backup before it
