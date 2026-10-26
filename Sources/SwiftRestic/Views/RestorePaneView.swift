@@ -739,9 +739,9 @@ struct RestorePaneView: View {
     // MARK: - Loading
 
     /// The selected record changed, or the pane was just shown: rebuild the
-    /// tree, walk the preserved folder's spine back open, and load the
-    /// change annotations. Search belongs to the record it was searched in
-    /// — a record switch takes both the hits and the query, so it never
+    /// tree, walk the preserved folder's spine back open, then open the
+    /// other roots, and load the change annotations. Search belongs to the
+    /// record it was searched in — a record switch takes both the hits and the query, so it never
     /// shows another backup's search. A pane just shown keeps the query it
     /// comes with — typed on a group's Overview, which turns the page to
     /// Backups, or left when the tab was last shown — and runs it.
@@ -761,10 +761,7 @@ struct RestorePaneView: View {
             currentPath = focus
         }
         loadedSnapshotID = record.id
-        let spine = RestorePaneLoad.foldersToOpen(
-            roots: record.paths,
-            spine: currentPath.map { Format.pathChain(of: $0, roots: record.paths) } ?? []
-        )
+        let spine = currentPath.map { Format.pathChain(of: $0, roots: record.paths) } ?? []
         tree.reset(to: record.paths.map(SnapshotNode.directory))
 
         isLoadingTree = true
@@ -836,20 +833,32 @@ struct RestorePaneView: View {
             revealPath = focus
         }
         isLoadingTree = false
+        // Not part of the walk: a root the user is not in must not become
+        // the folder they were in, stop the walk with its failure, or hold
+        // the walk's folder back behind its listing.
+        for root in RestorePaneLoad.rootsBesideWalk(roots: record.paths, walk: spine) {
+            guard let needed = tree.toggleExpanded(path: root) else { continue }
+            fetchChildren(of: root, needed: needed, record: record)
+        }
     }
 
     private func expand(path: String) {
         guard let needed = tree.toggleExpanded(path: path) else { return }
         guard let record else { return }
+        // A focus change that keeps the row selected, as NSOutlineView's
+        // does — not a deselect, which would send the next ↓
+        // back to the top of the list.
+        currentPath = path
+        fetchChildren(of: path, needed: needed, record: record)
+    }
+
+    /// Lists `needed`, the folder `path`'s opening asked for, into the tree.
+    private func fetchChildren(of path: String, needed: String, record: Snapshot) {
         // One fetch per directory at a time: a double-click racing itself
         // must not land two listings (the tree is replace-idempotent, but
         // skipping the duplicate spares a restic round trip).
         let fetchKey = FetchKey(snapshotID: record.id, path: needed)
         guard fetchTasks[fetchKey] == nil else { return }
-        // A focus change that keeps the row selected, as NSOutlineView's
-        // does — not a deselect, which would send the next ↓
-        // back to the top of the list.
-        currentPath = path
         fetchTasks[fetchKey] = Task {
             defer { fetchTasks[fetchKey] = nil }
             do {

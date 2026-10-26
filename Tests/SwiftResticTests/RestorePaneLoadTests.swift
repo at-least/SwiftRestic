@@ -146,12 +146,16 @@ struct RestorePaneLoadTests {
         #expect(Set(shown.changes.keys) == ["/src/a/k.txt"])
     }
 
-    @Test("every root opens, a root on the walk once, the walk last")
-    func foldersToOpen() {
-        #expect(RestorePaneLoad.foldersToOpen(roots: ["/src"], spine: []) == ["/src"])
-        #expect(RestorePaneLoad.foldersToOpen(roots: ["/a", "/b"], spine: []) == ["/a", "/b"])
-        #expect(RestorePaneLoad.foldersToOpen(roots: ["/a", "/b"], spine: ["/a", "/a/x"]) == ["/b", "/a", "/a/x"])
-        #expect(RestorePaneLoad.foldersToOpen(roots: ["/a", "/b"], spine: ["/a"]) == ["/b", "/a"])
+    @Test("the roots beside the walk open after it, a root on the walk left to the walk, spellings told apart by bytes")
+    func rootsBesideWalk() {
+        #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/src"], walk: []) == ["/src"])
+        #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/a", "/b"], walk: []) == ["/a", "/b"])
+        #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/a", "/b"], walk: ["/a", "/a/x"]) == ["/b"])
+        #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/a", "/b"], walk: ["/b"]) == ["/a"])
+        // NFC and NFD: one String to Swift's ==, two roots to restic. Failed
+        // with String comparison (the NFD root was dropped).
+        #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/Caf\u{E9}", "/Cafe\u{301}"], walk: ["/Caf\u{E9}"])
+            .map { PathKey($0) } == [PathKey("/Cafe\u{301}")])
     }
 
     @Test("a first backup lists its tree and runs no comparison")
