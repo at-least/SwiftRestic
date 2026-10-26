@@ -387,13 +387,13 @@ the generator after editing it; the PNGs are checked in.
   schedule's *At* is macOS's own time field, in the Mac's 12- or 24-hour
   clock, as every schedule then reads ("Daily at 2:00 AM", "Daily at 02:00"
   under a 24-hour clock) — the form of the *Next backup* value beside it,
-  where it had been a fixed 24-hour "02:00". *Skip › Online-only files*
+  where it had been a fixed 24-hour "02:00". *Skip ▸ Online-only files*
   (iCloud Drive, OneDrive) passes restic's `--exclude-cloud-files`: on
   for new plans, off for plans saved before the option (their backups do not
   change under it), and only with restic 0.19 or later, which brought the
   flag to macOS (restic's changelog) — the editor says when this restic is
   older. What restic does with an online-only file without the flag was not
-  tried: it would mean reading a real iCloud Drive file. *Skip › Developer
+  tried: it would mean reading a real iCloud Drive file. *Skip ▸ Developer
   files* (named *Skip what developer tools rebuild* until 2026-10-21) holds
   one checkbox per group, shown under the switch while it is on (since
   2026-10-23): Python, JavaScript & TypeScript, Swift & Xcode, Rust, Go,
@@ -524,7 +524,7 @@ the generator after editing it; the PNGs are checked in.
     under *Folder*, and on the plan editor's Excluding tab — "On the network
     share smb://me@nas.local/NAS", read from the mounted volume — with a
     *Share password* field; the password is kept in the Keychain, and
-    Settings › General lists the saved shares, *Remove* forgetting one.
+    Settings ▸ General lists the saved shares, *Remove* forgetting one.
     Before a backup, after the before-backup hooks, a share the run needs
     that is not mounted is mounted with that password, with no dialog, and
     the log says "Reconnected the network share … at /Volumes/NAS."; out of
@@ -562,7 +562,7 @@ the generator after editing it; the PNGs are checked in.
   slot), the menu bar's menu leads with "restic is missing — backups are on
   hold" and promises no next run, each grey *Back Up* row says "restic is
   missing", and the quiet-plan notification still names plans left unprotected.
-  *Find Again* in Settings › restic, or a relaunch, lets the due plans run.
+  *Find Again* in Settings ▸ restic, or a relaunch, lets the due plans run.
 - **Pause** — *Pause Backups* in the menu bar holds every scheduled backup,
   check and prune for an hour, until tomorrow or until resumed; *Pause and
   Stop Running Backups* also stops backups in flight, which start over when
@@ -647,7 +647,7 @@ the generator after editing it; the PNGs are checked in.
   search field and a repository picker above the results; once the
   repository's index has read every backup it searches as you type, and
   until then restic's walk runs on Return. Until 2026-10-18 it
-  was a sheet, and its restores stacked a second sheet on it. *Repository ›
+  was a sheet, and its restores stacked a second sheet on it. *Repository ▸
   Find Files* (⇧⌘F) opens it, the field focused, on the
   repository in view — the selected repository's or plan's or group's, else
   the first (Activity, the console, nothing); a repository page's own search
@@ -703,7 +703,7 @@ the generator after editing it; the PNGs are checked in.
   can register itself as a login item and sit in the menu bar.
 - **Maintenance** — scheduled `check` and `prune` per repository, on a day
   interval, plus manual runs, unlocking (restic's stale lock removal), repository stats, and a
-  plan's retention on demand (*Plan › Apply Retention Now* previews with
+  plan's retention on demand (*Plan ▸ Apply Retention Now* previews with
   `restic forget --dry-run --no-lock`, then asks). The repository page's
   *Last check* and *Last prune* read the newest such run in Activity and say
   how it ended when it did not succeed ("3 days ago · failed", "·
@@ -771,7 +771,7 @@ the generator after editing it; the PNGs are checked in.
   opened here (`~/Library/Caches/restic`), keeps it after the repository is
   removed, and never cleans up: past 30 days unused it only prints, at the
   start of a command nobody sees, that `restic cache --cleanup` would remove
-  it. Settings › restic measures it (`restic cache`: size, folder count, how
+  it. Settings ▸ restic measures it (`restic cache`: size, folder count, how
   many unused) and offers *Remove Caches Unused for 30 Days*, behind a
   confirmation stating the cost: a repository still set up here that went
   unused that long loses its cache too, rebuilt when restic next opens it —
@@ -780,7 +780,7 @@ the generator after editing it; the PNGs are checked in.
 - **Hooks** — shell commands before a backup and after success, warnings or
   failure, and per repository before and after a check or prune. Context arrives
   as `SWIFTRESTIC_*` environment variables; a before hook can be set to call the
-  run off. An editor's Hooks tab, like Settings › Webhooks for the channels below,
+  run off. An editor's Hooks tab, like Settings ▸ Webhooks for the channels below,
   lists them in a frame with + and − attached beneath it; empty, the frame
   says "No hooks" and what + adds, and while there are some, one is always
   open in the form under the list (the first on arrival, a neighbour after a
@@ -799,7 +799,7 @@ the generator after editing it; the PNGs are checked in.
   Optionally one per successful backup, and one for a scheduled plan gone
   quiet:
   *Notify when a scheduled plan has not backed up for* 3, 7 (the default) or
-  14 days, or never (Settings › General) — a drive unplugged at every slot,
+  14 days, or never (Settings ▸ General) — a drive unplugged at every slot,
   or slots slept through, write no failed run, so nothing else would say it.
   It names each plan once per quiet stretch ("No successful backup in 8 days
   — the last one was …", the mark saved on the plan), re-armed by its next
@@ -813,7 +813,7 @@ the generator after editing it; the PNGs are checked in.
   hour before each run. The menu bar's exclamation mark and problem line
   stay run-driven.
 - **restic console** — run any restic command against a repository and read its
-  own output, for what the UI does not cover (*Repository › restic
+  own output, for what the UI does not cover (*Repository ▸ restic
   Console*, or the sidebar's last row). A command that may change the backups — the ones it confirms
   first, plus `tag` and `copy` — re-reads the listing when it ends, so the
   sidebar, Files tabs and counts drop what a `forget` removed at once. A
@@ -851,7 +851,7 @@ the generator after editing it; the PNGs are checked in.
   rclone." — checked against SFTP through rclone 1.75.2 in Docker. Every surface naming a run names its
   repository too: the log sheet's header, notifications and webhooks,
   the menu bar, Settings. The history keeps the newest *Items kept in Activity* records
-  (Settings › General › History), trimming the oldest with their logs —
+  (Settings ▸ General ▸ History), trimming the oldest with their logs —
   except what a standing problem reads: each plan's newest failed or
   completed-with-errors backup until a later success (its caption and dot
   read it however old), and any other run's problem for the week the Recent
@@ -1181,12 +1181,12 @@ locked, a region capture (`-R`) failed, and this capture was not tried
 - The password is passed to the child process through `RESTIC_PASSWORD`, so it is
   visible to another process running as the same user via `ps -E`. Acceptable on
   a single-user Mac; a password-command or file-descriptor handoff would close it.
-- Grant **Full Disk Access** in System Settings › Privacy & Security. Without
+- Grant **Full Disk Access** in System Settings ▸ Privacy & Security. Without
   it macOS silently withholds `~/Documents`, `~/Desktop` and the like, and
   restic writes an *incomplete* snapshot (exit code 3), marked with a warning
   triangle in the Backups tab's list and Activity's drawer; the backup's tree
   lists what could not be read. The grant is detected at launch, on activation and
-  after every backup, and shown first in Settings › General; an
+  after every backup, and shown first in Settings ▸ General; an
   ad-hoc-signed build (Release) may need it again after each rebuild or
   update. "operation not permitted" on an item is macOS withholding it,
   which the grant fixes; "permission denied" is the file's own permissions,
@@ -1286,7 +1286,7 @@ that cannot be delivered is shown to you but never written into the run
 history, and that holds for the local system notification too: denied
 permission or a failed delivery names itself in a warning banner, once per
 failing stretch — denied permission with *Open Notification Settings*, which
-opens SwiftRestic's entry in System Settings › Notifications.
+opens SwiftRestic's entry in System Settings ▸ Notifications.
 
 ## Behaviour worth knowing
 

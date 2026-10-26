@@ -362,12 +362,12 @@ struct RepositoryEditorSheet: View {
                             SecureField(label, text: $providerSecret, prompt: Text("Optional"))
                         } else if draft.kind == .s3 {
                             TextField("Access key ID", text: $draft.s3AccessKeyID, prompt: Text("Required"))
-                            SecureField(label, text: $providerSecret)
+                            SecureField(label, text: $providerSecret, prompt: Text("Required"))
                         } else if draft.kind == .b2 {
                             TextField("Key ID", text: $draft.b2AccountID, prompt: Text("Required"))
-                            SecureField(label, text: $providerSecret)
+                            SecureField(label, text: $providerSecret, prompt: Text("Required"))
                         } else {
-                            SecureField(label, text: $providerSecret)
+                            SecureField(label, text: $providerSecret, prompt: Text("Required"))
                         }
                     }
                 }
