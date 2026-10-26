@@ -361,10 +361,10 @@ struct RepositoryEditorSheet: View {
                             TextField("User", text: $draft.restUser, prompt: Text("Optional"))
                             SecureField(label, text: $providerSecret, prompt: Text("Optional"))
                         } else if draft.kind == .s3 {
-                            TextField("Access key ID", text: $draft.s3AccessKeyID)
+                            TextField("Access key ID", text: $draft.s3AccessKeyID, prompt: Text("Required"))
                             SecureField(label, text: $providerSecret)
                         } else if draft.kind == .b2 {
-                            TextField("Account ID / key ID", text: $draft.b2AccountID)
+                            TextField("Key ID", text: $draft.b2AccountID, prompt: Text("Required"))
                             SecureField(label, text: $providerSecret)
                         } else {
                             SecureField(label, text: $providerSecret)
@@ -384,6 +384,7 @@ struct RepositoryEditorSheet: View {
 
             Section("Maintenance") {
                 Toggle("Check periodically", isOn: $draft.maintenance.checkEnabled)
+                    .editorSwitches()
                 Stepper(value: $draft.maintenance.checkIntervalDays, in: 1 ... 365) {
                     LabeledContent("Every", value: Format.plural(draft.maintenance.checkIntervalDays, "day"))
                 }
@@ -410,13 +411,14 @@ struct RepositoryEditorSheet: View {
                 }
 
                 Toggle("Clean up periodically", isOn: $draft.maintenance.pruneEnabled)
+                    .editorSwitches()
                 Stepper(value: $draft.maintenance.pruneIntervalDays, in: 1 ... 365) {
                     LabeledContent("Every", value: Format.plural(draft.maintenance.pruneIntervalDays, "day"))
                 }
                 .disabled(!draft.maintenance.pruneEnabled)
                 ExpandableCaption(
                     summary: "A cleanup frees the space of backups retention removed.",
-                    detail: "It takes an exclusive lock and can run for a long time, so backups to this repository wait for it."
+                    detail: "It can run for a long time, and backups to this repository wait until it finishes."
                 )
             }
 
@@ -466,9 +468,9 @@ struct RepositoryEditorSheet: View {
     /// itself: under a backup's or a check's lock it fails at once (exit 11).
     private var passwordChangeBlock: String? {
         if model.busyRepositoryIDs.contains(draft.id) {
-            return "Waits while a backup or maintenance job uses this repository."
+            return "The repository is in use by a backup or maintenance job — try again when it finishes."
         }
-        if !model.isResticAvailable { return "Needs restic, which could not be found." }
+        if !model.isResticAvailable { return "restic is missing." }
         return EditorRequirements.newPassword(newPassword, confirm: confirmNewPassword)
     }
 
@@ -538,7 +540,7 @@ struct RepositoryEditorSheet: View {
                 LabeledContent("Account name") { Text(draft.azureAccountName) }
             }
             if draft.kind == .gcs {
-                TextField("Project ID (optional)", text: $draft.gcsProjectID)
+                TextField("Project ID", text: $draft.gcsProjectID, prompt: Text("Optional"))
             }
         }
         if draft.kind == .local, let folderShare {
@@ -567,19 +569,19 @@ struct RepositoryEditorSheet: View {
             TextField("Path", text: $draft.sftpPath, prompt: Text("/volume1/restic"))
         case .s3:
             TextField("Endpoint", text: $draft.s3Endpoint, prompt: Text("s3.amazonaws.com"))
-            TextField("Bucket", text: $draft.s3Bucket)
-            TextField("Prefix (optional)", text: $draft.s3Prefix)
+            TextField("Bucket", text: $draft.s3Bucket, prompt: Text("Required"))
+            TextField("Prefix", text: $draft.s3Prefix, prompt: Text("Optional"))
         case .b2:
-            TextField("Bucket", text: $draft.b2Bucket)
-            TextField("Prefix (optional)", text: $draft.b2Prefix)
+            TextField("Bucket", text: $draft.b2Bucket, prompt: Text("Required"))
+            TextField("Prefix", text: $draft.b2Prefix, prompt: Text("Optional"))
         case .azure:
-            TextField("Container", text: $draft.azureContainer)
-            TextField("Prefix (optional)", text: $draft.azurePrefix)
-            TextField("Account name", text: $draft.azureAccountName)
+            TextField("Container", text: $draft.azureContainer, prompt: Text("Required"))
+            TextField("Prefix", text: $draft.azurePrefix, prompt: Text("Optional"))
+            TextField("Account name", text: $draft.azureAccountName, prompt: Text("Required"))
         case .gcs:
-            TextField("Bucket", text: $draft.gcsBucket)
-            TextField("Prefix (optional)", text: $draft.gcsPrefix)
-            TextField("Project ID (optional)", text: $draft.gcsProjectID)
+            TextField("Bucket", text: $draft.gcsBucket, prompt: Text("Required"))
+            TextField("Prefix", text: $draft.gcsPrefix, prompt: Text("Optional"))
+            TextField("Project ID", text: $draft.gcsProjectID, prompt: Text("Optional"))
         case .rest:
             TextField("URL", text: $draft.restURL, prompt: Text("https://host:8000/"))
                 // A URL pasted with its login sheds it into User and the
@@ -613,7 +615,7 @@ struct RepositoryEditorSheet: View {
             Text(RcloneSetup.noRemotes).foregroundStyle(.secondary)
         case let .remotes(remotes):
             Picker("Remote", selection: $draft.rcloneRemote) {
-                if draft.rcloneRemote.isEmpty { Text("Choose a Remote").tag("") }
+                if draft.rcloneRemote.isEmpty { Text("Choose").tag("") }
                 ForEach(remotes, id: \.name) { remote in
                     Text(remote.menuTitle).tag(remote.name)
                 }
@@ -654,7 +656,7 @@ struct RepositoryEditorSheet: View {
             return "Everything is encrypted with it, and it can’t be recovered — keep it in your password manager."
         }
         if secretsReadFailed {
-            return "The Keychain could not be read. Leave this blank to keep whatever password it holds, or enter the password to replace it."
+            return "Leave this blank to keep whatever password the Keychain holds, or enter the password to replace it."
         }
         if hasStoredPassword == false {
             return ResticError.passwordMissing(repositoryName: draftLabel).localizedDescription
@@ -853,7 +855,7 @@ struct RepositoryEditorSheet: View {
                 try await model.saveNetworkShare(share, password: sharePassword)
             } catch {
                 model.post(Banner(
-                    title: "Could not save the password for “\(share.volumeName)”",
+                    title: "Could not save the password for “\(share.url)”",
                     message: "The repository “\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
                     isError: true
                 ))

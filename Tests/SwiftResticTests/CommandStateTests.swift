@@ -468,7 +468,7 @@ struct CommandStateTests {
         )
         model.configuration.plans = [zero, planB]
         #expect(model.planCommands(for: .plan(planA.id)).retentionBlocker
-            == "Every retention rule is zero, so there is nothing to apply.")
+            == "Every retention rule is off, so there is nothing to apply.")
 
         let unset = makePlan("Unset", on: nil)
         model.configuration.plans = [unset]

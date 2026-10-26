@@ -313,7 +313,7 @@ struct PlanEditorSheet: View {
                     try await model.saveNetworkShare(entry.share, password: entry.password)
                 } catch {
                     model.post(Banner(
-                        title: "The password for \(entry.share.url) was not saved",
+                        title: "Could not save the password for “\(entry.share.url)”",
                         message: error.localizedDescription,
                         isError: true
                     ))
@@ -756,7 +756,7 @@ struct PlanEditorSheet: View {
                     // adopt mode: the dry run below answers from the real
                     // history, where this simulation can disagree with it.
                     Label(
-                        "≈ \(Format.plural(projection.keptSnapshots, "backup")) would survive, reaching back about \(Format.plural(projection.historyDays, "day")) on this schedule.",
+                        "≈ \(Format.plural(projection.keptSnapshots, "backup")) would stay, reaching back about \(Format.plural(projection.historyDays, "day")) on this schedule.",
                         systemImage: "chart.bar.doc.horizontal"
                     )
                     .foregroundStyle(.secondary)
@@ -767,7 +767,7 @@ struct PlanEditorSheet: View {
                     AdoptRetentionPreview(draft: draft)
                 }
                 // Says the count only where no line on the tab already has
-                // it: under the projection it anchors "≈ 41 would survive",
+                // it: under the projection it anchors "≈ 41 would stay",
                 // an adopting safe policy the dry run's answer counts, and
                 // otherwise this is the tab's only count. Keyed on what the
                 // draft's plan tag already holds here — an adopt draft's
@@ -783,7 +783,7 @@ struct PlanEditorSheet: View {
                 }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
                     Label(
-                        "With every rule at zero, every backup would be deleted, so retention is skipped until a rule is set.",
+                        "With every rule off, every backup would be removed, so retention is skipped until a rule is set.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(Theme.warning)
@@ -938,7 +938,7 @@ private struct AdoptRetentionPreview: View {
 }
 
 extension View {
-    /// The plan editor's on/off settings: mini switches in a grouped form,
+    /// The editors' on/off settings: mini switches in a grouped form,
     /// the HIG's "consider using a mini switch to control the setting in a
     /// single row", the same on every tab.
     func editorSwitches() -> some View {

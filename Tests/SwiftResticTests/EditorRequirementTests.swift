@@ -133,7 +133,7 @@ struct EditorRequirementTests {
             == "Enter the bucket and access key ID to save it.")
         draft.kind = .b2
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
-            == "Enter the bucket and account ID to save it.")
+            == "Enter the bucket and key ID to save it.")
         draft.kind = .azure
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
             == "Enter the container and account name to save it.")

@@ -111,7 +111,7 @@ extension AppModel {
         }
         guard plan.retention.isEnabled else { return "Retention is off for this plan." }
         guard plan.retention.isSafeToRun else {
-            return "Every retention rule is zero, so there is nothing to apply."
+            return "Every retention rule is off, so there is nothing to apply."
         }
         guard isResticAvailable else { return "restic is missing." }
         // The plan's own run included: its backup holds the repository too.

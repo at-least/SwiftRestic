@@ -124,7 +124,7 @@ enum EditorRequirements {
         case .s3:
             if draft.s3Bucket.isEmpty || draft.s3AccessKeyID.isEmpty { return "Enter the bucket and access key ID to save it." }
         case .b2:
-            if draft.b2Bucket.isEmpty || draft.b2AccountID.isEmpty { return "Enter the bucket and account ID to save it." }
+            if draft.b2Bucket.isEmpty || draft.b2AccountID.isEmpty { return "Enter the bucket and key ID to save it." }
         case .azure:
             if draft.azureContainer.isEmpty || draft.azureAccountName.isEmpty { return "Enter the container and account name to save it." }
         case .gcs:

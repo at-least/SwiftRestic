@@ -353,12 +353,12 @@ struct NetworkSharePasswordRows: View {
         // Labelled in a stack as in a Form: a bare field outside a Form
         // shows only its prompt.
         LabeledContent("Share password") {
-            SecureField("Share password", text: $password, prompt: Text(isSaved ? "Saved" : "Optional"))
+            SecureField("Share password", text: $password, prompt: Text(isSaved ? "Saved in Keychain" : "Optional"))
                 .labelsHidden()
         }
         Text(isSaved
-            ? "SwiftRestic reconnects the share when needed and the share isn’t mounted. Type a password to replace the saved one."
-            : "SwiftRestic reconnects the share when needed and the share isn’t mounted.")
+            ? "When the share isn’t mounted, SwiftRestic reconnects it as needed. Type a password to replace the saved one."
+            : "When the share isn’t mounted, SwiftRestic reconnects it as needed.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
