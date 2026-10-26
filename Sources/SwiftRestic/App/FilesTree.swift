@@ -426,12 +426,10 @@ final class FilesTree {
                 standing: !isHeld && isComplete ? .notBackedUp : .onDisk
             ))
         }
-        let deleted = indexed.filter { !present.contains(PathKey($0.path)) }.map { child in
-            Entry(
-                node: FileNode(repositoryID: folder.repositoryID, chainKey: folder.chainKey, path: child.path, isDirectory: child.isDirectory),
-                standing: .deleted(lastBackedUp: child.newest)
-            )
-        }
+        let deleted = entries(
+            indexed.filter { !present.contains(PathKey($0.path)) },
+            repositoryID: folder.repositoryID, chainKey: folder.chainKey, present: present
+        )
         return sorted(onDisk) + sorted(deleted)
     }
 

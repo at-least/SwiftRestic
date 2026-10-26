@@ -45,6 +45,9 @@ struct SnapshotDiffView: View {
     /// when its filter and needle read the same as the last one's.
     @State private var diffLoad = 0
     @State private var selection = Set<ResticDiffChange.ID>()
+    /// `diff`'s changes per category, counted once per load: the kind
+    /// picker shows them on every render.
+    @State private var categoryCounts: [ResticDiffChange.Category: Int] = [:]
     /// The restore waiting for its destination — asked in this sheet's
     /// place, not in a second sheet on top of it.
     @State private var destinationRequest: RestoreDestinationRequest?
@@ -218,11 +221,7 @@ struct SnapshotDiffView: View {
             ProgressView("Comparing…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError {
-            ContentUnavailableView {
-                Label("Could not compare these backups", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(loadError).textSelection(.enabled)
-            }
+            FailureUnavailableView(title: "Could not compare these backups", message: loadError)
         } else if let diff, diff.changes.isEmpty {
             // Nothing changed: said once, with no zero statistics, no
             // filters and no footer count around it.
@@ -303,7 +302,7 @@ struct SnapshotDiffView: View {
             Picker("Show", selection: $filter) {
                 Text("All (\(Format.count(diff.changes.count)))").tag(ResticDiffChange.Category?.none)
                 ForEach(visibleCategories) { category in
-                    Text("\(category.displayName) (\(Format.count(diff.count(of: category))))")
+                    Text("\(category.displayName) (\(Format.count(categoryCounts[category, default: 0])))")
                         .tag(ResticDiffChange.Category?.some(category))
                 }
             }
@@ -555,6 +554,7 @@ struct SnapshotDiffView: View {
     /// spinner for those frames is the honest state.
     private func installDiff(_ value: SnapshotDiff?) {
         diff = value
+        categoryCounts = (value?.changes ?? []).reduce(into: [:]) { $0[$1.category, default: 0] += 1 }
         search = DiffChangeSearch(changes: value?.changes ?? [])
         filteredRows = nil
         // A row's id is its path, so a selection kept across diffs would

@@ -892,15 +892,8 @@ private struct AdoptRetentionPreview: View {
                 }
             }
             if let failure {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityHidden(true)
-                    Text(Format.firstSentence(failure))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .help(failure)
+                WarningLine(text: Format.firstSentence(failure))
+                    .help(failure)
                 Button("Try Again") { retry += 1 }
                     .controlSize(.small)
             } else if let result {

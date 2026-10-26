@@ -210,17 +210,9 @@ struct RestorePaneView: View {
             ProgressView("Reading…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError {
-            ContentUnavailableView {
-                Label("Could not read this folder", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(loadError).textSelection(.enabled)
-            }
+            FailureUnavailableView(title: "Could not read this folder", message: loadError)
         } else if let searchError {
-            ContentUnavailableView {
-                Label("Search failed", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(searchError).textSelection(.enabled)
-            }
+            FailureUnavailableView(title: "Search failed", message: searchError)
         } else if let result = searchResult {
             if result.inThisBackup.isEmpty {
                 // Not a dead end: the index knows whether other backups
@@ -1073,10 +1065,7 @@ private struct IncompleteSnapshotStrip: View {
                                 Text(words(for: line, in: run))
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                                Image(systemName: "chevron.forward")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                                    .accessibilityHidden(true)
+                                RowChevron()
                             }
                             .font(.caption)
                             .foregroundStyle(.secondary)

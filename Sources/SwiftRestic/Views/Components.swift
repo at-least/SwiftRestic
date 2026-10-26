@@ -572,6 +572,38 @@ struct RestoreProgressStrip: View {
 
 // MARK: - Snapshot listing outcome
 
+/// Orange on the glyph only, the words secondary — the contrast rule the
+/// sidebar's captions follow.
+struct WarningLine: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Theme.warning)
+                .accessibilityHidden(true)
+            Text(text)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// A pane that could not load: what failed, and restic's or the system's
+/// words, selectable for copying.
+struct FailureUnavailableView: View {
+    let title: LocalizedStringKey
+    let message: String
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(title, systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(message).textSelection(.enabled)
+        }
+    }
+}
+
 /// Why a Snapshots value may read "—", in visible text: under the plan page's
 /// Backups card, and as the repository page's Protection card body. The tooltips carry the same
 /// lines, but a reason only a hovering mouse user can reach is no reason at

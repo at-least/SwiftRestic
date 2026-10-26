@@ -39,14 +39,11 @@ extension AppModel {
         loadingSnapshots.insert(repositoryID)
         defer {
             loadingSnapshots.remove(repositoryID)
-            if pendingSnapshotRefreshes.remove(repositoryID) != nil, !isShuttingDown {
-                // On the background lane, like the maintenance engine's
-                // closing refresh: that lane is what a quit drains, and the
-                // guard keeps a shutdown-time unwind from spawning restic
-                // work past `terminateAll`.
-                tasks.addBackground(Task { [weak self] in
-                    await self?.refreshSnapshots(repositoryID: repositoryID)
-                })
+            // The background lane is what a quit drains, and the helper's
+            // guard keeps a shutdown-time unwind from spawning restic work
+            // past `terminateAll`.
+            if pendingSnapshotRefreshes.remove(repositoryID) != nil {
+                scheduleSnapshotRefresh(repositoryID: repositoryID)
             }
         }
 

@@ -176,9 +176,10 @@ extension AppModel {
         // scheduler meanwhile; a plain Stop has no pause behind it and
         // stamps, or the next tick would restart the run within a minute.
         if stamp == .nothing, pauseStoppedPlanIDs.contains(planID) { return }
-        guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
-        configuration.plans[index].lastRunAt = date
-        if stamp == .whole { configuration.plans[index].lastSuccessAt = date }
+        updatePlan(planID) { plan in
+            plan.lastRunAt = date
+            if stamp == .whole { plan.lastSuccessAt = date }
+        }
     }
 }
 

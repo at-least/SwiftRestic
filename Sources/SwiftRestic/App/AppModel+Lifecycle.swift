@@ -47,14 +47,7 @@ extension AppModel {
     /// Now's forget, which stamps nothing however it ends.
     func quitScheduleNotice(now: Date = .now) -> String? {
         guard !startsAtLogin else { return nil }
-        let hold = Scheduler.hold(
-            pause: configuration.settings.schedulePause,
-            pauseOnBattery: configuration.settings.pauseOnBattery,
-            isOnBattery: isOnBattery,
-            pauseOnMeteredNetwork: configuration.settings.pauseOnMeteredNetwork,
-            isOnMeteredNetwork: isOnMeteredNetwork,
-            now: now
-        )
+        let hold = scheduleHold(now: now)
         let plansAfterQuit = configuration.plans.map { plan in
             guard let run = activity[plan.id], run.isBackup, !pauseStoppedPlanIDs.contains(plan.id) else { return plan }
             var plan = plan

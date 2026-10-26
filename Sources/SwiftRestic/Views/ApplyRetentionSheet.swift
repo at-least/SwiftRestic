@@ -79,7 +79,7 @@ struct ApplyRetentionSheet: View {
                 }
             }
             if let failure {
-                warning(Format.firstSentence(failure))
+                WarningLine(text: Format.firstSentence(failure))
                     .help(failure)
                 Button("Try Again") { retry += 1 }
                     .controlSize(.small)
@@ -89,7 +89,7 @@ struct ApplyRetentionSheet: View {
         }
 
         if let blocker = state.retentionBlocker {
-            warning(blocker)
+            WarningLine(text: blocker)
         }
 
         HStack {
@@ -142,19 +142,6 @@ struct ApplyRetentionSheet: View {
                 ? "A cleanup runs right after and frees their space — slow on a large repository, and backups to it wait until it finishes."
                 : "Their data stays in the repository until the next cleanup.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    /// Orange on the glyph only, the words secondary — the contrast rule the
-    /// sidebar's captions follow.
-    private func warning(_ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(Theme.warning)
-                .accessibilityHidden(true)
-            Text(text)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

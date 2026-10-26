@@ -233,11 +233,7 @@ struct FindFilesView: View {
     @ViewBuilder
     private func resultsPane(_ rows: [Row]) -> some View {
         if let errorMessage {
-            ContentUnavailableView {
-                Label("Search failed", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(errorMessage).textSelection(.enabled)
-            }
+            FailureUnavailableView(title: "Search failed", message: errorMessage)
         } else if isSearching {
             ProgressView("Searching…").frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if rows.isEmpty {
@@ -289,10 +285,7 @@ struct FindFilesView: View {
                             HStack(spacing: 4) {
                                 Text("\(count)")
                                     .monospacedDigit()
-                                Image(systemName: "chevron.forward")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                                    .accessibilityHidden(true)
+                                RowChevron()
                             }
                         }
                         .buttonStyle(HoverableButtonStyle())

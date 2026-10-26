@@ -97,11 +97,7 @@ struct FilesPaneView: View {
     @ViewBuilder
     private var content: some View {
         if let loadError {
-            ContentUnavailableView {
-                Label("Could not read its backups", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(loadError).textSelection(.enabled)
-            }
+            FailureUnavailableView(title: "Could not read its backups", message: loadError)
         } else if !didOpen {
             // The first read only: a re-read while the index has not
             // reached the item yet keeps the empty state up rather than
@@ -228,10 +224,7 @@ struct FilesPaneHeader: View {
                             Text(folder)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                            Image(systemName: "chevron.forward")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                                .accessibilityHidden(true)
+                            RowChevron()
                         }
                     }
                     .buttonStyle(HoverableButtonStyle())

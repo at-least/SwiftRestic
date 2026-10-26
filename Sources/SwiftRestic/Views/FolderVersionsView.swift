@@ -175,11 +175,7 @@ struct FolderVersionsView: View {
     @ViewBuilder
     private var listing: some View {
         if let loadError {
-            ContentUnavailableView {
-                Label("Could not read this folder", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(loadError).textSelection(.enabled)
-            }
+            FailureUnavailableView(title: "Could not read this folder", message: loadError)
         } else if isLoading, nodes.isEmpty {
             ProgressView("Reading…")
         } else if chosen == nil {

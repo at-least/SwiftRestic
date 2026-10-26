@@ -74,13 +74,24 @@ extension AppModel {
     /// the pause does — a whole-plan upsert from a captured copy could undo
     /// a run's stamps.
     func exclude(paths: [String], fromPlan planID: UUID) {
-        guard let index = configuration.plans.firstIndex(where: { $0.id == planID }) else { return }
-        var patterns = configuration.plans[index].excludePatterns
-        for pattern in paths.map(ResticService.globEscaped) where !patterns.contains(pattern) {
-            patterns.append(pattern)
+        updatePlan(planID) { plan in
+            for pattern in paths.map(ResticService.globEscaped) where !plan.excludePatterns.contains(pattern) {
+                plan.excludePatterns.append(pattern)
+            }
         }
-        // One assignment: each write to `configuration` runs its didSet.
-        configuration.plans[index].excludePatterns = patterns
+    }
+
+    /// Changes one plan's fields in place, in one write: each write to
+    /// `configuration` runs its didSet. Nothing when the plan is gone.
+    func updatePlan(_ id: UUID, _ change: (inout BackupPlan) -> Void) {
+        guard let index = configuration.plans.firstIndex(where: { $0.id == id }) else { return }
+        change(&configuration.plans[index])
+    }
+
+    /// `updatePlan(_:_:)` for a repository.
+    func updateRepository(_ id: UUID, _ change: (inout Repository) -> Void) {
+        guard let index = configuration.repositories.firstIndex(where: { $0.id == id }) else { return }
+        change(&configuration.repositories[index])
     }
 
     /// What every surface calls `plan` (`BackupPlan.label(among:)`), read
@@ -111,17 +122,19 @@ extension AppModel {
     /// `markPlanRun`'s stamps when a run finishes between reading the plan and
     /// writing the copy — a paused plan must not erase its own last success.
     func pausePlanSchedule(id: UUID, for length: PauseLength, now: Date = .now) {
-        guard let index = configuration.plans.firstIndex(where: { $0.id == id }) else { return }
         let end = length.end(from: now)
-        configuration.plans[index].isEnabled = end != nil
-        configuration.plans[index].pausedUntil = end
+        updatePlan(id) { plan in
+            plan.isEnabled = end != nil
+            plan.pausedUntil = end
+        }
     }
 
     /// Resume Schedule, for either kind of pause.
     func resumePlanSchedule(id: UUID) {
-        guard let index = configuration.plans.firstIndex(where: { $0.id == id }) else { return }
-        configuration.plans[index].isEnabled = true
-        configuration.plans[index].pausedUntil = nil
+        updatePlan(id) { plan in
+            plan.isEnabled = true
+            plan.pausedUntil = nil
+        }
     }
 
     func deletePlan(id: UUID) {

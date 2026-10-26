@@ -106,13 +106,17 @@ extension AppModel {
     /// What holds every scheduled run back right now, if anything — the one
     /// answer the tray, a repository's page, Settings and the plan page show.
     var scheduleHold: ScheduleHold? {
+        scheduleHold(now: .now)
+    }
+
+    func scheduleHold(now: Date) -> ScheduleHold? {
         Scheduler.hold(
             pause: configuration.settings.schedulePause,
             pauseOnBattery: configuration.settings.pauseOnBattery,
             isOnBattery: isOnBattery,
             pauseOnMeteredNetwork: configuration.settings.pauseOnMeteredNetwork,
             isOnMeteredNetwork: isOnMeteredNetwork,
-            now: .now
+            now: now
         )
     }
 
@@ -145,9 +149,7 @@ extension AppModel {
         for repository in configuration.repositories
             where repository.driveVolumeName == volume
         {
-            tasks.addBackground(Task { [weak self] in
-                await self?.refreshSnapshots(repositoryID: repository.id)
-            })
+            scheduleSnapshotRefresh(repositoryID: repository.id)
         }
     }
 
@@ -220,9 +222,7 @@ extension AppModel {
         upkeepAwaitingServer.removeAll()
         for repository in configuration.repositories where repository.kind != .local {
             guard case .failed = snapshotListingOutcomes[repository.id] else { continue }
-            tasks.addBackground(Task { [weak self] in
-                await self?.refreshSnapshots(repositoryID: repository.id)
-            })
+            scheduleSnapshotRefresh(repositoryID: repository.id)
         }
         runSkippedPlansAfterMount()
     }

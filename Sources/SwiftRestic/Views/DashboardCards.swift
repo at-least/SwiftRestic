@@ -169,7 +169,7 @@ struct OtherBackupsCard: View {
                 .controlSize(.small)
                 .help("Keep backing up this folder from this Mac, with these backups as its history")
                 .accessibilityLabel("Continue backups of \(label.title)")
-            DashboardRowChevron()
+            RowChevron()
         }
     }
 }
@@ -236,7 +236,7 @@ struct RecentProblemsCard: View {
                                     Text(when)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    DashboardRowChevron()
+                                    RowChevron()
                                 }
                             }
                             .buttonStyle(HoverableButtonStyle())
@@ -252,7 +252,7 @@ struct RecentProblemsCard: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     Spacer()
-                                    DashboardRowChevron()
+                                    RowChevron()
                                 }
                             }
                             .buttonStyle(HoverableButtonStyle())
@@ -270,8 +270,8 @@ struct RecentProblemsCard: View {
     }
 }
 
-/// The trailing mark of a dashboard row that goes somewhere.
-struct DashboardRowChevron: View {
+/// The trailing mark of a row that goes somewhere.
+struct RowChevron: View {
     var body: some View {
         Image(systemName: "chevron.forward")
             .font(.caption.weight(.semibold))

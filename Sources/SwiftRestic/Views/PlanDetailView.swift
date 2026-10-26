@@ -398,10 +398,7 @@ struct PlanDetailView: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(text)
-                    Image(systemName: "chevron.forward")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
+                    RowChevron()
                 }
             }
             .buttonStyle(HoverableButtonStyle())

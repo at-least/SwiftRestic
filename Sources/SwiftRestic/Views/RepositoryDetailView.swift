@@ -292,7 +292,7 @@ private struct MaintenanceRunValue: View {
             Button { router.focusRun(run.id) } label: {
                 HStack(spacing: 6) {
                     Text(text)
-                    DashboardRowChevron()
+                    RowChevron()
                 }
             }
             .buttonStyle(HoverableButtonStyle())

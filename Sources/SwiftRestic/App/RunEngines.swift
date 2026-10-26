@@ -69,6 +69,29 @@ enum BackupStamp: Equatable, Sendable {
     case nothing, whole
 }
 
+/// What every run engine asks of the model. `AppModel` conforms; tests
+/// record the calls instead.
+@MainActor
+protocol RunEngineSink: AnyObject {
+    /// What every surface calls the repository (`AppModel.label(of:)`): the
+    /// run's record and hooks say it.
+    func label(of repository: Repository) -> String
+    func service() throws -> any ResticClient
+    func context(for repository: Repository) async throws -> RepositoryContext
+    func noteAuthFailure(_ error: Error, repositoryID: UUID)
+    /// The closing snapshot refresh, scheduled by the sink so it runs
+    /// outside this task — a cancelled run leaves its task cancelled, and
+    /// an inline refresh would die with it — and inside whatever
+    /// bookkeeping keeps work from outliving a quit.
+    func scheduleSnapshotRefresh(repositoryID: UUID)
+    /// Mounts the saved network shares among `volumes` — volumes this run
+    /// needs that are away (`AppModel.reconnectShares`).
+    func reconnectShares(volumes: [String]) async -> [ShareReconnect]
+    /// One connection attempt to a network repository's server
+    /// (`ServerProbe`); nil when there is nothing to ask first.
+    func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
+}
+
 /// One backup run's lifecycle, so the sequencing — hooks → start ping →
 /// backup → retention → closing refresh → record — is unit-testable against
 /// a mock engine.
@@ -83,17 +106,13 @@ enum BackupRunEngine {
     /// The model surface a backup run drives. `AppModel` conforms; tests
     /// record the calls instead.
     @MainActor
-    protocol Sink: AnyObject {
+    protocol Sink: RunEngineSink {
         /// Why this plan's run was cancelled, for its record: the user's
         /// Stop, Pause and Stop, or the app quitting.
         func cancellationMessage(for planID: UUID) -> String
         /// What every surface calls the plan (`AppModel.label(of:)`): the
         /// run's record, hooks and notifications say it.
         func label(of plan: BackupPlan) -> String
-        /// What every surface calls the repository (`AppModel.label(of:)`).
-        func label(of repository: Repository) -> String
-        func service() throws -> any ResticClient
-        func context(for repository: Repository) async throws -> RepositoryContext
         /// Nil-anchored like the activity entry itself: a phase for a plan
         /// whose run has already unwound is dropped, never resurrected.
         func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID)
@@ -103,7 +122,6 @@ enum BackupRunEngine {
         /// main-actor class, not an existential or a generic parameter.
         func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void
         func markPlanRun(_ planID: UUID, at date: Date, wrote stamp: BackupStamp)
-        func noteAuthFailure(_ error: Error, repositoryID: UUID)
         /// A start ping in flight must not be lost to a quit mid-backup. The
         /// channels are read at send time, not capture time — a channel
         /// edited mid-run applies from this ping on.
@@ -112,9 +130,6 @@ enum BackupRunEngine {
         /// stay after retention: it reads the listing the forget left, which
         /// the index then takes.
         func refreshSnapshots(repositoryID: UUID) async
-        /// The maintenance engine's closing refresh, outside this task: for a
-        /// run whose retention step was stopped, whose task is cancelled.
-        func scheduleSnapshotRefresh(repositoryID: UUID)
         /// The listing of a repository whose drive the run found away, in
         /// the run's words — its share's reconnect already tried, and not
         /// tried again by a refresh.
@@ -124,12 +139,6 @@ enum BackupRunEngine {
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
         /// Runs the plan's shell hooks around the run.
         func makeHookRunner() -> HookRunner
-        /// Mounts the saved network shares among `volumes` — volumes this
-        /// run needs that are away (`AppModel.reconnectShares`).
-        func reconnectShares(volumes: [String]) async -> [ShareReconnect]
-        /// One connection attempt to a network repository's server
-        /// (`ServerProbe`); nil when there is nothing to ask first.
-        func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
     }
 
     static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
@@ -444,13 +453,8 @@ enum BackupRunEngine {
 @MainActor
 enum MaintenanceRunEngine {
     @MainActor
-    protocol Sink: AnyObject {
+    protocol Sink: RunEngineSink {
         var cancellationMessage: String { get }
-        /// What every surface calls the repository (`AppModel.label(of:)`):
-        /// the run's record and hooks say it.
-        func label(of repository: Repository) -> String
-        func service() throws -> any ResticClient
-        func context(for repository: Repository) async throws -> RepositoryContext
         /// Prune's live narration, hopped home by the sink itself (only it
         /// knows its concrete isolation); dropped if the run has already
         /// unwound, like the activity entry itself.
@@ -467,20 +471,8 @@ enum MaintenanceRunEngine {
         /// A scheduled check read its slice of the data: the next one reads
         /// the slice after (`MaintenancePolicy.nextCheckDataSlice`).
         func advanceCheckDataSlice(repositoryID: UUID)
-        /// One connection attempt to a network repository's server
-        /// (`ServerProbe`); nil when there is nothing to ask first.
-        func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
-        func noteAuthFailure(_ error: Error, repositoryID: UUID)
         func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async
         func makeHookRunner() -> HookRunner
-        /// The closing snapshot refresh, scheduled by the sink so it runs
-        /// outside this task — a cancelled run leaves its task cancelled, and
-        /// an inline refresh would die with it — and inside whatever
-        /// bookkeeping keeps work from outliving a quit.
-        func scheduleSnapshotRefresh(repositoryID: UUID)
-        /// Mounts the saved network shares among `volumes`, as for a backup
-        /// (`AppModel.reconnectShares`).
-        func reconnectShares(volumes: [String]) async -> [ShareReconnect]
     }
 
     static func perform(
@@ -713,27 +705,13 @@ enum RetentionRunEngine {
     /// does not. Delivery has its own name: AppModel's `deliver(record:
     /// plan:transcript:)` notifies and broadcasts, which this run must not.
     @MainActor
-    protocol Sink: AnyObject {
+    protocol Sink: RunEngineSink {
         func cancellationMessage(for planID: UUID) -> String
         /// What every surface calls the plan (`AppModel.label(of:)`).
         func label(of plan: BackupPlan) -> String
-        /// What every surface calls the repository (`AppModel.label(of:)`).
-        func label(of repository: Repository) -> String
-        func service() throws -> any ResticClient
-        func context(for repository: Repository) async throws -> RepositoryContext
-        func noteAuthFailure(_ error: Error, repositoryID: UUID)
         /// Stores the run, and announces it nowhere: the plan page and
         /// Activity say how it went.
         func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
-        /// The maintenance engine's closing refresh, scheduled outside this
-        /// (possibly cancelled) task.
-        func scheduleSnapshotRefresh(repositoryID: UUID)
-        /// Mounts the saved network shares among `volumes`, as for a backup
-        /// (`AppModel.reconnectShares`).
-        func reconnectShares(volumes: [String]) async -> [ShareReconnect]
-        /// One connection attempt to a network repository's server
-        /// (`ServerProbe`); nil when there is nothing to ask first.
-        func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
     }
 
     static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {

@@ -34,13 +34,14 @@ extension AppModel {
     ) {
         let reporter = restoreProgressReporter()
         let landing = ResticService.restoredItemURL(for: node, in: destination)
-        beginRestore(
-            repositoryID: repositoryID,
+        let step = RestoreStep(
             label: node.name,
             description: "Restoring “\(node.name)”",
             snapshotID: snapshotID,
             sourcePath: node.path,
-            destinationPath: landing.path
+            sourcePaths: nil,
+            destinationPath: landing.path,
+            itemCount: 1
         ) { service, context in
             try await service.restore(
                 context,
@@ -50,7 +51,9 @@ extension AppModel {
                 overwrite: overwrite,
                 onProgress: reporter
             )
-        } onSuccess: { [weak self] summary in
+        }
+        beginRestore(repositoryID: repositoryID, steps: [step]) { [weak self] summaries in
+            let summary = summaries[0]
             self?.post(Self.restoreBanner(
                 itemName: node.name,
                 isDirectory: node.isDirectory,
@@ -237,34 +240,6 @@ extension AppModel {
         case 1: "Kept 1 existing file as it was."
         default: "Kept \(Format.count(count)) existing files as they were."
         }
-    }
-
-    /// One item: a run of one restic restore. See
-    /// `beginRestore(repositoryID:steps:onSuccess:)`.
-    private func beginRestore(
-        repositoryID: UUID,
-        label: String,
-        description: String,
-        snapshotID: String,
-        sourcePath: String?,
-        destinationPath: String,
-        operation: @escaping @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?,
-        onSuccess: @escaping @MainActor (ResticSummary?) -> Void
-    ) {
-        beginRestore(
-            repositoryID: repositoryID,
-            steps: [RestoreStep(
-                label: label,
-                description: description,
-                snapshotID: snapshotID,
-                sourcePath: sourcePath,
-                sourcePaths: nil,
-                destinationPath: destinationPath,
-                itemCount: 1,
-                operation: operation
-            )],
-            onSuccess: { onSuccess($0[0]) }
-        )
     }
 
     /// Shared bookkeeping for every restore shape: one run at a time,

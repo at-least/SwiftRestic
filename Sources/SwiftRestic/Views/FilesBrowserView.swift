@@ -300,11 +300,7 @@ struct FilesBrowserView: View {
             switch answer.outcome {
             case let .failed(message):
                 // A broken index is its own answer: never a "no matches".
-                ContentUnavailableView {
-                    Label("Search failed", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message).textSelection(.enabled)
-                }
+                FailureUnavailableView(title: "Search failed", message: message)
             case let .hits(entries) where entries.isEmpty:
                 // Not a dead end: other plans' backups, and — while the index
                 // reads — the backups it has not reached, are Find Files'.

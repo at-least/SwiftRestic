@@ -104,11 +104,11 @@ extension AppModel {
     }
 
     func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date) {
-        guard let index = configuration.repositories.firstIndex(where: { $0.id == repositoryID })
-        else { return }
-        switch task {
-        case .check: configuration.repositories[index].maintenance.lastCheckAt = date
-        case .prune: configuration.repositories[index].maintenance.lastPruneAt = date
+        updateRepository(repositoryID) { repository in
+            switch task {
+            case .check: repository.maintenance.lastCheckAt = date
+            case .prune: repository.maintenance.lastPruneAt = date
+            }
         }
     }
 
