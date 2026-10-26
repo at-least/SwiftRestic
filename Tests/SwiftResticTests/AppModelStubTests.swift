@@ -717,14 +717,6 @@ struct AppModelStubTests {
         hanging.extraEnvironment["SWIFTRESTIC_STUB"] = "hang-once"
         await harness.model.upsert(repository: hanging, password: nil, providerSecret: nil)
 
-        func traceLineCount() -> Int {
-            let trace = (try? String(
-                contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
-                encoding: .utf8
-            )) ?? ""
-            return trace.components(separatedBy: "\n").filter { $0.hasPrefix("start ") }.count
-        }
-
         harness.model.scheduleSnapshotRefresh(repositoryID: harness.repository.id)
         #expect(
             await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
@@ -734,15 +726,15 @@ struct AppModelStubTests {
         await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
 
         await harness.model.shutdown()
-        let linesAtReturn = traceLineCount()
+        let linesAtReturn = traceLineCount(in: harness.root)
 
         // The remembered rerun must not run past the shutdown drain,
         // unregistered, after terminateAll.
         let settle = Date.now.addingTimeInterval(2)
         while Date.now < settle { try? await Task.sleep(for: .milliseconds(50)) }
         #expect(
-            traceLineCount() == linesAtReturn,
-            "the stub was invoked \(traceLineCount() - linesAtReturn) time(s) after shutdown returned"
+            traceLineCount(in: harness.root) == linesAtReturn,
+            "the stub was invoked \(traceLineCount(in: harness.root) - linesAtReturn) time(s) after shutdown returned"
         )
     }
 
@@ -1748,14 +1740,7 @@ struct AppModelStubTests {
 
         // Counted after the hung check's own start line: the baseline for
         // "nothing ran after shutdown returned".
-        func traceLineCount() -> Int {
-            let trace = (try? String(
-                contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
-                encoding: .utf8
-            )) ?? ""
-            return trace.components(separatedBy: "\n").filter { $0.hasPrefix("start ") }.count
-        }
-        let linesAtQuit = traceLineCount()
+        let linesAtQuit = traceLineCount(in: harness.root)
 
         // Quit cancels the hung check, waits for the run to unwind, and
         // flushes — the run's closing refresh must neither spawn restic work
@@ -1765,8 +1750,8 @@ struct AppModelStubTests {
         let settle = Date.now.addingTimeInterval(2)
         while Date.now < settle { try? await Task.sleep(for: .milliseconds(50)) }
         #expect(
-            traceLineCount() == linesAtQuit,
-            "the stub was invoked \(traceLineCount() - linesAtQuit) time(s) after shutdown returned"
+            traceLineCount(in: harness.root) == linesAtQuit,
+            "the stub was invoked \(traceLineCount(in: harness.root) - linesAtQuit) time(s) after shutdown returned"
         )
         #expect(
             await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 5),
@@ -2885,6 +2870,14 @@ struct AppModelStubTests {
         #expect(harness.model.isConfigurationUnreadable == false)
         await harness.model.shutdown()
     }
+}
+
+private func traceLineCount(in root: URL) -> Int {
+    let trace = (try? String(
+        contentsOf: root.appendingPathComponent("stub-trace.log"),
+        encoding: .utf8
+    )) ?? ""
+    return trace.components(separatedBy: "\n").filter { $0.hasPrefix("start ") }.count
 }
 
 /// Captures HTTP request bodies on the loopback interface.

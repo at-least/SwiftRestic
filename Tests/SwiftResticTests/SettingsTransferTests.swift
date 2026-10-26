@@ -35,10 +35,7 @@ struct SettingsTransferTests {
     }
 
     private func makePlan(_ name: String, on repositoryID: UUID?) -> BackupPlan {
-        var plan = BackupPlan()
-        plan.repositoryID = repositoryID
-        plan.path = "/Users/someone/\(name)"
-        return plan
+        namedPlan(name, repositoryID: repositoryID)
     }
 
     private func write(_ text: String, to directory: URL, name: String = "settings.json") throws -> URL {

@@ -6,20 +6,12 @@ import Testing
 /// none, and Other backups for whatever no plan of the repository made.
 @Suite("Sidebar tree")
 struct SidebarTreeTests {
-    /// A plan is called by its path's last component, so `name` ends it.
     private func plan(_ name: String, in repository: UUID?) -> BackupPlan {
-        var plan = BackupPlan()
-        plan.repositoryID = repository
-        plan.path = "/Users/someone/\(name)"
-        return plan
+        namedPlan(name, repositoryID: repository)
     }
 
-    /// A repository is called by where it is: a folder off the startup
-    /// disk by its own name, so `name` ends the path.
     private func repository(_ name: String) -> Repository {
-        var repository = Repository()
-        repository.localPath = "/Users/someone/\(name)"
-        return repository
+        namedRepository(name)
     }
 
     private func snapshot(
@@ -29,12 +21,7 @@ struct SidebarTreeTests {
         host: String = "mac",
         tags: [String] = []
     ) throws -> Snapshot {
-        let array = { (strings: [String]) in String(decoding: try JSONEncoder().encode(strings), as: UTF8.self) }
-        let json = """
-        {"id":"\(id)","short_id":"\(id.prefix(8))","time":"\(time)","paths":\(try array(paths)),\
-        "hostname":"\(host)","tags":\(try array(tags))}
-        """
-        return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        try snapshotFixture(id: id, time: time, paths: paths, includeShortID: true, hostname: host, tags: tags)
     }
 
     @Test("a repository lists its own plans in configuration order, then Other backups only while it holds any")

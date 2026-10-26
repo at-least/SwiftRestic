@@ -6,8 +6,7 @@ import Testing
 @Suite("Compare sheet selection restore")
 struct DiffRestoreSelectionTests {
     private func snapshot(_ id: String, time: String) throws -> Snapshot {
-        let json = #"{"id":"\#(id)","time":"\#(time)","paths":["/src"],"tags":[]}"#
-        return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        try snapshotFixture(id: id, time: time, paths: ["/src"], includeShortID: false, hostname: nil, tags: [])
     }
 
     @Test("each row restores from the backup that has it; a folder brings the rows inside it from its own backup only")

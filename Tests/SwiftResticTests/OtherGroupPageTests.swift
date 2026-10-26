@@ -14,15 +14,9 @@ struct OtherGroupPageTests {
         tags: [String] = [],
         excludes: [String]? = nil
     ) throws -> Snapshot {
-        // Arrays through JSONEncoder: interpolating a Swift array writes its
-        // debug description, whose escaped quotes end up inside the strings.
-        let array = { (strings: [String]) in String(decoding: try JSONEncoder().encode(strings), as: UTF8.self) }
-        let excludesJSON = try excludes.map { ",\"excludes\":\(try array($0))" } ?? ""
-        let json = """
-        {"id":"\(id)","short_id":"\(id.prefix(8))","time":"\(time)","paths":\(try array(paths)),\
-        "hostname":"\(host)","tags":\(try array(tags))\(excludesJSON)}
-        """
-        return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        try snapshotFixture(
+            id: id, time: time, paths: paths, includeShortID: true, hostname: host, tags: tags, excludes: excludes
+        )
     }
 
     @Test("an adoptable group's page explains what the history is, without asserting which cause")

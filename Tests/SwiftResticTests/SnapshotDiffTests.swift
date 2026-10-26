@@ -4,11 +4,7 @@ import Testing
 @Suite("Snapshot comparison")
 struct SnapshotDiffTests {
     private func snapshot(_ id: String, time: String, paths: [String], host: String = "mac") throws -> Snapshot {
-        let pathsJSON = String(decoding: try JSONEncoder().encode(paths), as: UTF8.self)
-        let json = """
-        {"id":"\(id)","short_id":"\(id.prefix(8))","time":"\(time)","paths":\(pathsJSON),"hostname":"\(host)","tags":[]}
-        """
-        return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        try snapshotFixture(id: id, time: time, paths: paths, includeShortID: true, hostname: host, tags: [])
     }
 
     @Test("the default comparison is the previous snapshot of the same folders from the same host")
@@ -90,8 +86,7 @@ struct SnapshotDiffTests {
 @Suite("Diff candidate grouping")
 struct DiffCandidateGroupingTests {
     private func snapshot(_ id: String, time: String) throws -> Snapshot {
-        let json = #"{"id":"\#(id)","time":"\#(time)","paths":["/x"],"tags":[]}"#
-        return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        try snapshotFixture(id: id, time: time, paths: ["/x"], includeShortID: false, hostname: nil, tags: [])
     }
 
     @Test("months bucket newest first, one label per month, order preserved")

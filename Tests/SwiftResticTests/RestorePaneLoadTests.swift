@@ -17,10 +17,7 @@ struct RestorePaneLoadTests {
     }
 
     private func snapshot(_ id: String, time: String) throws -> Snapshot {
-        let json = """
-        {"id":"\(id)","short_id":"\(id.prefix(8))","time":"\(time)","paths":["/src"],"hostname":"mac","tags":[]}
-        """
-        return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        try snapshotFixture(id: id, time: time, paths: ["/src"], includeShortID: true, hostname: "mac", tags: [])
     }
 
     /// A comparison the test finishes when it chooses: what a slow

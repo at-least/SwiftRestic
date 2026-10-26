@@ -1206,25 +1206,26 @@ struct AppModelTests {
     }
 }
 
+@MainActor
+private func makeModel(_ prefix: String) -> AppModel {
+    let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+    return AppModel(
+        store: ConfigStore(
+            directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(prefix)-\(UUID().uuidString)")
+        ),
+        secrets: .inMemory(secrets)
+    )
+}
+
 /// The banner queue's contract: an unread error survives the next message,
 /// the queue is bounded, and dismissal removes exactly one message.
 @Suite("Banner queue")
 @MainActor
 struct BannerQueueTests {
-    private func makeModel() -> AppModel {
-        let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
-        return AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticBanners-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory(secrets)
-        )
-    }
-
     @Test("newest first, dismissal by identity")
     func queueSemantics() {
-        let model = makeModel()
+        let model = makeModel("SwiftResticBanners")
         model.post(Banner(title: "first", message: "", isError: true))
         model.post(Banner(title: "second", message: "", isError: true))
         #expect(model.banners.map(\.title) == ["second", "first"])
@@ -1235,7 +1236,7 @@ struct BannerQueueTests {
 
     @Test("the queue is bounded so a failure loop cannot stack banners without end")
     func bounded() {
-        let model = makeModel()
+        let model = makeModel("SwiftResticBanners")
         for index in 0 ..< 10 {
             model.post(Banner(title: "banner \(index)", message: "", isError: true))
         }
@@ -1247,7 +1248,7 @@ struct BannerQueueTests {
 
     @Test("the cap evicts a success before it gives up an error")
     func capPrefersErrors() {
-        let model = makeModel()
+        let model = makeModel("SwiftResticBanners")
         model.post(Banner(title: "error", message: "", isError: true))
         for index in 0 ..< 4 {
             model.post(Banner(title: "ok \(index)", message: "", isError: false))
@@ -1260,7 +1261,7 @@ struct BannerQueueTests {
         #expect(model.banners.first?.title == "ok 4")
 
         // An all-error queue falls back to dropping its oldest.
-        let errors = makeModel()
+        let errors = makeModel("SwiftResticBanners")
         for index in 0 ..< 5 {
             errors.post(Banner(title: "e\(index)", message: "", isError: true))
         }
@@ -1342,20 +1343,9 @@ struct ListingGenerationTests {
 @Suite("Editor upsert preserves model-written stamps")
 @MainActor
 struct UpsertStampTests {
-    private func makeModel() -> AppModel {
-        let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
-        return AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticUpsert-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory(secrets)
-        )
-    }
-
     @Test("a stale plan draft keeps the last-run and last-success stamps")
     func planStampsSurviveStaleUpsert() {
-        let model = makeModel()
+        let model = makeModel("SwiftResticUpsert")
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.path = "/tmp"
@@ -1379,7 +1369,7 @@ struct UpsertStampTests {
 
     @Test("a run that wrote a snapshot stamps the last backup; one that wrote nothing stamps only its slot")
     func markPlanRunStampsBackups() {
-        let model = makeModel()
+        let model = makeModel("SwiftResticUpsert")
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.path = "/Volumes/Archive SSD/Photos"
@@ -1397,7 +1387,7 @@ struct UpsertStampTests {
 
     @Test("a stale plan draft keeps the plan's timed pause")
     func planPauseSurvivesStaleUpsert() {
-        let model = makeModel()
+        let model = makeModel("SwiftResticUpsert")
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.path = "/tmp"
@@ -1424,7 +1414,7 @@ struct UpsertStampTests {
 
     @Test("a stale repository draft keeps the check and prune stamps")
     func repositoryStampsSurviveStaleUpsert() async {
-        let model = makeModel()
+        let model = makeModel("SwiftResticUpsert")
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/tmp/somewhere"
@@ -1450,17 +1440,6 @@ struct UpsertStampTests {
 @Suite("Pausing")
 @MainActor
 struct PausingTests {
-    private func makeModel() -> AppModel {
-        let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
-        return AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticPausing-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory(secrets)
-        )
-    }
-
     private func plan(_ name: String) -> BackupPlan {
         var plan = BackupPlan()
         plan.repositoryID = UUID()
@@ -1470,7 +1449,7 @@ struct PausingTests {
 
     @Test("plan pauses, the app-wide pause and the battery hold reach the model's hold; lapsed pauses clear themselves")
     func pauseModelSemantics() {
-        let model = makeModel()
+        let model = makeModel("SwiftResticPausing")
         let nightly = plan("Nightly")
         model.upsert(plan: nightly)
         let now = Date(timeIntervalSince1970: 1_790_400_000)
@@ -1670,17 +1649,6 @@ struct StartAtLoginSurfaceTests {
 @Suite("Run reporters answer to their own run")
 @MainActor
 struct RunReporterTokenTests {
-    private func makeModel() -> AppModel {
-        let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
-        return AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticRunTokens-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory(secrets)
-        )
-    }
-
     /// Gives a reporter's `Task { @MainActor in … }` the full second to land
     /// before asserting. Not a poll: the hop under test must drop, and an
     /// absence has nothing to poll for, so a wait that ended early could
@@ -1693,7 +1661,7 @@ struct RunReporterTokenTests {
 
     @Test("a late progress hop from a finished backup never lands in the next run's strip")
     func lateBackupProgressHopDrops() async throws {
-        let model = makeModel()
+        let model = makeModel("SwiftResticRunTokens")
         let plan = BackupPlan()
         model.upsert(plan: plan)
 
@@ -1729,7 +1697,7 @@ struct RunReporterTokenTests {
 
     @Test("a late maintenance line never lands in the next job's activity")
     func lateMaintenanceLineDrops() async throws {
-        let model = makeModel()
+        let model = makeModel("SwiftResticRunTokens")
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/tmp/somewhere"
@@ -2229,9 +2197,8 @@ struct UnreadableConfigurationTests {
 @Suite("run snapshot link")
 struct RunSnapshotLinkTests {
     private func snapshot(_ id: String) throws -> Snapshot {
-        try ResticMessageDecoder.jsonDecoder.decode(
-            Snapshot.self,
-            from: Data(#"{"id":"\#(id)","short_id":"\#(id.prefix(8))","time":"2026-09-25T18:00:00Z","paths":["/src"]}"#.utf8)
+        try snapshotFixture(
+            id: id, time: "2026-09-25T18:00:00Z", paths: ["/src"], includeShortID: true, hostname: nil, tags: nil
         )
     }
 

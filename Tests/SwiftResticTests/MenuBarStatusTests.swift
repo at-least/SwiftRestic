@@ -6,20 +6,12 @@ import Testing
 /// announced → backup starts → phases tick over → finishes → idle again.
 @Suite("Menu bar status")
 struct MenuBarStatusTests {
-    /// A plan is called by its path's last component, so `name` ends it.
     private func plan(name: String) -> BackupPlan {
-        var plan = BackupPlan()
-        plan.repositoryID = UUID()
-        plan.path = "/Users/someone/\(name)"
-        return plan
+        namedPlan(name, repositoryID: UUID())
     }
 
-    /// A repository is called by where it is: a folder off the startup
-    /// disk by its own name, so `name` ends the path.
     private func repository(named name: String) -> Repository {
-        var repository = Repository()
-        repository.localPath = "/Users/someone/\(name)"
-        return repository
+        namedRepository(name)
     }
 
     private func activity(phase: PlanActivity.Phase = .backingUp) -> PlanActivity {

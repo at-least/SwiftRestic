@@ -26,13 +26,8 @@ struct AdoptTests {
         )
     }
 
-    /// A repository is called by where it is: a folder off the startup
-    /// disk by its own name, so `name` ends the path.
     private func makeRepository(_ name: String = "Home Disk") -> Repository {
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = "/Users/someone/\(name)"
-        return repository
+        namedRepository(name)
     }
 
     private func snapshot(
@@ -43,15 +38,9 @@ struct AdoptTests {
         tags: [String] = [],
         excludes: [String]? = nil
     ) throws -> Snapshot {
-        // Arrays through JSONEncoder: interpolating a Swift array writes its
-        // debug description, whose escaped quotes end up inside the strings.
-        let array = { (strings: [String]) in String(decoding: try JSONEncoder().encode(strings), as: UTF8.self) }
-        let excludesJSON = try excludes.map { ",\"excludes\":\(try array($0))" } ?? ""
-        let json = """
-        {"id":"\(id)","short_id":"\(id.prefix(8))","time":"\(time)","paths":\(try array(paths)),\
-        "hostname":"\(host)","tags":\(try array(tags))\(excludesJSON)}
-        """
-        return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        try snapshotFixture(
+            id: id, time: time, paths: paths, includeShortID: true, hostname: host, tags: tags, excludes: excludes
+        )
     }
 
     private func date(_ iso: String) -> Date {
@@ -557,9 +546,8 @@ struct AdoptHistorySpanTests {
 @Suite("Adoption preview line")
 struct AdoptionPreviewLineTests {
     private func snapshot(_ id: String) -> Snapshot {
-        try! ResticMessageDecoder.jsonDecoder.decode(
-            Snapshot.self,
-            from: Data(#"{"id":"\#(id)","time":"2026-10-02T02:00:00Z","paths":["/Data"]}"#.utf8)
+        try! snapshotFixture(
+            id: id, time: "2026-10-02T02:00:00Z", paths: ["/Data"], includeShortID: false, hostname: nil, tags: nil
         )
     }
 

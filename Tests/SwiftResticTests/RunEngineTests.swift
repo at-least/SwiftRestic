@@ -292,11 +292,10 @@ struct BackupRunEngineTests {
         // failure.
         // A loaded Mac can stretch a shell's start well past seconds, and a
         // cancel landing before the hook would test another case.
-        let deadline = Date.now.addingTimeInterval(60)
-        while Date.now < deadline, !FileManager.default.fileExists(atPath: hookStarted.path) {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        try #require(FileManager.default.fileExists(atPath: hookStarted.path), "the hook never started")
+        try #require(
+            await eventually(within: 60) { FileManager.default.fileExists(atPath: hookStarted.path) },
+            "the hook never started"
+        )
         task.cancel()
         await task.value
 
@@ -957,12 +956,8 @@ struct MaintenanceRunEngineTests {
         // that stopped the check, or it dies mid-flight and leaves the
         // listing stale. The scheduled task lands asynchronously, so poll
         // for it rather than trusting job ordering.
-        let deadline = Date.now.addingTimeInterval(5)
-        while Date.now < deadline, !sink.log.contains("refresh:cancelled=false") {
-            try await Task.sleep(for: .milliseconds(20))
-        }
         #expect(
-            sink.log.contains("refresh:cancelled=false"),
+            await eventually(within: 5) { sink.log.contains("refresh:cancelled=false") },
             "log was \(sink.log)"
         )
     }

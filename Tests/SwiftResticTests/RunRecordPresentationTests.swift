@@ -17,20 +17,12 @@ struct RunRecordPresentationTests {
         return record
     }
 
-    /// A plan is called by its path's last component, so `name` ends it.
     private func plan(name: String, repositoryID: UUID) -> BackupPlan {
-        var plan = BackupPlan()
-        plan.repositoryID = repositoryID
-        plan.path = "/Users/someone/\(name)"
-        return plan
+        namedPlan(name, repositoryID: repositoryID)
     }
 
-    /// A repository is called by where it is: a folder off the startup
-    /// disk by its own name, so `name` ends the path.
     private func repository(name: String) -> Repository {
-        var repository = Repository()
-        repository.localPath = "/Users/someone/\(name)"
-        return repository
+        namedRepository(name)
     }
 
     @Test("a plan and its repository are said in one string, once each")

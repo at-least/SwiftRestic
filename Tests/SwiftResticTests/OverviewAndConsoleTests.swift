@@ -35,12 +35,8 @@ struct OverviewMetricsTests {
 
     // MARK: - Protection rows
 
-    /// A plan is called by its path's last component, so `name` ends it.
     private func plan(_ name: String, repository: UUID?) -> BackupPlan {
-        var plan = BackupPlan()
-        plan.repositoryID = repository
-        plan.path = "/Users/someone/\(name)"
-        return plan
+        namedPlan(name, repositoryID: repository)
     }
 
     private func snapshot(_ id: String, at time: Date) -> Snapshot {
