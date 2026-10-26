@@ -144,7 +144,7 @@ struct FolderVersionsView: View {
             let (changes, notRead) = all.separatingUnread(model.unreadItems(inBackup: chosen.id))
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: changes.summary(since: previous.time, notRead: notRead.count))
-                    .help("Compared with the previous backup that holds this folder — what changed inside its folders is theirs to say, and a change of a file’s dates or permissions alone is not counted")
+                    .help("Items of this folder only; changes to dates or permissions alone aren’t counted")
                 // Each name opens the item in the tree at the previous
                 // backup, which has it.
                 if let removed = changes.removedNames {

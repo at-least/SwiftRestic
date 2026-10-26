@@ -205,8 +205,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
         case let .comparing(baseline):
             "Comparing with the backup of \(Format.timestamp(baseline.time))…"
         case let .compared(baseline, _):
-            "Added or modified since the backup of \(Format.timestamp(baseline.time)), the previous one of these folders "
-                + "from this Mac. To see what was deleted, Control-click this backup in the list and choose Compare with Previous"
+            "Added or modified since the backup of \(Format.timestamp(baseline.time))"
         case .failed:
             nil
         }

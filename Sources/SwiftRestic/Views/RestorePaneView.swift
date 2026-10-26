@@ -107,7 +107,7 @@ struct RestorePaneView: View {
                 ContentUnavailableView {
                     Label("Backup not found", systemImage: "questionmark.folder")
                 } description: {
-                    Text("This backup is no longer in the repository. Pick another one in the list.")
+                    Text("This backup is no longer in the repository. Select another one in the list.")
                 }
             }
         }
@@ -239,7 +239,7 @@ struct RestorePaneView: View {
             ContentUnavailableView {
                 Label("Not in this backup", systemImage: "folder.badge.questionmark")
             } description: {
-                Text("Pick another backup in the list.")
+                Text("Select another backup in the list.")
             }
         } else if tree.rows.isEmpty {
             ContentUnavailableView("Empty folder", systemImage: "folder")
@@ -629,7 +629,7 @@ struct RestorePaneView: View {
 
     /// The list's drag asks on every mouse-down, not only when a drag
     /// begins, so a drag that can never land offers nothing rather than
-    /// posting `dragRestoreProvider`'s "Cannot drag to restore" at each
+    /// posting `dragRestoreProvider`'s failure banner at each
     /// click — the pane already says why (record not found, or restic
     /// missing under its strip). The chevron's drag asks only when a drag
     /// starts, and keeps the banner.
@@ -1047,7 +1047,7 @@ private struct IncompleteSnapshotStrip: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(unreadable > 0
                     ? "This backup is incomplete: \(Format.plural(unreadable, "item")) could not be read when it was made."
-                    : "This backup is incomplete: some of the source data could not be read when it was made, and was not named.")
+                    : "This backup is incomplete: some of the source data could not be read when it was made.")
                     .font(.callout.weight(.medium))
                     // Not height-pinned, for BannerView's reason: the pane
                     // does not scroll, and a pinned text answers the split

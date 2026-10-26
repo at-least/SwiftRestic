@@ -37,7 +37,7 @@ extension AppModel {
         beginRestore(
             repositoryID: repositoryID,
             label: node.name,
-            description: "Restoring \(node.name)",
+            description: "Restoring “\(node.name)”",
             snapshotID: snapshotID,
             sourcePath: node.path,
             destinationPath: landing.path
@@ -130,7 +130,9 @@ extension AppModel {
                     let label = Self.itemsLabel(group.nodes.map(\.name))
                     return RestoreStep(
                         label: label,
-                        description: "Restoring \(label)",
+                        description: group.nodes.count == 1
+                            ? "Restoring “\(label)”"
+                            : "Restoring “\(group.nodes[0].name)” and \(Format.count(group.nodes.count - 1)) more",
                         snapshotID: snapshotID,
                         sourcePath: nil,
                         sourcePaths: group.nodes.map(\.path),
@@ -192,7 +194,7 @@ extension AppModel {
             )
         }
         return Banner(
-            title: "Restored \(itemName)",
+            title: "Restored “\(itemName)”",
             message: [landing.path, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
             isError: false,
             revealPaths: [landing.path]
@@ -297,7 +299,7 @@ extension AppModel {
         // The strip's title for each step; "(2 of 3)" only when there are
         // several.
         let titles = steps.enumerated().map { index, step in
-            steps.count > 1 ? "\(step.description) (\(index + 1) of \(steps.count))" : step.description
+            steps.count > 1 ? "\(step.description) (\(index + 1) of \(steps.count))…" : "\(step.description)…"
         }
         restoreActivity = OperationProgress()
         restoreDescription = titles[0]
@@ -425,7 +427,7 @@ extension AppModel {
 
     /// Whether a drag out of a list can restore at all. Lists ask on every
     /// mouse-down on a row, so they offer nothing when it cannot rather than
-    /// letting `dragRestoreProvider` post "Cannot drag" at each click.
+    /// letting `dragRestoreProvider` post its failure banner at each click.
     func canDragRestore(repositoryID: UUID) -> Bool {
         repository(id: repositoryID) != nil && isResticAvailable
     }
@@ -447,19 +449,20 @@ extension AppModel {
         // saying *why* right here, at drag start, beats a drop that Finder
         // refuses with no explanation of its own.
         guard let repository = repository(id: repositoryID) else {
-            postDragImpossibleBanner("The repository no longer exists — pick a backup from a current repository in the sidebar.")
+            postDragImpossibleBanner(node.name, "The repository no longer exists — select a backup from a current repository in the sidebar.")
             return provider
         }
         let service: any ResticClient
         do {
             service = try self.service()
         } catch {
-            postDragImpossibleBanner(error.localizedDescription)
+            postDragImpossibleBanner(node.name, error.localizedDescription)
             return provider
         }
         let secrets = self.secrets
         let repositoryLabel = label(of: repository)
         let staging = stagingDirectory
+        let itemName = node.name
 
         // The promise is typed by *content*, not as a file URL:
         // `public.file-url` declares the file's contents are a URL bookmark
@@ -494,7 +497,7 @@ extension AppModel {
                     await MainActor.run { [weak self] in
                         guard let self, !self.isShuttingDown else { return }
                         let message = error.localizedDescription
-                        self.post(Banner(title: "Drag restore failed", message: message, isError: true))
+                        self.post(Banner(title: "Could not restore “\(itemName)”", message: message, isError: true))
                     }
                 }
             }
@@ -506,8 +509,8 @@ extension AppModel {
     /// Dragging is possible but the drop can never land (no repository, no
     /// binary) — named at the moment the drag begins, since the provider
     /// itself has nothing to say.
-    private func postDragImpossibleBanner(_ message: String) {
-        post(Banner(title: "Cannot drag to restore", message: message, isError: true))
+    private func postDragImpossibleBanner(_ itemName: String, _ message: String) {
+        post(Banner(title: "Could not restore “\(itemName)”", message: message, isError: true))
     }
 
     /// The drag restore: restores one node into a fresh throwaway directory

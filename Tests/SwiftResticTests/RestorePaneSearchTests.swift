@@ -56,7 +56,7 @@ struct RestorePaneSearchTests {
 
         #expect(result.isTruncated)
         #expect(result.elsewhereCount == 2)
-        #expect(result.note == "The search stopped at the first 3 matches in this repository — narrow it to see more.")
+        #expect(result.note == "Not every match is shown — narrow the search to see the rest.")
     }
 
     @Test("an index still reading places no match and quotes no count")

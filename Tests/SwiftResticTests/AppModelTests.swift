@@ -453,7 +453,7 @@ struct AppModelTests {
         // strip nor the run history, and a drop that landed posts no banner.
         #expect(model.restoreActivity == nil)
         #expect(model.configuration.runs.allSatisfy { $0.kind == .backup })
-        #expect(!model.banners.contains { $0.title == "Drag restore failed" })
+        #expect(!model.banners.contains { $0.title.hasPrefix("Could not restore") })
 
         await model.shutdown()
     }
@@ -2280,7 +2280,7 @@ struct RestoreBannerTests {
             itemName: "Project", isDirectory: true, landing: landing,
             summary: summary(restored: 1, skipped: 3), policy: .keepExisting
         )
-        #expect(kept.title == "Restored Project")
+        #expect(kept.title == "Restored “Project”")
         #expect(kept.message == "/Users/x/Restored/Project\nKept 3 existing files as they were.")
         #expect(kept.revealPaths == ["/Users/x/Restored/Project"])
         #expect(!kept.isError)
@@ -2297,7 +2297,7 @@ struct RestoreBannerTests {
             itemName: "Project", isDirectory: true, landing: landing,
             summary: summary(restored: 1, skipped: 3), policy: .replaceExisting
         )
-        #expect(replaced.title == "Restored Project")
+        #expect(replaced.title == "Restored “Project”")
         #expect(replaced.message == "/Users/x/Restored/Project")
         #expect(replaced.revealPaths == ["/Users/x/Restored/Project"])
 
@@ -2314,7 +2314,7 @@ struct RestoreBannerTests {
             itemName: "a.txt", isDirectory: false, landing: fileLanding,
             summary: summary(restored: 1, skipped: nil), policy: .keepExisting
         )
-        #expect(silent.title == "Restored a.txt")
+        #expect(silent.title == "Restored “a.txt”")
         #expect(silent.message == "/Users/x/Restored/a.txt")
     }
 }

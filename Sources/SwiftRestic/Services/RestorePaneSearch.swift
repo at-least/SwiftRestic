@@ -54,7 +54,7 @@ struct RestorePaneSearch: Equatable, Sendable {
             return FilesSearchAnswer.searchStillReading
         }
         if isTruncated {
-            return "The search stopped at the first \(limit) matches in this repository — narrow it to see more."
+            return FilesSearchAnswer.searchTruncated
         }
         guard elsewhereCount > 0 else { return nil }
         return elsewhereCount == 1

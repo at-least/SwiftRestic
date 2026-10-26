@@ -394,7 +394,7 @@ struct FindDecodingTests {
         // A file that became a symlink and lost its mode bits arrives as "TU":
         // the type change is what matters, and the raw flags stay readable.
         #expect(changes[3].modifier == "TU")
-        #expect(changes[3].explanation == "type changed, metadata changed")
+        #expect(changes[3].explanation == "Type changed, metadata changed")
     }
 
     @Test("diff statistics")

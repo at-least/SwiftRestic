@@ -681,7 +681,7 @@ the generator after editing it; the PNGs are checked in.
   totals, under a header naming the repository: "what did last night's
   backup actually pick up?" without restoring anything. A row's right-click
   menu has *Show Versions* (also a double-click), closing the sheet onto its
-  plan's Files tab (not for a group's backups), and *Restore “…”* — both
+  plan's Files tab (not for a group's backups), and *Restore…* — both
   from whichever of the two backups
   holds the item (the newer for added or changed, the older for removed);
   an item the newer backup's own run could not read is marked *!*, not
@@ -689,7 +689,7 @@ the generator after editing it; the PNGs are checked in.
   the restore reads the item's kind in that backup first — the index's,
   or restic's listing where the index has not read it — since a diff names
   only a path and a kind. Several rows restore together as in Find Files:
-  *Restore Selected…* (Return) or the right-click *Restore N Items*, one
+  *Restore Selected…* (Return) or the right-click *Restore N Items…*, one
   destination and one run ("from 2 backups, each item from the one it was
   found in"), a row inside a selected folder of the same backup coming with
   the folder (the destination says so), while a file the newer backup

@@ -340,13 +340,12 @@ struct SnapshotLineageTests {
         #expect(inside["/src/sub"] == nil)
     }
 
-    @Test("the Change column's title says what it compares with, and where deletions are")
+    @Test("the Change column's title says what it compares with")
     func changeColumnHelp() throws {
         let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/src"])
         let since = Format.timestamp(baseline.time)
         #expect(RestoreRecordHeading.columnHelp(for: .compared(baseline: baseline, changeCount: 2))
-            == "Added or modified since the backup of \(since), the previous one of these folders from this Mac. "
-            + "To see what was deleted, Control-click this backup in the list and choose Compare with Previous")
+            == "Added or modified since the backup of \(since)")
         #expect(RestoreRecordHeading.columnHelp(for: .firstBackup) == "First backup of these folders — nothing to compare with")
         #expect(RestoreRecordHeading.columnHelp(for: .comparing(baseline: baseline)) == "Comparing with the backup of \(since)…")
         #expect(RestoreRecordHeading.columnHelp(for: .failed(baseline: baseline, reason: "Fatal: injected. More.")) == nil)

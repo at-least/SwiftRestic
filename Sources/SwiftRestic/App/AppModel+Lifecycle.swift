@@ -349,7 +349,7 @@ extension AppModel {
         }
         if enabled, !LoginItem.isInInstallableLocation {
             post(Banner(
-                title: "Cannot start at login from here",
+                title: "Could not start SwiftRestic at login",
                 message: LoginItem.notInstalledMessage,
                 isError: true
             ))

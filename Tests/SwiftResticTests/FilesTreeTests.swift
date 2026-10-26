@@ -493,7 +493,7 @@ struct FilesTreeTests {
         #expect(FilesSearchAnswer.note(isTruncated: false, isComplete: true) == nil)
         #expect(FilesSearchAnswer.note(isTruncated: false, isComplete: false) == FilesSearchAnswer.searchStillReading)
         #expect(FilesSearchAnswer.note(isTruncated: true, isComplete: false)
-            == "Showing \(AppModel.indexSearchLimit) matches — narrow the search to see the rest.")
+            == "Not every match is shown — narrow the search to see the rest.")
     }
 }
 

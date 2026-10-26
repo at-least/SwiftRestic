@@ -221,7 +221,9 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
         if modifier.contains("T") { parts.append("type changed") }
         if modifier.contains("U") { parts.append("metadata changed") }
         if modifier.contains("?") { parts.append("bitrot detected") }
-        return parts.isEmpty ? modifier : parts.joined(separator: ", ")
+        guard !parts.isEmpty else { return modifier }
+        let phrase = parts.joined(separator: ", ")
+        return phrase.prefix(1).uppercased() + phrase.dropFirst()
     }
 }
 

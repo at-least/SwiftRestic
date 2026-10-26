@@ -366,7 +366,7 @@ struct AppModelStubTests {
         #expect(record.outcome == .succeeded)
         // restic's count of what it restored, not the listing's 12.
         #expect(record.bytesProcessed == 8)
-        #expect(harness.model.banners.first?.title == "Restored a.txt")
+        #expect(harness.model.banners.first?.title == "Restored “a.txt”")
         #expect(
             try String(contentsOf: destination.appendingPathComponent("a.txt"), encoding: .utf8) == "restored",
             "the landing did not receive the file the stub restored"
@@ -438,7 +438,7 @@ struct AppModelStubTests {
 
         let landing = destination.appendingPathComponent("Project")
         let banner = try #require(harness.model.banners.first)
-        #expect(banner.title == "Restored Project")
+        #expect(banner.title == "Restored “Project”")
         #expect(banner.message.contains("Kept 3 existing files as they were."), "banner said: \(banner.message)")
         #expect(banner.revealPaths == [landing.path])
         let record = try #require(harness.model.configuration.runs.first)

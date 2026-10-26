@@ -39,7 +39,7 @@ struct RootDetailView: View {
             // menu bar line covers the window-closed case. Switching panes
             // hands the progress over to this strip. The fallback names the
             // work when no description has arrived.
-            RestoreProgressStrip(fallbackTitle: "Restoring")
+            RestoreProgressStrip(fallbackTitle: "Restoring…")
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
             // The one disabled-state whose cause the user cannot see from the

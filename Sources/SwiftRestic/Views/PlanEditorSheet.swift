@@ -509,7 +509,7 @@ struct PlanEditorSheet: View {
                 PathListEditor(
                     title: "Also skip",
                     paths: $draft.excludePatterns,
-                    placeholder: "Type a pattern, e.g. **/*.iso",  // a String variable, so not parsed as Markdown
+                    placeholder: "Type a pattern, such as **/*.iso",  // a String variable, so not parsed as Markdown
                     browseMessage: "Choose folders and files to leave out of backups",
                     browsePrompt: "Exclude",
                     escapesPickedGlobs: true

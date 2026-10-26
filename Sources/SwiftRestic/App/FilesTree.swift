@@ -556,6 +556,10 @@ struct FilesSearchAnswer: Equatable {
     /// search answer that may be short says them: the Restore pane's note,
     /// a Files tab's empty state and its footer.
     static let searchStillReading = "The index is still reading this repository — some matches may be missing."
+    /// A capped search, in every search's footer: no count, since a pane
+    /// may list only a subset of what the cap counted, and not "the first",
+    /// since each list re-sorts what the index cut in its own order.
+    static let searchTruncated = "Not every match is shown — narrow the search to see the rest."
 
     /// How the index matches what is typed, said once for every surface that
     /// states it. `SnapshotIndex.ftsQuery` makes each word a prefix term.
@@ -577,11 +581,10 @@ struct FilesSearchAnswer: Equatable {
     }
 
     /// What the hits' footer says, if anything: that the chain holds more
-    /// than the list shows — not "the first", since the list is in Finder's
-    /// order and the index cut it in its own — or that the index can still
+    /// than the list shows (`searchTruncated`), or that the index can still
     /// be missing matches (`searchStillReading`).
     @MainActor static func note(isTruncated: Bool, isComplete: Bool) -> String? {
-        if isTruncated { return "Showing \(AppModel.indexSearchLimit) matches — narrow the search to see the rest." }
+        if isTruncated { return searchTruncated }
         return isComplete ? nil : searchStillReading
     }
 }

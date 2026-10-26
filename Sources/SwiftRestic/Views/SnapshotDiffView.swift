@@ -334,7 +334,7 @@ struct SnapshotDiffView: View {
                     // Gone because the newer backup's own run could not
                     // read it, not because it left the disk.
                     let notRead = change.category == .removed ? unread.reason(for: change.path) : nil
-                    let explanation = notRead.map { "not read by this backup (\($0)) — it may still be on this Mac" } ?? change.explanation
+                    let explanation = notRead.map { "Not read by this backup (\($0)) — it may still be on this Mac" } ?? change.explanation
                     HStack(spacing: 8) {
                         Text(notRead == nil ? glyph(for: change) : "!")
                             .font(.system(.body, design: .monospaced).weight(.semibold))
@@ -369,7 +369,7 @@ struct SnapshotDiffView: View {
                         if let open = showVersions(of: change) {
                             Button("Show Versions", action: open)
                         }
-                        Button("Restore “\(change.name)”…") { restoreSelection([change]) }
+                        Button("Restore…") { restoreSelection([change]) }
                             .disabled(model.isRestoring || holder(of: change) == nil)
                     } else if ids.count > 1 {
                         let picked = rows.filter { ids.contains($0.id) }

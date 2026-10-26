@@ -112,7 +112,7 @@ struct FindFilesView: View {
         .searchable(
             text: $router.findQuery,
             placement: .toolbar,
-            prompt: Text(verbatim: indexComplete == true ? "File name, e.g. invoice or keynote" : "File name or pattern, e.g. invoice or *.key")
+            prompt: Text(verbatim: indexComplete == true ? "File name, such as invoice or keynote" : "File name or pattern, such as invoice or *.key")
         )
         .searchFocused($searchIsFocused)
         .onSubmit(of: .search) { search() }
@@ -250,7 +250,7 @@ struct FindFilesView: View {
                 systemImage: "magnifyingglass",
                 description: hasSearched
                     ? Text(searchedLatestOnly
-                        ? "Nothing in the latest backup matches. Uncheck Latest backup only to search older backups."
+                        ? "Nothing in the latest backup matches. Deselect “Latest backup only” to search older backups."
                         : "Nothing in this repository’s backups matches.")
                     : (repositoryID == nil ? Text("Find a file without knowing which backup holds it.") : nil)
             )
@@ -315,7 +315,7 @@ struct FindFilesView: View {
                 // unselected row must not depend on selection state.
                 let picked = rows.filter { ids.contains($0.id) }
                 if picked.count == 1, let row = picked.first {
-                    Button("Restore “\(row.match.name)”…") {
+                    Button("Restore…") {
                         restoreSelection(picked)
                     }
                     .disabled(model.isRestoring)
@@ -366,7 +366,7 @@ struct FindFilesView: View {
                                 .monospacedDigit()
                         }
                         if resultsTruncated {
-                            Text("Showing the first matches — narrow the search to see more.")
+                            Text(FilesSearchAnswer.searchTruncated)
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }

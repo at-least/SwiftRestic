@@ -46,7 +46,9 @@ final class PreviewSession {
                 // whatever preview came next.
                 guard !Task.isCancelled else { return }
                 if let reason = VersionPreview.unavailableReason(size: file.size, isReading: false) {
-                    failure = Failure(title: "Could not preview", message: reason)
+                    // A refusal, not an error: its reason is the line itself,
+                    // not a tooltip under "Could not preview".
+                    failure = Failure(title: reason, message: "")
                     task = nil
                     return
                 }
