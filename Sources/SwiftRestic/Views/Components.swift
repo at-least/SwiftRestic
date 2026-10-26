@@ -515,7 +515,7 @@ struct OperationProgressView: View {
                         Text("\(Format.duration(TimeInterval(remaining))) left")
                     }
                     Spacer()
-                    Text(progress.fraction.formatted(.percent.precision(.fractionLength(0))))
+                    Text(Format.percent(progress.fraction))
                         .font(.callout.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(Theme.tint)

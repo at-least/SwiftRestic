@@ -249,6 +249,15 @@ struct ResticDiffStatistics: Sendable, Equatable, Decodable {
 // MARK: - Line decoding
 
 enum ResticMessageDecoder {
+    /// restic answers an empty line — or a bare `null` — where a JSON list
+    /// command has nothing to report, so both spellings decode as no entries.
+    static func decodeArray<T: Decodable>(_ type: T.Type, from stdout: String) throws -> [T] {
+        let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "null", let data = trimmed.data(using: .utf8) else { return [] }
+        let decoded = try jsonDecoder.decode([T]?.self, from: data)
+        return decoded ?? []
+    }
+
     /// Decoder configured for restic's RFC3339-with-fractional-seconds timestamps.
     static let jsonDecoder: JSONDecoder = {
         let d = JSONDecoder()

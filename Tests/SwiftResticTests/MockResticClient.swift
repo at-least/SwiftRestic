@@ -201,7 +201,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     func prune(
         _ context: RepositoryContext,
-        dryRun: Bool,
         onRawLine: (@Sendable (String) -> Void)?
     ) async throws -> String {
         record("prune")

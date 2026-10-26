@@ -521,3 +521,10 @@ extension RunRecord {
         failureMessage = cancelled ? cancellationMessage : error.localizedDescription
     }
 }
+
+extension RunRecord {
+    /// A backup run of the plan `planID` names.
+    func isBackup(ofPlan planID: UUID?) -> Bool {
+        kind == .backup && self.planID == planID
+    }
+}

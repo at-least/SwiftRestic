@@ -249,8 +249,7 @@ struct FileVersionsView: View {
     }
 
     private func dragProvider(for version: ContentVersion) -> NSItemProvider? {
-        guard let (backup, file) = restorable(version),
-              model.repository(id: node.repositoryID) != nil, model.isResticAvailable
+        guard let (backup, file) = restorable(version), model.canDragRestore(repositoryID: node.repositoryID)
         else { return nil }
         return model.dragRestoreProvider(repositoryID: node.repositoryID, snapshotID: backup.id, node: file)
     }
@@ -261,21 +260,18 @@ struct FileVersionsView: View {
     /// and one may hold it as a folder (`RestoreSource.node`).
     private func restoreChosen() {
         guard let chosen, let backup = chosen.snapshots.first else { return }
-        let repositoryID = node.repositoryID
         let found = details[backup.id]
-        guard let selection = RestoreSelection([RestoreSource(
-            name: node.name, path: node.path, isDirectory: false,
-            snapshotID: backup.id, backupTime: backup.time, node: found
-        )]) else { return }
-        destinationRequest = RestoreDestinationRequest(
-            subject: selection.subject,
-            backupTime: backup.time,
-            snapshotShortID: String(backup.id.prefix(8)),
-            // The row was picked by this time; the sheet says it back.
-            versionModified: found?.mtime
-        ) { directories, overwrite in
-            Task { await model.restore(selection, repositoryID: repositoryID, into: directories, overwrite: overwrite) }
-        }
+        var request = RestoreDestinationRequest.picked(
+            [RestoreSource(
+                name: node.name, path: node.path, isDirectory: false,
+                snapshotID: backup.id, backupTime: backup.time, node: found
+            )],
+            repositoryID: node.repositoryID,
+            model: model
+        )
+        // The row was picked by this time; the sheet says it back.
+        request?.versionModified = found?.mtime
+        destinationRequest = request
     }
 
     /// Why a version cannot be previewed, or nil: the repository and restic

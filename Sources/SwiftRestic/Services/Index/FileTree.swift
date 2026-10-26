@@ -3,13 +3,22 @@ import Foundation
 /// One visible row of the restore browser's file tree: a node, its indent
 /// depth, and whether its children are shown / known.
 struct FileTreeRow: Identifiable, Equatable {
-    var node: SnapshotNode
-    var depth: Int
+    let node: SnapshotNode
+    let depth: Int
     var expanded: Bool
     /// Directories start unloaded; `ls` fills them on first expansion.
     var childrenLoaded: Bool
+    /// Stored, not computed: the list reads it per row on every render, and
+    /// the hex encoding allocates.
+    let id: String
 
-    var id: String { FileTree.id(of: node.path) }
+    init(node: SnapshotNode, depth: Int, expanded: Bool, childrenLoaded: Bool) {
+        self.node = node
+        self.depth = depth
+        self.expanded = expanded
+        self.childrenLoaded = childrenLoaded
+        id = FileTree.id(of: node.path)
+    }
 }
 
 /// The visible rows of a lazily-loaded file tree, as one flat array — the

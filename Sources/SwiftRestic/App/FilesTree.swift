@@ -366,10 +366,10 @@ final class FilesTree {
     /// it, by the plan's path. Empty for a plan deleted while its tab was
     /// still on screen, whose page goes with it.
     private static func root(of node: FileNode, model: AppModel) async throws -> Level {
-        guard let plan = model.configuration.plans.first(where: { ResticService.planTag($0.id) == node.chainKey }) else {
+        guard let plan = model.plan(id: ResticService.planUUID(fromTag: node.chainKey)) else {
             return Level(entries: [], isComplete: true)
         }
-        let path = ResticService.expandTilde(plan.path)
+        let path = plan.resolvedPath
         let isDirectory = try await Task.detached(priority: .userInitiated) { try DiskFolder.isDirectory(path) }.value
         // Asked before the holders: a backup once read stays read, so an
         // index complete beforehand has read every backup that holds it.

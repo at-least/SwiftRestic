@@ -634,7 +634,7 @@ struct RestorePaneView: View {
     /// missing under its strip). The chevron's drag asks only when a drag
     /// starts, and keeps the banner.
     private func listDragProvider(for node: SnapshotNode) -> NSItemProvider? {
-        guard model.repository(id: repositoryID) != nil, model.isResticAvailable else { return nil }
+        guard model.canDragRestore(repositoryID: repositoryID) else { return nil }
         return dragProvider(for: node)
     }
 

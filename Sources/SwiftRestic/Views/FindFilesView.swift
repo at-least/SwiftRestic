@@ -35,7 +35,6 @@ struct FindFilesView: View {
     /// Several at a time, as in a backup's tree: Restore Selected
     /// (Return) restores them together, each from its row's backup.
     @State private var selection = Set<String>()
-    @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var hasSearched = false
     /// Whether the search that last landed covered only the latest backup —
@@ -43,6 +42,7 @@ struct FindFilesView: View {
     /// so a no-match state is true to what was searched.
     @State private var searchedLatestOnly = false
     @State private var searchTask: Task<Void, Never>?
+    private var isSearching: Bool { searchTask != nil }
     /// True when the index search stopped early — at the hit cap, or (not
     /// expected, see `searchViaIndex`) a hit that came without its summary.
     /// The footer says so; a truncated list must not pass for the whole
@@ -433,7 +433,6 @@ struct FindFilesView: View {
         let searchedRepository = repositoryID
         let searchedPattern = pattern.trimmingCharacters(in: .whitespaces)
         let searchedLatestOnly = latestOnly
-        isSearching = true
         errorMessage = nil
         // Each search owns the footer's truncation line: an index search that
         // stopped early must not speak for a later restic-engine search that
@@ -495,7 +494,6 @@ struct FindFilesView: View {
             // no-match state reads is what the landed search covered. The
             // index engine searches every backup whatever the box says.
             self.searchedLatestOnly = !ready && searchedLatestOnly
-            isSearching = false
             searchTask = nil
         }
     }
@@ -580,7 +578,6 @@ struct FindFilesView: View {
     private func cancelSearch() {
         searchTask?.cancel()
         searchTask = nil
-        isSearching = false
         rows = []
         resultsTruncated = false
         hasSearched = false

@@ -30,7 +30,7 @@ struct ApplyRetentionSheet: View {
         let plan = model.plan(id: planID)
         return PreviewKey(
             retention: plan?.retention,
-            newestSnapshotID: model.snapshots(for: plan?.repositoryID, planID: planID).first?.id,
+            newestSnapshotID: model.latestSnapshot(in: plan?.repositoryID, planID: planID)?.id,
             retry: retry
         )
     }

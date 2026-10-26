@@ -177,9 +177,8 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .rest:
             return restURL.hasPrefix("rest:") ? restURL : "rest:\(restURL)"
         case .rclone:
-            let remote = rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
             // not trimSlashes: a leading slash is rclone's absolute path.
-            return "rclone:\(remote):\(rclonePath.replacing(/\/+$/, with: ""))"
+            return "rclone:\(rcloneRemoteName):\(rclonePath.replacing(/\/+$/, with: ""))"
         }
     }
 
@@ -204,6 +203,27 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// The local path with `~` expanded — the form every file-system
     /// consumer (restic, the volume read) needs; `localPath` keeps the form
     /// the user typed.
+    /// The REST server's URL, without restic's `rest:` scheme prefix.
+    var restServerURL: String {
+        restURL.hasPrefix("rest:") ? String(restURL.dropFirst("rest:".count)) : restURL
+    }
+
+    /// The rclone remote's name, without the colon rclone writes after it.
+    var rcloneRemoteName: String {
+        rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
+    }
+
+    /// A local repository whose drive is not mounted. False for every other
+    /// kind, and while the mount cannot be told.
+    var isDriveAway: Bool {
+        kind == .local && VolumePresence.isMounted(volumeOf: resolvedLocalPath) == false
+    }
+
+    /// The name of the drive a local repository sits on; nil for other kinds.
+    var driveVolumeName: String? {
+        kind == .local ? VolumePresence.volumeName(of: resolvedLocalPath) : nil
+    }
+
     var resolvedLocalPath: String {
         guard localPath.hasPrefix("~") else { return localPath }
         return (localPath as NSString).expandingTildeInPath
@@ -261,13 +281,12 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             return VolumePresence.volumeName(of: path) ?? (path as NSString).lastPathComponent
         case .sftp: return sftpHost
         case .rest:
-            let url = restURL.hasPrefix("rest:") ? String(restURL.dropFirst("rest:".count)) : restURL
-            return URL(string: url)?.host ?? url
+            return URL(string: restServerURL)?.host ?? restServerURL
         case .s3: return s3Bucket
         case .b2: return b2Bucket
         case .azure: return azureContainer
         case .gcs: return gcsBucket
-        case .rclone: return rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
+        case .rclone: return rcloneRemoteName
         }
     }
 

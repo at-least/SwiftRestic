@@ -31,6 +31,11 @@ enum Format {
         return byteCounter.string(fromByteCount: value)
     }
 
+    /// "42%": a fraction of 1, to the whole percent.
+    static func percent(_ fraction: Double) -> String {
+        fraction.formatted(.percent.precision(.fractionLength(0)))
+    }
+
     static func count(_ value: Int?) -> String {
         guard let value else { return "—" }
         return value.formatted(.number)

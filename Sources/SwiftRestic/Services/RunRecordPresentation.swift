@@ -136,9 +136,9 @@ enum RunRecordPresentation {
             return .editPlanShare(planID)
         }
         if run.repositoryFull == true { return .pruneNow(repositoryID) }
-        if run.exitCode == 12 { return .editRepository(repositoryID) }
-        if run.exitCode == 10 { return .addRepository }
-        let locked = run.exitCode == 11 || run.failureMessage?.contains("already locked") == true
+        if run.exitCode == ResticError.wrongPasswordCode { return .editRepository(repositoryID) }
+        if run.exitCode == ResticError.repositoryMissingCode { return .addRepository }
+        let locked = run.exitCode == ResticError.repositoryLockedCode || run.failureMessage?.contains("already locked") == true
         return locked && !repositoryBusy ? .removeStaleLocks(repositoryID) : nil
     }
 
@@ -370,7 +370,8 @@ enum RunRecordPresentation {
     static func exitCodeText(_ code: Int32) -> String? {
         guard code != 0 else { return nil }
         switch code {
-        case ResticError.backupPartialSuccessCode, 10, 11, 12:
+        case ResticError.backupPartialSuccessCode, ResticError.repositoryMissingCode,
+             ResticError.repositoryLockedCode, ResticError.wrongPasswordCode:
             return ResticError.knownExitCodeDescription(code).map { "\(code) — \($0)" } ?? String(code)
         default:
             return String(code)

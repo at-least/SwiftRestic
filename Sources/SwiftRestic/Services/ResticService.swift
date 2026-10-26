@@ -218,7 +218,7 @@ struct ResticService: ResticClient {
                 )
             )
             return true
-        } catch let ResticError.commandFailed(exitCode, _) where exitCode == 10 {
+        } catch let ResticError.commandFailed(exitCode, _) where exitCode == ResticError.repositoryMissingCode {
             return false
         }
     }
@@ -312,11 +312,9 @@ struct ResticService: ResticClient {
     /// still moving.
     func prune(
         _ context: RepositoryContext,
-        dryRun: Bool = false,
         onRawLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
-        var args = context.globalArguments + ["prune"]
-        if dryRun { args.append("--dry-run") }
+        let args = context.globalArguments + ["prune"]
         let result = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
@@ -375,7 +373,7 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        return try Self.decodeArray(Snapshot.self, from: result.stdout).sorted { $0.time > $1.time }
+        return try ResticMessageDecoder.decodeArray(Snapshot.self, from: result.stdout).sorted { $0.time > $1.time }
     }
 
     /// Lists the immediate children of `path` inside a snapshot.
@@ -497,7 +495,7 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        return try Self.decodeArray(FindResult.self, from: result.stdout).filter { !$0.matches.isEmpty }
+        return try ResticMessageDecoder.decodeArray(FindResult.self, from: result.stdout).filter { !$0.matches.isEmpty }
     }
 
     /// Compares two snapshots. `+` in the result means present only in `newer`.
@@ -888,18 +886,11 @@ struct ResticService: ResticClient {
             // Judged before the folder below exists: it is what Keep keeps.
             let overwriteArguments = try overwriteArguments(overwrite, landings: [target])
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-            let result = try await runner.run(
-                binary: binary,
-                invocation: ResticInvocation(
-                    arguments: context.globalArguments
-                        + ["restore", "--json", "\(snapshotID):\(node.path)", "--target", target.path]
-                        + overwriteArguments,
-                    environment: context.environment,
-                    idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
-                ),
-                onMessage: Self.progressHandler(onProgress)
+            return try await runRestore(
+                context,
+                arguments: ["\(snapshotID):\(node.path)", "--target", target.path] + overwriteArguments,
+                onProgress: onProgress
             )
-            return result.summary
         }
 
         // lstat, not fileExists: a dangling symlink holds the name too. The
@@ -976,19 +967,13 @@ struct ResticService: ResticClient {
                 throw ResticError.folderInTheWay(path: landing.path)
             }
         }
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(
-                arguments: context.globalArguments
-                    + ["restore", "--json", "\(snapshotID):\(parent)", "--target", destinationDirectory.path]
-                    + nodes.flatMap { ["--include", RestoreBatch.includePattern(forName: $0.name)] }
-                    + overwriteArguments,
-                environment: context.environment,
-                idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
-            ),
-            onMessage: Self.progressHandler(onProgress)
+        return try await runRestore(
+            context,
+            arguments: ["\(snapshotID):\(parent)", "--target", destinationDirectory.path]
+                + nodes.flatMap { ["--include", RestoreBatch.includePattern(forName: $0.name)] }
+                + overwriteArguments,
+            onProgress: onProgress
         )
-        return result.summary
     }
 
     /// The `--overwrite` arguments for a restore into `landings`. A restic
@@ -1036,12 +1021,24 @@ struct ResticService: ResticClient {
     ) async throws -> ResticSummary? {
         let overwriteArguments = try overwriteArguments(overwrite, landings: [destinationDirectory])
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+        return try await runRestore(
+            context,
+            arguments: [snapshotID, "--target", destinationDirectory.path] + overwriteArguments,
+            onProgress: onProgress
+        )
+    }
+
+    /// `restic restore --json` followed by `arguments`, its progress
+    /// streamed to `onProgress`.
+    private func runRestore(
+        _ context: RepositoryContext,
+        arguments: [String],
+        onProgress: (@Sendable (OperationProgress) -> Void)?
+    ) async throws -> ResticSummary? {
         let result = try await runner.run(
             binary: binary,
             invocation: ResticInvocation(
-                arguments: context.globalArguments
-                    + ["restore", "--json", snapshotID, "--target", destinationDirectory.path]
-                    + overwriteArguments,
+                arguments: context.globalArguments + ["restore", "--json"] + arguments,
                 environment: context.environment,
                 idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
             ),
@@ -1051,15 +1048,6 @@ struct ResticService: ResticClient {
     }
 
     // MARK: - Helpers
-
-    /// restic answers an empty line — or a bare `null` — where a JSON list
-    /// command has nothing to report, so both spellings decode as no entries.
-    private static func decodeArray<T: Decodable>(_ type: T.Type, from stdout: String) throws -> [T] {
-        let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != "null", let data = trimmed.data(using: .utf8) else { return [] }
-        let decoded = try ResticMessageDecoder.jsonDecoder.decode([T]?.self, from: data)
-        return decoded ?? []
-    }
 
     /// The message-to-progress adapter the streaming commands share: restic's
     /// periodic `status` lines become `OperationProgress` callbacks.

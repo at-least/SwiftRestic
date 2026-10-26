@@ -102,7 +102,7 @@ struct FilesBrowserView: View {
     /// selects when the folder refuses SwiftRestic.
     private var planPath: String? {
         guard case let .plan(id) = page, let plan = model.plan(id: id) else { return nil }
-        return ResticService.expandTilde(plan.path)
+        return plan.resolvedPath
     }
 
     /// Every level the tree has on screen: the roots and the open folders

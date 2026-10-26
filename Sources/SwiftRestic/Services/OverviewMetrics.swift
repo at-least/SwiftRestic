@@ -187,7 +187,7 @@ enum OverviewMetrics {
     static func isHealed(_ problem: RunRecord, in runs: [RunRecord]) -> Bool {
         guard problem.kind == .backup, let planID = problem.planID else { return false }
         return runs.contains {
-            $0.kind == .backup && $0.planID == planID
+            $0.isBackup(ofPlan: planID)
                 && ($0.outcome == .succeeded || $0.isPartialSkip)
                 && $0.finishedAt > problem.finishedAt
         }

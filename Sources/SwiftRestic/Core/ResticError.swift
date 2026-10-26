@@ -62,7 +62,7 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .binaryNotExecutable(path):
             return "The file at \(path) is not executable."
         case let .commandFailed(code, message):
-            if code == 12 {
+            if code == Self.wrongPasswordCode {
                 // The trust-critical failure carries its fix: restic's own
                 // diagnosis leaves Retry as the only next step, and Retry can
                 // never succeed here. restic's words stay for the discriminating
@@ -72,7 +72,7 @@ enum ResticError: Error, LocalizedError, Equatable {
                 let restic = Format.firstSentence(message)
                 return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
             }
-            if code == 10 || code == 11 {
+            if code == Self.repositoryMissingCode || code == Self.repositoryLockedCode {
                 // Exit 12's grammar: the fix leads, restic's first sentence
                 // keeps the detail. Exit 10's are the Add Repository
                 // button's own words, so the banner and the notification say
@@ -80,7 +80,7 @@ enum ResticError: Error, LocalizedError, Equatable {
                 // Unlock tooltip's "no run here holds it",
                 // checked when the button is offered: the stored message
                 // outlives that moment.
-                let base = code == 10
+                let base = code == Self.repositoryMissingCode
                     ? Self.noRepositoryAtLocation + "."
                     : "The repository is locked — if no other Mac is using it, unlock it."
                 let restic = Format.firstSentence(message)
@@ -180,9 +180,9 @@ enum ResticError: Error, LocalizedError, Equatable {
         case 1: "restic reported a fatal error"
         case 2: "Go runtime error"
         case 3: "Finished, but some data could not be read"
-        case 10: "The repository does not exist"
-        case 11: "The repository is already locked by another process"
-        case 12: "Wrong repository password or no matching key"
+        case repositoryMissingCode: "The repository does not exist"
+        case repositoryLockedCode: "The repository is already locked by another process"
+        case wrongPasswordCode: "Wrong repository password or no matching key"
         case 130: "restic was interrupted"
         default: nil
         }
@@ -193,6 +193,12 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// must not abort a scheduled run. `forget`'s 3 is another matter: it
     /// could not delete snapshots (`snapshotsNotRemoved`).
     static let backupPartialSuccessCode: Int32 = 3
+    /// restic's exit when no repository is at the location.
+    static let repositoryMissingCode: Int32 = 10
+    /// restic's exit when another process holds the repository's lock.
+    static let repositoryLockedCode: Int32 = 11
+    /// restic's exit when the password opens no key of the repository.
+    static let wrongPasswordCode: Int32 = 12
 
     /// Whether an error is a stop — Swift's task cancellation or restic's
     /// own `cancelled` — rather than a failure. The reading the run records

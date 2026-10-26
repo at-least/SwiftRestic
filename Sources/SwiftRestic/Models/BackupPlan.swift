@@ -293,6 +293,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// (`sources`), split into one plan per entry at load
     /// (`AppConfiguration`).
     var path: String = ""
+
+    /// `path` with a leading `~` expanded, as restic and the disk read it.
+    var resolvedPath: String { ResticService.expandTilde(path) }
+
     /// The patterns the user added, as typed or picked: the editor's
     /// *Also skip* list. The switches' rules are not among them — a run
     /// passes those beside them (`excludesToPass`).
@@ -500,7 +504,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         let twin = plans.contains {
             $0.id != id && $0.repositoryID == repositoryID && Self.lastComponent(of: $0.path) == name
         }
-        return twin ? (ResticService.expandTilde(path) as NSString).abbreviatingWithTildeInPath : name
+        return twin ? (resolvedPath as NSString).abbreviatingWithTildeInPath : name
     }
 
     private static func lastComponent(of path: String) -> String {

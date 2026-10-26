@@ -55,7 +55,7 @@ extension AppModel {
     func alertQuietPlans(now: Date) -> [StalePlanAlert] {
         var latest: [UUID: Date] = [:]
         for plan in configuration.plans {
-            latest[plan.id] = snapshots(for: plan.repositoryID, planID: plan.id).first?.time
+            latest[plan.id] = latestSnapshot(in: plan.repositoryID, planID: plan.id)?.time
         }
         let alerts = StaleAlert.due(
             plans: configuration.plans,

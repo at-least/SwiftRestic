@@ -279,7 +279,7 @@ extension AppModel {
     /// one extra Keychain read after any fatal error, which no run frequency
     /// makes expensive.
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-        guard case let ResticError.commandFailed(code, _) = error, code == 12 || code == 1 else { return }
+        guard case let ResticError.commandFailed(code, _) = error, code == ResticError.wrongPasswordCode || code == 1 else { return }
         forgetContext(repositoryID)
     }
 

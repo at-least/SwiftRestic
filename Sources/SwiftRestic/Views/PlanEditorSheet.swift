@@ -258,14 +258,10 @@ struct PlanEditorSheet: View {
     }
 
     private func adopt() {
-        guard let briefing else {
-            // The group left while the sheet was open: nothing left to ask
-            // about. The model says what the click found, and the plan the
-            // draft still describes is a coherent one to keep or cancel.
-            performAdopt()
-            return
-        }
-        guard briefing.needsConfirmation else {
+        // No briefing: the group left while the sheet was open, nothing left
+        // to ask about. The model says what the click found, and the plan
+        // the draft still describes is a coherent one to keep or cancel.
+        guard let briefing, briefing.needsConfirmation else {
             performAdopt()
             return
         }
@@ -293,7 +289,7 @@ struct PlanEditorSheet: View {
     /// share away while the sheet is open keeps its rows, so its password
     /// can still be replaced.
     private var folderShares: [(share: MountedShare, isSaved: Bool)] {
-        guard let volume = VolumePresence.volumeName(of: ResticService.expandTilde(draft.path)) else { return [] }
+        guard let volume = VolumePresence.volumeName(of: draft.resolvedPath) else { return [] }
         let saved = model.networkShare(forVolume: volume)
         if let mounted = mountedShares.first(where: { $0.volumeName == volume }) {
             return [(mounted, saved != nil)]
@@ -878,7 +874,7 @@ private struct AdoptRetentionPreview: View {
     private var previewKey: PreviewKey {
         PreviewKey(
             retention: draft.retention,
-            newestSnapshotID: model.snapshots(for: draft.repositoryID, planID: draft.id).first?.id,
+            newestSnapshotID: model.latestSnapshot(in: draft.repositoryID, planID: draft.id)?.id,
             retry: retry
         )
     }

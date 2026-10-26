@@ -94,7 +94,7 @@ extension AppModel {
         outcomeIn outcomes: Set<RunRecord.Outcome>? = nil
     ) -> RunRecord? {
         configuration.runs
-            .filter { $0.planID == planID && $0.kind == .backup && outcomes?.contains($0.outcome) ?? true }
+            .filter { $0.isBackup(ofPlan: planID) && outcomes?.contains($0.outcome) ?? true }
             .max { $0.finishedAt < $1.finishedAt }
     }
 }

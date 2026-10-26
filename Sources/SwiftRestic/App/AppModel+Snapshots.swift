@@ -59,7 +59,7 @@ extension AppModel {
         // mounts when the app starts; still away, the words say why. Earlier
         // rows stay, as for any failed read. A mount re-reads it
         // (`refreshRepositories(onVolume:)`).
-        if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+        if repository.isDriveAway {
             let stayedAway: String?
             do {
                 try await reconnectShare(before: repository)
@@ -73,7 +73,7 @@ extension AppModel {
                 snapshotListingOutcomes[repositoryID] = .failed(stayedAway)
                 return
             }
-            if VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+            if repository.isDriveAway {
                 snapshotListingOutcomes[repositoryID] = .failed(RunRecord.skippedReason(sources: [repository.resolvedLocalPath]))
                 return
             }
@@ -147,7 +147,7 @@ extension AppModel {
             snapshotListingOutcomes[repositoryID] = .failed(
                 "Waiting for a repository password — add it in the repository editor to read this repository."
             )
-        } catch let ResticError.commandFailed(code, _) where code == 10 {
+        } catch let ResticError.commandFailed(code, _) where code == ResticError.repositoryMissingCode {
             // restic's "does not exist": the repository is not where it was
             // saved — an unplugged volume, a moved folder. Never "empty": the
             // app creates a new repository before keeping it, so it holds no
@@ -234,6 +234,14 @@ extension AppModel {
         guard let planID else { return all }
         let tag = ResticService.planTag(planID)
         return all.filter { $0.tags.contains(tag) }
+    }
+
+    /// The plan's newest backup in the repository: the first of
+    /// `snapshots(for:planID:)`, found without filtering the rest.
+    func latestSnapshot(in repositoryID: UUID?, planID: UUID) -> Snapshot? {
+        guard let repositoryID else { return nil }
+        let tag = ResticService.planTag(planID)
+        return snapshots[repositoryID]?.first { $0.tags.contains(tag) }
     }
 
     /// `path` as a node of its kind in a backup the index has read — no

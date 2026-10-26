@@ -30,14 +30,9 @@ struct RetentionPreview: Sendable, Equatable {
     /// that does not decode throws, like the real forget's count does —
     /// "nothing would be removed" is a claim about the user's history.
     init(forgetOutput: String) throws {
-        let trimmed = forgetOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            self.init(kept: [], removed: [])
-            return
-        }
         let groups: [Group]
         do {
-            groups = try ResticMessageDecoder.jsonDecoder.decode([Group]?.self, from: Data(trimmed.utf8)) ?? []
+            groups = try ResticMessageDecoder.decodeArray(Group.self, from: forgetOutput)
         } catch {
             throw ResticError.malformedOutput(
                                 detail: "could not read which backups the retention rules would remove"

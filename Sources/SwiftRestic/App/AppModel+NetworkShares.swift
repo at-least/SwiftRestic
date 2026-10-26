@@ -37,13 +37,10 @@ extension AppModel {
     /// (`ShareNotReconnected`). A volume with no saved share is left to the
     /// read, as before.
     func reconnectShare(before repository: Repository) async throws {
-        let path = repository.resolvedLocalPath
-        guard repository.kind == .local, VolumePresence.isMounted(volumeOf: path) == false,
-              let volume = VolumePresence.volumeName(of: path)
-        else { return }
+        guard repository.isDriveAway, let volume = repository.driveVolumeName else { return }
         let failures = await reconnectShares(volumes: [volume]).filter { $0.failureReason != nil }
         guard failures.isEmpty else {
-            throw ShareNotReconnected(message: RunRecord.skippedReason(sources: [path], reconnectFailures: failures.reasonsByVolume))
+            throw ShareNotReconnected(message: RunRecord.skippedReason(sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume))
         }
     }
 

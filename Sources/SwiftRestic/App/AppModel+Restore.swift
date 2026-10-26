@@ -423,6 +423,13 @@ extension AppModel {
 
     func cancelRestore() { tasks.cancel(.restore) }
 
+    /// Whether a drag out of a list can restore at all. Lists ask on every
+    /// mouse-down on a row, so they offer nothing when it cannot rather than
+    /// letting `dragRestoreProvider` post "Cannot drag" at each click.
+    func canDragRestore(repositoryID: UUID) -> Bool {
+        repository(id: repositoryID) != nil && isResticAvailable
+    }
+
     /// Arq's signature restore gesture — drag an item out of the Restore
     /// pane into Finder — as a promised-file provider: the file does not
     /// exist yet, so the drag hands Finder a promise and the restore runs
@@ -646,7 +653,8 @@ extension AppModel {
     /// handed over, and no callback says when that ends — deleting on our
     /// side of the handoff is a race. A launch sweep has no such window:
     /// nothing from a previous session can still be mid-copy.
-    nonisolated static func sweepDragRestoreStaging(in directory: URL, fileManager: FileManager = .default) {
+    nonisolated static func sweepDragRestoreStaging(in directory: URL) {
+        let fileManager = FileManager.default
         guard let contents = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         else { return }
         for url in contents where url.lastPathComponent.hasPrefix(dragRestorePrefix)

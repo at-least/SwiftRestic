@@ -29,7 +29,7 @@ extension KeyedDecodingContainer {
         }
     }
 
-    func optional<T: Decodable>(_ key: Key, as type: T.Type = T.self) -> T? {
+    func optional<T: Decodable>(_ key: Key) -> T? {
         guard contains(key) else { return nil }
         do {
             if let decoded = try decodeIfPresent(T.self, forKey: key) { return decoded }

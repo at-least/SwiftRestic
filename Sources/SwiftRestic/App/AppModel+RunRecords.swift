@@ -81,7 +81,7 @@ extension AppModel {
         // (`continuingSkip(of:)`, `continuingStandingFailure(of:)`); its log
         // leaves with it.
         if record.outcome == .skipped || record.missingSources != nil || record.refusedShares != nil,
-           let index = configuration.runs.firstIndex(where: { $0.kind == .backup && $0.planID == record.planID }),
+           let index = configuration.runs.firstIndex(where: { $0.isBackup(ofPlan: record.planID) }),
            let merged = record.outcome == .skipped
                ? record.continuingSkip(of: configuration.runs[index])
                : record.continuingStandingFailure(of: configuration.runs[index]) {

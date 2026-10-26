@@ -191,7 +191,7 @@ enum BackupRunEngine {
             // the checks below read them as drives that are away. After the
             // hooks, which may have mounted them.
             let neededPaths = (repository.kind == .local ? [repository.resolvedLocalPath] : [])
-                + [ResticService.expandTilde(plan.path)]
+                + [plan.resolvedPath]
             let shareFailures = await reconnectAwayShares(
                 of: neededPaths,
                 transcript: transcript,
@@ -225,7 +225,7 @@ enum BackupRunEngine {
             // The repository's drive away (after the hooks, which may mount
             // it): skipped as for the folders' drive, never asking restic,
             // whose "does not exist" could not tell it from a moved folder.
-            if repository.kind == .local, VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+            if repository.isDriveAway {
                 let reason = RunRecord.skippedReason(
                     sources: [repository.resolvedLocalPath], reconnectFailures: reconnectFailures
                 )
@@ -366,7 +366,7 @@ enum BackupRunEngine {
             // back, so the run fails, a new plan for where the folder is now
             // its fix. The slot is stamped either way, so an hourly plan
             // does not try again every tick.
-            if VolumePresence.isMounted(volumeOf: ResticService.expandTilde(plan.path)) == false {
+            if VolumePresence.isMounted(volumeOf: plan.resolvedPath) == false {
                 record.outcome = .skipped
                 record.detailText = RunRecord.skippedReason(sources: [plan.path], reconnectFailures: reconnectFailures)
             } else {
@@ -566,7 +566,7 @@ enum MaintenanceRunEngine {
                     )
                     return
                 }
-                if VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+                if repository.isDriveAway {
                     record.outcome = .skipped
                     record.detailText = RunRecord.skippedReason(
                         sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
@@ -630,7 +630,6 @@ enum MaintenanceRunEngine {
                 record.detailText = try await RunTranscript.$current.withValue(transcript) {
                     try await service.prune(
                         context,
-                        dryRun: false,
                         onRawLine: sink.lineReporter(repositoryID: repository.id)
                     )
                 }
@@ -761,7 +760,7 @@ enum RetentionRunEngine {
                     transcript: transcript,
                     reconnect: { await sink.reconnectShares(volumes: $0) }
                 )
-                if VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false {
+                if repository.isDriveAway {
                     record.outcome = .failed
                     let refused = failures.filter(\.isRefusal).map(\.volumeName)
                     if !refused.isEmpty { record.refusedShares = refused }

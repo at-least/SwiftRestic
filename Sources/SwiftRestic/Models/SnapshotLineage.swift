@@ -171,7 +171,12 @@ extension SnapshotLineage {
         if let plan = soleWriter(of: lineage, plans: plans) {
             return plan.label(among: plans)
         }
-        let names = lineage.key.paths.map { ($0 as NSString).lastPathComponent }
+        return folderTitle(lineage.key.paths)
+    }
+
+    /// The folders' names, for a group no configured plan names.
+    static func folderTitle(_ paths: [String]) -> String {
+        let names = paths.map { ($0 as NSString).lastPathComponent }
         return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")
     }
 
@@ -181,7 +186,7 @@ extension SnapshotLineage {
         guard lineage.planTags.count == 1, !lineage.hasSnapshotsWithoutPlan,
               let tag = lineage.planTags.first
         else { return nil }
-        return plans.first { ResticService.planTag($0.id) == tag }
+        return ResticService.planUUID(fromTag: tag).flatMap { id in plans.first { $0.id == id } }
     }
 }
 
@@ -358,8 +363,7 @@ extension OtherBackupsGroup {
         if case let .plan(id, _) = group, let plan = plans.first(where: { $0.id == id }) {
             return plan.label(among: plans)
         }
-        let names = group.snapshots[0].lineageKey.paths.map { ($0 as NSString).lastPathComponent }
-        return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")
+        return SnapshotLineage.folderTitle(group.snapshots[0].lineageKey.paths)
     }
 }
 

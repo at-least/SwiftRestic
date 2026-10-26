@@ -78,8 +78,7 @@ extension AppModel {
     /// its task, unstamped and so still due, starts on this tick.
     private func upkeepStillAwaitingDrive() -> Set<UUID> {
         upkeepAwaitingDrive = upkeepAwaitingDrive.filter { id in
-            guard let repository = repository(id: id), repository.kind == .local else { return false }
-            return VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) == false
+            repository(id: id)?.isDriveAway ?? false
         }
         return upkeepAwaitingDrive
     }
@@ -144,7 +143,7 @@ extension AppModel {
     func refreshRepositories(onVolume volumePath: String) {
         guard !isShuttingDown, let volume = VolumePresence.volumeName(of: volumePath) else { return }
         for repository in configuration.repositories
-            where repository.kind == .local && VolumePresence.volumeName(of: repository.resolvedLocalPath) == volume
+            where repository.driveVolumeName == volume
         {
             tasks.addBackground(Task { [weak self] in
                 await self?.refreshSnapshots(repositoryID: repository.id)
@@ -169,7 +168,7 @@ extension AppModel {
             sourcesExist: { Self.sourceExists($0.path) },
             repositoryReachable: { plan in
                 guard let repository = configuration.repository(id: plan.repositoryID) else { return false }
-                return repository.kind != .local || VolumePresence.isMounted(volumeOf: repository.resolvedLocalPath) != false
+                return !repository.isDriveAway
             },
             now: now
         ) {

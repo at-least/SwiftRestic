@@ -273,11 +273,8 @@ struct FolderVersionsView: View {
         )
     }
 
-    /// The list asks on every mouse-down on a row, so a drag that can never
-    /// land offers nothing rather than posting its "Cannot drag" banner at
-    /// each click (the Restore pane's rule).
     private func dragProvider(for child: SnapshotNode) -> NSItemProvider? {
-        guard let chosen, model.repository(id: node.repositoryID) != nil, model.isResticAvailable else { return nil }
+        guard let chosen, model.canDragRestore(repositoryID: node.repositoryID) else { return nil }
         return model.dragRestoreProvider(repositoryID: node.repositoryID, snapshotID: chosen.id, node: child)
     }
 

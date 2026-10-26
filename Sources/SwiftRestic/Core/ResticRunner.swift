@@ -678,9 +678,12 @@ private final class StreamReader: @unchecked Sendable {
                 func absorb(_ chunk: Data) {
                     onActivity?()
                     buffer.append(chunk)
-                    while let newline = buffer.firstIndex(of: 0x0A) {
-                        let lineData = buffer[buffer.startIndex ..< newline]
-                        buffer.removeSubrange(buffer.startIndex ... newline)
+                    // Consumed lines leave once per chunk — not per line:
+                    // removing each line moves the rest of the buffer.
+                    var start = buffer.startIndex
+                    while let newline = buffer[start...].firstIndex(of: 0x0A) {
+                        let lineData = buffer[start ..< newline]
+                        start = buffer.index(after: newline)
                         if let line = String(data: lineData, encoding: .utf8) {
                             consume(line)
                         } else {
@@ -691,6 +694,7 @@ private final class StreamReader: @unchecked Sendable {
                             outcome.malformedCount += 1
                         }
                     }
+                    buffer.removeSubrange(buffer.startIndex ..< start)
                 }
 
                 loop: while true {

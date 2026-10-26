@@ -56,8 +56,7 @@ struct ServerProbe: Sendable {
         case .local, .sftp, .rclone:
             return nil
         case .rest:
-            let url = repository.restURL.hasPrefix("rest:") ? String(repository.restURL.dropFirst(5)) : repository.restURL
-            return urlTarget(url)
+            return urlTarget(repository.restServerURL)
         case .s3:
             let endpoint = repository.s3Endpoint.isEmpty ? "s3.amazonaws.com" : repository.s3Endpoint
             return urlTarget(endpoint.contains("://") ? endpoint : "https://\(endpoint)")

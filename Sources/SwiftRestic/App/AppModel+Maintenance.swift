@@ -42,7 +42,7 @@ extension AppModel {
             repositoryExists: repository != nil,
             repositoryBusy: run.repositoryID.map { busyRepositoryIDs.contains($0) } ?? false,
             planExists: plan(id: run.planID) != nil,
-            repositoryVolume: repository.flatMap { $0.kind == .local ? VolumePresence.volumeName(of: $0.resolvedLocalPath) : nil }
+            repositoryVolume: repository?.driveVolumeName
         )
     }
 
@@ -63,12 +63,7 @@ extension AppModel {
         guard !tasks.isOccupied(.maintenance(repositoryID)) else { return }
         guard let repository = repository(id: repositoryID) else { return }
         guard !busyRepositoryIDs.contains(repositoryID) else {
-            post(Banner(
-                title: "“\(label(of: repository))” is busy",
-                message: "A backup or another maintenance job is already using this repository.",
-                isError: false,
-                symbolName: "clock"
-            ))
+            postBusyBanner(for: repository)
             return
         }
 

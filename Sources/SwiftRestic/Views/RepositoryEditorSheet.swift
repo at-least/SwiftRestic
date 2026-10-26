@@ -695,11 +695,14 @@ struct RepositoryEditorSheet: View {
         }
     }
 
+    /// The rclone binary restic would run. The lookup stats the PATH — off
+    /// the main actor, the same rule resolveBinary's own probe follows.
+    private static func locateRclone() async -> URL? {
+        await Task.detached(operation: { ResticBinary.locateHelper(named: "rclone") }).value
+    }
+
     private func loadRcloneSetup() async -> RcloneSetup {
-        // The helper lookup stats the PATH — off the main actor, the same
-        // rule resolveBinary's own probe follows.
-        guard let rclone = await Task.detached(operation: { ResticBinary.locateHelper(named: "rclone") }).value
-        else { return .notInstalled }
+        guard let rclone = await Self.locateRclone() else { return .notInstalled }
         return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
     }
 
@@ -742,7 +745,7 @@ struct RepositoryEditorSheet: View {
         // restic shells out to rclone for this backend; catch a missing helper
         // here rather than letting it surface as an opaque failure from restic.
         if draft.requiresRcloneBinary,
-           await Task.detached(operation: { ResticBinary.locateHelper(named: "rclone") }).value == nil
+           await Self.locateRclone() == nil
         {
             status = .failure(ResticError.rcloneMissing)
             return false

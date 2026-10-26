@@ -182,7 +182,7 @@ enum PlanStatus {
     static func lastBackupRun(planID: UUID, in runs: [RunRecord]) -> RunRecord? {
         runs
             .filter {
-                $0.planID == planID && $0.kind == .backup
+                $0.isBackup(ofPlan: planID)
                     && ($0.outcome == .succeeded || $0.outcome == .completedWithErrors || $0.snapshotID != nil)
             }
             .max { $0.startedAt < $1.startedAt }

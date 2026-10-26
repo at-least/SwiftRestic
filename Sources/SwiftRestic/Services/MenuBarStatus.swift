@@ -387,7 +387,7 @@ enum MenuBarStatus {
     /// The restore, which is always at most one. `nil` while nothing restores.
     static func restoreLine(progress: OperationProgress?) -> RunningLine? {
         guard let progress else { return nil }
-        let percent = progress.fraction.formatted(.percent.precision(.fractionLength(0)))
+        let percent = Format.percent(progress.fraction)
         return RunningLine(id: "restore", text: "Restoring — \(percent)")
     }
 
@@ -398,7 +398,6 @@ enum MenuBarStatus {
     static func progressText(activity: PlanActivity?, progress: OperationProgress?) -> String {
         guard let activity else { return "…" }
         guard activity.phase == .backingUp else { return activity.phase.displayName }
-        let fraction = progress?.fraction ?? 0
-        return fraction.formatted(.percent.precision(.fractionLength(0)))
+        return Format.percent(progress?.fraction ?? 0)
     }
 }

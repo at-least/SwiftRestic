@@ -331,7 +331,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// follow it is another fact and stays; empty when the run names no
     /// plan (a check, a prune) or is not the plan's standing problem.
     private func newsLineRepeating(_ run: RunRecord) -> Set<String> {
-        guard let plan = model.configuration.plans.first(where: { $0.id == run.planID }),
+        guard let plan = model.plan(id: run.planID),
               let problem = model.currentProblem(for: plan.id),
               problem.id == run.id
         else { return [] }

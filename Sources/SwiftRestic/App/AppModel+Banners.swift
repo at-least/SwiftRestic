@@ -3,6 +3,16 @@ import Foundation
 extension AppModel {
     // MARK: - Banners
 
+    /// A maintenance job or retention asked for while the repository is in use.
+    func postBusyBanner(for repository: Repository) {
+        post(Banner(
+            title: "“\(label(of: repository))” is busy",
+            message: "A backup or another maintenance job is already using this repository.",
+            isError: false,
+            symbolName: "clock"
+        ))
+    }
+
     /// Shows a transient message. Successes and news dismiss themselves
     /// after a few seconds — success that outlives its moment reads as
     /// stale — while errors and warnings stay until the user dismisses

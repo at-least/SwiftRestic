@@ -22,7 +22,7 @@ extension AppModel {
         OverviewMetrics.protectionRows(
             plans: plans,
             latestSnapshot: { repositoryID, planID in
-                self.snapshots(for: repositoryID, planID: planID).first
+                self.latestSnapshot(in: repositoryID, planID: planID)
             },
             repositoryHasSnapshots: { repositoryID in
                 !self.snapshots(for: repositoryID).isEmpty
