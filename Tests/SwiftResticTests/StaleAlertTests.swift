@@ -95,4 +95,21 @@ struct StaleAlertTests {
         draft.staleAlertedFor = nil
         #expect(stored.merging(draft: draft).staleAlertedFor == stored.lastSuccessAt)
     }
+
+    @Test("the mark survives the configuration file, whose dates carry whole seconds, against a snapshot time with restic's fraction")
+    func markSurvivesTheFile() throws {
+        var stored = plan(lastSuccessDaysAgo: nil)
+        // restic's time, with its fraction ("2026-09-05T00:53:25.22662+08:00").
+        let snapshotTime = now.addingTimeInterval(-9 * day + 0.22662)
+        let alerts = due([stored], snapshots: [stored.id: snapshotTime])
+        #expect(alerts.count == 1)
+        stored.staleAlertedFor = try #require(alerts.first).mark
+        var configuration = AppConfiguration()
+        configuration.plans = [stored]
+        let relaunched = try ConfigStore.decoded(ConfigStore.encoded(configuration)).0.plans[0]
+        #expect(due([relaunched], snapshots: [stored.id: snapshotTime]).isEmpty)
+        // A newer backup re-arms it.
+        let later = snapshotTime.addingTimeInterval(day)
+        #expect(due([relaunched], snapshots: [stored.id: later]).count == 1)
+    }
 }

@@ -69,7 +69,7 @@ enum ResticPath {
     static func ancestors(of path: String) -> [String] {
         var ancestors: [String] = []
         var current = path
-        while current != "/", current.contains("/") {
+        while current != "/", current.unicodeScalars.contains("/") {
             current = parent(of: current)
             ancestors.append(current)
         }
@@ -81,5 +81,21 @@ enum ResticPath {
     static func holds(_ folder: String, _ path: String) -> Bool {
         if path.utf8.elementsEqual(folder.utf8) { return true }
         return path.utf8.starts(with: (folder == "/" ? folder : folder + "/").utf8)
+    }
+}
+
+/// `hasPrefix`/`hasSuffix` by bytes, for a restic line that carries a path:
+/// the Character forms join a Prepend character ending the path to the
+/// ": " or " " after it (`ResticPath`'s header), so "x\u{0600}: open …"
+/// has the Character prefix "x\u{0600}: " but one Character fewer than
+/// `count` says, and "x\u{0600} does not exist, skipping" has no Character
+/// suffix " does not exist, skipping" at all.
+extension String {
+    func hasBytePrefix(_ prefix: String) -> Bool {
+        utf8.starts(with: prefix.utf8)
+    }
+
+    func hasByteSuffix(_ suffix: String) -> Bool {
+        utf8.count >= suffix.utf8.count && utf8.suffix(suffix.utf8.count).elementsEqual(suffix.utf8)
     }
 }

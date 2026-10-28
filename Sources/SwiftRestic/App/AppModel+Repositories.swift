@@ -47,8 +47,8 @@ extension AppModel {
             post(Banner(
                 title: one ? "Ignored environment variable" : "Ignored environment variables",
                 message: one
-                    ? "\(overridden[0]) is set by SwiftRestic itself, so its entry in the extra environment for “\(label(of: repository))” has no effect. Remove it from SwiftRestic’s configuration file."
-                    : "\(Format.list(overridden)) are set by SwiftRestic itself, so their entries in the extra environment for “\(label(of: repository))” have no effect. Remove them from SwiftRestic’s configuration file.",
+                    ? "SwiftRestic manages \(overridden[0]) itself, so its entry in the extra environment for “\(label(of: repository))” has no effect. Remove it from SwiftRestic’s configuration file."
+                    : "SwiftRestic manages \(Format.list(overridden)) itself, so their entries in the extra environment for “\(label(of: repository))” have no effect. Remove them from SwiftRestic’s configuration file.",
                 level: .warning
             ))
         }

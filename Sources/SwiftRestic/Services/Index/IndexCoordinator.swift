@@ -97,9 +97,16 @@ actor IndexCoordinator {
     /// under its writer (`reconcile(listing:generation:)`), where the writes
     /// are ordered, so concurrent reconciles need no queue here: whichever
     /// reaches the writer second is compared with the first.
-    func reconcile(repositoryID: UUID, snapshots listing: [Snapshot], generation: UInt64) async {
-        guard let store = try? await lease(repositoryID) else { return }
+    ///
+    /// Answers whether the store took the listing: false for one dropped as
+    /// older, and for every failure — a removed repository, a lease or
+    /// write that threw — so the model does not count as taken a listing
+    /// whose answers still describe the one before.
+    @discardableResult
+    func reconcile(repositoryID: UUID, snapshots listing: [Snapshot], generation: UInt64) async -> Bool {
+        guard let store = try? await lease(repositoryID) else { return false }
         defer { registry.release(repositoryID) }
+        let taken: Bool
         do {
             // Marked before the release is awaited, so a reconcile arriving
             // meanwhile does not release again — a second release would hand
@@ -128,14 +135,18 @@ actor IndexCoordinator {
                     throw error
                 }
             }
-            try await Self.offActor {
-                guard try store.reconcile(listing: listing, generation: generation) else { return }
-                try store.housekeeping()
-            }
+            taken = try await Self.offActor { try store.reconcile(listing: listing, generation: generation) }
         } catch {
             // Dropped: the index answers with what it has until the next
-            // refresh, and housekeeping is space, never answers.
+            // refresh.
+            return false
         }
+        if taken {
+            // Housekeeping is space, never answers: its failure leaves the
+            // listing taken.
+            try? await Self.offActor { try store.housekeeping() }
+        }
+        return taken
     }
 
     // MARK: - Backfill

@@ -550,6 +550,13 @@ struct RunRecordPresentationTests {
         // A plan folder written with a tilde holds what is under it.
         let home = NSHomeDirectory() + "/Notes/a.md"
         #expect(RunRecordPresentation.unreadableItemWords(line: "\(home): open \(home): permission denied", path: home, sources: ["~/Notes"])?.location == "Notes")
+        // A Prepend character ending the item's name joins the ": " after it
+        // into one Character, so a Character count of the name is one short
+        // of the prefix on the line: cut by bytes, or the reason loses its
+        // first letter.
+        let prepend = "/Volumes/Data/Documents/new\u{0600}"
+        #expect(words("\(prepend): lstat \(prepend): no such file or directory", prepend)?.reason
+            == "lstat \(prepend): no such file or directory")
         // A line with no stored path stays restic's own.
         #expect(words("restic: some message without an item", nil) == nil)
     }

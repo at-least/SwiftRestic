@@ -3,13 +3,16 @@ import Foundation
 extension AppModel {
     // MARK: - Running a backup
 
-    /// `askedByUser` is false for the scheduler's and a mount's runs.
+    /// `askedByUser` is false for the scheduler's and a mount's runs, which
+    /// wait for a check or prune without a banner: no one clicked.
     func runBackup(planID: UUID, askedByUser: Bool = true) {
         guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.plan(planID)) else { return }
         guard let plan = plan(id: planID) else { return }
         if let reason = backupLockReason(for: plan) {
-            post(Banner(title: "“\(label(of: plan))” waits", message: reason, isError: false, symbolName: "clock"))
+            if askedByUser {
+                post(Banner(title: "“\(label(of: plan))” waits", message: reason, isError: false, symbolName: "clock"))
+            }
             return
         }
         guard plan.isConfigurationComplete, let repositoryID = plan.repositoryID,

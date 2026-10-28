@@ -841,10 +841,14 @@ struct RepositoryEditorSheet: View {
                 return
             }
         }
+        // A blank provider secret after a failed Keychain read keeps what
+        // is stored, as the blank password does: the field could not be
+        // prefilled, and an empty value would delete the stored one.
         await model.upsert(
             repository: draft,
             password: password.isEmpty ? nil : password,
-            providerSecret: draft.secretFieldLabel == nil || draft.kind == .sftp ? nil : providerSecret
+            providerSecret: draft.secretFieldLabel == nil || draft.kind == .sftp || (secretsReadFailed && providerSecret.isEmpty)
+                ? nil : providerSecret
         )
         // The repository is saved from here on: a share password that does
         // not save is said by the app, and the sheet closes as saved — kept

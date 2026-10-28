@@ -215,6 +215,11 @@ struct ResticFilesTreeTests {
         // Every file by its own path, the brackets escaped; every backup a
         // row lacks named, and no other.
         #expect(files.allSatisfy { find.contains(ResticService.globEscaped($0.path)) }, "\(find)")
+        // The patterns follow "--": a typed pattern starting with "-" is a
+        // pattern to restic, not a flag.
+        let patternsStart = try #require(find.range(of: " -- "), "\(find)")
+        #expect(files.allSatisfy { find[patternsStart.upperBound...].contains(ResticService.globEscaped($0.path)) }, "\(find)")
+        #expect(!find[..<patternsStart.lowerBound].contains(ResticService.globEscaped(files[0].path)), "\(find)")
         let named = Set(newest.values.joined())
         #expect(named.allSatisfy { find.contains("--snapshot \($0)") }, "\(find)")
         #expect(find.components(separatedBy: "--snapshot ").count - 1 == named.count, "\(find)")

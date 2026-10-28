@@ -388,8 +388,16 @@ actor ResticRunner {
     /// from every child's inheritance here, and
     /// `RepositoryContext.overriddenExtraEnvironmentKeys` reads the same set
     /// to flag the settings that can have no effect.
+    ///
+    /// RESTIC_REPOSITORY_FILE is `--repository-file`, which restic (0.19.1)
+    /// refuses beside the RESTIC_REPOSITORY the app always sets ("Options
+    /// -r and --repository-file are mutually exclusive"), so it would fail
+    /// every command. RESTIC_HOST would record its name on every backup in
+    /// place of this Mac's, which `ResticService.localHostname` and every
+    /// "from this Mac" reading assume restic took from gethostname(3).
     static let protectedEnvironmentKeys: Set<String> = [
-        "RESTIC_REPOSITORY", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE", "RESTIC_PASSWORD_COMMAND",
+        "RESTIC_REPOSITORY", "RESTIC_REPOSITORY_FILE", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE",
+        "RESTIC_PASSWORD_COMMAND", "RESTIC_HOST",
     ]
 
     /// A predictable environment for the child. A GUI app's inherited environment

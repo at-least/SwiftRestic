@@ -2300,7 +2300,11 @@ struct IndexCompletenessTests {
             .appendingPathComponent("SwiftResticIndexCompleteness-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory([:]))
-        let repositoryID = UUID()
+        // Configured: a reconcile of a repository no longer configured is
+        // not counted as taken.
+        let repository = namedRepository("NAS")
+        model.configuration.repositories = [repository]
+        let repositoryID = repository.id
 
         // The index takes an empty listing: complete for it.
         model.snapshotsGeneration[repositoryID] = 1

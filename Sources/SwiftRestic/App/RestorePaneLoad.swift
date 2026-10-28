@@ -6,8 +6,8 @@ import Foundation
 enum RestorePaneLoad {
     /// What the Change column shows.
     struct Marks: Equatable {
-        var changes: [String: ResticDiffChange]
-        var changesInside: [String: ChangesInside]
+        var changes: [PathKey: ResticDiffChange]
+        var changesInside: [PathKey: ChangesInside]
         var comparison: ChangeComparison
     }
 

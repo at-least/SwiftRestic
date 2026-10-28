@@ -18,7 +18,7 @@ struct SnapshotLineageTests {
         func change(_ path: String, _ modifier: String) -> ResticDiffChange {
             ResticDiffChange(path: path, modifier: modifier)
         }
-        let changes: [String: ResticDiffChange] = [
+        let changes: [PathKey: ResticDiffChange] = [
             "/r/a/x.txt": change("/r/a/x.txt", "M"),
             "/r/a/y.txt": change("/r/a/y.txt", "-"),
             "/r/b": change("/r/b/", "+"),
@@ -317,8 +317,8 @@ struct SnapshotLineageTests {
 
     @Test("the Change column marks only what this backup holds, so a folder's tally counts only rows it has")
     func changeColumnLeavesOutRemovals() {
-        func changeMap(_ lines: [(String, String)]) -> [String: ResticDiffChange] {
-            Dictionary(uniqueKeysWithValues: lines.map { (ResticPath.normalized($0.0), ResticDiffChange(path: $0.0, modifier: $0.1)) })
+        func changeMap(_ lines: [(String, String)]) -> [PathKey: ResticDiffChange] {
+            Dictionary(uniqueKeysWithValues: lines.map { (PathKey(ResticPath.normalized($0.0)), ResticDiffChange(path: $0.0, modifier: $0.1)) })
         }
         // restic 0.19.1's diff after a file and a folder were deleted: the
         // folder, then everything it held, each its own "-" line.

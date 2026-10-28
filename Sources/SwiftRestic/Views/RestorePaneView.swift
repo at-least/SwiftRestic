@@ -27,9 +27,9 @@ struct RestorePaneView: View {
     @State private var tree = FileTree(roots: [])
     /// The folder the tree is focused on — kept across record switches.
     @State private var currentPath: String?
-    @State private var changes: [String: ResticDiffChange] = [:]
+    @State private var changes: [PathKey: ResticDiffChange] = [:]
     /// Each folder's tally of the changes beneath it, from the same diff.
-    @State private var changesInside: [String: ChangesInside] = [:]
+    @State private var changesInside: [PathKey: ChangesInside] = [:]
     /// What `changes` was computed against, for the header: written beside
     /// the map in `loadLevel`, never re-derived — the header must name the
     /// comparison whose marks are on screen.
@@ -572,13 +572,13 @@ struct RestorePaneView: View {
     /// exactly changed.
     private func changeBadge(for path: String) -> some View {
         Group {
-            if let change = changes[path] {
+            if let change = changes[PathKey(path)] {
                 Text(change.category.displayName)
                     .font(.caption)
                     .lineLimit(1)
                     .help(change.explanation)
                     .frame(width: 56, alignment: .leading)
-            } else if let inside = changesInside[path], inside.total > 0 {
+            } else if let inside = changesInside[PathKey(path)], inside.total > 0 {
                 // A folder the diff never names, whose subtree it does: the
                 // count leads the expansion toward the leaves, and the
                 // root's equals the header's — a collapsed root under

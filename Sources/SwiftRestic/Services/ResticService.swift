@@ -10,10 +10,13 @@ struct RepositoryContext: Sendable {
     var environment: [String: String] {
         var env = repository.credentialEnvironment(secret: providerSecret)
         env.merge(repository.extraEnvironment) { _, new in new }
-        // restic ranks PASSWORD_COMMAND and PASSWORD_FILE above PASSWORD, so
-        // overriding the password alone is not enough — they must not reach it.
-        env.removeValue(forKey: "RESTIC_PASSWORD_COMMAND")
-        env.removeValue(forKey: "RESTIC_PASSWORD_FILE")
+        // The set the runner strips from the inherited environment, less the
+        // location, which is replaced below instead: restic ranks
+        // PASSWORD_COMMAND and PASSWORD_FILE above PASSWORD, so overriding
+        // the password alone is not enough.
+        for key in ResticRunner.protectedEnvironmentKeys where key != "RESTIC_REPOSITORY" {
+            env.removeValue(forKey: key)
+        }
         // Only claimed when there is a value: the console can legitimately reach
         // a repository the plan editor would call incomplete.
         let repositoryString = repository.resticRepositoryString
@@ -468,6 +471,8 @@ struct ResticService: ResticClient {
         var args = ["find", "--json", "--no-lock"]
         if ignoreCase { args.append("--ignore-case") }
         for id in snapshotIDs { args += ["--snapshot", id] }
+        // A typed pattern starting with "-" is a pattern, not a flag.
+        args.append("--")
         args += patterns
 
         let result = try await run(
@@ -665,8 +670,10 @@ struct ResticService: ResticClient {
         var seen: Set<String> = []
         var entries: [(line: String, path: String?)] = []
         for line in stderr.split(whereSeparator: \.isNewline).map(String.init) {
-            guard let suffix = skipSuffixes.first(where: { line.hasSuffix($0) }) else { continue }
-            if seen.insert(line).inserted { entries.append((line, String(line.dropLast(suffix.count)))) }
+            guard let suffix = skipSuffixes.first(where: { line.hasByteSuffix($0) }) else { continue }
+            if seen.insert(line).inserted {
+                entries.append((line, String(decoding: line.utf8.dropLast(suffix.utf8.count), as: UTF8.self)))
+            }
         }
         for error in errors {
             // Without restic's trailing newline, and keyed by the same text,

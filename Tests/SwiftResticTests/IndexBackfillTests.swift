@@ -340,7 +340,7 @@ struct IndexBackfillTests {
         let repositoryID = scene.repositoryID
         let coordinator = scene.coordinator
         let file = coordinator.fileURL(for: repositoryID)
-        await coordinator.reconcile(repositoryID: repositoryID, snapshots: [], generation: 1)
+        #expect(await coordinator.reconcile(repositoryID: repositoryID, snapshots: [], generation: 1))
         #expect(FileManager.default.fileExists(atPath: file.path))
 
         await coordinator.dropRepository(repositoryID: repositoryID)
@@ -349,8 +349,9 @@ struct IndexBackfillTests {
         // A refresh that was in flight when the removal happened still
         // carries its reconcile into the coordinator afterwards. The store
         // must refuse to recreate the file for a repository that is gone,
-        // or an orphan would live on disk forever after.
-        await coordinator.reconcile(repositoryID: repositoryID, snapshots: [], generation: 2)
+        // or an orphan would live on disk forever after — and say the
+        // listing was not taken, so the model does not count it as taken.
+        #expect(await !coordinator.reconcile(repositoryID: repositoryID, snapshots: [], generation: 2))
         #expect(!FileManager.default.fileExists(atPath: file.path))
     }
 

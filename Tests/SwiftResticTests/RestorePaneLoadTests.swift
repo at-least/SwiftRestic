@@ -63,7 +63,7 @@ struct RestorePaneLoadTests {
 
     private func marks(_ lines: [(String, String)], failure: String? = nil) -> ChangeMarks {
         ChangeMarks(
-            changes: Dictionary(uniqueKeysWithValues: lines.map { (ResticPath.normalized($0.0), change($0.0, $0.1)) }),
+            changes: Dictionary(uniqueKeysWithValues: lines.map { (PathKey(ResticPath.normalized($0.0)), change($0.0, $0.1)) }),
             failure: failure
         )
     }
@@ -104,6 +104,18 @@ struct RestorePaneLoadTests {
         #expect(shown.changesInside["/src/a"]?.total == 1)
         #expect(shown.comparison == .compared(baseline: baseline, changeCount: 2))
         #expect(recorder.events.count == 3)
+    }
+
+    @Test("two spellings of one name are two marks, as they are two paths to restic")
+    func twoSpellingsAreTwoMarks() throws {
+        let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z")
+        let nfc = "/src/caf\u{E9}.txt"
+        let nfd = "/src/cafe\u{301}.txt"
+        let shown = RestorePaneLoad.compared(marks([(nfc, "M"), (nfd, "+")]), baseline: baseline)
+        #expect(shown.changes[PathKey(nfc)]?.category == .modified)
+        #expect(shown.changes[PathKey(nfd)]?.category == .added)
+        #expect(shown.changesInside["/src"]?.total == 2)
+        #expect(shown.comparison == .compared(baseline: baseline, changeCount: 2))
     }
 
     @Test("a load cancelled by a record switch shows none of its comparison")

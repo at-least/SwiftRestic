@@ -239,6 +239,21 @@ struct ResticBinaryTests {
         #expect(located.url.path == "/bin/echo")
     }
 
+    @Test("an override typed with a tilde is read under the home folder, as every other typed path is")
+    func overrideExpandsTilde() {
+        // URL(fileURLWithPath:) expands the tilde itself; pinned, since the
+        // override is the one typed path that does not go through
+        // ResticService.expandTilde.
+        do {
+            _ = try ResticBinary.locate(userOverride: "~/nonexistent-restic-binary")
+            Issue.record("a missing override must not be accepted")
+        } catch let ResticError.binaryNotFound(searched) {
+            #expect(searched == [NSHomeDirectory() + "/nonexistent-restic-binary"])
+        } catch {
+            Issue.record("unexpected error \(error)")
+        }
+    }
+
     @Test("an override that is not an executable file is refused")
     func brokenOverrideIsRefused() {
         // A missing file is a different sentence than an unexecutable one:
@@ -430,12 +445,19 @@ struct PasswordPrecedenceTests {
             // kept away from it too.
             "RESTIC_PASSWORD_COMMAND": "echo hostile",
             "RESTIC_PASSWORD_FILE": "/hostile/file",
+            // -r and --repository-file are mutually exclusive to restic, so
+            // this one fails every command; RESTIC_HOST would record another
+            // Mac's name on every backup.
+            "RESTIC_REPOSITORY_FILE": "/hostile/repository-file",
+            "RESTIC_HOST": "elsewhere",
             "TAG": "innocent",
         ]).environment
         #expect(env["RESTIC_PASSWORD"] == "stored-password")
         #expect(env["RESTIC_REPOSITORY"] == "/Volumes/Backup")
         #expect(env["RESTIC_PASSWORD_COMMAND"] == nil)
         #expect(env["RESTIC_PASSWORD_FILE"] == nil)
+        #expect(env["RESTIC_REPOSITORY_FILE"] == nil)
+        #expect(env["RESTIC_HOST"] == nil)
         // A non-reserved entry passes through untouched.
         #expect(env["TAG"] == "innocent")
     }
@@ -465,9 +487,10 @@ struct PasswordPrecedenceTests {
         let overridden = context(extra: [
             "RESTIC_PASSWORD": "x",
             "RESTIC_PASSWORD_COMMAND": "y",
+            "RESTIC_HOST": "elsewhere",
             "AWS_ACCESS_KEY_ID": "z",
         ]).overriddenExtraEnvironmentKeys
-        #expect(overridden == ["RESTIC_PASSWORD", "RESTIC_PASSWORD_COMMAND"])
+        #expect(overridden == ["RESTIC_HOST", "RESTIC_PASSWORD", "RESTIC_PASSWORD_COMMAND"])
 
         #expect(context(extra: ["AWS_ACCESS_KEY_ID": "y"]).overriddenExtraEnvironmentKeys.isEmpty)
     }
@@ -595,6 +618,14 @@ struct UnreadableItemsTests {
             "/y cannot be accessed, skipping",
             "/src/a.pdf: open /src/a.pdf: permission denied",
         ])
+        // A source ending in a Prepend character joins the space after it
+        // into one Character, so a Character suffix test misses the skip
+        // line: matched by bytes, and the path cut by bytes.
+        let prepend = "/Volumes/Data/new\u{0600}"
+        #expect(ResticService.unreadableItems(errors: [], stderr: "\(prepend) does not exist, skipping\n")
+            == ["\(prepend) does not exist, skipping"])
+        #expect(ResticService.unreadableItemPaths(errors: [], stderr: "\(prepend) does not exist, skipping\n")
+            .values.map { Array($0.utf8) } == [Array(prepend.utf8)])
         #expect(ResticService.unreadableItems(errors: [], stderr: stderr) == [
             "/x/does-not-exist does not exist, skipping",
             "/y cannot be accessed, skipping",

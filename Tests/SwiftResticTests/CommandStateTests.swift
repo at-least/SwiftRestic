@@ -67,6 +67,24 @@ struct CommandStateTests {
             == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
     }
 
+    @Test("a run nobody asked for — a mount's or the network's catch-up — waits for a check or prune without a banner")
+    func unaskedRunWaitsSilently() {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents]
+        model.maintenance[repository.id] = MaintenanceActivity(task: .prune)
+
+        model.runBackup(planID: documents.id, askedByUser: false)
+        #expect(model.banners.isEmpty)
+        #expect(!model.isRunning(planID: documents.id))
+
+        model.runBackup(planID: documents.id)
+        #expect(model.banners.map(\.title) == ["“Documents” waits"])
+        #expect(!model.isRunning(planID: documents.id))
+    }
+
     @Test("Back Up All queues a plan behind another plan's run on its repository, its retention step too, and leaves out one whose repository a check or prune holds")
     func backUpAllQueuesBehindAPlansRun() {
         let model = makeModel()

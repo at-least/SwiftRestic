@@ -358,6 +358,34 @@ struct FilesTreeTests {
         #expect(tree.loadKey([folder], model: model) == taken)
     }
 
+    @Test("a listing's reconcile marks the generation taken only when the store took it and the repository is still configured")
+    func takenGenerationFollowsTheStore() async throws {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticFilesTree-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory([:])
+        )
+        let repository = namedRepository("NAS")
+        model.configuration.repositories = [repository]
+        model.indexReconcile(repositoryID: repository.id, listing: [], generation: 1)
+        await model.tasks.drain()
+        #expect(model.indexTakenGeneration[repository.id] == 1)
+
+        // Removed while a refresh's reconcile was in flight: the removal
+        // cleared the entry, and the reconcile that lands after must not
+        // write it back — the store refused the listing, and UUIDs are
+        // never reused, so nothing would clear it again.
+        model.deleteRepository(id: repository.id)
+        await model.tasks.drain()
+        #expect(model.indexTakenGeneration[repository.id] == nil)
+        model.indexReconcile(repositoryID: repository.id, listing: [], generation: 2)
+        await model.tasks.drain()
+        #expect(model.indexTakenGeneration[repository.id] == nil)
+        await model.indexCoordinator.shutdown()
+    }
+
     @Test("a folder level read whole reads ahead the files it lists that a backup holds; the roots or an incomplete level do not")
     func levelsReadAheadTheirFiles() async {
         let model = AppModel(

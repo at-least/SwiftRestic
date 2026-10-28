@@ -86,4 +86,19 @@ struct ResticPathTests {
         // A Prepend character before the separator: "\u{0600}/" is one Character.
         #expect(ResticPath.basename(of: "/a\u{0600}/b") == "b")
     }
+
+    @Test("ancestors steps up to the root by separator scalars, whatever cluster holds them")
+    func ancestors() {
+        #expect(ResticPath.ancestors(of: "/a/b/c") == ["/a/b", "/a", "/"])
+        #expect(ResticPath.ancestors(of: "/a") == ["/"])
+        #expect(ResticPath.ancestors(of: "/") == [])
+        #expect(ResticPath.ancestors(of: "name") == [])
+        // A combining mark on the first scalar after the root's slash joins it:
+        // "/\u{301}x" is the Character "/\u{301}" then "x", and a Character
+        // test for "/" finds none.
+        #expect(ResticPath.ancestors(of: "/\u{301}x") == ["/"])
+        #expect(ResticPath.ancestors(of: "/\u{301}x/y").map { Array($0.utf8) } == [Array("/\u{301}x".utf8), Array("/".utf8)])
+        #expect(ResticPath.ancestors(of: "/d/new\u{0600}/f").map { Array($0.utf8) }
+            == [Array("/d/new\u{0600}".utf8), Array("/d".utf8), Array("/".utf8)])
+    }
 }

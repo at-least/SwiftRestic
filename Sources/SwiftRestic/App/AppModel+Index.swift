@@ -18,8 +18,14 @@ extension AppModel {
     /// exiting under it.
     func indexReconcile(repositoryID: UUID, listing: [Snapshot], generation: UInt64) {
         tasks.addBackground(Task {
-            await indexCoordinator.reconcile(repositoryID: repositoryID, snapshots: listing, generation: generation)
-            indexTakenGeneration[repositoryID] = max(indexTakenGeneration[repositoryID] ?? 0, generation)
+            let taken = await indexCoordinator.reconcile(repositoryID: repositoryID, snapshots: listing, generation: generation)
+            // Only a listing the store took, of a repository still here: a
+            // removal clears the entry while a reconcile is in flight, and
+            // UUIDs are never reused, so a write after it would stay for the
+            // session.
+            if taken, repository(id: repositoryID) != nil {
+                indexTakenGeneration[repositoryID] = max(indexTakenGeneration[repositoryID] ?? 0, generation)
+            }
             // Backfill needs the repository and its credentials; if either is
             // gone mid-refresh, the next refresh retries the whole pass.
             guard let repository = repository(id: repositoryID),
@@ -203,7 +209,7 @@ extension AppModel {
             newerID: newerID,
             repositoryID: repositoryID
         ) {
-            var map: [String: ResticDiffChange] = [:]
+            var map: [PathKey: ResticDiffChange] = [:]
             for change in cached.map(\.resticDiffChange) {
                 map[ChangeMap.key(change)] = change
             }
@@ -241,7 +247,10 @@ extension AppModel {
 
 /// One comparison's marks for the restore browser's Change column.
 struct ChangeMarks: Equatable, Sendable {
-    var changes: [String: ResticDiffChange]
+    /// By bytes (`PathKey`), as every path map is: the NFC and NFD
+    /// spellings of one name are two paths to restic, and a String key
+    /// would keep one mark for both rows.
+    var changes: [PathKey: ResticDiffChange]
     /// Why `restic diff` stopped short; nil when it finished. What streamed
     /// before a failure stays — each mark is still true — but a blank row
     /// no longer means unchanged.
@@ -253,7 +262,7 @@ struct ChangeMarks: Equatable, Sendable {
 /// from a `@Sendable` closure.
 private final class ChangeMap: @unchecked Sendable {
     private let lock = NSLock()
-    private var storage: [String: ResticDiffChange] = [:]
+    private var storage: [PathKey: ResticDiffChange] = [:]
     private var raw: [ResticDiffChange] = []
 
     func insert(_ change: ResticDiffChange) {
@@ -269,9 +278,9 @@ private final class ChangeMap: @unchecked Sendable {
 
     /// The key a change's row is stored under: the bytewise-normalized
     /// path, a directory's trailing slash dropped (see `insert`).
-    static func key(_ change: ResticDiffChange) -> String { ResticPath.normalized(change.path) }
+    static func key(_ change: ResticDiffChange) -> PathKey { PathKey(ResticPath.normalized(change.path)) }
 
-    var map: [String: ResticDiffChange] {
+    var map: [PathKey: ResticDiffChange] {
         lock.lock()
         defer { lock.unlock() }
         return storage

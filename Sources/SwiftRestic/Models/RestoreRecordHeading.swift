@@ -23,7 +23,7 @@ extension ChangeComparison {
     /// removal has no row in its tree, and counting one in a folder's tally
     /// would promise a row the folder does not have; Compare with
     /// Previous lists them.
-    static func heldChanges(_ changes: [String: ResticDiffChange]) -> [String: ResticDiffChange] {
+    static func heldChanges(_ changes: [PathKey: ResticDiffChange]) -> [PathKey: ResticDiffChange] {
         changes.filter { $0.value.category != .removed }
     }
 }
@@ -56,11 +56,11 @@ extension ChangeComparison {
     /// tree root's total is the header's count. One pass over the map's
     /// keys when the diff lands, not a walk per row. Keys are the diff's
     /// own: normalized paths, no trailing slash.
-    static func changesInside(_ changes: [String: ResticDiffChange]) -> [String: ChangesInside] {
-        var inside: [String: ChangesInside] = [:]
+    static func changesInside(_ changes: [PathKey: ResticDiffChange]) -> [PathKey: ChangesInside] {
+        var inside: [PathKey: ChangesInside] = [:]
         for (key, change) in changes {
-            for folder in ResticPath.ancestors(of: key) {
-                inside[folder, default: ChangesInside()].add(change.category)
+            for folder in ResticPath.ancestors(of: key.path) {
+                inside[PathKey(folder), default: ChangesInside()].add(change.category)
             }
         }
         return inside
