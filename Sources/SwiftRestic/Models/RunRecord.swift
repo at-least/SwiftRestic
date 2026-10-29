@@ -99,7 +99,9 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// The path each stored unreadable line names, keyed by the line, where
     /// restic named one (`ResticService.unreadableItemPaths`). Nil on records
     /// written before it was kept: their lines get no per-item actions.
-    var unreadableItemPaths: [String: String]?
+    /// By bytes: two lines that differ only in Unicode normalization name
+    /// two items to restic, and a String key would keep one.
+    var unreadableItemPaths: [PathKey: String]?
     /// restic's exit code for the run's own command — the `backup` (0, or 3
     /// when some source data could not be read), else the first exit the
     /// run's transcript saw: a failed backup's, a check's, a prune's, a

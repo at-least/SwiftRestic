@@ -154,7 +154,7 @@ extension IndexedEntry {
 /// would answer one path's question with the other's facts. The keyed
 /// reads key on this instead. A string literal is one, so a path spelled
 /// inline reads as itself.
-struct PathKey: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConvertible {
+struct PathKey: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConvertible, Codable, CodingKeyRepresentable {
     let path: String
 
     init(_ path: String) {
@@ -176,6 +176,30 @@ struct PathKey: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConv
     }
 
     var description: String { path }
+
+    // Stored as its string, and as an object's key when it keys a
+    // dictionary: the JSON a [String: …] map wrote reads back unchanged.
+    init(from decoder: any Decoder) throws {
+        path = try decoder.singleValueContainer().decode(String.self)
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(path)
+    }
+
+    var codingKey: any CodingKey { Key(stringValue: path) }
+
+    init?<T: CodingKey>(codingKey: T) {
+        path = codingKey.stringValue
+    }
+
+    private struct Key: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
 
     /// The bytes in lowercase hex: a String whose `==` is byte equality,
     /// for the places that must hand SwiftUI a String identity or tag.

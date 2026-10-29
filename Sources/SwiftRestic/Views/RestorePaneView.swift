@@ -1030,7 +1030,7 @@ private struct IncompleteSnapshotStrip: View {
         let unreadable = run.itemErrorCount
         let lines = Array(run.unreadableItems.prefix(Self.shownItems))
         let baseline = SnapshotLineage.changeBaseline(for: snapshotID, in: model.snapshots(for: repositoryID))
-        let paths = lines.compactMap { run.unreadableItemPaths?[$0] }
+        let paths = lines.compactMap { run.unreadableItemPaths?[PathKey($0)] }
         return HStack(alignment: .top, spacing: 8) {
             // Beside words that say the same thing: decoration to VoiceOver.
             Image(systemName: RunRecord.Outcome.completedWithErrors.symbolName!)
@@ -1046,7 +1046,7 @@ private struct IncompleteSnapshotStrip: View {
                     // view's zero-width sizing query a character per line.
                     // Only the pane's minimum width keeps this one safe.
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    if let baseline, let path = run.unreadableItemPaths?[line],
+                    if let baseline, let path = run.unreadableItemPaths?[PathKey(line)],
                        let isDirectory = heldBefore[PathKey(path)],
                        let page = model.shelves(for: repositoryID).versionsPage(of: baseline) {
                         // A row that goes somewhere: the item's versions,
@@ -1118,7 +1118,7 @@ private struct IncompleteSnapshotStrip: View {
     /// path.
     private func words(for line: String, in run: RunRecord) -> String {
         let sources = run.planID.flatMap { model.plan(id: $0) }.map { [$0.path] } ?? []
-        guard let words = RunRecordPresentation.unreadableItemWords(line: line, path: run.unreadableItemPaths?[line], sources: sources)
+        guard let words = RunRecordPresentation.unreadableItemWords(line: line, path: run.unreadableItemPaths?[PathKey(line)], sources: sources)
         else { return line }
         return "\(words.name) — \(words.reason) · \(words.location)"
     }

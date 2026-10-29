@@ -51,7 +51,8 @@ final class AppModel {
     /// it named no path.
     func unreadItems(inBackup id: String) -> UnreadItems {
         var items = UnreadItems()
-        for (line, path) in backupRun(forSnapshot: id)?.unreadableItemPaths ?? [:] {
+        for (lineKey, path) in backupRun(forSnapshot: id)?.unreadableItemPaths ?? [:] {
+            let line = lineKey.path
             items.lines[PathKey(ResticPath.normalized(path))] = line
         }
         return items

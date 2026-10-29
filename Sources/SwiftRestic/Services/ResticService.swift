@@ -85,7 +85,7 @@ struct BackupOutcome: Sendable {
     var decodingWarning: String? = nil
     /// The path each unreadable line names, keyed by the line — where restic
     /// named one. See `ResticService.unreadableItemPaths(errors:stderr:)`.
-    var itemPaths: [String: String] = [:]
+    var itemPaths: [PathKey: String] = [:]
 
     /// True for restic exit 3 — finished but skipped files it could not
     /// read — or when the outcome records unreadable items or a decoding gap.
@@ -658,10 +658,10 @@ struct ResticService: ResticClient {
     /// none — an event without an item — is absent. Stored on the run so
     /// the fixes that act on an item (Show in Finder, Exclude) never
     /// parse restic's free text.
-    static func unreadableItemPaths(errors: [ResticErrorMessage], stderr: String) -> [String: String] {
-        var paths: [String: String] = [:]
+    static func unreadableItemPaths(errors: [ResticErrorMessage], stderr: String) -> [PathKey: String] {
+        var paths: [PathKey: String] = [:]
         for entry in unreadableEntries(errors: errors, stderr: stderr) {
-            if let path = entry.path { paths[entry.line] = path }
+            if let path = entry.path { paths[PathKey(entry.line)] = path }
         }
         return paths
     }
@@ -672,17 +672,19 @@ struct ResticService: ResticClient {
     private static let skipSuffixes = [missingSourceSuffix, inaccessibleSourceSuffix]
 
     private static func unreadableEntries(errors: [ResticErrorMessage], stderr: String) -> [(line: String, path: String?)] {
-        var seen: Set<String> = []
+        // By bytes, as the index keys paths: an NFC and an NFD spelling of
+        // one name are two items.
+        var seen: Set<PathKey> = []
         var entries: [(line: String, path: String?)] = []
         for line in stderr.split(whereSeparator: \.isNewline).map(String.init) {
             guard let path = skipSuffixes.lazy.compactMap({ line.removingByteSuffix($0) }).first else { continue }
-            if seen.insert(line).inserted { entries.append((line, path)) }
+            if seen.insert(PathKey(line)).inserted { entries.append((line, path)) }
         }
         for error in errors {
             // Without restic's trailing newline, and keyed by the same text,
             // so an item-less message with and without one is one line.
             let line = RunRecord.storedItemError(error.item.map { "\($0): \(error.message)" } ?? error.message)
-            if seen.insert(error.item ?? line).inserted { entries.append((line, error.item)) }
+            if seen.insert(PathKey(error.item ?? line)).inserted { entries.append((line, error.item)) }
         }
         return entries
     }

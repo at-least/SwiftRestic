@@ -68,7 +68,7 @@ struct FolderChangeSummaryTests {
         let line = "/d/locked.pdf: open /d/locked.pdf: permission denied"
         run.itemErrors = [line]
         run.itemErrorCount = 1
-        run.unreadableItemPaths = [line: "/d/locked.pdf"]
+        run.unreadableItemPaths = [PathKey(line): "/d/locked.pdf"]
         model.append(record: run)
         #expect(model.unreadItems(inBackup: "feedface00000000") == UnreadItems(lines: ["/d/locked.pdf": line]))
         #expect(model.unreadItems(inBackup: "0000000000000000") == UnreadItems())

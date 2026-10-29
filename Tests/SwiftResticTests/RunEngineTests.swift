@@ -509,7 +509,10 @@ struct BackupRunEngineTests {
         // A record written before the field existed has no paths, not empty ones.
         let old = try JSONDecoder().decode(RunRecord.self, from: Data(#"{"kind":"backup","itemErrors":["/x: permission denied"],"itemErrorCount":1}"#.utf8))
         #expect(old.unreadableItemPaths == nil)
-        let roundTrip = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(record))
+        let encoded = try JSONEncoder().encode(record)
+        // Stored as an object keyed by the line, as a [String: String] map was.
+        #expect(String(decoding: encoded, as: UTF8.self).contains(#""unreadableItemPaths":{"\/src\/a.pdf: permission denied":"\/src\/a.pdf"}"#))
+        let roundTrip = try JSONDecoder().decode(RunRecord.self, from: encoded)
         #expect(roundTrip.unreadableItemPaths == record.unreadableItemPaths)
     }
 

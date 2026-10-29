@@ -126,8 +126,8 @@ struct ItemErrorDiagnosisTests {
         record.itemErrors = [speechLine, tombstoneLine, deviceLine, speech2Line, mailLine]
         record.itemErrorCount = 4
         record.unreadableItemPaths = [
-            speechLine: speech, tombstoneLine: tombstone, deviceLine: device, speech2Line: speech2,
-            mailLine: "/Users/u/Library/Mail",
+            PathKey(speechLine): speech, PathKey(tombstoneLine): tombstone, PathKey(deviceLine): device,
+            PathKey(speech2Line): speech2, PathKey(mailLine): "/Users/u/Library/Mail",
         ]
 
         let paths = ItemErrorDiagnosis.excludablePaths(for:in:)
@@ -141,7 +141,7 @@ struct ItemErrorDiagnosisTests {
         // the record keeps `storedItemErrorLimit`): no partial Exclude.
         #expect(paths(.protectedEvenWithAccess(60), record).isEmpty)
         // A stored line without its path: the same.
-        record.unreadableItemPaths?[speech2Line] = nil
+        record.unreadableItemPaths?[PathKey(speech2Line)] = nil
         #expect(paths(.protectedEvenWithAccess(2), record).isEmpty)
         #expect(paths(.filePermissions(1), record) == [tombstone])
         // A record stored before items had paths offers nothing to exclude.

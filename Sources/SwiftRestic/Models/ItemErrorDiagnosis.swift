@@ -148,7 +148,7 @@ enum ItemErrorDiagnosis {
         }
         let paths = record.unreadableItems
             .filter { kind(of: $0) == excluded }
-            .compactMap { record.unreadableItemPaths?[$0] }
+            .compactMap { record.unreadableItemPaths?[PathKey($0)] }
         return paths.count == count ? paths : []
     }
 

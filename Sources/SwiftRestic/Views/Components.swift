@@ -1281,7 +1281,7 @@ struct UnreadableItemLine: View {
     @State private var isConfirmingExclude = false
 
     var body: some View {
-        let path = run.unreadableItemPaths?[line]
+        let path = run.unreadableItemPaths?[PathKey(line)]
         let plan = run.planID.flatMap { model.plan(id: $0) }
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             // By name, where and why; restic's whole line in the tooltip,

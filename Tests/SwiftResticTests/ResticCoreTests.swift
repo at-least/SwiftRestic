@@ -640,6 +640,15 @@ struct UnreadableItemsTests {
         // An event without an item names no path.
         let itemless = try errors([#"{"message_type":"error","error":{"message":"walk failed"}}"#])
         #expect(ResticService.unreadableItemPaths(errors: itemless, stderr: "") == [:])
+
+        // Two names that differ only in Unicode normalization are two items
+        // to restic: both listed, each with its path.
+        let nfc = "/src/caf\u{E9}.pdf", nfd = "/src/cafe\u{301}.pdf"
+        let twins = try errors([nfc, nfd].map { path in
+            #"{"message_type":"error","error":{"message":"open: permission denied"},"during":"archival","item":"\#(path)"}"#
+        })
+        #expect(ResticService.unreadableItems(errors: twins, stderr: "").count == 2)
+        #expect(Set(ResticService.unreadableItemPaths(errors: twins, stderr: "").values.map { PathKey($0) }) == [PathKey(nfc), PathKey(nfd)])
     }
 
     @Test("restic's trailing newline stays out of the stored line, and a copy without it is still the same item")

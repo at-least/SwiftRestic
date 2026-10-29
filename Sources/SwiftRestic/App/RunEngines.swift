@@ -290,8 +290,8 @@ enum BackupRunEngine {
             record.itemErrorTally = ItemErrorDiagnosis.tally(outcome.itemErrors)
             record.itemErrors.append(contentsOf: outcome.itemErrors.prefix(RunRecord.storedItemErrorLimit))
             // The stored lines' paths only, keyed as stored.
-            let storedLines = Set(record.itemErrors.map(RunRecord.storedItemError))
-            record.unreadableItemPaths = outcome.itemPaths.filter { storedLines.contains(RunRecord.storedItemError($0.key)) }
+            let storedLines = Set(record.itemErrors.map { PathKey(RunRecord.storedItemError($0)) })
+            record.unreadableItemPaths = outcome.itemPaths.filter { storedLines.contains(PathKey(RunRecord.storedItemError($0.key.path))) }
             if let decodingWarning = outcome.decodingWarning {
                 record.itemErrors.append(decodingWarning)
             }
