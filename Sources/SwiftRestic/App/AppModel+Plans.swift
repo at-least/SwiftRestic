@@ -81,6 +81,16 @@ extension AppModel {
         }
     }
 
+    /// Keep, on the plan page's rebuildable folders: the plan keeps backing
+    /// them up, and the page never offers them again.
+    func keepRebuildableFolders(paths: [String], inPlan planID: UUID) {
+        updatePlan(planID) { plan in
+            for path in paths where !plan.keptRebuildableFolders.contains(path) {
+                plan.keptRebuildableFolders.append(path)
+            }
+        }
+    }
+
     /// Changes one plan's fields in place, in one write: each write to
     /// `configuration` runs its didSet. Nothing when the plan is gone.
     func updatePlan(_ id: UUID, _ change: (inout BackupPlan) -> Void) {

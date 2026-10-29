@@ -244,6 +244,7 @@ struct PlanDetailView: View {
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             scheduleCard(plan)
             excludingCard(plan)
+            RebuildableFoldersCard(plan: plan)
         }
         .detailPane()
     }
@@ -500,11 +501,133 @@ struct PlanDetailView: View {
                         }
                     }
                 }
+                EarlierBackupsLine(plan: plan)
             }
         } accessory: {
             Button("Edit Plan…") { router.request(.editPlan(plan.id)) }
                 .controlSize(.small)
                 .help("Change what this plan leaves out")
+        }
+    }
+}
+
+/// The folders the plan's newest backup holds that the tools which made
+/// them make again (`RebuildableFolder`), each with Exclude and Keep — read
+/// from the index after each backup, never from the disk. Absent while there
+/// is nothing to offer.
+private struct RebuildableFoldersCard: View {
+    @Environment(AppModel.self) private var model
+    let plan: BackupPlan
+
+    @State private var folders: [RebuildableFolder] = []
+    @State private var failure: String?
+    @State private var showsAll = false
+
+    /// Rows shown before Show All.
+    private static let shownRows = 5
+
+    /// What the offer depends on: a new listing or index generation — a
+    /// backup landed, or the index read more — and the plan's own answers.
+    private struct ReadKey: Hashable {
+        var listedAt: Date?
+        var indexGeneration: UInt64?
+        var excludePatterns: [String]
+        var kept: [String]
+    }
+
+    private var readKey: ReadKey {
+        ReadKey(
+            listedAt: plan.repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) },
+            indexGeneration: plan.repositoryID.flatMap { model.indexTakenGeneration[$0] },
+            excludePatterns: plan.excludePatterns,
+            kept: plan.keptRebuildableFolders
+        )
+    }
+
+    var body: some View {
+        Group {
+            if let failure {
+                Card("Rebuildable Folders") {
+                    WarningLine(text: "SwiftRestic couldn’t look for them in this plan’s backups. \(Format.firstSentence(failure))")
+                        .help(failure)
+                }
+            } else if !folders.isEmpty {
+                card
+            }
+        }
+        .task(id: readKey) { await read() }
+    }
+
+    private var card: some View {
+        let shown = showsAll ? folders : Array(folders.prefix(Self.shownRows))
+        return Card("Rebuildable Folders") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(folders.count == 1
+                    ? "The latest backup holds a folder its tools make again. Excluding it makes the next backups smaller."
+                    : "The latest backup holds \(Format.count(folders.count)) folders their tools make again. Excluding them makes the next backups smaller.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(shown) { folder in
+                    row(folder)
+                }
+                if folders.count > Self.shownRows {
+                    Button(showsAll ? "Show Fewer" : "Show All \(Format.count(folders.count))") { showsAll.toggle() }
+                        .buttonStyle(.link)
+                        .controlSize(.small)
+                }
+            }
+        } accessory: {
+            if folders.count > 1 {
+                Button("Exclude All") { model.exclude(paths: folders.map(\.path), fromPlan: plan.id) }
+                    .controlSize(.small)
+                    .help("The plan’s next backups skip every folder listed here")
+            }
+        }
+    }
+
+    private func row(_ folder: RebuildableFolder) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                (Text(ResticPath.basename(of: folder.path))
+                    + Text(" — beside \(folder.rule.manifest), \(folder.rule.why)").foregroundStyle(.secondary))
+                    .font(.callout)
+                Text(location(of: folder))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+            .accessibilityElement(children: .combine)
+            .help(folder.path)
+            Spacer(minLength: 8)
+            Button("Keep") { model.keepRebuildableFolders(paths: [folder.path], inPlan: plan.id) }
+                .controlSize(.small)
+                .help("Keep backing it up, and don’t suggest it again")
+            Button("Exclude") { model.exclude(paths: [folder.path], fromPlan: plan.id) }
+                .controlSize(.small)
+                .help("The plan’s next backups skip it — the plan editor lists it under Also skip, where − takes it out again")
+        }
+    }
+
+    /// The folder that holds it, below the plan's folder.
+    private func location(of folder: RebuildableFolder) -> String {
+        let parent = ResticPath.parent(of: folder.path)
+        if parent == plan.resolvedPath { return "In \(model.label(of: plan))" }
+        if let below = ResticPath.relative(parent, below: plan.resolvedPath) { return "In \(model.label(of: plan))/\(below)" }
+        return "In " + (parent as NSString).abbreviatingWithTildeInPath
+    }
+
+    private func read() async {
+        do {
+            let found = try await model.rebuildableFolders(planID: plan.id)
+            guard !Task.isCancelled else { return }
+            folders = found
+            failure = nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            folders = []
+            failure = error.localizedDescription
         }
     }
 }

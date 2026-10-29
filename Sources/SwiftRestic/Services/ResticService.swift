@@ -542,6 +542,74 @@ struct ResticService: ResticClient {
         )
     }
 
+    /// `pattern` read back as the one path it matches, the inverse of
+    /// `globEscaped`: nil when it holds an unescaped `*`, `?` or `[` — a
+    /// pattern that can match more than one path — or ends in a lone `\`.
+    static func globUnescaped(_ pattern: String) -> String? {
+        var path = String.UnicodeScalarView()
+        var escaping = false
+        for scalar in pattern.unicodeScalars {
+            if escaping {
+                path.append(scalar)
+                escaping = false
+            } else if scalar == "\\" {
+                escaping = true
+            } else if "*?[".unicodeScalars.contains(scalar) {
+                return nil
+            } else {
+                path.append(scalar)
+            }
+        }
+        return escaping ? nil : String(path)
+    }
+
+    /// The plan's own patterns that each name one absolute path, as a backup
+    /// passes them (tilde expanded, less any naming the source or a folder
+    /// above it), with that path: what Remove from Earlier Backups looks for
+    /// in the plan's backups and passes to `rewrite`, so it removes exactly
+    /// what the next backups skip of those.
+    static func excludedPaths(of plan: BackupPlan, home: String = NSHomeDirectory()) -> [ExcludedPath] {
+        let source = expandTilde(plan.path, home: home)
+        var seen = Set<PathKey>()
+        return plan.excludePatterns.compactMap { stored in
+            let passed = expandTilde(stored, home: home)
+            guard !Self.pattern(passed, covers: source),
+                  let path = globUnescaped(passed), path.hasPrefix("/"),
+                  seen.insert(PathKey(path)).inserted
+            else { return nil }
+            return ExcludedPath(pattern: passed, path: ResticPath.normalized(path))
+        }
+    }
+
+    /// Removes the paths `patterns` match from every backup the plan made:
+    /// `restic rewrite --forget`, which writes each backup that holds one
+    /// again without it, under a new ID with the old one's time and tags, and
+    /// removes the old one. The data stays in the repository until a prune.
+    /// Returns how many backups restic rewrote.
+    func rewrite(_ context: RepositoryContext, plan: BackupPlan, excluding patterns: [String]) async throws -> Int {
+        var args = ["rewrite", "--forget", "--tag", Self.planTag(plan.id)]
+        for pattern in patterns {
+            args += ["--exclude", pattern]
+        }
+        // As arguments, not an --exclude-file: restic expands $VAR in a
+        // file's lines, as `backup` found.
+        let result = try await run(context, ResticInvocation(arguments: args, retainFullOutput: true))
+        return try Self.countRewritten(rewriteOutput: result.stdout)
+    }
+
+    /// `rewrite` has no JSON output (restic 0.19.1, probed: `--json` prints
+    /// the same text); its last line is "modified N snapshots" — plural for
+    /// one too — or "no snapshots were modified".
+    static func countRewritten(rewriteOutput output: String) throws -> Int {
+        let last = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? ""
+        if last == "no snapshots were modified" { return 0 }
+        let words = last.split(separator: " ")
+        guard words.count == 3, words[0] == "modified", words[2] == "snapshots", let count = Int(words[1]) else {
+            throw ResticError.malformedOutput(detail: "restic rewrite’s summary could not be read: \(last.prefix(200))")
+        }
+        return count
+    }
+
     // MARK: - Backup
 
     /// Whether the anchored `pattern` names `source` or a folder above it,

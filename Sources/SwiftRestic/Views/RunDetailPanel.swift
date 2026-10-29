@@ -131,7 +131,7 @@ struct RunDetailPanel: View {
             repositoryRow
             // A check's verdict, or what Apply Retention Now removed —
             // Copy Details' Result line.
-            if run.kind == .check || run.kind == .forget, let result = run.detailText {
+            if run.kind == .check || run.kind == .forget || run.kind == .rewrite, let result = run.detailText {
                 DetailRow("Result") {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(result).textSelection(.enabled)

@@ -67,6 +67,20 @@ extension AppModel {
         try await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
+    /// The folders the plan's newest indexed backup holds that a build tool
+    /// makes again (`RebuildableFolder`), less the ones it already skips by
+    /// path and the ones the user kept. Throws when the index fails.
+    func rebuildableFolders(planID: UUID) async throws -> [RebuildableFolder] {
+        guard let plan = plan(id: planID), let repositoryID = plan.repositoryID else { return [] }
+        let found = try await indexCoordinator.foldersBesideManifests(
+            RebuildableFolderRule.manifestsByFolder, inChain: ResticService.planTag(planID), repositoryID: repositoryID
+        )
+        // The plan as it stands once the read returns: a Keep or an Exclude
+        // made while it ran is already answered.
+        guard let current = self.plan(id: planID) else { return [] }
+        return RebuildableFolder.offered(found, to: current)
+    }
+
     /// What one chain ever held directly under `path`, from the index. Throws
     /// when the index fails: the Files view says so beside the fallback it
     /// lists instead, rather than reading a broken index as an empty folder.

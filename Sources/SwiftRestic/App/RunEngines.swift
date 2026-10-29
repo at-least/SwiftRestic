@@ -671,6 +671,37 @@ enum MaintenanceRunEngine {
     }
 }
 
+/// The maintenance engine's checks before restic, for a plan's run outside
+/// a backup: the drive's share reconnected first, and a drive or server
+/// still away fails the run in those words, before restic — its "does not
+/// exist" or its quarter-hour of retries would say less.
+@MainActor
+private func failIfRepositoryAway(
+    _ repository: Repository,
+    record: inout RunRecord,
+    transcript: RunTranscript,
+    sink: some RunEngineSink
+) async {
+    if repository.kind == .local {
+        let failures = await reconnectAwayShares(
+            of: [repository.resolvedLocalPath],
+            transcript: transcript,
+            reconnect: { await sink.reconnectShares(volumes: $0) }
+        )
+        if repository.isDriveAway {
+            record.outcome = .failed
+            let refused = failures.filter(\.isRefusal).map(\.volumeName)
+            if !refused.isEmpty { record.refusedShares = refused }
+            record.failureMessage = RunRecord.skippedReason(
+                sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
+            )
+        }
+    } else if case let .unreachable(why)? = await sink.probeServer(of: repository) {
+        record.outcome = .failed
+        record.failureMessage = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
+    }
+}
+
 /// Apply Retention Now's run: the plan's `forget`, outside a backup. It
 /// runs in the plan's own slot — so Stop, the sidebar's spinner, quitting
 /// and the busy repository all work as for a backup — but it is not one:
@@ -707,28 +738,7 @@ enum RetentionRunEngine {
         do {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
-            // The maintenance engine's checks before restic: the drive's
-            // share reconnected first, and a drive or server still away
-            // fails the run in those words, no forget — restic's "does not
-            // exist" or its quarter-hour of retries would say less.
-            if repository.kind == .local {
-                let failures = await reconnectAwayShares(
-                    of: [repository.resolvedLocalPath],
-                    transcript: transcript,
-                    reconnect: { await sink.reconnectShares(volumes: $0) }
-                )
-                if repository.isDriveAway {
-                    record.outcome = .failed
-                    let refused = failures.filter(\.isRefusal).map(\.volumeName)
-                    if !refused.isEmpty { record.refusedShares = refused }
-                    record.failureMessage = RunRecord.skippedReason(
-                        sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
-                    )
-                }
-            } else if case let .unreachable(why)? = await sink.probeServer(of: repository) {
-                record.outcome = .failed
-                record.failureMessage = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
-            }
+            await failIfRepositoryAway(repository, record: &record, transcript: transcript, sink: sink)
             if record.outcome != .failed {
                 let removed = try await RunTranscript.$current.withValue(transcript) {
                     try await service.forget(context, plan: plan)
@@ -747,6 +757,54 @@ enum RetentionRunEngine {
         await sink.deliverRetention(record: record, plan: plan, transcript: contents)
         // Whatever happened: a forget stopped or failed partway may already
         // have removed snapshots, and the refresh must not inherit a cancel.
+        sink.scheduleSnapshotRefresh(repositoryID: repository.id)
+    }
+}
+
+/// Remove from Earlier Backups' run: `restic rewrite --forget` of the plan's
+/// backups without the paths it now skips by name. Like Apply Retention
+/// Now's, it runs in the plan's own slot and announces nothing past its
+/// Activity record.
+@MainActor
+enum RewriteRunEngine {
+    @MainActor
+    protocol Sink: RunEngineSink {
+        func cancellationMessage(for planID: UUID) -> String
+        func label(of plan: BackupPlan) -> String
+        /// Stores the run, and announces it nowhere.
+        func deliverRewrite(record: RunRecord, transcript: RunTranscript.Contents) async
+    }
+
+    static func perform(plan: BackupPlan, repository: Repository, removing items: [ExcludedPath], sink: Sink) async {
+        var record = RunRecord(
+            kind: .rewrite,
+            planID: plan.id,
+            planName: sink.label(of: plan),
+            repositoryID: repository.id,
+            startedAt: .now
+        )
+        let transcript = RunTranscript()
+        do {
+            let service = try sink.service()
+            let context = try await sink.context(for: repository)
+            await failIfRepositoryAway(repository, record: &record, transcript: transcript, sink: sink)
+            if record.outcome != .failed {
+                let rewritten = try await RunTranscript.$current.withValue(transcript) {
+                    try await service.rewrite(context, plan: plan, excluding: items.map(\.pattern))
+                }
+                record.outcome = .succeeded
+                record.detailText = RunRecord.rewriteSummary(items: items.count, backups: rewritten)
+            }
+        } catch {
+            record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
+            sink.noteAuthFailure(error, repositoryID: repository.id)
+        }
+        record.finishedAt = .now
+        let contents = transcript.contents
+        if record.exitCode == nil { record.exitCode = contents.firstExitCode }
+        await sink.deliverRewrite(record: record, transcript: contents)
+        // Whatever happened: a rewrite stopped partway may already have
+        // replaced backups.
         sink.scheduleSnapshotRefresh(repositoryID: repository.id)
     }
 }

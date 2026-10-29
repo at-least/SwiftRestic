@@ -359,7 +359,22 @@ the generator after editing it; the PNGs are checked in.
   in its tooltip when all are ticked, and names them in its title when only
   some are), then *Also skip*, the user's own patterns as typed — with
   *Edit Plan…*, which opens the editor on its Excluding tab, where these are changed (the rest of
-  how it runs, its hooks among it, is the editor's). While the plan's newest failed or completed-with-errors
+  how it runs, its hooks among it, is the editor's). When the plan skips
+  paths by name that its earlier backups still hold, the card says so with
+  *Remove from Earlier Backups…*: a sheet lists each path and how many
+  backups hold it (from the index), and its *Remove from N Backups* runs
+  `restic rewrite --forget --tag <plan tag>` with those paths as
+  `--exclude`, in the plan's slot like Apply Retention Now — new IDs, the
+  old times and tags (0.19.1, probed), the space back at the next cleanup.
+  Only patterns that name one absolute path are listed; a wildcard pattern
+  is the console's. Under it, *Rebuildable Folders* appears when the
+  plan's newest indexed backup holds a folder with a generic name beside
+  the file that says which tool made it (`build` beside `build.gradle`,
+  `vendor` beside `go.mod`, `target` beside `pom.xml`; the list is
+  `RebuildableFolderRule.all`, adapted from asimov's as tmexclude ships
+  it): each with *Exclude*, which adds its exact path to *Also skip*, and
+  *Keep*, which keeps backing it up and never offers it again; *Exclude
+  All* takes every one. It reads the index, never the disk. While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,
   how many backups in a row ended that way for the same cause ("3 times in

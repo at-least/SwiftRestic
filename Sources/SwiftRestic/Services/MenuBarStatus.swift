@@ -138,7 +138,7 @@ enum MenuBarStatus {
                 subject = name
             case .restore:
                 subject = "Restore of \(name)"
-            case .check, .prune, .forget:
+            case .check, .prune, .forget, .rewrite:
                 subject = "\(newest.kind.displayName) on \(name)"
             }
         }

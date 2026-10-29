@@ -1955,6 +1955,32 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("remove from earlier backups rewrites the plan's backups without the items, in the plan's slot, and records it alone")
+    func removeFromEarlierBackupsRuns() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+        let item = ExcludedPath(pattern: harness.plan.path + "/app/build", path: harness.plan.path + "/app/build")
+
+        harness.model.removeFromEarlierBackups(planID: planID, items: [item])
+        #expect(harness.model.activity[planID]?.phase == .removingFromEarlierBackups)
+        // The rewrite holds restic's exclusive lock: a backup waits for it.
+        #expect(harness.model.lockedRepositories[harness.repository.id]?.contains("removing items from earlier backups") == true)
+        await harness.model.waitForRun(planID: planID)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .rewrite)
+        #expect(record.outcome == .succeeded)
+        #expect(record.planID == planID)
+        #expect(record.detailText == "Removed 1 item from 1 backup. The space is freed at the next cleanup.")
+        #expect(harness.model.plan(id: planID)?.lastRunAt == nil)
+        let rewrite = try #require(try invocations(harness).first { $0.contains(" rewrite ") })
+        for argument in ["rewrite", "--forget", "--tag \(ResticService.planTag(planID))", "--exclude \(item.pattern)"] {
+            #expect(rewrite.contains(" \(argument)"), "\(argument) missing from \(rewrite)")
+        }
+        await harness.model.shutdown()
+    }
+
     @Test("stopping a retention run records it cancelled and stamps nothing")
     func stoppingARetentionRunRecordsItCancelled() async throws {
         let harness = try await makeHarness(mode: "hang-forget")

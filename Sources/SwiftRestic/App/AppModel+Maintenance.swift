@@ -26,10 +26,12 @@ extension AppModel {
             let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
             reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
         }
-        for (planID, run) in activity where run.phase == .applyingRetention {
+        for (planID, run) in activity where run.phase == .applyingRetention || run.phase == .removingFromEarlierBackups {
             guard let plan = plan(id: planID), let repositoryID = plan.repositoryID, reasons[repositoryID] == nil else { continue }
             let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
-            reasons[repositoryID] = "\(name) is applying retention for “\(label(of: plan))” — backups wait until it finishes."
+            reasons[repositoryID] = run.phase == .applyingRetention
+                ? "\(name) is applying retention for “\(label(of: plan))” — backups wait until it finishes."
+                : "\(name) is removing items from earlier backups of “\(label(of: plan))” — backups wait until it finishes."
         }
         return reasons
     }

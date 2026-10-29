@@ -373,6 +373,17 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }
 
+    /// The folders the chain's newest indexed backup holds beside the file
+    /// that names the tool which made them — the plan page's offer to skip
+    /// them.
+    nonisolated func foldersBesideManifests(
+        _ manifests: [String: [String]],
+        inChain chainKey: String,
+        repositoryID: UUID
+    ) async throws -> [FolderBesideManifest] {
+        try await read(repositoryID) { try await $0.foldersBesideManifests(manifests, inChain: chainKey) }
+    }
+
     /// What changed directly under one folder between two backups of a
     /// chain — a Files tab's folder against the backup before.
     nonisolated func changes(

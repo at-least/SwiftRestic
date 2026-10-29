@@ -291,6 +291,24 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     }
 }
 
+/// One of a plan's own patterns that names one path
+/// (`ResticService.excludedPaths(of:)`).
+struct ExcludedPath: Hashable, Sendable {
+    /// As a backup passes it.
+    let pattern: String
+    /// As a backup records it.
+    let path: String
+}
+
+/// One of a plan's skipped paths that its backups still hold, with the
+/// backups holding it (`AppModel.itemsInEarlierBackups(planID:)`).
+struct EarlierBackupItem: Hashable, Sendable, Identifiable {
+    let excluded: ExcludedPath
+    let backups: [IndexVersion]
+
+    var id: String { excluded.path }
+}
+
 /// One folder or file backed up to one repository on a schedule.
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var id: UUID = UUID()
@@ -354,6 +372,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// builds stored one switch, `excludeDeveloperFiles`: on, it becomes
     /// every group once at load (`AppConfiguration`).
     var developerGroups: [ExcludeCategory] = ExcludeCategory.developerGroups
+    /// The folders the plan page offered to skip (`RebuildableFolder`) that
+    /// the user chose to keep backing up, as the backup recorded them: never
+    /// offered again.
+    var keptRebuildableFolders: [String] = []
 
     /// The switch itself: on while any group is ticked.
     var excludeDeveloperFiles: Bool { !developerGroups.isEmpty }
@@ -363,6 +385,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         case isEnabled, pausedUntil, hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
         case developerGroups = "skipDeveloperGroups"
         case skipsFinderFiles, skipsSystemFiles, skipsTimeMachineExclusions
+        case keptRebuildableFolders
     }
 
     init() {}
@@ -388,6 +411,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         // A group a later build added or renamed is dropped, not the list.
         let groups = Set(c.value(.developerGroups, default: [String]()).compactMap(ExcludeCategory.init(rawValue:)))
         developerGroups = ExcludeCategory.developerGroups.filter(groups.contains)
+        keptRebuildableFolders = c.value(.keptRebuildableFolders, default: [])
         // The string-list editor dedupes its own writes, so a duplicate
         // here means a hand-edited config — and duplicates would give the
         // list's rows colliding identities. First occurrence wins, order
@@ -550,8 +574,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     /// The stored plan wins over the editor's draft for the model-written
     /// fields the draft may hold stale: the run stamps (`markPlanRun`), the
-    /// quiet-plan alert's mark, and a timed pause's end, which the
-    /// scheduler's tick clears once it passes —
+    /// quiet-plan alert's mark, the folders the plan page was told to keep,
+    /// and a timed pause's end, which the scheduler's tick clears once it
+    /// passes —
     /// a stale draft must not erase the plan's last success or bring back a
     /// pause that has ended.
     /// Everything else comes from the draft; a new model-written field joins
@@ -563,6 +588,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         merged.lastSuccessAt = lastSuccessAt
         merged.pausedUntil = pausedUntil
         merged.staleAlertedFor = staleAlertedFor
+        merged.keptRebuildableFolders = keptRebuildableFolders
         return merged
     }
 }

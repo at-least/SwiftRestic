@@ -68,7 +68,11 @@ extension AppModel {
                 .filter { $0.repositoryID == repositoryID && activity[$0.id]?.isBackup == true }
                 .map { label(of: $0) },
             applyingRetentionNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.isBackup == false }
+                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.isBackup == false
+                    && activity[$0.id]?.phase != .removingFromEarlierBackups }
+                .map { label(of: $0) },
+            removingFromEarlierBackupsNames: configuration.plans
+                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.phase == .removingFromEarlierBackups }
                 .map { label(of: $0) },
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID
@@ -86,6 +90,7 @@ extension AppModel {
         isRestoring: Bool,
         runningBackupNames: [String],
         applyingRetentionNames: [String],
+        removingFromEarlierBackupsNames: [String] = [],
         isMaintaining: Bool,
         isConsoleRunning: Bool
     ) -> String {
@@ -108,6 +113,9 @@ extension AppModel {
         }
         if !applyingRetentionNames.isEmpty {
             consequences += " Retention is being applied to \(Format.list(applyingRetentionNames.map { "“\($0)”" })) and will be cancelled."
+        }
+        if !removingFromEarlierBackupsNames.isEmpty {
+            consequences += " Items are being removed from earlier backups of \(Format.list(removingFromEarlierBackupsNames.map { "“\($0)”" })), which will be cancelled."
         }
         if isMaintaining {
             consequences += " Repository maintenance is running and will be cancelled."

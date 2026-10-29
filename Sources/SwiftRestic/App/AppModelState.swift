@@ -13,6 +13,7 @@ struct PlanActivity: Sendable, Equatable {
         case starting
         case backingUp
         case applyingRetention
+        case removingFromEarlierBackups
         case runningHooks
         case notifying
         case cancelling
@@ -22,6 +23,7 @@ struct PlanActivity: Sendable, Equatable {
             case .starting: "Starting…"
             case .backingUp: "Backing up…"
             case .applyingRetention: "Applying retention…"
+            case .removingFromEarlierBackups: "Removing from earlier backups…"
             case .runningHooks: "Running hooks…"
             case .notifying: "Sending notifications…"
             case .cancelling: "Cancelling…"

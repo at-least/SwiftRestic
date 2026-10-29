@@ -4,6 +4,8 @@ import Foundation
 struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable {
         case backup, forget, check, prune, restore
+        /// Remove from Earlier Backups: `restic rewrite --forget`.
+        case rewrite
 
         /// The operation's word in titles and rows: "Backup", "Check", …
         /// A forget is "Retention", the word every other surface uses for it
@@ -13,6 +15,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             switch self {
             case .forget: "Retention"
             case .prune: MaintenanceTask.prune.displayName
+            case .rewrite: "Removal"
             default: rawValue.capitalized
             }
         }
@@ -534,5 +537,13 @@ extension RunRecord {
     /// A backup run of the plan `planID` names.
     func isBackup(ofPlan planID: UUID?) -> Bool {
         kind == .backup && self.planID == planID
+    }
+}
+
+extension RunRecord {
+    /// A finished Remove from Earlier Backups, as its record says it.
+    static func rewriteSummary(items: Int, backups: Int) -> String {
+        guard backups > 0 else { return "No backup held \(items == 1 ? "it" : "them")." }
+        return "Removed \(Format.plural(items, "item")) from \(Format.plural(backups, "backup")). The space is freed at the next cleanup."
     }
 }

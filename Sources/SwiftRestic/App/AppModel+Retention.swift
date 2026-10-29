@@ -68,3 +68,63 @@ extension AppModel: RetentionRunEngine.Sink {
         append(record: record)
     }
 }
+
+// MARK: - Remove from Earlier Backups
+
+extension AppModel {
+    /// The paths the plan skips by name that its backups still hold, each
+    /// with the backups holding it, newest first — read from the index.
+    /// Throws when the index fails.
+    func itemsInEarlierBackups(planID: UUID) async throws -> [EarlierBackupItem] {
+        guard let plan = plan(id: planID), let repositoryID = plan.repositoryID else { return [] }
+        var items: [EarlierBackupItem] = []
+        for excluded in ResticService.excludedPaths(of: plan) {
+            let holders = try await indexedHolders(ofPath: excluded.path, inChain: ResticService.planTag(planID), repositoryID: repositoryID)
+            if !holders.isEmpty { items.append(EarlierBackupItem(excluded: excluded, backups: holders)) }
+        }
+        return items
+    }
+
+    /// Why Remove from Earlier Backups cannot start now; nil when it can.
+    func removeFromEarlierBackupsBlocker(planID: UUID) -> String? {
+        guard let plan = plan(id: planID), let repository = repository(id: plan.repositoryID) else {
+            return BackupPlan.incompleteConfigurationReason
+        }
+        if let absence = resticAbsence { return absence.sentence }
+        guard !busyRepositoryIDs.contains(repository.id) else {
+            return "The repository is in use by a backup or maintenance job — try again when it finishes."
+        }
+        return nil
+    }
+
+    /// Removes `items` from every backup the plan made, in the plan's own
+    /// slot, guarded as Apply Retention Now is.
+    func removeFromEarlierBackups(planID: UUID, items: [ExcludedPath]) {
+        guard !isShuttingDown, !items.isEmpty else { return }
+        guard !tasks.isOccupied(.plan(planID)) else { return }
+        guard let plan = plan(id: planID), let repository = repository(id: plan.repositoryID) else { return }
+        guard !busyRepositoryIDs.contains(repository.id) else {
+            postBusyBanner(for: repository)
+            return
+        }
+
+        installPlanActivity(planID: planID)
+        activity[planID]?.phase = .removingFromEarlierBackups
+        activity[planID]?.isBackup = false
+        tasks.install(Task { [weak self] in
+            if let self {
+                await RewriteRunEngine.perform(plan: plan, repository: repository, removing: items, sink: self)
+            }
+            self?.unwindPlanRun(planID)
+        }, in: .plan(planID))
+    }
+}
+
+extension AppModel: RewriteRunEngine.Sink {
+    /// The record alone, as for Apply Retention Now.
+    func deliverRewrite(record: RunRecord, transcript: RunTranscript.Contents) async {
+        var record = record
+        await seal(&record, transcript: transcript)
+        append(record: record)
+    }
+}

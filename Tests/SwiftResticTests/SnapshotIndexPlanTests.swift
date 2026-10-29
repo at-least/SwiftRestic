@@ -219,6 +219,10 @@ struct SnapshotIndexPlanTests {
         ]),
         "searchFTS": Rule(
             contains: ["SCAN f VIRTUAL TABLE INDEX 0:M1", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["f"]),
+        // The FTS cursor, each hit's node by its key.
+        "nodesNamed": Rule(
+            contains: ["SCAN f VIRTUAL TABLE INDEX 0:M1", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["f"]),
+        "nodeAtSeq": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq<?)"]),
         // One candidate's runs in the chain and the indexed snapshots they
         // cover; the one node's group needs no sort.
         "newestInChain": Rule(

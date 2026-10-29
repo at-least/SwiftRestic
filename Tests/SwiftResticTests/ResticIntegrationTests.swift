@@ -232,6 +232,47 @@ struct ResticIntegrationTests {
         #expect(try await fixture.service.snapshots(fixture.context).count == 2)
     }
 
+    @Test("rewrite removes a skipped path from the plan's backups alone, keeping their times and tags")
+    func rewriteRemovesASkippedPath() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+        for index in 0 ..< 2 {
+            try "change \(index)".write(to: fixture.sourceDirectory.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+            _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
+        }
+        var otherPlan = fixture.plan
+        otherPlan.id = UUID()
+        _ = try await fixture.service.backup(fixture.context, plan: otherPlan)
+        let before = try await fixture.service.snapshots(fixture.context, planID: fixture.plan.id)
+
+        var plan = fixture.plan
+        plan.excludePatterns = [ResticService.globEscaped(fixture.sourceDirectory.appendingPathComponent("sub").path)]
+        let items = ResticService.excludedPaths(of: plan)
+        #expect(items.map(\.path) == [fixture.sourceDirectory.appendingPathComponent("sub").path])
+        #expect(try await fixture.service.rewrite(fixture.context, plan: plan, excluding: items.map(\.pattern)) == 2)
+
+        let after = try await fixture.service.snapshots(fixture.context, planID: plan.id)
+        #expect(Set(after.map(\.id)).isDisjoint(with: before.map(\.id)))
+        #expect(after.map(\.time).sorted() == before.map(\.time).sorted())
+        let newest = try #require(after.max { $0.time < $1.time })
+        func listing(of snapshotID: String) async throws -> Set<String> {
+            let listed = NodeCollector()
+            try await fixture.service.walkSnapshot(fixture.context, snapshotID: snapshotID) { listed.append($0) }
+            return Set(listed.content.keys)
+        }
+        let paths = try await listing(of: newest.id)
+        #expect(paths.contains(fixture.sourceDirectory.appendingPathComponent("a.txt").path))
+        #expect(!paths.contains { $0.hasPrefix(fixture.sourceDirectory.appendingPathComponent("sub").path) })
+        // The other plan's backup is untouched.
+        let other = try await fixture.service.snapshots(fixture.context, planID: otherPlan.id)
+        #expect(other.count == 1)
+        let otherPaths = try await listing(of: other[0].id)
+        #expect(otherPaths.contains(fixture.sourceDirectory.appendingPathComponent("sub/b.txt").path))
+        // Nothing left to remove.
+        #expect(try await fixture.service.rewrite(fixture.context, plan: plan, excluding: items.map(\.pattern)) == 0)
+    }
+
     @Test("a forget the repository refuses reads as refused, never as removed")
     func refusedForgetIsNotARemoval() async throws {
         let fixture = try makeFixture()

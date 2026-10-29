@@ -98,7 +98,7 @@ enum RunRecordPresentation {
         switch run.kind {
         case .check: return .check(id)
         case .prune: return .prune(id)
-        case .backup, .forget, .restore: return nil
+        case .backup, .forget, .rewrite, .restore: return nil
         }
     }
 
@@ -186,7 +186,7 @@ enum RunRecordPresentation {
     ) -> String {
         let repositoryName = repositories.first { $0.id == run.repositoryID }.map { $0.label(among: repositories) }
         switch run.kind {
-        case .backup, .forget, .restore:
+        case .backup, .forget, .rewrite, .restore:
             // The plan as it is called now. A restore carries no planID, so
             // its step label is the stored name — the label is its subject.
             return planWithRepository(currentPlanName(of: run, plans: plans), repositoryName: repositoryName)
@@ -208,7 +208,7 @@ enum RunRecordPresentation {
     /// repository the page already names.
     static func problemRowTitle(for run: RunRecord, plans: [BackupPlan]) -> String {
         switch run.kind {
-        case .backup, .forget, .restore:
+        case .backup, .forget, .rewrite, .restore:
             let name = currentPlanName(of: run, plans: plans)
             return name.isEmpty ? run.kind.displayName : name
         case .check, .prune:
@@ -274,7 +274,7 @@ enum RunRecordPresentation {
             return "\(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed"
         case .restore:
             return restoreDetail(run) ?? run.outcome.displayName
-        case .forget:
+        case .forget, .rewrite:
             // Apply Retention Now's count ("Removed 2 backups. Their data
             // stays until the next cleanup."), one short line.
             return run.detailText ?? run.outcome.displayName
@@ -435,7 +435,7 @@ enum RunRecordPresentation {
             if run.outcome == .succeeded, run.filesRestored + run.filesSkipped > 0 {
                 lines.append("Files: \(restoreFiles(run))")
             }
-        case .check, .forget:
+        case .check, .forget, .rewrite:
             // A check's verdict, or what Apply Retention Now removed.
             if let result = run.detailText { lines.append("Result: \(result)") }
         default:

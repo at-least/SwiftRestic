@@ -568,6 +568,11 @@ struct StubRestic: Sendable {
                         echo '{"message_type":"summary","files_new":0,"total_files_processed":0,"total_bytes_processed":0}'
                         exit 0
                         ;;
+                    *" rewrite "*)
+                        # restic 0.19.1's closing line, plural for one too.
+                        echo "modified 1 snapshots"
+                        exit 0
+                        ;;
                 esac
                 echo "[]"
                 exit 0
