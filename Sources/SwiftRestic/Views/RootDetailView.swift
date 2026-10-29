@@ -47,12 +47,12 @@ struct RootDetailView: View {
             // is why.
             // Only once the search for restic has answered: until then the
             // binary is unknown, not missing.
-            if let problem = model.binaryProblem {
+            if case let .refused(error, problem) = model.resticSearch {
                 // Built in place, not posted: the condition is the model's
                 // binary state, so there is nothing to dismiss.
                 BannerView(
                     banner: Banner(
-                        title: model.resticAbsence?.words ?? ResticAbsence.missing.words,
+                        title: ResticAbsence(refusal: error).words,
                         message: problem,
                         isError: true
                     ),

@@ -15,7 +15,7 @@ struct TimeMachineExclusionsTests {
 
     private func preferences(_ contents: [String: Any], in root: URL) throws -> URL {
         let file = root.appendingPathComponent("com.apple.TimeMachine.plist")
-        try PropertyListSerialization.data(fromPropertyList: contents, format: .binary, options: 0).write(to: file)
+        try writeTimeMachinePreferences(contents, to: file)
         return file
     }
 
@@ -150,7 +150,7 @@ struct TimeMachineExclusionsTests {
         try folders(mixed)
         #expect(TimeMachineExclusions.reading(for: source.path, preferences: try preferences(["SkipPaths": [source.path + "/listed", 7]], in: mixed)).notes == damagedNote)
         let array = mixed.appendingPathComponent("array.plist")
-        try PropertyListSerialization.data(fromPropertyList: [source.path], format: .binary, options: 0).write(to: array)
+        try writeTimeMachinePreferences([source.path], to: array)
         #expect(TimeMachineExclusions.reading(for: source.path, preferences: array).notes == damagedNote)
     }
 

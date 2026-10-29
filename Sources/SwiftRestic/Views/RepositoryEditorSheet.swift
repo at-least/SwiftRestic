@@ -470,7 +470,7 @@ struct RepositoryEditorSheet: View {
         if model.busyRepositoryIDs.contains(draft.id) {
             return "The repository is in use by a backup or maintenance job — try again when it finishes."
         }
-        if let absence = model.resticAbsence { return absence.words + "." }
+        if let absence = model.resticAbsence { return absence.sentence }
         return EditorRequirements.newPassword(newPassword, confirm: confirmNewPassword)
     }
 
@@ -844,11 +844,11 @@ struct RepositoryEditorSheet: View {
         // A blank provider secret after a failed Keychain read keeps what
         // is stored, as the blank password does: the field could not be
         // prefilled, and an empty value would delete the stored one.
+        let keepsStoredSecret = draft.secretFieldLabel == nil || draft.kind == .sftp || (secretsReadFailed && providerSecret.isEmpty)
         await model.upsert(
             repository: draft,
             password: password.isEmpty ? nil : password,
-            providerSecret: draft.secretFieldLabel == nil || draft.kind == .sftp || (secretsReadFailed && providerSecret.isEmpty)
-                ? nil : providerSecret
+            providerSecret: keepsStoredSecret ? nil : providerSecret
         )
         // The repository is saved from here on: a share password that does
         // not save is said by the app, and the sheet closes as saved — kept

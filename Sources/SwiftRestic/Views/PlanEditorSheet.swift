@@ -495,12 +495,12 @@ struct PlanEditorSheet: View {
                 // trade is said here, once.
                 Toggle(isOn: $draft.excludeCloudFiles) {
                     Text(PlanSkips.cloudFiles)
-                    Text(cloudFilesCaption)
+                    Text(PlanSkips.cloudFilesCaption)
                 }
                 Toggle(isOn: $draft.skipsTimeMachineExclusions) {
                     Text(PlanSkips.timeMachineExclusions)
                     Text(timeMachineListNeedsFullDiskAccess
-                        ? PlanSkips.timeMachineExclusionsCaptionWithoutFullDiskAccess
+                        ? PlanSkips.timeMachineExclusionsCaption + " " + PlanSkips.timeMachineExclusionsFullDiskAccessHint
                         : PlanSkips.timeMachineExclusionsCaption)
                 }
                 // The caption's next step, beside it — unless the section
@@ -591,10 +591,6 @@ struct PlanEditorSheet: View {
     /// One condition for the Time Machine switch's caption and its button.
     private var timeMachineListNeedsFullDiskAccess: Bool {
         draft.skipsTimeMachineExclusions && model.fullDiskAccess == .notGranted
-    }
-
-    private var cloudFilesCaption: String {
-        "Files kept only in iCloud Drive or OneDrive aren’t downloaded or backed up."
     }
 
     private var scheduleTab: some View {

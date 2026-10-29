@@ -666,16 +666,17 @@ struct ResticService: ResticClient {
         return paths
     }
 
-    private static let skipSuffixes = [" does not exist, skipping", " cannot be accessed, skipping"]
+    /// restic's words after a source it skipped (0.19.1).
+    static let missingSourceSuffix = " does not exist, skipping"
+    static let inaccessibleSourceSuffix = " cannot be accessed, skipping"
+    private static let skipSuffixes = [missingSourceSuffix, inaccessibleSourceSuffix]
 
     private static func unreadableEntries(errors: [ResticErrorMessage], stderr: String) -> [(line: String, path: String?)] {
         var seen: Set<String> = []
         var entries: [(line: String, path: String?)] = []
         for line in stderr.split(whereSeparator: \.isNewline).map(String.init) {
-            guard let suffix = skipSuffixes.first(where: { line.hasByteSuffix($0) }) else { continue }
-            if seen.insert(line).inserted {
-                entries.append((line, String(decoding: line.utf8.dropLast(suffix.utf8.count), as: UTF8.self)))
-            }
+            guard let path = skipSuffixes.lazy.compactMap({ line.removingByteSuffix($0) }).first else { continue }
+            if seen.insert(line).inserted { entries.append((line, path)) }
         }
         for error in errors {
             // Without restic's trailing newline, and keyed by the same text,

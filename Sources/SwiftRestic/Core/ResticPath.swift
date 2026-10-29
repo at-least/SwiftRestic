@@ -80,22 +80,49 @@ enum ResticPath {
     /// compares paths: "/Data2" is not inside "/Data".
     static func holds(_ folder: String, _ path: String) -> Bool {
         if path.utf8.elementsEqual(folder.utf8) { return true }
-        return path.utf8.starts(with: (folder == "/" ? folder : folder + "/").utf8)
+        return path.utf8.starts(with: insidePrefix(of: folder).utf8)
+    }
+
+    /// What every path inside `folder` starts with: the folder and a
+    /// separator, the root alone for the root.
+    static func insidePrefix(of folder: String) -> String {
+        folder == "/" ? "/" : folder + "/"
+    }
+
+    /// `name` inside `folder`.
+    static func child(of folder: String, named name: String) -> String {
+        insidePrefix(of: folder) + name
+    }
+
+    /// What follows `folder` in `path`, cut by bytes; nil unless `path` is
+    /// strictly inside `folder`.
+    static func relative(_ path: String, below folder: String) -> String? {
+        path.removingBytePrefix(insidePrefix(of: folder))
     }
 }
 
-/// `hasPrefix`/`hasSuffix` by bytes, for a restic line that carries a path:
+/// Prefix and suffix tests and cuts by bytes, for a restic line that carries a path:
 /// the Character forms join a Prepend character ending the path to the
 /// ": " or " " after it (`ResticPath`'s header), so "x\u{0600}: open …"
 /// has the Character prefix "x\u{0600}: " but one Character fewer than
 /// `count` says, and "x\u{0600} does not exist, skipping" has no Character
 /// suffix " does not exist, skipping" at all.
 extension String {
-    func hasBytePrefix(_ prefix: String) -> Bool {
-        utf8.starts(with: prefix.utf8)
-    }
-
     func hasByteSuffix(_ suffix: String) -> Bool {
         utf8.count >= suffix.utf8.count && utf8.suffix(suffix.utf8.count).elementsEqual(suffix.utf8)
+    }
+
+    /// The string after `prefix`, cut by bytes; nil when it does not start
+    /// with it. One call, so the test and the cut cannot disagree.
+    func removingBytePrefix(_ prefix: String) -> String? {
+        guard utf8.starts(with: prefix.utf8) else { return nil }
+        return String(decoding: utf8.dropFirst(prefix.utf8.count), as: UTF8.self)
+    }
+
+    /// The string before `suffix`, cut by bytes; nil when it does not end
+    /// with it.
+    func removingByteSuffix(_ suffix: String) -> String? {
+        guard hasByteSuffix(suffix) else { return nil }
+        return String(decoding: utf8.dropLast(suffix.utf8.count), as: UTF8.self)
     }
 }

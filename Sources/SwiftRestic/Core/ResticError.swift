@@ -8,11 +8,11 @@ enum ResticAbsence: Equatable, Sendable {
     case needsUpdate
     case unusable
 
-    /// From the last search's error: nil, before it answers, reads as missing.
-    init(_ error: (any Error)?) {
+    /// From the error the search for restic ended on.
+    init(refusal error: any Error) {
         switch error as? ResticError {
         case .resticTooOld?: self = .needsUpdate
-        case nil where error == nil, .binaryNotFound?: self = .missing
+        case .binaryNotFound?: self = .missing
         default: self = .unusable
         }
     }
@@ -24,6 +24,9 @@ enum ResticAbsence: Equatable, Sendable {
         case .unusable: "restic can’t be used"
         }
     }
+
+    /// `words` as a disabled control's reason.
+    var sentence: String { words + "." }
 }
 
 /// Everything that can go wrong between us and the restic binary.
@@ -65,7 +68,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// gone; whatever the destination held before is untouched.
     case stagedFileMoveFailed(path: String, reason: String)
     /// The restic found is older than `ResticVersion.minimumSupported`.
-    case resticTooOld(path: String, found: String, minimum: String)
+    case resticTooOld(path: String, found: String)
     /// `restic version` answered something that names no version.
     case resticVersionUnreadable(path: String)
     /// A folder stands where a Replace restore of several items would put a
@@ -147,9 +150,9 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output."
         case let .stagedFileMoveFailed(path, reason):
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
-        case let .resticTooOld(path, found, minimum):
+        case let .resticTooOld(path, found):
             let update = ResticBinary.isHomebrews(path) ? "Update it with brew upgrade restic" : "Update it"
-            return "SwiftRestic needs restic \(minimum) or later. The restic at \(path) is \(found). \(update), or set the path to a newer one in Settings."
+            return "SwiftRestic needs restic \(ResticVersion.minimumSupported.dotted) or later. The restic at \(path) is \(found). \(update), or set the path to a newer one in Settings."
         case let .resticVersionUnreadable(path):
             return "The program at \(path) didn’t report a restic version. Set the path to restic in Settings, or install it with brew install restic."
         case let .snapshotsNotRemoved(removed, refused, reason):

@@ -298,30 +298,43 @@ extension AppModel {
                 throw ResticError.resticVersionUnreadable(path: located.url.path)
             }
             guard version.isSupported else {
-                throw ResticError.resticTooOld(
-                    path: located.url.path, found: version.dotted, minimum: ResticVersion.minimumSupported.dotted
-                )
+                throw ResticError.resticTooOld(path: located.url.path, found: version.dotted)
             }
-            binary = located
-            resticVersion = output
-            binaryError = nil
+            resticSearch = .found(located, version: output)
         } catch {
-            binary = nil
-            resticVersion = ""
-            binaryError = error
+            resticSearch = .refused(error, problem: error.localizedDescription)
         }
+    }
+
+    /// The restic in use.
+    var binary: ResticBinary? {
+        guard case let .found(binary, _) = resticSearch else { return nil }
+        return binary
     }
 
     var isResticAvailable: Bool { binary != nil }
 
+    /// `restic version`'s answer for the restic in use; "" without one.
+    var resticVersion: String {
+        guard case let .found(_, version) = resticSearch else { return "" }
+        return version
+    }
+
     /// What Settings says about the last search for restic.
-    var binaryProblem: String? { binaryError?.localizedDescription }
+    var binaryProblem: String? {
+        guard case let .refused(_, problem) = resticSearch else { return nil }
+        return problem
+    }
 
     /// Why no restic can run, in the words every other surface uses; nil
-    /// while one can.
+    /// while one can. Before the first search answers, restic reads as
+    /// missing.
     var resticAbsence: ResticAbsence? {
-        guard binary == nil else { return nil }
-        return ResticAbsence(binaryError)
+        switch resticSearch {
+        case .found: nil
+        case .searching: .missing
+        case let .refused(error, _): ResticAbsence(refusal: error)
+        }
     }
 
     /// A click that turns start at login on or off, wherever it comes from —

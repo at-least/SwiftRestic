@@ -70,16 +70,13 @@ struct AppModelTests {
             // The restic under test, through the same override: the model's
             // own lookup would find the installed one.
             configuration.settings.resticPathOverride = try ResticAvailability.binary().url.path
+            _ = try await ResticAvailability.service()
+                .initializeRepository(RepositoryContext(repository: repository, password: "test-password"))
         }
 
         let storeDirectory = root.appendingPathComponent("config")
         let store = ConfigStore(directory: storeDirectory)
         try await store.save(configuration)
-
-        if stub == nil {
-            _ = try await ResticAvailability.service()
-                .initializeRepository(RepositoryContext(repository: repository, password: "test-password"))
-        }
 
         let model = AppModel(
             store: store,
@@ -1875,37 +1872,36 @@ extension ConfigurationSaveTests {
 @Suite("locating restic")
 @MainActor
 struct ResolveBinaryTests {
-    @Test("a program at the restic path that cannot answer `restic version` is no restic: the app says why")
-    func failedVersionIsAProblem() async throws {
+    /// A model whose restic path is a script running `body`, in a folder
+    /// the caller removes.
+    private func scriptedModel(running body: String) throws -> (model: AppModel, root: URL, path: String) {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticBadBinary-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
+            .appendingPathComponent("SwiftResticScriptedBinary-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let program = root.appendingPathComponent("not-restic")
-        try "#!/bin/sh\necho 'not restic' >&2\nexit 1\n".write(to: program, atomically: true, encoding: .utf8)
+        let program = root.appendingPathComponent("restic")
+        try "#!/bin/sh\n\(body)\n".write(to: program, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
-
         let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
         model.configuration.settings.resticPathOverride = program.path
+        return (model, root, program.path)
+    }
+
+    /// The model after a search that found a script printing `versionLine`.
+    private func resolve(printing versionLine: String) async throws -> (AppModel, String) {
+        let (model, root, path) = try scriptedModel(running: "echo '\(versionLine)'")
+        defer { try? FileManager.default.removeItem(at: root) }
+        await model.resolveBinary()
+        return (model, path)
+    }
+
+    @Test("a program at the restic path that cannot answer `restic version` is no restic: the app says why")
+    func failedVersionIsAProblem() async throws {
+        let (model, root, _) = try scriptedModel(running: "echo 'not restic' >&2\nexit 1")
+        defer { try? FileManager.default.removeItem(at: root) }
         await model.resolveBinary()
         #expect(!model.isResticAvailable)
         #expect(model.binaryProblem != nil)
         #expect(model.resticVersion == "")
-    }
-
-    /// A program at the restic path that prints `versionLine` for `restic version`.
-    private func resolve(printing versionLine: String) async throws -> (AppModel, String) {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticVersionedBinary-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let program = root.appendingPathComponent("restic")
-        try "#!/bin/sh\necho '\(versionLine)'\n".write(to: program, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
-        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
-        model.configuration.settings.resticPathOverride = program.path
-        await model.resolveBinary()
-        try FileManager.default.removeItem(at: root)
-        return (model, program.path)
     }
 
     @Test("a restic older than the minimum is refused at launch, its version and the fix named, and named as old everywhere else")
@@ -1917,7 +1913,7 @@ struct ResolveBinaryTests {
         #expect(model.binaryProblem == "SwiftRestic needs restic 0.19.1 or later. The restic at \(path) is 0.18.1. Update it, or set the path to a newer one in Settings.")
         #expect(model.resticAbsence == .needsUpdate)
         // What a run asking for restic meets is the same refusal, not "not found".
-        #expect(throws: ResticError.resticTooOld(path: path, found: "0.18.1", minimum: "0.19.1")) { try model.service() }
+        #expect(throws: ResticError.resticTooOld(path: path, found: "0.18.1")) { try model.service() }
     }
 
     @Test("Homebrew's restic, wherever its link is, is told to update with brew")
@@ -1932,24 +1928,18 @@ struct ResolveBinaryTests {
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: cellar.appendingPathComponent("restic"))
         #expect(ResticBinary.isHomebrews(link.path))
         #expect(!ResticBinary.isHomebrews(root.appendingPathComponent("Cellar").path))
-        #expect(ResticError.resticTooOld(path: link.path, found: "0.18.1", minimum: "0.19.1").localizedDescription
+        #expect(ResticError.resticTooOld(path: link.path, found: "0.18.1").localizedDescription
             == "SwiftRestic needs restic 0.19.1 or later. The restic at \(link.path) is 0.18.1. Update it with brew upgrade restic, or set the path to a newer one in Settings.")
     }
 
     @Test("a refused restic is not in use while its version is asked: the scheduler sees none until it is accepted")
     func refusedResticIsNeverInUse() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticSlowVersion-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         // Answers only once the test lets it: the window the check must not leave open.
-        let gate = root.appendingPathComponent("go")
-        let program = root.appendingPathComponent("restic")
-        try "#!/bin/sh\nwhile [ ! -e '\(gate.path)' ]; do sleep 0.05; done\necho 'restic 0.18.1 compiled with go1.25.1 on darwin/arm64'\n"
-            .write(to: program, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
-        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
-        model.configuration.settings.resticPathOverride = program.path
+        let gate = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticSlowVersionGate-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: gate) }
+        let (model, root, _) = try scriptedModel(running:
+            "while [ ! -e '\(gate.path)' ]; do sleep 0.05; done\necho 'restic 0.18.1 compiled with go1.25.1 on darwin/arm64'")
+        defer { try? FileManager.default.removeItem(at: root) }
         let resolving = Task { await model.resolveBinary() }
         // Long enough for the locate to finish and `restic version` to start.
         for _ in 0 ..< 40 {

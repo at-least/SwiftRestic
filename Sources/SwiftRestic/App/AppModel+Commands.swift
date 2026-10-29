@@ -113,7 +113,7 @@ extension AppModel {
         guard plan.retention.isSafeToRun else {
             return "Every retention rule is off, so there is nothing to apply."
         }
-        if let absence = resticAbsence { return absence.words + "." }
+        if let absence = resticAbsence { return absence.sentence }
         // The plan's own run included: its backup holds the repository too.
         guard !busyRepositoryIDs.contains(repository.id) else {
             return "The repository is in use by a backup or maintenance job — try again when it finishes."

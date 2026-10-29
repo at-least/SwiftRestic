@@ -328,7 +328,8 @@ struct AppModelStubTests {
         model.configuration.runs = [skipped]
         let bannersBefore = model.banners.count
         // As resolveBinary leaves it when restic is not found.
-        model.binary = nil
+        let notFound = ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
+        model.resticSearch = .refused(notFound, problem: notFound.localizedDescription)
 
         await model.runDuePlans()
         model.runSkippedPlansAfterMount()
@@ -411,9 +412,6 @@ struct AppModelStubTests {
     func keepExistingRestoreSaysWhatItKept() async throws {
         let harness = try await makeHarness(mode: "restoreskip")
         defer { try? FileManager.default.removeItem(at: harness.root) }
-        // The stub reports 0.0.0, which predates --overwrite (0.17); the flag under
-        // test is the one a current restic gets.
-        harness.model.resticVersion = "restic 0.19.1 compiled with go1.26.5 on darwin/arm64"
 
         let node = SnapshotNode(name: "Project", type: .dir, path: "/src/Project")
         let destination = harness.root.appendingPathComponent("restored")
@@ -452,7 +450,6 @@ struct AppModelStubTests {
     func restoringSeveralItems() async throws {
         let harness = try await makeHarness(mode: "restoreskip")
         defer { try? FileManager.default.removeItem(at: harness.root) }
-        harness.model.resticVersion = "restic 0.19.1 compiled with go1.26.5 on darwin/arm64"
 
         let project = SnapshotNode(name: "Project", type: .dir, path: "/src/Project")
         let notes = SnapshotNode(name: "notes.txt", type: .file, path: "/src/notes.txt")

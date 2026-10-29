@@ -333,14 +333,12 @@ enum RunRecordPresentation {
         case .deniedByFilePermissions: "permission denied"
         case .blockedByMacOS: "blocked by macOS"
         case .other:
-            if line.hasByteSuffix(" does not exist, skipping") {
+            if line.hasByteSuffix(ResticService.missingSourceSuffix) {
                 "not on this Mac"
-            } else if line.hasByteSuffix(" cannot be accessed, skipping") {
+            } else if line.hasByteSuffix(ResticService.inaccessibleSourceSuffix) {
                 "can’t be accessed"
-            } else if line.hasBytePrefix(path + ": ") {
-                String(decoding: line.utf8.dropFirst(path.utf8.count + 2), as: UTF8.self)
             } else {
-                line
+                line.removingBytePrefix(path + ": ") ?? line
             }
         }
     }

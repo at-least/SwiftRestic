@@ -56,6 +56,7 @@ enum TimeMachineExclusions {
         }
         var reading = Reading()
         var inside: [String] = []
+        var seen: Set<PathKey> = []
         for path in listed where isNear(path, folder: folder, realFolder: realFolder) {
             switch location(of: path) {
             case .absent:
@@ -70,15 +71,13 @@ enum TimeMachineExclusions {
                     reading.notes.append("Time Machine’s options leave out this plan’s folder, “\(path)”. SwiftRestic backed it up anyway.")
                 } else if ResticPath.holds(real, realFolder) {
                     reading.notes.append("Time Machine’s options leave out “\(path)”, which holds this plan’s folder. SwiftRestic backed it up anyway.")
-                } else if ResticPath.holds(realFolder, real), !inside.contains(where: { PathKey($0) == PathKey(real) }) {
+                } else if ResticPath.holds(realFolder, real), seen.insert(PathKey(real)).inserted {
                     inside.append(real)
                 }
             }
         }
-        let realPrefix = realFolder == "/" ? "/" : realFolder + "/"
-        let givenPrefix = folder == "/" ? "/" : folder + "/"
-        for real in inside where !inside.contains(where: { PathKey($0) != PathKey(real) && ResticPath.holds($0, real) }) {
-            reading.items.append(givenPrefix + String(decoding: real.utf8.dropFirst(realPrefix.utf8.count), as: UTF8.self))
+        for real in inside where !inside.contains(where: { ResticPath.relative(real, below: $0) != nil }) {
+            reading.items.append(ResticPath.child(of: folder, named: ResticPath.relative(real, below: realFolder)!))
         }
         return reading
     }
@@ -102,19 +101,25 @@ enum TimeMachineExclusions {
     }
 
     /// Whether `path`'s spelling lies inside the folder, or holds it, in
-    /// either spelling of the folder, with or without the /private that
-    /// /tmp, /var and /etc stand for. A folder reached through a link of
-    /// the user's own (a home folder moved elsewhere) is not matched.
+    /// either spelling of the folder, read as written or with its first
+    /// component's link followed (`rootLinkFollowed`). A folder reached
+    /// through a link deeper down (a home folder moved elsewhere) is not
+    /// matched.
     static func isNear(_ path: String, folder: String, realFolder: String) -> Bool {
-        var spellings = [path]
-        if path.hasPrefix("/private/") {
-            spellings.append(String(path.dropFirst("/private".count)))
-        } else {
-            spellings.append("/private" + path)
-        }
-        return spellings.contains { spelling in
+        [path, rootLinkFollowed(path)].contains { spelling in
             [folder, realFolder].contains { ResticPath.holds($0, spelling) || ResticPath.holds(spelling, $0) }
         }
+    }
+
+    /// `path` with its first component followed when that is a link at the
+    /// root of the startup disk (/tmp → /private/tmp). Read at the root, so
+    /// the lookup never reaches a share.
+    static func rootLinkFollowed(_ path: String) -> String {
+        guard let below = ResticPath.relative(path, below: "/") else { return path }
+        let first = "/" + (below.utf8.firstIndex(of: ResticPath.separator).map { String(decoding: below.utf8[..<$0], as: UTF8.self) } ?? below)
+        guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: first) else { return path }
+        let resolved = target.utf8.first == ResticPath.separator ? target : "/" + target
+        return resolved + String(decoding: path.utf8.dropFirst(first.utf8.count), as: UTF8.self)
     }
 
     enum Location: Equatable {
@@ -135,8 +140,7 @@ enum TimeMachineExclusions {
         let name = ResticPath.basename(of: path)
         guard let resolved = realpath(parent, nil) else { return errno == ENOENT ? .absent : .unknown }
         defer { free(resolved) }
-        let realParent = String(cString: resolved)
-        let real = realParent == "/" ? "/" + name : realParent + "/" + name
+        let real = ResticPath.child(of: String(cString: resolved), named: name)
         var info = stat()
         guard lstat(real, &info) == 0 else { return errno == ENOENT ? .absent : .unknown }
         return .found(real)

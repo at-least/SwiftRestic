@@ -409,10 +409,8 @@ struct FilesBrowserView: View {
         guard let base, parent != base else {
             return (parent as NSString).abbreviatingWithTildeInPath
         }
-        // Byte surgery, as ResticPath cuts: `holds` passed, so the prefix
-        // is there whole.
-        let prefix = base == "/" ? "/" : base + "/"
-        return String(decoding: parent.utf8.dropFirst(prefix.utf8.count), as: UTF8.self)
+        // `holds` passed and `parent` is not `base`: it is inside it.
+        return ResticPath.relative(parent, below: base)!
     }
 
     @ViewBuilder

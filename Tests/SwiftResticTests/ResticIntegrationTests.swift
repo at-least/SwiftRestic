@@ -441,7 +441,7 @@ struct ResticIntegrationTests {
             store: ConfigStore(directory: fixture.root.appendingPathComponent("config")),
             secrets: .inMemory([repository.id: (password: Self.password, providerSecret: nil)])
         )
-        model.binary = try ResticAvailability.binary()
+        model.resticSearch = .found(try ResticAvailability.binary(), version: "")
         model.configuration.repositories = [repository]
         model.snapshots[repository.id] = try await fixture.service.snapshots(fixture.context)
         return model
@@ -1041,8 +1041,7 @@ struct ResticIntegrationTests {
             try "listed".write(to: folder.appendingPathComponent("g"), atomically: true, encoding: .utf8)
         }
         let preferences = fixture.root.appendingPathComponent("com.apple.TimeMachine.plist")
-        try PropertyListSerialization.data(fromPropertyList: ["SkipPaths": [special.path, plain.path]], format: .binary, options: 0)
-            .write(to: preferences)
+        try writeTimeMachinePreferences(["SkipPaths": [special.path, plain.path]], to: preferences)
         fixture.service.timeMachinePreferences = preferences
 
         func backedUp(skipping: Bool) async throws -> Set<String> {

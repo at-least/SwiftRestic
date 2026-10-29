@@ -17,6 +17,11 @@ func waitUntilRestoreFinishes(in model: AppModel, within seconds: TimeInterval =
     }
 }
 
+/// Time Machine's preferences as a scratch file at `file`.
+func writeTimeMachinePreferences(_ contents: Any, to file: URL) throws {
+    try PropertyListSerialization.data(fromPropertyList: contents, format: .binary, options: 0).write(to: file)
+}
+
 extension BackupPlan {
     /// A plan that leaves nothing out by pattern: no switch's rules, no
     /// marker, no pattern of its own — so a fixture's tree is backed up as

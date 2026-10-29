@@ -21,7 +21,7 @@ struct CommandStateTests {
         )
         if resticAvailable {
             // Never run: the state only asks whether restic was found.
-            model.binary = ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false"))
+            model.resticSearch = .found(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
         }
         return model
     }

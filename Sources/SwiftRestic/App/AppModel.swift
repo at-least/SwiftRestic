@@ -59,17 +59,14 @@ final class AppModel {
 
     // MARK: Runtime state
 
-    var resticVersion: String = ""
+    /// Where the search for restic stands; `resolveBinary` writes it whole.
+    var resticSearch: ResticSearch = .searching
     /// restic's cache as Settings › restic last measured it: nil until the
     /// tab asks, then the report or the failure's words.
     var resticCache: ResticCacheState?
     var isWorkingOnResticCache = false
     /// What the last cleanup removed, in the Settings tab's own words.
     var resticCacheNote: String?
-    /// Why the last search for restic found none it can run: the error
-    /// Settings shows and `service()` throws. Nil while restic is in use,
-    /// and before the first search has answered.
-    var binaryError: (any Error)?
     var activity: [UUID: PlanActivity] = [:]
     /// Live backup progress per plan, in its own observable storage: a
     /// restic status tick (~1/sec) lands here and invalidates only the views
@@ -275,7 +272,6 @@ final class AppModel {
     /// State of the restic console pane (see `ConsoleModel`); its two
     /// injected closures are set below, at the end of `init`.
     let console = ConsoleModel()
-    var binary: ResticBinary?
     /// In-flight runs and the sends quitting must drain. See `TaskRegistry`.
     @ObservationIgnored let tasks = TaskRegistry()
     var schedulerTask: Task<Void, Never>?

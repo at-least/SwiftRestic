@@ -91,6 +91,17 @@ struct ResticBinary: Sendable {
     }
 }
 
+/// Where the app's search for restic stands.
+enum ResticSearch {
+    /// Before the first search has answered.
+    case searching
+    /// The restic in use, and `restic version`'s answer.
+    case found(ResticBinary, version: String)
+    /// Why no restic can run, and its words for Settings, worked out once:
+    /// a too-old restic's advice looks on disk (`ResticBinary.isHomebrews`).
+    case refused(any Error, problem: String)
+}
+
 /// The version parts of `restic version`'s first line, for the minimum the
 /// app checks at launch rather than displays.
 struct ResticVersion: Comparable, Sendable {

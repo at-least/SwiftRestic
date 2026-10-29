@@ -41,8 +41,9 @@ enum ItemErrorDiagnosis {
     /// whether or not `RunRecord.storedItemError` still carries it.
     static func kind(of line: String) -> Kind {
         let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        if line.hasSuffix(": operation not permitted") { return .blockedByMacOS }
-        if line.hasSuffix(": permission denied") { return .deniedByFilePermissions }
+        // By bytes, as the line's path is cut (`String.hasByteSuffix`).
+        if line.hasByteSuffix(": operation not permitted") { return .blockedByMacOS }
+        if line.hasByteSuffix(": permission denied") { return .deniedByFilePermissions }
         return .other
     }
 
