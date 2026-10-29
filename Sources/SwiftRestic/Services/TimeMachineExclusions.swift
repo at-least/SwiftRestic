@@ -28,6 +28,14 @@ enum TimeMachineExclusions {
     enum ListProblem: Error, Equatable {
         case needsFullDiskAccess
         case damaged
+
+        /// What the run's log says.
+        var note: String {
+            switch self {
+            case .needsFullDiskAccess: "Time Machine’s list of excluded items can be read only with Full Disk Access, so the items listed there were backed up."
+            case .damaged: "Time Machine’s list of excluded items is damaged, so the items listed there were backed up."
+            }
+        }
     }
 
     /// The list as a backup of `folder` uses it. Never fails the backup:
@@ -43,12 +51,8 @@ enum TimeMachineExclusions {
     static func reading(for folder: String, preferences: URL = preferencesFile) -> Reading {
         let listed: [String]
         switch listedPaths(in: preferences) {
-        case let .success(paths):
-            listed = paths
-        case .failure(.needsFullDiskAccess):
-            return Reading(notes: ["Time Machine’s list of excluded items can be read only with Full Disk Access, so the items listed there were backed up."])
-        case .failure(.damaged):
-            return Reading(notes: ["Time Machine’s list of excluded items is damaged, so the items listed there were backed up."])
+        case let .success(paths): listed = paths
+        case let .failure(problem): return Reading(notes: [problem.note])
         }
         guard !listed.isEmpty else { return Reading() }
         guard case let .found(realFolder) = location(of: folder) else {
