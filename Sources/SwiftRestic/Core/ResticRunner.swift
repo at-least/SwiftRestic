@@ -394,7 +394,10 @@ actor ResticRunner {
     /// -r and --repository-file are mutually exclusive"), so it would fail
     /// every command. RESTIC_HOST would record its name on every backup in
     /// place of this Mac's, which `ResticService.localHostname` and every
-    /// "from this Mac" reading assume restic took from gethostname(3).
+    /// "from this Mac" reading assume restic took from gethostname(3). Not
+    /// `backup --host` instead: RESTIC_HOST also filters `snapshots`, `ls
+    /// latest` and `forget` (0.19.1, probed: an empty listing, "no
+    /// snapshot found").
     static let protectedEnvironmentKeys: Set<String> = [
         "RESTIC_REPOSITORY", "RESTIC_REPOSITORY_FILE", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE",
         "RESTIC_PASSWORD_COMMAND", "RESTIC_HOST",
