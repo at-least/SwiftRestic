@@ -415,9 +415,14 @@ the generator after editing it; the PNGs are checked in.
   excluded from Time Machine* leaves out the items listed in Time Machine's
   options (`SkipPaths` in its preferences file) that lie inside the plan's
   folder, each passed to restic as its own `--exclude`, escaped — not as an
-  exclude file, whose lines restic expands `$VAR` in. macOS lets the app read
-  that list only with Full Disk Access; without it the editor says so under
-  the switch, and each run's log says the listed items were backed up. Not
+  exclude file, whose lines restic expands `$VAR` in. Paths are compared by
+  their real spelling, so an item Time Machine lists under /private/tmp is
+  found in a plan of /tmp. A listed item that holds the plan's folder is not
+  applied, as no rule that would leave out a plan's own folder is, and the
+  run's log says so. macOS lets the app read the list only with Full Disk
+  Access; without it the editor says so under the switch, with the button to
+  the setting. The list never fails a backup: unreadable or damaged, the run
+  goes ahead and its log says the listed items were backed up. Not
   the mark apps put on single items (`tmutil addexclusion` without `-p`):
   it lives on each item, and finding it meant walking the folder before every
   backup — about 35 seconds for a home folder of 330,000 items — so it was

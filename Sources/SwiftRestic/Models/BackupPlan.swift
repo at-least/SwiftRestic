@@ -341,8 +341,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// before the option reads it off, so its backups do not change under it.
     var excludeCloudFiles: Bool = true
     /// Leave out the items Time Machine's options list
-    /// (`TimeMachineExclusions`), read at each backup. On for new plans; a plan saved before the
-    /// option reads it off, so its backups do not change under it.
+    /// (`TimeMachineExclusions`), read at each backup. On for new plans; a
+    /// plan saved before the option reads it off, so its backups do not
+    /// change under it.
     var skipsTimeMachineExclusions: Bool = true
     /// The developer switch's groups that are ticked
     /// (`ExcludeCategory.developerGroups`), in their order: a run passes

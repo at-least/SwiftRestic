@@ -940,8 +940,8 @@ enum PlanSkips {
     static let developerFiles = "Developer files"
     static let cloudFiles = "Online-only files"
     static let timeMachineExclusions = "Items excluded from Time Machine"
-    static let timeMachineExclusionsCaption = "The items you list in Time Machine’s options."
-    static let timeMachineExclusionsCaptionWithoutFullDiskAccess = "The items you list in Time Machine’s options. SwiftRestic needs Full Disk Access to read them."
+    static let timeMachineExclusionsCaption = "The items listed in Time Machine’s options."
+    static let timeMachineExclusionsCaptionWithoutFullDiskAccess = "The items listed in Time Machine’s options. To read that list, turn on SwiftRestic in Full Disk Access."
     static let otherDisks = "Other disks mounted inside"
 
     static let cachesHelp = "Folders holding a CACHEDIR.TAG file"

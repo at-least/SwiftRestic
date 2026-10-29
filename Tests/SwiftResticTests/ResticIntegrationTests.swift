@@ -1033,11 +1033,15 @@ struct ResticIntegrationTests {
         let source = fixture.sourceDirectory
         // "$HOME" would be expanded in an --exclude-file line, "[1]" read
         // as a glob class without its escape.
-        let listed = source.appendingPathComponent("cache$HOME[1]")
-        try FileManager.default.createDirectory(at: listed, withIntermediateDirectories: true)
-        try "listed".write(to: listed.appendingPathComponent("g"), atomically: true, encoding: .utf8)
+        let special = source.appendingPathComponent("cache$HOME[1]")
+        // An ordinary name too, so the escapes cannot be what excludes it.
+        let plain = source.appendingPathComponent("listed")
+        for folder in [special, plain] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try "listed".write(to: folder.appendingPathComponent("g"), atomically: true, encoding: .utf8)
+        }
         let preferences = fixture.root.appendingPathComponent("com.apple.TimeMachine.plist")
-        try PropertyListSerialization.data(fromPropertyList: ["SkipPaths": [listed.path]], format: .binary, options: 0)
+        try PropertyListSerialization.data(fromPropertyList: ["SkipPaths": [special.path, plain.path]], format: .binary, options: 0)
             .write(to: preferences)
         fixture.service.timeMachinePreferences = preferences
 
@@ -1055,10 +1059,11 @@ struct ResticIntegrationTests {
 
         let skipped = try await backedUp(skipping: true)
         #expect(!skipped.contains("cache$HOME[1]"), "\(skipped)")
+        #expect(!skipped.contains("listed"), "\(skipped)")
         #expect(skipped.contains("a.txt"), "the rest of the folder must still be backed up: \(skipped)")
 
         let kept = try await backedUp(skipping: false)
-        #expect(kept.isSuperset(of: ["cache$HOME[1]", "a.txt"]), "\(kept)")
+        #expect(kept.isSuperset(of: ["cache$HOME[1]", "listed", "a.txt"]), "\(kept)")
     }
 
     @Test("the default excludes keep a Git repository restorable, object store included")

@@ -505,6 +505,10 @@ struct PlanEditorSheet: View {
                         ? PlanSkips.timeMachineExclusionsCaptionWithoutFullDiskAccess
                         : PlanSkips.timeMachineExclusionsCaption)
                 }
+                // The caption's next step, beside it.
+                if draft.skipsTimeMachineExclusions, model.fullDiskAccess == .notGranted {
+                    FullDiskAccessButton()
+                }
                 // restic's --one-file-system, said as what it skips.
                 Toggle(PlanSkips.otherDisks, isOn: $draft.oneFileSystem)
             } header: {
