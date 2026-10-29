@@ -2616,7 +2616,7 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.hasLog)
         #expect(record.exitCode == 3)
-        #expect(record.resticVersion == "restic 0.0.0-stub compiled with sh on darwin")
+        #expect(record.resticVersion == "restic 0.19.1-stub compiled with sh on darwin")
 
         let log = try logText(for: record, in: harness)
         #expect(log.hasPrefix("SwiftRestic"), "log began \(log.prefix(80))")

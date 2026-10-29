@@ -7,7 +7,35 @@ import Testing
 /// rather than only in the JSON lines the unit suites quote. They are skipped
 /// when restic is not installed so the suite still runs on a bare machine.
 enum ResticAvailability {
-    static let isInstalled = (try? ResticBinary.locate(userOverride: nil)) != nil
+    /// The restic every real-restic suite runs: SWIFTRESTIC_TEST_RESTIC when
+    /// set (`Tools/restic-version.sh` and CI pass it with xcodebuild's
+    /// TEST_RUNNER_ prefix), else the one the app would find.
+    static func binary() throws -> ResticBinary {
+        try ResticBinary.locate(userOverride: ProcessInfo.processInfo.environment["SWIFTRESTIC_TEST_RESTIC"])
+    }
+
+    static let isInstalled = (try? binary()) != nil
+
+    static func service() throws -> ResticService {
+        ResticService(runner: ResticRunner(), binary: try binary().url)
+    }
+}
+
+/// A run told which restic it is for must be on that restic: a variable
+/// that silently did not reach the test process would pass as a run on
+/// that version while the suites ran the installed one.
+@Suite("restic under test", .enabled(if: ResticAvailability.isInstalled))
+struct ResticUnderTestTests {
+    @Test("the restic under test is the version the run names")
+    func versionIsTheNamedOne() async throws {
+        let binary = try ResticAvailability.binary()
+        let output = try await ResticAvailability.service().version()
+        print("restic under test: \(binary.url.path): \(output)")
+        if let expected = ProcessInfo.processInfo.environment["SWIFTRESTIC_EXPECT_RESTIC_VERSION"] {
+            let version = try #require(ResticVersion(parsing: output))
+            #expect("\(version.major).\(version.minor).\(version.patch)" == expected, "\(output)")
+        }
+    }
 }
 
 @Suite("restic integration", .serialized, .enabled(if: ResticAvailability.isInstalled))
@@ -24,7 +52,6 @@ struct ResticIntegrationTests {
     }
 
     private func makeFixture() throws -> Fixture {
-        let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -72,7 +99,7 @@ struct ResticIntegrationTests {
             root: root,
             sourceDirectory: sourceDirectory,
             context: RepositoryContext(repository: repository, password: Self.password),
-            service: ResticService(runner: ResticRunner(), binary: binary.url),
+            service: try ResticAvailability.service(),
             plan: plan
         )
     }
@@ -344,7 +371,7 @@ struct ResticIntegrationTests {
         // file from a pipe this test holds open, so the lock is held for as
         // long as the preview and the control below take, however slowly
         // restic runs.
-        let binary = try ResticBinary.locate(userOverride: nil)
+        let binary = try ResticAvailability.binary()
         let holder = Process()
         holder.executableURL = binary.url
         holder.arguments = ["backup", "--stdin", "--stdin-filename", "hold"]
@@ -409,7 +436,7 @@ struct ResticIntegrationTests {
             store: ConfigStore(directory: fixture.root.appendingPathComponent("config")),
             secrets: .inMemory([repository.id: (password: Self.password, providerSecret: nil)])
         )
-        model.binary = try ResticBinary.locate(userOverride: nil)
+        model.binary = try ResticAvailability.binary()
         model.configuration.repositories = [repository]
         model.snapshots[repository.id] = try await fixture.service.snapshots(fixture.context)
         return model
@@ -531,7 +558,7 @@ struct ResticIntegrationTests {
         // disk, and the port in the string is parsed but never dialed.
         let server = "/usr/libexec/sftp-server"
         try #require(FileManager.default.isExecutableFile(atPath: server))
-        let binary = try ResticBinary.locate(userOverride: nil)
+        let binary = try ResticAvailability.binary()
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticTests-\(UUID().uuidString)")
             .resolvingSymlinksInPath()
@@ -572,8 +599,7 @@ struct ResticIntegrationTests {
 
     @Test("the editor's connection check gives up at its timeout on a server that refuses connections")
     func repositoryExistsTimesOut() async throws {
-        let binary = try ResticBinary.locate(userOverride: nil)
-        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let service = try ResticAvailability.service()
         var repository = Repository()
         repository.kind = .rest
         // Port 1 refuses: restic 0.19.1 retried this for over ten minutes
@@ -1241,7 +1267,6 @@ struct ResticIntegrationTests {
 struct ResticMaintenanceTests {
     @Test("prune reclaims space after forget, and reports in plain text")
     func prune() async throws {
-        let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticPrune-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -1260,7 +1285,7 @@ struct ResticMaintenanceTests {
         plan.path = source.path
         plan.skipNothing()
 
-        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let service = try ResticAvailability.service()
         let context = RepositoryContext(repository: repository, password: "prune-test")
         _ = try await service.initializeRepository(context)
 
@@ -1302,7 +1327,6 @@ struct ResticMaintenanceTests {
 struct ResticCheckDamageTests {
     @Test("a damaged repository's check still carries its error count")
     func checkOnDamagedRepositoryReportsErrors() async throws {
-        let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticCheckDamage-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -1325,7 +1349,7 @@ struct ResticCheckDamageTests {
         plan.skipNothing()
 
         let context = RepositoryContext(repository: repository, password: "check-damage-password")
-        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let service = try ResticAvailability.service()
         _ = try await service.initializeRepository(context)
         _ = try await service.backup(context, plan: plan)
 
@@ -1383,7 +1407,6 @@ private extension Data {
 struct ResticDiffTests {
     @Test("a modified, an added and a removed file each show up with the right modifier")
     func diffBetweenTwoSnapshots() async throws {
-        let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticDiff-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -1404,7 +1427,7 @@ struct ResticDiffTests {
         plan.path = source.path
         plan.skipNothing()
 
-        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let service = try ResticAvailability.service()
         let context = RepositoryContext(repository: repository, password: "diff-test")
         _ = try await service.initializeRepository(context)
 
@@ -1449,7 +1472,6 @@ struct ResticDiffTests {
 struct ResticFindTests {
     @Test("a file deleted from the source is still findable in an older snapshot")
     func findsFileAcrossSnapshots() async throws {
-        let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticFind-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -1475,7 +1497,7 @@ struct ResticFindTests {
         plan.path = source.path
         plan.skipNothing()
 
-        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let service = try ResticAvailability.service()
         let context = RepositoryContext(repository: repository, password: "find-test")
         _ = try await service.initializeRepository(context)
         _ = try await service.backup(context, plan: plan)
@@ -1515,7 +1537,6 @@ struct ResticFindTests {
     /// characters its name holds, with its size in each backup.
     @Test("an escaped path finds exactly that file in every backup, with its size in each")
     func escapedPathFindsOneFile() async throws {
-        let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticFindExact-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -1537,7 +1558,7 @@ struct ResticFindTests {
         plan.path = source.path
         plan.skipNothing()
 
-        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let service = try ResticAvailability.service()
         let context = RepositoryContext(repository: repository, password: "exact-test")
         _ = try await service.initializeRepository(context)
         _ = try await service.backup(context, plan: plan)

@@ -290,8 +290,18 @@ extension AppModel {
             }.value
             binary = located
             // A program that cannot answer `restic version` is no restic:
-            // every run would fail, and the feature flags would guess.
-            resticVersion = try await service().version()
+            // every run would fail. One older than the minimum is refused
+            // here, once, rather than failing or misreading run by run.
+            let output = try await service().version()
+            guard let version = ResticVersion(parsing: output) else {
+                throw ResticError.resticVersionUnreadable(path: located.url.path)
+            }
+            guard version.isSupported else {
+                throw ResticError.resticTooOld(
+                    path: located.url.path, found: version.dotted, minimum: ResticVersion.minimumSupported.dotted
+                )
+            }
+            resticVersion = output
             binaryProblem = nil
         } catch {
             binary = nil

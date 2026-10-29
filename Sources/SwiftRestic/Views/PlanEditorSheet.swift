@@ -573,13 +573,8 @@ struct PlanEditorSheet: View {
         "Leaves out what developer tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn’t backed up."
     }
 
-    /// What the cloud-files switch does with this restic: 0.19 brought
-    /// `--exclude-cloud-files` to macOS.
     private var cloudFilesCaption: String {
-        if let version = ResticVersion(parsing: model.resticVersion), !version.excludesCloudFilesOnMac {
-            return "Files kept only in iCloud Drive or OneDrive aren’t downloaded or backed up. Needs restic 0.19 or later."
-        }
-        return "Files kept only in iCloud Drive or OneDrive aren’t downloaded or backed up."
+        "Files kept only in iCloud Drive or OneDrive aren’t downloaded or backed up."
     }
 
     private var scheduleTab: some View {

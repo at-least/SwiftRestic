@@ -66,6 +66,10 @@ struct AppModelTests {
         configuration.plans = [plan]
         if let stub {
             configuration.settings.resticPathOverride = stub.url.path
+        } else {
+            // The restic under test, through the same override: the model's
+            // own lookup would find the installed one.
+            configuration.settings.resticPathOverride = try ResticAvailability.binary().url.path
         }
 
         let storeDirectory = root.appendingPathComponent("config")
@@ -73,8 +77,7 @@ struct AppModelTests {
         try await store.save(configuration)
 
         if stub == nil {
-            let binary = try ResticBinary.locate(userOverride: nil)
-            _ = try await ResticService(runner: ResticRunner(), binary: binary.url)
+            _ = try await ResticAvailability.service()
                 .initializeRepository(RepositoryContext(repository: repository, password: "test-password"))
         }
 
@@ -1888,6 +1891,46 @@ struct ResolveBinaryTests {
         #expect(!model.isResticAvailable)
         #expect(model.binaryProblem != nil)
         #expect(model.resticVersion == "")
+    }
+
+    /// A program at the restic path that prints `versionLine` for `restic version`.
+    private func resolve(printing versionLine: String) async throws -> (AppModel, String) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticVersionedBinary-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let program = root.appendingPathComponent("restic")
+        try "#!/bin/sh\necho '\(versionLine)'\n".write(to: program, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        model.configuration.settings.resticPathOverride = program.path
+        await model.resolveBinary()
+        try FileManager.default.removeItem(at: root)
+        return (model, program.path)
+    }
+
+    @Test("a restic older than the minimum is refused at launch, its version and the fix named")
+    func olderResticIsRefused() async throws {
+        let (model, path) = try await resolve(printing: "restic 0.18.1 compiled with go1.25.1 on darwin/arm64")
+        #expect(!model.isResticAvailable)
+        #expect(model.resticVersion == "")
+        #expect(model.binaryProblem == "SwiftRestic needs restic 0.19.1 or later. The restic at \(path) is 0.18.1. Update it with brew upgrade restic, or set the path to a newer one in Settings.")
+    }
+
+    @Test("a program whose answer names no version is refused, not guessed at")
+    func unreadableVersionIsRefused() async throws {
+        let (model, path) = try await resolve(printing: "hello")
+        #expect(!model.isResticAvailable)
+        #expect(model.binaryProblem == "The program at \(path) didn’t report a restic version. Set the path to restic in Settings, or install it with brew install restic.")
+    }
+
+    @Test("the minimum and anything newer are taken")
+    func supportedResticIsTaken() async throws {
+        for line in ["restic 0.19.1 compiled with go1.26.4 on darwin/arm64", "restic 0.20.0 compiled with go1.27.0 on darwin/arm64"] {
+            let (model, _) = try await resolve(printing: line)
+            #expect(model.isResticAvailable, "\(line)")
+            #expect(model.binaryProblem == nil, "\(line)")
+            #expect(model.resticVersion == line)
+        }
     }
 }
 

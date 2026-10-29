@@ -304,8 +304,5 @@ struct SkippedRunTests {
         #expect(BackupPlan().excludeCloudFiles)
         let older = try JSONDecoder().decode(BackupPlan.self, from: Data(#"{"name":"Old"}"#.utf8))
         #expect(!older.excludeCloudFiles)
-        // restic 0.18 had the flag for Windows only; 0.19 brought it to macOS.
-        #expect(ResticVersion(parsing: "restic 0.19.0 compiled with go1.24 on darwin/arm64")?.excludesCloudFilesOnMac == true)
-        #expect(ResticVersion(parsing: "restic 0.18.1 compiled with go1.24 on darwin/arm64")?.excludesCloudFilesOnMac == false)
     }
 }

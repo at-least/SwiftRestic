@@ -81,7 +81,7 @@ struct StubRestic: Sendable {
         case " $* " in
             *" version "*)
                 trace "version-arm"
-                echo "restic 0.0.0-stub compiled with sh on darwin"
+                echo "restic 0.19.1-stub compiled with sh on darwin"
                 exit 0
                 ;;
         esac
@@ -1027,52 +1027,6 @@ struct StubResticTests {
         #expect(try String(contentsOf: landing, encoding: .utf8) == "mine", "a cancelled restore changed the file")
         let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
         #expect(names == ["a.txt"], "left behind: \(names)")
-    }
-
-    @Test("below restic 0.17 no --overwrite is passed, and Keep refuses what it cannot keep")
-    func restoreWithoutOverwriteFlag() async throws {
-        let fixture = try makeFixture(mode: "restoreskip")
-        defer { cleanUp(fixture.root) }
-        // restic 0.16 answers "unknown flag: --overwrite" and always replaces.
-        let old = ResticService(runner: ResticRunner(), binary: fixture.stub.url, supportsRestoreOverwrite: false)
-        let project = SnapshotNode(name: "Project", type: .dir, path: "/src/Project")
-        let occupied = fixture.root.appendingPathComponent("occupied")
-        try FileManager.default.createDirectory(at: occupied.appendingPathComponent("Project"), withIntermediateDirectories: true)
-        try Data("mine".utf8).write(to: occupied.appendingPathComponent("Project/a.txt"))
-
-        func restoreStarts() throws -> [String] {
-            let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
-            // The repository travels in the environment, so `restore` can be
-            // the first argument, right after the bracket.
-            return trace.split(separator: "\n").map(String.init).filter { line in
-                line.hasPrefix("start args=[") && line.replacingOccurrences(of: "[", with: " ").contains(" restore ")
-            }
-        }
-
-        // Replace needs no flag: restic's own default is `always`.
-        try await old.restore(fixture.context, snapshotID: "latest", node: project, destinationDirectory: occupied, overwrite: .replaceExisting)
-        // Keep into a landing that holds nothing has nothing to keep — a
-        // fresh folder, or a drag's UUID directory.
-        try await old.restore(fixture.context, snapshotID: "latest", node: project, destinationDirectory: fixture.root.appendingPathComponent("fresh"), overwrite: .keepExisting)
-        try await old.restoreWholeSnapshot(fixture.context, snapshotID: "latest", destinationDirectory: fixture.root.appendingPathComponent("fresh-whole"), overwrite: .keepExisting)
-        let ran = try restoreStarts()
-        #expect(ran.count == 3, "restores started: \(ran)")
-        #expect(!ran.contains { $0.contains("--overwrite") }, "restores started: \(ran)")
-
-        // Keep onto files that are there is refused before restic runs.
-        let landing = occupied.appendingPathComponent("Project")
-        await #expect(throws: ResticError.keepNeedsNewerRestic(path: landing.path)) {
-            try await old.restore(fixture.context, snapshotID: "latest", node: project, destinationDirectory: occupied, overwrite: .keepExisting)
-        }
-        await #expect(throws: ResticError.keepNeedsNewerRestic(path: occupied.path)) {
-            try await old.restoreWholeSnapshot(fixture.context, snapshotID: "latest", destinationDirectory: occupied, overwrite: .keepExisting)
-        }
-        #expect(try restoreStarts().count == 3)
-        #expect(try String(contentsOf: landing.appendingPathComponent("a.txt"), encoding: .utf8) == "mine")
-
-        // A current restic gets the flag, whatever the destination holds.
-        try await fixture.service.restore(fixture.context, snapshotID: "latest", node: project, destinationDirectory: occupied, overwrite: .keepExisting)
-        #expect(try restoreStarts().last?.contains("--overwrite never") == true)
     }
 
     @Test("a binary that cannot be spawned reports a launch failure")

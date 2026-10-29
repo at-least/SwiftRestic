@@ -104,18 +104,6 @@ struct ResticService: ResticClient {
     static let streamingIdleTimeout: TimeInterval = 15 * 60
     let runner: ResticRunner
     let binary: URL
-    /// Whether the located restic streams `restore --json` progress (0.16+):
-    /// the restore commands' idle stall cap applies only when it does — an
-    /// older, legitimately silent restore must not be killed as hung.
-    /// Defaults on: an unreadable version is likelier a transient than an
-    /// ancient binary, and decoding is pinned to modern output anyway.
-    var streamsRestoreProgress = true
-    /// Whether the located restic takes `restore --overwrite` (0.17+).
-    /// Defaults on, for the same reason as the stall cap.
-    var supportsRestoreOverwrite = true
-    /// Whether this restic takes `--exclude-cloud-files` on macOS (0.19+).
-    /// Below that a plan's setting passes nothing, and the editor says so.
-    var excludesCloudFiles = true
     /// The home folder the run expands `~` against — the plan's path and
     /// its exclude patterns, and the developer rules' fitting with them.
     /// The real one, except where the tests re-root the anchored rules
@@ -592,7 +580,7 @@ struct ResticService: ResticClient {
         }
         if plan.excludeCaches { args.append("--exclude-caches") }
         if plan.oneFileSystem { args.append("--one-file-system") }
-        if plan.excludeCloudFiles, excludesCloudFiles { args.append("--exclude-cloud-files") }
+        if plan.excludeCloudFiles { args.append("--exclude-cloud-files") }
         args += ["--tag", Self.planTag(plan.id)]
         for tag in plan.tags where !tag.trimmingCharacters(in: .whitespaces).isEmpty {
             args += ["--tag", tag]
@@ -840,8 +828,8 @@ struct ResticService: ResticClient {
     /// the file's modified date.
     ///
     /// `overwrite` always reaches restic explicitly, even for Replace, whose
-    /// `always` is restic's default (0.17+): the command line in the run's
-    /// log then says what was asked (older restic: `overwriteArguments`).
+    /// `always` is restic's default: the command line in the run's log then
+    /// says what was asked.
     /// Replace is `always`, never `if-changed`, which trusts size and
     /// modification time. Keep is `never`, and not an absolute keep: it
     /// deletes a file that stands where the backup has a folder of the same
@@ -867,12 +855,10 @@ struct ResticService: ResticClient {
 
         let target = Self.restoredItemURL(for: node, in: destinationDirectory)
         if node.isDirectory {
-            // Judged before the folder below exists: it is what Keep keeps.
-            let overwriteArguments = try overwriteArguments(overwrite, landings: [target])
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
             return try await runRestore(
                 context,
-                arguments: ["\(snapshotID):\(node.path)", "--target", target.path] + overwriteArguments,
+                arguments: ["\(snapshotID):\(node.path)", "--target", target.path] + overwrite.resticArguments,
                 onProgress: onProgress
             )
         }
@@ -941,8 +927,6 @@ struct ResticService: ResticClient {
     ) async throws -> ResticSummary? {
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
         let landings = nodes.map { Self.restoredItemURL(for: $0, in: destinationDirectory) }
-        // Judged before the folders below exist: they are what Keep keeps.
-        let overwriteArguments = try overwriteArguments(overwrite, landings: landings)
         for (node, landing) in zip(nodes, landings) {
             if node.isDirectory {
                 try FileManager.default.createDirectory(at: landing, withIntermediateDirectories: true)
@@ -955,30 +939,9 @@ struct ResticService: ResticClient {
             context,
             arguments: ["\(snapshotID):\(parent)", "--target", destinationDirectory.path]
                 + nodes.flatMap { ["--include", RestoreBatch.includePattern(forName: $0.name)] }
-                + overwriteArguments,
+                + overwrite.resticArguments,
             onProgress: onProgress
         )
-    }
-
-    /// The `--overwrite` arguments for a restore into `landings`. A restic
-    /// older than 0.17 rejects the flag and always replaces: Replace needs
-    /// nothing there, and Keep is honest only where there is nothing to
-    /// keep — folders that do not exist yet or are empty, as a drag's fresh
-    /// UUID directory is. Anything else is refused before restic runs, not
-    /// replaced; something appearing between this look and restic's start
-    /// is the one gap.
-    private func overwriteArguments(_ policy: RestoreOverwritePolicy, landings: [URL]) throws -> [String] {
-        if supportsRestoreOverwrite { return ["--overwrite", policy.resticValue] }
-        guard policy == .keepExisting, let held = landings.first(where: Self.holdsAnything) else { return [] }
-        throw ResticError.keepNeedsNewerRestic(path: held.path)
-    }
-
-    /// Anything at `url` a restore could replace: a file or link (lstat), or
-    /// a folder with entries. A folder that cannot be listed counts as full.
-    private static func holdsAnything(_ url: URL) -> Bool {
-        guard RestoreDestinationRules.itemExists(at: url) else { return false }
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: url.path) else { return true }
-        return !entries.isEmpty
     }
 
     /// A single file Keep left alone, with the counters a restore summary
@@ -1003,11 +966,10 @@ struct ResticService: ResticClient {
         overwrite: RestoreOverwritePolicy,
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> ResticSummary? {
-        let overwriteArguments = try overwriteArguments(overwrite, landings: [destinationDirectory])
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
         return try await runRestore(
             context,
-            arguments: [snapshotID, "--target", destinationDirectory.path] + overwriteArguments,
+            arguments: [snapshotID, "--target", destinationDirectory.path] + overwrite.resticArguments,
             onProgress: onProgress
         )
     }
@@ -1023,7 +985,7 @@ struct ResticService: ResticClient {
             context,
             ResticInvocation(
                 arguments: ["restore", "--json"] + arguments,
-                idleTimeout: streamsRestoreProgress ? Self.streamingIdleTimeout : nil
+                idleTimeout: Self.streamingIdleTimeout
             ),
             onMessage: Self.progressHandler(onProgress)
         )
@@ -1118,3 +1080,4 @@ struct ResticService: ResticClient {
         return home + expanded.dropFirst(realHome.count)
     }
 }
+

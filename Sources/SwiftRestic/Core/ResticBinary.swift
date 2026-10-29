@@ -85,8 +85,8 @@ struct ResticBinary: Sendable {
     }
 }
 
-/// The version parts of `restic version`'s first line, for the features the
-/// app gates on rather than displays.
+/// The version parts of `restic version`'s first line, for the minimum the
+/// app checks at launch rather than displays.
 struct ResticVersion: Equatable, Sendable {
     var major: Int
     var minor: Int
@@ -99,9 +99,7 @@ struct ResticVersion: Equatable, Sendable {
     /// Pre-release and build suffixes ride on the patch component
     /// ("0.18.0-rc.1", "0.19.1+123"): the patch is the digits before the
     /// first "-" or "+", and a suffix never promotes a version —
-    /// 0.18.0-rc.1 is 0.18.0, not 0.18.1. Dropping unparseable components
-    /// instead would turn "0.15.0-dev" into no-version-at-all, which the
-    /// restore stall cap's default would read as modern restic.
+    /// 0.18.0-rc.1 is 0.18.0, not 0.18.1.
     init?(parsing output: String) {
         let firstLine = (output.split(separator: "\n").first.map(String.init) ?? output)
             .trimmingCharacters(in: .whitespaces)
@@ -125,23 +123,26 @@ struct ResticVersion: Equatable, Sendable {
         self.patch = patch
     }
 
-    /// `restore --json` began streaming progress lines in restic 0.16.
-    /// Before that, a healthy long restore is silent — an idle stall cap
-    /// would kill it as hung — so the cap only applies from this version on.
-    var streamsRestoreProgress: Bool {
-        (major, minor, patch) >= (0, 16, 0)
+    /// The oldest restic the app runs. Below 0.19.1, measured with the
+    /// real-restic suites (Tools/restic-version.sh): 0.19.0's `stats
+    /// --json` writes a progress line to stdout ahead of its JSON, so the
+    /// repository's size cannot be read; 0.18.1 exits 0 from a forget
+    /// whose deletions the repository refused, so a refused retention would
+    /// read as removed; 0.18 has no `--exclude-cloud-files` on macOS, and
+    /// 0.16 neither `restore --overwrite` nor streamed restore progress.
+    /// CI's oldest-supported job runs this version (ResticVersionTests).
+    static let minimumSupported = ResticVersion(major: 0, minor: 19, patch: 1)
+
+    init(major: Int, minor: Int, patch: Int) {
+        self.major = major
+        self.minor = minor
+        self.patch = patch
     }
 
-    /// `restore --overwrite` arrived in restic 0.17; an older restic
-    /// rejects the flag ("unknown flag: --overwrite", exit 1) and always
-    /// replaces.
-    var supportsRestoreOverwrite: Bool {
-        (major, minor, patch) >= (0, 17, 0)
+    var isSupported: Bool {
+        (major, minor, patch) >= (Self.minimumSupported.major, Self.minimumSupported.minor, Self.minimumSupported.patch)
     }
 
-    /// `backup --exclude-cloud-files` came in restic 0.18 for Windows only;
-    /// 0.19 brought it to macOS (restic's CHANGELOG, #3697 and #5352).
-    var excludesCloudFilesOnMac: Bool {
-        (major, minor, patch) >= (0, 19, 0)
-    }
+    /// "0.19.1".
+    var dotted: String { "\(major).\(minor).\(patch)" }
 }

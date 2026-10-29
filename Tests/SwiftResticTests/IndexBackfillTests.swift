@@ -40,7 +40,6 @@ struct IndexBackfillTests {
     }
 
     private func makeScene(_ label: String) async throws -> Scene {
-        let binary = try ResticBinary.locate(userOverride: nil)
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("\(label)-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         let root = base.resolvingSymlinksInPath()
@@ -55,7 +54,7 @@ struct IndexBackfillTests {
         plan.path = source.path
 
         let context = RepositoryContext(repository: repository, password: Self.password)
-        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let service = try ResticAvailability.service()
         _ = try await service.initializeRepository(context)
         return Scene(root: root, source: source, repository: repository, plan: plan, context: context, service: service)
     }

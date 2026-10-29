@@ -9,7 +9,7 @@ struct ResticFilesTreeTests {
     @MainActor
     @Test("a plan's tree is its folder as the disk holds it: unmarked while the index reads, then a newer file not backed up, a deleted one and a deleted folder's items the backups' alone, an excluded hidden one not at all; a folder gone says so")
     func treeListsTheDisk() async throws {
-        let binary = try ResticBinary.locate(userOverride: nil)
+        let binary = try ResticAvailability.binary()
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticDiskTree-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -27,7 +27,7 @@ struct ResticFilesTreeTests {
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         let password = "disk-tree-test"
-        let service = ResticService(runner: ResticRunner(), binary: binary.url)
+        let service = try ResticAvailability.service()
         let context = RepositoryContext(repository: repository, password: password)
         _ = try await service.initializeRepository(context)
         var plan = BackupPlan()
@@ -121,7 +121,7 @@ struct ResticFilesTreeTests {
         let calls: URL
 
         init() async throws {
-            let binary = try ResticBinary.locate(userOverride: nil)
+            let binary = try ResticAvailability.binary()
             let base = FileManager.default.temporaryDirectory
                 .appendingPathComponent("SwiftResticReadAhead-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -138,7 +138,7 @@ struct ResticFilesTreeTests {
             repository.kind = .local
             repository.localPath = root.appendingPathComponent("repo").path
             let password = "read-ahead-test"
-            let service = ResticService(runner: ResticRunner(), binary: binary.url)
+            let service = try ResticAvailability.service()
             let context = RepositoryContext(repository: repository, password: password)
             _ = try await service.initializeRepository(context)
             var plan = BackupPlan()

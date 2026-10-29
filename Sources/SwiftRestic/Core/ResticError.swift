@@ -38,10 +38,10 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// beside the landing could not be moved into place. The staged copy is
     /// gone; whatever the destination held before is untouched.
     case stagedFileMoveFailed(path: String, reason: String)
-    /// A Keep restore onto something that is already there, with a restic
-    /// older than 0.17: it has no `--overwrite` and would replace it.
-    /// Refused before restic runs.
-    case keepNeedsNewerRestic(path: String)
+    /// The restic found is older than `ResticVersion.minimumSupported`.
+    case resticTooOld(path: String, found: String, minimum: String)
+    /// `restic version` answered something that names no version.
+    case resticVersionUnreadable(path: String)
     /// A folder stands where a Replace restore of several items would put a
     /// file. restic fails on it — after taking away the folder's permissions —
     /// so it is refused before restic runs.
@@ -121,8 +121,10 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output."
         case let .stagedFileMoveFailed(path, reason):
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
-        case let .keepNeedsNewerRestic(path):
-            return "Keeping the files already at \(path) needs restic 0.17 or later — this restic would replace them, so nothing was restored. Update restic, restore into an empty folder, or choose “Replace it with the backed-up version”."
+        case let .resticTooOld(path, found, minimum):
+            return "SwiftRestic needs restic \(minimum) or later. The restic at \(path) is \(found). Update it with brew upgrade restic, or set the path to a newer one in Settings."
+        case let .resticVersionUnreadable(path):
+            return "The program at \(path) didn’t report a restic version. Set the path to restic in Settings, or install it with brew install restic."
         case let .snapshotsNotRemoved(removed, refused, reason):
             let cause = reason.isEmpty ? "" : " (\(reason))"
             let advice = "Thin it where deletions are allowed, or turn retention off."

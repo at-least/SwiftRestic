@@ -16,6 +16,26 @@ open SwiftRestic.xcodeproj     # or work in Xcode
 `xcodegen` snapshots the source file list, so `build.sh` regenerates the project
 on every build — new files are invisible to `xcodebuild` otherwise.
 
+### restic versions
+
+The app needs restic 0.19.1 or later (`ResticVersion.minimumSupported`). At
+launch it reads `restic version` and refuses an older restic, or a program that
+names no version, with a line in Settings saying which restic it found and how
+to update it. The minimum was measured, not guessed: the suites that drive a
+real restic, run on each release with `Tools/restic-version.sh`, fail on 0.19.0
+(its `stats --json` writes a progress line ahead of the JSON, so a repository's
+size cannot be read), on 0.18.1 (a forget whose deletions the repository refused
+exits 0, so a refused retention would read as removed) and further on older
+releases.
+
+```sh
+Tools/restic-version.sh 0.19.1   # the real-restic suites on that release, downloaded and checksummed
+```
+
+CI runs those suites on the minimum, and the whole suite on Homebrew's newest
+restic, so a new restic release shows up as a failing job rather than as a
+user's bug report.
+
 ### App icon
 
 The icon is drawn in code: `swift Tools/GenerateAppIcon.swift` writes all ten
@@ -390,9 +410,7 @@ the generator after editing it; the PNGs are checked in.
   where it had been a fixed 24-hour "02:00". *Skip ▸ Online-only files*
   (iCloud Drive, OneDrive) passes restic's `--exclude-cloud-files`: on
   for new plans, off for plans saved before the option (their backups do not
-  change under it), and only with restic 0.19 or later, which brought the
-  flag to macOS (restic's changelog) — the editor says when this restic is
-  older. What restic does with an online-only file without the flag was not
+  change under it). What restic does with an online-only file without the flag was not
   tried: it would mean reading a real iCloud Drive file. *Skip ▸ Developer
   files* (named *Skip what developer tools rebuild* until 2026-10-21) holds
   one checkbox per group, shown under the switch while it is on (since

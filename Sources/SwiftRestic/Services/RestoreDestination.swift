@@ -21,6 +21,8 @@ enum RestoreOverwritePolicy: String, Sendable, CaseIterable {
         case .replaceExisting: "always"
         }
     }
+
+    var resticArguments: [String] { ["--overwrite", resticValue] }
 }
 
 /// Where the destination sheet restores to. Desktop and Other folder are

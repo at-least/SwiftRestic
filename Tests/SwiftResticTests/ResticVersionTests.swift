@@ -1,9 +1,8 @@
 import Foundation
 import Testing
 
-/// The version gate behind the restore commands' idle stall cap: restic
-/// began streaming `restore --json` progress in 0.16, so an older binary's
-/// healthy silence must read as work, not as a hang.
+/// `restic version`'s line read as a version, and the minimum the app
+/// takes at launch.
 @Suite("restic version parsing")
 struct ResticVersionTests {
     @Test("the version line parses to its triple")
@@ -16,24 +15,28 @@ struct ResticVersionTests {
         #expect(version.patch == 1)
     }
 
-    @Test("restore progress streaming starts at 0.16")
-    func restoreProgressGate() throws {
-        let before = try #require(ResticVersion(parsing: "restic 0.15.2 compiled with go1.21.0"))
-        let at = try #require(ResticVersion(parsing: "restic 0.16.0 compiled with go1.21.0"))
-        let current = try #require(ResticVersion(parsing: "restic 0.19.1 compiled with go1.26.5"))
-        #expect(!before.streamsRestoreProgress)
-        #expect(at.streamsRestoreProgress)
-        #expect(current.streamsRestoreProgress)
+    @Test("the minimum is 0.19.1: it and anything newer are taken, anything older is not")
+    func minimum() throws {
+        #expect(ResticVersion.minimumSupported.dotted == "0.19.1")
+        #expect(try #require(ResticVersion(parsing: "restic 0.19.1 compiled with go1.26.4 on darwin/arm64")).isSupported)
+        #expect(try #require(ResticVersion(parsing: "restic 0.20.0 compiled with go1.27.0")).isSupported)
+        #expect(try #require(ResticVersion(parsing: "restic 1.0.0 compiled with go1.27.0")).isSupported)
+        #expect(try !#require(ResticVersion(parsing: "restic 0.19.0 compiled with go1.26.4 on darwin/arm64")).isSupported)
+        // A suffix rides on the patch: a release candidate of the minimum
+        // reads as the minimum.
+        #expect(try #require(ResticVersion(parsing: "restic 0.19.1-rc.1 compiled with go1.26.4")).isSupported)
+        #expect(try !#require(ResticVersion(parsing: "restic 0.18.1 compiled with go1.25.1 on darwin/arm64")).isSupported)
     }
 
-    @Test("restore --overwrite starts at 0.17")
-    func restoreOverwriteGate() throws {
-        let before = try #require(ResticVersion(parsing: "restic 0.16.5 compiled with go1.22.4 on darwin/arm64"))
-        let at = try #require(ResticVersion(parsing: "restic 0.17.0 compiled with go1.22.5"))
-        let current = try #require(ResticVersion(parsing: "restic 0.19.1 compiled with go1.26.5"))
-        #expect(!before.supportsRestoreOverwrite)
-        #expect(at.supportsRestoreOverwrite)
-        #expect(current.supportsRestoreOverwrite)
+    @Test("CI's oldest-supported job runs the minimum")
+    func ciRunsTheMinimum() throws {
+        let workflow = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent(".github/workflows/ci.yml")
+        let text = try String(contentsOf: workflow, encoding: .utf8)
+        let lines = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        let index = try #require(lines.firstIndex(of: "role: oldest supported"), "\(workflow.path)")
+        #expect(lines[index - 1] == "- restic: \"\(ResticVersion.minimumSupported.dotted)\"")
     }
 
     @Test("pre-release and build suffixes ride on the patch, never promote it")
@@ -43,20 +46,17 @@ struct ResticVersionTests {
         let dev = try #require(ResticVersion(parsing: "restic 0.15.0-dev compiled with go1.21.0"))
         #expect(dev.minor == 15)
         #expect(dev.patch == 0)
-        #expect(!dev.streamsRestoreProgress)
 
         let releaseCandidate = try #require(ResticVersion(parsing: "restic 0.18.0-rc.1 compiled with go1.24.0"))
         #expect(releaseCandidate.minor == 18)
         #expect(releaseCandidate.patch == 0)
-        #expect(releaseCandidate.streamsRestoreProgress)
 
         let buildStamped = try #require(ResticVersion(parsing: "restic 0.19.1+123 compiled with go1.26.5"))
         #expect(buildStamped.patch == 1)
 
-        // The test stub's own version line: 0.0.0, firmly pre-0.16.
-        let stub = try #require(ResticVersion(parsing: "restic 0.0.0-stub compiled with sh on darwin"))
-        #expect(stub.major == 0 && stub.minor == 0 && stub.patch == 0)
-        #expect(!stub.streamsRestoreProgress)
+        // The test stub's own version line: the minimum, so the model takes it.
+        let stub = try #require(ResticVersion(parsing: "restic 0.19.1-stub compiled with sh on darwin"))
+        #expect(stub.isSupported)
     }
 
     @Test("leading whitespace and multi-line output both parse")
