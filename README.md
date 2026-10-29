@@ -417,9 +417,12 @@ the generator after editing it; the PNGs are checked in.
   folder, each passed to restic as its own `--exclude`, escaped — not as an
   exclude file, whose lines restic expands `$VAR` in. Paths are compared by
   their real spelling, so an item Time Machine lists under /private/tmp is
-  found in a plan of /tmp. A listed item that holds the plan's folder is not
-  applied, as no rule that would leave out a plan's own folder is, and the
-  run's log says so. macOS lets the app read the list only with Full Disk
+  found in a plan of /tmp; a listed link is the link, not what it points to.
+  Only items spelled near the plan's folder are looked up on disk, since a
+  lookup on a network share that went away can block. A listed item that is
+  or holds the plan's folder is not applied, as no rule that would leave out
+  a plan's own folder is, and the run's log says so; so does an item that
+  could not be checked. macOS lets the app read the list only with Full Disk
   Access; without it the editor says so under the switch, with the button to
   the setting. The list never fails a backup: unreadable or damaged, the run
   goes ahead and its log says the listed items were backed up. Not

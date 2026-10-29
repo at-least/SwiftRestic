@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// The items Time Machine's options list as left out of its backups
@@ -15,75 +16,129 @@ enum TimeMachineExclusions {
     /// What a backup of one folder takes from the list.
     struct Reading: Equatable {
         /// The listed items inside the folder, spelled below the folder as
-        /// given — what restic records and matches — none inside another.
+        /// given — what restic records and matches — each once, none inside
+        /// another.
         var items: [String] = []
-        /// What the run's log says of the list: why it was not read, or a
-        /// listed item that holds the folder itself.
+        /// What the run's log says of the list: why it, or one of its
+        /// items, was not applied.
         var notes: [String] = []
     }
 
-    /// The list as a backup of `folder` uses it. Never throws: the file is
-    /// the system's, and a backup must not fail on it — a list macOS will
-    /// not let this process read, or a damaged one, is a note instead.
+    /// Why the list as a whole was not read.
+    enum ListProblem: Error, Equatable {
+        case needsFullDiskAccess
+        case damaged
+    }
+
+    /// The list as a backup of `folder` uses it. Never fails the backup:
+    /// the file is the system's, so a list or an item that cannot be used
+    /// is a note instead.
     ///
-    /// Compared by real path (realpath(3)): Time Machine may list
-    /// /private/tmp/proj/build while the plan says /tmp/proj. A listed item
-    /// that is not on disk leaves out nothing and is passed over.
+    /// An item is compared by its real location — its parent folder's real
+    /// path and its own name, so a listed symbolic link is the link, not
+    /// what it points to: Time Machine may list /private/tmp/proj/build
+    /// while the plan says /tmp/proj. Only items whose spelling is near
+    /// the folder are looked up on disk (`isNear`): a lookup on a network
+    /// share that went away can block for the mount's timeout.
     static func reading(for folder: String, preferences: URL = preferencesFile) -> Reading {
         let listed: [String]
         switch listedPaths(in: preferences) {
-        case let .success(paths?):
+        case let .success(paths):
             listed = paths
-        case .success(nil):
+        case .failure(.needsFullDiskAccess):
             return Reading(notes: ["Time Machine’s list of excluded items can be read only with Full Disk Access, so the items listed there were backed up."])
-        case let .failure(error):
-            return Reading(notes: ["Time Machine’s list of excluded items couldn’t be read (\(error.localizedDescription)), so the items listed there were backed up."])
+        case .failure(.damaged):
+            return Reading(notes: ["Time Machine’s list of excluded items is damaged, so the items listed there were backed up."])
         }
-        let realFolder = realPath(folder) ?? folder
+        guard !listed.isEmpty else { return Reading() }
+        guard case let .found(realFolder) = location(of: folder) else {
+            return Reading(notes: ["SwiftRestic couldn’t find this plan’s folder on disk, so the items Time Machine’s options list were backed up."])
+        }
         var reading = Reading()
         var inside: [String] = []
-        for path in listed {
-            guard let real = realPath(path) else { continue }
-            if ResticPath.holds(real, realFolder) {
-                // As every rule that would leave out the plan's own folder:
-                // a plan backs up its folder.
-                reading.notes.append("Time Machine’s options leave out “\(path)”, which holds this plan’s folder. SwiftRestic backed it up anyway.")
-            } else if ResticPath.holds(realFolder, real) {
-                inside.append(real)
+        for path in listed where isNear(path, folder: folder, realFolder: realFolder) {
+            switch location(of: path) {
+            case .absent:
+                // Not on disk: nothing to leave out.
+                continue
+            case .unknown:
+                reading.notes.append("SwiftRestic couldn’t check “\(path)”, listed in Time Machine’s options, so it was backed up.")
+            case let .found(real):
+                if real == realFolder {
+                    // As every rule that would leave out the plan's own
+                    // folder: a plan backs up its folder.
+                    reading.notes.append("Time Machine’s options leave out this plan’s folder, “\(path)”. SwiftRestic backed it up anyway.")
+                } else if ResticPath.holds(real, realFolder) {
+                    reading.notes.append("Time Machine’s options leave out “\(path)”, which holds this plan’s folder. SwiftRestic backed it up anyway.")
+                } else if ResticPath.holds(realFolder, real), !inside.contains(where: { PathKey($0) == PathKey(real) }) {
+                    inside.append(real)
+                }
             }
         }
         let realPrefix = realFolder == "/" ? "/" : realFolder + "/"
         let givenPrefix = folder == "/" ? "/" : folder + "/"
-        for real in inside where !inside.contains(where: { $0 != real && ResticPath.holds($0, real) }) {
+        for real in inside where !inside.contains(where: { PathKey($0) != PathKey(real) && ResticPath.holds($0, real) }) {
             reading.items.append(givenPrefix + String(decoding: real.utf8.dropFirst(realPrefix.utf8.count), as: UTF8.self))
         }
         return reading
     }
 
     /// The items Time Machine's options list, as absolute paths. None when
-    /// Time Machine was never set up (no file) or lists nothing (no key);
-    /// nil when macOS will not let this process read the file; a failure
-    /// for a file that is there but damaged.
-    static func listedPaths(in preferences: URL) -> Result<[String]?, any Error> {
+    /// Time Machine was never set up (no file) or lists nothing (no key).
+    static func listedPaths(in preferences: URL) -> Result<[String], ListProblem> {
         guard FileManager.default.fileExists(atPath: preferences.path) else { return .success([]) }
+        let settings: Any
         do {
-            let data = try Data(contentsOf: preferences)
-            guard let settings = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-                  let skipPaths = settings["SkipPaths"] as? [String]
-            else { return .success([]) }
-            return .success(skipPaths.map { ResticPath.normalized(ResticService.expandTilde($0)) })
+            settings = try PropertyListSerialization.propertyList(from: Data(contentsOf: preferences), format: nil)
         } catch CocoaError.fileReadNoPermission {
-            return .success(nil)
+            return .failure(.needsFullDiskAccess)
         } catch {
-            return .failure(error)
+            return .failure(.damaged)
+        }
+        guard let settings = settings as? [String: Any] else { return .failure(.damaged) }
+        guard let value = settings["SkipPaths"] else { return .success([]) }
+        guard let skipPaths = value as? [String] else { return .failure(.damaged) }
+        return .success(skipPaths.map { ResticPath.normalized(ResticService.expandTilde($0)) })
+    }
+
+    /// Whether `path`'s spelling lies inside the folder, or holds it, in
+    /// either spelling of the folder, with or without the /private that
+    /// /tmp, /var and /etc stand for. A folder reached through a link of
+    /// the user's own (a home folder moved elsewhere) is not matched.
+    static func isNear(_ path: String, folder: String, realFolder: String) -> Bool {
+        var spellings = [path]
+        if path.hasPrefix("/private/") {
+            spellings.append(String(path.dropFirst("/private".count)))
+        } else {
+            spellings.append("/private" + path)
+        }
+        return spellings.contains { spelling in
+            [folder, realFolder].contains { ResticPath.holds($0, spelling) || ResticPath.holds(spelling, $0) }
         }
     }
 
-    /// realpath(3), not URL.resolvingSymlinksInPath, which drops the
-    /// /private the real path keeps. Nil for a path that is not on disk.
-    private static func realPath(_ path: String) -> String? {
-        guard let resolved = realpath(path, nil) else { return nil }
+    enum Location: Equatable {
+        case found(String)
+        /// Not on disk.
+        case absent
+        /// On disk or not, the lookup failed (no permission on a folder
+        /// above, a loop of links).
+        case unknown
+    }
+
+    /// Where `path` is: its parent folder's real path (realpath(3), not
+    /// URL.resolvingSymlinksInPath, which drops the /private the real path
+    /// keeps) and its own name, the name itself not followed.
+    static func location(of path: String) -> Location {
+        guard path != "/" else { return .found("/") }
+        let parent = ResticPath.parent(of: path)
+        let name = ResticPath.basename(of: path)
+        guard let resolved = realpath(parent, nil) else { return errno == ENOENT ? .absent : .unknown }
         defer { free(resolved) }
-        return String(cString: resolved)
+        let realParent = String(cString: resolved)
+        let real = realParent == "/" ? "/" + name : realParent + "/" + name
+        var info = stat()
+        guard lstat(real, &info) == 0 else { return errno == ENOENT ? .absent : .unknown }
+        return .found(real)
     }
 }

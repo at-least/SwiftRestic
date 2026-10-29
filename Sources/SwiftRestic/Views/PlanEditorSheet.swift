@@ -451,9 +451,7 @@ struct PlanEditorSheet: View {
             // Said here, where the path is chosen, rather than after a
             // backup comes back with warnings. The check is a few string
             // comparisons (ProtectedLocations).
-            if model.fullDiskAccess != .granted,
-               ProtectedLocations.needsFullDiskAccess(draft.path, home: NSHomeDirectory())
-            {
+            if showsFullDiskAccessSection {
                 Section {
                     Label {
                         Text("Without Full Disk Access, parts of “\((draft.path as NSString).abbreviatingWithTildeInPath)” can’t be read, and its backups end with warnings.")
@@ -501,12 +499,13 @@ struct PlanEditorSheet: View {
                 }
                 Toggle(isOn: $draft.skipsTimeMachineExclusions) {
                     Text(PlanSkips.timeMachineExclusions)
-                    Text(model.fullDiskAccess == .notGranted
+                    Text(timeMachineListNeedsFullDiskAccess
                         ? PlanSkips.timeMachineExclusionsCaptionWithoutFullDiskAccess
                         : PlanSkips.timeMachineExclusionsCaption)
                 }
-                // The caption's next step, beside it.
-                if draft.skipsTimeMachineExclusions, model.fullDiskAccess == .notGranted {
+                // The caption's next step, beside it — unless the section
+                // above already offers the same button.
+                if timeMachineListNeedsFullDiskAccess, !showsFullDiskAccessSection {
                     FullDiskAccessButton()
                 }
                 // restic's --one-file-system, said as what it skips.
@@ -581,6 +580,17 @@ struct PlanEditorSheet: View {
     /// of the simulators and the machines are the part nobody rebuilds.
     private var developerFilesCaption: String {
         "Leaves out what developer tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn’t backed up."
+    }
+
+    /// The warning section above the switches, with its Full Disk Access
+    /// button.
+    private var showsFullDiskAccessSection: Bool {
+        model.fullDiskAccess != .granted && ProtectedLocations.needsFullDiskAccess(draft.path, home: NSHomeDirectory())
+    }
+
+    /// One condition for the Time Machine switch's caption and its button.
+    private var timeMachineListNeedsFullDiskAccess: Bool {
+        draft.skipsTimeMachineExclusions && model.fullDiskAccess == .notGranted
     }
 
     private var cloudFilesCaption: String {
