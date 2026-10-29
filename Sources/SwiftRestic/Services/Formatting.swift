@@ -299,7 +299,7 @@ enum Format {
     /// whole-disk root (`/`) contains every absolute path, and where it
     /// coexists with narrower roots the narrower one is the honest answer.
     static func containingRoot(of path: String, in roots: [String]) -> String? {
-        roots.filter { ResticPath.holds($0, path) }.max { $0.count < $1.count }
+        roots.filter { ResticPath.holds($0, path) }.max { $0.utf8.count < $1.utf8.count }
     }
 
     /// The ancestor chain of a path from its containing root down to itself,

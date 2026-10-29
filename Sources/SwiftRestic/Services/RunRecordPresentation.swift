@@ -310,17 +310,18 @@ enum RunRecordPresentation {
     /// stays restic's own.
     static func unreadableItemWords(line: String, path: String?, sources: [String]) -> UnreadableItemWords? {
         guard let path else { return nil }
-        let parent = (path as NSString).deletingLastPathComponent
-        let tops = sources.map { ResticPath.normalized(ResticService.expandTilde($0)) }
+        let parent = ResticPath.parent(of: path)
         // Not a whole-disk plan's "/": its name says nothing of where the
         // item is, so the item reads as on disk, tilde and all.
-        let location = if let top = tops.first(where: { $0 != "/" && ResticPath.holds($0, parent) }) {
-            (top as NSString).lastPathComponent + String(parent.unicodeScalars.dropFirst(top.unicodeScalars.count))
+        let tops = sources.map { ResticPath.normalized(ResticService.expandTilde($0)) }.filter { $0 != "/" }
+        let location = if let top = Format.containingRoot(of: parent, in: tops) {
+            // `holds` matched, so `top` is a byte prefix of `parent`.
+            ResticPath.basename(of: top) + parent.removingBytePrefix(top)!
         } else {
             (parent as NSString).abbreviatingWithTildeInPath
         }
         return UnreadableItemWords(
-            name: (path as NSString).lastPathComponent, location: location, reason: unreadableReason(line: line, path: path)
+            name: ResticPath.basename(of: path), location: location, reason: unreadableReason(line: line, path: path)
         )
     }
 

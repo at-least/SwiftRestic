@@ -557,6 +557,12 @@ struct RunRecordPresentationTests {
         let prepend = "/Volumes/Data/Documents/new\u{0600}"
         #expect(words("\(prepend): lstat \(prepend): no such file or directory", prepend)?.reason
             == "lstat \(prepend): no such file or directory")
+        // Nested plan folders: the item is placed under the nearest one.
+        let nested = "/Volumes/Data/Documents/Medical/scan.pdf"
+        #expect(RunRecordPresentation.unreadableItemWords(
+            line: "\(nested): open \(nested): permission denied", path: nested,
+            sources: ["/Volumes/Data", "/Volumes/Data/Documents"]
+        )?.location == "Documents/Medical")
         // A line with no stored path stays restic's own.
         #expect(words("restic: some message without an item", nil) == nil)
     }
