@@ -579,11 +579,11 @@ struct ResticService: ResticClient {
         // As arguments, not an --exclude-file: restic expands $VAR in a
         // file's lines (0.19.1, probed: a folder named "a$HOME" stayed in).
         if plan.skipsTimeMachineExclusions {
-            let found = try TimeMachineExclusions.items(under: source, preferences: timeMachinePreferences)
-            for item in found.items {
-                args += ["--exclude", Self.globEscaped(item)]
-            }
-            if !found.readTheList {
+            if let items = try TimeMachineExclusions.items(under: source, preferences: timeMachinePreferences) {
+                for item in items {
+                    args += ["--exclude", Self.globEscaped(item)]
+                }
+            } else {
                 // The editor says this under the switch; the log says it of this run.
                 RunTranscript.current?.note("Time Machine’s list of excluded items needs Full Disk Access to be read, so the items listed there were backed up.")
             }

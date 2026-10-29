@@ -340,8 +340,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// restic's `--exclude-cloud-files`. On for new plans; a plan saved
     /// before the option reads it off, so its backups do not change under it.
     var excludeCloudFiles: Bool = true
-    /// Leave out what Time Machine leaves out (`TimeMachineExclusions`),
-    /// read at each backup. On for new plans; a plan saved before the
+    /// Leave out the items Time Machine's options list
+    /// (`TimeMachineExclusions`), read at each backup. On for new plans; a plan saved before the
     /// option reads it off, so its backups do not change under it.
     var skipsTimeMachineExclusions: Bool = true
     /// The developer switch's groups that are ticked

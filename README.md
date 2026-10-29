@@ -412,20 +412,18 @@ the generator after editing it; the PNGs are checked in.
   for new plans, off for plans saved before the option (their backups do not
   change under it). What restic does with an online-only file without the flag was not
   tried: it would mean reading a real iCloud Drive file. *Skip ▸ Items
-  excluded from Time Machine* leaves out what Time Machine does, from the two
-  places the app can read: the mark apps put on items they say need no backup
-  (`tmutil addexclusion`, the attribute `tmutil isexcluded` reads) and the
-  items listed in Time Machine's options. macOS lets the app read that list
-  only with Full Disk Access; without it the marked items are still left out,
-  the editor says the listed ones are not, and each run's log says so. Each backup walks the plan's folder
-  for the marks first, without going into a marked folder, and passes each
-  item to restic as its own `--exclude`, escaped — not as an exclude file,
-  whose lines restic expands `$VAR` in. On a home folder of about 330,000
-  items the walk took about 35 seconds and found 413 marked items (2026-10-29).
-  Spotlight's index of the mark was no shortcut: it named 103 of the 11,670
-  marked items a full walk found. Time Machine's built-in system list
-  (~/Library/Caches and the like) is in no file on macOS 27, so the switch
-  does not cover it. On for new plans, off for plans saved before the option.
+  excluded from Time Machine* leaves out the items listed in Time Machine's
+  options (`SkipPaths` in its preferences file) that lie inside the plan's
+  folder, each passed to restic as its own `--exclude`, escaped — not as an
+  exclude file, whose lines restic expands `$VAR` in. macOS lets the app read
+  that list only with Full Disk Access; without it the editor says so under
+  the switch, and each run's log says the listed items were backed up. Not
+  the mark apps put on single items (`tmutil addexclusion` without `-p`):
+  it lives on each item, and finding it meant walking the folder before every
+  backup — about 35 seconds for a home folder of 330,000 items — so it was
+  left out (the user's call, 2026-10-30). Not Time Machine's built-in system
+  list (~/Library/Caches and the like) either, which is in no file on macOS
+  27. On for new plans, off for plans saved before the option.
   *Skip ▸ Developer
   files* (named *Skip what developer tools rebuild* until 2026-10-21) holds
   one checkbox per group, shown under the switch while it is on (since
