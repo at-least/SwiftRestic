@@ -109,6 +109,9 @@ struct ResticService: ResticClient {
     /// The real one, except where the tests re-root the anchored rules
     /// over a scratch tree.
     var home = NSHomeDirectory()
+    /// Time Machine's preferences, whose listed items a plan that skips
+    /// Time Machine's exclusions leaves out; a scratch file in the tests.
+    var timeMachinePreferences = TimeMachineExclusions.preferencesFile
 
     /// Tag stamped on every snapshot a plan creates, so retention and snapshot
     /// listings can be scoped to that plan without touching anyone else's data.
@@ -572,6 +575,18 @@ struct ResticService: ResticClient {
         for pattern in BackupPlan.withoutDuplicates(stored.map { Self.expandTilde($0, home: home) })
         where !Self.pattern(pattern, covers: source) {
             args += ["--exclude", pattern]
+        }
+        // As arguments, not an --exclude-file: restic expands $VAR in a
+        // file's lines (0.19.1, probed: a folder named "a$HOME" stayed in).
+        if plan.skipsTimeMachineExclusions {
+            let found = try TimeMachineExclusions.items(under: source, preferences: timeMachinePreferences)
+            for item in found.items {
+                args += ["--exclude", Self.globEscaped(item)]
+            }
+            if !found.readTheList {
+                // The editor says this under the switch; the log says it of this run.
+                RunTranscript.current?.note("Time Machine’s list of excluded items needs Full Disk Access to be read, so the items listed there were backed up.")
+            }
         }
         // The ticked developer groups' markers: restic leaves out the
         // contents of any folder holding one and keeps the marker itself.

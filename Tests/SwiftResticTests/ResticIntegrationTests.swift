@@ -1025,6 +1025,57 @@ struct ResticIntegrationTests {
         #expect(try String(contentsOf: restored, encoding: .utf8) == "same-size-A", "Replace trusted size and time over content")
     }
 
+    @Test("Time Machine's exclusions are left out of a backup by their own names, $ and [ included, and only while the plan asks")
+    func timeMachineExclusionsAreLeftOut() async throws {
+        var fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+        let source = fixture.sourceDirectory
+        // "$HOME" would be expanded in an --exclude-file line, "[1]" read
+        // as a glob class without its escape.
+        let cache = source.appendingPathComponent("cache$HOME[1]")
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        try "cached".write(to: cache.appendingPathComponent("f"), atomically: true, encoding: .utf8)
+        let scratchFile = source.appendingPathComponent("scratch.tmp")
+        try "scratch".write(to: scratchFile, atomically: true, encoding: .utf8)
+        for item in [cache, scratchFile] {
+            var url = item
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try url.setResourceValues(values)
+        }
+        let listed = source.appendingPathComponent("listed")
+        try FileManager.default.createDirectory(at: listed, withIntermediateDirectories: true)
+        try "listed".write(to: listed.appendingPathComponent("g"), atomically: true, encoding: .utf8)
+        let preferences = fixture.root.appendingPathComponent("com.apple.TimeMachine.plist")
+        try PropertyListSerialization.data(fromPropertyList: ["SkipPaths": [listed.path]], format: .binary, options: 0)
+            .write(to: preferences)
+        fixture.service.timeMachinePreferences = preferences
+
+        func backedUp(skipping: Bool) async throws -> Set<String> {
+            var plan = fixture.plan
+            plan.skipsTimeMachineExclusions = skipping
+            let outcome = try await fixture.service.backup(fixture.context, plan: plan)
+            let snapshotID = try #require(outcome.summary?.snapshotID)
+            let destination = fixture.root.appendingPathComponent("restore-\(skipping)")
+            _ = try await fixture.service.restoreWholeSnapshot(
+                fixture.context, snapshotID: snapshotID, destinationDirectory: destination, overwrite: .replaceExisting
+            )
+            let restoredSource = destination.appendingPathComponent(source.path)
+            let names = try FileManager.default.contentsOfDirectory(atPath: restoredSource.path)
+            return Set(names)
+        }
+
+        let skipped = try await backedUp(skipping: true)
+        #expect(!skipped.contains("cache$HOME[1]"), "\(skipped)")
+        #expect(!skipped.contains("scratch.tmp"), "\(skipped)")
+        #expect(!skipped.contains("listed"), "\(skipped)")
+        #expect(skipped.contains("a.txt"), "the rest of the folder must still be backed up: \(skipped)")
+
+        let kept = try await backedUp(skipping: false)
+        #expect(kept.isSuperset(of: ["cache$HOME[1]", "scratch.tmp", "listed", "a.txt"]), "\(kept)")
+    }
+
     @Test("the default excludes keep a Git repository restorable, object store included")
     func defaultExcludesKeepGitHistory() async throws {
         var fixture = try makeFixture()

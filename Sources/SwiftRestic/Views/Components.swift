@@ -939,6 +939,9 @@ enum PlanSkips {
     static let caches = "Folders marked as caches"
     static let developerFiles = "Developer files"
     static let cloudFiles = "Online-only files"
+    static let timeMachineExclusions = "Items excluded from Time Machine"
+    static let timeMachineExclusionsCaption = "Items apps mark as not needing a backup, and the items listed in Time Machine’s options."
+    static let timeMachineExclusionsCaptionWithoutFullDiskAccess = "Items apps mark as not needing a backup. The items listed in Time Machine’s options are left out once SwiftRestic has Full Disk Access."
     static let otherDisks = "Other disks mounted inside"
 
     static let cachesHelp = "Folders holding a CACHEDIR.TAG file"
@@ -965,6 +968,7 @@ enum PlanSkips {
             items.append((isAll ? developerFiles : "\(developerFiles): \(Format.list(groups))", isAll ? groups.joined(separator: "\n") : nil))
         }
         if plan.excludeCloudFiles { items.append((cloudFiles, "Files kept only in iCloud Drive or OneDrive")) }
+        if plan.skipsTimeMachineExclusions { items.append((timeMachineExclusions, timeMachineExclusionsCaption)) }
         if plan.oneFileSystem { items.append((otherDisks, nil)) }
         return items
     }

@@ -26,5 +26,6 @@ extension BackupPlan {
         skipsFinderFiles = false
         skipsSystemFiles = false
         developerGroups = []
+        skipsTimeMachineExclusions = false
     }
 }

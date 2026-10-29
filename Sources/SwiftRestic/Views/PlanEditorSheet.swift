@@ -499,6 +499,12 @@ struct PlanEditorSheet: View {
                     Text(PlanSkips.cloudFiles)
                     Text(cloudFilesCaption)
                 }
+                Toggle(isOn: $draft.skipsTimeMachineExclusions) {
+                    Text(PlanSkips.timeMachineExclusions)
+                    Text(model.fullDiskAccess == .notGranted
+                        ? PlanSkips.timeMachineExclusionsCaptionWithoutFullDiskAccess
+                        : PlanSkips.timeMachineExclusionsCaption)
+                }
                 // restic's --one-file-system, said as what it skips.
                 Toggle(PlanSkips.otherDisks, isOn: $draft.oneFileSystem)
             } header: {

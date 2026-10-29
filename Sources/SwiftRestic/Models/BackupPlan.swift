@@ -340,6 +340,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// restic's `--exclude-cloud-files`. On for new plans; a plan saved
     /// before the option reads it off, so its backups do not change under it.
     var excludeCloudFiles: Bool = true
+    /// Leave out what Time Machine leaves out (`TimeMachineExclusions`),
+    /// read at each backup. On for new plans; a plan saved before the
+    /// option reads it off, so its backups do not change under it.
+    var skipsTimeMachineExclusions: Bool = true
     /// The developer switch's groups that are ticked
     /// (`ExcludeCategory.developerGroups`), in their order: a run passes
     /// each ticked group's rules (`developerExcludes(groups:)`) and, for a
@@ -357,7 +361,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         case id, repositoryID, path, excludePatterns, excludeCaches, oneFileSystem, tags, schedule, retention
         case isEnabled, pausedUntil, hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
         case developerGroups = "skipDeveloperGroups"
-        case skipsFinderFiles, skipsSystemFiles
+        case skipsFinderFiles, skipsSystemFiles, skipsTimeMachineExclusions
     }
 
     init() {}
@@ -379,6 +383,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
         excludeCloudFiles = c.value(.excludeCloudFiles, default: false)
+        skipsTimeMachineExclusions = c.value(.skipsTimeMachineExclusions, default: false)
         // A group a later build added or renamed is dropped, not the list.
         let groups = Set(c.value(.developerGroups, default: [String]()).compactMap(ExcludeCategory.init(rawValue:)))
         developerGroups = ExcludeCategory.developerGroups.filter(groups.contains)
