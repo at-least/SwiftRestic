@@ -41,12 +41,8 @@ zip_url=https://www.sqlite.org/2023/sqlite-amalgamation-3430200.zip
 zip_sha256=a17ac8792f57266847d57651c5259001d1e4e4b46be96ec0d985c953925b2a1c
 source_sha3=e17a3dc69330bd109256fb5a6e2b3ce8fbec48892a800389eb7c0f8856703161
 
-# One xcodebuild test session at a time: two stomp each other's test runners
-# (AGENTS.md, and build.sh's own guard).
-if pgrep -x xcodebuild >/dev/null; then
-    echo "error: another xcodebuild is already running; concurrent test sessions kill each other's runners" >&2
-    exit 1
-fi
+source Tools/xcodebuild-common.sh
+refuse_concurrent_test_session
 
 lib_dir="${SWIFTRESTIC_SQLITE_FLOOR_LIB:-$PWD/.build/sqlite-$version/lib}"
 if [ ! -f "$lib_dir/libsqlite3.dylib" ]; then
@@ -104,15 +100,14 @@ fi
 # The whole log goes to the file: never pipe xcodebuild through anything that
 # can close early (AGENTS.md).
 status=0
-env "${runner_env[@]}" xcodebuild -project SwiftRestic.xcodeproj -scheme SwiftRestic -configuration Debug \
-    -destination "platform=macOS,arch=$(uname -m)" test \
+env "${runner_env[@]}" xcodebuild "${xcodebuild_arguments[@]}" test \
     -only-testing:SwiftResticTests/SnapshotIndexPlanTests \
     -only-testing:SwiftResticTests/SnapshotIndexPropertyTests \
     >"$log" 2>&1 || status=$?
 
 grep -E "sqlite_version|SnapshotIndexPropertyTests |Suite \".*\" (passed|failed)|✘|Test run with|error:" "$log" || true
 
-if grep -q "Restarting after unexpected exit" "$log"; then
+if runner_restarted "$log"; then
     echo "error: the test runner restarted mid-run — inspect the newest xcresult" >&2
     status=1
 fi

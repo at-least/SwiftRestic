@@ -77,22 +77,10 @@ if ! perl -e '
 fi
 
 ACTION="${1:-build}"
+source Tools/xcodebuild-common.sh
 
-# Two xcodebuild test sessions on one machine stomp each other's testmanagerd
-# sessions: the loser's runner gets SIGTERM'd mid-run ("Test crashed with
-# signal term"), xcodebuild restarts it, the remaining tests pass, and the
-# run is still marked failed. The suite costs about ten minutes; a
-# collision wastes all of it, so refuse to start while another instance exists. Test actions
-# only: a concurrent plain build does not touch the test-runner machinery.
-# Limits worth knowing: the check runs at start only (a session launched
-# mid-run is what the restart check below catches), it cannot see test runs
-# started from the Xcode IDE (no process named xcodebuild), and it refuses
-# on any xcodebuild, including harmless builds of other projects.
-if [ "$ACTION" = "test" ] && pgrep -x xcodebuild >/dev/null; then
-    echo "error: another xcodebuild is already running; concurrent test sessions kill each other's runners" >&2
-    pgrep -x xcodebuild | sed 's/^/  pid /' >&2
-    echo "error: wait for it to finish (or kill it) and re-run" >&2
-    exit 1
+if [ "$ACTION" = "test" ]; then
+    refuse_concurrent_test_session
 fi
 
 # The full log goes to a temporary file, the interesting lines stream to the
@@ -101,34 +89,15 @@ fi
 # success.
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
-# platform=macOS with the native arch is explicit so destination resolution
-# never walks the simulator fleet — the CoreSimulator churn the collisions
-# above rode in on.
-# Debug signs with the developer's Apple Development certificate
-# (project.yml says why); a machine without it — CI — asks for an ad-hoc
-# signature with SWIFTRESTIC_ADHOC_SIGN=1. Not a fallback on a missing
-# certificate: locally that must still fail, or every rebuild quietly
-# returns to asking the Keychain for the passwords.
-signing=()
-if [ "${SWIFTRESTIC_ADHOC_SIGN:-}" = "1" ]; then
-    signing=(CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=)
-fi
 status=0
-xcodebuild -project SwiftRestic.xcodeproj -scheme SwiftRestic -configuration Debug \
-  -destination "platform=macOS,arch=$(uname -m)" ${signing[@]+"${signing[@]}"} "$ACTION" 2>&1 \
+xcodebuild "${xcodebuild_arguments[@]}" "$ACTION" 2>&1 \
   | tee "$log" \
   | grep --line-buffered -E "error:|warning:|BUILD|TEST|Testing failed|failed|passed" \
   || status=${PIPESTATUS[0]}
 
-# A restarted runner never announces itself in the grepped stream: the
-# banner below matches none of the filter's terms, and the run still ends
-# with a plausible test summary — the killed tests "crashed", the rest
-# passed. Only the full log tells the truth, so check it whenever tests
-# ran, and fail even on a green summary: a run that restarted mid-way is
-# not a run whose green means green. The banner covers every restart cause
-# — a test crash, a test timeout, or a colliding xcodebuild session — so
-# the message points at the xcresult rather than naming a culprit.
-if [ "$ACTION" = "test" ] && grep -q "Restarting after unexpected exit" "$log"; then
+# The grepped stream above cannot show a restarted runner
+# (`runner_restarted`).
+if [ "$ACTION" = "test" ] && runner_restarted "$log"; then
     echo "error: the test runner restarted mid-run (a test crash or timeout, or a concurrent xcodebuild session) — inspect the newest xcresult before re-running" >&2
     status=1
 fi

@@ -40,12 +40,8 @@ if [ "$(uname -m)" != "arm64" ]; then
     exit 1
 fi
 
-# One xcodebuild test session at a time: two stomp each other's test runners
-# (build.sh's own guard).
-if pgrep -x xcodebuild >/dev/null; then
-    echo "error: another xcodebuild is already running; concurrent test sessions kill each other's runners" >&2
-    exit 1
-fi
+source Tools/xcodebuild-common.sh
+refuse_concurrent_test_session
 
 work="$PWD/.build/restic-$version"
 binary="$work/restic"
@@ -65,12 +61,6 @@ log="${2:-$PWD/.build/restic-$version-$(date +%Y%m%d-%H%M%S).log}"
 mkdir -p "$(dirname "$log")"
 echo "restic: $binary"
 echo "full log: $log"
-
-# The runner has no Apple Development certificate in CI; see build.sh.
-signing=()
-if [ "${SWIFTRESTIC_ADHOC_SIGN:-}" = "1" ]; then
-    signing=(CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=)
-fi
 
 # Every suite that runs a real restic: the ones enabled by
 # ResticAvailability.isInstalled.
@@ -92,13 +82,12 @@ for suite in "${suites[@]}"; do only+=("-only-testing:SwiftResticTests/$suite");
 # can close early.
 status=0
 env "TEST_RUNNER_SWIFTRESTIC_TEST_RESTIC=$binary" "TEST_RUNNER_SWIFTRESTIC_EXPECT_RESTIC_VERSION=$version" \
-    xcodebuild -project SwiftRestic.xcodeproj -scheme SwiftRestic -configuration Debug \
-    -destination "platform=macOS,arch=$(uname -m)" ${signing[@]+"${signing[@]}"} test "${only[@]}" \
+    xcodebuild "${xcodebuild_arguments[@]}" test "${only[@]}" \
     >"$log" 2>&1 || status=$?
 
 grep -E "restic under test:|Suite \".*\" (passed|failed)|✘|Test run with|error:" "$log" || true
 
-if grep -q "Restarting after unexpected exit" "$log"; then
+if runner_restarted "$log"; then
     echo "error: the test runner restarted mid-run — inspect the newest xcresult" >&2
     status=1
 fi
