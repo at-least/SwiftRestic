@@ -418,7 +418,10 @@ struct PlanEditorSheet: View {
     }
 
     private var sourcesTab: some View {
-        Form {
+        // Read once per render: the section and the Time Machine switch's
+        // button both ask it.
+        let showsFullDiskAccessSection = showsFullDiskAccessSection
+        return Form {
             // A folder on a network share: its password, so a backup can
             // reconnect it. Not while adopting — the sheet is about history.
             if mode != .adopt {
