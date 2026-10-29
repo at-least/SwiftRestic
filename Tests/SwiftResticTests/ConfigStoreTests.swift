@@ -1016,4 +1016,23 @@ struct TolerantDecodingTests {
             #expect(error.localizedDescription.contains("could not be read"))
         }
     }
+
+}
+
+@Suite("configuration dates")
+struct ConfigurationDateTests {
+    @Test("dates keep their milliseconds through the file, and a file of whole seconds still reads")
+    func millisecondsRoundTrip() throws {
+        var plan = BackupPlan()
+        let time = try #require(ResticDateFormat.parse("2026-09-05T00:53:25.22662+08:00"))
+        plan.lastSuccessAt = time
+        var configuration = AppConfiguration()
+        configuration.plans = [plan]
+        let data = try ConfigStore.encoded(configuration)
+        #expect(String(decoding: data, as: UTF8.self).contains("\"2026-09-04T16:53:25.226Z\""))
+        #expect(try ConfigStore.decoded(data).0.plans[0].lastSuccessAt == time)
+
+        let older = Data(#"{"plans":[{"path":"/Users/someone/Documents","lastSuccessAt":"2026-09-04T16:53:25Z"}]}"#.utf8)
+        #expect(try ConfigStore.decoded(older).0.plans[0].lastSuccessAt == Date(timeIntervalSince1970: 1_788_540_805))
+    }
 }

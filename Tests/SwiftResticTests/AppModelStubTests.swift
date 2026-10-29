@@ -280,8 +280,7 @@ struct AppModelStubTests {
         model.configuration.plans[index].lastSuccessAt = last
 
         #expect(model.alertQuietPlans(now: now).map(\.planID) == [harness.plan.id])
-        // At whole seconds, as the configuration file keeps it.
-        #expect(model.plan(id: harness.plan.id)?.staleAlertedFor == StaleAlert.mark(for: last))
+        #expect(model.plan(id: harness.plan.id)?.staleAlertedFor == last)
         // The next tick names nothing: one notification per stretch.
         #expect(model.alertQuietPlans(now: now.addingTimeInterval(60)).isEmpty)
         // Off names nothing either.

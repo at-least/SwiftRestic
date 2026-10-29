@@ -262,7 +262,15 @@ actor ConfigStore {
     static func encoded(_ configuration: AppConfiguration) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
+        // Milliseconds, as restic's times are read (`ResticDateFormat`), so a
+        // stored snapshot time equals the same time read from restic again.
+        // Not `.iso8601`, which drops the fraction. A file written before
+        // holds whole seconds, which the decoder still reads; an older build
+        // cannot read this one.
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(ResticDateFormat.string(from: date))
+        }
         return try encoder.encode(configuration)
     }
 
@@ -310,7 +318,14 @@ actor ConfigStore {
 
     static func decoded(_ data: Data) throws -> (AppConfiguration, DecodeNoteBox) {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            guard let date = ResticDateFormat.parse(raw) else {
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Not an ISO 8601 date: \(raw)")
+            }
+            return date
+        }
         let notes = DecodeNoteBox()
         let configuration = try DecodeNotes.$current.withValue(notes) {
             try decoder.decode(AppConfiguration.self, from: data)

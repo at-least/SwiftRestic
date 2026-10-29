@@ -367,4 +367,13 @@ enum ResticDateFormat {
         defer { lock.unlock() }
         return withFraction.date(from: string) ?? plain.date(from: string)
     }
+
+    /// `date` in the fractional form `parse` reads. The parser keeps
+    /// milliseconds ("…25.22662+08:00" reads as …25.226), and so does this,
+    /// so a time restic gave survives a write and a read exactly.
+    static func string(from date: Date) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return withFraction.string(from: date)
+    }
 }

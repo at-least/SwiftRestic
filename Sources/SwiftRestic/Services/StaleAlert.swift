@@ -5,12 +5,10 @@ import Foundation
 struct StalePlanAlert: Equatable, Sendable {
     let planID: UUID
     /// The last backup the stretch counts from (`PlanStatus.lastBackupAt`).
+    /// Stored on the plan once named (`BackupPlan.staleAlertedFor`), so the
+    /// plan's next backup — a newer moment — re-arms the alert.
     let lastBackupAt: Date
     let days: Int
-
-    /// What is stored on the plan once named (`BackupPlan.staleAlertedFor`),
-    /// so the plan's next backup — a newer moment — re-arms the alert.
-    var mark: Date { StaleAlert.mark(for: lastBackupAt) }
 }
 
 /// The quiet-plan alert. Every other problem surface is driven by a run
@@ -31,16 +29,6 @@ enum StaleAlert {
         return max(TimeInterval(thresholdDays) * day, (schedule.interval ?? 0) + day)
     }
 
-    /// The mark for a last backup at `last`: the moment at whole seconds.
-    /// The configuration file writes dates without their fraction
-    /// (`ConfigStore.encoded`, ISO 8601), while a snapshot's time keeps
-    /// restic's ("2026-09-05T00:53:25.22662+08:00"), so a mark compared
-    /// whole would differ from the same moment after every relaunch and
-    /// name the plan again at each.
-    static func mark(for last: Date) -> Date {
-        Date(timeIntervalSince1970: floor(last.timeIntervalSince1970))
-    }
-
     /// The plans to name now. Only plans the scheduler would start by
     /// itself — switched on, not inside a timed pause, scheduled, set up —
     /// and not running: a paused or manual plan is quiet by the user's
@@ -59,7 +47,7 @@ enum StaleAlert {
         return plans.compactMap { plan in
             guard plan.runsOnSchedule(at: now), !running.contains(plan.id),
                   let last = PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshotTimes[plan.id]),
-                  plan.staleAlertedFor.map(Self.mark(for:)) != Self.mark(for: last)
+                  plan.staleAlertedFor != last
             else { return nil }
             let quiet = now.timeIntervalSince(last)
             guard quiet > window(thresholdDays: thresholdDays, schedule: plan.schedule) else { return nil }
