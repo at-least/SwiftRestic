@@ -1,16 +1,17 @@
 #!/bin/bash
 # The suites that drive a real restic, run against one restic release
 # downloaded from GitHub instead of the restic installed on this Mac. CI runs
-# it for the oldest restic the app supports (ResticVersion.minimumSupported)
-# and for the release it is developed against; `./build.sh test` keeps running
-# the installed one.
+# it for the oldest restic the app supports (ResticVersion.minimumSupported);
+# `./build.sh test` keeps running the installed one.
 #
 # The binary reaches the tests through SWIFTRESTIC_TEST_RESTIC
 # (ResticAvailability.binary), forwarded by xcodebuild's TEST_RUNNER_ prefix,
 # which it strips for the test process and never sets for itself.
 # ResticUnderTestTests fails when `restic version` differs from
-# SWIFTRESTIC_EXPECT_RESTIC_VERSION, so a run in which the binary silently did
-# not reach the tests cannot pass as a run on that version.
+# SWIFTRESTIC_EXPECT_RESTIC_VERSION, and this script fails unless that suite
+# printed this download's path, so a run in which the variables silently did
+# not reach the tests — and the installed restic ran — cannot pass as a run on
+# that version.
 #
 # Usage: Tools/restic-version.sh <version> [log file]
 #   <version>  one of the releases in `checksums` below, e.g. 0.19.1
@@ -20,9 +21,8 @@ cd "$(dirname "$0")/.."
 version="${1:?usage: Tools/restic-version.sh <version> [log file]}"
 
 # SHA-256 of each release's restic_<version>_darwin_arm64.bz2, from that
-# release's SHA256SUMS on GitHub, checked against the download on 2026-10-29.
-# A version missing here is refused: an unchecked binary is not a test of
-# that release.
+# release's SHA256SUMS on GitHub. A version missing here is refused: an
+# unchecked binary is not a test of that release.
 case "$version" in
     0.16.5) sha256=c1439cff56678f08ca43ae32b4842fd43ada6b2c2798e647250e93bd32687c26 ;;
     0.17.3) sha256=18aac652463afe772700f568e52e6416b3940e366472c6c47fb1480dfb1c303c ;;
@@ -102,7 +102,8 @@ if grep -q "Restarting after unexpected exit" "$log"; then
     echo "error: the test runner restarted mid-run — inspect the newest xcresult" >&2
     status=1
 fi
-if ! grep -q "Suite \"restic under test\" passed" "$log"; then
+if ! grep -q "Suite \"restic under test\" passed" "$log" \
+    || ! grep -qF "restic under test: $binary: restic $version " "$log"; then
     echo "error: the tests did not show they ran on restic $version (see the restic under test line above)" >&2
     status=1
 fi

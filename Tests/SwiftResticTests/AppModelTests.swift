@@ -1908,12 +1908,58 @@ struct ResolveBinaryTests {
         return (model, program.path)
     }
 
-    @Test("a restic older than the minimum is refused at launch, its version and the fix named")
+    @Test("a restic older than the minimum is refused at launch, its version and the fix named, and named as old everywhere else")
     func olderResticIsRefused() async throws {
         let (model, path) = try await resolve(printing: "restic 0.18.1 compiled with go1.25.1 on darwin/arm64")
         #expect(!model.isResticAvailable)
         #expect(model.resticVersion == "")
-        #expect(model.binaryProblem == "SwiftRestic needs restic 0.19.1 or later. The restic at \(path) is 0.18.1. Update it with brew upgrade restic, or set the path to a newer one in Settings.")
+        // Not Homebrew's restic: no brew command to offer.
+        #expect(model.binaryProblem == "SwiftRestic needs restic 0.19.1 or later. The restic at \(path) is 0.18.1. Update it, or set the path to a newer one in Settings.")
+        #expect(model.resticAbsence == .needsUpdate)
+        // What a run asking for restic meets is the same refusal, not "not found".
+        #expect(throws: ResticError.resticTooOld(path: path, found: "0.18.1", minimum: "0.19.1")) { try model.service() }
+    }
+
+    @Test("Homebrew's restic, wherever its link is, is told to update with brew")
+    func homebrewAdvice() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticCellar-\(UUID().uuidString)").resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cellar = root.appendingPathComponent("Cellar/restic/0.18.1/bin")
+        try FileManager.default.createDirectory(at: cellar, withIntermediateDirectories: true)
+        try "".write(to: cellar.appendingPathComponent("restic"), atomically: true, encoding: .utf8)
+        let link = root.appendingPathComponent("restic")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: cellar.appendingPathComponent("restic"))
+        #expect(ResticBinary.isHomebrews(link.path))
+        #expect(!ResticBinary.isHomebrews(root.appendingPathComponent("Cellar").path))
+        #expect(ResticError.resticTooOld(path: link.path, found: "0.18.1", minimum: "0.19.1").localizedDescription
+            == "SwiftRestic needs restic 0.19.1 or later. The restic at \(link.path) is 0.18.1. Update it with brew upgrade restic, or set the path to a newer one in Settings.")
+    }
+
+    @Test("a refused restic is not in use while its version is asked: the scheduler sees none until it is accepted")
+    func refusedResticIsNeverInUse() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticSlowVersion-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        // Answers only once the test lets it: the window the check must not leave open.
+        let gate = root.appendingPathComponent("go")
+        let program = root.appendingPathComponent("restic")
+        try "#!/bin/sh\nwhile [ ! -e '\(gate.path)' ]; do sleep 0.05; done\necho 'restic 0.18.1 compiled with go1.25.1 on darwin/arm64'\n"
+            .write(to: program, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        model.configuration.settings.resticPathOverride = program.path
+        let resolving = Task { await model.resolveBinary() }
+        // Long enough for the locate to finish and `restic version` to start.
+        for _ in 0 ..< 40 {
+            try await Task.sleep(for: .milliseconds(25))
+            #expect(!model.isResticAvailable)
+        }
+        try "".write(to: gate, atomically: true, encoding: .utf8)
+        await resolving.value
+        #expect(!model.isResticAvailable)
+        #expect(model.resticAbsence == .needsUpdate)
     }
 
     @Test("a program whose answer names no version is refused, not guessed at")
@@ -1921,6 +1967,7 @@ struct ResolveBinaryTests {
         let (model, path) = try await resolve(printing: "hello")
         #expect(!model.isResticAvailable)
         #expect(model.binaryProblem == "The program at \(path) didn’t report a restic version. Set the path to restic in Settings, or install it with brew install restic.")
+        #expect(model.resticAbsence == .unusable)
     }
 
     @Test("the minimum and anything newer are taken")

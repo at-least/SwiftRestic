@@ -66,7 +66,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     private func refresh() {
         let state = currentState()
         statusItem.isVisible = model.configuration.settings.showMenuBarExtra
-        applyFace(for: state, hold: model.scheduleHold, isResticAvailable: model.isResticAvailable)
+        applyFace(for: state, hold: model.scheduleHold, resticAbsence: model.resticAbsence)
         armPulse(for: state)
 
         withObservationTracking {
@@ -79,14 +79,14 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             _ = model.configuration.settings.showMenuBarExtra
             _ = model.isOnBattery
             _ = model.isOnMeteredNetwork
-            _ = model.isResticAvailable
+            _ = model.resticAbsence
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
     }
 
     private func applyFace(
-        for state: MenuBarStatus.IconState, hold: ScheduleHold?, isResticAvailable: Bool
+        for state: MenuBarStatus.IconState, hold: ScheduleHold?, resticAbsence: ResticAbsence?
     ) {
         let button = statusItem.button
         switch MenuBarStatus.glyph(for: state) {
@@ -106,7 +106,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         // exclamation mark stays readable under it. The words go to VoiceOver.
         button?.appearsDisabled = MenuBarStatus.appearsHeld(state: state, hold: hold)
         button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(
-            for: state, hold: hold, isResticAvailable: isResticAvailable))
+            for: state, hold: hold, resticAbsence: resticAbsence))
     }
 
     /// The pulse timer lives only while the running face is up, and checks
@@ -144,7 +144,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         // While backups are held, that nothing is being backed up is the
         // news, so the hold leads — above the problem line. A missing restic
         // holds them too, and no pause lifts that one.
-        if let missing = MenuBarStatus.resticMissingLine(isResticAvailable: model.isResticAvailable) {
+        if let missing = MenuBarStatus.resticMissingLine(model.resticAbsence) {
             menu.addItem(disabledItem(missing))
         }
         if let hold {
@@ -179,7 +179,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             plans: model.configuration.plans,
             repositories: model.configuration.repositories,
             activity: model.activity,
-            isResticAvailable: model.isResticAvailable,
+            resticAbsence: model.resticAbsence,
             lockedRepositories: model.lockedRepositories,
             problem: { problems[$0] },
             protection: { model.protectionSummary(repositoryID: $0, now: .now) }
@@ -209,7 +209,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             isRestoring: model.isRestoring,
             hasNoRepositories: hasNoRepositories,
             hold: hold,
-            isResticAvailable: model.isResticAvailable,
+            resticAbsence: model.resticAbsence,
             plans: model.configuration.plans,
             repositories: model.configuration.repositories,
             nextRun: model.nextScheduledRun

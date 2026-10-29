@@ -72,7 +72,7 @@ extension AppModel {
         let rows = MenuBarStatus.planRows(
             plans: configuration.plans,
             activity: activity,
-            isResticAvailable: isResticAvailable,
+            resticAbsence: resticAbsence,
             lockedRepositories: lockedRepositories
         )
         state.canBackUpAll = rows.contains { $0.action == .backUp && $0.isEnabled }
@@ -113,7 +113,7 @@ extension AppModel {
         guard plan.retention.isSafeToRun else {
             return "Every retention rule is off, so there is nothing to apply."
         }
-        guard isResticAvailable else { return "restic is missing." }
+        if let absence = resticAbsence { return absence.words + "." }
         // The plan's own run included: its backup holds the repository too.
         guard !busyRepositoryIDs.contains(repository.id) else {
             return "The repository is in use by a backup or maintenance job — try again when it finishes."

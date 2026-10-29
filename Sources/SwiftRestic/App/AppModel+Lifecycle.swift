@@ -288,11 +288,12 @@ extension AppModel {
             let located = try await Task.detached(priority: .userInitiated) {
                 try ResticBinary.locate(userOverride: override)
             }.value
-            binary = located
             // A program that cannot answer `restic version` is no restic:
             // every run would fail. One older than the minimum is refused
             // here, once, rather than failing or misreading run by run.
-            let output = try await service().version()
+            // Asked of the located binary before it becomes `binary`: in
+            // between, a scheduler tick would run it unchecked.
+            let output = try await ResticService(runner: runner, binary: located.url).version()
             guard let version = ResticVersion(parsing: output) else {
                 throw ResticError.resticVersionUnreadable(path: located.url.path)
             }
@@ -301,16 +302,27 @@ extension AppModel {
                     path: located.url.path, found: version.dotted, minimum: ResticVersion.minimumSupported.dotted
                 )
             }
+            binary = located
             resticVersion = output
-            binaryProblem = nil
+            binaryError = nil
         } catch {
             binary = nil
             resticVersion = ""
-            binaryProblem = error.localizedDescription
+            binaryError = error
         }
     }
 
     var isResticAvailable: Bool { binary != nil }
+
+    /// What Settings says about the last search for restic.
+    var binaryProblem: String? { binaryError?.localizedDescription }
+
+    /// Why no restic can run, in the words every other surface uses; nil
+    /// while one can.
+    var resticAbsence: ResticAbsence? {
+        guard binary == nil else { return nil }
+        return ResticAbsence(binaryError)
+    }
 
     /// A click that turns start at login on or off, wherever it comes from —
     /// the Settings switch or the plan editor. Optimistic: the

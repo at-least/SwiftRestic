@@ -31,9 +31,14 @@ struct ResticUnderTestTests {
         let binary = try ResticAvailability.binary()
         let output = try await ResticAvailability.service().version()
         print("restic under test: \(binary.url.path): \(output)")
-        if let expected = ProcessInfo.processInfo.environment["SWIFTRESTIC_EXPECT_RESTIC_VERSION"] {
+        let environment = ProcessInfo.processInfo.environment
+        // A binary named without the version it is: nothing to hold it to.
+        if environment["SWIFTRESTIC_TEST_RESTIC"] != nil {
+            #expect(environment["SWIFTRESTIC_EXPECT_RESTIC_VERSION"] != nil, "SWIFTRESTIC_TEST_RESTIC is set without SWIFTRESTIC_EXPECT_RESTIC_VERSION")
+        }
+        if let expected = environment["SWIFTRESTIC_EXPECT_RESTIC_VERSION"] {
             let version = try #require(ResticVersion(parsing: output))
-            #expect("\(version.major).\(version.minor).\(version.patch)" == expected, "\(output)")
+            #expect(version.dotted == expected, "\(output)")
         }
     }
 }

@@ -291,7 +291,7 @@ extension AppModel {
     /// implementation is chosen.
     func service() throws -> any ResticClient {
         guard let binary else {
-            throw ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
+            throw binaryError ?? ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
         }
         return ResticService(runner: runner, binary: binary.url)
     }

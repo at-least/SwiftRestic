@@ -66,7 +66,7 @@ enum MenuBarStatus {
     static func accessibilityDescription(
         for state: IconState,
         hold: ScheduleHold? = nil,
-        isResticAvailable: Bool = true,
+        resticAbsence: ResticAbsence? = nil,
         now: Date = .now
     ) -> String {
         let base = switch state {
@@ -80,7 +80,7 @@ enum MenuBarStatus {
             let summary = hold.summary(now: now)
             clauses.append(summary.prefix(1).lowercased() + summary.dropFirst())
         }
-        if let missing = resticMissingLine(isResticAvailable: isResticAvailable) {
+        if let missing = resticMissingLine(resticAbsence) {
             clauses.append(missing)
         }
         guard !clauses.isEmpty else { return base }
@@ -151,8 +151,8 @@ enum MenuBarStatus {
 
     /// The line that leads the menu while restic is missing, as a hold's
     /// does: the scheduler starts nothing without it.
-    static func resticMissingLine(isResticAvailable: Bool) -> String? {
-        isResticAvailable ? nil : "restic is missing — backups are on hold"
+    static func resticMissingLine(_ absence: ResticAbsence?) -> String? {
+        absence.map { "\($0.words) — backups are on hold" }
     }
 
     /// The single line above the plan buttons. `nil` while anything runs —
@@ -172,13 +172,13 @@ enum MenuBarStatus {
         isRestoring: Bool = false,
         hasNoRepositories: Bool = false,
         hold: ScheduleHold? = nil,
-        isResticAvailable: Bool = true,
+        resticAbsence: ResticAbsence? = nil,
         plans: [BackupPlan],
         repositories: [Repository],
         nextRun: (plan: BackupPlan, date: Date)?
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring else { return nil }
-        guard hold == nil, isResticAvailable else { return nil }
+        guard hold == nil, resticAbsence == nil else { return nil }
         if hasNoRepositories { return "No repository set" }
         guard let nextRun else { return "No backups scheduled" }
         // The plan page's Next backup tile spells the same moment in these
@@ -210,7 +210,7 @@ enum MenuBarStatus {
     static func planRows(
         plans: [BackupPlan],
         activity: [UUID: PlanActivity],
-        isResticAvailable: Bool,
+        resticAbsence: ResticAbsence?,
         lockedRepositories: [UUID: String] = [:]
     ) -> [PlanRow] {
         plans.map { plan in
@@ -225,11 +225,10 @@ enum MenuBarStatus {
                     planID: plan.id,
                     title: "Back Up “\(name)” Now",
                     action: .backUp,
-                    isEnabled: plan.isConfigurationComplete && isResticAvailable && lockReason == nil,
+                    isEnabled: plan.isConfigurationComplete && resticAbsence == nil && lockReason == nil,
                     // The Plan menu's own words for each reason.
                     disabledReason: !plan.isConfigurationComplete ? BackupPlan.incompleteConfigurationReason
-                        : !isResticAvailable ? "restic is missing"
-                        : lockReason
+                        : resticAbsence?.words ?? lockReason
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
@@ -316,7 +315,7 @@ enum MenuBarStatus {
         plans: [BackupPlan],
         repositories: [Repository],
         activity: [UUID: PlanActivity],
-        isResticAvailable: Bool,
+        resticAbsence: ResticAbsence?,
         lockedRepositories: [UUID: String] = [:],
         problem: (UUID) -> RunRecord? = { _ in nil },
         protection: (UUID) -> ProtectionSummary? = { _ in nil },
@@ -328,7 +327,7 @@ enum MenuBarStatus {
             let rows = planRows(
                 plans: members,
                 activity: activity,
-                isResticAvailable: isResticAvailable,
+                resticAbsence: resticAbsence,
                 lockedRepositories: lockedRepositories
             )
             let news = members.flatMap { plan in

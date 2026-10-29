@@ -1,5 +1,31 @@
 import Foundation
 
+/// Why the app has no restic to run, in a few words for the surfaces that
+/// name it beside something else (a menu row, a disabled button's reason);
+/// Settings shows the whole error.
+enum ResticAbsence: Equatable, Sendable {
+    case missing
+    case needsUpdate
+    case unusable
+
+    /// From the last search's error: nil, before it answers, reads as missing.
+    init(_ error: (any Error)?) {
+        switch error as? ResticError {
+        case .resticTooOld?: self = .needsUpdate
+        case nil where error == nil, .binaryNotFound?: self = .missing
+        default: self = .unusable
+        }
+    }
+
+    var words: String {
+        switch self {
+        case .missing: "restic is missing"
+        case .needsUpdate: "restic needs an update"
+        case .unusable: "restic can’t be used"
+        }
+    }
+}
+
 /// Everything that can go wrong between us and the restic binary.
 enum ResticError: Error, LocalizedError, Equatable {
     /// No usable `restic` executable was found on disk.
@@ -122,7 +148,8 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .stagedFileMoveFailed(path, reason):
             return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
         case let .resticTooOld(path, found, minimum):
-            return "SwiftRestic needs restic \(minimum) or later. The restic at \(path) is \(found). Update it with brew upgrade restic, or set the path to a newer one in Settings."
+            let update = ResticBinary.isHomebrews(path) ? "Update it with brew upgrade restic" : "Update it"
+            return "SwiftRestic needs restic \(minimum) or later. The restic at \(path) is \(found). \(update), or set the path to a newer one in Settings."
         case let .resticVersionUnreadable(path):
             return "The program at \(path) didn’t report a restic version. Set the path to restic in Settings, or install it with brew install restic."
         case let .snapshotsNotRemoved(removed, refused, reason):

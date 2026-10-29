@@ -470,7 +470,7 @@ struct RepositoryEditorSheet: View {
         if model.busyRepositoryIDs.contains(draft.id) {
             return "The repository is in use by a backup or maintenance job — try again when it finishes."
         }
-        if !model.isResticAvailable { return "restic is missing." }
+        if let absence = model.resticAbsence { return absence.words + "." }
         return EditorRequirements.newPassword(newPassword, confirm: confirmNewPassword)
     }
 

@@ -238,7 +238,7 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
         func trayRow() -> MenuBarStatus.PlanRow? {
-            MenuBarStatus.planRows(plans: model.configuration.plans, activity: model.activity, isResticAvailable: true).first
+            MenuBarStatus.planRows(plans: model.configuration.plans, activity: model.activity, resticAbsence: nil).first
         }
 
         model.activity[plan.id] = PlanActivity(phase: .backingUp)

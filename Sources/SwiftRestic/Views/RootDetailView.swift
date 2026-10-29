@@ -52,7 +52,7 @@ struct RootDetailView: View {
                 // binary state, so there is nothing to dismiss.
                 BannerView(
                     banner: Banner(
-                        title: "restic is missing",
+                        title: model.resticAbsence?.words ?? ResticAbsence.missing.words,
                         message: problem,
                         isError: true
                     ),

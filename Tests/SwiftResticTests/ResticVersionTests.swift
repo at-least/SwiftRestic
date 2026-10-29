@@ -22,9 +22,10 @@ struct ResticVersionTests {
         #expect(try #require(ResticVersion(parsing: "restic 0.20.0 compiled with go1.27.0")).isSupported)
         #expect(try #require(ResticVersion(parsing: "restic 1.0.0 compiled with go1.27.0")).isSupported)
         #expect(try !#require(ResticVersion(parsing: "restic 0.19.0 compiled with go1.26.4 on darwin/arm64")).isSupported)
-        // A suffix rides on the patch: a release candidate of the minimum
-        // reads as the minimum.
-        #expect(try #require(ResticVersion(parsing: "restic 0.19.1-rc.1 compiled with go1.26.4")).isSupported)
+        // restic names a build from source after release X "X-dev": one
+        // after the minimum is taken, one from before it is not.
+        #expect(try #require(ResticVersion(parsing: "restic 0.19.1-dev (compiled manually) compiled with go1.27.1")).isSupported)
+        #expect(try !#require(ResticVersion(parsing: "restic 0.19.0-dev (compiled manually) compiled with go1.26.4")).isSupported)
         #expect(try !#require(ResticVersion(parsing: "restic 0.18.1 compiled with go1.25.1 on darwin/arm64")).isSupported)
     }
 

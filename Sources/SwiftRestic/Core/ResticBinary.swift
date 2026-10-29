@@ -18,6 +18,12 @@ struct ResticBinary: Sendable {
 
     var url: URL
 
+    /// Whether the restic at `path` is Homebrew's: Homebrew links it from
+    /// its Cellar, so the link's target says, wherever the link is.
+    static func isHomebrews(_ path: String) -> Bool {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path.contains("/Cellar/restic/")
+    }
+
     /// Resolves the binary, preferring an explicit user override.
     static func locate(userOverride: String?) throws -> ResticBinary {
         if let userOverride, !userOverride.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -87,19 +93,37 @@ struct ResticBinary: Sendable {
 
 /// The version parts of `restic version`'s first line, for the minimum the
 /// app checks at launch rather than displays.
-struct ResticVersion: Equatable, Sendable {
+struct ResticVersion: Comparable, Sendable {
     var major: Int
     var minor: Int
     var patch: Int
 
+    /// The oldest restic the app runs; `resolveBinary` refuses anything
+    /// below it. CI's oldest-supported job runs this version
+    /// (ResticVersionTests.ciRunsTheMinimum).
+    static let minimumSupported = ResticVersion(major: 0, minor: 19, patch: 1)
+
+    var isSupported: Bool { self >= Self.minimumSupported }
+
+    /// "0.19.1".
+    var dotted: String { "\(major).\(minor).\(patch)" }
+
+    static func < (a: ResticVersion, b: ResticVersion) -> Bool {
+        (a.major, a.minor, a.patch) < (b.major, b.minor, b.patch)
+    }
+}
+
+// In an extension, so the struct keeps its memberwise init.
+extension ResticVersion {
     /// Parses "restic 0.19.1 compiled with go1.26.5 darwin/arm64" — the
     /// whole first line is accepted so callers can hand over `version()`'s
     /// output as-is. `nil` when no dotted triple follows the name.
     ///
-    /// Pre-release and build suffixes ride on the patch component
-    /// ("0.18.0-rc.1", "0.19.1+123"): the patch is the digits before the
-    /// first "-" or "+", and a suffix never promotes a version —
-    /// 0.18.0-rc.1 is 0.18.0, not 0.18.1.
+    /// A suffix rides on the patch: the patch is the digits before the
+    /// first "-" or "+". restic names a build from source after release X
+    /// "X-dev" (its VERSION file), so "0.19.1-dev" is 0.19.1 or later and
+    /// reads as 0.19.1, and "0.19.0-dev", built before 0.19.1, reads as
+    /// 0.19.0.
     init?(parsing output: String) {
         let firstLine = (output.split(separator: "\n").first.map(String.init) ?? output)
             .trimmingCharacters(in: .whitespaces)
@@ -118,31 +142,6 @@ struct ResticVersion: Equatable, Sendable {
         // and Int accepts only ASCII digits, so Int alone rejects exactly
         // what the extra clause would.
         guard let patch = Int(patchDigits) else { return nil }
-        self.major = major
-        self.minor = minor
-        self.patch = patch
+        self.init(major: major, minor: minor, patch: patch)
     }
-
-    /// The oldest restic the app runs. Below 0.19.1, measured with the
-    /// real-restic suites (Tools/restic-version.sh): 0.19.0's `stats
-    /// --json` writes a progress line to stdout ahead of its JSON, so the
-    /// repository's size cannot be read; 0.18.1 exits 0 from a forget
-    /// whose deletions the repository refused, so a refused retention would
-    /// read as removed; 0.18 has no `--exclude-cloud-files` on macOS, and
-    /// 0.16 neither `restore --overwrite` nor streamed restore progress.
-    /// CI's oldest-supported job runs this version (ResticVersionTests).
-    static let minimumSupported = ResticVersion(major: 0, minor: 19, patch: 1)
-
-    init(major: Int, minor: Int, patch: Int) {
-        self.major = major
-        self.minor = minor
-        self.patch = patch
-    }
-
-    var isSupported: Bool {
-        (major, minor, patch) >= (Self.minimumSupported.major, Self.minimumSupported.minor, Self.minimumSupported.patch)
-    }
-
-    /// "0.19.1".
-    var dotted: String { "\(major).\(minor).\(patch)" }
 }

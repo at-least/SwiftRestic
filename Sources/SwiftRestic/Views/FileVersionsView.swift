@@ -278,7 +278,9 @@ struct FileVersionsView: View {
     /// first, as the drag's gate, then its size (`VersionPreview`).
     private func previewBlock(for version: ContentVersion) -> String? {
         guard model.repository(id: node.repositoryID) != nil else { return "The repository no longer exists" }
-        guard model.isResticAvailable else { return "Preview needs restic, which could not be found" }
+        if let absence = model.resticAbsence {
+            return absence == .missing ? "Preview needs restic, which could not be found" : "Preview needs restic: \(absence.words)"
+        }
         return VersionPreview.unavailableReason(size: detail(of: version)?.size, isReading: isReadingDetails)
     }
 

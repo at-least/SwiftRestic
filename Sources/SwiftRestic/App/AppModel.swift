@@ -66,7 +66,10 @@ final class AppModel {
     var isWorkingOnResticCache = false
     /// What the last cleanup removed, in the Settings tab's own words.
     var resticCacheNote: String?
-    var binaryProblem: String?
+    /// Why the last search for restic found none it can run: the error
+    /// Settings shows and `service()` throws. Nil while restic is in use,
+    /// and before the first search has answered.
+    var binaryError: (any Error)?
     var activity: [UUID: PlanActivity] = [:]
     /// Live backup progress per plan, in its own observable storage: a
     /// restic status tick (~1/sec) lands here and invalidates only the views

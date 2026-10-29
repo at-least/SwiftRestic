@@ -1080,4 +1080,3 @@ struct ResticService: ResticClient {
         return home + expanded.dropFirst(realHome.count)
     }
 }
-
