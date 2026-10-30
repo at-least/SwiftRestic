@@ -137,12 +137,16 @@ struct RestorePaneView: View {
     }
 
     private func browserPane(record: Snapshot?) -> some View {
-        VStack(spacing: 0) {
+        // One comparison read per render: every header below takes the same
+        // answer, and each read of `record` re-scans the repository's whole
+        // snapshot list.
+        let shown = shownComparison(for: record)
+        return VStack(spacing: 0) {
             // Only a failed comparison takes a line: a blank Change column
             // then means "not known", not "unchanged". What the column
             // compares with otherwise is its title's tooltip.
-            if case .failed = shownComparison(for: record) {
-                toolbar(record: record)
+            if case .failed = shown {
+                toolbar(record: record, comparison: shown)
                 Divider()
             }
             // Its own view, reading the run history itself: a new run
@@ -151,7 +155,7 @@ struct RestorePaneView: View {
             // Filling, whatever stands in for the tree: a
             // ContentUnavailableView answers its own height, and without
             // this the pane floats mid-window.
-            browser
+            browser(shown: shown)
                 .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity)
             Divider()
             footer(record: record)
@@ -173,26 +177,20 @@ struct RestorePaneView: View {
         return comparison
     }
 
-    private var isComparing: Bool {
-        if case .comparing = shownComparison(for: record) { true } else { false }
-    }
-
-    /// What the Change column compares with, for its title's tooltip —
-    /// nil when the comparison failed, the line above the tree saying so.
-    private var changeColumnHelp: String? {
-        RestoreRecordHeading.columnHelp(for: shownComparison(for: record))
+    private static func isComparing(_ comparison: ChangeComparison?) -> Bool {
+        if case .comparing = comparison { true } else { false }
     }
 
     /// Why the Change column could not be filled, when the comparison
     /// failed. The search is the toolbar's field, which searches the open
     /// backup on the Backups tab; Find Files searches every backup.
-    private func toolbar(record: Snapshot?) -> some View {
+    private func toolbar(record: Snapshot?, comparison: ChangeComparison?) -> some View {
         HStack(alignment: .center, spacing: 12) {
             if let record {
                 RestoreRecordHeader(
                     repositoryID: repositoryID,
                     record: record,
-                    comparison: shownComparison(for: record)
+                    comparison: comparison
                 )
                 .layoutPriority(1)
             }
@@ -205,7 +203,7 @@ struct RestorePaneView: View {
     // MARK: - Browser
 
     @ViewBuilder
-    private var browser: some View {
+    private func browser(shown: ChangeComparison?) -> some View {
         if isLoadingTree {
             ProgressView("Reading…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -239,8 +237,8 @@ struct RestorePaneView: View {
             VStack(spacing: 0) {
                 TreeColumnHeader(
                     rowContentWidth: rowContentWidth,
-                    changeHelp: changeColumnHelp,
-                    isComparing: isComparing
+                    changeHelp: RestoreRecordHeading.columnHelp(for: shown),
+                    isComparing: Self.isComparing(shown)
                 )
                 Divider()
                 treeList

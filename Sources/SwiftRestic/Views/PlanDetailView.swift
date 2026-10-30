@@ -345,7 +345,12 @@ struct PlanDetailView: View {
     /// Backups tab and its files its Files tab, so the card neither lists
     /// them a second time nor offers a second way to open them.
     private func backupsCard(_ plan: BackupPlan) -> some View {
-        let snapshots = model.snapshots(for: plan.repositoryID, planID: plan.id)
+        // The shelf's single home, not the raw tag filter: a backup two
+        // plans' tags claim (only `restic tag` from outside can do this)
+        // counts once, under the plan its page and the sidebar count it
+        // under — its count and its Last backup answer what this page's
+        // Backups tab lists.
+        let snapshots = planBackups(plan)
         return Card("Backups") {
             DetailGrid {
                 // The card's title labels this line: a DetailRow here would

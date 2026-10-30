@@ -296,6 +296,50 @@ final class AppRouter {
         else { return nil }
         return restoreFocus.path
     }
+
+    /// After a deletion the selected plan or repository may no longer exist;
+    /// landing on "Plan not found" is a dead end whose only exit is the
+    /// sidebar, so retarget to the landing pane instead. A selected
+    /// Other-backups group falls back to its repository's page — the place
+    /// it lived — for every way it can disappear: adopted, its plan moved
+    /// by the editor, refreshed away, its repository removed.
+    static func revalidated(
+        selection: SidebarItem?,
+        repositories: [Repository],
+        plans: [BackupPlan],
+        shelves: (UUID) -> BackupShelves,
+        isResticAvailable: Bool
+    ) -> SidebarItem? {
+        let landing = SidebarTree.landingSelection(repositories: repositories)
+        switch selection {
+        case .plan(let id) where !plans.contains { $0.id == id },
+             .repository(let id) where !repositories.contains { $0.id == id }:
+            return landing
+        case let .orphanPlan(repositoryID, planID)
+            where shelves(repositoryID).orphanPlanGroup(planID) == nil:
+            // The group is gone — adopted, its plan moved by the editor, or
+            // refreshed away. Its repository's page is where it lived; the
+            // landing pane when the repository went with it.
+            return repositories.contains { $0.id == repositoryID }
+                ? .repository(repositoryID)
+                : landing
+        case let .lineage(repositoryID, key)
+            where shelves(repositoryID).lineageGroup(key) == nil:
+            // The same for a lineage — forgotten, given a plan tag by the
+            // console, or refreshed away.
+            return repositories.contains { $0.id == repositoryID }
+                ? .repository(repositoryID)
+                : landing
+        case .console where repositories.isEmpty || !isResticAvailable,
+             .findFiles where repositories.isEmpty || !isResticAvailable:
+            // Their menu items are disabled against the same state; a
+            // selection parked on either pane must not outlive the menu
+            // item that opens it.
+            return landing
+        default:
+            return selection
+        }
+    }
 }
 
 /// A page's views — the toolbar's Overview | Backups | Files on a plan's

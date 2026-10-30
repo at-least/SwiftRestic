@@ -522,40 +522,17 @@ struct RootView: View {
         }
     }
 
-    /// After a deletion the selected plan or repository may no longer exist;
-    /// landing on "Plan not found" is a dead end whose only exit is the
-    /// sidebar, so retarget to the landing pane instead. A selected
-    /// Other-backups group falls back to its repository's page — the place
-    /// it lived — for every way it can disappear: adopted, its plan moved
-    /// by the editor, refreshed away, its repository removed.
+    /// The rules live on `AppRouter.revalidated`, where tests reach them;
+    /// this applies the answer, and only when it moved, so an unchanged
+    /// selection is no observable write.
     private func revalidateSelection() {
-        let landing = SidebarTree.landingSelection(repositories: model.configuration.repositories)
-        switch router.selection {
-        case .plan(let id) where model.plan(id: id) == nil,
-             .repository(let id) where model.repository(id: id) == nil:
-            router.selection = landing
-        case let .orphanPlan(repositoryID, planID)
-            where model.shelves(for: repositoryID).orphanPlanGroup(planID) == nil:
-            // The group is gone — adopted, its plan moved by the editor, or
-            // refreshed away. Its repository's page is where it lived; the
-            // landing pane when the repository went with it.
-            router.selection = model.repository(id: repositoryID) == nil
-                ? landing
-                : .repository(repositoryID)
-        case let .lineage(repositoryID, key)
-            where model.shelves(for: repositoryID).lineageGroup(key) == nil:
-            // The same for a lineage — forgotten, given a plan tag by the
-            // console, or refreshed away.
-            router.selection = model.repository(id: repositoryID) == nil
-                ? landing
-                : .repository(repositoryID)
-        case .console where model.configuration.repositories.isEmpty || !model.isResticAvailable,
-             .findFiles where model.configuration.repositories.isEmpty || !model.isResticAvailable:
-            // Their menu items are disabled here; a selection parked on
-            // either pane must not outlive the menu item that opens it.
-            router.selection = landing
-        default:
-            break
-        }
+        let corrected = AppRouter.revalidated(
+            selection: router.selection,
+            repositories: model.configuration.repositories,
+            plans: model.configuration.plans,
+            shelves: { model.shelves(for: $0) },
+            isResticAvailable: model.isResticAvailable
+        )
+        if corrected != router.selection { router.selection = corrected }
     }
 }

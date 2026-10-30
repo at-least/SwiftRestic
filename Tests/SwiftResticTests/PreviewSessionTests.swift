@@ -1,0 +1,178 @@
+import Foundation
+import Testing
+
+/// The preview's copy lifecycle over real restic (`PreviewSession`): the
+/// file copied out of the repository into a temporary folder of its own,
+/// shown, and that folder deleted exactly once — whichever way the preview
+/// ends.
+@Suite("preview session", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@MainActor
+struct PreviewSessionTests {
+    private struct Scene {
+        var root: URL
+        var model: AppModel
+        var repository: Repository
+        var snapshotID: String
+        /// The one file the backup holds.
+        var fileNode: SnapshotNode
+    }
+
+    /// A folder with one file; a plan of it that skips nothing, on a fresh
+    /// repository, backed up once; the model booted on it.
+    private func makeScene() async throws -> Scene {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticPreviewSession-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let root = base.resolvingSymlinksInPath()
+        let data = root.appendingPathComponent("Projects")
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        let file = data.appendingPathComponent("note.txt")
+        try "preview me".write(to: file, atomically: true, encoding: .utf8)
+
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+        let password = "preview-session-test"
+        _ = try await ResticAvailability.service().initializeRepository(RepositoryContext(repository: repository, password: password))
+        var plan = BackupPlan()
+        plan.repositoryID = repository.id
+        plan.path = data.path
+        plan.skipNothing()
+        plan.schedule.frequency = .manual
+
+        var configuration = AppConfiguration()
+        configuration.repositories = [repository]
+        configuration.plans = [plan]
+        configuration.settings.resticPathOverride = try ResticAvailability.binary().url.path
+        let store = ConfigStore(directory: root.appendingPathComponent("config"))
+        try await store.save(configuration)
+        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]))
+        await model.bootstrap()
+        await model.tasks.drain()
+
+        let service = try ResticAvailability.service()
+        let context = try await model.context(for: repository)
+        _ = try await service.backup(context, plan: plan)
+        let listing = try await service.snapshots(context, planID: nil, timeout: 60)
+        let snapshot = try #require(listing.first)
+        let node = SnapshotNode(name: file.lastPathComponent, type: .file, path: file.path, size: Int64("preview me".utf8.count))
+        return Scene(root: root, model: model, repository: repository, snapshotID: snapshot.id, fileNode: node)
+    }
+
+    /// Lets the session's task run to its next state, or gives up.
+    private func until(_ condition: @MainActor () -> Bool) async throws {
+        let deadline = Date.now.addingTimeInterval(30)
+        while !condition(), Date.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try #require(condition())
+    }
+
+    /// The preview copies still under the model's staging directory.
+    private func previewFolders(in model: AppModel) -> [URL] {
+        let contents = (try? FileManager.default.contentsOfDirectory(at: model.stagingDirectory, includingPropertiesForKeys: nil)) ?? []
+        return contents.filter { $0.lastPathComponent.hasPrefix(AppModel.previewPrefix) }
+    }
+
+    private struct NodeGone: LocalizedError {
+        var errorDescription: String? { "the node is gone" }
+    }
+
+    /// A flag the node closures set, so the test waits on facts, not time.
+    private final class Flag {
+        var woke = false
+    }
+
+    @Test("starting copies the file out and shows it; ending twice deletes the copy once and fails nothing")
+    func startShowsAndEndDeletesOnce() async throws {
+        let scene = try await makeScene()
+        defer { try? FileManager.default.removeItem(at: scene.root) }
+        let session = PreviewSession()
+        session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { scene.fileNode })
+        try await until { session.url != nil }
+        let url = try #require(session.url)
+        #expect(session.failure == nil)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        #expect(previewFolders(in: scene.model).count == 1)
+
+        // Safe to call any number of times: the second is a no-op, not a
+        // second delete dressed as a failure.
+        session.end()
+        session.end()
+        #expect(session.url == nil)
+        #expect(session.failure == nil)
+        #expect(!FileManager.default.fileExists(atPath: url.deletingLastPathComponent().path))
+        #expect(previewFolders(in: scene.model).isEmpty)
+    }
+
+    @Test("starting again ends the first preview: its copy is gone and the second url shows")
+    func startingAgainReplacesTheCopy() async throws {
+        let scene = try await makeScene()
+        defer { try? FileManager.default.removeItem(at: scene.root) }
+        let session = PreviewSession()
+        session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { scene.fileNode })
+        try await until { session.url != nil }
+        let first = try #require(session.url)
+
+        session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { scene.fileNode })
+        try await until { session.url != nil && session.url != first }
+        #expect(session.failure == nil)
+        // The cancelled first task winds down beside the second: once its
+        // copy is gone, only the second's folder is left.
+        try await until { self.previewFolders(in: scene.model).count == 1 }
+        #expect(!FileManager.default.fileExists(atPath: first.deletingLastPathComponent().path))
+        session.end()
+        #expect(previewFolders(in: scene.model).isEmpty)
+    }
+
+    @Test("a node that fails names the failure Could not preview, with the error's own words, and copies nothing")
+    func failedNodeFailsThePreview() async throws {
+        let scene = try await makeScene()
+        defer { try? FileManager.default.removeItem(at: scene.root) }
+        let session = PreviewSession()
+        session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { throw NodeGone() })
+        try await until { session.failure != nil }
+        #expect(session.failure == PreviewSession.Failure(title: "Could not preview", message: "the node is gone"))
+        #expect(session.url == nil)
+        #expect(previewFolders(in: scene.model).isEmpty)
+    }
+
+    @Test("a version too large to look at is refused before any copy, by the refusal's own line")
+    func oversizedNodeIsRefusedBeforeCopying() async throws {
+        let scene = try await makeScene()
+        defer { try? FileManager.default.removeItem(at: scene.root) }
+        let big = SnapshotNode(name: "big.bin", type: .file, path: "/Projects/big.bin", size: VersionPreview.sizeLimit + 1)
+        let session = PreviewSession()
+        session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { big })
+        try await until { session.failure != nil }
+        #expect(session.failure == PreviewSession.Failure(
+            title: VersionPreview.unavailableReason(size: big.size, isReading: false)!, message: ""))
+        #expect(session.url == nil)
+        #expect(previewFolders(in: scene.model).isEmpty)
+    }
+
+    @Test("ending a copy parked on its node cancels it: no failure and no folder")
+    func endingAParkedCopyLeavesNothing() async throws {
+        let scene = try await makeScene()
+        defer { try? FileManager.default.removeItem(at: scene.root) }
+        let session = PreviewSession()
+        // The stream parks the node read until the task is cancelled, which
+        // ends the stream — the closure then throws, the way a read that
+        // lost its source would.
+        let flag = Flag()
+        let (stream, continuation) = AsyncStream<SnapshotNode>.makeStream()
+        let node: @MainActor () async throws -> SnapshotNode = {
+            for await offered in stream { return offered }
+            flag.woke = true
+            throw NodeGone()
+        }
+        session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: node)
+        session.end()
+        let deadline = Date.now.addingTimeInterval(30)
+        while !flag.woke, Date.now < deadline { await Task.yield() }
+        #expect(flag.woke)
+        #expect(session.failure == nil)
+        #expect(previewFolders(in: scene.model).isEmpty)
+        continuation.finish()
+    }
+}

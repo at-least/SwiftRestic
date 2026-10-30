@@ -210,6 +210,109 @@ struct AppRouterTests {
         #expect(none.openFolders.isEmpty)
     }
 
+    // MARK: - Selection revalidation
+
+    private func revalidated(
+        _ selection: SidebarItem?,
+        repositories: [Repository],
+        plans: [BackupPlan],
+        shelves: BackupShelves = BackupShelves(listing: [], plans: [], allPlans: []),
+        isResticAvailable: Bool = true
+    ) -> SidebarItem? {
+        AppRouter.revalidated(
+            selection: selection,
+            repositories: repositories,
+            plans: plans,
+            shelves: { _ in shelves },
+            isResticAvailable: isResticAvailable
+        )
+    }
+
+    @Test("a selection whose plan or repository is gone lands on the first repository's page, or Welcome when none is left")
+    func gonePlanOrRepositoryLands() {
+        let first = namedRepository("First")
+        let second = namedRepository("Second")
+        let kept = namedPlan("Documents", repositoryID: first.id)
+
+        // The plan itself still selected: no move.
+        #expect(self.revalidated(.plan(kept.id), repositories: [first, second], plans: [kept]) == .plan(kept.id))
+        #expect(self.revalidated(.repository(first.id), repositories: [first], plans: [kept]) == .repository(first.id))
+
+        // Deleted: the landing pane, the first repository's page.
+        #expect(self.revalidated(.plan(UUID()), repositories: [first, second], plans: [kept]) == .repository(first.id))
+        #expect(self.revalidated(.repository(UUID()), repositories: [first, second], plans: [kept]) == .repository(first.id))
+
+        // Nothing left at all: Welcome — no selection.
+        #expect(self.revalidated(.plan(UUID()), repositories: [], plans: []) == nil)
+        #expect(self.revalidated(.repository(UUID()), repositories: [], plans: []) == nil)
+    }
+
+    @Test("a selected Other-backups group stays while its group is held, falls back to its repository's page, then to the landing")
+    func orphanPlanRetargets() throws {
+        let first = namedRepository("First")
+        let second = namedRepository("Second")
+        let kept = namedPlan("Kept", repositoryID: first.id)
+        let moved = namedPlan("Moved", repositoryID: second.id)
+        let held = BackupShelves(
+            listing: [try snapshotFixture(id: "m1", time: "2026-09-30T02:00:00Z", paths: ["/Data/Music"],
+                                          includeShortID: true, hostname: "mac", tags: [ResticService.planTag(moved.id)])],
+            plans: [kept], allPlans: [kept, moved])
+
+        // Adopted, moved by the editor, refreshed away — not yet: the group
+        // is held, the selection stays.
+        #expect(self.revalidated(.orphanPlan(repositoryID: first.id, planID: moved.id),
+                                 repositories: [first, second], plans: [kept, moved], shelves: held)
+            == .orphanPlan(repositoryID: first.id, planID: moved.id))
+
+        // Gone, its repository alive: the page where the group lived — the
+        // second repository's, not the landing (the first's).
+        #expect(self.revalidated(.orphanPlan(repositoryID: second.id, planID: moved.id),
+                                 repositories: [first, second], plans: [kept, moved])
+            == .repository(second.id))
+
+        // The repository went with it: the landing.
+        #expect(self.revalidated(.orphanPlan(repositoryID: UUID(), planID: moved.id),
+                                 repositories: [first], plans: [kept])
+            == .repository(first.id))
+    }
+
+    @Test("a selected lineage follows the same fall-back as a group")
+    func lineageRetargets() throws {
+        let first = namedRepository("First")
+        let second = namedRepository("Second")
+        let key = SnapshotLineage.Key(hostname: "old-mac", paths: ["/Data/Music"])
+        let held = BackupShelves(
+            listing: [try snapshotFixture(id: "x1", time: "2026-09-27T02:00:00Z", paths: ["/Data/Music"],
+                                          includeShortID: true, hostname: "old-mac", tags: [])],
+            plans: [], allPlans: [])
+
+        #expect(self.revalidated(.lineage(repositoryID: first.id, key: key),
+                                 repositories: [first, second], plans: [], shelves: held)
+            == .lineage(repositoryID: first.id, key: key))
+        #expect(self.revalidated(.lineage(repositoryID: second.id, key: key),
+                                 repositories: [first, second], plans: [])
+            == .repository(second.id))
+        #expect(self.revalidated(.lineage(repositoryID: UUID(), key: key),
+                                 repositories: [first], plans: [])
+            == .repository(first.id))
+    }
+
+    @Test("Console and Find Files stay only while repositories exist and restic is here; otherwise they land")
+    func consoleAndFindFilesNeedARepositoryAndRestic() {
+        let first = namedRepository("First")
+        for page: SidebarItem in [.console, .findFiles] {
+            #expect(self.revalidated(page, repositories: [first], plans: []) == page)
+            #expect(self.revalidated(page, repositories: [first], plans: [], isResticAvailable: false)
+                == .repository(first.id))
+            #expect(self.revalidated(page, repositories: [], plans: []) == nil)
+        }
+    }
+
+    @Test("Activity and no selection need no retargeting")
+    func activityAndNothingStay() {
+        #expect(self.revalidated(.activity, repositories: [], plans: [], isResticAvailable: false) == .activity)
+        #expect(self.revalidated(nil, repositories: [], plans: [], isResticAvailable: false) == nil)
+    }
 }
 
 

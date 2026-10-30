@@ -611,6 +611,68 @@ struct PlanStatusTests {
         #expect(summary.message == gap.itemErrors[0])
         #expect(summary.facts.isEmpty)
     }
+
+    // MARK: - Repository caption
+
+    private func repository(kind: Repository.Kind, at path: String) -> Repository {
+        var repository = Repository()
+        repository.kind = kind
+        repository.localPath = path
+        return repository
+    }
+
+    @Test("a known count wins over a read in flight or a failed one; before any read the row says nothing")
+    func countThenReadingThenNothing() throws {
+        let repository = repository(kind: .local, at: "/Volumes/Archive SSD/Backups")
+        let snapshot = try snapshotFixture(id: "s1", time: "2026-09-30T02:00:00Z", paths: ["/Data"], includeShortID: true, hostname: "mac", tags: [])
+        #expect(
+            PlanStatus.repositoryCaption(repository: repository, listing: [snapshot], isLoading: true, outcome: .failed("Fatal: unable to open repository"))
+                == .count(1)
+        )
+        #expect(
+            PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: true, outcome: .idle)
+                == .reading
+        )
+        #expect(PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: false, outcome: .idle) == nil)
+        #expect(
+            PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: false, outcome: .loaded)
+                == .zero
+        )
+        #expect(RepositoryCaption.count(2).text == "2 backups")
+        #expect(RepositoryCaption.zero.text == "0 backups")
+        #expect(RepositoryCaption.reading.text == "Reading backups…")
+        #expect(RepositoryCaption.reading.help == nil)
+    }
+
+    @Test("a local repository whose drive is away says so, its whole failure in the tooltip")
+    func notConnectedNamesTheDrive() {
+        let repository = repository(kind: .local, at: "/Volumes/Archive SSD/Backups")
+        let message = RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
+        let caption = PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: false, outcome: .failed(message))
+        #expect(caption == .notConnected(full: message))
+        #expect(caption?.text == "Not connected")
+        #expect(caption?.help == message)
+    }
+
+    @Test("a failed read of a repository elsewhere never claims a local drive is away")
+    func failedElsewhereKeepsItsSentence() {
+        // A network repository: its failed sentence is its own even when it
+        // spells a missing volume.
+        let remote = repository(kind: .sftp, at: "/Volumes/Archive SSD/Backups")
+        let message = RunRecord.skippedReason(sources: ["/Volumes/Archive SSD/Backups"])
+        let caption = PlanStatus.repositoryCaption(repository: remote, listing: [], isLoading: false, outcome: .failed(message))
+        #expect(caption == .failed(Format.firstSentence(message), full: message))
+        #expect(caption?.text == "“Archive SSD” is not connected.")
+        #expect(caption?.help == message)
+
+        // A local repository whose folder is not on a volume: its sentence
+        // stands, cut at the first boundary.
+        let plain = repository(kind: .local, at: "/Users/someone/Backups")
+        let refused = "Cannot reach nas.local: connection refused. Check the host and try again."
+        let local = PlanStatus.repositoryCaption(repository: plain, listing: [], isLoading: false, outcome: .failed(refused))
+        #expect(local == .failed("Cannot reach nas.local: connection refused", full: refused))
+        #expect(local?.help == refused)
+    }
 }
 
 /// What every surface calls a plan, which has no name of its own.

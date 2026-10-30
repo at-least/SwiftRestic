@@ -151,13 +151,15 @@ struct SidebarView: View {
             Button("Back Up Now") { model.runBackup(planID: plan.id) }
         }
         Button("Edit Plan…") { onEditPlan(plan) }
-        // The Schedule card's pair, word for word. The row's caption says the
-        // pause while the schedule is held; manual runs stay possible either
-        // way, and a manual plan has no schedule to pause — no item either,
-        // as the card has no control.
-        if !plan.isScheduleActive(at: .now) {
-            Button("Resume Schedule") { model.resumePlanSchedule(id: plan.id) }
-        } else if plan.schedule.frequency != .manual {
+        // The Schedule card's pair, word for word, read from the same
+        // command state the Plan menu reads — a rule added there shows up
+        // here instead of drifting. The row's caption says the pause while
+        // the schedule is held; manual runs stay possible either way, and a
+        // manual plan has no schedule to pause — no item either, as the
+        // card has no control.
+        if !commands.isScheduleActive {
+            Button(commands.scheduleTitle) { model.resumePlanSchedule(id: plan.id) }
+        } else if commands.canToggleSchedule {
             Menu("Pause Schedule") {
                 ForEach(PauseLength.allCases) { length in
                     Button(length.menuTitle) {
@@ -220,35 +222,28 @@ struct SidebarView: View {
         .contextMenu { repositoryContextMenu(repository) }
     }
 
-    /// The repository row's second line: how many backups it holds, every
-    /// plan's and the other ones together — but only once that is known. A
-    /// repository still being read, or whose read failed (a wrong password,
-    /// an unreachable server), never says "0 backups", which reads as "your
-    /// data is gone"; it says what an open plan says — a repository missing
-    /// from its location (restic exit 10, an unplugged disk) included. A
-    /// count from an earlier listing stands under a failed re-read, as the
-    /// records do.
+    /// The repository row's second line, `PlanStatus.repositoryCaption`'s
+    /// answer: a failed read's sentence truncates with its whole message in
+    /// the tooltip; the counts are short enough to show whole.
     @ViewBuilder
     private func backupsCaption(_ repository: Repository, listing: [Snapshot]) -> some View {
+        let caption = PlanStatus.repositoryCaption(
+            repository: repository,
+            listing: listing,
+            isLoading: model.loadingSnapshots.contains(repository.id),
+            outcome: model.snapshotListingOutcome(for: repository.id)
+        )
         Group {
-            if !listing.isEmpty {
-                Text(Format.plural(listing.count, "backup"))
-            } else if model.loadingSnapshots.contains(repository.id) {
-                Text("Reading backups…")
-            } else if case let .failed(message) = model.snapshotListingOutcome(for: repository.id) {
-                // Under the repository's own name, its drive's absence needs
-                // no name again: the sentence the listing wrote for it
-                // (`RunRecord.notConnected`, the volume's name), matched as
-                // that same derivation builds it — not the row's label,
-                // which names a twin by its path.
-                let line = Format.firstSentence(message)
-                let away = repository.kind == .local ? RunRecord.notConnected([repository.resolvedLocalPath]) : nil
-                Text(line.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == away ? "Not connected" : line)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(message)
-            } else if model.snapshotListingOutcome(for: repository.id) == .loaded {
-                Text(Format.plural(0, "backup"))
+            if let caption {
+                switch caption {
+                case .count, .reading, .zero:
+                    Text(caption.text)
+                case let .notConnected(full), let .failed(_, full):
+                    Text(caption.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(full)
+                }
             }
         }
         .font(.caption)
@@ -385,11 +380,14 @@ struct SidebarView: View {
             repositories: model.configuration.repositories, localHost: model.localHostname
         )
         ForEach(shelves.others) { group in
+            // One factory for either kind's page; the switch is only about
+            // the menus, which need the kind's own pieces.
+            let page = SidebarItem.otherGroup(repositoryID: repository.id, id: group.id)
             switch group {
             case let .plan(id, snapshots):
                 groupRow(
-                    page: .orphanPlan(repositoryID: repository.id, planID: id),
-                    label: labels[.plan(id)]!,
+                    page: page,
+                    label: labels[group.id]!,
                     repository: repository
                 )
                 .contextMenu {
@@ -400,9 +398,8 @@ struct SidebarView: View {
                     )
                 }
             case let .lineage(lineage):
-                let page = SidebarItem.lineage(repositoryID: repository.id, key: lineage.key)
                 // `otherLabels` labels every group it is given.
-                groupRow(page: page, label: labels[.lineage(lineage.key)]!, repository: repository)
+                groupRow(page: page, label: labels[group.id]!, repository: repository)
                     // Its backups and its files: no plan to open or adopt.
                     .contextMenu { showMenuItems(page, snapshots: lineage.snapshots, repository: repository) }
             }

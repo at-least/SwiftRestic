@@ -40,6 +40,43 @@ struct PlanCaption: Equatable, Sendable {
     var shortText: String? = nil
 }
 
+/// What a repository's sidebar row says under its name, by its case — nil
+/// renders nothing. A failed read's `full` message is the tooltip the
+/// renderer hangs under its truncated text; the other lines show whole.
+enum RepositoryCaption: Equatable, Sendable {
+    /// Every backup the repository holds, every plan's and the other ones
+    /// together.
+    case count(Int)
+    /// A listing in flight.
+    case reading
+    /// The read failed and its first sentence is the missing drive's own
+    /// (`RunRecord.notConnected`); `full` is the whole message.
+    case notConnected(full: String)
+    /// The read failed; `full` is its whole message.
+    case failed(String, full: String)
+    /// A listing settled and found none.
+    case zero
+
+    var text: String {
+        switch self {
+        case .count(let count): Format.plural(count, "backup")
+        case .reading: "Reading backups…"
+        case .notConnected: "Not connected"
+        case .failed(let line, full: _): line
+        case .zero: Format.plural(0, "backup")
+        }
+    }
+
+    /// The whole failed read's message, where the row truncates its text
+    /// into the tooltip; nil for a line short enough to show whole.
+    var help: String? {
+        switch self {
+        case .notConnected(let full), .failed(_, let full): full
+        case .count, .reading, .zero: nil
+        }
+    }
+}
+
 /// The plan page's words and the app's one "Last backup" moment, kept out
 /// of the view so they can be tested: the status row for a problem that
 /// still stands, the Next backup value, the sidebar caption, and the
@@ -388,6 +425,41 @@ enum PlanStatus {
             return PlanCaption(text: "Not scheduled")
         }
         return PlanCaption(text: plan.schedule.summary)
+    }
+
+    /// The repository row's second line: how many backups it holds, every
+    /// plan's and the other ones together — but only once that is known. A
+    /// repository still being read, or whose read failed (a wrong password,
+    /// an unreachable server), never says "0 backups", which reads as "your
+    /// data is gone"; it says what an open plan says — a repository missing
+    /// from its location (restic exit 10, an unplugged disk) included. A
+    /// count from an earlier listing stands under a failed re-read, as the
+    /// records do.
+    static func repositoryCaption(
+        repository: Repository,
+        listing: [Snapshot],
+        isLoading: Bool,
+        outcome: SnapshotListingOutcome
+    ) -> RepositoryCaption? {
+        if !listing.isEmpty { return .count(listing.count) }
+        if isLoading { return .reading }
+        if case let .failed(message) = outcome {
+            let line = Format.firstSentence(message)
+            // Under the repository's own name, its drive's absence needs no
+            // name again: the sentence the listing wrote for it
+            // (`RunRecord.notConnected`, the volume's name), matched as that
+            // same derivation builds it — not the row's label, which names
+            // a twin by its path.
+            let away = repository.kind == .local
+                ? RunRecord.notConnected([repository.resolvedLocalPath])
+                : nil
+            if line.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == away {
+                return .notConnected(full: message)
+            }
+            return .failed(line, full: message)
+        }
+        if outcome == .loaded { return .zero }
+        return nil
     }
 
     /// Searched among the trailing lines only, so an unreadable item's own

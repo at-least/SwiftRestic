@@ -428,7 +428,7 @@ private struct RevealRow: View {
     let path: String
     let runID: UUID
     /// Nil until the check lands; the button waits disabled until then.
-    @State private var exists: Bool?
+    @State private var existence = PathExistence()
 
     var body: some View {
         HStack(spacing: 8) {
@@ -441,20 +441,11 @@ private struct RevealRow: View {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
             .controlSize(.small)
-            .disabled(exists != true)
-            .modifier(TileHelp(help: exists == false ? "Nothing is at this path any more" : nil))
+            .disabled(existence.exists != true)
+            .modifier(TileHelp(help: existence.exists == false ? "Nothing is at this path any more" : nil))
         }
         .task(id: runID) {
-            exists = nil
-            let path = path
-            let found = await Task.detached(priority: .utility) {
-                FileManager.default.fileExists(atPath: path)
-            }.value
-            // The selection moved to another restore while a stalled check
-            // waited: cancelling this task does not stop the detached one
-            // returning, and its answer is about a path no longer shown.
-            guard !Task.isCancelled else { return }
-            exists = found
+            await existence.check(path)
         }
     }
 }
