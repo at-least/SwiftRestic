@@ -9,6 +9,18 @@ extension AppModel {
         configuration.settings.networkShares.first { $0.volumeName == volumeName }
     }
 
+    /// The share an editor's folder row shows: as mounted now, else as
+    /// saved — a share away while the sheet is open keeps its row, so its
+    /// password can still be replaced. A mounted volume of another name is
+    /// the stale read of a path since changed, not the row. Nil off
+    /// /Volumes with nothing saved.
+    func shareRow(for path: String, mounted: MountedShare?) -> (share: MountedShare, isSaved: Bool)? {
+        guard let volume = VolumePresence.volumeName(of: path) else { return nil }
+        let saved = networkShare(forVolume: volume)
+        if let mounted, mounted.volumeName == volume { return (mounted, saved != nil) }
+        return saved.map { (MountedShare(volumeName: $0.volumeName, url: $0.url), true) }
+    }
+
     /// Saves a share's password and, the first time, the share itself, by
     /// volume name — a repository and a plan on one share keep one record,
     /// its URL as last read from the mounted volume. The password goes

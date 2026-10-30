@@ -189,6 +189,35 @@ struct NetworkShareTests {
         #expect(await mounts.calls.map(\.url) == ["smb://me@nas.local/\(volume)"])
     }
 
+    @Test("an editor's share row: as mounted now, else as saved, matched by volume")
+    func editorShareRow() async throws {
+        let (model, _, volume) = try await makeModel(answer: .failed(EAUTH))
+        let saved = MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)")
+        let mounted = MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)")
+        // A saved share away: its row, as saved.
+        var row = try #require(model.shareRow(for: "/Volumes/\(volume)/docs", mounted: nil))
+        #expect(row.share == saved)
+        #expect(row.isSaved)
+        // The same volume mounted now: the mounted one, still a saved share.
+        row = try #require(model.shareRow(for: "/Volumes/\(volume)/docs", mounted: mounted))
+        #expect(row.share == mounted)
+        #expect(row.isSaved)
+        // A mounted volume of another name is the stale read of a path
+        // since changed: ignored.
+        let other = MountedShare(volumeName: "Other", url: "smb://me@other.local/Other")
+        row = try #require(model.shareRow(for: "/Volumes/\(volume)/docs", mounted: other))
+        #expect(row.share == saved)
+        #expect(row.isSaved)
+        // Off /Volumes there is no share row.
+        #expect(model.shareRow(for: "/Users/me/Documents", mounted: mounted) == nil)
+        // The share is gone from the configuration: the mounted row says
+        // nothing is saved.
+        model.configuration.settings.networkShares = []
+        row = try #require(model.shareRow(for: "/Volumes/\(volume)/docs", mounted: mounted))
+        #expect(row.share == mounted)
+        #expect(!row.isSaved)
+    }
+
     @Test("a refusal only the user clears is told from a server out of reach, which may come back by itself")
     func refusalOrUnreachable() {
         for refused in [EAUTH, ENOENT, EACCES, EPERM] {

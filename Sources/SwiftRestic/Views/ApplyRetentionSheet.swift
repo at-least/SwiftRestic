@@ -10,12 +10,7 @@ struct ApplyRetentionSheet: View {
     @Environment(\.dismiss) private var dismiss
     let planID: UUID
 
-    /// The last preview that came back. Kept while a re-preview runs, with
-    /// its button disabled, so the sheet does not jump.
-    @State private var preview: RetentionPreview?
-    @State private var isLoading = true
-    @State private var failure: String?
-    @State private var retry = 0
+    @State private var load = RetentionPreviewLoad()
 
     /// What the preview depends on: the rules, the plan's newest snapshot in
     /// the listing — a backup landing while the sheet is open re-previews,
@@ -31,7 +26,7 @@ struct ApplyRetentionSheet: View {
         return PreviewKey(
             retention: plan?.retention,
             newestSnapshotID: model.latestSnapshot(in: plan?.repositoryID, planID: planID)?.id,
-            retry: retry
+            retry: load.retry
         )
     }
 
@@ -52,7 +47,9 @@ struct ApplyRetentionSheet: View {
         }
         .padding(20)
         .frame(width: 480)
-        .task(id: previewKey) { await loadPreview() }
+        .task(id: previewKey) {
+            await load.load { try await model.previewRetention(planID: planID) }
+        }
     }
 
     @ViewBuilder
@@ -71,19 +68,13 @@ struct ApplyRetentionSheet: View {
         // A policy with no rule previews nothing, which would read as "no
         // snapshots yet"; the blocker below says what is really wrong.
         if plan.retention.isSafeToRun {
-            if isLoading {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Working out which backups these rules would remove…")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let failure {
-                WarningLine(text: Format.firstSentence(failure))
-                    .help(failure)
-                Button("Try Again") { retry += 1 }
-                    .controlSize(.small)
-            } else if let preview {
+            RetentionPreviewStatus(
+                isLoading: load.isLoading,
+                failure: load.failure,
+                working: "Working out which backups these rules would remove…",
+                onRetry: { load.requestRetry() }
+            )
+            if load.failure == nil, let preview = load.result {
                 previewContent(preview, plan: plan)
             }
         }
@@ -94,13 +85,13 @@ struct ApplyRetentionSheet: View {
 
         HStack {
             Spacer()
-            if let preview, preview.removed.isEmpty, !isLoading, failure == nil {
+            if let preview = load.result, preview.removed.isEmpty, !load.isLoading, load.failure == nil {
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
             } else {
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                if let preview, !preview.removed.isEmpty {
+                if let preview = load.result, !preview.removed.isEmpty {
                     // What Apply Retention Now was chosen for, so not marked
                     // destructive — the HIG's Empty Trash case — but no
                     // Return either: removing backups cannot be undone, and
@@ -109,7 +100,7 @@ struct ApplyRetentionSheet: View {
                         model.applyRetention(planID: planID)
                         dismiss()
                     }
-                    .disabled(isLoading || !state.canApplyRetention)
+                    .disabled(load.isLoading || !state.canApplyRetention)
                 }
             }
         }
@@ -145,22 +136,5 @@ struct ApplyRetentionSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private func loadPreview() async {
-        isLoading = true
-        failure = nil
-        do {
-            let result = try await model.previewRetention(planID: planID)
-            // A newer key (or the sheet closing) cancelled this read; its
-            // successor owns the state now.
-            guard !Task.isCancelled else { return }
-            preview = result
-        } catch {
-            guard !Task.isCancelled else { return }
-            failure = error.localizedDescription
-            preview = nil
-        }
-        isLoading = false
     }
 }

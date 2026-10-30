@@ -41,8 +41,7 @@ struct HookEditor: View {
         ) {
             Button("Remove") {
                 guard let index = hooks.firstIndex(where: { $0.id == selection }) else { return }
-                hooks.remove(at: index)
-                selection = hooks.indices.contains(index) ? hooks[index].id : hooks.last?.id
+                selection = hooks.removeKeepingNeighbourSelected(at: index)
             }
         } message: {
             Text("The script and its settings are removed from this editor. Nothing is deleted on disk.")

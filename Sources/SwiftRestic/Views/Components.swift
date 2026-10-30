@@ -589,6 +589,33 @@ struct WarningLine: View {
     }
 }
 
+/// A retention dry-run's spinner and failure (`RetentionPreviewLoad`), the
+/// two blocks its surfaces — the adopt sheet's preview and Apply Retention
+/// Now — showed identically, each with its own "working" line. Two
+/// independent `if`s: a failure stands alone, the answer being cleared.
+struct RetentionPreviewStatus: View {
+    let isLoading: Bool
+    let failure: String?
+    let working: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        if isLoading {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(working)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        if let failure {
+            WarningLine(text: Format.firstSentence(failure))
+                .help(failure)
+            Button("Try Again", action: onRetry)
+                .controlSize(.small)
+        }
+    }
+}
+
 /// A pane that could not load: what failed, and restic's or the system's
 /// words, selectable for copying.
 struct FailureUnavailableView: View {
@@ -1052,6 +1079,15 @@ struct ListBarButton: View {
         .buttonStyle(.borderless)
         .help(title)
         .accessibilityLabel(title)
+    }
+}
+
+extension View {
+    /// The editors' on/off settings: mini switches in a grouped form,
+    /// the HIG's "consider using a mini switch to control the setting in a
+    /// single row", the same on every tab.
+    func editorSwitches() -> some View {
+        toggleStyle(.switch).controlSize(.mini)
     }
 }
 

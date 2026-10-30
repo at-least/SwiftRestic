@@ -308,6 +308,19 @@ struct EditorRequirementTests {
         }
     }
 
+    @Test("a blank provider secret after a failed Keychain read keeps what is stored; no secret field writes nothing")
+    func keepsStoredProviderSecret() {
+        // A kind with no secret field: the upsert leaves the Keychain alone.
+        #expect(EditorRequirements.keepsStoredProviderSecret(secretFieldLabel: nil, readFailed: false, typedSecret: "") == true)
+        #expect(EditorRequirements.keepsStoredProviderSecret(secretFieldLabel: nil, readFailed: true, typedSecret: "key") == true)
+        // The read failed, so the field could not be prefilled: blank keeps
+        // what is stored, a typed value replaces it.
+        #expect(EditorRequirements.keepsStoredProviderSecret(secretFieldLabel: "Secret access key", readFailed: true, typedSecret: "") == true)
+        #expect(EditorRequirements.keepsStoredProviderSecret(secretFieldLabel: "Secret access key", readFailed: true, typedSecret: "key") == false)
+        // A read that worked: the user's deliberate clear deletes the stored secret.
+        #expect(EditorRequirements.keepsStoredProviderSecret(secretFieldLabel: "Secret access key", readFailed: false, typedSecret: "") == false)
+    }
+
     @Test("Test Connection's answer for a path with no repository says what Save will do in this mode")
     func missingRepositoryWords() {
         // A new repository is created on Save.

@@ -33,11 +33,11 @@ struct PlanEditorSheet: View {
     /// true words.
     @State private var isConfirmingAdopt = false
     @State private var armedAdoptConfirmation: ConfirmationCopy?
-    /// The network shares among the folders while mounted
+    /// The network share the path is on while mounted
     /// (`VolumePresence.mountedShare`), read off the main actor.
-    @State private var mountedShares: [MountedShare] = []
+    @State private var mountedShare: MountedShare?
     /// Whether the path is gone from this Mac, read off the main actor
-    /// beside `mountedShares`: a stalled share can hold the read.
+    /// beside `mountedShare`: a stalled share can hold the read.
     @State private var pathIsMissing = false
     /// Each share's password as typed, by volume name: empty leaves a saved
     /// one as it is.
@@ -285,39 +285,21 @@ struct PlanEditorSheet: View {
         }
     }
 
-    /// The network share the path is on: as mounted now, else as saved — a
-    /// share away while the sheet is open keeps its rows, so its password
-    /// can still be replaced.
-    private var folderShares: [(share: MountedShare, isSaved: Bool)] {
-        guard let volume = VolumePresence.volumeName(of: draft.resolvedPath) else { return [] }
-        let saved = model.networkShare(forVolume: volume)
-        if let mounted = mountedShares.first(where: { $0.volumeName == volume }) {
-            return [(mounted, saved != nil)]
-        }
-        if let saved {
-            return [(MountedShare(volumeName: saved.volumeName, url: saved.url), true)]
-        }
-        return []
-    }
-
-    /// The typed share passwords, saved once the sheet has closed — the
+    /// The typed share password, saved once the sheet has closed — the
     /// Keychain answers off the main actor; a failure says so in a banner.
     private func saveSharePasswords() {
-        let typed = folderShares.compactMap { entry in
-            sharePasswords[entry.share.volumeName].flatMap { $0.isEmpty ? nil : (share: entry.share, password: $0) }
-        }
-        guard !typed.isEmpty else { return }
+        guard let row = model.shareRow(for: draft.resolvedPath, mounted: mountedShare),
+              let typed = sharePasswords[row.share.volumeName], !typed.isEmpty
+        else { return }
         Task { [model] in
-            for entry in typed {
-                do {
-                    try await model.saveNetworkShare(entry.share, password: entry.password)
-                } catch {
-                    model.post(Banner(
-                        title: "Could not save the password for “\(entry.share.url)”",
-                        message: error.localizedDescription,
-                        isError: true
-                    ))
-                }
+            do {
+                try await model.saveNetworkShare(row.share, password: typed)
+            } catch {
+                model.post(Banner(
+                    title: "Could not save the password for “\(row.share.url)”",
+                    message: error.localizedDescription,
+                    isError: true
+                ))
             }
         }
     }
@@ -332,7 +314,7 @@ struct PlanEditorSheet: View {
     /// minute and a never-run plan counts as immediately due. Stated on the
     /// Schedule tab, beside the picker that could avoid it.
     private var startsFirstBackupOnCreate: Bool {
-        isNew && draft.isEnabled && draft.schedule.frequency != .manual
+        isNew && LoginItemAdvice.isScheduled(draft)
     }
 
     /// The plan's identity, above the tabs and so on screen from every one
@@ -424,18 +406,16 @@ struct PlanEditorSheet: View {
         return Form {
             // A folder on a network share: its password, so a backup can
             // reconnect it. Not while adopting — the sheet is about history.
-            if mode != .adopt {
-                ForEach(folderShares, id: \.share.volumeName) { entry in
-                    Section {
-                        NetworkSharePasswordRows(
-                            url: entry.share.url,
-                            isSaved: entry.isSaved,
-                            password: Binding(
-                                get: { sharePasswords[entry.share.volumeName] ?? "" },
-                                set: { sharePasswords[entry.share.volumeName] = $0 }
-                            )
+            if mode != .adopt, let row = model.shareRow(for: draft.resolvedPath, mounted: mountedShare) {
+                Section {
+                    NetworkSharePasswordRows(
+                        url: row.share.url,
+                        isSaved: row.isSaved,
+                        password: Binding(
+                            get: { sharePasswords[row.share.volumeName] ?? "" },
+                            set: { sharePasswords[row.share.volumeName] = $0 }
                         )
-                    }
+                    )
                 }
             }
             // A folder that is gone fails every backup; said here first.
@@ -540,14 +520,14 @@ struct PlanEditorSheet: View {
         // share can hold the read for seconds.
         .task(id: draft.path) {
             let path = draft.path
-            let (shares, missing) = await Task.detached {
+            let (share, missing) = await Task.detached {
                 (
-                    VolumePresence.mountedShare(holding: ResticService.expandTilde(path)).map { [$0] } ?? [],
+                    VolumePresence.mountedShare(holding: ResticService.expandTilde(path)),
                     !path.isEmpty && !AppModel.sourceExists(path)
                 )
             }.value
             guard !Task.isCancelled else { return }
-            mountedShares = shares
+            mountedShare = share
             pathIsMissing = missing
         }
     }
@@ -903,10 +883,7 @@ private struct AdoptRetentionPreview: View {
     /// the plan tag is the group's own UUID.
     let draft: BackupPlan
 
-    @State private var result: RetentionPreview?
-    @State private var isLoading = true
-    @State private var failure: String?
-    @State private var retry = 0
+    @State private var load = RetentionPreviewLoad()
 
     /// What the preview depends on: the rules, and the newest backup the
     /// rules would judge — a backup landing while the sheet is open changes
@@ -921,7 +898,7 @@ private struct AdoptRetentionPreview: View {
         PreviewKey(
             retention: draft.retention,
             newestSnapshotID: model.latestSnapshot(in: draft.repositoryID, planID: draft.id)?.id,
-            retry: retry
+            retry: load.retry
         )
     }
 
@@ -930,19 +907,13 @@ private struct AdoptRetentionPreview: View {
         // `if` branch never renders while that branch is empty, and the
         // preview would never start.
         VStack(alignment: .leading, spacing: 6) {
-            if isLoading {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Working out what these rules would keep…")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let failure {
-                WarningLine(text: Format.firstSentence(failure))
-                    .help(failure)
-                Button("Try Again") { retry += 1 }
-                    .controlSize(.small)
-            } else if let result {
+            RetentionPreviewStatus(
+                isLoading: load.isLoading,
+                failure: load.failure,
+                working: "Working out what these rules would keep…",
+                onRetry: { load.requestRetry() }
+            )
+            if load.failure == nil, let result = load.result {
                 // The glyph is decoration beside a sentence that says it all;
                 // no alarm colour — a dry run has not failed anything.
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -955,32 +926,8 @@ private struct AdoptRetentionPreview: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .task(id: previewKey) { await load() }
-    }
-
-    private func load() async {
-        isLoading = true
-        failure = nil
-        do {
-            let preview = try await model.previewRetention(plan: draft)
-            // A newer key (or the sheet closing) cancelled this read; its
-            // successor owns the state now.
-            guard !Task.isCancelled else { return }
-            result = preview
-        } catch {
-            guard !Task.isCancelled else { return }
-            failure = error.localizedDescription
-            result = nil
+        .task(id: previewKey) {
+            await load.load { try await model.previewRetention(plan: draft) }
         }
-        isLoading = false
-    }
-}
-
-extension View {
-    /// The editors' on/off settings: mini switches in a grouped form,
-    /// the HIG's "consider using a mini switch to control the setting in a
-    /// single row", the same on every tab.
-    func editorSwitches() -> some View {
-        toggleStyle(.switch).controlSize(.mini)
     }
 }

@@ -165,4 +165,13 @@ enum EditorRequirements {
         if let stored, !stored.isEmpty { return stored }
         throw ResticError.passwordMissing(repositoryName: repositoryName)
     }
+
+    /// Whether an upsert keeps the stored provider secret: a kind with no
+    /// secret field writes nothing, and a blank one after a failed Keychain
+    /// read keeps what is stored, as the blank password does — the field
+    /// could not be prefilled, and an empty value would delete the stored
+    /// one.
+    static func keepsStoredProviderSecret(secretFieldLabel: String?, readFailed: Bool, typedSecret: String) -> Bool {
+        secretFieldLabel == nil || (readFailed && typedSecret.isEmpty)
+    }
 }

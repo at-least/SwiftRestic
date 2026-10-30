@@ -262,14 +262,10 @@ struct RepositoryEditorSheet: View {
         return false
     }
 
-    /// The share the folder is on: as mounted now, else as saved — a share
-    /// away while the sheet is open keeps its row, so its password can
-    /// still be replaced. Nil off a share, and for any kind but a folder.
+    /// The share the folder is on (`model.shareRow`): nil off a share, and
+    /// for any kind but a folder.
     private var folderShare: (share: MountedShare, isSaved: Bool)? {
-        guard draft.kind == .local else { return nil }
-        let saved = VolumePresence.volumeName(of: draft.resolvedLocalPath).flatMap(model.networkShare(forVolume:))
-        if let mountedShare { return (mountedShare, saved != nil) }
-        return saved.map { (MountedShare(volumeName: $0.volumeName, url: $0.url), true) }
+        draft.kind == .local ? model.shareRow(for: draft.resolvedLocalPath, mounted: mountedShare) : nil
     }
 
     private func cancel() {
@@ -841,10 +837,9 @@ struct RepositoryEditorSheet: View {
                 return
             }
         }
-        // A blank provider secret after a failed Keychain read keeps what
-        // is stored, as the blank password does: the field could not be
-        // prefilled, and an empty value would delete the stored one.
-        let keepsStoredSecret = draft.secretFieldLabel == nil || draft.kind == .sftp || (secretsReadFailed && providerSecret.isEmpty)
+        let keepsStoredSecret = EditorRequirements.keepsStoredProviderSecret(
+            secretFieldLabel: draft.secretFieldLabel, readFailed: secretsReadFailed, typedSecret: providerSecret
+        )
         await model.upsert(
             repository: draft,
             password: password.isEmpty ? nil : password,

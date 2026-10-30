@@ -20,11 +20,11 @@ struct SettingsView: View {
     /// the banner's full form has no button to point with.
     private var loginCaption: String? {
         guard model.loginItemInstallable else { return LoginItem.notInstalledMessage }
-        if model.loginItemNeedsApproval { return LoginItem.needsApprovalShort }
         switch model.loginItemState {
         case .enabled: return nil
         case .off: return LoginItemAdvice.caption(for: .startAtLogin)
-        case .needsApproval, .notFound: return LoginItem.description(of: model.loginItemState)
+        case .needsApproval: return LoginItem.needsApprovalShort
+        case .notFound: return LoginItem.description(of: .notFound)
         }
     }
 
@@ -462,9 +462,7 @@ struct NotificationChannelsTab: View {
             Button("Remove") {
                 let channels = model.configuration.settings.notificationChannels
                 guard let index = channels.firstIndex(where: { $0.id == selection }) else { return }
-                model.configuration.settings.notificationChannels.remove(at: index)
-                let rest = model.configuration.settings.notificationChannels
-                selection = rest.indices.contains(index) ? rest[index].id : rest.last?.id
+                selection = model.configuration.settings.notificationChannels.removeKeepingNeighbourSelected(at: index)
                 testOutcome = nil
             }
         } message: {
